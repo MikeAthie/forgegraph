@@ -1,0 +1,102 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+
+interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> {
+  /** Controlled value (optional - if not provided, component manages its own state) */
+  value?: string;
+  /** Called on every keystroke (for controlled mode) */
+  onChange?: (value: string) => void;
+  /** Called after debounce with the search value */
+  onSearch?: (value: string) => void;
+  /** Debounce delay in milliseconds */
+  debounceMs?: number;
+}
+
+export function SearchInput({
+  value: controlledValue,
+  onChange,
+  onSearch,
+  debounceMs = 300,
+  className,
+  placeholder = "Search...",
+  ...props
+}: SearchInputProps) {
+  const isControlled = controlledValue !== undefined;
+  const [internalValue, setInternalValue] = useState(controlledValue ?? "");
+
+  // Sync internal value with controlled value
+  useEffect(() => {
+    if (isControlled) {
+      setInternalValue(controlledValue);
+    }
+  }, [controlledValue, isControlled]);
+
+  // Debounce the search callback
+  useEffect(() => {
+    if (!onSearch) return;
+
+    const timer = setTimeout(() => {
+      onSearch(internalValue);
+    }, debounceMs);
+
+    return () => clearTimeout(timer);
+  }, [internalValue, onSearch, debounceMs]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setInternalValue(newValue);
+    onChange?.(newValue);
+  };
+
+  const handleClear = () => {
+    setInternalValue("");
+    onChange?.("");
+    onSearch?.("");
+  };
+
+  return (
+    <div className={cn("relative", className)}>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
+        aria-hidden="true"
+      >
+        <path
+          fillRule="evenodd"
+          d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+          clipRule="evenodd"
+        />
+      </svg>
+      <Input
+        type="search"
+        value={internalValue}
+        onChange={handleChange}
+        placeholder={placeholder}
+        className="pl-9 pr-8"
+        {...props}
+      />
+      {internalValue && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Clear search"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="h-4 w-4"
+          >
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}

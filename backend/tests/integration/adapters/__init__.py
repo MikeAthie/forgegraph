@@ -1,0 +1,1 @@
+# Adapter Integration Tests

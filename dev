@@ -1,0 +1,75 @@
+#!/bin/bash
+
+set -e
+
+COMPOSE_FILE="docker-compose.yml"
+
+usage() {
+    echo "Usage: ./dev <command>"
+    echo ""
+    echo "Commands:"
+    echo "  up        Build and start all services"
+    echo "  down      Stop and remove all services"
+    echo "  logs      View logs from all services"
+    echo "  restart   Restart all services"
+    echo "  build     Rebuild all services"
+    echo "  ps        Show running services"
+    echo ""
+    echo "Backend Commands:"
+    echo "  migrate   Run database migrations"
+    echo "  shell     Open Django shell"
+    echo "  test      Run backend tests"
+    echo "  manage    Run any Django manage.py command"
+    echo ""
+}
+
+case "${1}" in
+    up)
+        echo "Building and starting ForgeGraph services..."
+        docker-compose -f "${COMPOSE_FILE}" up --build -d
+        echo ""
+        echo "Services started successfully!"
+        echo "  Frontend:   http://localhost:3000"
+        echo "  Backend:    http://localhost:8000"
+        echo "  gRPC Engine: localhost:50051"
+        ;;
+    down)
+        echo "Stopping ForgeGraph services..."
+        docker-compose -f "${COMPOSE_FILE}" down
+        echo "Services stopped."
+        ;;
+    logs)
+        docker-compose -f "${COMPOSE_FILE}" logs -f
+        ;;
+    restart)
+        echo "Restarting ForgeGraph services..."
+        docker-compose -f "${COMPOSE_FILE}" restart
+        ;;
+    build)
+        echo "Rebuilding ForgeGraph services..."
+        docker-compose -f "${COMPOSE_FILE}" build
+        ;;
+    ps)
+        docker-compose -f "${COMPOSE_FILE}" ps
+        ;;
+    migrate)
+        echo "Running database migrations..."
+        docker-compose -f "${COMPOSE_FILE}" exec backend python manage.py migrate
+        ;;
+    shell)
+        echo "Opening Django shell..."
+        docker-compose -f "${COMPOSE_FILE}" exec backend python manage.py shell
+        ;;
+    test)
+        echo "Running backend tests..."
+        docker-compose -f "${COMPOSE_FILE}" exec backend pytest -v
+        ;;
+    manage)
+        shift
+        docker-compose -f "${COMPOSE_FILE}" exec backend python manage.py "$@"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac

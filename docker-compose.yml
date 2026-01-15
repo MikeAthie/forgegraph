@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forgegraph-postgres
+    environment:
+      POSTGRES_DB: forgegraph
+      POSTGRES_USER: forgegraph
+      POSTGRES_PASSWORD: forgegraph_secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgegraph -d forgegraph"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: forgegraph-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: forgegraph-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DEBUG: "true"
+      ALLOWED_HOSTS: "*"
+      DJANGO_SUPERUSER_EMAIL: admin@forgegraph.local
+      DJANGO_SUPERUSER_PASSWORD: admin123456
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+      - backend_static:/app/staticfiles
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    container_name: forgegraph-engine
+    ports:
+      - "50051:50051"
+    environment:
+      GRPC_PORT: 50051
+    depends_on:
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: forgegraph-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_venv:
+  backend_static:

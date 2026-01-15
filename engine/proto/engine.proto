@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package engine;
+
+option go_package = "github.com/forgegraph/engine;main";
+
+// EngineService provides core ForgeGraph engine operations
+service EngineService {
+  // Ping returns a pong response for health checking
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// PingRequest is the request message for the Ping RPC
+message PingRequest {
+  string message = 1;
+}
+
+// PingResponse is the response message for the Ping RPC
+message PingResponse {
+  string message = 1;
+}
