@@ -10,10 +10,10 @@ import type { NodeProps } from "@xyflow/react";
 import { GraphNode } from "@/components/graph-editor/nodes/GraphNode";
 import { NODE_TYPES } from "@/lib/graph-types";
 
-// Mock @xyflow/react Handle component
+// Mock @xyflow/react Handle component and hooks
 jest.mock("@xyflow/react", () => ({
-  Handle: ({ type, position }: { type: string; position: string }) => (
-    <div data-testid={`handle-${type}-${position}`} />
+  Handle: ({ type, position, id }: { type: string; position: string; id?: string }) => (
+    <div data-testid={`handle-${type}-${position}${id ? `-${id}` : ""}`} />
   ),
   Position: {
     Top: "top",
@@ -21,6 +21,10 @@ jest.mock("@xyflow/react", () => ({
     Left: "left",
     Right: "right",
   },
+  useReactFlow: () => ({
+    setNodes: jest.fn(),
+    setEdges: jest.fn(),
+  }),
 }));
 
 describe("GraphNode", () => {

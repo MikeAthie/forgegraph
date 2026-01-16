@@ -70,8 +70,10 @@ describe("NodePalette", () => {
 
       expect(screen.getByText("Keyboard Shortcuts")).toBeInTheDocument();
       expect(screen.getByText("Save")).toBeInTheDocument();
+      expect(screen.getByText("Select all")).toBeInTheDocument();
       expect(screen.getByText("Delete node")).toBeInTheDocument();
       expect(screen.getByText("Ctrl+S")).toBeInTheDocument();
+      expect(screen.getByText("Ctrl+A")).toBeInTheDocument();
       expect(screen.getByText("Delete")).toBeInTheDocument();
     });
   });
@@ -138,7 +140,7 @@ describe("NodePalette", () => {
       await user.click(promptButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
-      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.PROMPT);
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.PROMPT, false);
     });
 
     it("should call onAddNode with HTTP type when HTTP button is clicked", async () => {
@@ -149,7 +151,7 @@ describe("NodePalette", () => {
       await user.click(httpButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
-      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.HTTP);
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.HTTP, false);
     });
 
     it("should call onAddNode with Transform type when Transform button is clicked", async () => {
@@ -160,7 +162,7 @@ describe("NodePalette", () => {
       await user.click(transformButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
-      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.TRANSFORM);
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.TRANSFORM, false);
     });
 
     it("should call onAddNode with Output type when Output button is clicked", async () => {
@@ -171,7 +173,18 @@ describe("NodePalette", () => {
       await user.click(outputButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
-      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.OUTPUT);
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.OUTPUT, false);
+    });
+
+    it("should call onAddNode with connectToSelected=true when hasSelectedNode is true", async () => {
+      const user = userEvent.setup();
+      render(<NodePalette onAddNode={mockOnAddNode} hasSelectedNode={true} />);
+
+      const promptButton = screen.getByRole("button", { name: /^prompt$/i });
+      await user.click(promptButton);
+
+      expect(mockOnAddNode).toHaveBeenCalledTimes(1);
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.PROMPT, true);
     });
 
     it("should not call onAddNode when a disabled node type is clicked", async () => {

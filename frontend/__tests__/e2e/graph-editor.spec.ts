@@ -32,6 +32,9 @@ async function connectNodes(
   sourceLabel: string,
   targetLabel: string
 ) {
+  const edges = page.locator('[data-testid^="rf__edge-"]');
+  const beforeCount = await edges.count();
+
   const sourceNode = page.locator(".react-flow__node").filter({ hasText: sourceLabel }).first();
   const targetNode = page.locator(".react-flow__node").filter({ hasText: targetLabel }).first();
 
@@ -52,7 +55,26 @@ async function connectNodes(
   await expect(targetHandle).toBeVisible();
   await expect(targetHandle).toHaveClass(/connectionindicator/);
 
-  await sourceHandle.dragTo(targetHandle);
+  const from = await getCenter(sourceHandle);
+  const to = await getCenter(targetHandle);
+
+  try {
+    await sourceHandle.click();
+    await targetHandle.click();
+    await expect(edges).toHaveCount(beforeCount + 1, { timeout: 1500 });
+    return;
+  } catch {
+    // Fall back to drag-to-connect for browsers where click-connect is flaky.
+  }
+
+  await page.keyboard.press("Escape").catch(() => undefined);
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 18 });
+  await page.mouse.up();
+
+  await expect(edges).toHaveCount(beforeCount + 1);
 }
 
 test.beforeAll(async ({ request }, testInfo) => {
@@ -525,8 +547,8 @@ test.describe("Graph Editor", () => {
     // Add nodes in sequence
     await page.getByRole("button", { name: /^prompt/i }).click();
     await page.getByRole("button", { name: /^http/i }).click();
-    await page.getByRole("button", { name: /^transform/i }).click();
     await page.getByRole("button", { name: /^output/i }).click();
+    await page.getByRole("button", { name: /^transform/i }).click();
 
     // All nodes should be visible
     await expect(page.getByText("Prompt Node")).toBeVisible();

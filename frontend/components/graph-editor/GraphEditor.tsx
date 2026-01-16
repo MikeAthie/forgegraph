@@ -9,6 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
+  SelectionMode,
   type NodeDragHandler,
   type Connection,
   type Node,
@@ -17,11 +18,12 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Save as SaveIcon } from "lucide-react";
+import { Save as SaveIcon, LayoutGrid } from "lucide-react";
 
 import type { GraphJson, NodeType } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
 import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
+import { getLayoutedElements } from "../../lib/graph-layout";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
@@ -167,21 +169,36 @@ export function GraphEditor({
   }, []);
 
   const handleAddNode = useCallback(
-    (nodeType: NodeType) => {
+    (nodeType: NodeType, connectToSelected = false) => {
       const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
       if (!typeInfo?.enabled) return;
 
       const newNodeId = generateId();
+      const sourceNode = connectToSelected && selectedNodeId
+        ? nodes.find((n) => n.id === selectedNodeId)
+        : null;
 
       setNodes((nds) => {
-        const index = nds.length;
-        const col = index % 2;
-        const row = Math.floor(index / 2);
+        let position: { x: number; y: number };
+
+        if (sourceNode) {
+          // Position below the selected node
+          position = {
+            x: sourceNode.position.x,
+            y: sourceNode.position.y + 150,
+          };
+        } else {
+          // Default grid positioning
+          const index = nds.length;
+          const col = index % 2;
+          const row = Math.floor(index / 2);
+          position = { x: 50 + col * 220, y: 80 + row * 190 };
+        }
 
         const newNode: Node = {
           id: newNodeId,
           type: nodeType,
-          position: { x: 250 + col * 260, y: 150 + row * 190 },
+          position,
           data: {
             label: `${typeInfo.label} Node`,
             nodeType: nodeType,
@@ -191,10 +208,21 @@ export function GraphEditor({
 
         return [...nds, newNode];
       });
+
+      // Create edge from selected node to new node
+      if (sourceNode) {
+        const newEdge: Edge = {
+          id: generateId(),
+          source: sourceNode.id,
+          target: newNodeId,
+        };
+        setEdges((eds) => [...eds, newEdge]);
+      }
+
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [setNodes]
+    [setNodes, setEdges, selectedNodeId, nodes]
   );
 
   const handleUpdateNode = useCallback(
@@ -223,6 +251,33 @@ export function GraphEditor({
     [setNodes, setEdges, selectedNodeId]
   );
 
+  const handleDuplicateNode = useCallback(
+    (nodeId: string) => {
+      const nodeToDuplicate = nodes.find((n) => n.id === nodeId);
+      if (!nodeToDuplicate) return;
+
+      const newNodeId = generateId();
+      const newNode: Node = {
+        ...nodeToDuplicate,
+        id: newNodeId,
+        position: {
+          x: nodeToDuplicate.position.x + 50,
+          y: nodeToDuplicate.position.y + 50,
+        },
+        data: {
+          ...nodeToDuplicate.data,
+          label: `${nodeToDuplicate.data.label} (copy)`,
+        },
+        selected: false,
+      };
+
+      setNodes((nds) => [...nds, newNode]);
+      setSelectedNodeId(newNodeId);
+      setIsDirty(true);
+    },
+    [nodes, setNodes]
+  );
+
   const handleDeleteEdge = useCallback(
     (edgeId: string) => {
       setEdges((eds) => eds.filter((e) => e.id !== edgeId));
@@ -245,6 +300,17 @@ export function GraphEditor({
     setIsDirty(false);
   }, [nodes, edges, graphName, graphDescription, graphId, onSave]);
 
+  const handleAutoLayout = useCallback(() => {
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+      nodes,
+      edges,
+      { direction: "TB", nodeSpacing: 50, rankSpacing: 100 }
+    );
+    setNodes(layoutedNodes);
+    setEdges(layoutedEdges);
+    setIsDirty(true);
+  }, [nodes, edges, setNodes, setEdges]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -253,6 +319,15 @@ export function GraphEditor({
         e.preventDefault();
         if (!saving) {
           void handleSave();
+        }
+      }
+
+      // Cmd/Ctrl + A to select all nodes
+      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") {
+          e.preventDefault();
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
         }
       }
 
@@ -272,23 +347,24 @@ export function GraphEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSave, saving, selectedNodeId, selectedEdgeId, handleDeleteNode, handleDeleteEdge]);
+  }, [handleSave, saving, selectedNodeId, selectedEdgeId, handleDeleteNode, handleDeleteEdge, setNodes]);
 
   return (
     <div className="flex h-full">
       {/* Left Panel - Node Palette */}
       <div className="w-64 border-r border-gray-200 bg-white overflow-y-auto">
-        <NodePalette onAddNode={handleAddNode} />
+        <NodePalette onAddNode={handleAddNode} hasSelectedNode={!!selectedNodeId} />
       </div>
 
       {/* Center - Canvas */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative overflow-hidden">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          connectOnClick
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
           onNodeDragStop={onNodeDragStop}
@@ -297,6 +373,10 @@ export function GraphEditor({
           fitView
           snapToGrid
           snapGrid={[15, 15]}
+          selectionOnDrag
+          selectionMode={SelectionMode.Partial}
+          selectNodesOnDrag={false}
+          panOnDrag={[1, 2]}
           defaultEdgeOptions={{
             type: "smoothstep",
             style: { strokeWidth: 2 },
@@ -311,6 +391,17 @@ export function GraphEditor({
             className="bg-white border border-gray-200 rounded-lg"
           />
           <Panel position="top-right" className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Auto-layout"
+              onClick={handleAutoLayout}
+              disabled={nodes.length === 0}
+              className="bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
+              title="Tidy up layout"
+            >
+              <LayoutGrid aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Tidy</span>
+            </button>
             <div className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm flex items-center gap-2">
               <select
                 aria-label="Version"
@@ -356,6 +447,7 @@ export function GraphEditor({
           graphDescription={graphDescription}
           onUpdateNode={handleUpdateNode}
           onDeleteNode={handleDeleteNode}
+          onDuplicateNode={handleDuplicateNode}
           onUpdateMetadata={onUpdateMetadata}
           onEditingMetadataChange={setIsEditingMetadata}
         />

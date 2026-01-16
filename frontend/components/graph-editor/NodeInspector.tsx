@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { NODE_TYPES } from "../../lib/graph-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ interface NodeInspectorProps {
   graphDescription: string;
   onUpdateNode: (nodeId: string, updates: Partial<Node["data"]>) => void;
   onDeleteNode: (nodeId: string) => void;
+  onDuplicateNode: (nodeId: string) => void;
   onUpdateMetadata: (name: string, description: string) => Promise<void>;
   onEditingMetadataChange?: (editing: boolean) => void;
 }
@@ -20,6 +22,7 @@ export function NodeInspector({
   graphDescription,
   onUpdateNode,
   onDeleteNode,
+  onDuplicateNode,
   onUpdateMetadata,
   onEditingMetadataChange,
 }: NodeInspectorProps) {
@@ -170,13 +173,22 @@ export function NodeInspector({
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-gray-900">Node Config</h3>
-        <Button
-          size="sm"
-          variant="destructive"
-          onClick={() => onDeleteNode(selectedNode.id)}
-        >
-          Delete
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDuplicateNode(selectedNode.id)}
+          >
+            Duplicate
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => onDeleteNode(selectedNode.id)}
+          >
+            Delete
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -214,6 +226,32 @@ export function NodeInspector({
           </p>
         </div>
 
+        {/* Disable toggle */}
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-700">
+            Enabled
+          </label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!nodeData.disabled}
+            onClick={() =>
+              onUpdateNode(selectedNode.id, { disabled: !nodeData.disabled })
+            }
+            className={`
+              relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+              ${nodeData.disabled ? "bg-gray-300" : "bg-primary"}
+            `}
+          >
+            <span
+              className={`
+                inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform
+                ${nodeData.disabled ? "translate-x-0.5" : "translate-x-4.5"}
+              `}
+            />
+          </button>
+        </div>
+
         {/* Node-specific config editors */}
         {nodeType === NODE_TYPES.PROMPT && (
           <PromptNodeConfig
@@ -242,6 +280,14 @@ export function NodeInspector({
             onChange={(config) => onUpdateNode(selectedNode.id, { config })}
           />
         )}
+
+        {/* Advanced Configuration */}
+        <AdvancedNodeConfig
+          timeoutMs={(nodeData.timeout_ms as number) ?? undefined}
+          retryPolicy={(nodeData.retry_policy as { max_attempts?: number; backoff_multiplier?: number }) ?? undefined}
+          onChangeTimeout={(timeout_ms) => onUpdateNode(selectedNode.id, { timeout_ms })}
+          onChangeRetryPolicy={(retry_policy) => onUpdateNode(selectedNode.id, { retry_policy })}
+        />
       </div>
     </div>
   );
@@ -410,6 +456,127 @@ function OutputNodeConfig({
           Map state values to output keys
         </p>
       </div>
+    </div>
+  );
+}
+
+// Advanced Node Config (collapsible)
+function AdvancedNodeConfig({
+  timeoutMs,
+  retryPolicy,
+  onChangeTimeout,
+  onChangeRetryPolicy,
+}: {
+  timeoutMs?: number;
+  retryPolicy?: { max_attempts?: number; backoff_multiplier?: number };
+  onChangeTimeout: (timeout: number | undefined) => void;
+  onChangeRetryPolicy: (policy: { max_attempts?: number; backoff_multiplier?: number } | undefined) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const hasAdvancedConfig = timeoutMs !== undefined || retryPolicy !== undefined;
+
+  return (
+    <div className="pt-3 border-t border-gray-200">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 w-full text-left text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4" />
+        ) : (
+          <ChevronRight className="w-4 h-4" />
+        )}
+        <span className="uppercase tracking-wider">Advanced</span>
+        {hasAdvancedConfig && !isExpanded && (
+          <span className="ml-auto text-primary text-xs">configured</span>
+        )}
+      </button>
+
+      {isExpanded && (
+        <div className="mt-3 space-y-3">
+          {/* Timeout */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Timeout (ms)
+            </label>
+            <Input
+              type="number"
+              value={timeoutMs ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                onChangeTimeout(val ? parseInt(val, 10) : undefined);
+              }}
+              placeholder="30000"
+              className="text-sm"
+              min={0}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Max execution time before timeout (leave empty for default)
+            </p>
+          </div>
+
+          {/* Retry Policy */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Max Retry Attempts
+            </label>
+            <Input
+              type="number"
+              value={retryPolicy?.max_attempts ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                const newPolicy = {
+                  ...retryPolicy,
+                  max_attempts: val ? parseInt(val, 10) : undefined,
+                };
+                if (!newPolicy.max_attempts && !newPolicy.backoff_multiplier) {
+                  onChangeRetryPolicy(undefined);
+                } else {
+                  onChangeRetryPolicy(newPolicy);
+                }
+              }}
+              placeholder="3"
+              className="text-sm"
+              min={0}
+              max={10}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Number of retry attempts on failure (0 = no retries)
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Backoff Multiplier
+            </label>
+            <Input
+              type="number"
+              value={retryPolicy?.backoff_multiplier ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                const newPolicy = {
+                  ...retryPolicy,
+                  backoff_multiplier: val ? parseFloat(val) : undefined,
+                };
+                if (!newPolicy.max_attempts && !newPolicy.backoff_multiplier) {
+                  onChangeRetryPolicy(undefined);
+                } else {
+                  onChangeRetryPolicy(newPolicy);
+                }
+              }}
+              placeholder="2.0"
+              className="text-sm"
+              min={1}
+              step={0.1}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Exponential backoff multiplier between retries
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
