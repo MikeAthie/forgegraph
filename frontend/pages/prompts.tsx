@@ -553,21 +553,22 @@ export default function PromptsPage() {
 
             <form id="create-prompt-form" className="space-y-4" onSubmit={submitCreate}>
               <div className="grid gap-4 md:grid-cols-2">
-                <FormField label="Title" required>
+                <FormField label="Title" required htmlFor="create-prompt-title">
                   <Input
+                    id="create-prompt-title"
                     value={createForm.title}
                     onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
                     disabled={isCreating}
                   />
                 </FormField>
 
-                <FormField label="Category">
+                <FormField label="Category" htmlFor="create-prompt-category">
                   <Select
                     value={createForm.category}
                     onValueChange={(v) => setCreateForm((prev) => ({ ...prev, category: v as PromptCategory }))}
                     disabled={isCreating}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="create-prompt-category">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -581,16 +582,18 @@ export default function PromptsPage() {
                 </FormField>
               </div>
 
-              <FormField label="Description">
+              <FormField label="Description" htmlFor="create-prompt-description">
                 <Input
+                  id="create-prompt-description"
                   value={createForm.description}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                   disabled={isCreating}
                 />
               </FormField>
 
-              <FormField label="Content" required>
+              <FormField label="Content" required htmlFor="create-prompt-content">
                 <Textarea
+                  id="create-prompt-content"
                   value={createForm.content}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, content: e.target.value }))}
                   disabled={isCreating}
@@ -599,8 +602,13 @@ export default function PromptsPage() {
                 />
               </FormField>
 
-              <FormField label="Variables schema (JSON)" description="Leave empty for no variables.">
+              <FormField
+                label="Variables schema (JSON)"
+                description="Leave empty for no variables."
+                htmlFor="create-prompt-variables"
+              >
                 <Textarea
+                  id="create-prompt-variables"
                   value={createForm.variablesSchemaText}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
                   disabled={isCreating}
@@ -676,8 +684,9 @@ export default function PromptsPage() {
 
                 <form id="edit-prompt-form" className="space-y-4" onSubmit={submitEdit}>
                   <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="Title" required>
+                    <FormField label="Title" required htmlFor="edit-prompt-title">
                       <Input
+                        id="edit-prompt-title"
                         value={editForm.title}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
                         disabled={isSaving}
@@ -691,16 +700,18 @@ export default function PromptsPage() {
                     </FormField>
                   </div>
 
-                  <FormField label="Description">
+                  <FormField label="Description" htmlFor="edit-prompt-description">
                     <Input
+                      id="edit-prompt-description"
                       value={editForm.description}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
                       disabled={isSaving}
                     />
                   </FormField>
 
-                  <FormField label="Content" required>
+                  <FormField label="Content" required htmlFor="edit-prompt-content">
                     <Textarea
+                      id="edit-prompt-content"
                       value={editForm.content}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
                       disabled={isSaving}
@@ -709,8 +720,9 @@ export default function PromptsPage() {
                     />
                   </FormField>
 
-                  <FormField label="Variables schema (JSON)">
+                  <FormField label="Variables schema (JSON)" htmlFor="edit-prompt-variables">
                     <Textarea
+                      id="edit-prompt-variables"
                       value={editForm.variablesSchemaText}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
                       disabled={isSaving}

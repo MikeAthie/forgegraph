@@ -110,14 +110,14 @@ export default function RegisterPage() {
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {displayError && (
               <Alert variant="destructive">
                 <AlertDescription>{displayError}</AlertDescription>
               </Alert>
             )}
 
-            <FormField label="Email address" required>
+            <FormField label="Email address" required htmlFor="email">
               <Input
                 id="email"
                 name="email"
@@ -135,6 +135,7 @@ export default function RegisterPage() {
               label="Password"
               required
               description="Must be at least 8 characters with uppercase, lowercase, and number"
+              htmlFor="password"
             >
               <Input
                 id="password"
@@ -149,7 +150,7 @@ export default function RegisterPage() {
               />
             </FormField>
 
-            <FormField label="Confirm password" required>
+            <FormField label="Confirm password" required htmlFor="confirmPassword">
               <Input
                 id="confirmPassword"
                 name="confirmPassword"

@@ -1,6 +1,7 @@
 import type { AppProps } from "next/app";
 
 import "../styles/globals.css";
+import "@xyflow/react/dist/style.css";
 import { AuthProvider } from "../contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 

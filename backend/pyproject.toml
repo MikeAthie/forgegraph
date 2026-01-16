@@ -10,6 +10,8 @@ dependencies = [
     "djangorestframework>=3.14.0",
     "djangorestframework-simplejwt>=5.3.1",
     "django-cors-headers>=4.3.1",
+    # API docs
+    "drf-spectacular>=0.27.1",
     # Database
     "psycopg2-binary>=2.9.9",
     # Cache

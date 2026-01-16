@@ -111,7 +111,7 @@ export default function GraphsPage() {
         name: createForm.name.trim(),
         description: createForm.description.trim(),
       });
-      showSuccess("Graph created", `"${created.name}" is ready to edit.`);
+      showSuccess("Graph created");
       await router.push(`/graphs/${created.id}`);
     } catch (err: unknown) {
       setCreateError(getApiErrorMessage(err, "Failed to create graph."));
@@ -311,8 +311,9 @@ export default function GraphsPage() {
             )}
 
             <form id="create-graph-form" className="space-y-4" onSubmit={submitCreate}>
-              <FormField label="Name" required>
+              <FormField label="Name" required htmlFor="create-graph-name">
                 <Input
+                  id="create-graph-name"
                   value={createForm.name}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
                   disabled={isCreating}
@@ -320,8 +321,9 @@ export default function GraphsPage() {
                 />
               </FormField>
 
-              <FormField label="Description">
+              <FormField label="Description" htmlFor="create-graph-description">
                 <Textarea
+                  id="create-graph-description"
                   value={createForm.description}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                   disabled={isCreating}
@@ -366,16 +368,18 @@ export default function GraphsPage() {
             )}
 
             <form id="edit-graph-form" className="space-y-4" onSubmit={submitEdit}>
-              <FormField label="Name" required>
+              <FormField label="Name" required htmlFor="edit-graph-name">
                 <Input
+                  id="edit-graph-name"
                   value={editForm.name}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
                   disabled={isSavingEdit}
                 />
               </FormField>
 
-              <FormField label="Description">
+              <FormField label="Description" htmlFor="edit-graph-description">
                 <Textarea
+                  id="edit-graph-description"
                   value={editForm.description}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
                   disabled={isSavingEdit}

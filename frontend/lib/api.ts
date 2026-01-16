@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
+import type { GraphJson, GraphVersion, CreateGraphVersionInput } from "./graph-types";
 
 export interface User {
   id: string;
@@ -81,6 +82,9 @@ const API_PATHS = {
     listCreate: "/api/graphs/",
     detail: (graphId: string) => `/api/graphs/${graphId}`,
     versions: (graphId: string) => `/api/graphs/${graphId}/versions`,
+    latestVersion: (graphId: string) => `/api/graphs/${graphId}/versions/latest`,
+    versionDetail: (graphId: string, versionId: string) =>
+      `/api/graphs/${graphId}/versions/${versionId}`,
   },
   prompts: {
     listCreate: "/api/prompts/",
@@ -240,9 +244,27 @@ export const authApi = {
   },
 
   refreshToken: async (): Promise<AccessTokenResponse> => {
-    const response = await authClient.post<AccessTokenResponse>(API_PATHS.auth.refresh, {});
-    accessToken = response.data.access;
-    return response.data;
+    if (isRefreshing) {
+      const token = await new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      });
+      return { access: token };
+    }
+
+    isRefreshing = true;
+
+    try {
+      const response = await authClient.post<AccessTokenResponse>(API_PATHS.auth.refresh, {});
+      accessToken = response.data.access;
+      processQueue(null, accessToken);
+      return response.data;
+    } catch (refreshError: unknown) {
+      processQueue(refreshError, null);
+      clearTokens();
+      throw refreshError;
+    } finally {
+      isRefreshing = false;
+    }
   },
 };
 
@@ -314,6 +336,36 @@ export const graphsApi = {
   listVersions: async (graphId: string): Promise<GraphVersionSummary[]> => {
     const response = await api.get<ApiSuccessResponse<GraphVersionSummary[]>>(
       API_PATHS.graphs.versions(graphId),
+    );
+    return response.data.data;
+  },
+
+  getLatestVersion: async (graphId: string): Promise<GraphVersion | null> => {
+    try {
+      const response = await api.get<ApiSuccessResponse<GraphVersion>>(
+        API_PATHS.graphs.latestVersion(graphId),
+      );
+      return response.data.data;
+    } catch (error) {
+      // 404 means no versions exist yet
+      if ((error as AxiosError)?.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  getVersion: async (graphId: string, versionId: string): Promise<GraphVersion> => {
+    const response = await api.get<ApiSuccessResponse<GraphVersion>>(
+      API_PATHS.graphs.versionDetail(graphId, versionId),
+    );
+    return response.data.data;
+  },
+
+  createVersion: async (graphId: string, input: CreateGraphVersionInput): Promise<GraphVersion> => {
+    const response = await api.post<ApiSuccessResponse<GraphVersion>>(
+      API_PATHS.graphs.versions(graphId),
+      input,
     );
     return response.data.data;
   },

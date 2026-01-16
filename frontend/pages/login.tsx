@@ -105,14 +105,14 @@ export default function LoginPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {displayError && (
               <Alert variant="destructive">
                 <AlertDescription>{displayError}</AlertDescription>
               </Alert>
             )}
 
-            <FormField label="Email address" required>
+            <FormField label="Email address" required htmlFor="email">
               <Input
                 id="email"
                 name="email"
@@ -126,7 +126,7 @@ export default function LoginPage() {
               />
             </FormField>
 
-            <FormField label="Password" required>
+            <FormField label="Password" required htmlFor="password">
               <Input
                 id="password"
                 name="password"

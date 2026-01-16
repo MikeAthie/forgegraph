@@ -40,12 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const checkAuth = useCallback(async () => {
-    const token = getAccessToken();
-
     setLoading(true);
 
     try {
-      if (!token) {
+      if (!getAccessToken()) {
         await authApi.refreshToken();
       }
       const userData = await authApi.getMe();
