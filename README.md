@@ -96,6 +96,18 @@ ForgeGraph lets you build AI agent workflows using a visual graph builder. Conne
 
 Open http://localhost:3000 in your browser. You should see "ForgeGraph running" and the backend health status.
 
+## Graph Builder
+
+1. Create a graph in the UI and open it (routes under `/graphs/[graphId]`).
+2. Add nodes from the left palette (click to add; if a node is selected, click-to-add will auto-connect).
+3. Connect nodes on the canvas and configure them in the right inspector panel.
+4. Save a new version with the save button or `Ctrl+S` / `Cmd+S`, then use the version dropdown to load older versions.
+
+**Tips**
+- Use `Tidy` to auto-layout, `Ctrl+A` / `Cmd+A` to select all, and `Delete` to remove selected nodes/edges.
+- Use the MiniMap + zoom controls for large workflows.
+- “Note” nodes are editor-only annotations (saved in `editor_state`, not executed by the engine).
+
 ### Backend
 
 ```bash
@@ -181,8 +193,8 @@ forgegraph/
 ## Development Roadmap
 
 - [x] Phase 0: Monorepo scaffolding + Docker + gRPC ping
-- [ ] Phase 1: Django models + auth + prompt library
-- [ ] Phase 2: NextJS graph builder + save/load JSON
+- [x] Phase 1: Django models + auth + prompt library
+- [x] Phase 2: NextJS graph builder + save/load JSON
 - [ ] Phase 3: Go engine basic execution
 - [ ] Phase 4: Run viewer + persistence
 - [ ] Phase 5: Branch/merge + retry/timeout

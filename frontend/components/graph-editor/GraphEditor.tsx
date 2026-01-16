@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Controls,
@@ -10,7 +10,7 @@ import {
   useEdgesState,
   addEdge,
   SelectionMode,
-  type NodeDragHandler,
+  type OnNodeDrag,
   type Connection,
   type Node,
   type Edge,
@@ -18,7 +18,7 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Save as SaveIcon, LayoutGrid } from "lucide-react";
+import { Save as SaveIcon, LayoutGrid, Redo2, Undo2 } from "lucide-react";
 
 import type { GraphJson, NodeType } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
@@ -27,6 +27,9 @@ import { getLayoutedElements } from "../../lib/graph-layout";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
+import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
+
+const NOTE_NODE_TYPE = "note";
 
 // Custom node types for React Flow
 const nodeTypes: NodeTypes = {
@@ -37,6 +40,7 @@ const nodeTypes: NodeTypes = {
   [NODE_TYPES.BRANCH]: GraphNodeComponent,
   [NODE_TYPES.MERGE]: GraphNodeComponent,
   [NODE_TYPES.HUMAN_GATE]: GraphNodeComponent,
+  [NOTE_NODE_TYPE]: NoteNodeComponent,
 };
 
 interface GraphEditorProps {
@@ -57,6 +61,39 @@ interface GraphEditorProps {
 // Generate unique ID for new nodes/edges
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+type EditorSnapshot = {
+  nodes: Node[];
+  edges: Edge[];
+};
+
+type ClipboardNode = Pick<Node, "id" | "type" | "position" | "data" | "connectable" | "draggable">;
+type ClipboardEdge = Pick<Edge, "source" | "target" | "label" | "data">;
+type ClipboardSnapshot = {
+  nodes: ClipboardNode[];
+  edges: ClipboardEdge[];
+};
+
+function deepClone<T>(value: T): T {
+  const cloneFn = (globalThis as any).structuredClone as ((input: T) => T) | undefined;
+  if (typeof cloneFn === "function") {
+    return cloneFn(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName;
+  if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") {
+    return true;
+  }
+
+  return target.isContentEditable;
 }
 
 export function GraphEditor({
@@ -84,8 +121,272 @@ export function GraphEditor({
   const [isDirty, setIsDirty] = useState(false);
   const [isEditingMetadata, setIsEditingMetadata] = useState(false);
 
+  const paletteSearchRef = useRef<HTMLInputElement>(null);
+
+  const clipboardRef = useRef<ClipboardSnapshot | null>(null);
+  const pasteOffsetRef = useRef(0);
+
+  const undoStackRef = useRef<EditorSnapshot[]>([]);
+  const redoStackRef = useRef<EditorSnapshot[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const editHistoryArmedRef = useRef(false);
+  const editHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragHistoryPushedRef = useRef(false);
+
+  const takeSnapshot = useCallback((): EditorSnapshot => {
+    return { nodes: deepClone(nodes), edges: deepClone(edges) };
+  }, [nodes, edges]);
+
+  const resetHistory = useCallback(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
+    editHistoryArmedRef.current = false;
+    if (editHistoryTimerRef.current) {
+      clearTimeout(editHistoryTimerRef.current);
+      editHistoryTimerRef.current = null;
+    }
+    clipboardRef.current = null;
+    pasteOffsetRef.current = 0;
+    dragHistoryPushedRef.current = false;
+  }, []);
+
+  const pushHistory = useCallback(() => {
+    undoStackRef.current.push(takeSnapshot());
+    if (undoStackRef.current.length > 50) {
+      undoStackRef.current.shift();
+    }
+    redoStackRef.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, [takeSnapshot]);
+
+  const pushHistoryForEdit = useCallback(() => {
+    if (!editHistoryArmedRef.current) {
+      pushHistory();
+      editHistoryArmedRef.current = true;
+    }
+
+    if (editHistoryTimerRef.current) {
+      clearTimeout(editHistoryTimerRef.current);
+    }
+    editHistoryTimerRef.current = setTimeout(() => {
+      editHistoryArmedRef.current = false;
+    }, 800);
+  }, [pushHistory]);
+
+  const handleUndo = useCallback(() => {
+    const previous = undoStackRef.current.pop();
+    if (!previous) return;
+
+    redoStackRef.current.push(takeSnapshot());
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setIsDirty(true);
+
+    setCanUndo(undoStackRef.current.length > 0);
+    setCanRedo(true);
+  }, [setEdges, setNodes, takeSnapshot]);
+
+  const handleRedo = useCallback(() => {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+
+    undoStackRef.current.push(takeSnapshot());
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setIsDirty(true);
+
+    setCanUndo(true);
+    setCanRedo(redoStackRef.current.length > 0);
+  }, [setEdges, setNodes, takeSnapshot]);
+
+  const getSelectedNodes = useCallback((): Node[] => {
+    const selected = nodes.filter((n) => n.selected);
+    if (selected.length > 0) return selected;
+
+    if (selectedNodeId) {
+      const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+      return selectedNode ? [selectedNode] : [];
+    }
+
+    return [];
+  }, [nodes, selectedNodeId]);
+
+  const getSelectedEdges = useCallback((): Edge[] => {
+    const selected = edges.filter((e) => e.selected);
+    if (selected.length > 0) return selected;
+
+    if (selectedEdgeId) {
+      const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
+      return selectedEdge ? [selectedEdge] : [];
+    }
+
+    return [];
+  }, [edges, selectedEdgeId]);
+
+  const handleCopy = useCallback(() => {
+    const selectedNodes = getSelectedNodes();
+    if (selectedNodes.length === 0) return;
+
+    const selectedIds = new Set(selectedNodes.map((n) => n.id));
+    const selectedEdges = edges.filter(
+      (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target),
+    );
+
+    clipboardRef.current = deepClone({
+      nodes: selectedNodes.map((node) => ({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: node.data,
+        connectable: node.connectable,
+        draggable: node.draggable,
+      })),
+      edges: selectedEdges.map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        label: edge.label,
+        data: edge.data,
+      })),
+    } satisfies ClipboardSnapshot);
+
+    pasteOffsetRef.current = 0;
+  }, [edges, getSelectedNodes]);
+
+  const applyClipboard = useCallback(
+    (clipboard: ClipboardSnapshot, options?: { incrementOffset?: boolean }) => {
+      if (clipboard.nodes.length === 0) return;
+
+      pushHistory();
+
+      const offsetBase = 40;
+      const offset = offsetBase + pasteOffsetRef.current;
+      if (options?.incrementOffset !== false) {
+        pasteOffsetRef.current += 20;
+      }
+
+      const idMap = new Map<string, string>();
+      const newNodes: Node[] = clipboard.nodes.map((node) => {
+        const newId = generateId();
+        idMap.set(node.id, newId);
+
+        const label =
+          typeof (node.data as any)?.label === "string" ? String((node.data as any).label) : "";
+
+        return {
+          ...deepClone(node),
+          id: newId,
+          position: {
+            x: node.position.x + offset,
+            y: node.position.y + offset,
+          },
+          data: {
+            ...(deepClone(node.data) as any),
+            label: label ? `${label} (copy)` : label,
+          },
+          selected: true,
+        } satisfies Node;
+      });
+
+      const newEdges: Edge[] = clipboard.edges
+        .map((edge): Edge | null => {
+          const source = idMap.get(edge.source);
+          const target = idMap.get(edge.target);
+          if (!source || !target) return null;
+
+          return {
+            id: generateId(),
+            source,
+            target,
+            label: edge.label,
+            data: deepClone(edge.data),
+          } as Edge;
+        })
+        .filter((edge): edge is Edge => edge !== null);
+
+      setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
+      setEdges((eds) => [...eds.map((e) => ({ ...e, selected: false })), ...newEdges]);
+      setSelectedNodeId(newNodes[0]?.id ?? null);
+      setSelectedEdgeId(null);
+      setIsDirty(true);
+    },
+    [pushHistory, setEdges, setNodes],
+  );
+
+  const handlePaste = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard) return;
+    applyClipboard(clipboard);
+  }, [applyClipboard]);
+
+  const handleDuplicateSelection = useCallback(() => {
+    const selectedNodes = getSelectedNodes();
+    if (selectedNodes.length === 0) return;
+
+    const selectedIds = new Set(selectedNodes.map((n) => n.id));
+    const selectedEdges = edges.filter(
+      (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target),
+    );
+
+    applyClipboard(
+      {
+        nodes: selectedNodes.map((node) => ({
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: node.data,
+          connectable: node.connectable,
+          draggable: node.draggable,
+        })),
+        edges: selectedEdges.map((edge) => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.label,
+          data: edge.data,
+        })),
+      },
+      { incrementOffset: false },
+    );
+  }, [applyClipboard, edges, getSelectedNodes]);
+
+  const handleDeleteSelection = useCallback(() => {
+    const selectedNodes = getSelectedNodes();
+    const selectedEdges = getSelectedEdges();
+
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+      return;
+    }
+
+    pushHistory();
+
+    const nodeIdSet = new Set(selectedNodes.map((n) => n.id));
+    const edgeIdSet = new Set(selectedEdges.map((e) => e.id));
+
+    setNodes((nds) => nds.filter((n) => !nodeIdSet.has(n.id)));
+    setEdges((eds) =>
+      eds.filter((e) => {
+        if (edgeIdSet.has(e.id)) return false;
+        if (nodeIdSet.has(e.source) || nodeIdSet.has(e.target)) return false;
+        return true;
+      }),
+    );
+
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setIsDirty(true);
+  }, [getSelectedEdges, getSelectedNodes, pushHistory, setEdges, setNodes]);
+
   // Sync editor state when the loaded version changes (save or version switch).
   useEffect(() => {
+    resetHistory();
+
     if (!initialGraphJson) {
       setIsDirty(false);
       return;
@@ -97,11 +398,12 @@ export function GraphEditor({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setIsDirty(false);
-  }, [initialGraphJson, setNodes, setEdges]);
+  }, [initialGraphJson, resetHistory, setNodes, setEdges]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId)
     : null;
+  const canQuickAddConnect = !!selectedNode && selectedNode.type !== NOTE_NODE_TYPE;
 
   const handleSelectVersion = useCallback(
     async (versionId: string) => {
@@ -138,6 +440,7 @@ export function GraphEditor({
         return;
       }
 
+      pushHistory();
       const newEdge: Edge = {
         ...connection,
         id: generateId(),
@@ -146,7 +449,7 @@ export function GraphEditor({
       setEdges((eds) => addEdge(newEdge, eds));
       setIsDirty(true);
     },
-    [edges, setEdges]
+    [edges, pushHistory, setEdges]
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -159,9 +462,16 @@ export function GraphEditor({
     setSelectedNodeId(null);
   }, []);
 
-  const onNodeDragStop = useCallback<NodeDragHandler>(() => {
+  const onNodeDragStop = useCallback<OnNodeDrag>((_, __, ___) => {
+    dragHistoryPushedRef.current = false;
     setIsDirty(true);
   }, []);
+
+  const onNodeDragStart = useCallback<OnNodeDrag>(() => {
+    if (dragHistoryPushedRef.current) return;
+    dragHistoryPushedRef.current = true;
+    pushHistory();
+  }, [pushHistory]);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
@@ -173,10 +483,12 @@ export function GraphEditor({
       const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
       if (!typeInfo?.enabled) return;
 
+      pushHistory();
       const newNodeId = generateId();
-      const sourceNode = connectToSelected && selectedNodeId
-        ? nodes.find((n) => n.id === selectedNodeId)
-        : null;
+      const sourceNode =
+        connectToSelected && selectedNodeId
+          ? nodes.find((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+          : null;
 
       setNodes((nds) => {
         let position: { x: number; y: number };
@@ -222,11 +534,42 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [setNodes, setEdges, selectedNodeId, nodes]
+    [nodes, pushHistory, selectedNodeId, setEdges, setNodes]
   );
+
+  const handleAddNote = useCallback(() => {
+    pushHistory();
+    const newNodeId = generateId();
+
+    setNodes((nds) => {
+      const noteCount = nds.filter((n) => n.type === NOTE_NODE_TYPE).length;
+      const col = noteCount % 2;
+      const row = Math.floor(noteCount / 2);
+
+      const position = { x: 350 + col * 240, y: 80 + row * 190 };
+
+      const newNode: Node = {
+        id: newNodeId,
+        type: NOTE_NODE_TYPE,
+        position,
+        data: {
+          label: "Note",
+          text: "",
+        },
+        connectable: false,
+      };
+
+      return [...nds, newNode];
+    });
+
+    setSelectedNodeId(newNodeId);
+    setSelectedEdgeId(null);
+    setIsDirty(true);
+  }, [pushHistory, setNodes]);
 
   const handleUpdateNode = useCallback(
     (nodeId: string, updates: Partial<Node["data"]>) => {
+      pushHistoryForEdit();
       setNodes((nds) =>
         nds.map((node) =>
           node.id === nodeId
@@ -236,11 +579,13 @@ export function GraphEditor({
       );
       setIsDirty(true);
     },
-    [setNodes]
+    [pushHistoryForEdit, setNodes]
   );
 
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
+      if (!nodes.some((n) => n.id === nodeId)) return;
+      pushHistory();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
       if (selectedNodeId === nodeId) {
@@ -248,7 +593,7 @@ export function GraphEditor({
       }
       setIsDirty(true);
     },
-    [setNodes, setEdges, selectedNodeId]
+    [nodes, pushHistory, setNodes, setEdges, selectedNodeId]
   );
 
   const handleDuplicateNode = useCallback(
@@ -256,6 +601,7 @@ export function GraphEditor({
       const nodeToDuplicate = nodes.find((n) => n.id === nodeId);
       if (!nodeToDuplicate) return;
 
+      pushHistory();
       const newNodeId = generateId();
       const newNode: Node = {
         ...nodeToDuplicate,
@@ -275,18 +621,20 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [nodes, setNodes]
+    [nodes, pushHistory, setNodes]
   );
 
   const handleDeleteEdge = useCallback(
     (edgeId: string) => {
+      if (!edges.some((e) => e.id === edgeId)) return;
+      pushHistory();
       setEdges((eds) => eds.filter((e) => e.id !== edgeId));
       if (selectedEdgeId === edgeId) {
         setSelectedEdgeId(null);
       }
       setIsDirty(true);
     },
-    [setEdges, selectedEdgeId],
+    [edges, pushHistory, setEdges, selectedEdgeId],
   );
 
   const handleSave = useCallback(async () => {
@@ -301,59 +649,122 @@ export function GraphEditor({
   }, [nodes, edges, graphName, graphDescription, graphId, onSave]);
 
   const handleAutoLayout = useCallback(() => {
+    if (nodes.length === 0) return;
+    pushHistory();
+    const executableNodes = nodes.filter((node) => node.type !== NOTE_NODE_TYPE);
+    const noteNodes = nodes.filter((node) => node.type === NOTE_NODE_TYPE);
+    const executableIds = new Set(executableNodes.map((node) => node.id));
+    const executableEdges = edges.filter(
+      (edge) => executableIds.has(edge.source) && executableIds.has(edge.target)
+    );
+
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-      nodes,
-      edges,
+      executableNodes,
+      executableEdges,
       { direction: "TB", nodeSpacing: 50, rankSpacing: 100 }
     );
-    setNodes(layoutedNodes);
+    setNodes([...layoutedNodes, ...noteNodes]);
     setEdges(layoutedEdges);
     setIsDirty(true);
-  }, [nodes, edges, setNodes, setEdges]);
+  }, [nodes, edges, pushHistory, setNodes, setEdges]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd/Ctrl + S to save
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        if (!saving) {
-          void handleSave();
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          if (!saving) {
+            void handleSave();
+          }
         }
       }
 
       // Cmd/Ctrl + A to select all nodes
-      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
-        const target = e.target as HTMLElement;
-        if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+        if (!isEditableTarget(e.target)) {
           e.preventDefault();
           setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
+        }
+      }
+
+      // Cmd/Ctrl + Z (undo) and Cmd/Ctrl + Shift + Z (redo)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            handleRedo();
+          } else {
+            handleUndo();
+          }
+        }
+      }
+
+      // Cmd/Ctrl + Y to redo (Windows convention)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+
+      // Cmd/Ctrl + Shift + F to focus node search
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          paletteSearchRef.current?.focus();
+          paletteSearchRef.current?.select();
+        }
+      }
+
+      // Cmd/Ctrl + C to copy selected nodes
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          handleCopy();
+        }
+      }
+
+      // Cmd/Ctrl + V to paste copied nodes
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          handlePaste();
+        }
+      }
+
+      // Cmd/Ctrl + D to duplicate selection
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          handleDuplicateSelection();
         }
       }
 
       // Delete/Backspace to delete selected node
       if (e.key === "Delete" || e.key === "Backspace") {
         // Only delete if not focused on an input
-        const target = e.target as HTMLElement;
-        if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") {
-          if (selectedNodeId) {
-            handleDeleteNode(selectedNodeId);
-          } else if (selectedEdgeId) {
-            handleDeleteEdge(selectedEdgeId);
-          }
+        if (!isEditableTarget(e.target)) {
+          handleDeleteSelection();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSave, saving, selectedNodeId, selectedEdgeId, handleDeleteNode, handleDeleteEdge, setNodes]);
+  }, [handleSave, saving, setNodes, handleUndo, handleRedo, handleCopy, handlePaste, handleDuplicateSelection, handleDeleteSelection]);
 
   return (
     <div className="flex h-full">
       {/* Left Panel - Node Palette */}
       <div className="w-64 border-r border-gray-200 bg-white overflow-y-auto">
-        <NodePalette onAddNode={handleAddNode} hasSelectedNode={!!selectedNodeId} />
+        <NodePalette
+          onAddNode={handleAddNode}
+          onAddNote={handleAddNote}
+          hasSelectedNode={canQuickAddConnect}
+          searchInputRef={paletteSearchRef}
+        />
       </div>
 
       {/* Center - Canvas */}
@@ -367,6 +778,7 @@ export function GraphEditor({
           connectOnClick
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
+          onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
@@ -391,6 +803,29 @@ export function GraphEditor({
             className="bg-white border border-gray-200 rounded-lg"
           />
           <Panel position="top-right" className="flex items-center gap-2">
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm flex">
+              <button
+                type="button"
+                aria-label="Undo"
+                onClick={handleUndo}
+                disabled={!canUndo}
+                title="Undo (Ctrl+Z)"
+                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Undo2 aria-hidden="true" className="h-4 w-4" />
+              </button>
+              <div className="w-px bg-gray-200" />
+              <button
+                type="button"
+                aria-label="Redo"
+                onClick={handleRedo}
+                disabled={!canRedo}
+                title="Redo (Ctrl+Y)"
+                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Redo2 aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </div>
             <button
               type="button"
               aria-label="Auto-layout"

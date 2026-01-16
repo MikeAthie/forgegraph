@@ -146,6 +146,9 @@ npm run test:coverage
 # Run Playwright E2E tests
 npm run test:e2e
 
+# Run only the graph editor E2E spec
+npm run test:e2e -- __tests__/e2e/graph-editor.spec.ts
+
 # Run Playwright E2E tests with UI
 npm run test:e2e:ui
 
@@ -202,6 +205,12 @@ npx playwright install
 - Delete graph with confirmation
 - Graph details navigation
 - Empty state handling
+
+**Graph Editor (`graph-editor.spec.ts`)**
+- Open editor for a graph
+- Add nodes from the palette
+- Connect/configure nodes and save
+- Reload and verify persistence
 
 **Prompts (`prompts.spec.ts`)**
 - Prompt library page display

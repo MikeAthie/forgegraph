@@ -107,6 +107,7 @@ describe("Graph Conversion Utilities", () => {
             id: "node-1",
             type: NODE_TYPES.PROMPT,
             name: "Retryable Prompt",
+            disabled: true,
             config: {},
             retry_policy: {
               max_attempts: 3,
@@ -124,6 +125,7 @@ describe("Graph Conversion Utilities", () => {
       const result = graphJsonToReactFlow(graphJson);
 
       expect(result.nodes[0].data).toMatchObject({
+        disabled: true,
         retry_policy: {
           max_attempts: 3,
           backoff_ms: 1000,
@@ -465,6 +467,7 @@ describe("Graph Conversion Utilities", () => {
             id: "node-2",
             type: NODE_TYPES.HTTP,
             name: "API Call",
+            disabled: true,
             config: {
               method: "POST",
               url: "https://api.example.com/data",
@@ -533,6 +536,7 @@ describe("Graph Conversion Utilities", () => {
         expect(converted.id).toBe(original.id);
         expect(converted.type).toBe(original.type);
         expect(converted.name).toBe(original.name);
+        expect(converted.disabled).toBe(original.disabled);
         expect(converted.config).toEqual(original.config);
         expect(converted.retry_policy).toEqual(original.retry_policy);
         expect(converted.timeout_ms).toEqual(original.timeout_ms);

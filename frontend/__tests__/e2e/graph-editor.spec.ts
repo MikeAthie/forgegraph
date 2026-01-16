@@ -83,6 +83,7 @@ test.beforeAll(async ({ request }, testInfo) => {
 });
 
 test.describe("Graph Editor", () => {
+  test.describe.configure({ mode: "serial" });
   test.beforeEach(async ({ page }) => {
     await login(page, seededUser);
   });
@@ -200,7 +201,7 @@ test.describe("Graph Editor", () => {
     // Inspector should show node config
     await expect(page.getByText("Node Config")).toBeVisible();
     await expect(page.getByText("prompt", { exact: true })).toBeVisible(); // Type badge
-    await expect(page.getByRole("button", { name: /delete/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^delete$/i })).toBeVisible();
   });
 
   test("updates node name via inspector", async ({ page }) => {
@@ -515,8 +516,10 @@ test.describe("Graph Editor", () => {
     const graphName = createGraphName("Empty Graph Test");
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
-    await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    const createDialog = page.getByRole("dialog");
+    await createDialog.waitFor({ state: "visible" });
+    await createDialog.locator("#create-graph-name").fill(graphName);
+    await createDialog.getByRole("button", { name: /^create$/i }).click();
 
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
@@ -544,33 +547,12 @@ test.describe("Graph Editor", () => {
 
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
-    // Add nodes in sequence
+    // Add nodes in sequence (quick-add will connect to the selected node)
     await page.getByRole("button", { name: /^prompt/i }).click();
-    await page.getByRole("button", { name: /^http/i }).click();
-    await page.getByRole("button", { name: /^output/i }).click();
-    await page.getByRole("button", { name: /^transform/i }).click();
-
-    // All nodes should be visible
-    await expect(page.getByText("Prompt Node")).toBeVisible();
-    await expect(page.getByText("HTTP Node")).toBeVisible();
-    await expect(page.getByText("Transform Node")).toBeVisible();
-    await expect(page.getByText("Output Node")).toBeVisible();
-
-    // Connect nodes: Prompt -> HTTP -> Transform -> Output
-    const edges = page.locator('[data-testid^="rf__edge-"]');
-    await connectNodes(page, "Prompt Node", "HTTP Node");
-    await expect(edges).toHaveCount(1);
-    await connectNodes(page, "HTTP Node", "Transform Node");
-    await expect(edges).toHaveCount(2);
-    await connectNodes(page, "Transform Node", "Output Node");
-    await expect(edges).toHaveCount(3);
-
-    // Configure nodes
-    await page.getByText("Prompt Node").click();
     await page.getByPlaceholder(/select or enter prompt id/i).fill("workflow-prompt");
     await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
 
-    await page.getByText("HTTP Node").click();
+    await page.getByRole("button", { name: /^http/i }).click();
     const httpConfigSection = page
       .getByRole("heading", { name: /^http configuration$/i })
       .locator("..");
@@ -578,12 +560,21 @@ test.describe("Graph Editor", () => {
     await page.getByPlaceholder(/https:\/\/api\.example\.com/i).fill("https://api.test.com/endpoint");
     await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();
 
-    await page.getByText("Transform Node").click();
+    await page.getByRole("button", { name: /^transform/i }).click();
     await page.getByPlaceholder(/state\.input \| uppercase/i).fill("state.data | lowercase");
     await expect(page.getByText(/state\.data \| lowercase\.\.\./i)).toBeVisible();
 
-    await page.getByText("Output Node").click();
+    await page.getByRole("button", { name: /^output/i }).click();
     await page.getByPlaceholder(/state\.final_output/i).fill('{"result":"state.final_output"}');
+
+    // All nodes should be visible
+    await expect(page.getByText("Prompt Node")).toBeVisible();
+    await expect(page.getByText("HTTP Node")).toBeVisible();
+    await expect(page.getByText("Transform Node")).toBeVisible();
+    await expect(page.getByText("Output Node")).toBeVisible();
+
+    // Prompt -> HTTP -> Transform -> Output should be connected via quick-add edges
+    await expect(page.locator('[data-testid^="rf__edge-"]')).toHaveCount(3, { timeout: 15000 });
 
     // Save the workflow
     await page.getByRole("button", { name: /^save$/i }).click();
@@ -600,7 +591,7 @@ test.describe("Graph Editor", () => {
     await expect(page.getByText("HTTP Node")).toBeVisible();
     await expect(page.getByText("Transform Node")).toBeVisible();
     await expect(page.getByText("Output Node")).toBeVisible();
-    await expect(page.locator('[data-testid^="rf__edge-"]')).toHaveCount(3);
+    await expect(page.locator('[data-testid^="rf__edge-"]')).toHaveCount(3, { timeout: 15000 });
 
     await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
     await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();

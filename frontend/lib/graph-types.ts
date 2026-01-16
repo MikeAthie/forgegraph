@@ -122,6 +122,8 @@ export interface GraphNode {
   type: NodeType;
   /** Display name for the node */
   name: string;
+  /** If true, node is skipped during execution. */
+  disabled?: boolean;
   /** Node-specific configuration */
   config: NodeConfig;
   /** Optional retry policy */
@@ -158,6 +160,12 @@ export interface GraphMetadata {
   [key: string]: unknown;
 }
 
+export interface NoteEditorNode {
+  id: string;
+  label?: string;
+  text: string;
+}
+
 /**
  * Editor-specific UI state that should be preserved but ignored by the engine.
  * Stored in a dedicated location to keep engine-relevant data clean.
@@ -171,6 +179,8 @@ export interface EditorState {
     y: number;
     zoom: number;
   };
+  /** Sticky notes/annotations (editor-only). */
+  notes?: NoteEditorNode[];
   /** Additional UI flags */
   [key: string]: unknown;
 }

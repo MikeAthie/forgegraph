@@ -114,8 +114,8 @@
   - [x] Output node
     - [x] Final output mapping (what to return at end of run)
 - [ ] 6.3 Optional advanced fields (align with `SPECS.md` section 8)
-  - [ ] `timeout_ms` editor
-  - [ ] `retry_policy` editor (max attempts, backoff)
+  - [x] `timeout_ms` editor
+  - [x] `retry_policy` editor (max attempts, backoff)
   - [ ] `outputs` editor (named outputs, for future branch/merge)
 
 ---
@@ -138,10 +138,10 @@
   - [x] Surface backend validation errors (missing fields, invalid node types, cycle detection)
   - [x] Map common errors to helpful UI hints (highlight offending nodes/edges when possible)
   - [x] Disable save while request is in-flight; recover cleanly on failure
-- [ ] 7.5 Load older versions
-  - [ ] Versions list/dropdown in editor
-  - [ ] Switching versions prompts if there are unsaved changes
-  - [ ] Loading an older version keeps editing enabled, but saving creates a new version (no overwrite)
+- [x] 7.5 Load older versions
+  - [x] Versions list/dropdown in editor
+  - [x] Switching versions prompts if there are unsaved changes
+  - [x] Loading an older version keeps editing enabled, but saving creates a new version (no overwrite)
 
 ---
 
@@ -162,13 +162,13 @@
 - [x] 9.1 Unit tests for graph conversion utilities
   - [x] Round-trip: GraphJson -> React Flow -> GraphJson
   - [x] Required keys always present (`nodes`, `edges`, `id/type/name`, `from/to`)
-- [ ] 9.2 Component tests for editor behavior
+- [x] 9.2 Component tests for editor behavior
   - [x] Add node from palette and render it
   - [x] Select node and edit config
-  - [ ] Create and delete edges/nodes
-- [ ] 9.3 Playwright E2E tests for graph editor flow
+  - [x] Create and delete edges/nodes
+- [x] 9.3 Playwright E2E tests for graph editor flow
   - [x] Create graph -> open editor
-  - [ ] Add nodes -> connect -> configure -> save
+  - [x] Add nodes -> connect -> configure -> save
   - [x] Reload editor and verify persisted graph renders the same
 - [x] 9.4 Build and regression checks
   - [x] `npm test` (unit/integration)
@@ -179,26 +179,26 @@
 
 ## 10. Documentation
 
-- [ ] 10.1 Update project docs for Phase 2
-  - [ ] Add a short "Graph Builder" section to `README.md` (how to use, how to save/load)
-  - [ ] Update `TESTING.md` with graph editor E2E coverage and how to run it
-  - [ ] Ensure `CLAUDE.md` Phase status remains accurate
+- [x] 10.1 Update project docs for Phase 2
+  - [x] Add a short "Graph Builder" section to `README.md` (how to use, how to save/load)
+  - [x] Update `TESTING.md` with graph editor E2E coverage and how to run it
+  - [x] Ensure `CLAUDE.md` Phase status remains accurate
 
 ---
 
 ## 11. Final Verification
 
-- [ ] 11.1 End-to-end manual QA
-  - [ ] Login -> create graph -> open editor
-  - [ ] Add >= 3 nodes, connect them, configure them
-  - [ ] Save and verify a new GraphVersion is created
-  - [ ] Reload and confirm the graph loads identically (nodes, edges, layout)
+- [x] 11.1 End-to-end manual QA (covered by Playwright E2E)
+  - [x] Login -> create graph -> open editor
+  - [x] Add >= 3 nodes, connect them, configure them
+  - [x] Save and verify a new GraphVersion is created
+  - [x] Reload and confirm the graph loads identically (nodes, edges, layout)
 - [ ] 11.2 Contract verification
-  - [ ] Saved `graph_json` matches `SPECS.md` section 8 and passes backend validation
+  - [x] Saved `graph_json` matches `SPECS.md` section 8 and passes backend validation
   - [ ] Cycle detection is enforced (backend error surfaced cleanly)
-- [ ] 11.3 Clean up
-  - [ ] No secrets committed; `.env*` remains untracked
-  - [ ] All tests passing
+- [x] 11.3 Clean up
+  - [x] No secrets committed; `.env*` remains untracked
+  - [x] All tests passing
 
 ---
 
@@ -212,10 +212,10 @@
 | 4. Node Palette | 3 | ✅ |
 | 5. Canvas Interactions | 4 | ✅ |
 | 6. Node Inspector | 3 | 🟡 (6.3 pending) |
-| 7. Save/Load Versions | 5 | 🟡 (7.5 pending) |
+| 7. Save/Load Versions | 5 | ✅ |
 | 8. Metadata & UX | 2 | ✅ |
-| 9. Testing & Quality | 4 | ? |
-| 10. Documentation | 1 | ? |
-| 11. Verification | 3 | ? |
+| 9. Testing & Quality | 4 | ✅ |
+| 10. Documentation | 1 | ✅ |
+| 11. Verification | 3 | 🟡 (cycle detection pending) |
 
 **Total: ~34 tasks**

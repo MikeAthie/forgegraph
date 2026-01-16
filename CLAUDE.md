@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ForgeGraph is a visual, high-performance workflow engine for AI agents and automation. Users design agent workflows visually, run them reliably at scale, and debug them like software.
 
-**Current Phase:** Phase 1 (Django control plane core complete)
+**Current Phase:** Phase 2.5 (Graph builder UI/UX complete)
 
 See [SPECS.md](SPECS.md) for full project specification.
 See [architecture.md](architecture.md) for Clean Architecture structure.
@@ -133,7 +133,7 @@ Engine maintains `map[string]any` state:
 
 - [x] Phase 0: Monorepo scaffolding + Docker + gRPC ping
 - [x] Phase 1: Django models + auth + prompt library
-- [ ] Phase 2: NextJS graph builder + save/load JSON
+- [x] Phase 2: NextJS graph builder + save/load JSON
 - [ ] Phase 3: Go engine basic execution (prompt/http/output nodes)
 - [ ] Phase 4: Run viewer + persistence
 - [ ] Phase 5: Branch/merge + retry/timeout

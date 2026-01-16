@@ -5,17 +5,22 @@ import type {
   GraphJson,
   GraphMetadata,
   GraphNode,
+  NoteEditorNode,
   NodeConfig,
   NodeOutput,
   NodeType,
   RetryPolicy,
 } from "./graph-types";
+import { isValidNodeType } from "./graph-types";
+
+const NOTE_NODE_TYPE = "note";
 
 export function graphJsonToReactFlow(graphJson: GraphJson): {
   nodes: Node[];
   edges: Edge[];
 } {
   const positions = graphJson.editor_state?.nodePositions ?? {};
+  const noteState = graphJson.editor_state?.notes ?? [];
 
   const nodes: Node[] = graphJson.nodes.map((node, index) => ({
     id: node.id,
@@ -25,11 +30,27 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
       label: node.name,
       nodeType: node.type,
       config: node.config,
+      disabled: node.disabled,
       retry_policy: node.retry_policy,
       timeout_ms: node.timeout_ms,
       outputs: node.outputs,
     },
   }));
+
+  const noteNodes: Node[] = (noteState as NoteEditorNode[])
+    .filter((note) => typeof note?.id === "string" && note.id.length > 0)
+    .map((note, index) => ({
+      id: note.id,
+      type: NOTE_NODE_TYPE,
+      position:
+        positions[note.id] ??
+        { x: 450, y: 100 + index * 160 },
+      data: {
+        label: note.label ?? "Note",
+        text: note.text ?? "",
+      },
+      connectable: false,
+    }));
 
   const edges: Edge[] = graphJson.edges.map((edge) => ({
     id: edge.id,
@@ -41,7 +62,7 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
     },
   }));
 
-  return { nodes, edges };
+  return { nodes: [...nodes, ...noteNodes], edges };
 }
 
 export function reactFlowToGraphJson(
@@ -51,13 +72,22 @@ export function reactFlowToGraphJson(
   graphId?: string,
   versionId?: string
 ): GraphJson {
-  const graphNodes: GraphNode[] = nodes.map((node) => {
+  const executableNodes = nodes.filter((node): node is Node & { type: NodeType } =>
+    isValidNodeType(node.type ?? "")
+  );
+
+  const noteNodes = nodes.filter((node) => node.type === NOTE_NODE_TYPE);
+
+  const graphNodes: GraphNode[] = executableNodes.map((node) => {
     const result: GraphNode = {
       id: node.id,
       type: node.type as NodeType,
       name: node.data.label as string,
       config: (node.data.config as NodeConfig) ?? {},
     };
+    if (node.data.disabled === true) {
+      result.disabled = true;
+    }
     if (node.data.retry_policy) {
       result.retry_policy = node.data.retry_policy as RetryPolicy;
     }
@@ -70,18 +100,30 @@ export function reactFlowToGraphJson(
     return result;
   });
 
-  const graphEdges: GraphEdge[] = edges.map((edge) => ({
-    id: edge.id,
-    from: edge.source,
-    to: edge.target,
-    label: edge.label as string | undefined,
-    condition: edge.data?.condition as string | undefined,
-  }));
+  const executableNodeIds = new Set(executableNodes.map((node) => node.id));
+  const graphEdges: GraphEdge[] = edges
+    .filter(
+      (edge) =>
+        executableNodeIds.has(edge.source) && executableNodeIds.has(edge.target)
+    )
+    .map((edge) => ({
+      id: edge.id,
+      from: edge.source,
+      to: edge.target,
+      label: edge.label as string | undefined,
+      condition: edge.data?.condition as string | undefined,
+    }));
 
   const nodePositions: Record<string, { x: number; y: number }> = {};
   for (const node of nodes) {
     nodePositions[node.id] = node.position;
   }
+
+  const notes: NoteEditorNode[] = noteNodes.map((node) => ({
+    id: node.id,
+    label: (node.data as any)?.label ? String((node.data as any).label) : undefined,
+    text: (node.data as any)?.text ? String((node.data as any).text) : "",
+  }));
 
   return {
     graph_id: graphId,
@@ -91,7 +133,7 @@ export function reactFlowToGraphJson(
     metadata,
     editor_state: {
       nodePositions,
+      notes: notes.length > 0 ? notes : undefined,
     },
   };
 }
-

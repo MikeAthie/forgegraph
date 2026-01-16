@@ -16,6 +16,9 @@
   - [x] When a node is selected, clicking palette item adds node AND creates edge
   - [x] New node positioned below selected node
   - [x] Link icon indicator when node is selected
+- [x] 1.3 Categorize nodes in NodePalette
+  - [x] Group nodes under category headers (AI / Logic / I/O / Annotations)
+  - [x] Search includes category labels
 
 ---
 
@@ -47,7 +50,10 @@
   - [x] Toggle switch in NodeInspector
   - [x] Visual indicator on node (grayed out, strikethrough label)
   - [x] "disabled" badge on disabled nodes
-- [ ] 3.5 Sticky notes / comment nodes (deferred)
+- [x] 3.5 Sticky notes / comment nodes
+  - [x] "Note" node type (editor-only) in palette
+  - [x] Notes persisted in `editor_state.notes`
+  - [x] Note text editable in inspector
 
 ---
 
@@ -82,7 +88,7 @@
 - [x] 6.3 Advanced config accordion in NodeInspector
   - [x] Collapsible "Advanced" section
   - [x] Timeout (ms) field
-  - [x] Retry policy (max attempts, backoff multiplier)
+  - [x] Retry policy (max attempts, backoff, strategy)
   - [x] "configured" indicator when collapsed
 
 ---
@@ -91,22 +97,25 @@
 
 | Section | Completed | Total | Status |
 |---------|-----------|-------|--------|
-| 1. Node Discovery | 2 | 2 | ✅ |
+| 1. Node Discovery | 3 | 3 | ✅ |
 | 2. Canvas Controls | 6 | 6 | ✅ |
-| 3. Node Interaction | 4 | 5 | ✅ (1 skipped, 1 deferred) |
+| 3. Node Interaction | 4 | 5 | ✅ (1 skipped) |
 | 4. Execution | 0 | 4 | ⏸️ (deferred to Phase 3+) |
-| 5. Version History | 4 | 5 | ✅ (1 deferred) |
+| 5. Version History | 4 | 5 | 🟡 (1 deferred) |
 | 6. Advanced Nodes | 3 | 3 | ✅ |
 
-**Completed: 19/25 tasks** (4 deferred to engine integration, 2 low-priority deferrals)
+**Completed: 20/26 tasks** (4 deferred to engine integration, 1 deferred, 1 skipped)
 
 ---
 
 ## Files Modified
 
-- `frontend/components/graph-editor/NodePalette.tsx` - Search filter, quick-add indicator
-- `frontend/components/graph-editor/GraphEditor.tsx` - Quick-add, multi-select, auto-layout, keyboard shortcuts
-- `frontend/components/graph-editor/NodeInspector.tsx` - Duplicate button, disable toggle, advanced config accordion
+- `frontend/components/graph-editor/NodePalette.tsx` - Search, categories, quick-add indicator, note entry
+- `frontend/components/graph-editor/GraphEditor.tsx` - Quick-add, multi-select, auto-layout, notes, keyboard shortcuts
+- `frontend/components/graph-editor/NodeInspector.tsx` - Duplicate button, disable toggle, note editor, advanced config accordion
 - `frontend/components/graph-editor/nodes/GraphNode.tsx` - Delete on hover, disable visual, Branch/Merge handles
+- `frontend/components/graph-editor/nodes/NoteNode.tsx` - Sticky note rendering
+- `frontend/lib/graph-conversion.ts` - Persist/load notes via `editor_state.notes` (filter from executable graph)
 - `frontend/lib/graph-layout.ts` - New file for dagre auto-layout utility
+- `frontend/lib/graph-types.ts` - Note editor-state type
 - `frontend/package.json` - Added dagre dependency

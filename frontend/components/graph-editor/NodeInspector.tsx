@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { NODE_TYPES } from "../../lib/graph-types";
+import { NODE_TYPES, type RetryPolicy } from "../../lib/graph-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -168,6 +168,7 @@ export function NodeInspector({
 
   const nodeType = selectedNode.type as string;
   const nodeData = selectedNode.data;
+  const isNote = nodeType === "note";
 
   return (
     <div className="p-4">
@@ -226,33 +227,41 @@ export function NodeInspector({
           </p>
         </div>
 
-        {/* Disable toggle */}
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-700">
-            Enabled
-          </label>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!nodeData.disabled}
-            onClick={() =>
-              onUpdateNode(selectedNode.id, { disabled: !nodeData.disabled })
-            }
-            className={`
-              relative inline-flex h-5 w-9 items-center rounded-full transition-colors
-              ${nodeData.disabled ? "bg-gray-300" : "bg-primary"}
-            `}
-          >
-            <span
+        {!isNote && (
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-gray-700">
+              Enabled
+            </label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!nodeData.disabled}
+              onClick={() =>
+                onUpdateNode(selectedNode.id, { disabled: !nodeData.disabled })
+              }
               className={`
-                inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform
-                ${nodeData.disabled ? "translate-x-0.5" : "translate-x-4.5"}
+                relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                ${nodeData.disabled ? "bg-gray-300" : "bg-primary"}
               `}
-            />
-          </button>
-        </div>
+            >
+              <span
+                className={`
+                  inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform
+                  ${nodeData.disabled ? "translate-x-0.5" : "translate-x-4.5"}
+                `}
+              />
+            </button>
+          </div>
+        )}
 
         {/* Node-specific config editors */}
+        {isNote && (
+          <NoteNodeConfig
+            text={(nodeData as any)?.text ? String((nodeData as any).text) : ""}
+            onChange={(text) => onUpdateNode(selectedNode.id, { text })}
+          />
+        )}
+
         {nodeType === NODE_TYPES.PROMPT && (
           <PromptNodeConfig
             config={(nodeData.config as Record<string, unknown>) ?? {}}
@@ -281,12 +290,39 @@ export function NodeInspector({
           />
         )}
 
-        {/* Advanced Configuration */}
-        <AdvancedNodeConfig
-          timeoutMs={(nodeData.timeout_ms as number) ?? undefined}
-          retryPolicy={(nodeData.retry_policy as { max_attempts?: number; backoff_multiplier?: number }) ?? undefined}
-          onChangeTimeout={(timeout_ms) => onUpdateNode(selectedNode.id, { timeout_ms })}
-          onChangeRetryPolicy={(retry_policy) => onUpdateNode(selectedNode.id, { retry_policy })}
+        {!isNote && (
+          <AdvancedNodeConfig
+            timeoutMs={(nodeData.timeout_ms as number) ?? undefined}
+            retryPolicy={(nodeData.retry_policy as Partial<RetryPolicy>) ?? undefined}
+            onChangeTimeout={(timeout_ms) => onUpdateNode(selectedNode.id, { timeout_ms })}
+            onChangeRetryPolicy={(retry_policy) => onUpdateNode(selectedNode.id, { retry_policy })}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NoteNodeConfig({
+  text,
+  onChange,
+}: {
+  text: string;
+  onChange: (text: string) => void;
+}) {
+  return (
+    <div className="space-y-3 pt-3 border-t border-gray-200">
+      <h4 className="text-xs font-medium text-gray-700">Note</h4>
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          Text
+        </label>
+        <textarea
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Write a note to document this part of the workflow..."
+          rows={6}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         />
       </div>
     </div>
@@ -468,9 +504,9 @@ function AdvancedNodeConfig({
   onChangeRetryPolicy,
 }: {
   timeoutMs?: number;
-  retryPolicy?: { max_attempts?: number; backoff_multiplier?: number };
+  retryPolicy?: Partial<RetryPolicy>;
   onChangeTimeout: (timeout: number | undefined) => void;
-  onChangeRetryPolicy: (policy: { max_attempts?: number; backoff_multiplier?: number } | undefined) => void;
+  onChangeRetryPolicy: (policy: RetryPolicy | undefined) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -527,52 +563,82 @@ function AdvancedNodeConfig({
               value={retryPolicy?.max_attempts ?? ""}
               onChange={(e) => {
                 const val = e.target.value;
-                const newPolicy = {
-                  ...retryPolicy,
-                  max_attempts: val ? parseInt(val, 10) : undefined,
-                };
-                if (!newPolicy.max_attempts && !newPolicy.backoff_multiplier) {
+                const max_attempts = val ? parseInt(val, 10) : undefined;
+
+                if (max_attempts === undefined && retryPolicy?.backoff_ms === undefined) {
                   onChangeRetryPolicy(undefined);
-                } else {
-                  onChangeRetryPolicy(newPolicy);
+                  return;
                 }
+
+                onChangeRetryPolicy({
+                  max_attempts: max_attempts ?? retryPolicy?.max_attempts ?? 3,
+                  backoff_ms: retryPolicy?.backoff_ms ?? 1000,
+                  backoff_strategy: retryPolicy?.backoff_strategy ?? "exponential",
+                });
               }}
               placeholder="3"
               className="text-sm"
-              min={0}
+              min={1}
               max={10}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Number of retry attempts on failure (0 = no retries)
+              Total attempts on failure (1 = no retries)
             </p>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Backoff Multiplier
+              Backoff (ms)
             </label>
             <Input
               type="number"
-              value={retryPolicy?.backoff_multiplier ?? ""}
+              value={retryPolicy?.backoff_ms ?? ""}
               onChange={(e) => {
                 const val = e.target.value;
-                const newPolicy = {
-                  ...retryPolicy,
-                  backoff_multiplier: val ? parseFloat(val) : undefined,
-                };
-                if (!newPolicy.max_attempts && !newPolicy.backoff_multiplier) {
+                const backoff_ms = val ? parseInt(val, 10) : undefined;
+
+                if (backoff_ms === undefined && retryPolicy?.max_attempts === undefined) {
                   onChangeRetryPolicy(undefined);
-                } else {
-                  onChangeRetryPolicy(newPolicy);
+                  return;
                 }
+
+                onChangeRetryPolicy({
+                  max_attempts: retryPolicy?.max_attempts ?? 3,
+                  backoff_ms: backoff_ms ?? retryPolicy?.backoff_ms ?? 1000,
+                  backoff_strategy: retryPolicy?.backoff_strategy ?? "exponential",
+                });
               }}
-              placeholder="2.0"
+              placeholder="1000"
               className="text-sm"
-              min={1}
-              step={0.1}
+              min={0}
+              step={100}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Exponential backoff multiplier between retries
+              Base delay between retries (fixed), or base delay for exponential backoff
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Backoff Strategy
+            </label>
+            <select
+              value={retryPolicy?.backoff_strategy ?? "exponential"}
+              onChange={(e) => {
+                const backoff_strategy = e.target.value as RetryPolicy["backoff_strategy"];
+                onChangeRetryPolicy({
+                  max_attempts: retryPolicy?.max_attempts ?? 3,
+                  backoff_ms: retryPolicy?.backoff_ms ?? 1000,
+                  backoff_strategy: backoff_strategy ?? "exponential",
+                });
+              }}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="exponential">exponential</option>
+              <option value="fixed">fixed</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Exponential uses backoff * 2^(attempt-2)
             </p>
           </div>
         </div>

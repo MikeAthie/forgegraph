@@ -13,12 +13,22 @@ const backendUrl = `http://127.0.0.1:${backendPort}`;
 // Give E2E helpers a stable default API URL (avoids IPv6 localhost issues on some hosts).
 process.env.PLAYWRIGHT_API_URL = process.env.PLAYWRIGHT_API_URL ?? backendUrl;
 
+const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
+const useSqlite = (process.env.USE_SQLITE ?? "true").toLowerCase() === "true";
+// SQLite-backed Django dev server can get flaky under high concurrency; default to serial execution unless overridden.
+const workerCount =
+  Number.isFinite(workerOverride) && workerOverride && workerOverride > 0
+    ? workerOverride
+    : process.env.CI || useSqlite
+      ? 1
+      : undefined;
+
 export default defineConfig({
   testDir: './__tests__/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: workerCount,
   reporter: 'html',
   use: {
     baseURL: devUrl,
