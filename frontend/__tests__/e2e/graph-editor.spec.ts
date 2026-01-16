@@ -11,13 +11,49 @@
  * - Editing graph metadata
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { createTestUser, ensureUserRegistered, login, type TestUser } from "./helpers";
 
 let seededUser: TestUser;
 
 const createGraphName = (prefix: string) =>
   `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+async function getCenter(locator: Locator) {
+  const box = await locator.boundingBox();
+  if (!box) {
+    throw new Error("Could not determine element bounding box");
+  }
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+async function connectNodes(
+  page: Page,
+  sourceLabel: string,
+  targetLabel: string
+) {
+  const sourceNode = page.locator(".react-flow__node").filter({ hasText: sourceLabel }).first();
+  const targetNode = page.locator(".react-flow__node").filter({ hasText: targetLabel }).first();
+
+  await expect(sourceNode).toBeVisible();
+  await expect(targetNode).toBeVisible();
+
+  const sourceHandle = sourceNode
+    .locator(".react-flow__handle.source.react-flow__handle-bottom")
+    .first();
+
+  await expect(sourceHandle).toBeVisible();
+  await expect(sourceHandle).toHaveClass(/connectionindicator/);
+
+  const targetHandle = targetNode
+    .locator(".react-flow__handle.target.react-flow__handle-top")
+    .first();
+
+  await expect(targetHandle).toBeVisible();
+  await expect(targetHandle).toHaveClass(/connectionindicator/);
+
+  await sourceHandle.dragTo(targetHandle);
+}
 
 test.beforeAll(async ({ request }, testInfo) => {
   seededUser = createTestUser(testInfo, "e2e-graph-editor");
@@ -204,7 +240,10 @@ test.describe("Graph Editor", () => {
     // Configure HTTP settings
     await expect(page.getByText("HTTP Configuration")).toBeVisible();
 
-    const methodSelect = page.locator("select").first();
+    const httpConfigSection = page
+      .getByRole("heading", { name: /^http configuration$/i })
+      .locator("..");
+    const methodSelect = httpConfigSection.locator("select");
     await methodSelect.selectOption("POST");
 
     const urlInput = page.getByPlaceholder(/https:\/\/api\.example\.com/i);
@@ -259,7 +298,15 @@ test.describe("Graph Editor", () => {
     await expect(page.getByRole("button", { name: /saving\.\.\./i })).toBeVisible();
 
     // Should show version number
-    await expect(page.getByText(/v1/)).toBeVisible();
+    const versionSelect = page.getByRole("combobox", { name: /^version$/i });
+    await expect(versionSelect).toBeVisible();
+    await expect
+      .poll(async () => {
+        return versionSelect.evaluate((el: HTMLSelectElement) => {
+          return el.options[el.selectedIndex]?.textContent ?? "";
+        });
+      })
+      .toMatch(/v1/i);
 
     // Should show success toast
     await expect(page.getByText(/saved as version/i)).toBeVisible();
@@ -451,8 +498,15 @@ test.describe("Graph Editor", () => {
 
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
-    // Should show no version initially
-    await expect(page.getByText("No version")).toBeVisible();
+    const versionSelect = page.getByRole("combobox", { name: /^version$/i });
+    await expect(versionSelect).toBeDisabled();
+    await expect
+      .poll(async () => {
+        return versionSelect.evaluate((el: HTMLSelectElement) => {
+          return el.options[el.selectedIndex]?.textContent ?? "";
+        });
+      })
+      .toMatch(/no version/i);
 
     // Save button should be disabled (no changes)
     const saveButton = page.getByRole("button", { name: /^save$/i });
@@ -480,8 +534,113 @@ test.describe("Graph Editor", () => {
     await expect(page.getByText("Transform Node")).toBeVisible();
     await expect(page.getByText("Output Node")).toBeVisible();
 
+    // Connect nodes: Prompt -> HTTP -> Transform -> Output
+    const edges = page.locator('[data-testid^="rf__edge-"]');
+    await connectNodes(page, "Prompt Node", "HTTP Node");
+    await expect(edges).toHaveCount(1);
+    await connectNodes(page, "HTTP Node", "Transform Node");
+    await expect(edges).toHaveCount(2);
+    await connectNodes(page, "Transform Node", "Output Node");
+    await expect(edges).toHaveCount(3);
+
+    // Configure nodes
+    await page.getByText("Prompt Node").click();
+    await page.getByPlaceholder(/select or enter prompt id/i).fill("workflow-prompt");
+    await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
+
+    await page.getByText("HTTP Node").click();
+    const httpConfigSection = page
+      .getByRole("heading", { name: /^http configuration$/i })
+      .locator("..");
+    await httpConfigSection.locator("select").selectOption("POST");
+    await page.getByPlaceholder(/https:\/\/api\.example\.com/i).fill("https://api.test.com/endpoint");
+    await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();
+
+    await page.getByText("Transform Node").click();
+    await page.getByPlaceholder(/state\.input \| uppercase/i).fill("state.data | lowercase");
+    await expect(page.getByText(/state\.data \| lowercase\.\.\./i)).toBeVisible();
+
+    await page.getByText("Output Node").click();
+    await page.getByPlaceholder(/state\.final_output/i).fill('{"result":"state.final_output"}');
+
     // Save the workflow
     await page.getByRole("button", { name: /^save$/i }).click();
     await expect(page.getByText(/saved as version 1/i)).toBeVisible();
+
+    // Reload and verify nodes/edges still render
+    const url = page.url();
+    await page.goto("/graphs");
+    await expect(page.getByRole("heading", { name: /^graphs$/i })).toBeVisible();
+    await page.goto(url);
+
+    await expect(page.getByText("Add Nodes")).toBeVisible();
+    await expect(page.getByText("Prompt Node")).toBeVisible();
+    await expect(page.getByText("HTTP Node")).toBeVisible();
+    await expect(page.getByText("Transform Node")).toBeVisible();
+    await expect(page.getByText("Output Node")).toBeVisible();
+    await expect(page.locator('[data-testid^="rf__edge-"]')).toHaveCount(3);
+
+    await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
+    await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();
+    await expect(page.getByText(/state\.data \| lowercase\.\.\./i)).toBeVisible();
+  });
+
+  test("loads older versions from the dropdown", async ({ page }) => {
+    const graphName = createGraphName("Version Switch Test");
+
+    await page.getByRole("button", { name: /^new graph$/i }).click();
+    await page.locator("#create-graph-name").fill(graphName);
+    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+
+    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+
+    const versionSelect = page.getByRole("combobox", { name: /^version$/i });
+
+    // Create v1
+    await page.getByRole("button", { name: /^prompt/i }).click();
+    await page.getByText("Prompt Node").click();
+    await page.getByPlaceholder(/select or enter prompt id/i).fill("v1-prompt");
+    await page.getByRole("button", { name: /^save$/i }).click();
+    await expect(page.getByText(/saved as version 1/i)).toBeVisible();
+
+    const versionIds = await versionSelect.evaluate((el: HTMLSelectElement) => {
+      const byText = (text: string) => Array.from(el.options).find((o) => o.textContent === text)?.value ?? "";
+      return { v1: byText("v1"), v2: byText("v2") };
+    });
+
+    // Create v2
+    await page.getByText("Prompt Node").click();
+    await page.getByPlaceholder(/select or enter prompt id/i).fill("v2-prompt");
+    await page.getByRole("button", { name: /^save$/i }).click();
+    await expect(page.getByText(/saved as version 2/i)).toBeVisible();
+
+    const versionIdsAfterV2 = await versionSelect.evaluate((el: HTMLSelectElement) => {
+      const byText = (text: string) => Array.from(el.options).find((o) => o.textContent === text)?.value ?? "";
+      return { v1: byText("v1"), v2: byText("v2") };
+    });
+
+    expect(versionIdsAfterV2.v1).not.toBe("");
+    expect(versionIdsAfterV2.v2).not.toBe("");
+
+    // Make an unsaved change so switching prompts
+    await page.getByText("Prompt Node").click();
+    await page.getByPlaceholder(/select or enter prompt id/i).fill("unsaved-change");
+    await expect(page.getByText("*")).toBeVisible();
+
+    page.once("dialog", async (dialog) => {
+      expect(dialog.type()).toBe("confirm");
+      await dialog.accept();
+    });
+
+    await versionSelect.selectOption(versionIdsAfterV2.v1);
+
+    await expect(page.getByText(/prompt: v1-prompt/i)).toBeVisible();
+    await expect(page.getByText("*")).not.toBeVisible();
+
+    // Saving after loading older version creates a new version (no overwrite)
+    await page.getByText("Prompt Node").click();
+    await page.getByPlaceholder(/select or enter prompt id/i).fill("v3-prompt");
+    await page.getByRole("button", { name: /^save$/i }).click();
+    await expect(page.getByText(/saved as version 3/i)).toBeVisible();
   });
 });

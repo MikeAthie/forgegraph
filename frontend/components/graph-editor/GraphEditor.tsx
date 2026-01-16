@@ -9,6 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
+  type NodeDragHandler,
   type Connection,
   type Node,
   type Edge,
@@ -42,6 +43,10 @@ interface GraphEditorProps {
   graphDescription: string;
   initialGraphJson: GraphJson | null;
   currentVersion: number | null;
+  currentVersionId: string | null;
+  availableVersions: Array<{ id: string; version: number }>;
+  onSelectVersion: (versionId: string) => Promise<void>;
+  loadingVersion?: boolean;
   onSave: (graphJson: GraphJson) => Promise<void>;
   onUpdateMetadata: (name: string, description: string) => Promise<void>;
   saving: boolean;
@@ -58,6 +63,10 @@ export function GraphEditor({
   graphDescription,
   initialGraphJson,
   currentVersion,
+  currentVersionId,
+  availableVersions,
+  onSelectVersion,
+  loadingVersion = false,
   onSave,
   onUpdateMetadata,
   saving,
@@ -69,22 +78,48 @@ export function GraphEditor({
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [isEditingMetadata, setIsEditingMetadata] = useState(false);
 
-  // Track changes
+  // Sync editor state when the loaded version changes (save or version switch).
   useEffect(() => {
-    setIsDirty(true);
-  }, [nodes, edges]);
+    if (!initialGraphJson) {
+      setIsDirty(false);
+      return;
+    }
 
-  // Reset dirty state when initialGraphJson changes (after save)
-  useEffect(() => {
+    const next = graphJsonToReactFlow(initialGraphJson);
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
     setIsDirty(false);
-  }, [initialGraphJson]);
+  }, [initialGraphJson, setNodes, setEdges]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId)
     : null;
+
+  const handleSelectVersion = useCallback(
+    async (versionId: string) => {
+      if (!versionId || versionId === currentVersionId) return;
+
+      if (isDirty) {
+        const confirmed = window.confirm(
+          "You have unsaved changes. Discard them and switch versions?"
+        );
+        if (!confirmed) return;
+      }
+
+      try {
+        await onSelectVersion(versionId);
+      } catch {
+        // Errors are surfaced by the parent (toast).
+      }
+    },
+    [currentVersionId, isDirty, onSelectVersion],
+  );
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -107,16 +142,28 @@ export function GraphEditor({
       } as Edge;
 
       setEdges((eds) => addEdge(newEdge, eds));
+      setIsDirty(true);
     },
     [edges, setEdges]
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedEdgeId(edge.id);
+    setSelectedNodeId(null);
+  }, []);
+
+  const onNodeDragStop = useCallback<NodeDragHandler>(() => {
+    setIsDirty(true);
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
   }, []);
 
   const handleAddNode = useCallback(
@@ -124,19 +171,28 @@ export function GraphEditor({
       const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
       if (!typeInfo?.enabled) return;
 
-      const newNode: Node = {
-        id: generateId(),
-        type: nodeType,
-        position: { x: 250, y: 150 },
-        data: {
-          label: `${typeInfo.label} Node`,
-          nodeType: nodeType,
-          config: {},
-        },
-      };
+      const newNodeId = generateId();
 
-      setNodes((nds) => [...nds, newNode]);
-      setSelectedNodeId(newNode.id);
+      setNodes((nds) => {
+        const index = nds.length;
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+
+        const newNode: Node = {
+          id: newNodeId,
+          type: nodeType,
+          position: { x: 250 + col * 260, y: 150 + row * 190 },
+          data: {
+            label: `${typeInfo.label} Node`,
+            nodeType: nodeType,
+            config: {},
+          },
+        };
+
+        return [...nds, newNode];
+      });
+      setSelectedNodeId(newNodeId);
+      setIsDirty(true);
     },
     [setNodes]
   );
@@ -150,6 +206,7 @@ export function GraphEditor({
             : node
         )
       );
+      setIsDirty(true);
     },
     [setNodes]
   );
@@ -161,8 +218,20 @@ export function GraphEditor({
       if (selectedNodeId === nodeId) {
         setSelectedNodeId(null);
       }
+      setIsDirty(true);
     },
     [setNodes, setEdges, selectedNodeId]
+  );
+
+  const handleDeleteEdge = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+      if (selectedEdgeId === edgeId) {
+        setSelectedEdgeId(null);
+      }
+      setIsDirty(true);
+    },
+    [setEdges, selectedEdgeId],
   );
 
   const handleSave = useCallback(async () => {
@@ -188,18 +257,22 @@ export function GraphEditor({
       }
 
       // Delete/Backspace to delete selected node
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId) {
+      if (e.key === "Delete" || e.key === "Backspace") {
         // Only delete if not focused on an input
         const target = e.target as HTMLElement;
         if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") {
-          handleDeleteNode(selectedNodeId);
+          if (selectedNodeId) {
+            handleDeleteNode(selectedNodeId);
+          } else if (selectedEdgeId) {
+            handleDeleteEdge(selectedEdgeId);
+          }
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSave, saving, selectedNodeId, handleDeleteNode]);
+  }, [handleSave, saving, selectedNodeId, selectedEdgeId, handleDeleteNode, handleDeleteEdge]);
 
   return (
     <div className="flex h-full">
@@ -217,6 +290,8 @@ export function GraphEditor({
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
+          onNodeDragStop={onNodeDragStop}
           onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
           fitView
@@ -236,8 +311,26 @@ export function GraphEditor({
             className="bg-white border border-gray-200 rounded-lg"
           />
           <Panel position="top-right" className="flex items-center gap-2">
-            <div className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
-              {currentVersion ? `v${currentVersion}` : "No version"}
+            <div className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm flex items-center gap-2">
+              <select
+                aria-label="Version"
+                value={currentVersionId ?? ""}
+                disabled={loadingVersion || saving || availableVersions.length === 0}
+                onChange={(e) => void handleSelectVersion(e.target.value)}
+                className="bg-transparent text-sm text-gray-600 outline-none"
+              >
+                {availableVersions.length === 0 ? (
+                  <option value="">No version</option>
+                ) : (
+                  [...availableVersions]
+                    .sort((a, b) => b.version - a.version)
+                    .map((v) => (
+                      <option key={v.id} value={v.id}>
+                        v{v.version}
+                      </option>
+                    ))
+                )}
+              </select>
               {isDirty && <span className="text-amber-500 ml-1">*</span>}
             </div>
             {!isEditingMetadata && (

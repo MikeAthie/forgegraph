@@ -32,10 +32,11 @@ export default function GraphDetailPage() {
   const graphId = Array.isArray(graphIdParam) ? graphIdParam[0] : graphIdParam;
 
   const [graph, setGraph] = useState<GraphDetail | null>(null);
-  const [latestVersion, setLatestVersion] = useState<GraphVersion | null>(null);
+  const [activeVersion, setActiveVersion] = useState<GraphVersion | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingVersion, setLoadingVersion] = useState(false);
 
   const loadGraph = useCallback(async () => {
     if (!graphId) {
@@ -53,7 +54,7 @@ export default function GraphDetailPage() {
         graphsApi.getLatestVersion(graphId),
       ]);
       setGraph(graphData);
-      setLatestVersion(versionData);
+      setActiveVersion(versionData);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Failed to load graph."));
     } finally {
@@ -77,7 +78,24 @@ export default function GraphDetailPage() {
         const newVersion = await graphsApi.createVersion(graphId, {
           graph_json: graphJson,
         });
-        setLatestVersion(newVersion);
+        setActiveVersion(newVersion);
+        setGraph((prev) => {
+          if (!prev) return prev;
+          const exists = prev.versions.some((v) => v.id === newVersion.id);
+          if (exists) return prev;
+          return {
+            ...prev,
+            versions: [
+              ...prev.versions,
+              {
+                id: newVersion.id,
+                version: newVersion.version,
+                checksum: newVersion.checksum,
+                created_at: newVersion.created_at,
+              },
+            ],
+          };
+        });
         showSuccess(`Saved as version ${newVersion.version}`);
         // Refresh graph data to update version list
         const updatedGraph = await graphsApi.get(graphId);
@@ -87,6 +105,24 @@ export default function GraphDetailPage() {
         throw err;
       } finally {
         setSaving(false);
+      }
+    },
+    [graphId]
+  );
+
+  const handleSelectVersion = useCallback(
+    async (versionId: string) => {
+      if (!graphId) return;
+
+      setLoadingVersion(true);
+      try {
+        const version = await graphsApi.getVersion(graphId, versionId);
+        setActiveVersion(version);
+      } catch (err: unknown) {
+        showError(getApiErrorMessage(err, "Failed to load graph version"));
+        throw err;
+      } finally {
+        setLoadingVersion(false);
       }
     },
     [graphId]
@@ -176,8 +212,12 @@ export default function GraphDetailPage() {
             graphId={graph.id}
             graphName={graph.name}
             graphDescription={graph.description}
-            initialGraphJson={latestVersion?.graph_json ?? null}
-            currentVersion={latestVersion?.version ?? null}
+            initialGraphJson={activeVersion?.graph_json ?? null}
+            currentVersion={activeVersion?.version ?? null}
+            currentVersionId={activeVersion?.id ?? null}
+            availableVersions={graph.versions.map((v) => ({ id: v.id, version: v.version }))}
+            loadingVersion={loadingVersion}
+            onSelectVersion={handleSelectVersion}
             onSave={handleSave}
             onUpdateMetadata={handleUpdateMetadata}
             saving={saving}
