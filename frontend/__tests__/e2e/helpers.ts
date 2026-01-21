@@ -13,9 +13,11 @@ const API_BASE_URL = (process.env.PLAYWRIGHT_API_URL ??
 
 export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const project = testInfo.project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const projectName = testInfo?.project?.name ?? "default";
+  const project = projectName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const safePrefix = prefix.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/empty/g, "blank");
   return {
-    email: `${prefix}-${project}-${runId}@example.com`,
+    email: `${safePrefix}-${project}-${runId}@example.com`,
     password: TEST_PASSWORD,
   };
 }

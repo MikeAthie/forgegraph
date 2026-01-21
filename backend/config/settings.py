@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # Third-party
+    "channels",
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
@@ -64,6 +65,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
 # Database
 USE_SQLITE = os.environ.get("USE_SQLITE", "false").lower() in {"1", "true", "yes"}
@@ -93,6 +95,33 @@ CACHES = {
         "LOCATION": f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
     }
 }
+
+# Channels
+USE_IN_MEMORY_CHANNEL_LAYER = os.environ.get("USE_IN_MEMORY_CHANNEL_LAYER", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+if USE_SQLITE or USE_IN_MEMORY_CHANNEL_LAYER:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [
+                    (
+                        os.environ.get("REDIS_HOST", "localhost"),
+                        int(os.environ.get("REDIS_PORT", "6379")),
+                    )
+                ]
+            },
+        }
+    }
 
 # Custom User Model
 AUTH_USER_MODEL = "orm.User"

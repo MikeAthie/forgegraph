@@ -245,6 +245,10 @@ class Run(models.Model):
     class Meta:
         db_table = "runs"
         ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["owner", "started_at"], name="runs_owner_started_idx"),
+            models.Index(fields=["owner", "status"], name="runs_owner_status_idx"),
+        ]
 
     def __str__(self):
         return f"Run {self.id} - {self.status}"
@@ -288,6 +292,9 @@ class NodeRun(models.Model):
     class Meta:
         db_table = "node_runs"
         ordering = ["started_at"]
+        indexes = [
+            models.Index(fields=["run", "started_at", "attempt"], name="node_runs_run_time_idx"),
+        ]
 
     def __str__(self):
         return f"NodeRun {self.node_id} - {self.status}"

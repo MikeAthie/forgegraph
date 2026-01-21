@@ -4,9 +4,6 @@ Unit tests for API serializers.
 Tests serializer validation, field transformations, and error messages.
 """
 
-import pytest
-from rest_framework import serializers as drf_serializers
-
 from adapters.api.auth.serializers import LoginSerializer, RegisterSerializer
 from adapters.api.graphs.serializers import (
     GraphCreateSerializer,

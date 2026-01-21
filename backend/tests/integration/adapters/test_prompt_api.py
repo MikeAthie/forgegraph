@@ -99,7 +99,11 @@ class TestPromptListCreate:
             owner=user, title="Mine", category="research", content="Content"
         )
         PromptTemplate.objects.create(
-            owner=None, title="Built-in", category="research", content="Content", visibility="public"
+            owner=None,
+            title="Built-in",
+            category="research",
+            content="Content",
+            visibility="public",
         )
 
         # Filter for "mine"

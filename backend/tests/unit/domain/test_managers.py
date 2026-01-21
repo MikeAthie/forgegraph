@@ -21,9 +21,7 @@ class TestGraphManager:
 
     def test_for_user_filters_by_owner(self, user):
         """for_user should return only graphs owned by the user."""
-        other_user = User.objects.create_user(
-            email="other@example.com", password="testpass123"
-        )
+        other_user = User.objects.create_user(email="other@example.com", password="testpass123")
 
         # Create graphs for both users
         user_graph1 = Graph.objects.create(owner=user, name="User Graph 1")
@@ -75,12 +73,8 @@ class TestGraphVersionManager:
         """latest_for_graph should return the version with highest version number."""
         graph = Graph.objects.create(owner=user, name="Test Graph")
 
-        v1 = GraphVersion.objects.create(
-            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
-        )
-        v2 = GraphVersion.objects.create(
-            graph=graph, version=2, graph_json={"nodes": [], "edges": []}
-        )
+        GraphVersion.objects.create(graph=graph, version=1, graph_json={"nodes": [], "edges": []})
+        GraphVersion.objects.create(graph=graph, version=2, graph_json={"nodes": [], "edges": []})
         v3 = GraphVersion.objects.create(
             graph=graph, version=3, graph_json={"nodes": [], "edges": []}
         )
@@ -102,15 +96,11 @@ class TestGraphVersionManager:
         """latest_for_graph should work with non-sequential version numbers."""
         graph = Graph.objects.create(owner=user, name="Test Graph")
 
-        GraphVersion.objects.create(
-            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
-        )
+        GraphVersion.objects.create(graph=graph, version=1, graph_json={"nodes": [], "edges": []})
         v5 = GraphVersion.objects.create(
             graph=graph, version=5, graph_json={"nodes": [], "edges": []}
         )
-        GraphVersion.objects.create(
-            graph=graph, version=3, graph_json={"nodes": [], "edges": []}
-        )
+        GraphVersion.objects.create(graph=graph, version=3, graph_json={"nodes": [], "edges": []})
 
         latest = GraphVersion.objects.latest_for_graph(graph.id)
 
@@ -125,9 +115,7 @@ class TestGraphVersionManager:
         v1_g1 = GraphVersion.objects.create(
             graph=graph1, version=1, graph_json={"nodes": [], "edges": []}
         )
-        GraphVersion.objects.create(
-            graph=graph2, version=10, graph_json={"nodes": [], "edges": []}
-        )
+        GraphVersion.objects.create(graph=graph2, version=10, graph_json={"nodes": [], "edges": []})
 
         latest_g1 = GraphVersion.objects.latest_for_graph(graph1.id)
 
@@ -214,9 +202,7 @@ class TestPromptTemplateManager:
 
     def test_for_user_includes_public_prompts(self, user):
         """for_user should include all public prompts."""
-        other_user = User.objects.create_user(
-            email="other@example.com", password="testpass123"
-        )
+        other_user = User.objects.create_user(email="other@example.com", password="testpass123")
 
         public_prompt = PromptTemplate.objects.create(
             owner=other_user,
@@ -246,9 +232,7 @@ class TestPromptTemplateManager:
 
     def test_for_user_excludes_other_users_private_prompts(self, user):
         """for_user should not include private prompts from other users."""
-        other_user = User.objects.create_user(
-            email="other@example.com", password="testpass123"
-        )
+        other_user = User.objects.create_user(email="other@example.com", password="testpass123")
 
         private_prompt = PromptTemplate.objects.create(
             owner=other_user,
@@ -264,9 +248,7 @@ class TestPromptTemplateManager:
 
     def test_for_user_complete_visibility_logic(self, user):
         """for_user should correctly implement complete visibility logic."""
-        other_user = User.objects.create_user(
-            email="other@example.com", password="testpass123"
-        )
+        other_user = User.objects.create_user(email="other@example.com", password="testpass123")
 
         # User's private prompt - VISIBLE
         user_private = PromptTemplate.objects.create(
@@ -338,9 +320,7 @@ class TestPromptTemplateManager:
         )
 
         # Chain with filter
-        research_prompts = PromptTemplate.objects.for_user(user).filter(
-            category="research"
-        )
+        research_prompts = PromptTemplate.objects.for_user(user).filter(category="research")
 
         assert research_prompts.count() == 1
         assert research_prompts.first().title == "Research Prompt"

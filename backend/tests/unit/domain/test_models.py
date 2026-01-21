@@ -6,10 +6,9 @@ Tests model behavior, properties, methods, and model-level validation.
 
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
 
@@ -166,9 +165,7 @@ class TestGraphVersionModel:
         graph = Graph.objects.create(owner=user, name="Test")
         graph_json = {"nodes": [{"id": "n1", "type": "prompt"}], "edges": []}
 
-        version = GraphVersion.objects.create(
-            graph=graph, version=1, graph_json=graph_json
-        )
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
 
         assert version.graph == graph
         assert version.version == 1
@@ -180,9 +177,7 @@ class TestGraphVersionModel:
         graph = Graph.objects.create(owner=user, name="Test")
         graph_json = {"nodes": [], "edges": []}
 
-        version = GraphVersion.objects.create(
-            graph=graph, version=1, graph_json=graph_json
-        )
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
 
         # Compute expected checksum
         json_str = json.dumps(graph_json, sort_keys=True, separators=(",", ":"))
@@ -196,21 +191,15 @@ class TestGraphVersionModel:
         graph = Graph.objects.create(owner=user, name="Test")
         graph_json = {"nodes": [], "edges": []}
 
-        version1 = GraphVersion.objects.create(
-            graph=graph, version=1, graph_json=graph_json
-        )
-        version2 = GraphVersion.objects.create(
-            graph=graph, version=2, graph_json=graph_json
-        )
+        version1 = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        version2 = GraphVersion.objects.create(graph=graph, version=2, graph_json=graph_json)
 
         assert version1.checksum == version2.checksum
 
     def test_graph_version_unique_version_per_graph(self, user):
         """Version numbers should be unique per graph."""
         graph = Graph.objects.create(owner=user, name="Test")
-        GraphVersion.objects.create(
-            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
-        )
+        GraphVersion.objects.create(graph=graph, version=1, graph_json={"nodes": [], "edges": []})
 
         with pytest.raises(IntegrityError):
             GraphVersion.objects.create(
@@ -399,7 +388,14 @@ class TestPromptTemplateModel:
 
     def test_prompt_template_category_choices(self, user):
         """Should accept valid category choices."""
-        valid_categories = ["research", "summarization", "email", "extraction", "reasoning", "other"]
+        valid_categories = [
+            "research",
+            "summarization",
+            "email",
+            "extraction",
+            "reasoning",
+            "other",
+        ]
 
         for category in valid_categories:
             prompt = PromptTemplate.objects.create(

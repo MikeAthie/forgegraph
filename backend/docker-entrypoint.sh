@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+echo "Syncing dependencies..."
+uv sync --frozen --no-dev --no-install-project
+
 echo "Running database migrations..."
 python manage.py migrate --noinput
 

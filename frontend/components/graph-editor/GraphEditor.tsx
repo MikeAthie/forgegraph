@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/router";
 import {
   ReactFlow,
   Controls,
@@ -18,12 +20,15 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Save as SaveIcon, LayoutGrid, Redo2, Undo2 } from "lucide-react";
+import { Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2 } from "lucide-react";
 
 import type { GraphJson, NodeType } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
 import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
+import { getApiErrorMessage, runsApi, type NodeRunItem, type RunDetail } from "../../lib/api";
+import { formatJsonForDisplay } from "../../lib/json";
+import { showError, showSuccess } from "../../lib/toast";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
@@ -96,6 +101,20 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.isContentEditable;
 }
 
+const isTerminalRunStatus = (status: string) => {
+  return status === "succeeded" || status === "failed" || status === "canceled";
+};
+
+const formatDuration = (durationMs: number | null | undefined) => {
+  if (durationMs === null || durationMs === undefined) return "-";
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${totalSeconds}s`;
+};
+
 export function GraphEditor({
   graphId,
   graphName,
@@ -110,6 +129,12 @@ export function GraphEditor({
   onUpdateMetadata,
   saving,
 }: GraphEditorProps) {
+  const router = useRouter();
+
+  const runIdParam = router.query.runId;
+  const runIdValue = Array.isArray(runIdParam) ? runIdParam[0] : runIdParam;
+  const overlayRunId = typeof runIdValue === "string" ? runIdValue : null;
+
   const initial = initialGraphJson
     ? graphJsonToReactFlow(initialGraphJson)
     : graphJsonToReactFlow(createEmptyGraphJson({ name: graphName, description: graphDescription }));
@@ -120,6 +145,12 @@ export function GraphEditor({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  const [startingRun, setStartingRun] = useState(false);
+  const [overlayRun, setOverlayRun] = useState<RunDetail | null>(null);
+  const [overlayRunLoading, setOverlayRunLoading] = useState(false);
+  const [overlayRunRefreshing, setOverlayRunRefreshing] = useState(false);
+  const [overlayRunError, setOverlayRunError] = useState<string | null>(null);
+  const [overlayCanceling, setOverlayCanceling] = useState(false);
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
 
@@ -400,6 +431,105 @@ export function GraphEditor({
     setIsDirty(false);
   }, [initialGraphJson, resetHistory, setNodes, setEdges]);
 
+  const applyExecutionOverlay = useCallback(
+    (run: RunDetail | null) => {
+      setNodes((currentNodes) => {
+        const latestByNodeId: Record<string, NodeRunItem> = {};
+
+        for (const nodeRun of run?.node_runs ?? []) {
+          const key = nodeRun.node_id;
+          const existing = latestByNodeId[key];
+          if (!existing || nodeRun.attempt >= existing.attempt) {
+            latestByNodeId[key] = nodeRun;
+          }
+        }
+
+        return currentNodes.map((node) => {
+          if (node.type === NOTE_NODE_TYPE) return node;
+
+          const data = { ...(node.data as Record<string, unknown>) };
+          delete data.executionStatus;
+          delete data.executionAttempt;
+          delete data.executionDurationMs;
+
+          const latest = latestByNodeId[node.id];
+          if (latest) {
+            data.executionStatus = String(latest.status);
+            data.executionAttempt = latest.attempt;
+            data.executionDurationMs = latest.duration_ms ?? null;
+          }
+
+          return { ...node, data };
+        });
+      });
+    },
+    [setNodes],
+  );
+
+  const fetchOverlayRun = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!overlayRunId) return;
+
+      const silent = opts?.silent ?? false;
+      if (!silent) {
+        setOverlayRunLoading(true);
+      } else {
+        setOverlayRunRefreshing(true);
+      }
+      setOverlayRunError(null);
+
+      try {
+        const run = await runsApi.get(overlayRunId);
+
+        if (String(run.graph_id ?? "") !== String(graphId)) {
+          setOverlayRun(null);
+          setOverlayRunError("This run does not belong to the current graph.");
+          applyExecutionOverlay(null);
+          return;
+        }
+
+        setOverlayRun(run);
+      } catch (err: unknown) {
+        setOverlayRun(null);
+        setOverlayRunError(getApiErrorMessage(err, "Failed to load execution trace."));
+        applyExecutionOverlay(null);
+      } finally {
+        setOverlayRunLoading(false);
+        setOverlayRunRefreshing(false);
+      }
+    },
+    [applyExecutionOverlay, graphId, overlayRunId],
+  );
+
+  useEffect(() => {
+    if (!overlayRunId) {
+      setOverlayRun(null);
+      setOverlayRunError(null);
+      applyExecutionOverlay(null);
+      return;
+    }
+
+    void fetchOverlayRun();
+  }, [applyExecutionOverlay, fetchOverlayRun, overlayRunId]);
+
+  useEffect(() => {
+    applyExecutionOverlay(overlayRun);
+  }, [applyExecutionOverlay, initialGraphJson, overlayRun]);
+
+  useEffect(() => {
+    if (!overlayRunId) return;
+    if (!overlayRun) return;
+    if (isTerminalRunStatus(String(overlayRun.status))) return;
+
+    const interval = window.setInterval(() => {
+      void fetchOverlayRun({ silent: true });
+    }, 3000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [fetchOverlayRun, overlayRun, overlayRunId]);
+
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId)
     : null;
@@ -648,6 +778,58 @@ export function GraphEditor({
     setIsDirty(false);
   }, [nodes, edges, graphName, graphDescription, graphId, onSave]);
 
+  const runDisabledReason =
+    startingRun
+      ? "Starting run..."
+      : saving
+        ? "Save in progress"
+        : loadingVersion
+          ? "Loading version"
+          : !currentVersionId
+            ? "Save the graph to create a version first"
+            : isDirty
+              ? "Save changes before running"
+              : null;
+
+  const handleRunWorkflow = useCallback(async () => {
+    if (runDisabledReason) {
+      showError(runDisabledReason);
+      return;
+    }
+    if (!currentVersionId) return;
+
+    setStartingRun(true);
+    try {
+      const run = await runsApi.start({ graph_version_id: currentVersionId, input_json: {} });
+      showSuccess("Run created");
+      void router.push(`/runs/${run.id}`);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, "Failed to start run"));
+    } finally {
+      setStartingRun(false);
+    }
+  }, [currentVersionId, router, runDisabledReason]);
+
+  const handleExitExecutionView = useCallback(() => {
+    void router.push(`/graphs/${graphId}`);
+  }, [graphId, router]);
+
+  const handleCancelExecution = useCallback(async () => {
+    if (!overlayRun) return;
+    if (isTerminalRunStatus(String(overlayRun.status))) return;
+
+    setOverlayCanceling(true);
+    try {
+      const updated = await runsApi.cancel(overlayRun.id);
+      setOverlayRun(updated);
+      showSuccess("Run canceled");
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, "Failed to cancel run"));
+    } finally {
+      setOverlayCanceling(false);
+    }
+  }, [overlayRun]);
+
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
     pushHistory();
@@ -755,6 +937,13 @@ export function GraphEditor({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave, saving, setNodes, handleUndo, handleRedo, handleCopy, handlePaste, handleDuplicateSelection, handleDeleteSelection]);
 
+  const overlaySelectedNodeRuns: NodeRunItem[] =
+    overlayRun && selectedNodeId
+      ? [...overlayRun.node_runs.filter((nodeRun) => nodeRun.node_id === selectedNodeId)].sort(
+          (a, b) => a.attempt - b.attempt,
+        )
+      : [];
+
   return (
     <div className="flex h-full">
       {/* Left Panel - Node Palette */}
@@ -860,15 +1049,27 @@ export function GraphEditor({
               {isDirty && <span className="text-amber-500 ml-1">*</span>}
             </div>
             {!isEditingMetadata && (
-              <button
-                type="button"
-                aria-label={saving ? "Saving..." : "Save"}
-                onClick={() => void handleSave()}
-                disabled={saving || !isDirty}
-                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-              >
-                {saving ? "Saving..." : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
-              </button>
+              <>
+                <button
+                  type="button"
+                  aria-label={runDisabledReason ?? "Run workflow"}
+                  onClick={() => void handleRunWorkflow()}
+                  disabled={Boolean(runDisabledReason)}
+                  title={runDisabledReason ?? "Run workflow"}
+                  className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  {startingRun ? "Starting..." : <Play aria-hidden="true" className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  aria-label={saving ? "Saving..." : "Save"}
+                  onClick={() => void handleSave()}
+                  disabled={saving || !isDirty}
+                  className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  {saving ? "Saving..." : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
+                </button>
+              </>
             )}
           </Panel>
         </ReactFlow>
@@ -876,6 +1077,115 @@ export function GraphEditor({
 
       {/* Right Panel - Inspector */}
       <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto">
+        {overlayRunId && (
+          <div className="border-b border-gray-200 bg-gray-50 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">Execution</h3>
+              <button
+                type="button"
+                onClick={handleExitExecutionView}
+                className="text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                Exit
+              </button>
+            </div>
+
+            {overlayRunLoading && !overlayRun && (
+              <p className="text-xs text-gray-500">Loading execution trace...</p>
+            )}
+
+            {overlayRunError && (
+              <p className="text-xs text-red-600 whitespace-pre-wrap">{overlayRunError}</p>
+            )}
+
+            {overlayRun && (
+              <>
+                <div className="flex items-center justify-between gap-2 text-xs text-gray-600">
+                  <span>
+                    Status:{" "}
+                    <span className="font-medium text-gray-900">{String(overlayRun.status)}</span>
+                  </span>
+                  <Link href={`/runs/${overlayRun.id}`} className="text-primary hover:underline">
+                    Open run
+                  </Link>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!isTerminalRunStatus(String(overlayRun.status)) && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCancelExecution()}
+                      disabled={overlayCanceling}
+                      className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {overlayCanceling ? "Stopping..." : "Stop"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void fetchOverlayRun()}
+                    disabled={overlayRunLoading || overlayRunRefreshing}
+                    className="flex-1 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {overlayRunLoading || overlayRunRefreshing ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+
+                <div className="pt-3 border-t border-gray-200 space-y-2">
+                  <p className="text-xs font-semibold text-gray-700 uppercase">Node trace</p>
+
+                  {!selectedNodeId ? (
+                    <p className="text-xs text-gray-500">Select a node to inspect its execution.</p>
+                  ) : overlaySelectedNodeRuns.length === 0 ? (
+                    <p className="text-xs text-gray-500">No trace records for this node.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {overlaySelectedNodeRuns.map((nodeRun) => (
+                        <div
+                          key={nodeRun.id}
+                          className="rounded-lg border border-gray-200 bg-white p-2 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-medium text-gray-900">attempt {nodeRun.attempt}</span>
+                            <span className="text-gray-600">{String(nodeRun.status)}</span>
+                            <span className="text-gray-600">{formatDuration(nodeRun.duration_ms)}</span>
+                          </div>
+
+                          <details open>
+                            <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                              Response
+                            </summary>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-gray-900 p-2 text-[11px] text-gray-100 whitespace-pre-wrap">
+                              {formatJsonForDisplay(nodeRun.output_json)}
+                            </pre>
+                          </details>
+
+                          <details open={String(nodeRun.status) === "failed"}>
+                            <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                              Failure
+                            </summary>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[11px] text-gray-800 whitespace-pre-wrap">
+                              {formatJsonForDisplay(nodeRun.error_json)}
+                            </pre>
+                          </details>
+
+                          <details>
+                            <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                              Input
+                            </summary>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[11px] text-gray-800 whitespace-pre-wrap">
+                              {formatJsonForDisplay(nodeRun.input_json)}
+                            </pre>
+                          </details>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <NodeInspector
           selectedNode={selectedNode}
           graphName={graphName}

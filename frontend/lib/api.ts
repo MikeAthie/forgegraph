@@ -92,6 +92,12 @@ const API_PATHS = {
     clone: (promptId: string) => `/api/prompts/${promptId}/clone`,
     publish: (promptId: string) => `/api/prompts/${promptId}/publish`,
   },
+  runs: {
+    list: "/api/runs/",
+    detail: (runId: string) => `/api/runs/${runId}`,
+    start: "/api/runs/start",
+    cancel: (runId: string) => `/api/runs/${runId}/cancel`,
+  },
 } as const;
 
 const api: AxiosInstance = axios.create({
@@ -465,6 +471,82 @@ export const promptsApi = {
       API_PATHS.prompts.publish(promptId),
       input ?? {},
     );
+    return response.data.data;
+  },
+};
+
+export type RunStatus =
+  | "pending"
+  | "running"
+  | "paused"
+  | "succeeded"
+  | "failed"
+  | "canceled"
+  | string;
+
+export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | string;
+
+export interface RunListItem {
+  id: string;
+  graph_id: string;
+  graph_name: string;
+  graph_version_id: string;
+  graph_version: number;
+  status: RunStatus;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+}
+
+export interface NodeRunItem {
+  id: string;
+  node_id: string;
+  node_type: string;
+  status: NodeRunStatus;
+  attempt: number;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  input_json: Record<string, unknown>;
+  output_json: Record<string, unknown> | null;
+  error_json: Record<string, unknown> | null;
+}
+
+export interface RunDetail {
+  id: string;
+  owner_id: string;
+  graph_id: string;
+  graph_name: string;
+  graph_version_id: string;
+  graph_version: number;
+  status: RunStatus;
+  started_at: string | null;
+  ended_at: string | null;
+  input_json: Record<string, unknown>;
+  output_json: Record<string, unknown> | null;
+  error_message: string;
+  duration_ms: number | null;
+  node_runs: NodeRunItem[];
+}
+
+export const runsApi = {
+  list: async (): Promise<RunListItem[]> => {
+    const response = await api.get<ApiSuccessResponse<RunListItem[]>>(API_PATHS.runs.list);
+    return response.data.data;
+  },
+
+  get: async (runId: string): Promise<RunDetail> => {
+    const response = await api.get<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.detail(runId));
+    return response.data.data;
+  },
+
+  start: async (input: { graph_version_id: string; input_json?: Record<string, unknown> }): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.start, input);
+    return response.data.data;
+  },
+
+  cancel: async (runId: string): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.cancel(runId), {});
     return response.data.data;
   },
 };

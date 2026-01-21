@@ -356,12 +356,167 @@ Content-Type: application/json
 
 ---
 
+## Run APIs
+
+### List Runs (Run History)
+```http
+GET /api/runs/
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "graph_id": "uuid",
+      "graph_name": "My Workflow",
+      "graph_version_id": "uuid",
+      "graph_version": 3,
+      "status": "running",
+      "started_at": "2024-01-15T10:00:00Z",
+      "ended_at": null,
+      "duration_ms": null
+    }
+  ],
+  "meta": { "requestId": "uuid", "timestamp": "ISO-8601" }
+}
+```
+
+### Get Run Detail (Run Viewer)
+```http
+GET /api/runs/{run_id}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "owner_id": "uuid",
+    "graph_id": "uuid",
+    "graph_name": "My Workflow",
+    "graph_version_id": "uuid",
+    "graph_version": 3,
+    "status": "succeeded",
+    "started_at": "2024-01-15T10:00:00Z",
+    "ended_at": "2024-01-15T10:00:05Z",
+    "duration_ms": 5000,
+    "input_json": {},
+    "output_json": { "result": "..." },
+    "error_message": "",
+    "node_runs": [
+      {
+        "id": "uuid",
+        "node_id": "node1",
+        "node_type": "prompt",
+        "status": "succeeded",
+        "attempt": 1,
+        "started_at": "2024-01-15T10:00:00Z",
+        "ended_at": "2024-01-15T10:00:02Z",
+        "duration_ms": 2000,
+        "input_json": {},
+        "output_json": { "text": "..." },
+        "error_json": null
+      }
+    ]
+  },
+  "meta": { "requestId": "uuid", "timestamp": "ISO-8601" }
+}
+```
+
+### Start Run
+```http
+POST /api/runs/start
+Content-Type: application/json
+
+{
+  "graph_version_id": "uuid",
+  "input_json": {}
+}
+```
+
+**Response:** `201 Created` with the run detail payload (initially `node_runs: []`).
+
+**Note:** This currently creates the `Run` record in the control-plane DB. Engine-triggered execution is still pending integration.
+
+### Cancel Run
+```http
+POST /api/runs/{run_id}/cancel
+```
+
+**Response:** `200 OK` with updated run detail (`status: "canceled"`).
+
+### Run Events (Delta Broadcast)
+
+This endpoint is intended for the engine/control-plane to persist trace deltas and broadcast them over WebSockets.
+
+```http
+POST /api/runs/{run_id}/events
+Content-Type: application/json
+Authorization: Bearer <access_token>
+```
+
+**Node run delta (upsert + broadcast):**
+```json
+{
+  "event_type": "node_run.updated",
+  "node_run": {
+    "node_id": "start",
+    "node_type": "prompt",
+    "status": "running",
+    "attempt": 1,
+    "started_at": "2026-01-20T10:00:00Z",
+    "input_json": { "prompt": "..." }
+  }
+}
+```
+
+**Run delta (update + broadcast):**
+```json
+{
+  "event_type": "run.updated",
+  "run": {
+    "status": "succeeded",
+    "ended_at": "2026-01-20T10:00:05Z",
+    "output_json": { "result": "..." },
+    "error_message": ""
+  }
+}
+```
+
+**Response:** `200 OK` with the broadcast message payload (also sent over WebSockets).
+
+### WebSocket: Live Run Updates
+
+Clients can subscribe to a run's live events:
+
+`ws://localhost:8000/ws/runs/{run_id}/?token=<access_jwt>`
+
+**Example messages:**
+```json
+{ "type": "node_run.updated", "run_id": "uuid", "node_run": { "node_id": "start", "status": "running" } }
+```
+
+```json
+{ "type": "run.updated", "run_id": "uuid", "run": { "status": "succeeded", "ended_at": "..." } }
+```
+
+### Run Resume Endpoint (Not Implemented Yet)
+
+This endpoint exists but returns `501 Not Implemented` until Phase 6 (Human Gate):
+
+- `POST /api/runs/{run_id}/resume`
+
+---
+
 ## Error Codes
 
 | Code | Description | HTTP Status |
 |------|-------------|-------------|
 | `VALIDATION_ERROR` | Invalid input fields | 400 |
 | `GRAPH_VALIDATION_ERROR` | Graph structure validation failed | 400 |
+| `INVALID_STATE` | Action not allowed for current status | 400 |
 | `NOT_FOUND` | Resource not found or unauthorized | 404 |
 
 ## Node Types (for Graph JSON)

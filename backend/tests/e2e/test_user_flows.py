@@ -162,12 +162,12 @@ class TestGraphWorkflowFlow:
         Test that graphs are properly isolated between users.
         """
         # Create two users
-        user1_response = api_client.post(
+        api_client.post(
             "/api/auth/register",
             {"email": "user1@example.com", "password": "password123"},
             format="json",
         )
-        user2_response = api_client.post(
+        api_client.post(
             "/api/auth/register",
             {"email": "user2@example.com", "password": "password123"},
             format="json",
@@ -345,9 +345,7 @@ class TestPromptLibraryFlow:
 class TestCompleteWorkflowScenario:
     """Test a realistic end-to-end workflow scenario."""
 
-    def test_complete_workflow_creation_and_execution_scenario(
-        self, api_client
-    ):
+    def test_complete_workflow_creation_and_execution_scenario(self, api_client):
         """
         Realistic scenario: User creates account, builds workflow, adds prompts, prepares for execution.
         """
@@ -471,9 +469,7 @@ class TestErrorHandlingFlows:
         Verify that invalid graph JSON is rejected at version creation.
         """
         # Create graph
-        graph = authenticated_client.post(
-            "/api/graphs/", {"name": "Test"}, format="json"
-        )
+        graph = authenticated_client.post("/api/graphs/", {"name": "Test"}, format="json")
         graph_id = graph.data["data"]["id"]
 
         # Try to create version with invalid JSON
@@ -503,9 +499,7 @@ class TestErrorHandlingFlows:
         Verify that deleted resources return 404.
         """
         # Create and delete a graph
-        graph = authenticated_client.post(
-            "/api/graphs/", {"name": "To Delete"}, format="json"
-        )
+        graph = authenticated_client.post("/api/graphs/", {"name": "To Delete"}, format="json")
         graph_id = graph.data["data"]["id"]
 
         authenticated_client.delete(f"/api/graphs/{graph_id}")
@@ -513,9 +507,7 @@ class TestErrorHandlingFlows:
         # Attempt to access deleted resource
         responses = [
             authenticated_client.get(f"/api/graphs/{graph_id}"),
-            authenticated_client.patch(
-                f"/api/graphs/{graph_id}", {"name": "New"}, format="json"
-            ),
+            authenticated_client.patch(f"/api/graphs/{graph_id}", {"name": "New"}, format="json"),
             authenticated_client.delete(f"/api/graphs/{graph_id}"),
         ]
 

@@ -7,7 +7,7 @@ import path from "path";
 const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_DEV_PORT) : 3001;
 // Use 127.0.0.1 to keep frontend/backend on the same "site" for SameSite=Lax cookies.
 const devUrl = `http://127.0.0.1:${devPort}`;
-const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ? Number(process.env.PLAYWRIGHT_BACKEND_PORT) : 8000;
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ? Number(process.env.PLAYWRIGHT_BACKEND_PORT) : 8002;
 const backendUrl = `http://127.0.0.1:${backendPort}`;
 
 // Give E2E helpers a stable default API URL (avoids IPv6 localhost issues on some hosts).

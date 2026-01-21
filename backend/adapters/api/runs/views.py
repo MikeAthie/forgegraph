@@ -4,16 +4,25 @@ Runs API views (stub for Phase 4).
 Clean Architecture: Interface Adapters layer.
 """
 
+from django.db import transaction
+from django.db.models import Case, IntegerField, Prefetch, When
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from adapters.api.responses import error_response, success_response
 from adapters.api.runs.serializers import (
+    RunDetailWithNodeRunsSerializer,
+    RunEventSerializer,
+    RunListSerializer,
     RunResumeSerializer,
     RunStartSerializer,
 )
+from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
+from infrastructure.orm.models import GraphVersion, NodeRun, Run
 
 
 class RunListView(APIView):
@@ -23,8 +32,67 @@ class RunListView(APIView):
 
     def get(self, request: Request) -> Response:
         """List user's runs."""
-        # Stub - will be implemented in Phase 4
-        return Response([])
+        runs = Run.objects.filter(owner=request.user).select_related("graph_version__graph")
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            runs = runs.filter(status=status_filter)
+
+        runs = runs.order_by(
+            Case(
+                When(started_at__isnull=True, then=1),
+                default=0,
+                output_field=IntegerField(),
+            ),
+            "-started_at",
+        )
+
+        total_count = runs.count()
+
+        limit_param = request.query_params.get("limit")
+        offset_param = request.query_params.get("offset")
+        limit: int | None = None
+        offset = 0
+
+        if offset_param is not None:
+            try:
+                offset = max(int(offset_param), 0)
+            except (TypeError, ValueError):
+                offset = 0
+
+        if limit_param is not None:
+            try:
+                parsed_limit = int(limit_param)
+            except (TypeError, ValueError):
+                parsed_limit = 0
+
+            if parsed_limit > 0:
+                limit = parsed_limit
+
+        if offset or limit is not None:
+            end = None if limit is None else offset + limit
+            runs = runs[offset:end]
+
+        result = []
+        for run in runs:
+            graph_version = run.graph_version
+            graph = graph_version.graph
+            result.append(
+                {
+                    "id": run.id,
+                    "graph_id": graph.id,
+                    "graph_name": graph.name,
+                    "graph_version_id": graph_version.id,
+                    "graph_version": graph_version.version,
+                    "status": run.status,
+                    "started_at": run.started_at,
+                    "ended_at": run.ended_at,
+                    "duration_ms": run.duration_ms,
+                }
+            )
+
+        serialized_data = RunListSerializer(result, many=True).data
+        return success_response(serialized_data, meta={"total": total_count})
 
 
 class RunDetailView(APIView):
@@ -34,42 +102,219 @@ class RunDetailView(APIView):
 
     def get(self, request: Request, run_id) -> Response:
         """Get run details with node runs."""
-        # Stub - will be implemented in Phase 4
-        return Response(
-            {"detail": "Run not found."},
-            status=status.HTTP_404_NOT_FOUND,
+        node_runs_queryset = NodeRun.objects.order_by(
+            Case(
+                When(started_at__isnull=True, then=1),
+                default=0,
+                output_field=IntegerField(),
+            ),
+            "started_at",
+            "attempt",
         )
+
+        try:
+            run = (
+                Run.objects.select_related("graph_version__graph")
+                .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
+                .get(id=run_id, owner=request.user)
+            )
+        except Run.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Run with id '{run_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        graph_version = run.graph_version
+        graph = graph_version.graph
+
+        run_data = {
+            "id": run.id,
+            "owner_id": run.owner_id,
+            "graph_id": graph.id,
+            "graph_name": graph.name,
+            "graph_version_id": graph_version.id,
+            "graph_version": graph_version.version,
+            "status": run.status,
+            "started_at": run.started_at,
+            "ended_at": run.ended_at,
+            "input_json": run.input_json,
+            "output_json": run.output_json,
+            "error_message": run.error_message,
+            "duration_ms": run.duration_ms,
+            "node_runs": [
+                {
+                    "id": node_run.id,
+                    "node_id": node_run.node_id,
+                    "node_type": node_run.node_type,
+                    "status": node_run.status,
+                    "attempt": node_run.attempt,
+                    "started_at": node_run.started_at,
+                    "ended_at": node_run.ended_at,
+                    "duration_ms": node_run.duration_ms,
+                    "input_json": node_run.input_json,
+                    "output_json": node_run.output_json,
+                    "error_json": node_run.error_json,
+                }
+                for node_run in run.node_runs.all()
+            ],
+        }
+
+        serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+        return success_response(serialized_data)
 
 
 class RunStartView(APIView):
-    """Start a run (stub)."""
+    """Start a run."""
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
         """Start a new run."""
         serializer = RunStartSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
 
-        # Stub - will be implemented in Phase 4
-        return Response(
-            {"detail": "Run execution not yet implemented."},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
+        graph_version_id = serializer.validated_data["graph_version_id"]
+        input_json = serializer.validated_data.get("input_json") or {}
+
+        try:
+            graph_version = GraphVersion.objects.select_related("graph").get(
+                id=graph_version_id, graph__owner=request.user
+            )
+        except GraphVersion.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"GraphVersion with id '{graph_version_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        run = Run.objects.create(
+            owner=request.user,
+            graph_version=graph_version,
+            status="pending",
+            started_at=timezone.now(),
+            ended_at=None,
+            input_json=input_json,
+            output_json=None,
+            error_message="",
         )
+        broadcast_run_updated(run)
+
+        run_data = {
+            "id": run.id,
+            "owner_id": run.owner_id,
+            "graph_id": graph_version.graph_id,
+            "graph_name": graph_version.graph.name,
+            "graph_version_id": graph_version.id,
+            "graph_version": graph_version.version,
+            "status": run.status,
+            "started_at": run.started_at,
+            "ended_at": run.ended_at,
+            "input_json": run.input_json,
+            "output_json": run.output_json,
+            "error_message": run.error_message,
+            "duration_ms": run.duration_ms,
+            "node_runs": [],
+        }
+
+        serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+        return success_response(serialized_data, status=status.HTTP_201_CREATED)
 
 
 class RunCancelView(APIView):
-    """Cancel a run (stub)."""
+    """Cancel a run."""
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, run_id) -> Response:
         """Cancel a running run."""
-        # Stub - will be implemented in Phase 4
-        return Response(
-            {"detail": "Run cancellation not yet implemented."},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
+        node_runs_queryset = NodeRun.objects.order_by(
+            Case(
+                When(started_at__isnull=True, then=1),
+                default=0,
+                output_field=IntegerField(),
+            ),
+            "started_at",
+            "attempt",
         )
+
+        try:
+            run = (
+                Run.objects.select_related("graph_version__graph")
+                .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
+                .get(id=run_id, owner=request.user)
+            )
+        except Run.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Run with id '{run_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if run.status in {"succeeded", "failed", "canceled"}:
+            return error_response(
+                code="INVALID_STATE",
+                message=f"Cannot cancel a run in status '{run.status}'.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not run.started_at:
+            run.started_at = timezone.now()
+
+        run.status = "canceled"
+        run.ended_at = timezone.now()
+        if not run.error_message:
+            run.error_message = "Canceled by user."
+
+        run.save(update_fields=["status", "started_at", "ended_at", "error_message"])
+        broadcast_run_updated(run)
+
+        graph_version = run.graph_version
+        graph = graph_version.graph
+
+        run_data = {
+            "id": run.id,
+            "owner_id": run.owner_id,
+            "graph_id": graph.id,
+            "graph_name": graph.name,
+            "graph_version_id": graph_version.id,
+            "graph_version": graph_version.version,
+            "status": run.status,
+            "started_at": run.started_at,
+            "ended_at": run.ended_at,
+            "input_json": run.input_json,
+            "output_json": run.output_json,
+            "error_message": run.error_message,
+            "duration_ms": run.duration_ms,
+            "node_runs": [
+                {
+                    "id": node_run.id,
+                    "node_id": node_run.node_id,
+                    "node_type": node_run.node_type,
+                    "status": node_run.status,
+                    "attempt": node_run.attempt,
+                    "started_at": node_run.started_at,
+                    "ended_at": node_run.ended_at,
+                    "duration_ms": node_run.duration_ms,
+                    "input_json": node_run.input_json,
+                    "output_json": node_run.output_json,
+                    "error_json": node_run.error_json,
+                }
+                for node_run in run.node_runs.all()
+            ],
+        }
+
+        serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+        return success_response(serialized_data)
 
 
 class RunResumeView(APIView):
@@ -80,10 +325,118 @@ class RunResumeView(APIView):
     def post(self, request: Request, run_id) -> Response:
         """Resume a paused run."""
         serializer = RunResumeSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
 
-        # Stub - will be implemented in Phase 4
-        return Response(
-            {"detail": "Run resume not yet implemented."},
+        return error_response(
+            code="NOT_IMPLEMENTED",
+            message="Run resume not yet implemented (pending Phase 3 engine integration).",
             status=status.HTTP_501_NOT_IMPLEMENTED,
+        )
+
+
+class RunEventsView(APIView):
+    """Persist + broadcast Run/NodeRun delta events."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, run_id) -> Response:
+        serializer = RunEventSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        try:
+            run = Run.objects.get(id=run_id, owner=request.user)
+        except Run.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Run with id '{run_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        event_type = serializer.validated_data["event_type"]
+
+        if event_type == "run.updated":
+            payload = serializer.validated_data["run"]
+            update_fields: list[str] = []
+
+            for field in ["status", "started_at", "ended_at", "output_json", "error_message"]:
+                if field not in payload:
+                    continue
+                setattr(run, field, payload[field])
+                update_fields.append(field)
+
+            if update_fields:
+                run.save(update_fields=update_fields)
+
+            message = broadcast_run_updated(run)
+            return success_response(message)
+
+        if event_type == "node_run.updated":
+            payload = serializer.validated_data["node_run"]
+            node_id = payload["node_id"]
+            node_type = payload["node_type"]
+            attempt = payload["attempt"]
+
+            with transaction.atomic():
+                node_run, created = NodeRun.objects.get_or_create(
+                    run=run,
+                    node_id=node_id,
+                    attempt=attempt,
+                    defaults={
+                        "node_type": node_type,
+                        "status": payload["status"],
+                    },
+                )
+
+                update_fields: list[str] = []
+
+                if not created and node_run.node_type != node_type:
+                    node_run.node_type = node_type
+                    update_fields.append("node_type")
+
+                node_run.status = payload["status"]
+                update_fields.append("status")
+
+                if "started_at" in payload:
+                    node_run.started_at = payload["started_at"]
+                    update_fields.append("started_at")
+                if "ended_at" in payload:
+                    node_run.ended_at = payload["ended_at"]
+                    update_fields.append("ended_at")
+                if "input_json" in payload:
+                    node_run.input_json = payload["input_json"]
+                    update_fields.append("input_json")
+                if "output_json" in payload:
+                    node_run.output_json = payload["output_json"]
+                    update_fields.append("output_json")
+                if "error_json" in payload:
+                    node_run.error_json = payload["error_json"]
+                    update_fields.append("error_json")
+
+                node_run.save(update_fields=sorted(set(update_fields)))
+
+            message = broadcast_node_run_updated(run=run, node_run=node_run)
+            return success_response(message)
+
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="Unknown event_type",
+            status=status.HTTP_400_BAD_REQUEST,
         )

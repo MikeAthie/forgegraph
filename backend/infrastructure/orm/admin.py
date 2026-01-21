@@ -75,6 +75,13 @@ class PromptTemplateAdmin(admin.ModelAdmin):
     readonly_fields = ("id", "created_at", "updated_at")
 
 
+class NodeRunInline(admin.TabularInline):
+    model = NodeRun
+    extra = 0
+    show_change_link = True
+    fields = ("node_id", "node_type", "status", "attempt", "started_at", "ended_at")
+
+
 @admin.register(Run)
 class RunAdmin(admin.ModelAdmin):
     """Run admin."""
@@ -83,6 +90,7 @@ class RunAdmin(admin.ModelAdmin):
     list_filter = ("status", "started_at")
     search_fields = ("owner__email",)
     readonly_fields = ("id",)
+    inlines = [NodeRunInline]
 
 
 @admin.register(NodeRun)

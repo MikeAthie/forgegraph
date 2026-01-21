@@ -106,7 +106,26 @@ Open http://localhost:3000 in your browser. You should see "ForgeGraph running" 
 **Tips**
 - Use `Tidy` to auto-layout, `Ctrl+A` / `Cmd+A` to select all, and `Delete` to remove selected nodes/edges.
 - Use the MiniMap + zoom controls for large workflows.
-- “Note” nodes are editor-only annotations (saved in `editor_state`, not executed by the engine).
+- "Note" nodes are editor-only annotations (saved in `editor_state`, not executed by the engine).
+
+## Observability Demo (Phase 4)
+
+Use the seed commands to validate the run viewer and WebSocket delta updates without the Go engine.
+
+```bash
+cd backend
+
+# Seed a demo graph + 3 demo runs (succeeded/failed/running)
+uv run python manage.py seed_phase4_demo
+
+# Stream a live execution trace over WebSockets (open /runs first)
+uv run python manage.py stream_run_trace <graph_version_id> --run-status succeeded
+```
+
+UI flow:
+- Open `/runs` to see the run history.
+- Open a run to view the node-by-node trace (polling + WebSocket deltas).
+- Use **Open in editor** to jump to `/graphs/{graphId}?runId={runId}` and see the execution overlay on the canvas + the execution side panel.
 
 ### Backend
 
@@ -196,7 +215,7 @@ forgegraph/
 - [x] Phase 1: Django models + auth + prompt library
 - [x] Phase 2: NextJS graph builder + save/load JSON
 - [ ] Phase 3: Go engine basic execution
-- [ ] Phase 4: Run viewer + persistence
+- [x] Phase 4: Run viewer + persistence (UI/API; engine integration pending)
 - [ ] Phase 5: Branch/merge + retry/timeout
 - [ ] Phase 6: Human gate
 - [ ] Phase 7: Polish + demo workflows + docs

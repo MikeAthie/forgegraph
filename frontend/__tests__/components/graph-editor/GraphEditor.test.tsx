@@ -8,6 +8,7 @@
 
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRouter } from "next/router";
 
 jest.mock("@xyflow/react", () => {
   const React = require("react");
@@ -75,7 +76,13 @@ jest.mock("@xyflow/react", () => {
   };
 });
 
+jest.mock("next/router", () => ({
+  useRouter: jest.fn(),
+}));
+
 import { GraphEditor } from "@/components/graph-editor/GraphEditor";
+
+const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
 function renderGraphEditor() {
   return render(
@@ -96,6 +103,18 @@ function renderGraphEditor() {
 }
 
 describe("GraphEditor", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseRouter.mockReturnValue({
+      push: jest.fn(),
+      replace: jest.fn(),
+      prefetch: jest.fn(),
+      pathname: "/graphs/graph-1",
+      query: { graphId: "graph-1" },
+      asPath: "/graphs/graph-1",
+    } as any);
+  });
+
   it("should quick-add an edge when adding a node with a selection", async () => {
     const user = userEvent.setup();
     renderGraphEditor();
@@ -143,4 +162,3 @@ describe("GraphEditor", () => {
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(1);
   });
 });
-

@@ -56,6 +56,9 @@ interface GraphNodeData {
   nodeType: string;
   config?: Record<string, unknown>;
   disabled?: boolean;
+  executionStatus?: string;
+  executionAttempt?: number;
+  executionDurationMs?: number | null;
 }
 
 function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
@@ -66,6 +69,20 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
   const colors = nodeTypeColors[nodeType] ?? nodeTypeColors[NODE_TYPES.PROMPT];
   const typeLabel = nodeTypeLabels[nodeType] ?? nodeType;
   const isDisabled = nodeData.disabled === true;
+  const executionStatus = nodeData.executionStatus;
+
+  const executionDotClass: string | null =
+    executionStatus === "succeeded"
+      ? "bg-green-500"
+      : executionStatus === "failed"
+        ? "bg-red-500"
+        : executionStatus === "running"
+          ? "bg-blue-500"
+          : executionStatus === "pending"
+            ? "bg-gray-400"
+            : executionStatus
+              ? "bg-gray-400"
+              : null;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -109,6 +126,13 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
           </span>
           {isDisabled && (
             <span className="text-xs text-gray-500 italic">disabled</span>
+          )}
+          {executionDotClass && (
+            <span
+              className={`ml-auto h-2.5 w-2.5 rounded-full ${executionDotClass}`}
+              title={`Execution: ${executionStatus}`}
+              aria-hidden="true"
+            />
           )}
         </div>
 
