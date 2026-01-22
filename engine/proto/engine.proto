@@ -8,7 +8,23 @@ option go_package = "github.com/forgegraph/engine;main";
 service EngineService {
   // Ping returns a pong response for health checking
   rpc Ping(PingRequest) returns (PingResponse);
+
+  // StartRun begins executing a workflow graph
+  rpc StartRun(StartRunRequest) returns (StartRunResponse);
+
+  // GetRunStatus returns the current status of a run
+  rpc GetRunStatus(GetRunStatusRequest) returns (GetRunStatusResponse);
+
+  // CancelRun cancels an active run
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+
+  // ResumeRun resumes a paused run (e.g., after human gate approval)
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
 }
+
+// =============================================================================
+// Health Check
+// =============================================================================
 
 // PingRequest is the request message for the Ping RPC
 message PingRequest {
@@ -18,4 +34,89 @@ message PingRequest {
 // PingResponse is the response message for the Ping RPC
 message PingResponse {
   string message = 1;
+}
+
+// =============================================================================
+// Run Execution
+// =============================================================================
+
+// StartRunRequest initiates workflow execution
+message StartRunRequest {
+  // Unique identifier for this run (UUID from control plane)
+  string run_id = 1;
+
+  // The graph definition as JSON string (GraphVersion.graph_json)
+  string graph_json = 2;
+
+  // Initial input variables as JSON string
+  string input_json = 3;
+
+  // URL to POST execution events back to control plane
+  string callback_url = 4;
+}
+
+// StartRunResponse confirms run acceptance
+message StartRunResponse {
+  // Whether the run was accepted for execution
+  bool accepted = 1;
+
+  // Error message if not accepted
+  string error = 2;
+}
+
+// GetRunStatusRequest queries run status
+message GetRunStatusRequest {
+  // The run ID to query
+  string run_id = 1;
+}
+
+// GetRunStatusResponse returns current run status
+message GetRunStatusResponse {
+  // The run ID
+  string run_id = 1;
+
+  // Current status: pending, running, paused, succeeded, failed, canceled
+  string status = 2;
+
+  // Currently executing node ID (if running)
+  string current_node_id = 3;
+
+  // Error message (if failed)
+  string error = 4;
+}
+
+// CancelRunRequest requests run cancellation
+message CancelRunRequest {
+  // The run ID to cancel
+  string run_id = 1;
+}
+
+// CancelRunResponse confirms cancellation
+message CancelRunResponse {
+  // Whether cancellation was successful
+  bool success = 1;
+
+  // Error message if cancellation failed
+  string error = 2;
+}
+
+// ResumeRunRequest resumes a paused run (human gate)
+message ResumeRunRequest {
+  // The run ID to resume
+  string run_id = 1;
+
+  // The human gate node ID to resume from
+  string node_id = 2;
+
+  // Human-provided input as JSON string
+  string input_json = 3;
+}
+
+// ResumeRunResponse confirms resumption
+message ResumeRunResponse {
+  // Whether the run was resumed
+  bool accepted = 1;
+
+  // Error message if resumption failed
+  string error = 2;
 }

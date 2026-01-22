@@ -4,6 +4,21 @@ set -e
 
 COMPOSE_FILE="docker-compose.yml"
 
+dc() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose -f "${COMPOSE_FILE}" "$@"
+        return
+    fi
+
+    if command -v docker-compose >/dev/null 2>&1; then
+        docker-compose -f "${COMPOSE_FILE}" "$@"
+        return
+    fi
+
+    echo "Error: Docker Compose not found (expected 'docker compose' or 'docker-compose')." >&2
+    exit 1
+}
+
 usage() {
     echo "Usage: ./dev <command>"
     echo ""
@@ -26,7 +41,7 @@ usage() {
 case "${1}" in
     up)
         echo "Building and starting ForgeGraph services..."
-        docker-compose -f "${COMPOSE_FILE}" up --build -d
+        dc up --build -d
         echo ""
         echo "Services started successfully!"
         echo "  Frontend:   http://localhost:3000"
@@ -35,38 +50,38 @@ case "${1}" in
         ;;
     down)
         echo "Stopping ForgeGraph services..."
-        docker-compose -f "${COMPOSE_FILE}" down
+        dc down
         echo "Services stopped."
         ;;
     logs)
-        docker-compose -f "${COMPOSE_FILE}" logs -f
+        dc logs -f
         ;;
     restart)
         echo "Restarting ForgeGraph services..."
-        docker-compose -f "${COMPOSE_FILE}" restart
+        dc restart
         ;;
     build)
         echo "Rebuilding ForgeGraph services..."
-        docker-compose -f "${COMPOSE_FILE}" build
+        dc build
         ;;
     ps)
-        docker-compose -f "${COMPOSE_FILE}" ps
+        dc ps
         ;;
     migrate)
         echo "Running database migrations..."
-        docker-compose -f "${COMPOSE_FILE}" exec backend python manage.py migrate
+        dc exec backend python manage.py migrate
         ;;
     shell)
         echo "Opening Django shell..."
-        docker-compose -f "${COMPOSE_FILE}" exec backend python manage.py shell
+        dc exec backend python manage.py shell
         ;;
     test)
         echo "Running backend tests..."
-        docker-compose -f "${COMPOSE_FILE}" exec backend pytest -v
+        dc exec backend pytest -v
         ;;
     manage)
         shift
-        docker-compose -f "${COMPOSE_FILE}" exec backend python manage.py "$@"
+        dc exec backend python manage.py "$@"
         ;;
     *)
         usage

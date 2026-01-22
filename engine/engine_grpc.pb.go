@@ -19,7 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	EngineService_Ping_FullMethodName = "/engine.EngineService/Ping"
+	EngineService_Ping_FullMethodName         = "/engine.EngineService/Ping"
+	EngineService_StartRun_FullMethodName     = "/engine.EngineService/StartRun"
+	EngineService_GetRunStatus_FullMethodName = "/engine.EngineService/GetRunStatus"
+	EngineService_CancelRun_FullMethodName    = "/engine.EngineService/CancelRun"
+	EngineService_ResumeRun_FullMethodName    = "/engine.EngineService/ResumeRun"
 )
 
 // EngineServiceClient is the client API for EngineService service.
@@ -30,6 +34,14 @@ const (
 type EngineServiceClient interface {
 	// Ping returns a pong response for health checking
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
+	// StartRun begins executing a workflow graph
+	StartRun(ctx context.Context, in *StartRunRequest, opts ...grpc.CallOption) (*StartRunResponse, error)
+	// GetRunStatus returns the current status of a run
+	GetRunStatus(ctx context.Context, in *GetRunStatusRequest, opts ...grpc.CallOption) (*GetRunStatusResponse, error)
+	// CancelRun cancels an active run
+	CancelRun(ctx context.Context, in *CancelRunRequest, opts ...grpc.CallOption) (*CancelRunResponse, error)
+	// ResumeRun resumes a paused run (e.g., after human gate approval)
+	ResumeRun(ctx context.Context, in *ResumeRunRequest, opts ...grpc.CallOption) (*ResumeRunResponse, error)
 }
 
 type engineServiceClient struct {
@@ -50,6 +62,46 @@ func (c *engineServiceClient) Ping(ctx context.Context, in *PingRequest, opts ..
 	return out, nil
 }
 
+func (c *engineServiceClient) StartRun(ctx context.Context, in *StartRunRequest, opts ...grpc.CallOption) (*StartRunResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartRunResponse)
+	err := c.cc.Invoke(ctx, EngineService_StartRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *engineServiceClient) GetRunStatus(ctx context.Context, in *GetRunStatusRequest, opts ...grpc.CallOption) (*GetRunStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRunStatusResponse)
+	err := c.cc.Invoke(ctx, EngineService_GetRunStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *engineServiceClient) CancelRun(ctx context.Context, in *CancelRunRequest, opts ...grpc.CallOption) (*CancelRunResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelRunResponse)
+	err := c.cc.Invoke(ctx, EngineService_CancelRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *engineServiceClient) ResumeRun(ctx context.Context, in *ResumeRunRequest, opts ...grpc.CallOption) (*ResumeRunResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResumeRunResponse)
+	err := c.cc.Invoke(ctx, EngineService_ResumeRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // EngineServiceServer is the server API for EngineService service.
 // All implementations must embed UnimplementedEngineServiceServer
 // for forward compatibility.
@@ -58,6 +110,14 @@ func (c *engineServiceClient) Ping(ctx context.Context, in *PingRequest, opts ..
 type EngineServiceServer interface {
 	// Ping returns a pong response for health checking
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
+	// StartRun begins executing a workflow graph
+	StartRun(context.Context, *StartRunRequest) (*StartRunResponse, error)
+	// GetRunStatus returns the current status of a run
+	GetRunStatus(context.Context, *GetRunStatusRequest) (*GetRunStatusResponse, error)
+	// CancelRun cancels an active run
+	CancelRun(context.Context, *CancelRunRequest) (*CancelRunResponse, error)
+	// ResumeRun resumes a paused run (e.g., after human gate approval)
+	ResumeRun(context.Context, *ResumeRunRequest) (*ResumeRunResponse, error)
 	mustEmbedUnimplementedEngineServiceServer()
 }
 
@@ -71,6 +131,18 @@ type UnimplementedEngineServiceServer struct{}
 func (UnimplementedEngineServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
+func (UnimplementedEngineServiceServer) StartRun(context.Context, *StartRunRequest) (*StartRunResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartRun not implemented")
+}
+func (UnimplementedEngineServiceServer) GetRunStatus(context.Context, *GetRunStatusRequest) (*GetRunStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRunStatus not implemented")
+}
+func (UnimplementedEngineServiceServer) CancelRun(context.Context, *CancelRunRequest) (*CancelRunResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelRun not implemented")
+}
+func (UnimplementedEngineServiceServer) ResumeRun(context.Context, *ResumeRunRequest) (*ResumeRunResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResumeRun not implemented")
+}
 func (UnimplementedEngineServiceServer) mustEmbedUnimplementedEngineServiceServer() {}
 func (UnimplementedEngineServiceServer) testEmbeddedByValue()                       {}
 
@@ -82,7 +154,7 @@ type UnsafeEngineServiceServer interface {
 }
 
 func RegisterEngineServiceServer(s grpc.ServiceRegistrar, srv EngineServiceServer) {
-	// If the following call pancis, it indicates UnimplementedEngineServiceServer was
+	// If the following call panics, it indicates UnimplementedEngineServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
@@ -110,6 +182,78 @@ func _EngineService_Ping_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _EngineService_StartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EngineServiceServer).StartRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EngineService_StartRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EngineServiceServer).StartRun(ctx, req.(*StartRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EngineService_GetRunStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRunStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EngineServiceServer).GetRunStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EngineService_GetRunStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EngineServiceServer).GetRunStatus(ctx, req.(*GetRunStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EngineService_CancelRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EngineServiceServer).CancelRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EngineService_CancelRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EngineServiceServer).CancelRun(ctx, req.(*CancelRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EngineService_ResumeRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EngineServiceServer).ResumeRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EngineService_ResumeRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EngineServiceServer).ResumeRun(ctx, req.(*ResumeRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // EngineService_ServiceDesc is the grpc.ServiceDesc for EngineService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -120,6 +264,22 @@ var EngineService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Ping",
 			Handler:    _EngineService_Ping_Handler,
+		},
+		{
+			MethodName: "StartRun",
+			Handler:    _EngineService_StartRun_Handler,
+		},
+		{
+			MethodName: "GetRunStatus",
+			Handler:    _EngineService_GetRunStatus_Handler,
+		},
+		{
+			MethodName: "CancelRun",
+			Handler:    _EngineService_CancelRun_Handler,
+		},
+		{
+			MethodName: "ResumeRun",
+			Handler:    _EngineService_ResumeRun_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -6,7 +6,14 @@ A visual, high-performance workflow engine for AI agents and automation, built f
 
 ## What is ForgeGraph?
 
-ForgeGraph lets you build AI agent workflows using a visual graph builder. Connect nodes like Prompt, HTTP, Branch, and Merge to create complex automation pipelines. Execute them with built-in concurrency, retries, and timeouts. Debug runs with full node-level visibility into inputs, outputs, and timings.
+ForgeGraph uses a **schema-driven, LangGraph-style runtime** with an **n8n-inspired UX**. Users build workflows as directed graphs of Nodes connected by Edges. The execution engine runs the graph deterministically while supporting conditional branching, parallelism, validation, and final outputs.
+
+### Core Principles
+
+- **Agnostic execution primitives** - A small, stable set of node types that can express most workflows
+- **Schema-first reliability** - Outputs can be validated and structured (e.g., JSON Schema) to reduce hallucinations
+- **N8n-like UX, LangGraph-like semantics** - Easy graph building with real runtime logic (start nodes, conditional edges, merging, final output)
+- **State-driven execution** - Nodes read from and write to a shared run state
 
 ### Key Features (MVP)
 
@@ -51,7 +58,7 @@ ForgeGraph lets you build AI agent workflows using a visual graph builder. Conne
    cd forgegraph
    ```
 
-2. Make the dev script executable:
+2. Make the dev script executable (macOS/Linux/WSL):
 
    ```bash
    chmod +x dev
@@ -61,6 +68,8 @@ ForgeGraph lets you build AI agent workflows using a visual graph builder. Conne
 
    ```bash
    ./dev up
+   # or (PowerShell):
+   docker compose up --build -d
    ```
 
 4. Access the services:
@@ -143,17 +152,29 @@ Expected response:
 
 The gRPC engine runs on port 50051 and implements a Ping RPC that returns "pong".
 
+## Execution Model
+
+**Shared Runtime State:** Execution maintains a shared state map. After each node runs, it writes output under a namespaced key (`state["node.<id>.output"]`). Downstream nodes reference previous outputs via state paths.
+
+**Start Nodes:** Any node with no incoming edges (indegree = 0). Multiple start nodes run in parallel.
+
+**Scheduling:** Queue-based execution with worker pool. Nodes become ready when all upstream dependencies are satisfied. Ready nodes execute concurrently.
+
+**Branching:** Branch nodes evaluate boolean conditions and activate exactly one outgoing edge path (true or false). Non-selected branches are skipped.
+
+**Merging:** Merge nodes wait until all incoming branches complete, then continue downstream.
+
 ## Node Types
 
 | Node | Description |
 |------|-------------|
-| **Prompt** | Call LLM providers with template variables |
-| **HTTP Tool** | Call external HTTP APIs |
-| **Transform** | Transform state with safe expressions |
-| **Branch** | Conditional routing based on state |
-| **Merge** | Join parallel branches |
-| **Human Gate** | Pause for human approval or input |
-| **Output** | Finalize run output |
+| **Prompt** | Calls LLM with structured instructions, can target an output schema, writes validated output to state |
+| **Tool (HTTP)** | Generic tool executor (HTTP as baseline), UX uses "service pills" as presets, writes response to state |
+| **Transform** | Deterministic state transforms (mapping, formatting, extraction), writes derived values to state |
+| **Branch** | Evaluates conditions → routes execution to exactly one path |
+| **Merge** | Waits for multiple inputs → continues downstream |
+| **Human Gate** | Pauses run → resumes on approval/input |
+| **Output** | Collects + validates final result → ends run |
 
 ## Project Structure
 
@@ -214,9 +235,9 @@ forgegraph/
 - [x] Phase 0: Monorepo scaffolding + Docker + gRPC ping
 - [x] Phase 1: Django models + auth + prompt library
 - [x] Phase 2: NextJS graph builder + save/load JSON
-- [ ] Phase 3: Go engine basic execution
-- [x] Phase 4: Run viewer + persistence (UI/API; engine integration pending)
-- [ ] Phase 5: Branch/merge + retry/timeout
+- [x] Phase 3: Go engine basic execution
+- [x] Phase 4: Run viewer + persistence
+- [x] Phase 5: Branch/merge + retry/timeout
 - [ ] Phase 6: Human gate
 - [ ] Phase 7: Polish + demo workflows + docs
 

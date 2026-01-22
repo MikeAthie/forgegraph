@@ -6,7 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ForgeGraph is a visual, high-performance workflow engine for AI agents and automation. Users design agent workflows visually, run them reliably at scale, and debug them like software.
 
-**Current Phase:** Phase 4 (Observability MVP - run viewer + persistence)
+**Core Principles:**
+
+- **Agnostic execution primitives** - A small, stable set of node types that can express most workflows
+- **Schema-first reliability** - Outputs can be validated and structured to reduce hallucinations
+- **N8n-like UX, LangGraph-like semantics** - Easy graph building with real runtime logic
+- **State-driven execution** - Nodes read from and write to a shared run state
+
+**Current Phase:** Phase 6 (Human gate)
 
 See [SPECS.md](SPECS.md) for full project specification.
 See [architecture.md](architecture.md) for Clean Architecture structure.
@@ -115,31 +122,76 @@ protoc --go_out=. --go-grpc_out=. proto/engine.proto
 4. Engine executes DAG, writes NodeRun traces to Postgres
 5. Frontend polls for run status (MVP) or receives SSE updates (v1)
 
+### Execution Model
+
+**Start Nodes (Triggers):**
+
+- Any node with no incoming edges (indegree = 0) is a start node
+- Multiple start nodes run in parallel on run start
+
+**Scheduling & Parallelism:**
+
+- Queue-based execution with worker pool (goroutines)
+- Node becomes ready when all upstream dependencies are satisfied
+- Ready nodes execute concurrently
+
+**Conditional Branching:**
+
+- Branch node evaluates boolean condition against state
+- Exactly one outgoing edge path is activated (true or false)
+- Non-selected branches are skipped for that run
+
+**Merging:**
+
+- Merge node waits until all incoming branches complete
+- Supports "namespaced" (default) and "last_write_wins" merge strategies
+
 ### Node Types (MVP)
 
-- **Prompt** - LLM calls with template variables
-- **HTTP Tool** - External API calls
-- **Transform** - State transformations (safe expressions only)
-- **Branch** - Conditional routing
-- **Merge** - Join parallel branches
-- **Human Gate** - Pause for approval
-- **Output** - Finalize run result
+| Node           | Status             | Description                                               |
+| -------------- | ------------------ | --------------------------------------------------------- |
+| **Prompt**     | ⚠️ Interface ready | Calls LLM with structured instructions, validates output  |
+| **Tool (HTTP)**| ✅ Complete        | Generic tool executor (HTTP baseline, service presets)    |
+| **Transform**  | ✅ Complete        | Deterministic state transforms (mapping, formatting)      |
+| **Branch**     | ✅ Complete        | Evaluates conditions → routes execution                   |
+| **Merge**      | ✅ Complete        | Waits for multiple inputs → continues downstream          |
+| **Human Gate** | ❌ Phase 6         | Pauses run → resumes on approval/input                    |
+| **Output**     | ✅ Complete        | Collects + validates final result → ends run              |
+
+### Branch Node Conditions
+
+The branch executor supports these condition expressions:
+
+```text
+vars.score > 80                    # Numeric comparison
+node.http_1.output.status == 200   # Node output check
+vars.approved == true              # Boolean comparison
+input.mode != "test"               # String inequality
+vars.count                         # Truthy check (non-zero)
+```
+
+Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
 
 ### State Management
 
-Engine maintains `map[string]any` state:
+Engine maintains a shared state map during execution:
 
-- `state["node.<id>.output"]` - Node outputs
-- `state["vars.<name>"]` - Computed variables
+```text
+state["node.<id>.output"]  # Node outputs (written after each node runs)
+state["vars.<name>"]       # User/computed variables
+state["input.<name>"]      # Run input values
+```
+
+Downstream nodes reference previous outputs via state paths. This makes wiring simple and deterministic.
 
 ## Development Phases
 
 - [x] Phase 0: Monorepo scaffolding + Docker + gRPC ping
 - [x] Phase 1: Django models + auth + prompt library
 - [x] Phase 2: NextJS graph builder + save/load JSON
-- [ ] Phase 3: Go engine basic execution (prompt/http/output nodes)
+- [x] Phase 3: Go engine basic execution (prompt/http/output nodes)
 - [x] Phase 4: Run viewer + persistence
-- [ ] Phase 5: Branch/merge + retry/timeout
+- [x] Phase 5: Branch/merge + retry/timeout
 - [ ] Phase 6: Human gate
 - [ ] Phase 7: Polish + demo workflows + docs
 
@@ -175,11 +227,21 @@ Backend tests use pytest with pytest-django:
 ```bash
 # Run all tests
 cd backend
-USE_SQLITE=true pytest
+USE_SQLITE=true USE_IN_MEMORY_CHANNEL_LAYER=true pytest
 
 # Run specific test file
-USE_SQLITE=true pytest tests/integration/adapters/test_auth_api.py
+USE_SQLITE=true USE_IN_MEMORY_CHANNEL_LAYER=true pytest tests/integration/adapters/test_auth_api.py
 
 # Run with verbose output
-USE_SQLITE=true pytest -v
+USE_SQLITE=true USE_IN_MEMORY_CHANNEL_LAYER=true pytest -v
+```
+
+Engine tests use Go's built-in testing:
+
+```bash
+cd engine
+go test ./...
+
+# Run with verbose output
+go test -v ./...
 ```

@@ -27,6 +27,46 @@ This document defines the Clean Architecture structure for ForgeGraph. All code 
 
 ---
 
+## Execution Model
+
+ForgeGraph uses a **schema-driven, LangGraph-style runtime** with an **n8n-inspired UX**. Users build workflows as directed graphs of Nodes connected by Edges.
+
+### Core Principles
+
+- **Agnostic execution primitives** - A small, stable set of node types that can express most workflows
+- **Schema-first reliability** - Outputs can be validated and structured to reduce hallucinations
+- **N8n-like UX, LangGraph-like semantics** - Easy graph building with real runtime logic
+- **State-driven execution** - Nodes read from and write to a shared run state
+
+### Runtime State
+
+The execution engine maintains a shared state map:
+
+- `state["node.<id>.output"]` - Node execution output
+- `state["vars.<name>"]` - Computed variables from transform nodes
+- `state["input.<name>"]` - Run input values
+
+### Execution Flow
+
+1. **Start Nodes** - Any node with no incoming edges (indegree = 0). Multiple start nodes run in parallel.
+2. **Scheduling** - Queue-based with worker pool. Nodes become ready when all upstream dependencies are satisfied.
+3. **Branching** - Branch nodes evaluate boolean conditions and activate exactly one outgoing edge path (true/false).
+4. **Merging** - Merge nodes wait until all incoming branches complete, then continue downstream.
+
+### Node Types
+
+| Node | Description |
+|------|-------------|
+| **Prompt** | Calls LLM with structured instructions, can target an output schema, writes validated output to state |
+| **Tool (HTTP)** | Generic tool executor (HTTP as baseline), writes response to state |
+| **Transform** | Deterministic state transforms (mapping, formatting, extraction), writes derived values to state |
+| **Branch** | Evaluates conditions → routes execution to exactly one path |
+| **Merge** | Waits for multiple inputs → continues downstream (synchronization barrier) |
+| **Human Gate** | Pauses run → resumes on approval/input |
+| **Output** | Collects + validates final result → ends run |
+
+---
+
 ## Layer Definitions
 
 ### 1. Enterprise Business Rules (Entities)
@@ -288,7 +328,8 @@ engine/
 │   │   └── retry_policy.go          # RetryPolicy struct
 │   ├── service/
 │   │   ├── graph_validator.go       # Validates DAG structure
-│   │   └── execution_planner.go     # Builds execution order
+│   │   ├── execution_planner.go     # Builds execution order
+│   │   └── condition_evaluator.go   # Evaluates branch conditions
 │   └── errors.go                    # Domain errors
 │
 ├── application/                     # Application Business Rules

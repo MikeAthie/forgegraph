@@ -1,9 +1,12 @@
 """
-Runs API views (stub for Phase 4).
+Runs API views.
 
 Clean Architecture: Interface Adapters layer.
 """
 
+import logging
+
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Case, IntegerField, Prefetch, When
 from django.utils import timezone
@@ -21,8 +24,24 @@ from adapters.api.runs.serializers import (
     RunResumeSerializer,
     RunStartSerializer,
 )
+from adapters.gateways.grpc_engine_client import (
+    EngineConnectionError,
+    EngineExecutionError,
+    GrpcEngineClient,
+)
 from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
 from infrastructure.orm.models import GraphVersion, NodeRun, Run
+
+logger = logging.getLogger(__name__)
+
+
+def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
+    """Get an engine client instance. Can be mocked in tests."""
+    return GrpcEngineClient(
+        host=settings.ENGINE_HOST,
+        port=settings.ENGINE_PORT,
+        callback_url=callback_url,
+    )
 
 
 class RunListView(APIView):
@@ -209,6 +228,46 @@ class RunStartView(APIView):
         )
         broadcast_run_updated(run)
 
+        # Send run to the engine
+        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        try:
+            with get_engine_client(callback_url) as engine:
+                engine.start_run(
+                    run_id=run.id,
+                    graph_json=graph_version.graph_json,
+                    input_json=input_json,
+                )
+                # Update status to running once engine accepts
+                run.status = "running"
+                run.save(update_fields=["status"])
+                broadcast_run_updated(run)
+
+        except EngineConnectionError as e:
+            logger.error(f"Engine connection failed for run {run.id}: {e}")
+            run.status = "failed"
+            run.ended_at = timezone.now()
+            run.error_message = f"Engine connection failed: {e}"
+            run.save(update_fields=["status", "ended_at", "error_message"])
+            broadcast_run_updated(run)
+            return error_response(
+                code="ENGINE_UNAVAILABLE",
+                message="The execution engine is not available. Please try again later.",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except EngineExecutionError as e:
+            logger.error(f"Engine rejected run {run.id}: {e}")
+            run.status = "failed"
+            run.ended_at = timezone.now()
+            run.error_message = f"Engine rejected run: {e}"
+            run.save(update_fields=["status", "ended_at", "error_message"])
+            broadcast_run_updated(run)
+            return error_response(
+                code="ENGINE_ERROR",
+                message=str(e),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
@@ -266,6 +325,19 @@ class RunCancelView(APIView):
                 message=f"Cannot cancel a run in status '{run.status}'.",
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Tell the engine to cancel the run
+        try:
+            with get_engine_client() as engine:
+                engine.cancel_run(run_id=run.id)
+
+        except EngineConnectionError as e:
+            logger.warning(f"Engine connection failed when canceling run {run.id}: {e}")
+            # Still proceed to mark as canceled in the control plane
+
+        except EngineExecutionError as e:
+            logger.warning(f"Engine failed to cancel run {run.id}: {e}")
+            # Still proceed to mark as canceled in the control plane
 
         if not run.started_at:
             run.started_at = timezone.now()

@@ -13,6 +13,15 @@ A visual, high-performance workflow engine for AI agents and automation, built f
 
 Design agent workflows visually. Run them reliably at scale. Debug them like software.
 
+## 2.1 Design Principles
+
+ForgeGraph uses a **schema-driven, LangGraph-style runtime** with an **n8n-inspired UX**:
+
+- **Agnostic execution primitives** - A small, stable set of node types that can express most workflows
+- **Schema-first reliability** - Outputs can be validated and structured (e.g., JSON Schema / Pydantic-like validation) to reduce hallucinations
+- **N8n-like UX, LangGraph-like semantics** - Easy graph building with real runtime logic (start nodes, conditional edges, merging, final output)
+- **State-driven execution** - Nodes read from and write to a shared run state
+
 ## 3. Target users
 
 Primary:
@@ -64,38 +73,22 @@ Not in MVP:
   - State snapshots (key-value "state")
 
 ### 5.3 Node types (initial)
-Minimum set:
+Minimum set of agnostic execution primitives:
 
-1) Prompt Node
-- Calls LLM provider with prompt template + variables
-- Writes output to state
+| Node | Description |
+|------|-------------|
+| **Prompt** | Calls LLM with structured instructions, can target an output schema, writes validated output to state |
+| **Tool (HTTP)** | Generic tool executor (HTTP as baseline), UX uses "service pills" as presets, writes response to state |
+| **Transform** | Deterministic state transforms (mapping, formatting, extraction), writes derived values to state |
+| **Branch** | Evaluates conditions → routes execution to exactly one path (true/false edges) |
+| **Merge** | Waits for multiple inputs → continues downstream (synchronization barrier) |
+| **Human Gate** | Pauses run → resumes on approval/input |
+| **Output** | Collects + validates final result → ends run |
 
-2) HTTP Tool Node
-- Calls external HTTP APIs
-- Supports headers, query, body
-- Writes response to state
-
-3) Transform Node
-- Simple transformations on state
-- MVP: limited expressions only (no arbitrary code)
-- Writes result to state
-
-4) Branch Node
-- Evaluates condition expression against state
-- Routes execution to matching edge(s)
-
-5) Merge Node
-- Joins parallel branches
-- Waits for all required predecessors
-- Continues with merged state (merge strategy defined)
-
-6) Human Gate Node
-- Pauses run and awaits approval or input
-- Resume continues execution
-
-7) Output Node
-- Finalizes run output
-- Optionally triggers webhook (MVP optional)
+**State keys:**
+- `node.<id>.output` - Node execution output
+- `vars.<name>` - Computed variables from transform nodes
+- `input.<name>` - Run input values
 
 ### 5.4 Prompt Library
 - Ship with 10+ original prompts
@@ -261,44 +254,65 @@ Monorepo services:
 ### 8.2 Node schema
 Each node:
 - id (string)
-- type (enum)
+- type (enum: prompt, http, transform, branch, merge, human_gate, output)
 - name (string)
-- config (object)
+- config (object) - type-specific configuration
 - retry_policy (object) optional
 - timeout_ms (int) optional
-- outputs (list of named outputs) optional
 
 ### 8.3 Edge schema
 Each edge:
 - id (string)
 - from (node_id)
 - to (node_id)
-- condition (string) optional
-- label (string) optional
+- label (string) optional - used for branch routing ("true"/"false")
+
+**Edge semantics:**
+- Edges define execution dependencies and data flow
+- For branch nodes, edges use `label: "true"` or `label: "false"` to indicate conditional paths
+- Non-labeled edges are always followed when the source node completes
+- Merge nodes wait for all incoming edges before continuing
 
 ### 8.4 State passing
-- Engine maintains a State object:
-  - map[string]any
-- Each node reads from state and writes:
-  - state["node.<id>.output"] = output
-  - state["vars.<name>"] = computed variables
-- Merge node defines merge strategy:
-  - MVP: last-write-wins or namespaced outputs
+Engine maintains a shared `map[string]any` state:
+- `state["node.<id>.output"]` - Node execution output
+- `state["vars.<name>"]` - Computed variables
+- `state["input.<name>"]` - Run input values
+
+**State resolution in expressions:**
+- `vars.score` → `state["vars.score"]`
+- `node.http_1.output.status` → `state["node.http_1.output"]["status"]`
+- `input.mode` → `state["input.mode"]`
 
 ## 9. Execution semantics (Go engine)
 
-### 9.1 DAG execution
-- Identify start nodes (indegree 0)
-- Execute nodes when all dependencies satisfied
-- Parallel execution for independent nodes
+### 9.1 Start nodes
+- Any node with no incoming edges (indegree = 0) is a start node
+- Multiple start nodes run in parallel
+- Start nodes receive initial run input in state
 
-### 9.2 Concurrency model
-- Worker pool (goroutines)
-- Configurable max concurrency:
-  - global default
-  - per-run override (later)
+### 9.2 Scheduling
+- Queue-based execution with worker pool (goroutines)
+- Nodes become ready when all upstream dependencies are satisfied
+- Ready nodes execute concurrently (up to max workers)
+- Configurable max concurrency (global default, per-run override planned)
 
-### 9.3 Retries
+### 9.3 Branching
+- Branch nodes evaluate boolean conditions against state
+- Condition syntax: `vars.score > 80`, `node.http_1.output.status == 200`
+- Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
+- Activates exactly one outgoing edge path (true or false)
+- Non-selected branches are marked as skipped (not executed)
+
+### 9.4 Merging
+- Merge nodes wait until all incoming branches complete
+- Acts as synchronization barrier before continuing downstream
+- Merge strategies:
+  - **namespaced** (default): Each input preserved under `merged[nodeID]`
+  - **last_write_wins**: Map values merged, later overwrites earlier
+- Skipped branches are excluded from merge (gracefully handled)
+
+### 9.5 Retries
 - Per-node retry_policy:
   - max_attempts
   - backoff_ms
@@ -311,22 +325,12 @@ Each edge:
   - invalid config
   - user expression parse errors
 
-### 9.4 Timeouts and cancellation
+### 9.6 Timeouts and cancellation
 - Each node executes with context timeout
 - Cancel run:
   - marks run as CANCELED
   - cancels context for active workers
-
-### 9.5 Branch node
-- Evaluates boolean expression against state
-- Routes to first matching outgoing edge
-- MVP: allow a default edge with no condition
-
-### 9.6 Merge node
-- Waits for all specified predecessors
-- Combines outputs into state
-- MVP merge strategy:
-  - namespaced by node id
+  - in-flight nodes complete gracefully
 
 ### 9.7 Human gate node
 - On reaching human gate:
@@ -431,18 +435,19 @@ Portfolio:
 
 ## 15. Development roadmap (broad)
 
-Phase 0: monorepo scaffolding + docker + gRPC ping
-Phase 1: Django models + auth + prompt library
-Phase 2: Next graph builder + save/load JSON
-Phase 3: Go engine basic execution (prompt/http/output)
-Phase 4: Run viewer + persistence
-Phase 5: branch/merge + retry/timeout
-Phase 6: human gate
-Phase 7: polish + demo workflows + docs
+- [x] Phase 0: monorepo scaffolding + docker + gRPC ping
+- [x] Phase 1: Django models + auth + prompt library
+- [x] Phase 2: Next graph builder + save/load JSON
+- [x] Phase 3: Go engine basic execution (prompt/http/output)
+- [x] Phase 4: Run viewer + persistence
+- [x] Phase 5: branch/merge + retry/timeout
+- [ ] Phase 6: human gate
+- [ ] Phase 7: polish + demo workflows + docs
 
 ## 16. Open questions (track here)
-- Expression language for Branch/Transform (simple safe DSL vs JS subset)
-- Merge strategy (namespaced vs explicit key mapping)
+
+- ~~Expression language for Branch/Transform (simple safe DSL vs JS subset)~~ → Resolved: Safe DSL with path resolution (vars.x, node.id.output) and comparison operators
+- ~~Merge strategy (namespaced vs explicit key mapping)~~ → Resolved: Both supported - "namespaced" (default) and "last_write_wins"
 - Credential vault approach
 - Event streaming mechanism (DB polling vs SSE vs Redis Streams)
 

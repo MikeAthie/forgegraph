@@ -224,3 +224,11 @@ AUTH_REFRESH_COOKIE_SAMESITE = os.environ.get("AUTH_REFRESH_COOKIE_SAMESITE", "L
 AUTH_REFRESH_COOKIE_SECURE = os.environ.get(
     "AUTH_REFRESH_COOKIE_SECURE", "true" if not DEBUG else "false"
 ).lower() in {"1", "true", "yes"}
+
+# Engine Configuration (Go gRPC service)
+ENGINE_HOST = os.environ.get("ENGINE_HOST", "localhost")
+ENGINE_PORT = int(os.environ.get("ENGINE_PORT", "50051"))
+ENGINE_CALLBACK_URL = os.environ.get(
+    "ENGINE_CALLBACK_URL",
+    f"http://localhost:8000/api/runs/{{run_id}}/events/",
+)

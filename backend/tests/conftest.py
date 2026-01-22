@@ -2,9 +2,12 @@
 Pytest configuration and fixtures.
 """
 
+from unittest.mock import patch
+
 import pytest
 from rest_framework.test import APIClient
 
+from adapters.gateways.grpc_engine_client import MockEngineClient
 from infrastructure.orm.models import User
 
 
@@ -28,3 +31,14 @@ def authenticated_client(api_client, user):
     """Return an authenticated API client."""
     api_client.force_authenticate(user=user)
     return api_client
+
+
+@pytest.fixture(autouse=True)
+def mock_engine_client():
+    """Mock the engine client in all tests by default."""
+    mock_client = MockEngineClient()
+    with patch(
+        "adapters.api.runs.views.get_engine_client",
+        return_value=mock_client,
+    ):
+        yield mock_client

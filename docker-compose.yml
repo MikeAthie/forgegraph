@@ -50,11 +50,16 @@ services:
       ALLOWED_HOSTS: "*"
       DJANGO_SUPERUSER_EMAIL: admin@forgegraph.local
       DJANGO_SUPERUSER_PASSWORD: admin123456
+      ENGINE_HOST: engine
+      ENGINE_PORT: 50051
+      ENGINE_CALLBACK_URL: http://backend:8000/api/runs/{run_id}/events/
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      engine:
+        condition: service_started
     volumes:
       - ./backend:/app
       - backend_venv:/app/.venv
@@ -75,8 +80,14 @@ services:
       - "50051:50051"
     environment:
       GRPC_PORT: 50051
+      DATABASE_URL: postgres://forgegraph:forgegraph_secret@postgres:5432/forgegraph?sslmode=disable
+      MAX_WORKERS: 10
+      DEFAULT_TIMEOUT_MS: 30000
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   frontend:
     build:

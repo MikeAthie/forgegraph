@@ -200,7 +200,8 @@ class TestRunStart:
         assert "data" in response.data
         run_data = response.data["data"]
         assert run_data["graph_version_id"] == str(version.id)
-        assert run_data["status"] == "pending"
+        # Status is "running" after engine accepts the run
+        assert run_data["status"] == "running"
         assert run_data["input_json"] == {"hello": "world"}
 
         created_run_id = run_data["id"]

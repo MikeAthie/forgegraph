@@ -1,0 +1,52 @@
+// Package port defines interfaces (ports) for the application layer.
+// These are implemented by adapters in the infrastructure layer.
+package port
+
+import (
+	"context"
+
+	"github.com/forgegraph/engine/domain/entity"
+)
+
+// RunRepository persists run and node run data to the database.
+// Implementations handle the actual database operations.
+type RunRepository interface {
+	// Run operations
+
+	// GetRun retrieves a run by ID
+	GetRun(ctx context.Context, runID string) (*entity.Run, error)
+
+	// UpdateRunStatus updates the status of a run
+	UpdateRunStatus(ctx context.Context, runID string, status string) error
+
+	// UpdateRunOutput sets the final output JSON for a completed run
+	UpdateRunOutput(ctx context.Context, runID string, output map[string]any) error
+
+	// UpdateRunError sets the error message for a failed run
+	UpdateRunError(ctx context.Context, runID string, errorMsg string) error
+
+	// SetRunEnded marks a run as ended with the given status and optional output/error
+	SetRunEnded(ctx context.Context, runID string, status string, output map[string]any, errorMsg string) error
+
+	// NodeRun operations
+
+	// CreateNodeRun creates a new node run record
+	CreateNodeRun(ctx context.Context, nodeRun *entity.NodeRun) error
+
+	// UpdateNodeRun updates an existing node run record
+	UpdateNodeRun(ctx context.Context, nodeRun *entity.NodeRun) error
+
+	// GetNodeRun retrieves a node run by run ID and node ID
+	GetNodeRun(ctx context.Context, runID, nodeID string) (*entity.NodeRun, error)
+
+	// GetNodeRunsByRunID retrieves all node runs for a given run
+	GetNodeRunsByRunID(ctx context.Context, runID string) ([]*entity.NodeRun, error)
+}
+
+// GraphRepository loads graph definitions.
+// Note: In the current architecture, graphs are passed via gRPC request,
+// but this interface supports future scenarios where the engine loads graphs directly.
+type GraphRepository interface {
+	// GetGraph retrieves a graph by version ID
+	GetGraph(ctx context.Context, versionID string) (*entity.Graph, error)
+}

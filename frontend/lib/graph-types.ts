@@ -287,13 +287,13 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
     type: NODE_TYPES.BRANCH,
     label: "Branch",
     description: "Conditional routing based on state",
-    enabled: false, // Coming in Phase 5
+    enabled: true, // Phase 5
   },
   {
     type: NODE_TYPES.MERGE,
     label: "Merge",
     description: "Join parallel branches",
-    enabled: false, // Coming in Phase 5
+    enabled: true, // Phase 5
   },
   {
     type: NODE_TYPES.HUMAN_GATE,
