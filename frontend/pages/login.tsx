@@ -3,7 +3,20 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 
 import { useAuth } from "../contexts/AuthContext";
-import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FormField, Input, Spinner } from "@/components/ui";
+import AuthLayout from "../components/AuthLayout";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  FormField,
+  Input,
+  Spinner,
+} from "@/components/ui";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,7 +28,9 @@ export default function LoginPage() {
   const router = useRouter();
 
   const registeredParam = router.query.registered;
-  const registered = Array.isArray(registeredParam) ? registeredParam[0] : registeredParam;
+  const registered = Array.isArray(registeredParam)
+    ? registeredParam[0]
+    : registeredParam;
   const showRegisteredMessage = registered === "true" || registered === "1";
 
   useEffect(() => {
@@ -70,9 +85,9 @@ export default function LoginPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <AuthLayout>
         <Spinner size="lg" />
-      </div>
+      </AuthLayout>
     );
   }
 
@@ -83,76 +98,105 @@ export default function LoginPage() {
   const displayError = formError || error;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">ForgeGraph</CardTitle>
-          <CardDescription className="text-lg mt-2">Sign in to your account</CardDescription>
-          <p className="text-sm text-muted-foreground mt-2">
-            Or{" "}
-            <Link href="/register" className="font-medium text-primary hover:text-primary/80 transition-colors">
-              create a new account
-            </Link>
-          </p>
-        </CardHeader>
+    <AuthLayout>
+      <div className="w-full max-w-md">
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+            <CardDescription className="text-base mt-1">
+              Sign in to your account to continue
+            </CardDescription>
+          </CardHeader>
 
-        <CardContent>
-          {showRegisteredMessage && (
-            <Alert className="mb-4 border-green-200 bg-green-50 text-green-700">
-              <AlertDescription>
-                Registration successful! Please sign in with your new account.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {displayError && (
-              <Alert variant="destructive">
-                <AlertDescription>{displayError}</AlertDescription>
+          <CardContent className="pt-4">
+            {showRegisteredMessage && (
+              <Alert className="mb-4 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <AlertDescription>
+                  Registration successful! Please sign in with your new account.
+                </AlertDescription>
               </Alert>
             )}
 
-            <FormField label="Email address" required htmlFor="email">
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                disabled={isSubmitting}
-              />
-            </FormField>
-
-            <FormField label="Password" required htmlFor="password">
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                disabled={isSubmitting}
-              />
-            </FormField>
-
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Spinner size="xs" className="mr-2" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign in"
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              {displayError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{displayError}</AlertDescription>
+                </Alert>
               )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+
+              <FormField label="Email address" required htmlFor="email">
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  disabled={isSubmitting}
+                  className="h-11"
+                />
+              </FormField>
+
+              <FormField label="Password" required htmlFor="password">
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  disabled={isSubmitting}
+                  className="h-11"
+                />
+              </FormField>
+
+              <Button
+                type="submit"
+                className="w-full h-11 text-base font-medium"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Spinner size="xs" className="mr-2" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign in"
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/register"
+                  className="font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  Create one
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </AuthLayout>
   );
 }

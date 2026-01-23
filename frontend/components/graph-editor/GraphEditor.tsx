@@ -571,15 +571,25 @@ export function GraphEditor({
       }
 
       pushHistory();
+
+      // Determine edge label based on source node type and handle
+      let edgeLabel: string | undefined;
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      if (sourceNode?.type === NODE_TYPES.BRANCH && connection.sourceHandle) {
+        // Branch node: label edge with "true" or "false" based on handle
+        edgeLabel = connection.sourceHandle;
+      }
+
       const newEdge: Edge = {
         ...connection,
         id: generateId(),
+        label: edgeLabel,
       } as Edge;
 
       setEdges((eds) => addEdge(newEdge, eds));
       setIsDirty(true);
     },
-    [edges, pushHistory, setEdges]
+    [edges, nodes, pushHistory, setEdges]
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -947,7 +957,7 @@ export function GraphEditor({
   return (
     <div className="flex h-full">
       {/* Left Panel - Node Palette */}
-      <div className="w-64 border-r border-gray-200 bg-white overflow-y-auto">
+      <div className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
         <NodePalette
           onAddNode={handleAddNode}
           onAddNote={handleAddNote}
@@ -959,6 +969,7 @@ export function GraphEditor({
       {/* Center - Canvas */}
       <div className="flex-1 relative overflow-hidden">
         <ReactFlow
+          className="bg-background"
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
@@ -980,7 +991,7 @@ export function GraphEditor({
           panOnDrag={[1, 2]}
           defaultEdgeOptions={{
             type: "smoothstep",
-            style: { strokeWidth: 2 },
+            style: { strokeWidth: 2, stroke: "var(--muted-foreground)" },
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
@@ -989,28 +1000,28 @@ export function GraphEditor({
             nodeStrokeWidth={3}
             zoomable
             pannable
-            className="bg-white border border-gray-200 rounded-lg"
+            className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
           />
           <Panel position="top-right" className="flex items-center gap-2">
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm flex">
+            <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
               <button
                 type="button"
                 aria-label="Undo"
                 onClick={handleUndo}
                 disabled={!canUndo}
                 title="Undo (Ctrl+Z)"
-                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <Undo2 aria-hidden="true" className="h-4 w-4" />
               </button>
-              <div className="w-px bg-gray-200" />
+              <div className="w-px bg-border" />
               <button
                 type="button"
                 aria-label="Redo"
                 onClick={handleRedo}
                 disabled={!canRedo}
                 title="Redo (Ctrl+Y)"
-                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <Redo2 aria-hidden="true" className="h-4 w-4" />
               </button>
@@ -1020,19 +1031,19 @@ export function GraphEditor({
               aria-label="Auto-layout"
               onClick={handleAutoLayout}
               disabled={nodes.length === 0}
-              className="bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
+              className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
               title="Tidy up layout"
             >
               <LayoutGrid aria-hidden="true" className="h-4 w-4" />
               <span className="hidden sm:inline">Tidy</span>
             </button>
-            <div className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm flex items-center gap-2">
+            <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
               <select
                 aria-label="Version"
                 value={currentVersionId ?? ""}
                 disabled={loadingVersion || saving || availableVersions.length === 0}
                 onChange={(e) => void handleSelectVersion(e.target.value)}
-                className="bg-transparent text-sm text-gray-600 outline-none"
+                className="bg-transparent text-sm text-muted-foreground outline-none"
               >
                 {availableVersions.length === 0 ? (
                   <option value="">No version</option>
@@ -1076,34 +1087,34 @@ export function GraphEditor({
       </div>
 
       {/* Right Panel - Inspector */}
-      <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto">
+      <div className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
         {overlayRunId && (
-          <div className="border-b border-gray-200 bg-gray-50 p-4 space-y-3">
+          <div className="border-b border-border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">Execution</h3>
+              <h3 className="text-sm font-semibold text-foreground">Execution</h3>
               <button
                 type="button"
                 onClick={handleExitExecutionView}
-                className="text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 Exit
               </button>
             </div>
 
             {overlayRunLoading && !overlayRun && (
-              <p className="text-xs text-gray-500">Loading execution trace...</p>
+              <p className="text-xs text-muted-foreground">Loading execution trace...</p>
             )}
 
             {overlayRunError && (
-              <p className="text-xs text-red-600 whitespace-pre-wrap">{overlayRunError}</p>
+              <p className="text-xs text-destructive whitespace-pre-wrap">{overlayRunError}</p>
             )}
 
             {overlayRun && (
               <>
-                <div className="flex items-center justify-between gap-2 text-xs text-gray-600">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
                     Status:{" "}
-                    <span className="font-medium text-gray-900">{String(overlayRun.status)}</span>
+                    <span className="font-medium text-foreground">{String(overlayRun.status)}</span>
                   </span>
                   <Link href={`/runs/${overlayRun.id}`} className="text-primary hover:underline">
                     Open run
@@ -1125,55 +1136,55 @@ export function GraphEditor({
                     type="button"
                     onClick={() => void fetchOverlayRun()}
                     disabled={overlayRunLoading || overlayRunRefreshing}
-                    className="flex-1 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {overlayRunLoading || overlayRunRefreshing ? "Refreshing..." : "Refresh"}
                   </button>
                 </div>
 
-                <div className="pt-3 border-t border-gray-200 space-y-2">
-                  <p className="text-xs font-semibold text-gray-700 uppercase">Node trace</p>
+                <div className="pt-3 border-t border-border space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Node trace</p>
 
                   {!selectedNodeId ? (
-                    <p className="text-xs text-gray-500">Select a node to inspect its execution.</p>
+                    <p className="text-xs text-muted-foreground">Select a node to inspect its execution.</p>
                   ) : overlaySelectedNodeRuns.length === 0 ? (
-                    <p className="text-xs text-gray-500">No trace records for this node.</p>
+                    <p className="text-xs text-muted-foreground">No trace records for this node.</p>
                   ) : (
                     <div className="space-y-2">
                       {overlaySelectedNodeRuns.map((nodeRun) => (
                         <div
                           key={nodeRun.id}
-                          className="rounded-lg border border-gray-200 bg-white p-2 space-y-2"
+                          className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
                         >
                           <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="font-medium text-gray-900">attempt {nodeRun.attempt}</span>
-                            <span className="text-gray-600">{String(nodeRun.status)}</span>
-                            <span className="text-gray-600">{formatDuration(nodeRun.duration_ms)}</span>
+                            <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
+                            <span className="text-muted-foreground">{String(nodeRun.status)}</span>
+                            <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
                           </div>
 
                           <details open>
-                            <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                               Response
                             </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-gray-900 p-2 text-[11px] text-gray-100 whitespace-pre-wrap">
+                            <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
                               {formatJsonForDisplay(nodeRun.output_json)}
                             </pre>
                           </details>
 
                           <details open={String(nodeRun.status) === "failed"}>
-                            <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                               Failure
                             </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[11px] text-gray-800 whitespace-pre-wrap">
+                            <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
                               {formatJsonForDisplay(nodeRun.error_json)}
                             </pre>
                           </details>
 
                           <details>
-                            <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                               Input
                             </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[11px] text-gray-800 whitespace-pre-wrap">
+                            <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
                               {formatJsonForDisplay(nodeRun.input_json)}
                             </pre>
                           </details>

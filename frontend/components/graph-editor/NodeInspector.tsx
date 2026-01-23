@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { NODE_TYPES, type RetryPolicy } from "../../lib/graph-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 interface NodeInspectorProps {
   selectedNode: Node | null | undefined;
@@ -67,14 +68,14 @@ export function NodeInspector({
     // Show graph info when no node is selected
     return (
       <div className="p-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Graph Info</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Graph Info</h3>
 
         {editingMetadata ? (
           <div className="space-y-4">
             <div>
               <label
                 htmlFor="edit-graph-name"
-                className="block text-xs font-medium text-gray-700 mb-1"
+                className="block text-xs font-medium text-muted-foreground mb-1"
               >
                 Name
               </label>
@@ -88,16 +89,16 @@ export function NodeInspector({
             <div>
               <label
                 htmlFor="edit-graph-description"
-                className="block text-xs font-medium text-gray-700 mb-1"
+                className="block text-xs font-medium text-muted-foreground mb-1"
               >
                 Description
               </label>
-              <textarea
+              <Textarea
                 id="edit-graph-description"
                 value={metadataDescription}
                 onChange={(e) => setMetadataDescription(e.target.value)}
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="text-sm"
               />
             </div>
             <div className="flex gap-2">
@@ -127,18 +128,18 @@ export function NodeInspector({
             {showGraphText && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                     Name
                   </label>
-                  <p className="text-sm text-gray-900">{graphName}</p>
+                  <p className="text-sm text-foreground">{graphName}</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                     Description
                   </label>
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
                     {graphDescription || (
-                      <span className="text-gray-400">No description</span>
+                      <span className="text-muted-foreground">No description</span>
                     )}
                   </p>
                 </div>
@@ -157,8 +158,8 @@ export function NodeInspector({
           </div>
         )}
 
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">
+        <div className="mt-6 pt-4 border-t border-border">
+          <p className="text-xs text-muted-foreground">
             Select a node on the canvas to view and edit its configuration.
           </p>
         </div>
@@ -173,7 +174,7 @@ export function NodeInspector({
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Node Config</h3>
+        <h3 className="text-sm font-semibold text-foreground">Node Config</h3>
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -195,7 +196,7 @@ export function NodeInspector({
       <div className="space-y-4">
         {/* Node Type Badge */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+          <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
             Type
           </label>
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
@@ -205,7 +206,7 @@ export function NodeInspector({
 
         {/* Node Name */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
             Name
           </label>
           <Input
@@ -219,17 +220,17 @@ export function NodeInspector({
 
         {/* Node ID (read-only) */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+          <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
             ID
           </label>
-          <p className="text-xs text-gray-600 font-mono break-all">
+          <p className="text-xs text-muted-foreground font-mono break-all">
             {selectedNode.id}
           </p>
         </div>
 
         {!isNote && (
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-gray-700">
+            <label className="text-xs font-medium text-muted-foreground">
               Enabled
             </label>
             <button
@@ -241,12 +242,12 @@ export function NodeInspector({
               }
               className={`
                 relative inline-flex h-5 w-9 items-center rounded-full transition-colors
-                ${nodeData.disabled ? "bg-gray-300" : "bg-primary"}
+                ${nodeData.disabled ? "bg-muted" : "bg-primary"}
               `}
             >
               <span
                 className={`
-                  inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform
+                  inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
                   ${nodeData.disabled ? "translate-x-0.5" : "translate-x-4.5"}
                 `}
               />
@@ -290,6 +291,20 @@ export function NodeInspector({
           />
         )}
 
+        {nodeType === NODE_TYPES.BRANCH && (
+          <BranchNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.MERGE && (
+          <MergeNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
         {!isNote && (
           <AdvancedNodeConfig
             timeoutMs={(nodeData.timeout_ms as number) ?? undefined}
@@ -311,18 +326,18 @@ function NoteNodeConfig({
   onChange: (text: string) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-200">
-      <h4 className="text-xs font-medium text-gray-700">Note</h4>
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Note</h4>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Text
         </label>
-        <textarea
+        <Textarea
           value={text}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Write a note to document this part of the workflow..."
           rows={6}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          className="text-sm"
         />
       </div>
     </div>
@@ -338,10 +353,10 @@ function PromptNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-200">
-      <h4 className="text-xs font-medium text-gray-700">Prompt Configuration</h4>
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt Configuration</h4>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Prompt Template ID
         </label>
         <Input
@@ -350,7 +365,7 @@ function PromptNodeConfig({
           placeholder="Select or enter prompt ID"
           className="text-sm"
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           ID of a prompt from the Prompt Library
         </p>
       </div>
@@ -367,16 +382,16 @@ function HttpNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-200">
-      <h4 className="text-xs font-medium text-gray-700">HTTP Configuration</h4>
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">HTTP Configuration</h4>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Method
         </label>
         <select
           value={(config.method as string) ?? "GET"}
           onChange={(e) => onChange({ ...config, method: e.target.value })}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
         >
           <option value="GET">GET</option>
           <option value="POST">POST</option>
@@ -386,7 +401,7 @@ function HttpNodeConfig({
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           URL
         </label>
         <Input
@@ -397,7 +412,7 @@ function HttpNodeConfig({
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Output Key
         </label>
         <Input
@@ -406,7 +421,7 @@ function HttpNodeConfig({
           placeholder="response"
           className="text-sm"
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Key to store the response in state
         </p>
       </div>
@@ -423,25 +438,25 @@ function TransformNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-200">
-      <h4 className="text-xs font-medium text-gray-700">Transform Configuration</h4>
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transform Configuration</h4>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Expression
         </label>
-        <textarea
+        <Textarea
           value={(config.expression as string) ?? ""}
           onChange={(e) => onChange({ ...config, expression: e.target.value })}
           placeholder="state.input | uppercase"
           rows={3}
-          className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          className="text-sm font-mono"
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Expression to transform the state
         </p>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Output Key
         </label>
         <Input
@@ -464,13 +479,13 @@ function OutputNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-200">
-      <h4 className="text-xs font-medium text-gray-700">Output Configuration</h4>
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Output Configuration</h4>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
           Output Mapping (JSON)
         </label>
-        <textarea
+        <Textarea
           value={
             config.output_mapping
               ? JSON.stringify(config.output_mapping, null, 2)
@@ -486,9 +501,9 @@ function OutputNodeConfig({
           }}
           placeholder='{"result": "state.final_output"}'
           rows={4}
-          className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          className="text-sm font-mono"
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Map state values to output keys
         </p>
       </div>
@@ -513,11 +528,11 @@ function AdvancedNodeConfig({
   const hasAdvancedConfig = timeoutMs !== undefined || retryPolicy !== undefined;
 
   return (
-    <div className="pt-3 border-t border-gray-200">
+    <div className="pt-3 border-t border-border">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 w-full text-left text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        className="flex items-center gap-2 w-full text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
       >
         {isExpanded ? (
           <ChevronDown className="w-4 h-4" />
@@ -534,7 +549,7 @@ function AdvancedNodeConfig({
         <div className="mt-3 space-y-3">
           {/* Timeout */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
               Timeout (ms)
             </label>
             <Input
@@ -548,14 +563,14 @@ function AdvancedNodeConfig({
               className="text-sm"
               min={0}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Max execution time before timeout (leave empty for default)
             </p>
           </div>
 
           {/* Retry Policy */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
               Max Retry Attempts
             </label>
             <Input
@@ -581,13 +596,13 @@ function AdvancedNodeConfig({
               min={1}
               max={10}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Total attempts on failure (1 = no retries)
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
               Backoff (ms)
             </label>
             <Input
@@ -613,13 +628,13 @@ function AdvancedNodeConfig({
               min={0}
               step={100}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Base delay between retries (fixed), or base delay for exponential backoff
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
               Backoff Strategy
             </label>
             <select
@@ -632,17 +647,95 @@ function AdvancedNodeConfig({
                   backoff_strategy: backoff_strategy ?? "exponential",
                 });
               }}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
             >
               <option value="exponential">exponential</option>
               <option value="fixed">fixed</option>
             </select>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Exponential uses backoff * 2^(attempt-2)
             </p>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Branch Node Config
+function BranchNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Branch Configuration</h4>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Condition Expression
+        </label>
+        <Textarea
+          value={(config.condition as string) ?? ""}
+          onChange={(e) => onChange({ ...config, condition: e.target.value })}
+          placeholder="vars.score > 80"
+          rows={2}
+          className="text-sm font-mono"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Expression that evaluates to true/false to determine which path to take
+        </p>
+      </div>
+      <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">Example expressions:</p>
+        <code className="block font-mono text-foreground">vars.score &gt; 80</code>
+        <code className="block font-mono text-foreground">node.http_1.output.status == 200</code>
+        <code className="block font-mono text-foreground">vars.approved == true</code>
+        <code className="block font-mono text-foreground">input.mode != &quot;test&quot;</code>
+      </div>
+    </div>
+  );
+}
+
+// Merge Node Config
+function MergeNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Merge Configuration</h4>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Merge Strategy
+        </label>
+        <select
+          value={(config.merge_strategy as string) ?? "namespaced"}
+          onChange={(e) => onChange({ ...config, merge_strategy: e.target.value })}
+          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
+        >
+          <option value="namespaced">Namespaced (default)</option>
+          <option value="last_write_wins">Last Write Wins</option>
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          How to combine outputs from incoming branches
+        </p>
+      </div>
+      <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
+        <div>
+          <p className="font-medium text-foreground">Namespaced:</p>
+          <p>Each branch&apos;s output is stored under its node ID</p>
+        </div>
+        <div>
+          <p className="font-medium text-foreground">Last Write Wins:</p>
+          <p>Later branches overwrite earlier values for same keys</p>
+        </div>
+      </div>
     </div>
   );
 }

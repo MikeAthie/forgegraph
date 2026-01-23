@@ -91,60 +91,53 @@ describe("GraphNode", () => {
   });
 
   describe("Node Type Styling", () => {
-    it("should apply purple styling for Prompt nodes", () => {
+    it("should apply violet accent styling for Prompt nodes", () => {
       const props = createNodeProps(NODE_TYPES.PROMPT, "Prompt");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-purple-50", "border-purple-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-violet-500");
     });
 
-    it("should apply blue styling for HTTP nodes", () => {
+    it("should apply amber accent styling for HTTP nodes", () => {
       const props = createNodeProps(NODE_TYPES.HTTP, "HTTP");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-blue-50", "border-blue-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-amber-500");
     });
 
-    it("should apply green styling for Transform nodes", () => {
+    it("should apply blue accent styling for Transform nodes", () => {
       const props = createNodeProps(NODE_TYPES.TRANSFORM, "Transform");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-green-50", "border-green-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-blue-500");
     });
 
-    it("should apply orange styling for Output nodes", () => {
+    it("should apply indigo accent styling for Output nodes", () => {
       const props = createNodeProps(NODE_TYPES.OUTPUT, "Output");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-orange-50", "border-orange-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-indigo-500");
     });
 
-    it("should apply yellow styling for Branch nodes", () => {
+    it("should apply rose accent styling for Branch nodes", () => {
       const props = createNodeProps(NODE_TYPES.BRANCH, "Branch");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-yellow-50", "border-yellow-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-rose-500");
     });
 
-    it("should apply teal styling for Merge nodes", () => {
+    it("should apply emerald accent styling for Merge nodes", () => {
       const props = createNodeProps(NODE_TYPES.MERGE, "Merge");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-teal-50", "border-teal-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-emerald-500");
     });
 
-    it("should apply pink styling for Human Gate nodes", () => {
+    it("should apply orange accent styling for Human Gate nodes", () => {
       const props = createNodeProps(NODE_TYPES.HUMAN_GATE, "Human Gate");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("bg-pink-50", "border-pink-300");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-orange-500");
     });
   });
 
@@ -178,11 +171,9 @@ describe("GraphNode", () => {
 
     it("should not show config preview when config is empty", () => {
       const props = createNodeProps(NODE_TYPES.PROMPT, "My Prompt", {});
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      // Config preview section should not be rendered when config is empty
-      const configPreview = container.querySelector(".text-xs.text-gray-500");
-      expect(configPreview).not.toBeInTheDocument();
+      expect(screen.queryByTestId("node-config-preview")).not.toBeInTheDocument();
     });
   });
 
@@ -192,20 +183,20 @@ describe("GraphNode", () => {
         method: "POST",
         url: "https://api.example.com/endpoint",
       });
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview).toHaveTextContent(/POST https:\/\/api\.example\.com\/endpoi/);
+      expect(screen.getByTestId("node-config-preview")).toHaveTextContent(
+        /POST https:\/\/api\.example\.com\/endpoi/,
+      );
     });
 
     it("should default to GET method when not specified", () => {
       const props = createNodeProps(NODE_TYPES.HTTP, "HTTP", {
         url: "https://api.test.com",
       });
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview).toHaveTextContent(/GET https:\/\/api\.test\.com/);
+      expect(screen.getByTestId("node-config-preview")).toHaveTextContent(/GET https:\/\/api\.test\.com/);
     });
 
     it("should truncate long URLs", () => {
@@ -214,20 +205,19 @@ describe("GraphNode", () => {
         method: "GET",
         url: longUrl,
       });
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
       // Should show truncated version with ellipsis
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview?.textContent).toContain("GET https://api.example.com/very");
-      expect(preview?.textContent).toContain("...");
+      const preview = screen.getByTestId("node-config-preview");
+      expect(preview.textContent).toContain("GET https://api.example.com/very");
+      expect(preview.textContent).toContain("...");
     });
 
     it("should not show config preview when config is empty", () => {
       const props = createNodeProps(NODE_TYPES.HTTP, "HTTP", {});
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview).not.toBeInTheDocument();
+      expect(screen.queryByTestId("node-config-preview")).not.toBeInTheDocument();
     });
   });
 
@@ -236,11 +226,11 @@ describe("GraphNode", () => {
       const props = createNodeProps(NODE_TYPES.TRANSFORM, "My Transform", {
         expression: "state.input | uppercase",
       });
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview?.textContent).toContain("state.input | uppercase");
-      expect(preview?.textContent).toContain("...");
+      const preview = screen.getByTestId("node-config-preview");
+      expect(preview.textContent).toContain("state.input | uppercase");
+      expect(preview.textContent).toContain("...");
     });
 
     it("should truncate long expressions", () => {
@@ -248,19 +238,18 @@ describe("GraphNode", () => {
       const props = createNodeProps(NODE_TYPES.TRANSFORM, "My Transform", {
         expression: longExpression,
       });
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview?.textContent).toContain("state.very.long.expression");
-      expect(preview?.textContent).toContain("...");
+      const preview = screen.getByTestId("node-config-preview");
+      expect(preview.textContent).toContain("state.very.long.expression");
+      expect(preview.textContent).toContain("...");
     });
 
     it("should not show config preview when config is empty", () => {
       const props = createNodeProps(NODE_TYPES.TRANSFORM, "My Transform", {});
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview).not.toBeInTheDocument();
+      expect(screen.queryByTestId("node-config-preview")).not.toBeInTheDocument();
     });
   });
 
@@ -269,29 +258,25 @@ describe("GraphNode", () => {
       const props = createNodeProps(NODE_TYPES.OUTPUT, "Output", {
         output_mapping: { result: "state.data" },
       });
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview).toHaveTextContent("Final output");
+      expect(screen.getByTestId("node-config-preview")).toHaveTextContent("Final output");
     });
 
     it("should not show config preview when config is empty", () => {
       const props = createNodeProps(NODE_TYPES.OUTPUT, "Output", {});
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const preview = container.querySelector(".text-xs.text-gray-500");
-      expect(preview).not.toBeInTheDocument();
+      expect(screen.queryByTestId("node-config-preview")).not.toBeInTheDocument();
     });
   });
 
   describe("Empty Config", () => {
     it("should not show config preview when config is empty and no preview is defined", () => {
       const props = createNodeProps(NODE_TYPES.BRANCH, "Branch", {});
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      // Config preview section should not be rendered
-      const previewElements = container.querySelectorAll(".text-xs.text-gray-500");
-      expect(previewElements.length).toBe(0);
+      expect(screen.queryByTestId("node-config-preview")).not.toBeInTheDocument();
     });
 
     it("should handle undefined config", () => {
@@ -375,7 +360,7 @@ describe("GraphNode", () => {
       const { container } = render(<GraphNode {...props} />);
 
       const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("min-w-[180px]");
+      expect(nodeElement).toHaveClass("min-w-[200px]");
     });
 
     it("should have rounded corners", () => {
@@ -383,7 +368,7 @@ describe("GraphNode", () => {
       const { container } = render(<GraphNode {...props} />);
 
       const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("rounded-lg");
+      expect(nodeElement).toHaveClass("rounded-xl");
     });
 
     it("should have border and shadow", () => {
@@ -391,7 +376,7 @@ describe("GraphNode", () => {
       const { container } = render(<GraphNode {...props} />);
 
       const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("border-2", "shadow-sm");
+      expect(nodeElement).toHaveClass("border", "shadow-sm");
     });
 
     it("should have transition effects", () => {
@@ -406,11 +391,10 @@ describe("GraphNode", () => {
   describe("Badge Styling", () => {
     it("should render type badge with appropriate color", () => {
       const props = createNodeProps(NODE_TYPES.PROMPT, "Node");
-      const { container } = render(<GraphNode {...props} />);
+      render(<GraphNode {...props} />);
 
-      const badge = container.querySelector(".bg-purple-500");
-      expect(badge).toBeInTheDocument();
-      expect(badge).toHaveClass("text-white", "rounded", "text-xs", "font-medium");
+      const badge = screen.getByText("Prompt");
+      expect(badge).toHaveClass("rounded-full", "text-xs", "font-medium", "bg-violet-500/15");
     });
   });
 

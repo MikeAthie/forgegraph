@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { RefreshCw } from "lucide-react";
 
-import Header from "../components/Header";
+import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getApiErrorMessage, runsApi, type RunListItem } from "../lib/api";
 import {
+  Alert,
+  AlertDescription,
   Badge,
   Button,
   Card,
@@ -149,20 +152,20 @@ const getStatusBadgeClass = (status: string) => {
   switch (status) {
     case "succeeded":
     case "success":
-      return "border-green-200 bg-green-50 text-green-700";
+      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
     case "failed":
     case "error":
-      return "border-red-200 bg-red-50 text-red-700";
+      return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300";
     case "running":
-      return "border-blue-200 bg-blue-50 text-blue-700";
+      return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300";
     case "pending":
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-muted-foreground/25 bg-muted/40 text-muted-foreground";
     case "paused":
-      return "border-yellow-200 bg-yellow-50 text-yellow-800";
+      return "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300";
     case "canceled":
-      return "border-gray-200 bg-gray-50 text-gray-500";
+      return "border-muted-foreground/20 bg-muted/40 text-muted-foreground";
     default:
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-muted-foreground/25 bg-muted/40 text-muted-foreground";
   }
 };
 
@@ -225,30 +228,28 @@ export default function RunsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Runs</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Debug your workflows with node-by-node status, outputs, and timings.
-              </p>
+      <DashboardLayout>
+        <div className="flex flex-col gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
+                  Runs
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Debug your workflows with node-by-node status, outputs, and timings.
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => void refreshRuns()} disabled={loading}>
+                {loading ? <Spinner size="xs" /> : <RefreshCw aria-hidden="true" />}
+                {loading ? "Refreshing..." : "Refresh"}
+              </Button>
             </div>
-            <Button variant="outline" onClick={() => void refreshRuns()} disabled={loading}>
-              {loading ? (
-                <>
-                  <Spinner size="xs" className="mr-2" />
-                  Refreshing...
-                </>
-              ) : (
-                "Refresh"
-              )}
-            </Button>
           </div>
 
-          <Card className="mt-6">
-            <CardHeader>
+          <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
+            <CardHeader className="pb-2">
               <CardTitle className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <span>Run history</span>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -256,7 +257,7 @@ export default function RunsPage() {
                     <SelectTrigger className="w-full sm:w-[160px]">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
-                  <SelectContent>
+                    <SelectContent>
                       <SelectItem value="all">All statuses</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="running">Running</SelectItem>
@@ -312,34 +313,34 @@ export default function RunsPage() {
                 />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted/40">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Graph
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Status
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Started
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Duration
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Run
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-border">
                       {filteredRuns.map((run) => (
                         <tr
                           key={run.id}
-                          className="hover:bg-gray-50 cursor-pointer"
+                          className="hover:bg-muted/40 cursor-pointer transition-colors"
                           onClick={() => void router.push(`/runs/${run.id}`)}
                         >
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          <td className="px-4 py-3 text-sm font-medium text-foreground">
                             <div className="flex flex-col">
                               <span className="truncate max-w-[340px]">{run.graph_name}</span>
                               <span className="text-xs text-muted-foreground">
@@ -383,11 +384,15 @@ export default function RunsPage() {
                 </div>
               )}
 
-              {error && <p className="mt-4 text-sm text-destructive">Error: {error}</p>}
+              {error && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
-        </main>
-      </div>
+        </div>
+      </DashboardLayout>
     </ProtectedRoute>
   );
 }

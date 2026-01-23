@@ -19,3 +19,4 @@ export * from "./empty-state";
 export * from "./form-field";
 export * from "./search-input";
 export * from "./spinner";
+export * from "./theme-toggle";

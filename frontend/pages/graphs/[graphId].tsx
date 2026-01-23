@@ -149,9 +149,9 @@ export default function GraphDetailPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="h-screen flex flex-col bg-gray-50">
+        <div className="h-screen flex flex-col bg-background">
           <div className="flex-1 flex items-center justify-center">
-            <div className="flex items-center space-x-3 text-gray-600">
+            <div className="flex items-center space-x-3 text-muted-foreground">
               <Spinner size="md" />
               <span className="text-sm">Loading graph...</span>
             </div>
@@ -164,13 +164,13 @@ export default function GraphDetailPage() {
   if (error || !graph) {
     return (
       <ProtectedRoute>
-        <div className="h-screen flex flex-col bg-gray-50">
+        <div className="h-screen flex flex-col bg-background">
           <main className="flex-1 flex items-center justify-center">
-            <div className="bg-white rounded-lg border border-gray-200 p-10 text-center max-w-md">
-              <h2 className="text-lg font-semibold text-gray-900">
+            <div className="bg-card rounded-lg border border-border p-10 text-center max-w-md shadow-sm">
+              <h2 className="text-lg font-semibold text-foreground">
                 {error ? "Error Loading Graph" : "Graph Not Found"}
               </h2>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-2 text-sm text-muted-foreground">
                 {error ?? "The graph may have been deleted or you may not have access."}
               </p>
               <Link
@@ -188,22 +188,23 @@ export default function GraphDetailPage() {
 
   return (
     <ProtectedRoute>
-      <div className="h-screen flex flex-col bg-gray-100">
+      <div className="h-screen flex flex-col bg-background">
         {/* Header with back button */}
-        <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-4">
+        <div className="bg-background/80 backdrop-blur-lg border-b border-border px-4 py-2 flex items-center gap-4">
           <Link
             href="/graphs"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Back
           </Link>
-          <div className="h-4 w-px bg-gray-300" />
+          <div className="h-4 w-px bg-border" />
           <h1
             aria-label={graph.name}
-            className="text-sm font-semibold text-gray-900 truncate"
+            className="text-sm font-semibold text-foreground truncate"
           >
-            Graph Editor
+            {graph.name}
           </h1>
+          <span className="hidden sm:inline text-xs text-muted-foreground">Graph Editor</span>
         </div>
 
         {/* Editor */}

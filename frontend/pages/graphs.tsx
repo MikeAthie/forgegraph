@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { Plus, RefreshCw } from "lucide-react";
 
-import Header from "../components/Header";
+import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getApiErrorMessage, graphsApi, type GraphListItem, type GraphVersionSummary } from "../lib/api";
 import { showSuccess, showError } from "../lib/toast";
@@ -190,52 +191,61 @@ export default function GraphsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Graphs</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Manage your workflow graphs and their versions.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void refreshGraphs()}
-                disabled={loading}
-              >
-                Refresh
-              </Button>
-              <Button onClick={openCreate}>New graph</Button>
+      <DashboardLayout>
+        <div className="flex flex-col gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
+                  Graphs
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Manage your workflow graphs and their versions.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" onClick={() => void refreshGraphs()} disabled={loading}>
+                  <RefreshCw aria-hidden="true" />
+                  Refresh
+                </Button>
+                <Button onClick={openCreate}>
+                  <Plus aria-hidden="true" />
+                  New graph
+                </Button>
+              </div>
             </div>
           </div>
 
           {error && (
-            <Alert variant="destructive" className="mt-6">
+            <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
           {loading ? (
-            <div className="mt-10 flex items-center justify-center">
-              <div className="flex items-center space-x-3 text-gray-600">
+            <div className="flex items-center justify-center py-16">
+              <div className="flex items-center space-x-3 text-muted-foreground">
                 <Spinner size="md" />
                 <span className="text-sm">Loading graphs...</span>
               </div>
             </div>
           ) : sortedGraphs.length === 0 ? (
             <EmptyState
-              className="mt-10"
+              className="py-16"
               title="No graphs yet"
               description="Create your first graph to start building workflows."
               action={<Button onClick={openCreate}>Create a graph</Button>}
             />
           ) : (
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {sortedGraphs.map((graph) => (
-                <Card key={graph.id} className="hover:shadow-md transition-shadow">
+                <Card
+                  key={graph.id}
+                  className="group relative overflow-hidden border-border/50 bg-card/60 backdrop-blur-sm transition-all hover:border-primary/30 hover:shadow-lg"
+                >
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-primary/60 via-violet-500/50 to-fuchsia-500/50 opacity-0 transition-opacity group-hover:opacity-100" />
+
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
                       <Link
@@ -249,7 +259,7 @@ export default function GraphsPage() {
                       )}
                     </div>
                     <CardDescription className="line-clamp-2">
-                      {graph.description || "No description"}
+                      {graph.description || <span className="italic">No description</span>}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -259,11 +269,14 @@ export default function GraphsPage() {
                         {graph.version_count} {graph.version_count === 1 ? "version" : "versions"}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" className="flex-1 min-w-[6rem]" asChild>
+                        <Link href={`/graphs/${graph.id}`}>Open</Link>
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1"
+                        className="flex-1 min-w-[6rem]"
                         onClick={() => openEdit(graph)}
                       >
                         Edit
@@ -271,7 +284,7 @@ export default function GraphsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1"
+                        className="flex-1 min-w-[6rem]"
                         onClick={() => void openVersions(graph)}
                       >
                         Versions
@@ -292,7 +305,7 @@ export default function GraphsPage() {
               ))}
             </div>
           )}
-        </main>
+        </div>
 
         {/* Create Dialog */}
         <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
@@ -433,21 +446,21 @@ export default function GraphsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto max-h-64">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-border">
+                  <thead className="bg-muted/40">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                         Version
                       </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                         Created
                       </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                         Checksum
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-border">
                     {versions
                       .slice()
                       .sort((a, b) => b.version - a.version)
@@ -481,7 +494,7 @@ export default function GraphsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </DashboardLayout>
     </ProtectedRoute>
   );
 }

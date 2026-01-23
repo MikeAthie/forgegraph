@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Plus, RefreshCw } from "lucide-react";
 
-import Header from "../components/Header";
+import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -411,26 +412,34 @@ export default function PromptsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Prompts</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Browse built-in prompts and manage your own prompt library.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => void refreshPrompts()} disabled={loading}>
-                Refresh
-              </Button>
-              <Button onClick={openCreate}>New prompt</Button>
+      <DashboardLayout>
+        <div className="flex flex-col gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
+                  Prompts
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Browse built-in prompts and manage your own prompt library.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" onClick={() => void refreshPrompts()} disabled={loading}>
+                  <RefreshCw aria-hidden="true" />
+                  Refresh
+                </Button>
+                <Button onClick={openCreate}>
+                  <Plus aria-hidden="true" />
+                  New prompt
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Filters */}
-          <Card className="mt-6">
+          <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
             <CardContent className="pt-6">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
@@ -473,19 +482,19 @@ export default function PromptsPage() {
           </Card>
 
           {error && (
-            <Alert variant="destructive" className="mt-6">
+            <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
           {loading ? (
-            <div className="mt-10 flex items-center justify-center">
+            <div className="flex items-center justify-center py-10">
               <Spinner size="md" />
               <span className="ml-3 text-sm text-muted-foreground">Loading prompts...</span>
             </div>
           ) : prompts.length === 0 ? (
             <EmptyState
-              className="mt-10"
+              className="py-10"
               title={emptyStateTitle}
               description={emptyStateDescription}
               action={
@@ -495,7 +504,7 @@ export default function PromptsPage() {
               }
             />
           ) : (
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {prompts.map((prompt) => (
                 <Card
                   key={prompt.id}
@@ -535,7 +544,6 @@ export default function PromptsPage() {
               ))}
             </div>
           )}
-        </main>
 
         {/* Create Dialog */}
         <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
@@ -781,7 +789,7 @@ export default function PromptsPage() {
                   <Separator />
                   <div>
                     <h4 className="text-sm font-medium mb-2">Content</h4>
-                    <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                    <pre className="p-4 bg-muted rounded-lg border border-border/50 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
                       {selectedPrompt.content}
                     </pre>
                   </div>
@@ -852,6 +860,7 @@ export default function PromptsPage() {
           </DialogContent>
         </Dialog>
       </div>
+      </DashboardLayout>
     </ProtectedRoute>
   );
 }

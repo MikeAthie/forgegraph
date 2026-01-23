@@ -24,6 +24,8 @@ dependencies = [
     "gunicorn>=21.2.0",
     # Environment
     "python-dotenv>=1.0.0",
+    "grpcio>=1.76.0",
+    "grpcio-tools>=1.76.0",
 ]
 
 [dependency-groups]

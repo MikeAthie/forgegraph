@@ -3,7 +3,20 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 
 import { useAuth } from "../contexts/AuthContext";
-import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FormField, Input, Spinner } from "@/components/ui";
+import AuthLayout from "../components/AuthLayout";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  FormField,
+  Input,
+  Spinner,
+} from "@/components/ui";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -83,9 +96,9 @@ export default function RegisterPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <AuthLayout>
         <Spinner size="lg" />
-      </div>
+      </AuthLayout>
     );
   }
 
@@ -96,87 +109,104 @@ export default function RegisterPage() {
   const displayError = formError || error;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">ForgeGraph</CardTitle>
-          <CardDescription className="text-lg mt-2">Create your account</CardDescription>
-          <p className="text-sm text-muted-foreground mt-2">
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
-              Sign in
-            </Link>
-          </p>
-        </CardHeader>
+    <AuthLayout>
+      <div className="w-full max-w-md">
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="text-2xl font-bold">Create account</CardTitle>
+            <CardDescription className="text-base mt-1">
+              Get started with ForgeGraph for free
+            </CardDescription>
+          </CardHeader>
 
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {displayError && (
-              <Alert variant="destructive">
-                <AlertDescription>{displayError}</AlertDescription>
-              </Alert>
-            )}
-
-            <FormField label="Email address" required htmlFor="email">
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                disabled={isSubmitting}
-              />
-            </FormField>
-
-            <FormField
-              label="Password"
-              required
-              description="Must be at least 8 characters with uppercase, lowercase, and number"
-              htmlFor="password"
-            >
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create a password"
-                disabled={isSubmitting}
-              />
-            </FormField>
-
-            <FormField label="Confirm password" required htmlFor="confirmPassword">
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm your password"
-                disabled={isSubmitting}
-              />
-            </FormField>
-
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Spinner size="xs" className="mr-2" />
-                  Creating account...
-                </>
-              ) : (
-                "Create account"
+          <CardContent className="pt-4">
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              {displayError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{displayError}</AlertDescription>
+                </Alert>
               )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+
+              <FormField label="Email address" required htmlFor="email">
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  disabled={isSubmitting}
+                  className="h-11"
+                />
+              </FormField>
+
+              <FormField
+                label="Password"
+                required
+                description="At least 8 characters with uppercase, lowercase, and number"
+                htmlFor="password"
+              >
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Create a password"
+                  disabled={isSubmitting}
+                  className="h-11"
+                />
+              </FormField>
+
+              <FormField label="Confirm password" required htmlFor="confirmPassword">
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your password"
+                  disabled={isSubmitting}
+                  className="h-11"
+                />
+              </FormField>
+
+              <Button
+                type="submit"
+                className="w-full h-11 text-base font-medium"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Spinner size="xs" className="mr-2" />
+                    Creating account...
+                  </>
+                ) : (
+                  "Create account"
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Already have an account?{" "}
+                <Link
+                  href="/login"
+                  className="font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  Sign in
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </AuthLayout>
   );
 }

@@ -172,6 +172,36 @@ vars.count                         # Truthy check (non-zero)
 
 Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
 
+### Retry and Timeout Configuration
+
+Nodes can have per-node retry and timeout policies:
+
+```json
+{
+  "id": "http_1",
+  "type": "http",
+  "name": "Call API",
+  "config": { "url": "https://api.example.com" },
+  "timeout_ms": 30000,
+  "retry_policy": {
+    "max_attempts": 3,
+    "backoff_ms": 1000,
+    "backoff_strategy": "exponential"
+  }
+}
+```
+
+**Retry Policy:**
+
+- `max_attempts`: Maximum number of attempts (default: 1, no retry)
+- `backoff_ms`: Base delay between retries in milliseconds
+- `backoff_strategy`: `"fixed"` (constant delay) or `"exponential"` (2^attempt × base)
+
+**Retryable vs Non-Retryable:**
+
+- Retryable: Network errors, 5xx HTTP responses, timeouts, LLM transient errors
+- Non-retryable: 4xx HTTP responses, validation errors, config errors
+
 ### State Management
 
 Engine maintains a shared state map during execution:

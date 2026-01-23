@@ -16,7 +16,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center space-y-4">
           <Spinner size="lg" />
           <p className="text-sm text-muted-foreground">Loading...</p>
@@ -27,7 +27,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center space-y-4">
           <Spinner size="lg" />
           <p className="text-sm text-muted-foreground">Redirecting to login...</p>

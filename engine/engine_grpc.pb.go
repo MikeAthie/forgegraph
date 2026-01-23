@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.24.4
-// source: proto/engine.proto
+// source: engine.proto
 
 package main
 
@@ -154,7 +154,7 @@ type UnsafeEngineServiceServer interface {
 }
 
 func RegisterEngineServiceServer(s grpc.ServiceRegistrar, srv EngineServiceServer) {
-	// If the following call panics, it indicates UnimplementedEngineServiceServer was
+	// If the following call pancis, it indicates UnimplementedEngineServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
@@ -283,5 +283,5 @@ var EngineService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/engine.proto",
+	Metadata: "engine.proto",
 }

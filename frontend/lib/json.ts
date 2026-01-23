@@ -23,7 +23,7 @@ function normalizeJsonForDisplay(
   if (value === null || value === undefined) return null;
 
   const valueType = typeof value;
-  if (valueType === "string") {
+  if (typeof value === "string") {
     if (value.length <= options.maxStringLength) return value;
     const truncated = value.slice(0, options.maxStringLength);
     return `${truncated}… (truncated ${value.length - options.maxStringLength} chars)`;
@@ -79,4 +79,3 @@ export function formatJsonForDisplay(value: unknown, opts?: JsonDisplayOptions):
     return String(value);
   }
 }
-

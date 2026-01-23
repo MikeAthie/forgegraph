@@ -68,7 +68,7 @@ describe("Runs List Page", () => {
       render(<RunsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/error/i)).toBeInTheDocument();
+        expect(screen.getByText("Failed to load runs.")).toBeInTheDocument();
       });
     });
   });
@@ -146,9 +146,9 @@ describe("Runs List Page", () => {
         expect(runningBadge).toBeInTheDocument();
 
         // Check for appropriate CSS classes or styles
-        expect(succeededBadge).toHaveClass(/success|green/i);
-        expect(failedBadge).toHaveClass(/error|red/i);
-        expect(runningBadge).toHaveClass(/info|blue/i);
+        expect(succeededBadge).toHaveClass(/emerald/i);
+        expect(failedBadge).toHaveClass(/rose/i);
+        expect(runningBadge).toHaveClass(/blue/i);
       });
     });
 

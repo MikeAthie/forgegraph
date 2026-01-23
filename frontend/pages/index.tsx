@@ -209,7 +209,7 @@ export default function Home() {
     "Without Code",
     "That Just Work",
     "Your Way",
-  ], 80, 40, 2500);
+  ], 80, 40, 3500);
 
   // Animate workflow nodes
   useEffect(() => {
@@ -232,72 +232,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
-      {/* CSS Animations */}
-      <style jsx global>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-20px) rotate(5deg); }
-        }
-
-        @keyframes pulse-glow {
-          0%, 100% {
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
-          }
-          50% {
-            box-shadow: 0 0 40px rgba(99, 102, 241, 0.6), 0 0 60px rgba(99, 102, 241, 0.3);
-          }
-        }
-
-        @keyframes gradient-x {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-
-        @keyframes particle-float {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-            opacity: 0.3;
-          }
-          25% {
-            transform: translate(10px, -30px) scale(1.1);
-            opacity: 0.6;
-          }
-          50% {
-            transform: translate(-5px, -60px) scale(1);
-            opacity: 0.4;
-          }
-          75% {
-            transform: translate(15px, -30px) scale(0.9);
-            opacity: 0.5;
-          }
-        }
-
-        .animate-gradient {
-          background-size: 200% 200%;
-          animation: gradient-x 3s ease infinite;
-        }
-
-        .glow-effect {
-          animation: pulse-glow 2s ease-in-out infinite;
-        }
-      `}</style>
-
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -335,9 +269,9 @@ export default function Home() {
         {/* Animated background */}
         <div className="absolute inset-0 -z-10">
           {/* Gradient orbs */}
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-primary/30 rounded-full blur-[100px] animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[80px] animate-pulse" style={{ animationDelay: '1s' }} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px]" />
+          <div className="absolute top-1/4 left-1/4 w-125 h-125 bg-primary/30 rounded-full blur-[100px] animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/4 w-100 h-100 bg-violet-500/20 rounded-full blur-[80px] animate-pulse animation-delay-1000" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-indigo-500/10 rounded-full blur-[120px]" />
 
           {/* Floating particles */}
           {particles.map((particle) => (
@@ -368,7 +302,7 @@ export default function Home() {
           <div
             className={`transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
           >
-            <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm animate-bounce">
+            <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm">
               <span className="relative flex h-2 w-2 mr-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
@@ -383,7 +317,7 @@ export default function Home() {
             }`}
           >
             Create AI Agents
-            <span className="block mt-2 h-[1.2em] bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent animate-gradient bg-[length:200%_auto]">
+            <span className="block mt-2 h-[1.2em] bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent animate-gradient bg-size-[200%_auto]">
               {typedText}
               <span className="animate-pulse">|</span>
             </span>
@@ -685,7 +619,7 @@ export default function Home() {
             {/* Animated background elements */}
             <div className="absolute inset-0 overflow-hidden">
               <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-primary/10 rounded-full blur-3xl animate-pulse" />
-              <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-violet-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+              <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-violet-500/10 rounded-full blur-3xl animate-pulse animation-delay-1000" />
             </div>
 
             <div className="relative">

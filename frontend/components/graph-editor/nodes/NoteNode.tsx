@@ -2,6 +2,8 @@ import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { StickyNote } from "lucide-react";
 
+import { cn } from "@/lib/utils";
+
 interface NoteNodeData {
   label?: string;
   text?: string;
@@ -14,23 +16,27 @@ function NoteNodeComponent({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`
-        relative min-w-[180px] max-w-[260px] rounded-lg border-2 border-yellow-300 bg-yellow-50 p-3 shadow-sm
-        ${selected ? "ring-2 ring-primary ring-offset-2" : ""}
-      `}
+      className={cn(
+        "relative min-w-[180px] max-w-[260px] rounded-xl border border-border bg-card p-3 shadow-sm",
+        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+      )}
     >
-      <div className="flex items-center gap-2 text-yellow-800 mb-2">
-        <StickyNote aria-hidden="true" className="w-4 h-4" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide">Note</span>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1 rounded-t-xl bg-amber-500" />
+
+      <div className="flex items-center gap-2 mb-2">
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+          <StickyNote aria-hidden="true" className="w-3.5 h-3.5" />
+          Note
+        </span>
       </div>
 
-      <div className="text-sm font-medium text-yellow-900 truncate">{title}</div>
+      <div className="text-sm font-semibold text-foreground truncate">{title}</div>
 
-      <div className="mt-2 text-xs text-yellow-900 whitespace-pre-wrap break-words line-clamp-6">
+      <div className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-6">
         {text ? (
-          text
+          <span className="text-foreground/90">{text}</span>
         ) : (
-          <span className="text-yellow-800/70 italic">Add a note in the inspector…</span>
+          <span className="italic">Add a note in the inspector…</span>
         )}
       </div>
     </div>
@@ -38,4 +44,3 @@ function NoteNodeComponent({ data, selected }: NodeProps) {
 }
 
 export const NoteNode = memo(NoteNodeComponent);
-

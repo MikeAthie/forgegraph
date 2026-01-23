@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
-import Header from "../../components/Header";
+import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type NodeRunItem, type RunDetail } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
@@ -153,22 +153,22 @@ const getStatusBadgeClass = (status: string) => {
   switch (status) {
     case "succeeded":
     case "success":
-      return "border-green-200 bg-green-50 text-green-700";
+      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
     case "failed":
     case "error":
-      return "border-red-200 bg-red-50 text-red-700";
+      return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300";
     case "running":
-      return "border-blue-200 bg-blue-50 text-blue-700";
+      return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300";
     case "pending":
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-muted-foreground/25 bg-muted/40 text-muted-foreground";
     case "paused":
-      return "border-yellow-200 bg-yellow-50 text-yellow-800";
+      return "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300";
     case "canceled":
-      return "border-gray-200 bg-gray-50 text-gray-500";
+      return "border-muted-foreground/20 bg-muted/40 text-muted-foreground";
     case "skipped":
-      return "border-gray-200 bg-gray-50 text-gray-500";
+      return "border-muted-foreground/20 bg-muted/40 text-muted-foreground";
     default:
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-muted-foreground/25 bg-muted/40 text-muted-foreground";
   }
 };
 
@@ -546,82 +546,84 @@ export default function RunDetailPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-
-        <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/runs">Back</Link>
-                </Button>
-                <h1 className="text-2xl font-bold text-gray-900">Run</h1>
+      <DashboardLayout>
+        <div className="flex flex-col gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/runs">Back</Link>
+                  </Button>
+                  <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Run</h1>
+                </div>
+                {lastUpdatedAt && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Last updated: {lastUpdatedAt.toLocaleTimeString()}
+                  </p>
+                )}
+                {run && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Live updates: {wsConnected ? "websocket" : "polling"}
+                    {wsError ? ` (${wsError})` : ""}
+                  </p>
+                )}
               </div>
-              {lastUpdatedAt && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Last updated: {lastUpdatedAt.toLocaleTimeString()}
-                </p>
-              )}
-              {run && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Live updates: {wsConnected ? "websocket" : "polling"}
-                  {wsError ? ` (${wsError})` : ""}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {run?.graph_id && (
-                <Button variant="outline" asChild disabled={loading || isRefreshing || isCanceling || isRerunning}>
-                  <Link href={`/graphs/${run.graph_id}?runId=${run.id}`}>Open in editor</Link>
-                </Button>
-              )}
-              {run && (
+
+              <div className="flex flex-wrap items-center gap-2">
+                {run?.graph_id && (
+                  <Button variant="outline" asChild disabled={loading || isRefreshing || isCanceling || isRerunning}>
+                    <Link href={`/graphs/${run.graph_id}?runId=${run.id}`}>Open in editor</Link>
+                  </Button>
+                )}
+                {run && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void rerun()}
+                    disabled={loading || isRefreshing || isCanceling || isRerunning}
+                  >
+                    {isRerunning ? (
+                      <>
+                        <Spinner size="xs" className="mr-2" />
+                        Starting...
+                      </>
+                    ) : (
+                      "Re-run"
+                    )}
+                  </Button>
+                )}
+                {run && !isTerminalRunStatus(String(run.status)) && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => void cancelRun()}
+                    disabled={loading || isRefreshing || isCanceling || isRerunning}
+                  >
+                    {isCanceling ? (
+                      <>
+                        <Spinner size="xs" className="mr-2" />
+                        Canceling...
+                      </>
+                    ) : (
+                      "Cancel"
+                    )}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
-                  onClick={() => void rerun()}
+                  onClick={() => void fetchRun()}
                   disabled={loading || isRefreshing || isCanceling || isRerunning}
                 >
-                  {isRerunning ? (
+                  {loading || isRefreshing ? (
                     <>
                       <Spinner size="xs" className="mr-2" />
-                      Starting...
+                      Refreshing...
                     </>
                   ) : (
-                    "Re-run"
+                    "Refresh"
                   )}
                 </Button>
-              )}
-              {run && !isTerminalRunStatus(String(run.status)) && (
-                <Button
-                  variant="destructive"
-                  onClick={() => void cancelRun()}
-                  disabled={loading || isRefreshing || isCanceling || isRerunning}
-                >
-                  {isCanceling ? (
-                    <>
-                      <Spinner size="xs" className="mr-2" />
-                      Canceling...
-                    </>
-                  ) : (
-                    "Cancel"
-                  )}
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => void fetchRun()}
-                disabled={loading || isRefreshing || isCanceling || isRerunning}
-              >
-                {loading || isRefreshing ? (
-                  <>
-                    <Spinner size="xs" className="mr-2" />
-                    Refreshing...
-                  </>
-                ) : (
-                  "Refresh"
-                )}
-              </Button>
+              </div>
             </div>
           </div>
 
@@ -631,14 +633,14 @@ export default function RunDetailPage() {
               <span className="ml-3 text-sm text-muted-foreground">Loading run...</span>
             </div>
           ) : !run ? (
-            <Card className="mt-6">
+            <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
               <CardContent className="py-10">
                 <p className="text-sm text-destructive">Error: {error ?? "Run not found."}</p>
               </CardContent>
             </Card>
           ) : (
             <>
-              <Card className="mt-6">
+              <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between gap-4">
                     <span className="truncate">
@@ -687,13 +689,13 @@ export default function RunDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card className="mt-6">
+              <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle>Run data</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {run.output_json ? (
-                    <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-auto max-h-[45vh] text-sm whitespace-pre-wrap">
+                    <pre className="p-4 bg-muted rounded-lg border border-border/50 overflow-auto max-h-[45vh] text-sm font-mono whitespace-pre-wrap">
                       {formatJsonForDisplay(run.output_json)}
                     </pre>
                   ) : (
@@ -704,8 +706,8 @@ export default function RunDetailPage() {
                 </CardContent>
               </Card>
 
-              <div className="mt-6 grid gap-6 lg:grid-cols-3">
-                <Card className="lg:col-span-1">
+              <div className="grid gap-6 lg:grid-cols-3">
+                <Card className="lg:col-span-1 border-border/50 bg-card/60 backdrop-blur-sm">
                   <CardHeader>
                     <CardTitle>Nodes</CardTitle>
                   </CardHeader>
@@ -727,7 +729,7 @@ export default function RunDetailPage() {
                               onClick={() => setSelectedNodeRunId(nodeRun.id)}
                               className={[
                                 "w-full text-left rounded-lg border p-3 transition-colors",
-                                isSelected ? "border-primary bg-primary/5" : "border-gray-200 hover:bg-gray-50",
+                                isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
                               ].join(" ")}
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -758,7 +760,7 @@ export default function RunDetailPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="lg:col-span-2 lg:sticky lg:top-6 lg:self-start">
+                <Card className="lg:col-span-2 lg:sticky lg:top-24 lg:self-start border-border/50 bg-card/60 backdrop-blur-sm">
                   <CardHeader>
                     <CardTitle>Node details</CardTitle>
                   </CardHeader>
@@ -800,7 +802,7 @@ export default function RunDetailPage() {
 
                         <details open>
                           <summary className="cursor-pointer text-sm font-medium">Response</summary>
-                          <pre className="mt-2 p-4 bg-gray-900 text-gray-100 rounded-lg overflow-auto max-h-[45vh] text-sm whitespace-pre-wrap">
+                          <pre className="mt-2 p-4 bg-muted rounded-lg border border-border/50 overflow-auto max-h-[45vh] text-sm font-mono whitespace-pre-wrap">
                             {formatJsonForDisplay(selectedNodeRun.output_json)}
                           </pre>
                         </details>
@@ -825,8 +827,8 @@ export default function RunDetailPage() {
               </div>
             </>
           )}
-        </main>
-      </div>
+        </div>
+      </DashboardLayout>
     </ProtectedRoute>
   );
 }

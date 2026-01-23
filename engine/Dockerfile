@@ -2,7 +2,10 @@ FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache protobuf protobuf-dev
+# git can be needed for some module fetches; ca-certs helps TLS downloads
+RUN apk add --no-cache protobuf protobuf-dev git ca-certificates
+
+RUN go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.8.9
 
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -13,12 +16,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /engine .
 
 FROM alpine:3.19
 
-# Install grpcurl for health checks
-RUN apk add --no-cache grpcurl ca-certificates
+# We only need certs at runtime
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
 COPY --from=builder /engine .
+COPY --from=builder /go/bin/grpcurl /usr/local/bin/grpcurl
 
 EXPOSE 50051
 

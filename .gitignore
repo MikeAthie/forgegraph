@@ -40,9 +40,18 @@ env/
 *.egg-info/
 
 # IDEs
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/settings.json
 .idea/
 
-# Local tooling
-.claude/
+# Local tooling (temp)
 tmpclaude-*
+
+# Windows reserved filename accidentally created by tooling
+/nul
+
+# Local notes
+tasks-*.md

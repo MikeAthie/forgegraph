@@ -47,16 +47,16 @@ export default function Modal({
       />
 
       <div
-        className={`relative w-full ${maxWidthClassName} bg-white rounded-lg shadow-lg border border-gray-200`}
+        className={`relative w-full ${maxWidthClassName} bg-background rounded-lg shadow-lg border border-border`}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-start justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <div className="flex items-start justify-between p-4 border-b border-border">
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="ml-4 inline-flex items-center justify-center rounded-md p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+            className="ml-4 inline-flex items-center justify-center rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             aria-label="Close"
           >
             <svg
@@ -75,7 +75,7 @@ export default function Modal({
         <div className="p-4">{children}</div>
 
         {footer && (
-          <div className="p-4 border-t border-gray-200 flex items-center justify-end gap-2">
+          <div className="p-4 border-t border-border flex items-center justify-end gap-2">
             {footer}
           </div>
         )}

@@ -106,23 +106,23 @@ describe("NodePalette", () => {
       const outputButton = screen.getByRole("button", { name: /^output$/i });
       expect(outputButton).not.toBeDisabled();
     });
-  });
 
-  describe("Disabled Node Types", () => {
-    it("should render Branch node type as disabled", () => {
+    it("should render Branch node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const branchButton = screen.getByRole("button", { name: /^branch$/i });
-      expect(branchButton).toBeDisabled();
+      expect(branchButton).not.toBeDisabled();
     });
 
-    it("should render Merge node type as disabled", () => {
+    it("should render Merge node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const mergeButton = screen.getByRole("button", { name: /^merge$/i });
-      expect(mergeButton).toBeDisabled();
+      expect(mergeButton).not.toBeDisabled();
     });
+  });
 
+  describe("Disabled Node Types", () => {
     it("should render Human Gate node type as disabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
@@ -191,8 +191,8 @@ describe("NodePalette", () => {
       const user = userEvent.setup();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const branchButton = screen.getByRole("button", { name: /^branch$/i });
-      await user.click(branchButton);
+      const disabledButton = screen.getByRole("button", { name: /^human gate$/i });
+      await user.click(disabledButton);
 
       expect(mockOnAddNode).not.toHaveBeenCalled();
     });
@@ -215,7 +215,9 @@ describe("NodePalette", () => {
       const { container } = render(<NodePalette onAddNode={mockOnAddNode} />);
 
       // Each node button should have a colored icon badge
-      const iconBadges = container.querySelectorAll(".bg-purple-500, .bg-blue-500, .bg-green-500, .bg-orange-500");
+      const iconBadges = container.querySelectorAll(
+        ".bg-violet-500, .bg-amber-500, .bg-blue-500, .bg-indigo-500, .bg-rose-500, .bg-emerald-500, .bg-orange-500"
+      );
       expect(iconBadges.length).toBeGreaterThan(0);
     });
 
