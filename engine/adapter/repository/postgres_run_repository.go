@@ -397,3 +397,113 @@ func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID st
 
 	return result, nil
 }
+
+// SavePauseState saves the execution state when a run is paused at a human gate
+func (r *PostgresRunRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string) error {
+	// Combine state snapshot, completed nodes, and graph into a single JSON object
+	pauseState := map[string]any{
+		"state_snapshot":  stateSnapshot,
+		"completed_nodes": completedNodes,
+		"graph_json":      graphJSON,
+	}
+
+	pauseStateBytes, err := json.Marshal(pauseState)
+	if err != nil {
+		return fmt.Errorf("failed to marshal pause state: %w", err)
+	}
+
+	query := `
+		UPDATE runs
+		SET pause_state_json = $1, paused_node_id = $2, updated_at = $3
+		WHERE id = $4
+	`
+
+	result, err := r.db.ExecContext(ctx, query, string(pauseStateBytes), pausedNodeID, time.Now(), runID)
+	if err != nil {
+		return fmt.Errorf("failed to save pause state: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return domain.ErrRunNotFound
+	}
+
+	return nil
+}
+
+// LoadPauseState retrieves the saved pause state for resuming a run
+func (r *PostgresRunRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string, err error) {
+	query := `
+		SELECT paused_node_id, pause_state_json
+		FROM runs
+		WHERE id = $1
+	`
+
+	var pausedNodeIDNull sql.NullString
+	var pauseStateJSONStr sql.NullString
+
+	err = r.db.QueryRowContext(ctx, query, runID).Scan(&pausedNodeIDNull, &pauseStateJSONStr)
+	if err == sql.ErrNoRows {
+		return "", nil, nil, "", domain.ErrRunNotFound
+	}
+	if err != nil {
+		return "", nil, nil, "", fmt.Errorf("failed to load pause state: %w", err)
+	}
+
+	if !pausedNodeIDNull.Valid || pausedNodeIDNull.String == "" {
+		return "", nil, nil, "", fmt.Errorf("run is not paused")
+	}
+	pausedNodeID = pausedNodeIDNull.String
+
+	if pauseStateJSONStr.Valid && pauseStateJSONStr.String != "" {
+		var pauseState map[string]any
+		if err := json.Unmarshal([]byte(pauseStateJSONStr.String), &pauseState); err != nil {
+			return "", nil, nil, "", fmt.Errorf("failed to parse pause state: %w", err)
+		}
+
+		if snapshot, ok := pauseState["state_snapshot"].(map[string]any); ok {
+			stateSnapshot = snapshot
+		}
+
+		if nodes, ok := pauseState["completed_nodes"].([]any); ok {
+			for _, n := range nodes {
+				if nodeStr, ok := n.(string); ok {
+					completedNodes = append(completedNodes, nodeStr)
+				}
+			}
+		}
+
+		if gj, ok := pauseState["graph_json"].(string); ok {
+			graphJSON = gj
+		}
+	}
+
+	return pausedNodeID, stateSnapshot, completedNodes, graphJSON, nil
+}
+
+// ClearPauseState removes the pause state after a run is resumed
+func (r *PostgresRunRepository) ClearPauseState(ctx context.Context, runID string) error {
+	query := `
+		UPDATE runs
+		SET pause_state_json = NULL, paused_node_id = NULL, updated_at = $1
+		WHERE id = $2
+	`
+
+	result, err := r.db.ExecContext(ctx, query, time.Now(), runID)
+	if err != nil {
+		return fmt.Errorf("failed to clear pause state: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return domain.ErrRunNotFound
+	}
+
+	return nil
+}

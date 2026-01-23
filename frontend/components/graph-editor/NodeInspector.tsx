@@ -305,6 +305,13 @@ export function NodeInspector({
           />
         )}
 
+        {nodeType === NODE_TYPES.HUMAN_GATE && (
+          <HumanGateNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
         {!isNote && (
           <AdvancedNodeConfig
             timeoutMs={(nodeData.timeout_ms as number) ?? undefined}
@@ -734,6 +741,115 @@ function MergeNodeConfig({
         <div>
           <p className="font-medium text-foreground">Last Write Wins:</p>
           <p>Later branches overwrite earlier values for same keys</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Human Gate Node Config
+function HumanGateNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  const requiredFields = (config.required_fields as string[]) || [];
+
+  const addField = (field: string) => {
+    if (field && !requiredFields.includes(field)) {
+      onChange({ ...config, required_fields: [...requiredFields, field] });
+    }
+  };
+
+  const removeField = (index: number) => {
+    const updated = requiredFields.filter((_, i) => i !== index);
+    onChange({ ...config, required_fields: updated });
+  };
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Human Gate Configuration</h4>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Prompt Message
+        </label>
+        <Textarea
+          value={(config.prompt_message as string) ?? ""}
+          onChange={(e) => onChange({ ...config, prompt_message: e.target.value })}
+          placeholder="Please review and approve this step..."
+          rows={3}
+          className="text-sm"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Message shown to the reviewer when the workflow pauses
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Required Fields
+        </label>
+        <div className="space-y-2">
+          {requiredFields.map((field, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={field}
+                readOnly
+                className="text-sm flex-1"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => removeField(index)}
+                className="text-destructive hover:text-destructive"
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Field name (e.g., approval_reason)"
+              className="text-sm flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const input = e.target as HTMLInputElement;
+                  addField(input.value.trim());
+                  input.value = "";
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement;
+                if (input?.value) {
+                  addField(input.value.trim());
+                  input.value = "";
+                }
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Fields the reviewer must fill in before approving
+        </p>
+      </div>
+
+      <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
+        <div>
+          <p className="font-medium text-foreground">Approve:</p>
+          <p>Run continues with submitted fields available in state as <code className="font-mono">node.&lt;id&gt;.output</code></p>
+        </div>
+        <div>
+          <p className="font-medium text-foreground">Reject:</p>
+          <p>Run terminates with feedback message stored as error</p>
         </div>
       </div>
     </div>

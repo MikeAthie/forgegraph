@@ -11,4 +11,5 @@ urlpatterns = [
     path("graphs/", include("adapters.api.graphs.urls")),
     path("prompts/", include("adapters.api.prompts.urls")),
     path("runs/", include("adapters.api.runs.urls")),
+    path("approvals/", include("adapters.api.approvals.urls")),
 ]

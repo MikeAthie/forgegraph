@@ -271,6 +271,45 @@ class TestGraphVersionListCreate:
         assert "checksum" in response.data["data"]
         assert len(response.data["data"]["checksum"]) == 64  # SHA256
 
+    def test_create_version_preserves_edge_labels_and_node_policies(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Test")
+
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "prompt1",
+                    "type": "prompt",
+                    "name": "Prompt",
+                    "config": {"prompt_id": "p1"},
+                    "retry_policy": {"max_attempts": 4, "backoff_ms": 250, "backoff_strategy": "fixed"},
+                    "timeout_ms": 1500,
+                },
+                {
+                    "id": "branch1",
+                    "type": "branch",
+                    "name": "Branch",
+                    "config": {"condition": "vars.ok == true"},
+                },
+                {"id": "out_true", "type": "output", "name": "True out", "config": {}},
+                {"id": "out_false", "type": "output", "name": "False out", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "prompt1", "to": "branch1"},
+                {"id": "e2", "from": "branch1", "to": "out_true", "label": "true"},
+                {"id": "e3", "from": "branch1", "to": "out_false", "label": "false"},
+            ],
+        }
+
+        create_response = authenticated_client.post(
+            f"/api/graphs/{graph.id}/versions", {"graph_json": graph_json}, format="json"
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        version_id = create_response.data["data"]["id"]
+
+        detail_response = authenticated_client.get(f"/api/graphs/{graph.id}/versions/{version_id}")
+        assert detail_response.status_code == status.HTTP_200_OK
+        assert detail_response.data["data"]["graph_json"] == graph_json
+
 
 class TestGraphVersionDetail:
     """Tests for GET /api/graphs/{id}/versions/{version_id}"""

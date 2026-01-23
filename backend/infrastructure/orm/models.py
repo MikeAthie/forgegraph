@@ -242,6 +242,10 @@ class Run(models.Model):
     output_json = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
 
+    # Human Gate pause state (for durable resume)
+    pause_state_json = models.JSONField(null=True, blank=True)
+    paused_node_id = models.CharField(max_length=64, null=True, blank=True)
+
     class Meta:
         db_table = "runs"
         ordering = ["-started_at"]
@@ -268,6 +272,7 @@ class NodeRun(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("running", "Running"),
+        ("waiting", "Waiting"),  # Human gate awaiting approval
         ("succeeded", "Succeeded"),
         ("failed", "Failed"),
         ("skipped", "Skipped"),
@@ -306,3 +311,48 @@ class NodeRun(models.Model):
             delta = self.ended_at - self.started_at
             return int(delta.total_seconds() * 1000)
         return None
+
+
+class ApprovalTask(models.Model):
+    """ApprovalTask model representing a human gate approval request."""
+
+    APPROVAL_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="approval_tasks",
+    )
+    node_id = models.CharField(max_length=64)
+    assignee = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_tasks",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=APPROVAL_STATUS_CHOICES,
+        default="pending",
+    )
+    payload = models.JSONField(default=dict)  # prompt_message, required_fields from node config
+    result = models.JSONField(null=True, blank=True)  # submitted fields, feedback, approved flag
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "approval_tasks"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["assignee", "status"], name="approval_tasks_assignee_idx"),
+            models.Index(fields=["run", "status"], name="approval_tasks_run_idx"),
+        ]
+
+    def __str__(self):
+        return f"ApprovalTask {self.id} - {self.status}"

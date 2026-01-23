@@ -7,7 +7,7 @@ Clean Architecture: Interface Adapters layer.
 from rest_framework import serializers
 
 RUN_STATUS_CHOICES = ["pending", "running", "paused", "succeeded", "failed", "canceled"]
-NODE_RUN_STATUS_CHOICES = ["pending", "running", "succeeded", "failed", "skipped"]
+NODE_RUN_STATUS_CHOICES = ["pending", "running", "waiting", "succeeded", "failed", "skipped"]
 
 
 class RunStartSerializer(serializers.Serializer):
@@ -54,6 +54,9 @@ class RunDetailSerializer(serializers.Serializer):
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_message = serializers.CharField(read_only=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
+    # Human Gate pause fields
+    paused_node_id = serializers.CharField(read_only=True, allow_null=True)
+    pause_payload = serializers.JSONField(read_only=True, allow_null=True)
     node_runs = serializers.ListField(read_only=True)
 
 
@@ -113,6 +116,11 @@ class RunUpdateDeltaSerializer(serializers.Serializer):
     ended_at = serializers.DateTimeField(required=False, allow_null=True)
     output_json = serializers.JSONField(required=False, allow_null=True)
     error_message = serializers.CharField(required=False, allow_blank=True)
+
+    # Human gate pause fields
+    paused_node_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    pause_state_json = serializers.JSONField(required=False, allow_null=True)
+    pause_payload = serializers.JSONField(required=False, allow_null=True)  # From engine event
 
 
 class RunEventSerializer(serializers.Serializer):

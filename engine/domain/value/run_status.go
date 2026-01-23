@@ -67,6 +67,7 @@ type NodeRunStatus string
 const (
 	NodeRunStatusPending   NodeRunStatus = "pending"
 	NodeRunStatusRunning   NodeRunStatus = "running"
+	NodeRunStatusWaiting   NodeRunStatus = "waiting" // Human gate awaiting approval
 	NodeRunStatusSucceeded NodeRunStatus = "succeeded"
 	NodeRunStatusFailed    NodeRunStatus = "failed"
 	NodeRunStatusSkipped   NodeRunStatus = "skipped"
@@ -80,7 +81,7 @@ func (s NodeRunStatus) String() string {
 // IsValid returns true if the status is recognized
 func (s NodeRunStatus) IsValid() bool {
 	switch s {
-	case NodeRunStatusPending, NodeRunStatusRunning,
+	case NodeRunStatusPending, NodeRunStatusRunning, NodeRunStatusWaiting,
 		NodeRunStatusSucceeded, NodeRunStatusFailed, NodeRunStatusSkipped:
 		return true
 	}

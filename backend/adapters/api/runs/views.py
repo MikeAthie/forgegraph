@@ -30,7 +30,7 @@ from adapters.gateways.grpc_engine_client import (
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
-from infrastructure.orm.models import GraphVersion, NodeRun, Run
+from infrastructure.orm.models import ApprovalTask, GraphVersion, NodeRun, Run
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,15 @@ class RunDetailView(APIView):
         graph_version = run.graph_version
         graph = graph_version.graph
 
+        # Get pause_payload from the waiting node run if available
+        pause_payload = None
+        if run.paused_node_id:
+            waiting_node_run = run.node_runs.filter(
+                node_id=run.paused_node_id, status="waiting"
+            ).first()
+            if waiting_node_run and waiting_node_run.output_json:
+                pause_payload = waiting_node_run.output_json.get("pause_payload")
+
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
@@ -161,6 +170,8 @@ class RunDetailView(APIView):
             "output_json": run.output_json,
             "error_message": run.error_message,
             "duration_ms": run.duration_ms,
+            "paused_node_id": run.paused_node_id,
+            "pause_payload": pause_payload,
             "node_runs": [
                 {
                     "id": node_run.id,
@@ -390,12 +401,12 @@ class RunCancelView(APIView):
 
 
 class RunResumeView(APIView):
-    """Resume a paused run (stub)."""
+    """Resume a paused run (human gate approval/rejection)."""
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, run_id) -> Response:
-        """Resume a paused run."""
+        """Resume a paused run with human decision."""
         serializer = RunResumeSerializer(data=request.data)
         if not serializer.is_valid():
             return error_response(
@@ -408,11 +419,66 @@ class RunResumeView(APIView):
                 ],
             )
 
-        return error_response(
-            code="NOT_IMPLEMENTED",
-            message="Run resume not yet implemented (pending Phase 3 engine integration).",
-            status=status.HTTP_501_NOT_IMPLEMENTED,
-        )
+        # Get the run
+        try:
+            run = Run.objects.select_related("graph_version__graph").get(
+                id=run_id, owner=request.user
+            )
+        except Run.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Run with id '{run_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verify run is paused
+        if run.status != "paused":
+            return error_response(
+                code="INVALID_STATE",
+                message=f"Cannot resume a run in status '{run.status}'. Run must be paused.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        node_id = serializer.validated_data["node_id"]
+        input_json = serializer.validated_data.get("input_json", {})
+
+        # Verify node_id matches paused node
+        if run.paused_node_id and run.paused_node_id != node_id:
+            return error_response(
+                code="INVALID_NODE",
+                message=f"Node '{node_id}' does not match paused node '{run.paused_node_id}'",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Call engine ResumeRun
+        try:
+            with get_engine_client() as engine:
+                engine.resume_run(run_id=run.id, node_id=node_id, input_json=input_json)
+        except EngineConnectionError as e:
+            logger.error(f"Engine connection failed when resuming run {run.id}: {e}")
+            return error_response(
+                code="ENGINE_UNAVAILABLE",
+                message="The execution engine is not available. Please try again later.",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except EngineExecutionError as e:
+            logger.error(f"Engine failed to resume run {run.id}: {e}")
+            return error_response(
+                code="ENGINE_ERROR",
+                message=str(e),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Update ApprovalTask
+        approval_task = run.approval_tasks.filter(node_id=node_id, status="pending").first()
+        if approval_task:
+            approved = input_json.get("approved", True)
+            approval_task.status = "approved" if approved else "rejected"
+            approval_task.result = input_json
+            approval_task.resolved_at = timezone.now()
+            approval_task.save(update_fields=["status", "result", "resolved_at"])
+
+        return success_response({"resumed": True, "run_id": str(run.id)})
 
 
 class RunEventsView(APIView):
@@ -454,8 +520,40 @@ class RunEventsView(APIView):
                 setattr(run, field, payload[field])
                 update_fields.append(field)
 
+            # Handle pause_state fields for human gate
+            if "paused_node_id" in payload:
+                run.paused_node_id = payload["paused_node_id"]
+                update_fields.append("paused_node_id")
+            if "pause_state_json" in payload:
+                run.pause_state_json = payload["pause_state_json"]
+                update_fields.append("pause_state_json")
+
             if update_fields:
                 run.save(update_fields=update_fields)
+
+            # Create ApprovalTask when run is paused (human gate)
+            if payload.get("status") == "paused":
+                pause_output = payload.get("pause_payload", {})
+                node_id = run.paused_node_id or pause_output.get("node_id", "")
+
+                if node_id:
+                    # Extract pause payload from the event or find the waiting node
+                    prompt_message = pause_output.get("prompt_message", "")
+                    required_fields = pause_output.get("required_fields", [])
+
+                    # Create ApprovalTask (idempotent)
+                    ApprovalTask.objects.get_or_create(
+                        run=run,
+                        node_id=node_id,
+                        status="pending",
+                        defaults={
+                            "assignee": run.owner,
+                            "payload": {
+                                "prompt_message": prompt_message,
+                                "required_fields": required_fields,
+                            },
+                        },
+                    )
 
             message = broadcast_run_updated(run)
             return success_response(message)

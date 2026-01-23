@@ -171,12 +171,37 @@ func (s *EngineServer) CancelRun(ctx context.Context, req *CancelRunRequest) (*C
 }
 
 // ResumeRun resumes a paused run (e.g., after human gate approval)
-// TODO: Implement in Phase 6 (Human Gate)
 func (s *EngineServer) ResumeRun(ctx context.Context, req *ResumeRunRequest) (*ResumeRunResponse, error) {
 	s.logger.Info("resume_run_request", "run_id", req.RunId, "node_id", req.NodeId)
 
-	// ResumeRun is deferred to Phase 6 (Human Gate)
-	return nil, status.Errorf(codes.Unimplemented, "ResumeRun not yet implemented - coming in Phase 6")
+	// Validate request
+	if req.RunId == "" {
+		return &ResumeRunResponse{
+			Accepted: false,
+			Error:    "run_id is required",
+		}, nil
+	}
+	if req.NodeId == "" {
+		return &ResumeRunResponse{
+			Accepted: false,
+			Error:    "node_id is required",
+		}, nil
+	}
+
+	// Resume the run via scheduler
+	err := s.scheduler.ResumeRun(ctx, req.RunId, req.NodeId, req.InputJson)
+	if err != nil {
+		s.logger.Error("resume_run_failed", "run_id", req.RunId, "error", err.Error())
+		return &ResumeRunResponse{
+			Accepted: false,
+			Error:    err.Error(),
+		}, nil
+	}
+
+	s.logger.Info("resume_run_accepted", "run_id", req.RunId, "node_id", req.NodeId)
+	return &ResumeRunResponse{
+		Accepted: true,
+	}, nil
 }
 
 func main() {
@@ -230,10 +255,11 @@ func main() {
 		executor.NewHTTPExecutor(),
 		executor.NewBranchExecutor(),
 		executor.NewMergeExecutor(),
+		executor.NewHumanGateExecutor(),
 		// PromptExecutor requires LLM client, skip for MVP
 		// executor.NewPromptExecutor(llmClient),
 	)
-	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge"})
+	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate"})
 
 	// Initialize scheduler
 	schedulerConfig := usecase.SchedulerConfig{

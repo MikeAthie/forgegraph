@@ -42,4 +42,25 @@ export async function login(page: Page, user: TestUser): Promise<void> {
   await page.locator("#password").fill(user.password);
   await page.getByRole("button", { name: /^sign in$/i }).click();
   await page.waitForURL("/graphs", { timeout: 10_000 });
+  await page.waitForLoadState("networkidle");
+}
+
+export async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("interrupted by another navigation")) {
+        throw error;
+      }
+      await page.waitForTimeout(250);
+    }
+  }
+
+  throw lastError;
 }

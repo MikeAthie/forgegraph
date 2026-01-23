@@ -19,12 +19,21 @@ type mockRepository struct {
 	mu       sync.Mutex
 	runs     map[string]*entity.Run
 	nodeRuns map[string]*entity.NodeRun
+	pauses   map[string]mockPauseState
+}
+
+type mockPauseState struct {
+	pausedNodeID   string
+	stateSnapshot  map[string]any
+	completedNodes []string
+	graphJSON      string
 }
 
 func newMockRepository() *mockRepository {
 	return &mockRepository{
 		runs:     make(map[string]*entity.Run),
 		nodeRuns: make(map[string]*entity.NodeRun),
+		pauses:   make(map[string]mockPauseState),
 	}
 }
 
@@ -77,6 +86,35 @@ func (r *mockRepository) SetRunEnded(ctx context.Context, runID, status string, 
 	r.runs[runID].Status = status
 	r.runs[runID].OutputJSON = output
 	r.runs[runID].ErrorMessage = errorMsg
+	return nil
+}
+
+func (r *mockRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pauses[runID] = mockPauseState{
+		pausedNodeID:   pausedNodeID,
+		stateSnapshot:  stateSnapshot,
+		completedNodes: completedNodes,
+		graphJSON:      graphJSON,
+	}
+	return nil
+}
+
+func (r *mockRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	pause, ok := r.pauses[runID]
+	if !ok {
+		return "", nil, nil, "", fmt.Errorf("pause state not found")
+	}
+	return pause.pausedNodeID, pause.stateSnapshot, pause.completedNodes, pause.graphJSON, nil
+}
+
+func (r *mockRepository) ClearPauseState(ctx context.Context, runID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.pauses, runID)
 	return nil
 }
 
@@ -742,6 +780,143 @@ func TestScheduler_NonRetryableError(t *testing.T) {
 	// Verify run failed
 	if repo.getRunStatus("run-7") != string(value.RunStatusFailed) {
 		t.Errorf("Expected run status failed, got %s", repo.getRunStatus("run-7"))
+	}
+}
+
+func TestScheduler_BranchSkipDoesNotBlockMerge(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "branch", Type: "branch", Name: "Branch", Config: map[string]any{}},
+		{ID: "truePath", Type: "transform", Name: "True Path", Config: map[string]any{}},
+		{ID: "falsePath", Type: "transform", Name: "False Path", Config: map[string]any{}},
+		{ID: "merge", Type: "merge", Name: "Merge", Config: map[string]any{}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "branch", To: "truePath"},
+		{From: "branch", To: "falsePath"},
+		{From: "truePath", To: "merge"},
+		{From: "falsePath", To: "merge"},
+		{From: "merge", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	branchExec := newMockExecutor("branch", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		// Only take the truePath
+		return port.NewBranchResult(map[string]any{"taken": "true"}, []string{"truePath"}), nil
+	})
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"node_id": node.ID}), nil
+	})
+
+	mergeExec := newMockExecutor("merge", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"merged": true}), nil
+	})
+
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(branchExec, transformExec, mergeExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), "run-branch-merge", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-branch-merge", 5*time.Second)
+
+	if repo.getRunStatus("run-branch-merge") != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus("run-branch-merge"))
+	}
+
+	if transformExec.getNodeExecuteCount("falsePath") != 0 {
+		t.Errorf("Expected falsePath to be skipped (0 executes), got %d", transformExec.getNodeExecuteCount("falsePath"))
+	}
+	if mergeExec.getNodeExecuteCount("merge") != 1 {
+		t.Errorf("Expected merge to execute once, got %d", mergeExec.getNodeExecuteCount("merge"))
+	}
+	if outputExec.getNodeExecuteCount("output1") != 1 {
+		t.Errorf("Expected output to execute once, got %d", outputExec.getNodeExecuteCount("output1"))
+	}
+
+	if !emitter.hasEventType(port.EventTypeNodeSkipped) {
+		t.Error("Expected node_skipped event")
+	}
+}
+
+func TestScheduler_PauseStopsScheduling(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "start", Type: "transform", Name: "Start", Config: map[string]any{}},
+		{ID: "gate", Type: "human_gate", Name: "Human Gate", Config: map[string]any{}},
+		{ID: "after", Type: "output", Name: "After", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "start", To: "gate"},
+		{From: "gate", To: "after"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	humanGateExec := newMockExecutor("human_gate", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewPauseResult(map[string]any{"prompt_message": "Please approve"}), nil
+	})
+
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"should_not_run": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, humanGateExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), "run-paused", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunInactive(t, scheduler, "run-paused", 5*time.Second)
+
+	if repo.getRunStatus("run-paused") != string(value.RunStatusPaused) {
+		t.Fatalf("Expected run status paused, got %s", repo.getRunStatus("run-paused"))
+	}
+	if outputExec.getNodeExecuteCount("after") != 0 {
+		t.Errorf("Expected 'after' not to execute, got %d", outputExec.getNodeExecuteCount("after"))
+	}
+	if !emitter.hasEventType(port.EventTypeRunPaused) {
+		t.Error("Expected run_paused event")
+	}
+
+	pausedNodeID, snapshot, completedNodes, graphJSONLoaded, loadErr := repo.LoadPauseState(context.Background(), "run-paused")
+	if loadErr != nil {
+		t.Fatalf("Expected pause state to be saved, got error: %v", loadErr)
+	}
+	if pausedNodeID != "gate" {
+		t.Errorf("Expected paused node id 'gate', got %q", pausedNodeID)
+	}
+	if snapshot == nil {
+		t.Error("Expected non-nil state snapshot")
+	}
+	if graphJSONLoaded == "" {
+		t.Error("Expected graph JSON to be saved")
+	}
+	if len(completedNodes) == 0 {
+		t.Error("Expected at least one completed node (start) recorded")
 	}
 }
 

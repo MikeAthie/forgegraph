@@ -25,6 +25,13 @@ func NewStateWithInput(input map[string]any) *State {
 	return s
 }
 
+// NewStateFromSnapshot creates a new state from a previously saved snapshot
+func NewStateFromSnapshot(snapshot map[string]any) *State {
+	s := NewState()
+	s.Merge(snapshot)
+	return s
+}
+
 // Get retrieves a value from state (thread-safe)
 func (s *State) Get(key string) (any, bool) {
 	s.mu.RLock()

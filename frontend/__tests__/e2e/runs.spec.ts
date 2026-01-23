@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import path from "path";
 import { execFileSync } from "child_process";
 
-import { createTestUser, ensureUserRegistered, login, type TestUser } from "./helpers";
+import { createTestUser, ensureUserRegistered, gotoWithRetry, login, type TestUser } from "./helpers";
 
 let seededUser: TestUser;
 
@@ -90,7 +90,7 @@ test.describe("Runs", () => {
     const runId = await waitForRunId(request, accessToken, graphVersionId);
 
     await login(page, seededUser);
-    await page.goto("/runs");
+    await gotoWithRetry(page, "/runs");
 
     await expect(page.getByRole("heading", { name: /^runs$/i })).toBeVisible();
 
@@ -103,6 +103,74 @@ test.describe("Runs", () => {
     await expect(page.getByText("Nodes")).toBeVisible();
     await expect(page.getByRole("button", { name: /start/i })).toBeVisible();
     await expect(page.getByText(/"ok": true/i)).toBeVisible();
+  });
+
+  test("shows a paused run with Human Gate approval UI", async ({ page, request }) => {
+    const accessToken = await getAccessToken(request, seededUser);
+
+    const graphName = createGraphName("E2E Paused Run Graph");
+    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      data: { name: graphName, description: "Created by Playwright (paused run)." },
+    });
+    expect(createGraphResponse.ok()).toBeTruthy();
+    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
+    const graphId = createdGraph.data.id;
+
+    const graphJson = {
+      nodes: [
+        { id: "start", type: "prompt", name: "Start", config: {} },
+        {
+          id: "gate",
+          type: "human_gate",
+          name: "Human Gate",
+          config: { prompt_message: "Please review this run.", required_fields: ["ticket"] },
+        },
+        { id: "end", type: "output", name: "End", config: {} },
+      ],
+      edges: [
+        { id: "e1", from: "start", to: "gate" },
+        { id: "e2", from: "gate", to: "end" },
+      ],
+    };
+
+    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      data: { graph_json: graphJson },
+    });
+    expect(createVersionResponse.ok()).toBeTruthy();
+    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
+    const graphVersionId = createdVersion.data.id;
+
+    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
+    execFileSync(
+      "python",
+      ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "paused", "--paused-node-id", "gate"],
+      {
+        cwd: backendDir,
+        env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
+        stdio: "inherit",
+      },
+    );
+
+    const runId = await waitForRunId(request, accessToken, graphVersionId);
+
+    await login(page, seededUser);
+    await gotoWithRetry(page, "/runs");
+
+    const runRow = page.locator("tr").filter({ hasText: graphName }).first();
+    await expect(runRow).toBeVisible();
+    await runRow.getByRole("link", { name: /^view$/i }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
+
+    // Human Gate approval UI should render for paused runs.
+    await expect(page.getByText(/waiting for approval/i)).toBeVisible();
+    await expect(page.getByText("Please review this run.")).toBeVisible();
+    await expect(page.getByText(/paused at node/i)).toBeVisible();
+    await expect(page.getByText(/^ticket$/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^approve$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^reject$/i })).toBeVisible();
   });
 
   test("displays run list with status badges", async ({ page, request }) => {
@@ -147,7 +215,7 @@ test.describe("Runs", () => {
     });
 
     await login(page, seededUser);
-    await page.goto("/runs");
+    await gotoWithRetry(page, "/runs");
 
     await expect(page.getByRole("heading", { name: /^runs$/i })).toBeVisible();
 
@@ -191,7 +259,7 @@ test.describe("Runs", () => {
     const runId = await waitForRunId(request, accessToken, graphVersionId);
 
     await login(page, seededUser);
-    await page.goto("/runs");
+    await gotoWithRetry(page, "/runs");
 
     // Click on the table row
     const runRow = page.locator("tr").filter({ hasText: graphName }).first();
@@ -307,7 +375,7 @@ test.describe("Runs", () => {
     await ensureUserRegistered(request, freshUser);
 
     await login(page, freshUser);
-    await page.goto("/runs");
+    await gotoWithRetry(page, "/runs");
 
     await expect(page.getByRole("heading", { name: /^runs$/i })).toBeVisible();
     await expect(page.getByText(/no runs yet|empty|get started/i)).toBeVisible();
@@ -346,7 +414,7 @@ test.describe("Runs", () => {
     });
 
     await login(page, seededUser);
-    await page.goto("/runs");
+    await gotoWithRetry(page, "/runs");
 
     // Should display some duration (ms, s, m, etc.)
     await expect(page.locator("text=/\\d+\\s*(ms|s|m|h)/").first()).toBeVisible();
@@ -365,8 +433,11 @@ test.describe("Runs", () => {
     const graphId = createdGraph.data.id;
 
     const graphJson = {
-      nodes: [{ id: "node_1", type: "http", name: "Retrying Node", config: {} }],
-      edges: [],
+      nodes: [
+        { id: "node_1", type: "http", name: "Retrying Node", config: {} },
+        { id: "end", type: "output", name: "End", config: {} },
+      ],
+      edges: [{ id: "e1", from: "node_1", to: "end" }],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -377,14 +448,19 @@ test.describe("Runs", () => {
     const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
     const graphVersionId = createdVersion.data.id;
 
-    // Start a run via API
-    const startRunResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_version_id: graphVersionId, input_json: {} },
-    });
-    expect(startRunResponse.ok()).toBeTruthy();
-    const runData = (await startRunResponse.json()) as { data: { id: string } };
-    const runId = runData.data.id;
+    // Seed a run (avoid depending on the Go engine for this UI-only assertion)
+    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
+    execFileSync(
+      "python",
+      ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"],
+      {
+        cwd: backendDir,
+        env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
+        stdio: "inherit",
+      },
+    );
+
+    const runId = await waitForRunId(request, accessToken, graphVersionId);
 
     // Manually create node runs with retry attempts
     await request.post(`${API_BASE_URL}/api/runs/${runId}/events`, {
@@ -426,11 +502,15 @@ test.describe("Runs", () => {
     await login(page, seededUser);
     await page.goto(`/runs/${runId}`);
 
-    await expect(page.getByText(graphName)).toBeVisible();
+    await expect(page.getByText(graphName).first()).toBeVisible({ timeout: 10_000 });
 
     // Should show both attempts
-    await expect(page.getByText(/attempt 1/i)).toBeVisible();
-    await expect(page.getByText(/attempt 2/i)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Retrying Node.*attempt 1/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Retrying Node.*attempt 2/i }),
+    ).toBeVisible();
   });
 
   test("handles 404 for non-existent run", async ({ page }) => {

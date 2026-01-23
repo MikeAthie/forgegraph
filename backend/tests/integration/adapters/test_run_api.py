@@ -10,7 +10,7 @@ import pytest
 from django.utils import timezone
 from rest_framework import status
 
-from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run, User
+from infrastructure.orm.models import ApprovalTask, Graph, GraphVersion, NodeRun, Run, User
 
 pytestmark = pytest.mark.django_db
 
@@ -377,6 +377,164 @@ class TestRunEvents:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data["error"]["code"] == "NOT_FOUND"
+
+
+    def test_run_paused_event_creates_approval_task(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        payload = {
+            "event_type": "run.updated",
+            "run": {
+                "status": "paused",
+                "paused_node_id": "human_gate_1",
+                "pause_state_json": {"state": "snapshot"},
+                "pause_payload": {
+                    "node_id": "human_gate_1",
+                    "prompt_message": "Please approve",
+                    "required_fields": ["ticket"],
+                },
+            },
+        }
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/events", payload, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "paused"
+        assert run.paused_node_id == "human_gate_1"
+        assert run.pause_state_json == {"state": "snapshot"}
+
+        tasks = ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending")
+        assert tasks.count() == 1
+        task = tasks.first()
+        assert task.assignee == user
+        assert task.payload["prompt_message"] == "Please approve"
+        assert task.payload["required_fields"] == ["ticket"]
+
+        # Idempotent: second identical event should not create a duplicate task
+        authenticated_client.post(f"/api/runs/{run.id}/events", payload, format="json")
+        assert ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count() == 1
+
+
+class TestRunResume:
+    """Tests for POST /api/runs/{run_id}/resume"""
+
+    def test_resume_requires_authentication(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+
+        response = api_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": {"approved": True}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_resume_rejects_non_paused_run(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running", paused_node_id="gate")
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": {"approved": True}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_STATE"
+        assert not any(call[0] == "resume_run" for call in mock_engine_client.calls)
+
+    def test_resume_rejects_node_mismatch(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "other_gate", "input_json": {"approved": True}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_NODE"
+        assert not any(call[0] == "resume_run" for call in mock_engine_client.calls)
+
+    def test_resume_calls_engine_and_marks_task_approved(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+        task = ApprovalTask.objects.create(
+            run=run,
+            node_id="gate",
+            assignee=user,
+            status="pending",
+            payload={"prompt_message": "Please approve", "required_fields": ["ticket"]},
+        )
+
+        input_json = {"approved": True, "fields": {"ticket": "ABC-123"}, "feedback": "LGTM"}
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": input_json},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["resumed"] is True
+
+        # Engine called
+        resume_calls = [call for call in mock_engine_client.calls if call[0] == "resume_run"]
+        assert len(resume_calls) == 1
+        assert resume_calls[0][1]["run_id"] == run.id
+        assert resume_calls[0][1]["node_id"] == "gate"
+        assert resume_calls[0][1]["input_json"] == input_json
+
+        # Task updated
+        task.refresh_from_db()
+        assert task.status == "approved"
+        assert task.result == input_json
+        assert task.resolved_at is not None
+
+    def test_resume_calls_engine_and_marks_task_rejected(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+        task = ApprovalTask.objects.create(
+            run=run,
+            node_id="gate",
+            assignee=user,
+            status="pending",
+            payload={"prompt_message": "Please approve"},
+        )
+
+        input_json = {"approved": False, "feedback": "Needs changes"}
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": input_json},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        task.refresh_from_db()
+        assert task.status == "rejected"
+        assert task.result == input_json
+        assert task.resolved_at is not None
 
 
 class TestRunListEdgeCases:

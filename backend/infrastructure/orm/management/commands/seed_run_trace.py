@@ -32,9 +32,15 @@ class Command(BaseCommand):
         parser.add_argument(
             "--run-status",
             type=str,
-            choices=["pending", "running", "succeeded", "failed"],
+            choices=["pending", "running", "paused", "succeeded", "failed"],
             default="succeeded",
             help="Overall run status to generate.",
+        )
+        parser.add_argument(
+            "--paused-node-id",
+            type=str,
+            default=None,
+            help="Node id to pause at when run-status=paused (defaults to the first human_gate node, or the last node).",
         )
         parser.add_argument(
             "--fail-node-id",
@@ -73,6 +79,7 @@ class Command(BaseCommand):
 
         run_status: str = options["run_status"]
         fail_node_id: str | None = options.get("fail_node_id")
+        paused_node_id: str | None = options.get("paused_node_id")
         fail_message: str = options["fail_message"]
 
         graph_json = graph_version.graph_json or {}
@@ -85,6 +92,7 @@ class Command(BaseCommand):
         ]
 
         fail_index: int | None = None
+        paused_index: int | None = None
 
         if run_status == "failed":
             if fail_node_id is None:
@@ -96,12 +104,27 @@ class Command(BaseCommand):
                 )
             if fail_node_id:
                 fail_index = node_ids_in_order.index(fail_node_id)
+        elif run_status == "paused":
+            if paused_node_id is None:
+                # Prefer pausing at a Human Gate if present, otherwise pause at the last node.
+                human_gate = next((n for n in node_order if str(n.get("type")) == "human_gate"), None)
+                paused_node_id = str(human_gate.get("id")) if human_gate and human_gate.get("id") else None
+
+            if paused_node_id is None:
+                paused_node_id = node_ids_in_order[-1] if node_ids_in_order else None
+
+            if paused_node_id and paused_node_id not in node_ids_in_order:
+                raise CommandError(
+                    f"--paused-node-id '{paused_node_id}' is not present in graph_json.nodes[].id"
+                )
+            if paused_node_id:
+                paused_index = node_ids_in_order.index(paused_node_id)
 
         now = timezone.now()
         started_at = None
         ended_at = None
 
-        if run_status in {"running", "succeeded", "failed"}:
+        if run_status in {"running", "paused", "succeeded", "failed"}:
             started_at = now - timedelta(seconds=max(1, len(node_order)))
 
         with transaction.atomic():
@@ -133,6 +156,15 @@ class Command(BaseCommand):
                     node_status = "pending"
                 elif run_status == "running":
                     node_status = "running" if index == len(node_order) - 1 else "succeeded"
+                elif run_status == "paused":
+                    if paused_index is None:
+                        node_status = "waiting"
+                    elif index < paused_index:
+                        node_status = "succeeded"
+                    elif index == paused_index:
+                        node_status = "waiting"
+                    else:
+                        node_status = "pending"
                 elif run_status == "succeeded":
                     node_status = "succeeded"
                 elif run_status == "failed":
@@ -145,10 +177,11 @@ class Command(BaseCommand):
                     else:
                         node_status = "skipped"
 
-                if run_status in {"running", "succeeded", "failed"} and node_status in {
+                if run_status in {"running", "paused", "succeeded", "failed"} and node_status in {
                     "succeeded",
                     "running",
                     "failed",
+                    "waiting",
                 }:
                     node_started_at = (started_at or now) + timedelta(milliseconds=offset_ms)
                     duration_ms = 250 + (index * 50)
@@ -166,6 +199,18 @@ class Command(BaseCommand):
                         "node_id": node_id,
                         "node_type": node_type,
                     }
+                elif node_status == "waiting":
+                    config = node.get("config") or {}
+                    prompt_message = config.get("prompt_message") or "Awaiting human approval."
+                    required_fields = config.get("required_fields") or []
+                    node_output_json = {
+                        "pause_payload": {
+                            "node_id": node_id,
+                            "node_name": node.get("name") or node_id,
+                            "prompt_message": prompt_message,
+                            "required_fields": required_fields,
+                        }
+                    }
 
                 NodeRun.objects.create(
                     run=run,
@@ -179,6 +224,11 @@ class Command(BaseCommand):
                     output_json=node_output_json,
                     error_json=node_error_json,
                 )
+
+            if run_status == "paused":
+                run.paused_node_id = paused_node_id
+                run.pause_state_json = {"seeded": True, "paused_node_id": paused_node_id}
+                run.save(update_fields=["paused_node_id", "pause_state_json"])
 
             if run_status == "succeeded":
                 run.output_json = {"seeded": True}

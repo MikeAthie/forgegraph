@@ -299,6 +299,6 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
     type: NODE_TYPES.HUMAN_GATE,
     label: "Human Gate",
     description: "Pause for human approval",
-    enabled: false, // Coming in Phase 6
+    enabled: true,
   },
 ];

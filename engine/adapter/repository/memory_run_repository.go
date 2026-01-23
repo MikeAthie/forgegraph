@@ -11,19 +11,29 @@ import (
 	"github.com/forgegraph/engine/domain/entity"
 )
 
+// pauseState holds the pause information for a run
+type pauseState struct {
+	pausedNodeID   string
+	stateSnapshot  map[string]any
+	completedNodes []string
+	graphJSON      string
+}
+
 // MemoryRunRepository is an in-memory implementation of RunRepository for testing.
 // It is thread-safe and stores runs and node runs in memory.
 type MemoryRunRepository struct {
-	mu       sync.RWMutex
-	runs     map[string]*entity.Run
-	nodeRuns map[string]*entity.NodeRun // key: runID-nodeID
+	mu          sync.RWMutex
+	runs        map[string]*entity.Run
+	nodeRuns    map[string]*entity.NodeRun // key: runID-nodeID
+	pauseStates map[string]*pauseState     // key: runID
 }
 
 // NewMemoryRunRepository creates a new in-memory run repository
 func NewMemoryRunRepository() *MemoryRunRepository {
 	return &MemoryRunRepository{
-		runs:     make(map[string]*entity.Run),
-		nodeRuns: make(map[string]*entity.NodeRun),
+		runs:        make(map[string]*entity.Run),
+		nodeRuns:    make(map[string]*entity.NodeRun),
+		pauseStates: make(map[string]*pauseState),
 	}
 }
 
@@ -199,6 +209,56 @@ func (r *MemoryRunRepository) Clear() {
 
 	r.runs = make(map[string]*entity.Run)
 	r.nodeRuns = make(map[string]*entity.NodeRun)
+	r.pauseStates = make(map[string]*pauseState)
+}
+
+// SavePauseState saves the execution state when a run is paused at a human gate
+func (r *MemoryRunRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return domain.ErrRunNotFound
+	}
+
+	r.pauseStates[runID] = &pauseState{
+		pausedNodeID:   pausedNodeID,
+		stateSnapshot:  stateSnapshot,
+		completedNodes: completedNodes,
+		graphJSON:      graphJSON,
+	}
+
+	return nil
+}
+
+// LoadPauseState retrieves the saved pause state for resuming a run
+func (r *MemoryRunRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string, err error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return "", nil, nil, "", domain.ErrRunNotFound
+	}
+
+	ps, ok := r.pauseStates[runID]
+	if !ok || ps.pausedNodeID == "" {
+		return "", nil, nil, "", fmt.Errorf("run is not paused")
+	}
+
+	return ps.pausedNodeID, ps.stateSnapshot, ps.completedNodes, ps.graphJSON, nil
+}
+
+// ClearPauseState removes the pause state after a run is resumed
+func (r *MemoryRunRepository) ClearPauseState(ctx context.Context, runID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return domain.ErrRunNotFound
+	}
+
+	delete(r.pauseStates, runID)
+	return nil
 }
 
 // nodeRunKey generates a unique key for a node run

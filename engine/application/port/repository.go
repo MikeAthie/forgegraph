@@ -28,6 +28,17 @@ type RunRepository interface {
 	// SetRunEnded marks a run as ended with the given status and optional output/error
 	SetRunEnded(ctx context.Context, runID string, status string, output map[string]any, errorMsg string) error
 
+	// Pause/Resume operations (for Human Gate)
+
+	// SavePauseState saves the execution state when a run is paused at a human gate
+	SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string) error
+
+	// LoadPauseState retrieves the saved pause state for resuming a run
+	LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string, err error)
+
+	// ClearPauseState removes the pause state after a run is resumed
+	ClearPauseState(ctx context.Context, runID string) error
+
 	// NodeRun operations
 
 	// CreateNodeRun creates a new node run record

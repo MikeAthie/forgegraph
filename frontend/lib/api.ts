@@ -97,6 +97,12 @@ const API_PATHS = {
     detail: (runId: string) => `/api/runs/${runId}`,
     start: "/api/runs/start",
     cancel: (runId: string) => `/api/runs/${runId}/cancel`,
+    resume: (runId: string) => `/api/runs/${runId}/resume`,
+  },
+  approvals: {
+    list: "/api/approvals/",
+    count: "/api/approvals/count",
+    detail: (approvalId: string) => `/api/approvals/${approvalId}`,
   },
 } as const;
 
@@ -527,6 +533,41 @@ export interface RunDetail {
   error_message: string;
   duration_ms: number | null;
   node_runs: NodeRunItem[];
+  // Human Gate pause fields
+  paused_node_id?: string | null;
+  pause_payload?: {
+    prompt_message?: string;
+    required_fields?: string[];
+    node_id?: string;
+    node_name?: string;
+  } | null;
+}
+
+export interface ApprovalTask {
+  id: string;
+  run_id: string;
+  run_name: string;
+  graph_name: string;
+  node_id: string;
+  node_name: string;
+  status: "pending" | "approved" | "rejected";
+  prompt_message: string;
+  payload?: {
+    prompt_message?: string;
+    required_fields?: string[];
+  };
+  result?: Record<string, unknown> | null;
+  created_at: string;
+  resolved_at?: string | null;
+}
+
+export interface ResumeRunInput {
+  node_id: string;
+  input_json: {
+    approved: boolean;
+    fields?: Record<string, string>;
+    feedback?: string;
+  };
 }
 
 export const runsApi = {
@@ -547,6 +588,32 @@ export const runsApi = {
 
   cancel: async (runId: string): Promise<RunDetail> => {
     const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.cancel(runId), {});
+    return response.data.data;
+  },
+
+  resume: async (runId: string, input: ResumeRunInput): Promise<{ resumed: boolean }> => {
+    const response = await api.post<ApiSuccessResponse<{ resumed: boolean }>>(
+      API_PATHS.runs.resume(runId),
+      input,
+    );
+    return response.data.data;
+  },
+};
+
+export const approvalsApi = {
+  list: async (status?: string): Promise<ApprovalTask[]> => {
+    const params = status ? { status } : {};
+    const response = await api.get<ApiSuccessResponse<ApprovalTask[]>>(API_PATHS.approvals.list, { params });
+    return response.data.data;
+  },
+
+  count: async (): Promise<{ count: number }> => {
+    const response = await api.get<ApiSuccessResponse<{ count: number }>>(API_PATHS.approvals.count);
+    return response.data.data;
+  },
+
+  get: async (approvalId: string): Promise<ApprovalTask> => {
+    const response = await api.get<ApiSuccessResponse<ApprovalTask>>(API_PATHS.approvals.detail(approvalId));
     return response.data.data;
   },
 };

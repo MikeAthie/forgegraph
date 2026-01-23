@@ -62,7 +62,11 @@ describe("NodePalette", () => {
       });
 
       // Should show "Coming soon" label for disabled nodes
-      expect(screen.getAllByText("(Coming soon)").length).toBeGreaterThan(0);
+      if (disabledNodeTypes.length > 0) {
+        expect(screen.getAllByText("(Coming soon)").length).toBeGreaterThan(0);
+      } else {
+        expect(screen.queryByText("(Coming soon)")).not.toBeInTheDocument();
+      }
     });
 
     it("should display keyboard shortcuts section", () => {
@@ -122,12 +126,12 @@ describe("NodePalette", () => {
     });
   });
 
-  describe("Disabled Node Types", () => {
-    it("should render Human Gate node type as disabled", () => {
+  describe("Phase 6 Node Types", () => {
+    it("should render Human Gate node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const humanGateButton = screen.getByRole("button", { name: /^human gate$/i });
-      expect(humanGateButton).toBeDisabled();
+      expect(humanGateButton).not.toBeDisabled();
     });
   });
 
@@ -187,14 +191,15 @@ describe("NodePalette", () => {
       expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.PROMPT, true);
     });
 
-    it("should not call onAddNode when a disabled node type is clicked", async () => {
+    it("should call onAddNode when Human Gate button is clicked", async () => {
       const user = userEvent.setup();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const disabledButton = screen.getByRole("button", { name: /^human gate$/i });
-      await user.click(disabledButton);
+      const humanGateButton = screen.getByRole("button", { name: /^human gate$/i });
+      await user.click(humanGateButton);
 
-      expect(mockOnAddNode).not.toHaveBeenCalled();
+      expect(mockOnAddNode).toHaveBeenCalledTimes(1);
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.HUMAN_GATE, false);
     });
 
     it("should allow multiple clicks on enabled nodes", async () => {

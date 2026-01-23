@@ -58,12 +58,13 @@ func NewScheduler(
 
 // runContext holds runtime state for a single run
 type runContext struct {
-	runID      string
-	ctx        context.Context
-	cancel     context.CancelFunc
-	plan       *service.ExecutionPlan
-	state      *entity.State
+	runID       string
+	ctx         context.Context
+	cancel      context.CancelFunc
+	plan        *service.ExecutionPlan
+	state       *entity.State
 	callbackURL string
+	graphJSON   string // Original graph JSON for pause/resume
 
 	// Synchronization
 	pendingMu sync.Mutex
@@ -130,6 +131,7 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		plan:        plan,
 		state:       state,
 		callbackURL: callbackURL,
+		graphJSON:   graphJSON,
 		pending:     plan.CloneIndegree(),
 		completed:   make(map[string]bool),
 		skipped:     make(map[string]bool),
@@ -286,18 +288,33 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 
 	// Handle human gate pause
 	if result.Pause {
-		nodeRun.Status = string(value.NodeRunStatusSucceeded)
-		nodeRun.SetEnded(time.Now())
+		// Set node to "waiting" status - do NOT set ended_at since the node is still pending human input
+		nodeRun.Status = string(value.NodeRunStatusWaiting)
 		if result.Output != nil {
-			nodeRun.OutputJSON = map[string]any{"output": result.Output}
+			nodeRun.OutputJSON = map[string]any{"pause_payload": result.Output}
 		}
 		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
 
+		// Save state snapshot for durable resume
+		stateSnapshot := rc.state.Snapshot()
+		completedNodes := make([]string, 0, len(rc.completed))
+		rc.pendingMu.Lock()
+		for id := range rc.completed {
+			completedNodes = append(completedNodes, id)
+		}
+		rc.pendingMu.Unlock()
+
+		s.repository.SavePauseState(context.Background(), rc.runID, nodeID, stateSnapshot, completedNodes, rc.graphJSON)
 		s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
-		s.emitter.EmitAsync(
-			port.NewEvent(port.EventTypeRunPaused, rc.runID).
-				WithNode(nodeID, node.Type, node.Name),
-		)
+
+		// Emit pause event with the pause payload
+		pauseEvent := port.NewEvent(port.EventTypeRunPaused, rc.runID).
+			WithNode(nodeID, node.Type, node.Name)
+		if result.Output != nil {
+			pauseEvent = pauseEvent.WithOutput(map[string]any{"pause_payload": result.Output})
+		}
+		s.emitter.EmitAsync(pauseEvent)
+
 		rc.cancel() // Stop further processing
 		return
 	}
@@ -491,10 +508,13 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 
 	// Recursively skip children that have only this as parent
 	for _, edge := range rc.plan.GetOutgoingEdges(nodeID) {
-		// Only auto-skip if this is the only incoming edge
+		// Only auto-skip if this is the only incoming edge.
+		// Otherwise, treat this skipped node as "logically complete" for dependency tracking.
 		if rc.plan.GetIndegree(edge.To) == 1 {
 			s.markSkipped(rc, edge.To)
+			continue
 		}
+		s.decrementAndEnqueue(rc, edge.To)
 	}
 }
 
@@ -582,6 +602,169 @@ func (s *Scheduler) CancelRun(runID string) error {
 	s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunCanceled, runID))
 
 	return nil
+}
+
+// ResumeRun resumes a paused run after human gate approval/rejection
+func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string) error {
+	// Load pause state
+	pausedNodeID, stateSnapshot, completedNodes, graphJSON, err := s.repository.LoadPauseState(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("failed to load pause state: %w", err)
+	}
+
+	// Validate node ID matches
+	if pausedNodeID != nodeID {
+		return fmt.Errorf("node_id mismatch: expected %s, got %s", pausedNodeID, nodeID)
+	}
+
+	// Parse human decision input
+	var decision map[string]any
+	if inputJSON != "" {
+		if err := json.Unmarshal([]byte(inputJSON), &decision); err != nil {
+			return fmt.Errorf("invalid input JSON: %w", err)
+		}
+	}
+
+	// Check if approved or rejected
+	approved, _ := decision["approved"].(bool)
+	feedback, _ := decision["feedback"].(string)
+
+	// Handle rejection - terminate the run
+	if !approved {
+		errorMsg := "Rejected by user"
+		if feedback != "" {
+			errorMsg = fmt.Sprintf("Rejected by user: %s", feedback)
+		}
+
+		// Update node run to failed
+		nodeRun, _ := s.repository.GetNodeRun(ctx, runID, nodeID)
+		if nodeRun != nil {
+			nodeRun.Status = string(value.NodeRunStatusFailed)
+			now := time.Now()
+			nodeRun.EndedAt = &now
+			nodeRun.ErrorJSON = map[string]any{"message": errorMsg, "rejected": true}
+			s.repository.UpdateNodeRun(ctx, nodeRun)
+		}
+
+		// Mark run as failed
+		s.repository.SetRunEnded(ctx, runID, string(value.RunStatusFailed), nil, errorMsg)
+		s.repository.ClearPauseState(ctx, runID)
+		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunFailed, runID).WithError(errorMsg))
+		return nil
+	}
+
+	// Parse graph JSON
+	var graph entity.Graph
+	if err := json.Unmarshal([]byte(graphJSON), &graph); err != nil {
+		return fmt.Errorf("invalid stored graph JSON: %w", err)
+	}
+
+	// Build execution plan
+	planner := service.NewExecutionPlanner()
+	plan := planner.Plan(&graph)
+
+	// Restore state from snapshot
+	state := entity.NewStateFromSnapshot(stateSnapshot)
+
+	// Inject human decision into state
+	humanDecision := map[string]any{
+		"approved":   true,
+		"fields":     decision["fields"],
+		"feedback":   feedback,
+		"decided_at": time.Now().Format(time.RFC3339),
+	}
+	state.SetNodeOutput(nodeID, humanDecision)
+
+	// Update human gate node run to succeeded
+	nodeRun, _ := s.repository.GetNodeRun(ctx, runID, nodeID)
+	if nodeRun != nil {
+		nodeRun.Status = string(value.NodeRunStatusSucceeded)
+		now := time.Now()
+		nodeRun.EndedAt = &now
+		nodeRun.OutputJSON = map[string]any{"output": humanDecision}
+		s.repository.UpdateNodeRun(ctx, nodeRun)
+	}
+
+	// Create run context for resumed execution
+	runCtx, cancel := context.WithCancel(ctx)
+	rc := &runContext{
+		runID:       runID,
+		ctx:         runCtx,
+		cancel:      cancel,
+		plan:        plan,
+		state:       state,
+		graphJSON:   graphJSON,
+		pending:     plan.CloneIndegree(),
+		completed:   make(map[string]bool),
+		skipped:     make(map[string]bool),
+		running:     make(map[string]bool),
+		workChan:    make(chan string, len(plan.NodeMap)),
+	}
+
+	// Mark previously completed nodes
+	for _, completedID := range completedNodes {
+		rc.completed[completedID] = true
+	}
+	// Also mark the human gate node as completed
+	rc.completed[nodeID] = true
+
+	// Store active run
+	s.activeRuns.Store(runID, rc)
+
+	// Clear pause state and update run status
+	s.repository.ClearPauseState(ctx, runID)
+	s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning))
+
+	// Emit run resumed event
+	s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunResumed, runID))
+
+	// Start execution in background - resume from the human gate node's successors
+	go s.executeResumedRun(rc, nodeID)
+
+	return nil
+}
+
+// executeResumedRun continues execution from a resumed run
+func (s *Scheduler) executeResumedRun(rc *runContext, resumedNodeID string) {
+	defer func() {
+		// Cleanup
+		s.activeRuns.Delete(rc.runID)
+		rc.cancel()
+		close(rc.workChan)
+	}()
+
+	// Start workers
+	for i := 0; i < s.config.MaxWorkers; i++ {
+		go s.worker(rc)
+	}
+
+	// Get the node we resumed from
+	resumedNode := rc.plan.GetNode(resumedNodeID)
+	if resumedNode == nil {
+		log.Printf("Resumed node %s not found in plan", resumedNodeID)
+		return
+	}
+
+	// Enqueue downstream nodes of the resumed human gate
+	for _, edge := range rc.plan.GetOutgoingEdges(resumedNodeID) {
+		rc.wg.Add(1)
+		// Decrement pending count for downstream nodes
+		rc.pendingMu.Lock()
+		rc.pending[edge.To]--
+		if rc.pending[edge.To] == 0 {
+			rc.pendingMu.Unlock()
+			rc.workChan <- edge.To
+		} else {
+			rc.pendingMu.Unlock()
+			rc.wg.Done() // Not ready yet
+		}
+	}
+
+	// Wait for all work to complete
+	rc.wg.Wait()
+
+	// Determine final status
+	s.finalizeRun(rc)
 }
 
 // GetRunStatus returns the current status of an active run

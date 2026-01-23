@@ -6,9 +6,11 @@
  * - Delete selected node/edge
  */
 
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import { render, screen, within, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/router";
+
+let lastOnConnect: ((connection: any) => void) | undefined;
 
 jest.mock("@xyflow/react", () => {
   const React = require("react");
@@ -18,12 +20,19 @@ jest.mock("@xyflow/react", () => {
     ReactFlow: ({
       nodes = [],
       edges = [],
+      onConnect,
       onNodeClick,
       onEdgeClick,
       onPaneClick,
       children,
     }: any) => (
-      <div data-testid="reactflow" onClick={() => onPaneClick?.()}>
+      <div
+        data-testid="reactflow"
+        onClick={() => {
+          lastOnConnect = onConnect;
+          onPaneClick?.();
+        }}
+      >
         <div data-testid="reactflow-nodes">
           {nodes.map((node: any) => (
             <button
@@ -52,6 +61,7 @@ jest.mock("@xyflow/react", () => {
             >
               {edge.source}-{">"}
               {edge.target}
+              {edge.label ? ` (${edge.label})` : ""}
             </button>
           ))}
         </div>
@@ -105,6 +115,7 @@ function renderGraphEditor() {
 describe("GraphEditor", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    lastOnConnect = undefined;
     mockUseRouter.mockReturnValue({
       push: jest.fn(),
       replace: jest.fn(),
@@ -160,5 +171,39 @@ describe("GraphEditor", () => {
 
     expect(within(flow).queryAllByTestId(/edge-/)).toHaveLength(0);
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(1);
+  });
+
+  it("should label edges from a Branch node based on the source handle", async () => {
+    const user = userEvent.setup();
+    renderGraphEditor();
+
+    await user.click(screen.getByRole("button", { name: /^branch$/i }));
+
+    const branchNodeButton = screen.getByRole("button", { name: /branch node/i });
+    const branchTestId = branchNodeButton.getAttribute("data-testid") ?? "";
+    const branchId = branchTestId.replace(/^node-/, "");
+
+    // Clear selection so the next node doesn't auto-connect.
+    await user.click(screen.getByTestId("reactflow"));
+
+    await user.click(screen.getByRole("button", { name: /^output$/i }));
+
+    const outputNodeButton = screen.getByRole("button", { name: /output node/i });
+    const outputTestId = outputNodeButton.getAttribute("data-testid") ?? "";
+    const outputId = outputTestId.replace(/^node-/, "");
+
+    expect(typeof lastOnConnect).toBe("function");
+    await act(async () => {
+      lastOnConnect?.({
+        source: branchId,
+        target: outputId,
+        sourceHandle: "true",
+      });
+    });
+
+    const flow = screen.getByTestId("reactflow");
+    const edgeButtons = await within(flow).findAllByTestId(/edge-/);
+    expect(edgeButtons).toHaveLength(1);
+    expect(edgeButtons[0]).toHaveTextContent(/\(true\)/i);
   });
 });

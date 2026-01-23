@@ -75,13 +75,15 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
         ? "bg-rose-500"
         : executionStatus === "running"
           ? "bg-blue-500"
-          : executionStatus === "skipped"
-            ? "bg-muted-foreground/50"
-            : executionStatus === "pending"
-              ? "bg-muted-foreground/60"
-              : executionStatus
+          : executionStatus === "waiting"
+            ? "bg-amber-500 animate-pulse"
+            : executionStatus === "skipped"
+              ? "bg-muted-foreground/50"
+              : executionStatus === "pending"
                 ? "bg-muted-foreground/60"
-                : null;
+                : executionStatus
+                  ? "bg-muted-foreground/60"
+                  : null;
 
   const isSkipped = executionStatus === "skipped";
   const hasAdvancedConfig = Boolean(nodeData.retry_policy?.max_attempts && nodeData.retry_policy.max_attempts > 1) || Boolean(nodeData.timeout_ms);
@@ -260,6 +262,10 @@ function getConfigPreview(
         : "No condition set";
     case NODE_TYPES.MERGE:
       return `Strategy: ${(config.merge_strategy as string) ?? "namespaced"}`;
+    case NODE_TYPES.HUMAN_GATE:
+      return config.prompt_message
+        ? `${String(config.prompt_message).slice(0, 30)}...`
+        : "Requires approval";
     default:
       return "";
   }

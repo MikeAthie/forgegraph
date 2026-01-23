@@ -4,7 +4,9 @@ import { useRouter } from "next/router";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type NodeRunItem, type RunDetail } from "../../lib/api";
+import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type NodeRunItem, type RunDetail, type ResumeRunInput } from "../../lib/api";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { formatJsonForDisplay } from "../../lib/json";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Separator, Spinner } from "@/components/ui";
 
@@ -81,8 +83,9 @@ function StatusIcon({ status }: { status: string }) {
         </svg>
       );
     case "paused":
+    case "waiting":
       return (
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={status === "waiting" ? "animate-pulse" : ""}>
           <path
             d="M9 7v10M15 7v10"
             stroke="currentColor"
@@ -162,6 +165,7 @@ const getStatusBadgeClass = (status: string) => {
     case "pending":
       return "border-muted-foreground/25 bg-muted/40 text-muted-foreground";
     case "paused":
+    case "waiting":
       return "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300";
     case "canceled":
       return "border-muted-foreground/20 bg-muted/40 text-muted-foreground";
@@ -238,6 +242,12 @@ export default function RunDetailPage() {
   const runStatusRef = useRef<string | null>(null);
 
   const [selectedNodeRunId, setSelectedNodeRunId] = useState<string | null>(null);
+
+  // Human Gate approval state
+  const [approvalFields, setApprovalFields] = useState<Record<string, string>>({});
+  const [approvalFeedback, setApprovalFeedback] = useState("");
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
 
   const formatNodeLabel = useCallback(
     (nodeRun: NodeRunItem) => {
@@ -321,6 +331,39 @@ export default function RunDetailPage() {
       setIsRerunning(false);
     }
   }, [run, router]);
+
+  const resumeRun = useCallback(async (approved: boolean) => {
+    if (!runId || !run?.paused_node_id) return;
+
+    if (approved) {
+      setIsApproving(true);
+    } else {
+      setIsRejecting(true);
+    }
+    setError(null);
+
+    try {
+      const input: ResumeRunInput = {
+        node_id: run.paused_node_id,
+        input_json: {
+          approved,
+          fields: approved ? approvalFields : undefined,
+          feedback: !approved ? approvalFeedback : undefined,
+        },
+      };
+      await runsApi.resume(runId, input);
+      // Clear the form
+      setApprovalFields({});
+      setApprovalFeedback("");
+      // Refresh to get updated status
+      await fetchRun();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, approved ? "Failed to approve run." : "Failed to reject run."));
+    } finally {
+      setIsApproving(false);
+      setIsRejecting(false);
+    }
+  }, [runId, run, approvalFields, approvalFeedback, fetchRun]);
 
   useEffect(() => {
     if (!runId) return;
@@ -688,6 +731,97 @@ export default function RunDetailPage() {
                   {error && <p className="mt-4 text-sm text-destructive">Error: {error}</p>}
                 </CardContent>
               </Card>
+
+              {/* Human Gate Approval UI */}
+              {String(run.status) === "paused" && run.paused_node_id && (
+                <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                      <StatusIcon status="paused" />
+                      Waiting for Approval
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Prompt message */}
+                    {run.pause_payload?.prompt_message && (
+                      <div className="rounded-lg bg-background/50 p-4 border border-amber-500/20">
+                        <p className="text-sm">{run.pause_payload.prompt_message}</p>
+                      </div>
+                    )}
+
+                    {/* Node info */}
+                    <div className="text-sm text-muted-foreground">
+                      Paused at node: <span className="font-mono">{run.pause_payload?.node_name ?? run.paused_node_id}</span>
+                    </div>
+
+                    {/* Required fields */}
+                    {run.pause_payload?.required_fields && run.pause_payload.required_fields.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-sm font-medium">Required fields:</p>
+                        {run.pause_payload.required_fields.map((field) => (
+                          <div key={field}>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">
+                              {field}
+                            </label>
+                            <Input
+                              value={approvalFields[field] ?? ""}
+                              onChange={(e) => setApprovalFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                              placeholder={`Enter ${field}...`}
+                              className="text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Feedback for rejection */}
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">
+                        Feedback (optional for approval, recommended for rejection)
+                      </label>
+                      <Textarea
+                        value={approvalFeedback}
+                        onChange={(e) => setApprovalFeedback(e.target.value)}
+                        placeholder="Add feedback or reason..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        onClick={() => void resumeRun(true)}
+                        disabled={isApproving || isRejecting}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        {isApproving ? (
+                          <>
+                            <Spinner size="xs" className="mr-2" />
+                            Approving...
+                          </>
+                        ) : (
+                          "Approve"
+                        )}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => void resumeRun(false)}
+                        disabled={isApproving || isRejecting}
+                      >
+                        {isRejecting ? (
+                          <>
+                            <Spinner size="xs" className="mr-2" />
+                            Rejecting...
+                          </>
+                        ) : (
+                          "Reject"
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
                 <CardHeader>
