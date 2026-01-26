@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from "path";
+import os from "os";
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -15,6 +16,7 @@ process.env.PLAYWRIGHT_API_URL = process.env.PLAYWRIGHT_API_URL ?? backendUrl;
 
 const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
 const useSqlite = (process.env.USE_SQLITE ?? "true").toLowerCase() === "true";
+const sqliteDbPath = process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), "forgegraph-playwright-db.sqlite3");
 // SQLite-backed Django dev server can get flaky under high concurrency; default to serial execution unless overridden.
 const workerCount =
   Number.isFinite(workerOverride) && workerOverride && workerOverride > 0
@@ -62,6 +64,8 @@ export default defineConfig({
         ...process.env,
         DEBUG: process.env.DEBUG ?? "true",
         USE_SQLITE: process.env.USE_SQLITE ?? "true",
+        SQLITE_DB_PATH: sqliteDbPath,
+        USE_IN_MEMORY_CHANNEL_LAYER: process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
       },
     },
     {

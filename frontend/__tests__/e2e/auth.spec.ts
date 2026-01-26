@@ -29,7 +29,8 @@ test.describe("Authentication Flow", () => {
     const nav = page.getByRole("navigation");
     await nav.getByRole("link", { name: /get started/i }).click();
     await expect(page).toHaveURL("/register");
-    await expect(page.getByText(/create your account/i)).toBeVisible();
+    await expect(page.locator("#email")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^create account$/i })).toBeVisible();
   });
 
   test("should navigate to login page", async ({ page }) => {
@@ -80,7 +81,7 @@ test.describe("User Registration", () => {
   });
 
   test("should navigate to login page from sign in link", async ({ page }) => {
-    await page.getByRole("link", { name: /sign in/i }).click();
+    await page.getByRole("main").getByRole("link", { name: /^sign in$/i }).click();
     await expect(page).toHaveURL("/login");
   });
 });

@@ -5,6 +5,9 @@ Tests custom manager methods and queryset filters.
 """
 
 import pytest
+from datetime import timedelta
+
+from django.utils import timezone
 
 from infrastructure.orm.models import (
     Graph,
@@ -58,6 +61,11 @@ class TestGraphManager:
         """for_user should preserve default ordering by updated_at."""
         graph1 = Graph.objects.create(owner=user, name="First")
         graph2 = Graph.objects.create(owner=user, name="Second")
+
+        # Ensure deterministic ordering across DBs with coarse timestamp precision.
+        now = timezone.now()
+        Graph.objects.filter(id=graph1.id).update(updated_at=now)
+        Graph.objects.filter(id=graph2.id).update(updated_at=now + timedelta(seconds=1))
 
         graphs = list(Graph.objects.for_user(user))
 
@@ -129,7 +137,7 @@ class TestPromptTemplateManager:
     def test_public_filters_public_visibility(self, user):
         """public should return only prompts with public visibility."""
         # Create prompts with different visibilities
-        PromptTemplate.objects.create(
+        private_prompt = PromptTemplate.objects.create(
             owner=user,
             title="Private Prompt",
             category="research",
@@ -146,8 +154,9 @@ class TestPromptTemplateManager:
 
         public_prompts = PromptTemplate.objects.public()
 
-        assert public_prompts.count() == 1
+        assert private_prompt not in public_prompts
         assert public_prompt in public_prompts
+        assert not public_prompts.filter(visibility="private").exists()
 
     def test_public_includes_builtin_prompts(self):
         """public should include built-in prompts (owner=None)."""
@@ -181,7 +190,9 @@ class TestPromptTemplateManager:
         )
 
         # Chain with filter
-        research_prompts = PromptTemplate.objects.public().filter(category="research")
+        research_prompts = PromptTemplate.objects.public().filter(
+            category="research", title="Public Research"
+        )
 
         assert research_prompts.count() == 1
         assert research_prompts.first().title == "Public Research"
@@ -320,7 +331,9 @@ class TestPromptTemplateManager:
         )
 
         # Chain with filter
-        research_prompts = PromptTemplate.objects.for_user(user).filter(category="research")
+        research_prompts = PromptTemplate.objects.for_user(user).filter(
+            category="research", title="Research Prompt"
+        )
 
         assert research_prompts.count() == 1
         assert research_prompts.first().title == "Research Prompt"

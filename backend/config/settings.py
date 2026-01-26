@@ -70,10 +70,18 @@ ASGI_APPLICATION = "config.asgi.application"
 # Database
 USE_SQLITE = os.environ.get("USE_SQLITE", "false").lower() in {"1", "true", "yes"}
 if USE_SQLITE:
+    sqlite_db_path = os.environ.get("SQLITE_DB_PATH")
+    if sqlite_db_path:
+        sqlite_db_path = Path(sqlite_db_path)
+        if not sqlite_db_path.is_absolute():
+            sqlite_db_path = BASE_DIR / sqlite_db_path
+    else:
+        sqlite_db_path = BASE_DIR / "db.sqlite3"
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": sqlite_db_path,
         }
     }
 else:

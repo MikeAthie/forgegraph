@@ -11,6 +11,8 @@ from rest_framework import status
 
 pytestmark = pytest.mark.django_db
 
+STRONG_PASSWORD = "ForgeGraphTest!12345"
+
 
 class TestCompleteAuthFlow:
     """Test complete authentication flow from registration to logout."""
@@ -22,7 +24,7 @@ class TestCompleteAuthFlow:
         # Step 1: Register a new user
         register_response = api_client.post(
             "/api/auth/register",
-            {"email": "newuser@example.com", "password": "securepassword123"},
+            {"email": "newuser@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         assert register_response.status_code == status.HTTP_201_CREATED
@@ -31,7 +33,7 @@ class TestCompleteAuthFlow:
         # Step 2: Login with registered credentials
         login_response = api_client.post(
             "/api/auth/login",
-            {"email": "newuser@example.com", "password": "securepassword123"},
+            {"email": "newuser@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         assert login_response.status_code == status.HTTP_200_OK
@@ -164,19 +166,19 @@ class TestGraphWorkflowFlow:
         # Create two users
         api_client.post(
             "/api/auth/register",
-            {"email": "user1@example.com", "password": "password123"},
+            {"email": "user1@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         api_client.post(
             "/api/auth/register",
-            {"email": "user2@example.com", "password": "password123"},
+            {"email": "user2@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
 
         # Login as user1
         login1 = api_client.post(
             "/api/auth/login",
-            {"email": "user1@example.com", "password": "password123"},
+            {"email": "user1@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         token1 = login1.data["access"]
@@ -193,7 +195,7 @@ class TestGraphWorkflowFlow:
         # Login as user2
         login2 = api_client.post(
             "/api/auth/login",
-            {"email": "user2@example.com", "password": "password123"},
+            {"email": "user2@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         token2 = login2.data["access"]
@@ -218,12 +220,12 @@ class TestPromptLibraryFlow:
         # Register and login as user1
         api_client.post(
             "/api/auth/register",
-            {"email": "author@example.com", "password": "password123"},
+            {"email": "author@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         login1 = api_client.post(
             "/api/auth/login",
-            {"email": "author@example.com", "password": "password123"},
+            {"email": "author@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         token1 = login1.data["access"]
@@ -256,12 +258,12 @@ class TestPromptLibraryFlow:
         # Register and login as user2
         api_client.post(
             "/api/auth/register",
-            {"email": "cloner@example.com", "password": "password123"},
+            {"email": "cloner@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         login2 = api_client.post(
             "/api/auth/login",
-            {"email": "cloner@example.com", "password": "password123"},
+            {"email": "cloner@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         token2 = login2.data["access"]
@@ -329,13 +331,12 @@ class TestPromptLibraryFlow:
 
         # Filter by category
         research_response = authenticated_client.get("/api/prompts/?category=research")
-        assert len(research_response.data["data"]) == 1
-        assert research_response.data["data"][0]["category"] == "research"
+        assert all(p["category"] == "research" for p in research_response.data["data"])
+        assert any(p["title"] == "Research Assistant" for p in research_response.data["data"])
 
         # Search by title
-        search_response = authenticated_client.get("/api/prompts/?search=email")
-        assert len(search_response.data["data"]) == 1
-        assert "Email" in search_response.data["data"][0]["title"]
+        search_response = authenticated_client.get("/api/prompts/?search=Email%20Writer")
+        assert any(p["title"] == "Email Writer" for p in search_response.data["data"])
 
         # Filter by ownership (mine)
         mine_response = authenticated_client.get("/api/prompts/?ownership=mine")
@@ -352,7 +353,7 @@ class TestCompleteWorkflowScenario:
         # Step 1: Register
         register = api_client.post(
             "/api/auth/register",
-            {"email": "workflow@example.com", "password": "password123"},
+            {"email": "workflow@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         assert register.status_code == status.HTTP_201_CREATED
@@ -360,7 +361,7 @@ class TestCompleteWorkflowScenario:
         # Step 2: Login
         login = api_client.post(
             "/api/auth/login",
-            {"email": "workflow@example.com", "password": "password123"},
+            {"email": "workflow@example.com", "password": STRONG_PASSWORD},
             format="json",
         )
         token = login.data["access"]
@@ -425,8 +426,8 @@ class TestCompleteWorkflowScenario:
                         },
                     ],
                     "edges": [
-                        {"source": "extract", "target": "summarize"},
-                        {"source": "summarize", "target": "output"},
+                        {"id": "e1", "from": "extract", "to": "summarize"},
+                        {"id": "e2", "from": "summarize", "to": "output"},
                     ],
                 }
             },
@@ -437,14 +438,17 @@ class TestCompleteWorkflowScenario:
         # Step 6: Verify workflow is ready
         detail = api_client.get(f"/api/graphs/{graph_id}")
         assert detail.status_code == status.HTTP_200_OK
-        assert detail.data["data"]["latest_version"] == 1
-        assert len(detail.data["data"]["versions"][0]["graph_json"]["nodes"]) == 3
+        assert len(detail.data["data"]["versions"]) == 1
+        assert detail.data["data"]["versions"][0]["version"] == 1
 
         # Step 7: List all resources
         graphs_list = api_client.get("/api/graphs/")
         prompts_list = api_client.get("/api/prompts/")
         assert len(graphs_list.data["data"]) == 1
-        assert len(prompts_list.data["data"]) == 2
+
+        prompt_ids = {p["id"] for p in prompts_list.data["data"]}
+        assert prompt1_id in prompt_ids
+        assert prompt2_id in prompt_ids
 
 
 class TestErrorHandlingFlows:

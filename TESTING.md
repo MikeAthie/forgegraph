@@ -10,6 +10,27 @@ ForgeGraph follows a comprehensive testing strategy with three layers:
 2. **Integration Tests** - Test interactions between multiple components or modules
 3. **End-to-End (E2E) Tests** - Test complete user flows through the application
 
+## Run All Tests (One Command)
+
+From the repo root (PowerShell):
+
+```powershell
+.\test-all.ps1
+```
+
+Helpful options:
+
+```powershell
+# Faster run (targets key integration tests only; skips full backend suite breadth)
+.\test-all.ps1 -Fast
+
+# Skip Playwright e2e
+.\test-all.ps1 -SkipE2E
+```
+
+Notes:
+- `.\test-all.ps1` forces backend tests to use SQLite and writes the test DB to your temp directory (via `SQLITE_DB_PATH`) so `backend/db.sqlite3` stays unchanged.
+
 ## Backend Testing (Django + DRF)
 
 ### Test Structure

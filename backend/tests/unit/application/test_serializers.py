@@ -4,6 +4,8 @@ Unit tests for API serializers.
 Tests serializer validation, field transformations, and error messages.
 """
 
+import pytest
+
 from adapters.api.auth.serializers import LoginSerializer, RegisterSerializer
 from adapters.api.graphs.serializers import (
     GraphCreateSerializer,
@@ -16,13 +18,15 @@ from adapters.api.prompts.serializers import (
     PromptUpdateSerializer,
 )
 
+pytestmark = pytest.mark.django_db
+
 
 class TestRegisterSerializer:
     """Tests for RegisterSerializer."""
 
     def test_valid_registration_data(self):
         """Should validate correct registration data."""
-        data = {"email": "test@example.com", "password": "testpassword123"}
+        data = {"email": "test@example.com", "password": "ForgeGraphTest!12345"}
         serializer = RegisterSerializer(data=data)
 
         assert serializer.is_valid()
@@ -30,7 +34,7 @@ class TestRegisterSerializer:
 
     def test_email_is_required(self):
         """Should require email field."""
-        data = {"password": "testpassword123"}
+        data = {"password": "ForgeGraphTest!12345"}
         serializer = RegisterSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -46,7 +50,7 @@ class TestRegisterSerializer:
 
     def test_invalid_email_format(self):
         """Should reject invalid email formats."""
-        data = {"email": "not-an-email", "password": "testpassword123"}
+        data = {"email": "not-an-email", "password": "ForgeGraphTest!12345"}
         serializer = RegisterSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -58,7 +62,7 @@ class TestLoginSerializer:
 
     def test_valid_login_data(self):
         """Should validate correct login data."""
-        data = {"email": "test@example.com", "password": "testpassword123"}
+        data = {"email": "test@example.com", "password": "ForgeGraphTest!12345"}
         serializer = LoginSerializer(data=data)
 
         assert serializer.is_valid()
@@ -66,7 +70,7 @@ class TestLoginSerializer:
 
     def test_email_is_required(self):
         """Should require email field."""
-        data = {"password": "testpassword123"}
+        data = {"password": "ForgeGraphTest!12345"}
         serializer = LoginSerializer(data=data)
 
         assert not serializer.is_valid()
