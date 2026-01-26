@@ -51,6 +51,8 @@ interface GraphNodeData {
   nodeType: string;
   config?: Record<string, unknown>;
   disabled?: boolean;
+  isTrigger?: boolean;
+  isEnd?: boolean;
   executionStatus?: string;
   executionAttempt?: number;
   executionDurationMs?: number | null;
@@ -135,6 +137,16 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
           >
             {typeLabel}
           </span>
+          {nodeData.isTrigger && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              Start
+            </span>
+          )}
+          {nodeData.isEnd && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-300">
+              End
+            </span>
+          )}
           {isDisabled && (
             <span className="text-xs text-muted-foreground italic">disabled</span>
           )}
@@ -245,7 +257,12 @@ function getConfigPreview(
 ): string {
   switch (nodeType) {
     case NODE_TYPES.PROMPT:
-      return config.prompt_id ? `Prompt: ${config.prompt_id}` : "No prompt selected";
+      if (config.prompt_id) {
+        return `Prompt: ${config.prompt_id}`;
+      }
+      return config.prompt_template
+        ? `${String(config.prompt_template).slice(0, 30)}...`
+        : "No prompt configured";
     case NODE_TYPES.HTTP:
       return config.url
         ? `${config.method ?? "GET"} ${String(config.url).slice(0, 30)}...`

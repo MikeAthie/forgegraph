@@ -82,6 +82,7 @@ services:
       DATABASE_URL: postgres://forgegraph:forgegraph_secret@postgres:5432/forgegraph?sslmode=disable
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

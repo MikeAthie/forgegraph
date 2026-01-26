@@ -117,6 +117,29 @@ Open http://localhost:3000 in your browser. You should see "ForgeGraph running" 
 - Use the MiniMap + zoom controls for large workflows.
 - "Note" nodes are editor-only annotations (saved in `editor_state`, not executed by the engine).
 
+## Demo Workflows
+
+ForgeGraph includes three demo workflows showcasing its capabilities. To seed them:
+
+```bash
+# Set your OpenAI API key (required for Prompt nodes)
+export OPENAI_API_KEY=sk-your-key-here
+
+# Start services
+./dev up
+
+# Seed demo workflows
+./dev manage seed_phase7_demos
+```
+
+### Available Demos
+
+1. **Research Assistant** - Parallel LLM calls analyzing a topic from multiple angles, merged into a synthesis report. Demonstrates parallel execution and merge synchronization.
+
+2. **Email Drafting Agent** - Drafts a professional email, then pauses for human review before finalizing. Demonstrates human-in-the-loop approval.
+
+3. **Data Extraction Agent** - Parses unstructured text into structured JSON with confidence scoring. Low-confidence results route to human verification. Demonstrates conditional branching.
+
 ## Observability Demo (Phase 4)
 
 Use the seed commands to validate the run viewer and WebSocket delta updates without the Go engine.
@@ -223,6 +246,7 @@ forgegraph/
 | Variable | Description | Default |
 |----------|-------------|---------|
 | GRPC_PORT | gRPC server port | 50051 |
+| OPENAI_API_KEY | OpenAI API key for Prompt nodes | (required for LLM features) |
 
 ### Frontend
 
@@ -238,11 +262,22 @@ forgegraph/
 - [x] Phase 3: Go engine basic execution
 - [x] Phase 4: Run viewer + persistence
 - [x] Phase 5: Branch/merge + retry/timeout
-- [ ] Phase 6: Human gate
-- [ ] Phase 7: Polish + demo workflows + docs
+- [x] Phase 6: Human gate
+- [x] Phase 7: Polish + demo workflows + docs
 
 See [SPECS.md](SPECS.md) for the full project specification.
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+ForgeGraph is built with these excellent open source projects:
+
+- [React Flow](https://reactflow.dev/) - Graph visualization and interaction
+- [Django](https://www.djangoproject.com/) & [Django REST Framework](https://www.django-rest-framework.org/) - Backend API
+- [Next.js](https://nextjs.org/) - Frontend framework
+- [gRPC](https://grpc.io/) - High-performance RPC
+- [Tailwind CSS](https://tailwindcss.com/) - Styling
+- [Radix UI](https://www.radix-ui.com/) - Accessible UI primitives

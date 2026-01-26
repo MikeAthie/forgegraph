@@ -14,12 +14,12 @@ import grpc
 
 from application.ports.services import IEngineClient
 from infrastructure.grpc import (
-    EngineServiceStub,
-    PingRequest,
-    StartRunRequest,
-    GetRunStatusRequest,
     CancelRunRequest,
+    EngineServiceStub,
+    GetRunStatusRequest,
+    PingRequest,
     ResumeRunRequest,
+    StartRunRequest,
 )
 
 logger = logging.getLogger(__name__)

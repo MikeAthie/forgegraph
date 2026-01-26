@@ -3,10 +3,10 @@
 # Adapters for external services (gRPC engine, LLM providers, etc.).
 
 from .grpc_engine_client import (
-    GrpcEngineClient,
-    MockEngineClient,
     EngineConnectionError,
     EngineExecutionError,
+    GrpcEngineClient,
+    MockEngineClient,
 )
 
 __all__ = [

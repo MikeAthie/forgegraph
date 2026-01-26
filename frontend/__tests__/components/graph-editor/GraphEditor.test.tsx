@@ -6,7 +6,7 @@
  * - Delete selected node/edge
  */
 
-import { render, screen, within, fireEvent, act } from "@testing-library/react";
+import { render, screen, within, fireEvent, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/router";
 
@@ -112,6 +112,27 @@ function renderGraphEditor() {
   );
 }
 
+async function addPromptNodeViaWizard(user: ReturnType<typeof userEvent.setup>, task = "Write a short response.") {
+  await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+
+  const dialog = await screen.findByRole("dialog");
+  const dialogScope = within(dialog);
+
+  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Role -> Task
+  await user.type(dialogScope.getByPlaceholderText(/write a clear task description/i), task);
+  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Task -> Examples
+  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Examples -> Output
+  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Output -> Review
+
+  // Avoid API calls in unit tests.
+  await user.click(dialogScope.getByRole("checkbox", { name: /save to prompt library/i }));
+  await user.click(dialogScope.getByRole("button", { name: /^finish$/i }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+}
+
 describe("GraphEditor", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -130,7 +151,7 @@ describe("GraphEditor", () => {
     const user = userEvent.setup();
     renderGraphEditor();
 
-    await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+    await addPromptNodeViaWizard(user);
     await user.click(screen.getByRole("button", { name: /^http$/i }));
 
     const flow = screen.getByTestId("reactflow");
@@ -142,7 +163,7 @@ describe("GraphEditor", () => {
     const user = userEvent.setup();
     renderGraphEditor();
 
-    await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+    await addPromptNodeViaWizard(user);
     await user.click(screen.getByRole("button", { name: /^http$/i }));
 
     const flow = screen.getByTestId("reactflow");
@@ -159,7 +180,7 @@ describe("GraphEditor", () => {
     const user = userEvent.setup();
     renderGraphEditor();
 
-    await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+    await addPromptNodeViaWizard(user);
     await user.click(screen.getByRole("button", { name: /^http$/i }));
 
     const flow = screen.getByTestId("reactflow");

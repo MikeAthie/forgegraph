@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/forgegraph/engine/adapter/executor"
+	"github.com/forgegraph/engine/adapter/gateway"
 	"github.com/forgegraph/engine/adapter/repository"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
@@ -256,10 +257,18 @@ func main() {
 		executor.NewBranchExecutor(),
 		executor.NewMergeExecutor(),
 		executor.NewHumanGateExecutor(),
-		// PromptExecutor requires LLM client, skip for MVP
-		// executor.NewPromptExecutor(llmClient),
 	)
-	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate"})
+
+	// Initialize LLM client for Prompt nodes
+	llmClient, err := gateway.NewOpenAIClient()
+	if err != nil {
+		log.Warn("openai_client_not_configured", "error", err.Error(), "note", "Prompt nodes will fail without OPENAI_API_KEY")
+	} else {
+		registry.Register(executor.NewPromptExecutor(llmClient))
+		log.Info("openai_client_initialized", "note", "Prompt nodes enabled")
+	}
+
+	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate", "prompt"})
 
 	// Initialize scheduler
 	schedulerConfig := usecase.SchedulerConfig{

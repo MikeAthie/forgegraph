@@ -16,6 +16,9 @@ from domain.value_objects.node_types import NodeType
 class GraphValidator:
     """Validates graph structure and semantics."""
 
+    START_NODE_ID = "START"
+    END_NODE_ID = "END"
+
     def validate(self, graph_json: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Validate a graph JSON structure.
@@ -79,6 +82,9 @@ class GraphValidator:
 
         node_id = node["id"]
 
+        if node_id in {self.START_NODE_ID, self.END_NODE_ID}:
+            errors.append({"type": "reserved_node_id", "node_id": node_id})
+
         if node_id in existing_ids:
             errors.append({"type": "duplicate_node_id", "node_id": node_id})
 
@@ -106,15 +112,33 @@ class GraphValidator:
 
         if "from" not in edge:
             errors.append({"type": "edge_missing_from", "edge_id": edge_id})
-        elif edge["from"] not in node_ids:
-            errors.append(
-                {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": edge["from"]}
-            )
+        else:
+            from_node = edge["from"]
+            if from_node == self.END_NODE_ID:
+                errors.append({"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node})
+            elif from_node != self.START_NODE_ID and from_node not in node_ids:
+                errors.append(
+                    {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
+                )
 
         if "to" not in edge:
             errors.append({"type": "edge_missing_to", "edge_id": edge_id})
-        elif edge["to"] not in node_ids:
-            errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": edge["to"]})
+        else:
+            to_node = edge["to"]
+            if to_node == self.START_NODE_ID:
+                errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": to_node})
+            elif to_node != self.END_NODE_ID and to_node not in node_ids:
+                errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": to_node})
+
+        # Validate START/END sentinel semantics
+        from_node = edge.get("from")
+        to_node = edge.get("to")
+        if from_node == self.START_NODE_ID:
+            if to_node == self.END_NODE_ID or to_node == self.START_NODE_ID or to_node not in node_ids:
+                errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": to_node})
+        if to_node == self.END_NODE_ID:
+            if from_node == self.START_NODE_ID or from_node == self.END_NODE_ID or from_node not in node_ids:
+                errors.append({"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node})
 
         # Check for self-referencing edge
         if "from" in edge and "to" in edge and edge["from"] == edge["to"]:

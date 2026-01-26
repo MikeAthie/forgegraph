@@ -15,7 +15,6 @@ from django.db.models import Max
 
 from infrastructure.orm.models import Graph, GraphVersion, User
 
-
 # Prompt templates embedded directly (matching built-in prompts from migration 0002)
 RESEARCH_SUMMARY_PROMPT = """You are a research analyst tasked with summarizing findings on a specific topic.
 

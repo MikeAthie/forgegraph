@@ -94,6 +94,32 @@ async function connectNodes(
   await expect(edges).toHaveCount(beforeCount + 1);
 }
 
+async function addPromptNodeViaWizard(
+  page: Page,
+  options?: { task?: string; saveToLibrary?: boolean },
+) {
+  const task = options?.task ?? "Write a short response.";
+  const saveToLibrary = options?.saveToLibrary ?? false;
+
+  await page.getByRole("button", { name: /^prompt/i }).click();
+
+  const wizard = page.getByRole("dialog", { name: /prompt node wizard/i });
+  await expect(wizard).toBeVisible();
+
+  await wizard.getByRole("button", { name: /^next$/i }).click(); // Role -> Task
+  await wizard.getByPlaceholder(/write a clear task description/i).fill(task);
+  await wizard.getByRole("button", { name: /^next$/i }).click(); // Task -> Examples
+  await wizard.getByRole("button", { name: /^next$/i }).click(); // Examples -> Output
+  await wizard.getByRole("button", { name: /^next$/i }).click(); // Output -> Review
+
+  if (!saveToLibrary) {
+    await wizard.getByRole("checkbox", { name: /save to prompt library/i }).uncheck();
+  }
+
+  await wizard.getByRole("button", { name: /^finish$/i }).click();
+  await expect(wizard).toBeHidden();
+}
+
 test.beforeAll(async ({ request }, testInfo) => {
   seededUser = createTestUser(testInfo, "e2e-graph-editor");
   await ensureUserRegistered(request, seededUser);
@@ -154,7 +180,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add a Prompt node
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
 
     // Node should appear in the canvas
     await expect(page.getByText("Prompt Node")).toBeVisible();
@@ -170,7 +196,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add different node types
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await expect(page.getByText("Prompt Node")).toBeVisible();
 
     await page.getByRole("button", { name: /^http/i }).click();
@@ -210,7 +236,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add a node
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
 
     // Click on the node to select it
     await page.getByText("Prompt Node").click();
@@ -233,7 +259,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add a node and select it
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await page.getByText("Prompt Node").click();
 
     // Update node name in inspector
@@ -254,7 +280,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add and select prompt node
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await page.getByText("Prompt Node").click();
 
     // Configure prompt ID
@@ -327,7 +353,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add a node to make the graph dirty
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
 
     // Save button should be enabled
     const saveButton = page.getByRole("button", { name: /^save$/i });
@@ -367,7 +393,7 @@ test.describe("Graph Editor", () => {
     await expect(page.getByText("*")).not.toBeVisible();
 
     // Add a node
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
 
     // Should show dirty indicator (asterisk)
     await expect(page.getByText("*")).toBeVisible();
@@ -392,7 +418,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add a node
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await expect(page.getByText("Prompt Node")).toBeVisible();
 
     // Select and delete
@@ -476,7 +502,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add and configure a node
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await page.getByText("Prompt Node").click();
 
     const promptIdInput = page.getByPlaceholder(/select or enter prompt id/i);
@@ -571,7 +597,7 @@ test.describe("Graph Editor", () => {
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
     // Add nodes in sequence (quick-add will connect to the selected node)
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await page.getByPlaceholder(/select or enter prompt id/i).fill("workflow-prompt");
     await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
 
@@ -615,7 +641,24 @@ test.describe("Graph Editor", () => {
     const latestVersion = (await latestVersionResponse.json()) as {
       data?: { graph_json?: { edges?: unknown[] } };
     };
-    expect(latestVersion.data?.graph_json?.edges?.length).toBe(3);
+    const savedEdges = latestVersion.data?.graph_json?.edges ?? [];
+    const workflowEdges = savedEdges.filter((edge) => {
+      if (!edge || typeof edge !== "object") return false;
+      const typed = edge as { from?: string; to?: string };
+      return typed.from !== "START" && typed.to !== "END";
+    });
+    const startEdges = savedEdges.filter((edge) => {
+      if (!edge || typeof edge !== "object") return false;
+      return (edge as { from?: string }).from === "START";
+    });
+    const endEdges = savedEdges.filter((edge) => {
+      if (!edge || typeof edge !== "object") return false;
+      return (edge as { to?: string }).to === "END";
+    });
+
+    expect(workflowEdges.length).toBe(3);
+    expect(startEdges.length).toBeGreaterThanOrEqual(1);
+    expect(endEdges.length).toBeGreaterThanOrEqual(1);
 
     // Reload and verify nodes/edges still render
     const url = page.url();
@@ -646,7 +689,7 @@ test.describe("Graph Editor", () => {
     const versionSelect = page.getByRole("combobox", { name: /^version$/i });
 
     // Create v1
-    await page.getByRole("button", { name: /^prompt/i }).click();
+    await addPromptNodeViaWizard(page);
     await page.getByText("Prompt Node").click();
     await page.getByPlaceholder(/select or enter prompt id/i).fill("v1-prompt");
     await page.getByRole("button", { name: /^save$/i }).click();

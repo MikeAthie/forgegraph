@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
-import type { Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { NODE_TYPES, type RetryPolicy } from "../../lib/graph-types";
+import { getApiErrorMessage, promptsApi } from "../../lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 interface NodeInspectorProps {
   selectedNode: Node | null | undefined;
+  selectedEdge: Edge | null | undefined;
+  nodes: Node[];
   graphName: string;
   graphDescription: string;
   onUpdateNode: (nodeId: string, updates: Partial<Node["data"]>) => void;
+  onUpdateEdge: (edgeId: string, updates: Partial<Edge>) => void;
   onDeleteNode: (nodeId: string) => void;
+  onDeleteEdge: (edgeId: string) => void;
   onDuplicateNode: (nodeId: string) => void;
   onUpdateMetadata: (name: string, description: string) => Promise<void>;
   onEditingMetadataChange?: (editing: boolean) => void;
@@ -19,10 +25,14 @@ interface NodeInspectorProps {
 
 export function NodeInspector({
   selectedNode,
+  selectedEdge,
+  nodes,
   graphName,
   graphDescription,
   onUpdateNode,
+  onUpdateEdge,
   onDeleteNode,
+  onDeleteEdge,
   onDuplicateNode,
   onUpdateMetadata,
   onEditingMetadataChange,
@@ -48,10 +58,10 @@ export function NodeInspector({
   }, [shouldDeferGraphText]);
 
   useEffect(() => {
-    if (!selectedNode || !editingMetadata) return;
+    if ((!selectedNode && !selectedEdge) || !editingMetadata) return;
     setEditingMetadata(false);
     onEditingMetadataChange?.(false);
-  }, [selectedNode, editingMetadata, onEditingMetadataChange]);
+  }, [selectedEdge, selectedNode, editingMetadata, onEditingMetadataChange]);
 
   const handleSaveMetadata = async () => {
     setSavingMetadata(true);
@@ -63,6 +73,142 @@ export function NodeInspector({
       setSavingMetadata(false);
     }
   };
+
+  if (selectedEdge) {
+    const sourceNode = nodes.find((node) => node.id === selectedEdge.source);
+    const targetNode = nodes.find((node) => node.id === selectedEdge.target);
+    const sourceLabel =
+      (sourceNode?.data?.label as string | undefined) ?? selectedEdge.source;
+    const targetLabel =
+      (targetNode?.data?.label as string | undefined) ?? selectedEdge.target;
+
+    const sourceIsTrigger = (sourceNode?.data as any)?.isTrigger === true;
+    const targetIsEnd = (targetNode?.data as any)?.isEnd === true;
+
+    const edgeLabel = typeof selectedEdge.label === "string" ? selectedEdge.label : "";
+    const edgeCondition = typeof selectedEdge.data?.condition === "string" ? selectedEdge.data.condition : "";
+
+    return (
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-foreground">Edge Config</h3>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => onDeleteEdge(selectedEdge.id)}
+          >
+            Delete
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+              From → To
+            </label>
+            <p className="text-sm text-foreground">
+              {sourceLabel} → {targetLabel}
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-3 border-t border-border">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Graph Structure
+            </h4>
+
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">
+                Mark source as Trigger (START)
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={sourceIsTrigger}
+                onClick={() => onUpdateNode(selectedEdge.source, { isTrigger: !sourceIsTrigger })}
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${sourceIsTrigger ? "bg-primary" : "bg-muted"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
+                    ${sourceIsTrigger ? "translate-x-4.5" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">
+                Mark target as End (END)
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={targetIsEnd}
+                onClick={() => onUpdateNode(selectedEdge.target, { isEnd: !targetIsEnd })}
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${targetIsEnd ? "bg-primary" : "bg-muted"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
+                    ${targetIsEnd ? "translate-x-4.5" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              These settings create special START → node and node → END edges when you save.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+              ID
+            </label>
+            <p className="text-xs text-muted-foreground font-mono break-all">
+              {selectedEdge.id}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Label
+            </label>
+            <Input
+              value={edgeLabel}
+              onChange={(e) => onUpdateEdge(selectedEdge.id, { label: e.target.value })}
+              className="text-sm"
+              placeholder="Optional label (e.g., true/false, loop/done)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Condition (optional)
+            </label>
+            <Textarea
+              value={edgeCondition}
+              onChange={(e) =>
+                onUpdateEdge(selectedEdge.id, { data: { condition: e.target.value } })
+              }
+              rows={3}
+              className="text-sm font-mono"
+              placeholder='Example: vars.status == "done"'
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Note: edge conditions are stored, but runtime routing currently relies on Branch nodes.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedNode) {
     // Show graph info when no node is selected
@@ -255,6 +401,71 @@ export function NodeInspector({
           </div>
         )}
 
+        {!isNote && (
+          <div className="space-y-3 pt-3 border-t border-border">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Graph Structure
+            </h4>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">
+                Trigger (START)
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={(nodeData as any)?.isTrigger === true}
+                onClick={() =>
+                  onUpdateNode(selectedNode.id, {
+                    isTrigger: !((nodeData as any)?.isTrigger === true),
+                  })
+                }
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${(nodeData as any)?.isTrigger === true ? "bg-primary" : "bg-muted"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
+                    ${(nodeData as any)?.isTrigger === true ? "translate-x-4.5" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">
+                End (END)
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={(nodeData as any)?.isEnd === true}
+                onClick={() =>
+                  onUpdateNode(selectedNode.id, {
+                    isEnd: !((nodeData as any)?.isEnd === true),
+                  })
+                }
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${(nodeData as any)?.isEnd === true ? "bg-primary" : "bg-muted"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
+                    ${(nodeData as any)?.isEnd === true ? "translate-x-4.5" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Triggers create an entry edge from START → this node. End nodes create an exit edge from this node → END.
+            </p>
+          </div>
+        )}
+
         {/* Node-specific config editors */}
         {isNote && (
           <NoteNodeConfig
@@ -359,21 +570,80 @@ function PromptNodeConfig({
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
 }) {
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
+  const [promptLoadError, setPromptLoadError] = useState<string | null>(null);
+
+  const loadPromptFromId = async () => {
+    const promptId = String(config.prompt_id ?? "").trim();
+    if (!promptId) {
+      setPromptLoadError("Prompt ID is required.");
+      return;
+    }
+
+    setPromptLoadError(null);
+    setLoadingPrompt(true);
+    try {
+      const prompt = await promptsApi.get(promptId);
+      onChange({
+        ...config,
+        prompt_id: prompt.id,
+        prompt_template: prompt.content,
+      });
+    } catch (err: unknown) {
+      setPromptLoadError(getApiErrorMessage(err, "Failed to load prompt."));
+    } finally {
+      setLoadingPrompt(false);
+    }
+  };
+
   return (
     <div className="space-y-3 pt-3 border-t border-border">
       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt Configuration</h4>
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Prompt Template ID
+          Prompt Template ID (optional)
         </label>
-        <Input
-          value={(config.prompt_id as string) ?? ""}
-          onChange={(e) => onChange({ ...config, prompt_id: e.target.value })}
-          placeholder="Select or enter prompt ID"
-          className="text-sm"
+        <div className="flex gap-2">
+          <Input
+            value={(config.prompt_id as string) ?? ""}
+            onChange={(e) => {
+              setPromptLoadError(null);
+              onChange({ ...config, prompt_id: e.target.value });
+            }}
+            placeholder="Select or enter prompt ID"
+            className="text-sm"
+          />
+          <Button type="button" variant="secondary" onClick={loadPromptFromId} disabled={loadingPrompt}>
+            {loadingPrompt ? <Spinner size="sm" /> : "Load"}
+          </Button>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Load a prompt from the Prompt Library by ID (fills <code>prompt_template</code> for execution).
+        </p>
+        {promptLoadError && (
+          <p className="mt-2 text-xs text-destructive">
+            {promptLoadError}
+          </p>
+        )}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Prompt Template
+        </label>
+        <Textarea
+          value={(config.prompt_template as string) ?? ""}
+          onChange={(e) => {
+            const nextConfig = { ...config, prompt_template: e.target.value };
+            delete (nextConfig as Record<string, unknown>).prompt_id;
+            setPromptLoadError(null);
+            onChange(nextConfig);
+          }}
+          placeholder="Write the prompt template (required to run)..."
+          rows={10}
+          className="text-sm font-mono"
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          ID of a prompt from the Prompt Library
+          This is what the engine executes. Editing detaches from the Prompt Library ID.
         </p>
       </div>
     </div>

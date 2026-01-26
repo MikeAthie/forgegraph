@@ -28,11 +28,12 @@ import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conv
 import { getLayoutedElements } from "../../lib/graph-layout";
 import { getApiErrorMessage, runsApi, type NodeRunItem, type RunDetail } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
-import { showError, showSuccess } from "../../lib/toast";
+import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
 import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
+import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
 
 const NOTE_NODE_TYPE = "note";
 
@@ -151,6 +152,9 @@ export function GraphEditor({
   const [overlayRunRefreshing, setOverlayRunRefreshing] = useState(false);
   const [overlayRunError, setOverlayRunError] = useState<string | null>(null);
   const [overlayCanceling, setOverlayCanceling] = useState(false);
+
+  const [promptWizardOpen, setPromptWizardOpen] = useState(false);
+  const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<string | null>(null);
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
 
@@ -533,6 +537,7 @@ export function GraphEditor({
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId)
     : null;
+  const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
   const canQuickAddConnect = !!selectedNode && selectedNode.type !== NOTE_NODE_TYPE;
 
   const handleSelectVersion = useCallback(
@@ -618,19 +623,26 @@ export function GraphEditor({
     setSelectedEdgeId(null);
   }, []);
 
-  const handleAddNode = useCallback(
-    (nodeType: NodeType, connectToSelected = false) => {
+  const addExecutableNode = useCallback(
+    (nodeType: NodeType, options?: { sourceNodeId?: string | null; config?: Record<string, unknown> }) => {
       const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
-      if (!typeInfo?.enabled) return;
+      if (!typeInfo) return;
+
+      // Human Gate is implemented; keep it enabled even if a stale config marks it otherwise.
+      if (!typeInfo.enabled && nodeType !== NODE_TYPES.HUMAN_GATE) return;
 
       pushHistory();
       const newNodeId = generateId();
-      const sourceNode =
-        connectToSelected && selectedNodeId
-          ? nodes.find((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
-          : null;
+
+      const sourceNodeId = options?.sourceNodeId ?? null;
+      const sourceNode = sourceNodeId
+        ? nodes.find((n) => n.id === sourceNodeId && n.type !== NOTE_NODE_TYPE)
+        : null;
 
       setNodes((nds) => {
+        const hasTrigger = nds.some(
+          (node) => node.type !== NOTE_NODE_TYPE && (node.data as any)?.isTrigger === true
+        );
         let position: { x: number; y: number };
 
         if (sourceNode) {
@@ -654,7 +666,8 @@ export function GraphEditor({
           data: {
             label: `${typeInfo.label} Node`,
             nodeType: nodeType,
-            config: {},
+            config: options?.config ?? {},
+            ...(hasTrigger ? {} : { isTrigger: true }),
           },
         };
 
@@ -674,7 +687,31 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [nodes, pushHistory, selectedNodeId, setEdges, setNodes]
+    [nodes, pushHistory, setEdges, setNodes]
+  );
+
+  const handleAddNode = useCallback(
+    (nodeType: NodeType, connectToSelected = false) => {
+      const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
+      if (!typeInfo) return;
+
+      // Human Gate is implemented; keep it enabled even if a stale config marks it otherwise.
+      if (!typeInfo.enabled && nodeType !== NODE_TYPES.HUMAN_GATE) return;
+
+      const sourceNodeId =
+        connectToSelected && selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+          ? selectedNodeId
+          : null;
+
+      if (nodeType === NODE_TYPES.PROMPT) {
+        setPromptWizardSourceNodeId(sourceNodeId);
+        setPromptWizardOpen(true);
+        return;
+      }
+
+      addExecutableNode(nodeType, { sourceNodeId, config: {} });
+    },
+    [addExecutableNode, nodes, selectedNodeId]
   );
 
   const handleAddNote = useCallback(() => {
@@ -720,6 +757,27 @@ export function GraphEditor({
       setIsDirty(true);
     },
     [pushHistoryForEdit, setNodes]
+  );
+
+  const handleUpdateEdge = useCallback(
+    (edgeId: string, updates: Partial<Edge>) => {
+      pushHistoryForEdit();
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id !== edgeId) return edge;
+          return {
+            ...edge,
+            ...updates,
+            data: {
+              ...(edge.data ?? {}),
+              ...(updates.data ?? {}),
+            },
+          };
+        })
+      );
+      setIsDirty(true);
+    },
+    [pushHistoryForEdit, setEdges],
   );
 
   const handleDeleteNode = useCallback(
@@ -778,8 +836,62 @@ export function GraphEditor({
   );
 
   const handleSave = useCallback(async () => {
+    let normalizedNodes = nodes;
+    let addedTrigger = false;
+    let addedEnds = 0;
+
+    const executableNodes = nodes.filter((node) => node.type !== NOTE_NODE_TYPE);
+    if (executableNodes.length > 0) {
+      const hasTrigger = executableNodes.some((node) => (node.data as any)?.isTrigger === true);
+      if (!hasTrigger) {
+        const firstExecutableIndex = nodes.findIndex((node) => node.type !== NOTE_NODE_TYPE);
+        if (firstExecutableIndex >= 0) {
+          normalizedNodes = nodes.map((node, index) =>
+            index === firstExecutableIndex
+              ? { ...node, data: { ...node.data, isTrigger: true } }
+              : node
+          );
+          addedTrigger = true;
+        }
+      }
+
+      const hasEnd = executableNodes.some((node) => (node.data as any)?.isEnd === true);
+      if (!hasEnd) {
+        const executableIds = new Set(executableNodes.map((node) => node.id));
+        const outdegree = new Map<string, number>();
+        for (const id of executableIds) {
+          outdegree.set(id, 0);
+        }
+        for (const edge of edges) {
+          if (executableIds.has(edge.source) && executableIds.has(edge.target)) {
+            outdegree.set(edge.source, (outdegree.get(edge.source) ?? 0) + 1);
+          }
+        }
+
+        const sinkIds = [...executableIds].filter((id) => (outdegree.get(id) ?? 0) === 0);
+        if (sinkIds.length > 0) {
+          const sinkSet = new Set(sinkIds);
+          normalizedNodes = normalizedNodes.map((node) =>
+            sinkSet.has(node.id) ? { ...node, data: { ...node.data, isEnd: true } } : node
+          );
+          addedEnds = sinkIds.length;
+        }
+      }
+    }
+
+    if (normalizedNodes !== nodes) {
+      setNodes(normalizedNodes);
+    }
+
+    if (addedTrigger || addedEnds > 0) {
+      const parts: string[] = [];
+      if (addedTrigger) parts.push("added START entry");
+      if (addedEnds > 0) parts.push(`added ${addedEnds} END exit${addedEnds === 1 ? "" : "s"}`);
+      showInfo("Graph structure updated", parts.join(" and "));
+    }
+
     const graphJson = reactFlowToGraphJson(
-      nodes,
+      normalizedNodes,
       edges,
       { name: graphName, description: graphDescription },
       graphId
@@ -956,6 +1068,22 @@ export function GraphEditor({
 
   return (
     <div className="flex h-full">
+      <PromptNodeWizardDialog
+        open={promptWizardOpen}
+        onOpenChange={(nextOpen) => {
+          setPromptWizardOpen(nextOpen);
+          if (!nextOpen) {
+            setPromptWizardSourceNodeId(null);
+          }
+        }}
+        onComplete={(config) => {
+          addExecutableNode(NODE_TYPES.PROMPT, {
+            sourceNodeId: promptWizardSourceNodeId,
+            config,
+          });
+          setPromptWizardSourceNodeId(null);
+        }}
+      />
       {/* Left Panel - Node Palette */}
       <div className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
         <NodePalette
@@ -1199,10 +1327,14 @@ export function GraphEditor({
         )}
         <NodeInspector
           selectedNode={selectedNode}
+          selectedEdge={selectedEdge}
+          nodes={nodes}
           graphName={graphName}
           graphDescription={graphDescription}
           onUpdateNode={handleUpdateNode}
+          onUpdateEdge={handleUpdateEdge}
           onDeleteNode={handleDeleteNode}
+          onDeleteEdge={handleDeleteEdge}
           onDuplicateNode={handleDuplicateNode}
           onUpdateMetadata={onUpdateMetadata}
           onEditingMetadataChange={setIsEditingMetadata}

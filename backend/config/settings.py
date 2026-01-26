@@ -238,7 +238,7 @@ ENGINE_HOST = os.environ.get("ENGINE_HOST", "localhost")
 ENGINE_PORT = int(os.environ.get("ENGINE_PORT", "50051"))
 ENGINE_CALLBACK_URL = os.environ.get(
     "ENGINE_CALLBACK_URL",
-    f"http://localhost:8000/api/runs/{{run_id}}/events/",
+    "http://localhost:8000/api/runs/{run_id}/events/",
 )
 
 # Encryption Configuration

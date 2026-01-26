@@ -43,6 +43,10 @@ dev = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+extend-exclude = [
+    "infrastructure/grpc/engine_pb2.py",
+    "infrastructure/grpc/engine_pb2_grpc.py",
+]
 
 [tool.ruff.lint]
 select = [

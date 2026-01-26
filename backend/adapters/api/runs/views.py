@@ -44,6 +44,37 @@ def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
     )
 
 
+START_NODE_ID = "START"
+END_NODE_ID = "END"
+
+
+def strip_sentinel_edges(graph_json: dict) -> dict:
+    """
+    Remove LangGraph-style START/END edges before sending a graph to the engine.
+
+    The current engine execution model derives start nodes from indegree==0 and
+    end nodes from sinks; START/END sentinel endpoints are editor/export-only.
+    """
+    edges = graph_json.get("edges")
+    if not isinstance(edges, list):
+        return graph_json
+
+    filtered_edges = [
+        edge
+        for edge in edges
+        if isinstance(edge, dict)
+        and edge.get("from") != START_NODE_ID
+        and edge.get("to") != END_NODE_ID
+    ]
+
+    if filtered_edges == edges:
+        return graph_json
+
+    cleaned = dict(graph_json)
+    cleaned["edges"] = filtered_edges
+    return cleaned
+
+
 class RunListView(APIView):
     """List runs (stub)."""
 
@@ -245,7 +276,7 @@ class RunStartView(APIView):
             with get_engine_client(callback_url) as engine:
                 engine.start_run(
                     run_id=run.id,
-                    graph_json=graph_version.graph_json,
+                    graph_json=strip_sentinel_edges(graph_version.graph_json),
                     input_json=input_json,
                 )
                 # Update status to running once engine accepts

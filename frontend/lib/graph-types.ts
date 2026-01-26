@@ -25,6 +25,16 @@ export const NODE_TYPES = {
 export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];
 
 /**
+ * LangGraph-style sentinel endpoints for entry/exit edges.
+ *
+ * These are not real nodes; they are represented as special edge endpoints:
+ * - START -> node_id (entry points)
+ * - node_id -> END (exit points)
+ */
+export const START_NODE_ID = "START" as const;
+export const END_NODE_ID = "END" as const;
+
+/**
  * Retry policy for node execution.
  */
 export interface RetryPolicy {
@@ -54,6 +64,11 @@ export interface BaseNodeConfig {
 export interface PromptNodeConfig extends BaseNodeConfig {
   prompt_id?: string;
   template_id?: string;
+  prompt_template?: string;
+  system_prompt?: string;
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
   variables?: Record<string, string>;
 }
 
@@ -141,9 +156,9 @@ export interface GraphNode {
 export interface GraphEdge {
   /** Unique identifier for the edge */
   id: string;
-  /** Source node ID */
+  /** Source node ID (or START for entry edges) */
   from: string;
-  /** Target node ID */
+  /** Target node ID (or END for exit edges) */
   to: string;
   /** Optional condition expression (for branch nodes) */
   condition?: string;

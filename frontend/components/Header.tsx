@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { Menu } from "lucide-react";
 
 import { useAuth } from "../contexts/AuthContext";
+import { approvalsApi } from "../lib/api";
 import {
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -20,19 +22,32 @@ export default function Header() {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
 
   const navItems = [
     { href: "/graphs", label: "Graphs" },
     { href: "/prompts", label: "Prompts" },
     { href: "/runs", label: "Runs" },
+    { href: "/approvals", label: "Approvals" },
   ] as const;
 
   const activeHref = (() => {
     if (router.pathname.startsWith("/graphs")) return "/graphs";
     if (router.pathname.startsWith("/prompts")) return "/prompts";
     if (router.pathname.startsWith("/runs")) return "/runs";
+    if (router.pathname.startsWith("/approvals")) return "/approvals";
     return null;
   })();
+
+  const refreshPendingApprovals = async () => {
+    try {
+      const data = await approvalsApi.count();
+      setPendingApprovalsCount(data.count);
+    } catch {
+      // Non-blocking: ignore errors (e.g., transient auth/network issues).
+      setPendingApprovalsCount(null);
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -42,6 +57,36 @@ export default function Header() {
       setIsLoggingOut(false);
     }
   };
+
+  // Keep the approvals badge reasonably fresh without being noisy.
+  // (Runs/resumes update tasks server-side; this catches changes across tabs.)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPendingApprovalsCount(null);
+      return;
+    }
+
+    if (process.env.NODE_ENV === "test") {
+      // Avoid noisy act() warnings in unit tests; the badge is non-critical UI.
+      setPendingApprovalsCount(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshPendingApprovals();
+    };
+
+    void tick();
+    const intervalId = window.setInterval(() => void tick(), 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated]);
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border supports-[backdrop-filter]:bg-background/60">
@@ -66,7 +111,18 @@ export default function Header() {
                         }}
                         className={activeHref === item.href ? "bg-accent cursor-pointer" : "cursor-pointer"}
                       >
-                        {item.label}
+                        <div className="flex w-full items-center justify-between gap-3">
+                          <span>{item.label}</span>
+                          {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
+                            <Badge
+                              variant="destructive"
+                              className="h-5 min-w-5 px-1.5"
+                              aria-label={`${pendingApprovalsCount} pending approvals`}
+                            >
+                              {pendingApprovalsCount}
+                            </Badge>
+                          )}
+                        </div>
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
@@ -86,7 +142,18 @@ export default function Header() {
                     variant={activeHref === item.href ? "secondary" : "ghost"}
                     asChild
                   >
-                    <Link href={item.href}>{item.label}</Link>
+                    <Link href={item.href} className="flex items-center gap-2">
+                      <span>{item.label}</span>
+                      {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="h-5 min-w-5 px-1.5"
+                          aria-label={`${pendingApprovalsCount} pending approvals`}
+                        >
+                          {pendingApprovalsCount}
+                        </Badge>
+                      )}
+                    </Link>
                   </Button>
                 ))}
               </div>

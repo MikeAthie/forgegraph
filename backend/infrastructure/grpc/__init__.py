@@ -1,15 +1,15 @@
 # gRPC generated code for ForgeGraph Engine communication
 from .engine_pb2 import (
-    PingRequest,
-    PingResponse,
-    StartRunRequest,
-    StartRunResponse,
-    GetRunStatusRequest,
-    GetRunStatusResponse,
     CancelRunRequest,
     CancelRunResponse,
+    GetRunStatusRequest,
+    GetRunStatusResponse,
+    PingRequest,
+    PingResponse,
     ResumeRunRequest,
     ResumeRunResponse,
+    StartRunRequest,
+    StartRunResponse,
 )
 from .engine_pb2_grpc import EngineServiceStub
 

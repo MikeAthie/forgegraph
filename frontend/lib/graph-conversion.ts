@@ -11,7 +11,7 @@ import type {
   NodeType,
   RetryPolicy,
 } from "./graph-types";
-import { isValidNodeType } from "./graph-types";
+import { END_NODE_ID, START_NODE_ID, isValidNodeType } from "./graph-types";
 
 const NOTE_NODE_TYPE = "note";
 
@@ -21,6 +21,19 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
 } {
   const positions = graphJson.editor_state?.nodePositions ?? {};
   const noteState = graphJson.editor_state?.notes ?? [];
+
+  const triggerNodeIds = new Set<string>();
+  const endNodeIds = new Set<string>();
+
+  for (const edge of graphJson.edges ?? []) {
+    if (edge.from === START_NODE_ID && typeof edge.to === "string") {
+      triggerNodeIds.add(edge.to);
+      continue;
+    }
+    if (edge.to === END_NODE_ID && typeof edge.from === "string") {
+      endNodeIds.add(edge.from);
+    }
+  }
 
   const nodes: Node[] = graphJson.nodes.map((node, index) => ({
     id: node.id,
@@ -34,6 +47,8 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
       retry_policy: node.retry_policy,
       timeout_ms: node.timeout_ms,
       outputs: node.outputs,
+      isTrigger: triggerNodeIds.has(node.id),
+      isEnd: endNodeIds.has(node.id),
     },
   }));
 
@@ -52,15 +67,17 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
       connectable: false,
     }));
 
-  const edges: Edge[] = graphJson.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.from,
-    target: edge.to,
-    label: edge.label,
-    data: {
-      condition: edge.condition,
-    },
-  }));
+  const edges: Edge[] = (graphJson.edges ?? [])
+    .filter((edge) => edge.from !== START_NODE_ID && edge.to !== END_NODE_ID)
+    .map((edge) => ({
+      id: edge.id,
+      source: edge.from,
+      target: edge.to,
+      label: edge.label,
+      data: {
+        condition: edge.condition,
+      },
+    }));
 
   return { nodes: [...nodes, ...noteNodes], edges };
 }
@@ -114,6 +131,28 @@ export function reactFlowToGraphJson(
       condition: edge.data?.condition as string | undefined,
     }));
 
+  const startEndEdges: GraphEdge[] = [];
+
+  for (const node of executableNodes) {
+    const isTrigger = (node.data as any)?.isTrigger === true;
+    if (isTrigger) {
+      startEndEdges.push({
+        id: `start-${node.id}`,
+        from: START_NODE_ID,
+        to: node.id,
+      });
+    }
+
+    const isEnd = (node.data as any)?.isEnd === true;
+    if (isEnd) {
+      startEndEdges.push({
+        id: `end-${node.id}`,
+        from: node.id,
+        to: END_NODE_ID,
+      });
+    }
+  }
+
   const nodePositions: Record<string, { x: number; y: number }> = {};
   for (const node of nodes) {
     nodePositions[node.id] = node.position;
@@ -129,7 +168,7 @@ export function reactFlowToGraphJson(
     graph_id: graphId,
     version_id: versionId,
     nodes: graphNodes,
-    edges: graphEdges,
+    edges: [...startEndEdges, ...graphEdges],
     metadata,
     editor_state: {
       nodePositions,

@@ -27,7 +27,7 @@ class EncryptionService:
         python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     """
 
-    _instance: "EncryptionService | None" = None
+    _instance: EncryptionService | None = None
 
     def __init__(self, key: str | None = None):
         """Initialize with encryption key.
@@ -49,7 +49,7 @@ class EncryptionService:
             raise EncryptionError(f"Invalid encryption key: {e}") from e
 
     @classmethod
-    def get_instance(cls) -> "EncryptionService":
+    def get_instance(cls) -> EncryptionService:
         """Get singleton instance of the encryption service."""
         if cls._instance is None:
             cls._instance = cls()

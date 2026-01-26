@@ -4,9 +4,9 @@ Unit tests for custom model managers and querysets.
 Tests custom manager methods and queryset filters.
 """
 
-import pytest
 from datetime import timedelta
 
+import pytest
 from django.utils import timezone
 
 from infrastructure.orm.models import (

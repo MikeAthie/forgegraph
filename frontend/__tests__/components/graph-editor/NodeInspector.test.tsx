@@ -250,7 +250,7 @@ describe("NodeInspector", () => {
     it("should display Prompt Template ID field", () => {
       render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
 
-      expect(screen.getByText("Prompt Template ID")).toBeInTheDocument();
+      expect(screen.getByText(/Prompt Template ID/i)).toBeInTheDocument();
       expect(screen.getByDisplayValue("prompt-abc")).toBeInTheDocument();
     });
 
@@ -270,7 +270,8 @@ describe("NodeInspector", () => {
     it("should display helper text for prompt field", () => {
       render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
 
-      expect(screen.getByText("ID of a prompt from the Prompt Library")).toBeInTheDocument();
+      expect(screen.getByText(/Load a prompt from the Prompt Library/i)).toBeInTheDocument();
+      expect(screen.getByText("Prompt Template")).toBeInTheDocument();
     });
   });
 

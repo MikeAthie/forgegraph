@@ -5,10 +5,9 @@ import { useRouter } from "next/router";
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type NodeRunItem, type RunDetail, type ResumeRunInput } from "../../lib/api";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { formatJsonForDisplay } from "../../lib/json";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Separator, Spinner } from "@/components/ui";
+import { showError, showSuccess, showWarning } from "../../lib/toast";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ConfirmButton, Input, Separator, Spinner, Textarea } from "@/components/ui";
 
 const formatDateTime = (isoString: string) => {
   const date = new Date(isoString);
@@ -248,6 +247,7 @@ export default function RunDetailPage() {
   const [approvalFeedback, setApprovalFeedback] = useState("");
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const hasPrefilledApprovalFieldsRef = useRef(false);
 
   const formatNodeLabel = useCallback(
     (nodeRun: NodeRunItem) => {
@@ -335,6 +335,17 @@ export default function RunDetailPage() {
   const resumeRun = useCallback(async (approved: boolean) => {
     if (!runId || !run?.paused_node_id) return;
 
+    const requiredFields = run.pause_payload?.required_fields ?? [];
+    if (approved && requiredFields.length > 0) {
+      const missing = requiredFields.filter((field) => !String(approvalFields[field] ?? "").trim());
+      if (missing.length > 0) {
+        const message = `Missing required field${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`;
+        setError(message);
+        showError("Cannot approve yet", message);
+        return;
+      }
+    }
+
     if (approved) {
       setIsApproving(true);
     } else {
@@ -352,18 +363,76 @@ export default function RunDetailPage() {
         },
       };
       await runsApi.resume(runId, input);
+      if (approved) {
+        showSuccess("Approved", "Run resumed and workflow continues.");
+      } else {
+        showWarning("Rejected", "Run was rejected and will not continue.");
+      }
       // Clear the form
       setApprovalFields({});
       setApprovalFeedback("");
       // Refresh to get updated status
-      await fetchRun();
+      await fetchRun({ silent: true });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, approved ? "Failed to approve run." : "Failed to reject run."));
+      const message = getApiErrorMessage(err, approved ? "Failed to approve run." : "Failed to reject run.");
+      setError(message);
+      showError(approved ? "Approval failed" : "Rejection failed", message);
     } finally {
       setIsApproving(false);
       setIsRejecting(false);
     }
   }, [runId, run, approvalFields, approvalFeedback, fetchRun]);
+
+  const latestSucceededNodeRun = useMemo(() => {
+    if (!run?.node_runs?.length) return null;
+    const candidates = run.node_runs
+      .filter((nodeRun) => (String(nodeRun.status) === "succeeded" || String(nodeRun.status) === "success") && nodeRun.output_json)
+      .filter((nodeRun) => String(nodeRun.node_id) !== String(run.paused_node_id));
+    return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+  }, [run]);
+
+  const latestSucceededNodeOutputText = useMemo(() => {
+    if (!latestSucceededNodeRun?.output_json) return "";
+    return formatJsonForDisplay(latestSucceededNodeRun.output_json);
+  }, [latestSucceededNodeRun]);
+
+  useEffect(() => {
+    if (!run || String(run.status) !== "paused") {
+      hasPrefilledApprovalFieldsRef.current = false;
+      return;
+    }
+
+    // Prefill likely long-form required fields (email draft / JSON review) with the most recent output,
+    // but never overwrite user input and avoid obvious short fields like "ticket".
+    const requiredFields = run.pause_payload?.required_fields ?? [];
+    if (requiredFields.length === 0) return;
+    if (hasPrefilledApprovalFieldsRef.current) return;
+
+    const shouldPrefill = (field: string) => /\b(draft|email|body|message|json|data|content|output)\b/i.test(field);
+    const next: Record<string, string> = { ...approvalFields };
+    let changed = false;
+
+    for (const field of requiredFields) {
+      if (!shouldPrefill(field)) continue;
+      if (String(next[field] ?? "").trim()) continue;
+      if (!latestSucceededNodeOutputText) continue;
+      next[field] = latestSucceededNodeOutputText;
+      changed = true;
+    }
+
+    if (changed) {
+      setApprovalFields(next);
+      hasPrefilledApprovalFieldsRef.current = true;
+    }
+  }, [run, approvalFields, latestSucceededNodeOutputText]);
+
+  useEffect(() => {
+    if (!run || String(run.status) !== "paused") return;
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#approval") return;
+    const el = document.getElementById("approval");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [run]);
 
   useEffect(() => {
     if (!runId) return;
@@ -734,11 +803,16 @@ export default function RunDetailPage() {
 
               {/* Human Gate Approval UI */}
               {String(run.status) === "paused" && run.paused_node_id && (
-                <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-sm">
+                <Card id="approval" className="border-amber-500/30 bg-amber-500/5 backdrop-blur-sm">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                      <StatusIcon status="paused" />
-                      Waiting for Approval
+                    <CardTitle className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                        <StatusIcon status="paused" />
+                        <span>Waiting for Approval</span>
+                      </div>
+                      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+                        Action required
+                      </Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -754,21 +828,48 @@ export default function RunDetailPage() {
                       Paused at node: <span className="font-mono">{run.pause_payload?.node_name ?? run.paused_node_id}</span>
                     </div>
 
+                    {/* Context */}
+                    {latestSucceededNodeRun && latestSucceededNodeOutputText && (
+                      <details className="rounded-lg border border-border/50 bg-background/50 p-3">
+                        <summary className="cursor-pointer select-none text-sm font-medium text-foreground">
+                          Show context (latest node output)
+                        </summary>
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">
+                            From: <span className="font-mono">{formatNodeLabel(latestSucceededNodeRun)}</span>
+                          </p>
+                          <pre className="p-3 bg-muted rounded-md border border-border/50 overflow-auto max-h-[30vh] text-xs font-mono whitespace-pre-wrap">
+                            {latestSucceededNodeOutputText}
+                          </pre>
+                        </div>
+                      </details>
+                    )}
+
                     {/* Required fields */}
                     {run.pause_payload?.required_fields && run.pause_payload.required_fields.length > 0 && (
                       <div className="space-y-3">
-                        <p className="text-sm font-medium">Required fields:</p>
+                        <p className="text-sm font-medium">Required fields</p>
                         {run.pause_payload.required_fields.map((field) => (
                           <div key={field}>
                             <label className="block text-xs font-medium text-muted-foreground mb-1">
                               {field}
                             </label>
-                            <Input
-                              value={approvalFields[field] ?? ""}
-                              onChange={(e) => setApprovalFields((prev) => ({ ...prev, [field]: e.target.value }))}
-                              placeholder={`Enter ${field}...`}
-                              className="text-sm"
-                            />
+                            {/\b(draft|email|body|message|json|data|content|output)\b/i.test(field) ? (
+                              <Textarea
+                                value={approvalFields[field] ?? ""}
+                                onChange={(e) => setApprovalFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                                placeholder={`Enter ${field}...`}
+                                rows={5}
+                                className="text-sm"
+                              />
+                            ) : (
+                              <Input
+                                value={approvalFields[field] ?? ""}
+                                onChange={(e) => setApprovalFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                                placeholder={`Enter ${field}...`}
+                                className="text-sm"
+                              />
+                            )}
                           </div>
                         ))}
                       </div>
@@ -794,6 +895,7 @@ export default function RunDetailPage() {
                         onClick={() => void resumeRun(true)}
                         disabled={isApproving || isRejecting}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        aria-label="Approve"
                       >
                         {isApproving ? (
                           <>
@@ -804,9 +906,12 @@ export default function RunDetailPage() {
                           "Approve"
                         )}
                       </Button>
-                      <Button
+                      <ConfirmButton
                         variant="destructive"
-                        onClick={() => void resumeRun(false)}
+                        title="Reject this approval?"
+                        description="Rejecting will stop the workflow and mark the run as failed."
+                        confirmText="Reject & Fail Run"
+                        onConfirm={() => resumeRun(false)}
                         disabled={isApproving || isRejecting}
                       >
                         {isRejecting ? (
@@ -817,7 +922,7 @@ export default function RunDetailPage() {
                         ) : (
                           "Reject"
                         )}
-                      </Button>
+                      </ConfirmButton>
                     </div>
                   </CardContent>
                 </Card>

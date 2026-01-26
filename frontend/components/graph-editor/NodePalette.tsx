@@ -77,7 +77,8 @@ export function NodePalette({
       type: nodeType.type,
       label: nodeType.label,
       description: nodeType.description,
-      enabled: nodeType.enabled,
+      // Human Gate is implemented; keep it enabled even if a stale config marks it otherwise.
+      enabled: nodeType.type === "human_gate" ? true : nodeType.enabled,
       category: NODE_CATEGORIES[nodeType.type] ?? "Other",
     }));
 
