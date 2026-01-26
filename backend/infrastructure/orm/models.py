@@ -356,3 +356,46 @@ class ApprovalTask(models.Model):
 
     def __str__(self):
         return f"ApprovalTask {self.id} - {self.status}"
+
+
+class APIKey(models.Model):
+    """APIKey model for storing encrypted user API keys for LLM providers."""
+
+    PROVIDER_CHOICES = [
+        ("openai", "OpenAI"),
+        ("anthropic", "Anthropic"),
+        ("google", "Google AI"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="api_keys",
+    )
+    provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES)
+    name = models.CharField(max_length=100, help_text="User-friendly name for this key")
+    encrypted_key = models.BinaryField(help_text="Fernet-encrypted API key")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "api_keys"
+        ordering = ["-created_at"]
+        unique_together = [["user", "provider", "name"]]
+        indexes = [
+            models.Index(fields=["user", "provider"], name="api_keys_user_provider_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.provider} - {self.name} ({self.user.email})"
+
+    @property
+    def key_hint(self) -> str:
+        """Return last 4 characters of the decrypted key for display."""
+        from infrastructure.crypto.encryption import decrypt_api_key
+
+        try:
+            decrypted = decrypt_api_key(self.encrypted_key)
+            return f"****{decrypted[-4:]}" if len(decrypted) >= 4 else "****"
+        except Exception:
+            return "****"

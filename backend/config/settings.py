@@ -240,3 +240,7 @@ ENGINE_CALLBACK_URL = os.environ.get(
     "ENGINE_CALLBACK_URL",
     f"http://localhost:8000/api/runs/{{run_id}}/events/",
 )
+
+# Encryption Configuration
+# Generate key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")
