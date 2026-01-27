@@ -28,6 +28,7 @@ type mockPauseState struct {
 	pausedNodeID   string
 	stateSnapshot  map[string]any
 	completedNodes []string
+	skippedNodes   []string
 	graphJSON      string
 }
 
@@ -107,26 +108,27 @@ func (r *mockRepository) SetRunEnded(ctx context.Context, runID, status string, 
 	return nil
 }
 
-func (r *mockRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string) error {
+func (r *mockRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pauses[runID] = mockPauseState{
 		pausedNodeID:   pausedNodeID,
 		stateSnapshot:  stateSnapshot,
 		completedNodes: completedNodes,
+		skippedNodes:   skippedNodes,
 		graphJSON:      graphJSON,
 	}
 	return nil
 }
 
-func (r *mockRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string, err error) {
+func (r *mockRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	pause, ok := r.pauses[runID]
 	if !ok {
-		return "", nil, nil, "", fmt.Errorf("pause state not found")
+		return "", nil, nil, nil, "", fmt.Errorf("pause state not found")
 	}
-	return pause.pausedNodeID, pause.stateSnapshot, pause.completedNodes, pause.graphJSON, nil
+	return pause.pausedNodeID, pause.stateSnapshot, pause.completedNodes, pause.skippedNodes, pause.graphJSON, nil
 }
 
 func (r *mockRepository) ClearPauseState(ctx context.Context, runID string) error {
@@ -1134,7 +1136,7 @@ func TestScheduler_PauseStopsScheduling(t *testing.T) {
 		t.Error("Expected run_paused event")
 	}
 
-	pausedNodeID, snapshot, completedNodes, graphJSONLoaded, loadErr := repo.LoadPauseState(context.Background(), "run-paused")
+	pausedNodeID, snapshot, completedNodes, skippedNodes, graphJSONLoaded, loadErr := repo.LoadPauseState(context.Background(), "run-paused")
 	if loadErr != nil {
 		t.Fatalf("Expected pause state to be saved, got error: %v", loadErr)
 	}
@@ -1149,6 +1151,83 @@ func TestScheduler_PauseStopsScheduling(t *testing.T) {
 	}
 	if len(completedNodes) == 0 {
 		t.Error("Expected at least one completed node (start) recorded")
+	}
+	if skippedNodes == nil {
+		t.Error("Expected skipped nodes slice to be non-nil")
+	}
+}
+
+func TestScheduler_ResumeRestoresSkippedBranches(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "branch", Type: "branch", Name: "Branch", Config: map[string]any{}},
+		{ID: "truePath", Type: "transform", Name: "True Path", Config: map[string]any{}},
+		{ID: "falsePath", Type: "transform", Name: "False Path", Config: map[string]any{}},
+		{ID: "gate", Type: "human_gate", Name: "Gate", Config: map[string]any{}},
+		{ID: "merge", Type: "merge", Name: "Merge", Config: map[string]any{}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "branch", To: "truePath"},
+		{From: "branch", To: "falsePath"},
+		{From: "truePath", To: "gate"},
+		{From: "falsePath", To: "merge"},
+		{From: "gate", To: "merge"},
+		{From: "merge", To: "output"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	branchExec := newMockExecutor("branch", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewBranchResult(map[string]any{"next_nodes": []string{"truePath"}}, []string{"truePath"}), nil
+	})
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": node.ID}), nil
+	})
+	humanGateExec := newMockExecutor("human_gate", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewPauseResult(map[string]any{"prompt_message": "Approve?"}), nil
+	})
+	mergeExec := newMockExecutor("merge", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"merged": true}), nil
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(branchExec, transformExec, humanGateExec, mergeExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	runID := "run-resume-skip"
+	if err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunInactive(t, scheduler, runID, 5*time.Second)
+	if repo.getRunStatus(runID) != string(value.RunStatusPaused) {
+		t.Fatalf("Expected run status paused, got %s", repo.getRunStatus(runID))
+	}
+	if transformExec.getNodeExecuteCount("falsePath") != 0 {
+		t.Errorf("Expected falsePath to be skipped, got %d", transformExec.getNodeExecuteCount("falsePath"))
+	}
+
+	if err := scheduler.ResumeRun(context.Background(), runID, "gate", `{"approved": true}`); err != nil {
+		t.Fatalf("ResumeRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, runID, 5*time.Second)
+
+	if mergeExec.getNodeExecuteCount("merge") != 1 {
+		t.Errorf("Expected merge to execute once, got %d", mergeExec.getNodeExecuteCount("merge"))
+	}
+	if outputExec.getNodeExecuteCount("output") != 1 {
+		t.Errorf("Expected output to execute once, got %d", outputExec.getNodeExecuteCount("output"))
+	}
+	if repo.getRunStatus(runID) != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus(runID))
 	}
 }
 

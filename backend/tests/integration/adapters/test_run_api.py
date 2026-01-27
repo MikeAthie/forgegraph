@@ -226,6 +226,31 @@ class TestRunStart:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data["error"]["code"] == "NOT_FOUND"
 
+    def test_start_run_rejects_invalid_input_schema(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Schema Graph")
+        graph_json = {
+            "nodes": [],
+            "edges": [],
+            "metadata": {
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"],
+                    "additionalProperties": False,
+                }
+            },
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"name": 123}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_INPUT_SCHEMA"
+
 
 class TestRunInvoke:
     """Tests for POST /api/runs/invoke"""
@@ -479,6 +504,38 @@ class TestRunEvents:
         # Idempotent: second identical event should not create a duplicate task
         authenticated_client.post(f"/api/runs/{run.id}/events", payload, format="json")
         assert ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count() == 1
+
+    def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Schema Graph")
+        graph_json = {
+            "nodes": [],
+            "edges": [],
+            "metadata": {
+                "schema_mode": "strict",
+                "output_schema": {
+                    "type": "object",
+                    "properties": {"value": {"type": "number"}},
+                    "required": ["value"],
+                    "additionalProperties": False,
+                },
+            },
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        payload = {
+            "event_type": "run.updated",
+            "run": {"status": "succeeded", "output_json": {"value": "nope"}},
+        }
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/events", payload, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "failed"
+        assert "Output schema validation failed" in run.error_message
 
 
 class TestRunResume:

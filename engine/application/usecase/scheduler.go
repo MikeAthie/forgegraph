@@ -401,13 +401,17 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		// Save state snapshot for durable resume
 		stateSnapshot := rc.state.Snapshot()
 		completedNodes := make([]string, 0, len(rc.completed))
+		skippedNodes := make([]string, 0, len(rc.skipped))
 		rc.pendingMu.Lock()
 		for id := range rc.completed {
 			completedNodes = append(completedNodes, id)
 		}
+		for id := range rc.skipped {
+			skippedNodes = append(skippedNodes, id)
+		}
 		rc.pendingMu.Unlock()
 
-		s.repository.SavePauseState(context.Background(), rc.runID, nodeID, stateSnapshot, completedNodes, rc.graphJSON)
+		s.repository.SavePauseState(context.Background(), rc.runID, nodeID, stateSnapshot, completedNodes, skippedNodes, rc.graphJSON)
 		s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
 
 		// Emit pause event with the pause payload
@@ -942,7 +946,7 @@ func (s *Scheduler) CancelRun(runID string) error {
 // ResumeRun resumes a paused run after human gate approval/rejection
 func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string) error {
 	// Load pause state
-	pausedNodeID, stateSnapshot, completedNodes, graphJSON, err := s.repository.LoadPauseState(ctx, runID)
+	pausedNodeID, stateSnapshot, completedNodes, skippedNodes, graphJSON, err := s.repository.LoadPauseState(ctx, runID)
 	if err != nil {
 		return fmt.Errorf("failed to load pause state: %w", err)
 	}
@@ -1046,8 +1050,16 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	for _, completedID := range completedNodes {
 		rc.completed[completedID] = true
 	}
+	// Mark skipped nodes from paused state
+	for _, skippedID := range skippedNodes {
+		rc.skipped[skippedID] = true
+	}
 	// Also mark the human gate node as completed
 	rc.completed[nodeID] = true
+
+	// Rebuild pending counts based on completed/skipped nodes
+	s.applyCheckpointToPending(rc)
+	rc.initialNodes = s.computeReadyNodes(rc)
 
 	// Store active run
 	s.activeRuns.Store(runID, rc)
@@ -1059,14 +1071,14 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	// Emit run resumed event
 	s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunResumed, runID))
 
-	// Start execution in background - resume from the human gate node's successors
-	go s.executeResumedRun(rc, nodeID)
+	// Start execution in background from all ready nodes
+	go s.executeResumedRun(rc, rc.initialNodes)
 
 	return nil
 }
 
 // executeResumedRun continues execution from a resumed run
-func (s *Scheduler) executeResumedRun(rc *runContext, resumedNodeID string) {
+func (s *Scheduler) executeResumedRun(rc *runContext, startNodes []string) {
 	defer func() {
 		// Cleanup
 		s.activeRuns.Delete(rc.runID)
@@ -1079,26 +1091,10 @@ func (s *Scheduler) executeResumedRun(rc *runContext, resumedNodeID string) {
 		go s.worker(rc)
 	}
 
-	// Get the node we resumed from
-	resumedNode := rc.plan.GetNode(resumedNodeID)
-	if resumedNode == nil {
-		log.Printf("Resumed node %s not found in plan", resumedNodeID)
-		return
-	}
-
-	// Enqueue downstream nodes of the resumed human gate
-	for _, edge := range rc.plan.GetOutgoingEdges(resumedNodeID) {
+	// Enqueue ready nodes captured at resume time
+	for _, nodeID := range startNodes {
 		rc.wg.Add(1)
-		// Decrement pending count for downstream nodes
-		rc.pendingMu.Lock()
-		rc.pending[edge.To]--
-		if rc.pending[edge.To] == 0 {
-			rc.pendingMu.Unlock()
-			rc.workChan <- edge.To
-		} else {
-			rc.pendingMu.Unlock()
-			rc.wg.Done() // Not ready yet
-		}
+		rc.workChan <- nodeID
 	}
 
 	// Wait for all work to complete

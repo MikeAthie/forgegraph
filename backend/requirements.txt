@@ -19,6 +19,9 @@ gunicorn==21.2.0
 # API Documentation
 drf-spectacular==0.27.1
 
+# Schema Validation
+jsonschema==4.26.0
+
 # gRPC
 grpcio==1.60.0
 grpcio-tools==1.60.0

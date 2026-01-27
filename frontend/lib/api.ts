@@ -96,6 +96,7 @@ const API_PATHS = {
     list: "/api/runs/",
     detail: (runId: string) => `/api/runs/${runId}`,
     start: "/api/runs/start",
+    invoke: "/api/runs/invoke",
     cancel: (runId: string) => `/api/runs/${runId}/cancel`,
     resume: (runId: string) => `/api/runs/${runId}/resume`,
   },
@@ -494,6 +495,7 @@ export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "sk
 
 export interface RunListItem {
   id: string;
+  thread_id?: string | null;
   graph_id: string;
   graph_name: string;
   graph_version_id: string;
@@ -521,6 +523,7 @@ export interface NodeRunItem {
 export interface RunDetail {
   id: string;
   owner_id: string;
+  thread_id?: string | null;
   graph_id: string;
   graph_name: string;
   graph_version_id: string;
@@ -570,6 +573,11 @@ export interface ResumeRunInput {
   };
 }
 
+export interface InvokeRunInput {
+  thread_id: string;
+  input_json?: Record<string, unknown>;
+}
+
 export const runsApi = {
   list: async (): Promise<RunListItem[]> => {
     const response = await api.get<ApiSuccessResponse<RunListItem[]>>(API_PATHS.runs.list);
@@ -583,6 +591,11 @@ export const runsApi = {
 
   start: async (input: { graph_version_id: string; input_json?: Record<string, unknown> }): Promise<RunDetail> => {
     const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.start, input);
+    return response.data.data;
+  },
+
+  invoke: async (input: InvokeRunInput): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.invoke, input);
     return response.data.data;
   },
 

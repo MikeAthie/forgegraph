@@ -16,6 +16,7 @@ type pauseState struct {
 	pausedNodeID   string
 	stateSnapshot  map[string]any
 	completedNodes []string
+	skippedNodes   []string
 	graphJSON      string
 }
 
@@ -233,7 +234,7 @@ func (r *MemoryRunRepository) Clear() {
 }
 
 // SavePauseState saves the execution state when a run is paused at a human gate
-func (r *MemoryRunRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string) error {
+func (r *MemoryRunRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -245,6 +246,7 @@ func (r *MemoryRunRepository) SavePauseState(ctx context.Context, runID, pausedN
 		pausedNodeID:   pausedNodeID,
 		stateSnapshot:  stateSnapshot,
 		completedNodes: completedNodes,
+		skippedNodes:   skippedNodes,
 		graphJSON:      graphJSON,
 	}
 
@@ -252,20 +254,20 @@ func (r *MemoryRunRepository) SavePauseState(ctx context.Context, runID, pausedN
 }
 
 // LoadPauseState retrieves the saved pause state for resuming a run
-func (r *MemoryRunRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, graphJSON string, err error) {
+func (r *MemoryRunRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	if _, ok := r.runs[runID]; !ok {
-		return "", nil, nil, "", domain.ErrRunNotFound
+		return "", nil, nil, nil, "", domain.ErrRunNotFound
 	}
 
 	ps, ok := r.pauseStates[runID]
 	if !ok || ps.pausedNodeID == "" {
-		return "", nil, nil, "", fmt.Errorf("run is not paused")
+		return "", nil, nil, nil, "", fmt.Errorf("run is not paused")
 	}
 
-	return ps.pausedNodeID, ps.stateSnapshot, ps.completedNodes, ps.graphJSON, nil
+	return ps.pausedNodeID, ps.stateSnapshot, ps.completedNodes, ps.skippedNodes, ps.graphJSON, nil
 }
 
 // ClearPauseState removes the pause state after a run is resumed

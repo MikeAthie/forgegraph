@@ -33,6 +33,11 @@ from adapters.api.runs.serializers import (
     RunResumeSerializer,
     RunStartSerializer,
 )
+from application.services.schema_validation import (
+    SchemaError,
+    extract_schema_metadata,
+    validate_json_schema,
+)
 from adapters.gateways.grpc_engine_client import (
     EngineConnectionError,
     EngineExecutionError,
@@ -277,6 +282,26 @@ class RunStartView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        input_schema, _, _ = extract_schema_metadata(graph_version.graph_json)
+        if input_schema:
+            try:
+                schema_errors = validate_json_schema(input_json, input_schema)
+            except SchemaError as exc:
+                return error_response(
+                    code="INVALID_SCHEMA",
+                    message="Input schema is invalid.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                    details=[{"message": str(exc)}],
+                )
+
+            if schema_errors:
+                return error_response(
+                    code="INVALID_INPUT_SCHEMA",
+                    message="Input does not match the required schema.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                    details=schema_errors,
+                )
+
         run = Run.objects.create(
             owner=request.user,
             graph_version=graph_version,
@@ -432,6 +457,26 @@ class RunInvokeView(APIView):
         graph_version = latest_run.graph_version
         graph_json = strip_sentinel_edges(graph_version.graph_json)
         checkpoint_graph_json = pyjson.dumps(graph_json)
+
+        input_schema, _, _ = extract_schema_metadata(graph_version.graph_json)
+        if input_schema:
+            try:
+                schema_errors = validate_json_schema(input_json, input_schema)
+            except SchemaError as exc:
+                return error_response(
+                    code="INVALID_SCHEMA",
+                    message="Input schema is invalid.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                    details=[{"message": str(exc)}],
+                )
+
+            if schema_errors:
+                return error_response(
+                    code="INVALID_INPUT_SCHEMA",
+                    message="Input does not match the required schema.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                    details=schema_errors,
+                )
 
         seed_state = checkpoint.state_json if isinstance(checkpoint.state_json, dict) else {}
         seed_state = dict(seed_state)
@@ -778,6 +823,39 @@ class RunEventsView(APIView):
                             },
                         },
                     )
+
+            output_schema = None
+            schema_mode = "warn"
+            try:
+                _, output_schema, schema_mode = extract_schema_metadata(
+                    run.graph_version.graph_json
+                )
+            except Exception:
+                output_schema = None
+
+            schema_errors: list[dict] | None = None
+            if output_schema and payload.get("status") == "succeeded" and "output_json" in payload:
+                try:
+                    schema_errors = validate_json_schema(payload.get("output_json"), output_schema)
+                except SchemaError as exc:
+                    logger.warning("Invalid output schema for run %s: %s", run.id, exc)
+
+            if schema_errors:
+                try:
+                    RunEvent.objects.create(
+                        run=run,
+                        event_type="run.schema_validation",
+                        payload={"errors": schema_errors, "mode": schema_mode},
+                    )
+                except Exception as exc:  # pragma: no cover - log and continue
+                    logger.warning("Failed to persist schema validation event: %s", exc)
+
+                if schema_mode == "strict":
+                    run.status = "failed"
+                    run.error_message = f"Output schema validation failed: {schema_errors[0]['message']}"
+                    run.save(update_fields=["status", "error_message"])
+                    payload["status"] = run.status
+                    payload["error_message"] = run.error_message
 
             try:
                 RunEvent.objects.create(
