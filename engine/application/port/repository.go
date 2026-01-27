@@ -39,6 +39,25 @@ type RunRepository interface {
 	// ClearPauseState removes the pause state after a run is resumed
 	ClearPauseState(ctx context.Context, runID string) error
 
+	// Checkpoint operations (durable execution)
+
+	// SaveCheckpoint persists the latest execution state for durable resume
+	SaveCheckpoint(ctx context.Context, runID, nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error
+
+	// LoadLatestCheckpoint retrieves the most recent checkpoint for a run
+	LoadLatestCheckpoint(ctx context.Context, runID string) (nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error)
+
+	// ClearCheckpoints removes all checkpoints for a run
+	ClearCheckpoints(ctx context.Context, runID string) error
+
+	// Node cache operations
+
+	// GetCachedNodeResult retrieves a cached node output by key if not expired
+	GetCachedNodeResult(ctx context.Context, cacheKey string) (output any, found bool, err error)
+
+	// SaveCachedNodeResult stores a cached node output with TTL seconds
+	SaveCachedNodeResult(ctx context.Context, cacheKey string, output any, ttlSeconds int) error
+
 	// NodeRun operations
 
 	// CreateNodeRun creates a new node run record

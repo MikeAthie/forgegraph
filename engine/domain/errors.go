@@ -26,6 +26,7 @@ var (
 	ErrRunNotPaused     = errors.New("run is not paused")
 	ErrNodeNotFound     = errors.New("node not found")
 	ErrExecutorNotFound = errors.New("no executor registered for node type")
+	ErrCheckpointNotFound = errors.New("checkpoint not found")
 )
 
 // Node execution errors

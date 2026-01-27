@@ -20,6 +20,8 @@ type mockRepository struct {
 	runs     map[string]*entity.Run
 	nodeRuns map[string]*entity.NodeRun
 	pauses   map[string]mockPauseState
+	checkpoints map[string]mockCheckpointState
+	cache   map[string]mockCacheEntry
 }
 
 type mockPauseState struct {
@@ -29,11 +31,27 @@ type mockPauseState struct {
 	graphJSON      string
 }
 
+type mockCheckpointState struct {
+	nodeID         string
+	stepIndex      int
+	stateSnapshot  map[string]any
+	completedNodes []string
+	skippedNodes   []string
+	graphJSON      string
+}
+
+type mockCacheEntry struct {
+	output    any
+	expiresAt time.Time
+}
+
 func newMockRepository() *mockRepository {
 	return &mockRepository{
 		runs:     make(map[string]*entity.Run),
 		nodeRuns: make(map[string]*entity.NodeRun),
 		pauses:   make(map[string]mockPauseState),
+		checkpoints: make(map[string]mockCheckpointState),
+		cache:    make(map[string]mockCacheEntry),
 	}
 }
 
@@ -115,6 +133,64 @@ func (r *mockRepository) ClearPauseState(ctx context.Context, runID string) erro
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.pauses, runID)
+	return nil
+}
+
+func (r *mockRepository) SaveCheckpoint(ctx context.Context, runID, nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.checkpoints[runID] = mockCheckpointState{
+		nodeID:         nodeID,
+		stepIndex:      stepIndex,
+		stateSnapshot:  stateSnapshot,
+		completedNodes: append([]string(nil), completedNodes...),
+		skippedNodes:   append([]string(nil), skippedNodes...),
+		graphJSON:      graphJSON,
+	}
+	return nil
+}
+
+func (r *mockRepository) LoadLatestCheckpoint(ctx context.Context, runID string) (nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	checkpoint, ok := r.checkpoints[runID]
+	if !ok {
+		return "", 0, nil, nil, nil, "", domain.ErrCheckpointNotFound
+	}
+	return checkpoint.nodeID, checkpoint.stepIndex, checkpoint.stateSnapshot, append([]string(nil), checkpoint.completedNodes...), append([]string(nil), checkpoint.skippedNodes...), checkpoint.graphJSON, nil
+}
+
+func (r *mockRepository) ClearCheckpoints(ctx context.Context, runID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.checkpoints, runID)
+	return nil
+}
+
+func (r *mockRepository) GetCachedNodeResult(ctx context.Context, cacheKey string) (output any, found bool, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.cache[cacheKey]
+	if !ok {
+		return nil, false, nil
+	}
+	if time.Now().After(entry.expiresAt) {
+		delete(r.cache, cacheKey)
+		return nil, false, nil
+	}
+	return entry.output, true, nil
+}
+
+func (r *mockRepository) SaveCachedNodeResult(ctx context.Context, cacheKey string, output any, ttlSeconds int) error {
+	if ttlSeconds <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cache[cacheKey] = mockCacheEntry{
+		output:    output,
+		expiresAt: time.Now().Add(time.Duration(ttlSeconds) * time.Second),
+	}
 	return nil
 }
 
@@ -849,6 +925,162 @@ func TestScheduler_BranchSkipDoesNotBlockMerge(t *testing.T) {
 
 	if !emitter.hasEventType(port.EventTypeNodeSkipped) {
 		t.Error("Expected node_skipped event")
+	}
+}
+
+func TestScheduler_DynamicNextNodesFromOutput(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "start", Type: "transform", Name: "Start", Config: map[string]any{}},
+		{ID: "branch", Type: "transform", Name: "Branch", Config: map[string]any{}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "start", To: "branch"},
+		{From: "start", To: "output"},
+		{From: "branch", To: "output"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		if node.ID == "start" {
+			return &port.NodeExecutionResult{
+				Output: map[string]any{
+					"next_nodes": []string{"output"},
+				},
+			}, nil
+		}
+		return &port.NodeExecutionResult{Output: map[string]any{"ran": node.ID}}, nil
+	})
+
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"ok": true}}, nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), "run-dynamic-next", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-dynamic-next", 5*time.Second)
+
+	if transformExec.getNodeExecuteCount("start") != 1 {
+		t.Errorf("Expected start to execute once, got %d", transformExec.getNodeExecuteCount("start"))
+	}
+	if transformExec.getNodeExecuteCount("branch") != 0 {
+		t.Errorf("Expected branch to be skipped, got %d", transformExec.getNodeExecuteCount("branch"))
+	}
+	if outputExec.getNodeExecuteCount("output") != 1 {
+		t.Errorf("Expected output to execute once, got %d", outputExec.getNodeExecuteCount("output"))
+	}
+}
+
+func TestScheduler_ResumeFromCheckpoint(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "step1", Type: "transform", Name: "Step 1", Config: map[string]any{}},
+		{ID: "step2", Type: "transform", Name: "Step 2", Config: map[string]any{}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "step1", To: "step2"},
+		{From: "step2", To: "output"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"node": node.ID}}, nil
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"ok": true}}, nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	runID := "run-checkpoint-resume"
+	_ = repo.SaveCheckpoint(context.Background(), runID, "step1", 1, map[string]any{"node.step1.output": "done"}, []string{"step1"}, []string{}, graphJSON)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, runID, 5*time.Second)
+
+	if transformExec.getNodeExecuteCount("step1") != 0 {
+		t.Errorf("Expected step1 to be skipped due to checkpoint, got %d", transformExec.getNodeExecuteCount("step1"))
+	}
+	if transformExec.getNodeExecuteCount("step2") != 1 {
+		t.Errorf("Expected step2 to execute once, got %d", transformExec.getNodeExecuteCount("step2"))
+	}
+	if outputExec.getNodeExecuteCount("output") != 1 {
+		t.Errorf("Expected output to execute once, got %d", outputExec.getNodeExecuteCount("output"))
+	}
+
+	if !emitter.hasEventType(port.EventTypeRunResumed) {
+		t.Error("Expected run_resumed event on checkpoint resume")
+	}
+}
+
+func TestScheduler_NodeCacheTTL(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "cached", Type: "transform", Name: "Cached", Config: map[string]any{
+			"cache": map[string]any{
+				"enabled":     true,
+				"ttl_seconds": 60,
+			},
+		}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "cached", To: "output"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"value": "cached"}}, nil
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"ok": true}}, nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), "run-cache-1", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+	waitForRunCompletion(t, scheduler, repo, "run-cache-1", 5*time.Second)
+
+	err = scheduler.StartRun(context.Background(), "run-cache-2", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+	waitForRunCompletion(t, scheduler, repo, "run-cache-2", 5*time.Second)
+
+	if transformExec.getExecuteCount() != 1 {
+		t.Errorf("Expected cached transform to execute once, got %d", transformExec.getExecuteCount())
 	}
 }
 

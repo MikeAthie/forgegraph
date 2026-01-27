@@ -4,22 +4,31 @@ Runs API views.
 Clean Architecture: Interface Adapters layer.
 """
 
+import asyncio
 import logging
+import json as pyjson
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Case, IntegerField, Prefetch, When
+from django.http import StreamingHttpResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import AccessToken
 
 from adapters.api.responses import error_response, success_response
 from adapters.api.runs.serializers import (
     RunDetailWithNodeRunsSerializer,
     RunEventSerializer,
+    RunInvokeSerializer,
     RunListSerializer,
     RunResumeSerializer,
     RunStartSerializer,
@@ -30,7 +39,14 @@ from adapters.gateways.grpc_engine_client import (
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
-from infrastructure.orm.models import ApprovalTask, GraphVersion, NodeRun, Run
+from infrastructure.orm.models import (
+    ApprovalTask,
+    GraphVersion,
+    NodeRun,
+    Run,
+    RunCheckpoint,
+    RunEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +146,7 @@ class RunListView(APIView):
             result.append(
                 {
                     "id": run.id,
+                    "thread_id": run.thread_id,
                     "graph_id": graph.id,
                     "graph_name": graph.name,
                     "graph_version_id": graph_version.id,
@@ -190,6 +207,7 @@ class RunDetailView(APIView):
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "thread_id": run.thread_id,
             "graph_id": graph.id,
             "graph_name": graph.name,
             "graph_version_id": graph_version.id,
@@ -246,6 +264,7 @@ class RunStartView(APIView):
 
         graph_version_id = serializer.validated_data["graph_version_id"]
         input_json = serializer.validated_data.get("input_json") or {}
+        thread_id = serializer.validated_data.get("thread_id")
 
         try:
             graph_version = GraphVersion.objects.select_related("graph").get(
@@ -261,6 +280,7 @@ class RunStartView(APIView):
         run = Run.objects.create(
             owner=request.user,
             graph_version=graph_version,
+            thread_id=thread_id,
             status="pending",
             started_at=timezone.now(),
             ended_at=None,
@@ -313,6 +333,178 @@ class RunStartView(APIView):
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "thread_id": run.thread_id,
+            "graph_id": graph_version.graph_id,
+            "graph_name": graph_version.graph.name,
+            "graph_version_id": graph_version.id,
+            "graph_version": graph_version.version,
+            "status": run.status,
+            "started_at": run.started_at,
+            "ended_at": run.ended_at,
+            "input_json": run.input_json,
+            "output_json": run.output_json,
+            "error_message": run.error_message,
+            "duration_ms": run.duration_ms,
+            "node_runs": [],
+        }
+
+        serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+        return success_response(serialized_data, status=status.HTTP_201_CREATED)
+
+
+class RunInvokeView(APIView):
+    """Invoke a threaded run using persisted state."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = RunInvokeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        thread_id = serializer.validated_data["thread_id"]
+        input_json = serializer.validated_data.get("input_json") or {}
+
+        if input_json and not isinstance(input_json, dict):
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="input_json must be a JSON object",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        active_run = (
+            Run.objects.filter(
+                owner=request.user,
+                thread_id=thread_id,
+                status__in=["pending", "running", "paused"],
+            )
+            .order_by("-started_at")
+            .first()
+        )
+        if active_run:
+            return error_response(
+                code="INVALID_STATE",
+                message=f"Thread '{thread_id}' has an active run ({active_run.id}).",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        latest_run = (
+            Run.objects.filter(owner=request.user, thread_id=thread_id)
+            .select_related("graph_version__graph")
+            .order_by(
+                Case(
+                    When(started_at__isnull=True, then=1),
+                    default=0,
+                    output_field=IntegerField(),
+                ),
+                "-started_at",
+            )
+            .first()
+        )
+
+        if latest_run is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Thread with id '{thread_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            checkpoint = latest_run.checkpoint
+        except RunCheckpoint.DoesNotExist:
+            checkpoint = None
+
+        if checkpoint is None:
+            return error_response(
+                code="NO_CHECKPOINT",
+                message="No persisted state found for this thread.",
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        graph_version = latest_run.graph_version
+        graph_json = strip_sentinel_edges(graph_version.graph_json)
+        checkpoint_graph_json = pyjson.dumps(graph_json)
+
+        seed_state = checkpoint.state_json if isinstance(checkpoint.state_json, dict) else {}
+        seed_state = dict(seed_state)
+        for key, value in input_json.items():
+            seed_state[f"input.{key}"] = value
+
+        with transaction.atomic():
+            run = Run.objects.create(
+                owner=request.user,
+                graph_version=graph_version,
+                thread_id=thread_id,
+                status="pending",
+                started_at=timezone.now(),
+                ended_at=None,
+                input_json=input_json,
+                output_json=None,
+                error_message="",
+            )
+
+            RunCheckpoint.objects.create(
+                run=run,
+                node_id="seed",
+                step_index=0,
+                state_json=seed_state,
+                completed_nodes=[],
+                skipped_nodes=[],
+                graph_json=checkpoint_graph_json,
+            )
+
+        broadcast_run_updated(run)
+
+        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        try:
+            with get_engine_client(callback_url) as engine:
+                engine.start_run(
+                    run_id=run.id,
+                    graph_json=graph_json,
+                    input_json=input_json,
+                )
+                run.status = "running"
+                run.save(update_fields=["status"])
+                broadcast_run_updated(run)
+
+        except EngineConnectionError as e:
+            logger.error(f"Engine connection failed for run {run.id}: {e}")
+            run.status = "failed"
+            run.ended_at = timezone.now()
+            run.error_message = f"Engine connection failed: {e}"
+            run.save(update_fields=["status", "ended_at", "error_message"])
+            broadcast_run_updated(run)
+            return error_response(
+                code="ENGINE_UNAVAILABLE",
+                message="The execution engine is not available. Please try again later.",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except EngineExecutionError as e:
+            logger.error(f"Engine rejected run {run.id}: {e}")
+            run.status = "failed"
+            run.ended_at = timezone.now()
+            run.error_message = f"Engine rejected run: {e}"
+            run.save(update_fields=["status", "ended_at", "error_message"])
+            broadcast_run_updated(run)
+            return error_response(
+                code="ENGINE_ERROR",
+                message=str(e),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        run_data = {
+            "id": run.id,
+            "owner_id": run.owner_id,
+            "thread_id": run.thread_id,
             "graph_id": graph_version.graph_id,
             "graph_name": graph_version.graph.name,
             "graph_version_id": graph_version.id,
@@ -398,6 +590,7 @@ class RunCancelView(APIView):
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "thread_id": run.thread_id,
             "graph_id": graph.id,
             "graph_name": graph.name,
             "graph_version_id": graph_version.id,
@@ -586,6 +779,15 @@ class RunEventsView(APIView):
                         },
                     )
 
+            try:
+                RunEvent.objects.create(
+                    run=run,
+                    event_type=event_type,
+                    payload=payload,
+                )
+            except Exception as exc:  # pragma: no cover - log and continue
+                logger.warning("Failed to persist run event: %s", exc)
+
             message = broadcast_run_updated(run)
             return success_response(message)
 
@@ -633,6 +835,12 @@ class RunEventsView(APIView):
 
                 node_run.save(update_fields=sorted(set(update_fields)))
 
+                RunEvent.objects.create(
+                    run=run,
+                    event_type=event_type,
+                    payload=payload,
+                )
+
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)
 
@@ -641,3 +849,129 @@ class RunEventsView(APIView):
             message="Unknown event_type",
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+def _build_stream_message(*, run: Run, event: RunEvent) -> dict:
+    payload = event.payload or {}
+    message = {
+        "event_id": str(event.id),
+        "timestamp": event.created_at.isoformat(),
+        "type": event.event_type,
+        "run_id": str(run.id),
+    }
+    if event.event_type == "run.updated":
+        message["run"] = payload
+    elif event.event_type == "node_run.updated":
+        message["node_run"] = payload
+    else:
+        message["payload"] = payload
+    return message
+
+
+def _format_sse(message: dict, event_name: str | None = None) -> str:
+    payload = pyjson.dumps(message, default=str)
+    lines = []
+    if event_name:
+        lines.append(f"event: {event_name}")
+    lines.append(f"data: {payload}")
+    return "\n".join(lines) + "\n\n"
+
+
+def _get_user_from_request(request: Request):
+    user = getattr(request, "user", None)
+    if user and getattr(user, "is_authenticated", False):
+        return user
+
+    token = request.query_params.get("token")
+    if not token:
+        return None
+
+    try:
+        access_token = AccessToken(token)
+    except TokenError:
+        return None
+
+    user_id_claim = getattr(settings, "SIMPLE_JWT", {}).get("USER_ID_CLAIM", "user_id")
+    user_id = access_token.get(user_id_claim)
+    if not user_id:
+        return None
+
+    from django.contrib.auth import get_user_model
+
+    user_model = get_user_model()
+    try:
+        return user_model.objects.get(id=user_id)
+    except user_model.DoesNotExist:
+        return None
+
+
+async def _receive_with_timeout(channel_layer, channel_name: str, timeout: float):
+    try:
+        return await asyncio.wait_for(channel_layer.receive(channel_name), timeout=timeout)
+    except asyncio.TimeoutError:
+        return None
+
+
+class RunEventsStreamView(APIView):
+    """Stream run events over Server-Sent Events (SSE)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, run_id) -> StreamingHttpResponse | Response:
+        user = _get_user_from_request(request)
+        if not user or not getattr(user, "is_authenticated", False):
+            return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            run = Run.objects.get(id=run_id, owner=user)
+        except Run.DoesNotExist:
+            return Response({"detail": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        since_param = request.query_params.get("since")
+        since = parse_datetime(since_param) if since_param else None
+
+        def event_stream():
+            yield _format_sse(
+                {
+                    "type": "connected",
+                    "run_id": str(run.id),
+                    "timestamp": timezone.now().isoformat(),
+                },
+                event_name="connected",
+            )
+
+            if since:
+                for event in RunEvent.objects.filter(run=run, created_at__gt=since).order_by("created_at"):
+                    message = _build_stream_message(run=run, event=event)
+                    yield _format_sse(message, event_name=event.event_type)
+
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                return
+
+            channel_name = async_to_sync(channel_layer.new_channel)()
+            async_to_sync(channel_layer.group_add)(f"run_{run.id}", channel_name)
+
+            try:
+                while True:
+                    event = async_to_sync(_receive_with_timeout)(channel_layer, channel_name, 15)
+                    if event is None:
+                        yield ": ping\n\n"
+                        continue
+
+                    message = event.get("message")
+                    if message is None:
+                        continue
+
+                    event_type = message.get("type")
+                    yield _format_sse(message, event_name=str(event_type) if event_type else None)
+            except GeneratorExit:
+                return
+            finally:
+                async_to_sync(channel_layer.group_discard)(f"run_{run.id}", channel_name)
+
+        response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        response["Connection"] = "keep-alive"
+        return response

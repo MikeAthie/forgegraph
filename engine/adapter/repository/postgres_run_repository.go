@@ -507,3 +507,169 @@ func (r *PostgresRunRepository) ClearPauseState(ctx context.Context, runID strin
 
 	return nil
 }
+
+// SaveCheckpoint persists the latest execution state for durable resume
+func (r *PostgresRunRepository) SaveCheckpoint(ctx context.Context, runID, nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
+	stateBytes, err := json.Marshal(stateSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state snapshot: %w", err)
+	}
+
+	completedBytes, err := json.Marshal(completedNodes)
+	if err != nil {
+		return fmt.Errorf("failed to marshal completed nodes: %w", err)
+	}
+
+	skippedBytes, err := json.Marshal(skippedNodes)
+	if err != nil {
+		return fmt.Errorf("failed to marshal skipped nodes: %w", err)
+	}
+
+	query := `
+		INSERT INTO run_checkpoints
+			(run_id, node_id, step_index, state_json, completed_nodes, skipped_nodes, graph_json, created_at, updated_at)
+		VALUES
+			($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (run_id) DO UPDATE
+		SET node_id = EXCLUDED.node_id,
+		    step_index = EXCLUDED.step_index,
+		    state_json = EXCLUDED.state_json,
+		    completed_nodes = EXCLUDED.completed_nodes,
+		    skipped_nodes = EXCLUDED.skipped_nodes,
+		    graph_json = EXCLUDED.graph_json,
+		    updated_at = EXCLUDED.updated_at
+		WHERE run_checkpoints.step_index <= EXCLUDED.step_index
+	`
+
+	now := time.Now()
+	_, err = r.db.ExecContext(ctx, query, runID, nodeID, stepIndex, string(stateBytes), string(completedBytes), string(skippedBytes), graphJSON, now, now)
+	if err != nil {
+		return fmt.Errorf("failed to save checkpoint: %w", err)
+	}
+
+	return nil
+}
+
+// LoadLatestCheckpoint retrieves the most recent checkpoint for a run
+func (r *PostgresRunRepository) LoadLatestCheckpoint(ctx context.Context, runID string) (nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
+	query := `
+		SELECT node_id, step_index, state_json, completed_nodes, skipped_nodes, graph_json
+		FROM run_checkpoints
+		WHERE run_id = $1
+	`
+
+	var stateJSON, completedJSON, skippedJSON, graphJSONStr sql.NullString
+	err = r.db.QueryRowContext(ctx, query, runID).Scan(&nodeID, &stepIndex, &stateJSON, &completedJSON, &skippedJSON, &graphJSONStr)
+	if err == sql.ErrNoRows {
+		return "", 0, nil, nil, nil, "", domain.ErrCheckpointNotFound
+	}
+	if err != nil {
+		return "", 0, nil, nil, nil, "", fmt.Errorf("failed to load checkpoint: %w", err)
+	}
+
+	if stateJSON.Valid && stateJSON.String != "" {
+		if err := json.Unmarshal([]byte(stateJSON.String), &stateSnapshot); err != nil {
+			return "", 0, nil, nil, nil, "", fmt.Errorf("failed to parse state_json: %w", err)
+		}
+	}
+
+	if completedJSON.Valid && completedJSON.String != "" {
+		if err := json.Unmarshal([]byte(completedJSON.String), &completedNodes); err != nil {
+			return "", 0, nil, nil, nil, "", fmt.Errorf("failed to parse completed_nodes: %w", err)
+		}
+	}
+
+	if skippedJSON.Valid && skippedJSON.String != "" {
+		if err := json.Unmarshal([]byte(skippedJSON.String), &skippedNodes); err != nil {
+			return "", 0, nil, nil, nil, "", fmt.Errorf("failed to parse skipped_nodes: %w", err)
+		}
+	}
+
+	if graphJSONStr.Valid {
+		graphJSON = graphJSONStr.String
+	}
+
+	return nodeID, stepIndex, stateSnapshot, completedNodes, skippedNodes, graphJSON, nil
+}
+
+// ClearCheckpoints removes all checkpoints for a run
+func (r *PostgresRunRepository) ClearCheckpoints(ctx context.Context, runID string) error {
+	query := `DELETE FROM run_checkpoints WHERE run_id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, runID)
+	if err != nil {
+		return fmt.Errorf("failed to clear checkpoints: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return domain.ErrCheckpointNotFound
+	}
+
+	return nil
+}
+
+// GetCachedNodeResult retrieves a cached node output by key if not expired
+func (r *PostgresRunRepository) GetCachedNodeResult(ctx context.Context, cacheKey string) (output any, found bool, err error) {
+	query := `
+		SELECT output_json, expires_at
+		FROM node_run_cache
+		WHERE cache_key = $1 AND expires_at > $2
+	`
+
+	var outputJSON sql.NullString
+	var expiresAt sql.NullTime
+	err = r.db.QueryRowContext(ctx, query, cacheKey, time.Now()).Scan(&outputJSON, &expiresAt)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get cached node result: %w", err)
+	}
+
+	if !outputJSON.Valid || outputJSON.String == "" {
+		return nil, false, nil
+	}
+
+	if err := json.Unmarshal([]byte(outputJSON.String), &output); err != nil {
+		return nil, false, fmt.Errorf("failed to parse cached output: %w", err)
+	}
+
+	return output, true, nil
+}
+
+// SaveCachedNodeResult stores a cached node output with TTL seconds
+func (r *PostgresRunRepository) SaveCachedNodeResult(ctx context.Context, cacheKey string, output any, ttlSeconds int) error {
+	if ttlSeconds <= 0 {
+		return nil
+	}
+
+	outputBytes, err := json.Marshal(output)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cached output: %w", err)
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
+
+	query := `
+		INSERT INTO node_run_cache
+			(cache_key, output_json, created_at, updated_at, expires_at)
+		VALUES
+			($1, $2, $3, $4, $5)
+		ON CONFLICT (cache_key) DO UPDATE
+		SET output_json = EXCLUDED.output_json,
+		    updated_at = EXCLUDED.updated_at,
+		    expires_at = EXCLUDED.expires_at
+	`
+
+	_, err = r.db.ExecContext(ctx, query, cacheKey, string(outputBytes), now, now, expiresAt)
+	if err != nil {
+		return fmt.Errorf("failed to save cached node result: %w", err)
+	}
+
+	return nil
+}

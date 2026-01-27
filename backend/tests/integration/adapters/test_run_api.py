@@ -5,12 +5,14 @@ Tests run history and run detail endpoints for Phase 4 observability MVP.
 """
 
 from datetime import timedelta
+import json
+from uuid import uuid4
 
 import pytest
 from django.utils import timezone
 from rest_framework import status
 
-from infrastructure.orm.models import ApprovalTask, Graph, GraphVersion, NodeRun, Run, User
+from infrastructure.orm.models import ApprovalTask, Graph, GraphVersion, NodeRun, Run, RunCheckpoint, User
 
 pytestmark = pytest.mark.django_db
 
@@ -224,6 +226,63 @@ class TestRunStart:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data["error"]["code"] == "NOT_FOUND"
 
+
+class TestRunInvoke:
+    """Tests for POST /api/runs/invoke"""
+
+    def test_invoke_requires_authentication(self, api_client, user):
+        response = api_client.post(
+            "/api/runs/invoke",
+            {"thread_id": str(uuid4()), "input_json": {}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_invoke_creates_threaded_run(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        thread_id = uuid4()
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            thread_id=thread_id,
+            started_at=timezone.now(),
+            input_json={"initial": "state"},
+        )
+        RunCheckpoint.objects.create(
+            run=run,
+            node_id="seed",
+            step_index=1,
+            state_json={"input.initial": "state", "node.step.output": "done"},
+            completed_nodes=["step"],
+            skipped_nodes=[],
+            graph_json=json.dumps(version.graph_json),
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/invoke",
+            {"thread_id": str(thread_id), "input_json": {"query": "hi"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        run_data = response.data["data"]
+        assert run_data["thread_id"] == str(thread_id)
+        assert run_data["status"] == "running"
+
+        new_run = Run.objects.get(id=run_data["id"])
+        assert new_run.thread_id == thread_id
+        assert new_run.input_json == {"query": "hi"}
+
+        new_checkpoint = new_run.checkpoint
+        assert new_checkpoint.state_json["input.query"] == "hi"
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        assert start_calls[0][1]["run_id"] == new_run.id
 
 class TestRunCancel:
     """Tests for POST /api/runs/{run_id}/cancel"""

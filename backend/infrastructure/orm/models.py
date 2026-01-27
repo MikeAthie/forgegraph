@@ -230,6 +230,7 @@ class Run(models.Model):
         on_delete=models.CASCADE,
         related_name="runs",
     )
+    thread_id = models.UUIDField(null=True, blank=True)
     graph_version = models.ForeignKey(
         GraphVersion,
         on_delete=models.CASCADE,
@@ -252,6 +253,7 @@ class Run(models.Model):
         indexes = [
             models.Index(fields=["owner", "started_at"], name="runs_owner_started_idx"),
             models.Index(fields=["owner", "status"], name="runs_owner_status_idx"),
+            models.Index(fields=["owner", "thread_id"], name="runs_owner_thread_idx"),
         ]
 
     def __str__(self):
@@ -264,6 +266,59 @@ class Run(models.Model):
             delta = self.ended_at - self.started_at
             return int(delta.total_seconds() * 1000)
         return None
+
+
+class RunEvent(models.Model):
+    """RunEvent model storing execution events for observability."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    event_type = models.CharField(max_length=64)
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "run_events"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["run", "created_at"], name="run_events_run_time_idx"),
+        ]
+
+    def __str__(self):
+        return f"RunEvent {self.run_id} - {self.event_type}"
+
+
+class RunCheckpoint(models.Model):
+    """RunCheckpoint model representing the latest durable checkpoint for a run."""
+
+    run = models.OneToOneField(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="checkpoint",
+        primary_key=True,
+    )
+    node_id = models.CharField(max_length=64)
+    step_index = models.PositiveIntegerField(default=0)
+    state_json = models.JSONField(default=dict)
+    completed_nodes = models.JSONField(default=list)
+    skipped_nodes = models.JSONField(default=list)
+    graph_json = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "run_checkpoints"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["updated_at"], name="run_checkpoints_updated_idx"),
+        ]
+
+    def __str__(self):
+        return f"RunCheckpoint {self.run_id} @ {self.step_index}"
 
 
 class NodeRun(models.Model):
@@ -311,6 +366,26 @@ class NodeRun(models.Model):
             delta = self.ended_at - self.started_at
             return int(delta.total_seconds() * 1000)
         return None
+
+
+class NodeRunCache(models.Model):
+    """NodeRunCache model storing cached node outputs."""
+
+    cache_key = models.CharField(max_length=128, primary_key=True)
+    output_json = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "node_run_cache"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["expires_at"], name="node_run_cache_expires_idx"),
+        ]
+
+    def __str__(self):
+        return f"NodeRunCache {self.cache_key}"
 
 
 class ApprovalTask(models.Model):

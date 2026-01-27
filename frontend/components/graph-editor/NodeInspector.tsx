@@ -525,6 +525,8 @@ export function NodeInspector({
 
         {!isNote && (
           <AdvancedNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChangeConfig={(config) => onUpdateNode(selectedNode.id, { config })}
             timeoutMs={(nodeData.timeout_ms as number) ?? undefined}
             retryPolicy={(nodeData.retry_policy as Partial<RetryPolicy>) ?? undefined}
             onChangeTimeout={(timeout_ms) => onUpdateNode(selectedNode.id, { timeout_ms })}
@@ -790,11 +792,15 @@ function OutputNodeConfig({
 
 // Advanced Node Config (collapsible)
 function AdvancedNodeConfig({
+  config,
+  onChangeConfig,
   timeoutMs,
   retryPolicy,
   onChangeTimeout,
   onChangeRetryPolicy,
 }: {
+  config: Record<string, unknown>;
+  onChangeConfig: (config: Record<string, unknown>) => void;
   timeoutMs?: number;
   retryPolicy?: Partial<RetryPolicy>;
   onChangeTimeout: (timeout: number | undefined) => void;
@@ -802,7 +808,13 @@ function AdvancedNodeConfig({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const hasAdvancedConfig = timeoutMs !== undefined || retryPolicy !== undefined;
+  const cacheConfig = (config.cache as Record<string, unknown>) ?? {};
+  const cacheEnabled = cacheConfig.enabled === true;
+  const cacheTtlSeconds =
+    typeof cacheConfig.ttl_seconds === "number" ? cacheConfig.ttl_seconds : "";
+  const useGlobalTTL = cacheEnabled && typeof cacheConfig.ttl_seconds !== "number";
+  const defaultCacheTTL = 3600;
+  const hasAdvancedConfig = cacheEnabled || timeoutMs !== undefined || retryPolicy !== undefined;
 
   return (
     <div className="pt-3 border-t border-border">
@@ -824,6 +836,114 @@ function AdvancedNodeConfig({
 
       {isExpanded && (
         <div className="mt-3 space-y-3">
+          {/* Cache */}
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-2">
+              Cache Results
+            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">
+                Enable cache
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-label="Enable cache"
+                aria-checked={cacheEnabled}
+                onClick={() =>
+                  onChangeConfig({
+                    ...config,
+                    cache: { ...cacheConfig, enabled: !cacheEnabled },
+                  })
+                }
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${cacheEnabled ? "bg-primary" : "bg-muted"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
+                    ${cacheEnabled ? "translate-x-4.5" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+            {cacheEnabled && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Use global TTL
+                  </label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Use global TTL"
+                    aria-checked={useGlobalTTL}
+                    onClick={() => {
+                      const nextCache: Record<string, unknown> = {
+                        ...cacheConfig,
+                        enabled: true,
+                      };
+                      if (useGlobalTTL) {
+                        nextCache.ttl_seconds =
+                          typeof cacheConfig.ttl_seconds === "number"
+                            ? cacheConfig.ttl_seconds
+                            : defaultCacheTTL;
+                      } else {
+                        delete nextCache.ttl_seconds;
+                      }
+                      onChangeConfig({ ...config, cache: nextCache });
+                    }}
+                    className={`
+                      relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                      ${useGlobalTTL ? "bg-primary" : "bg-muted"}
+                    `}
+                  >
+                    <span
+                      className={`
+                        inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
+                        ${useGlobalTTL ? "translate-x-4.5" : "translate-x-0.5"}
+                      `}
+                    />
+                  </button>
+                </div>
+
+                {!useGlobalTTL && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      TTL (seconds)
+                    </label>
+                    <Input
+                      type="number"
+                      value={cacheTtlSeconds}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const parsed = val ? parseInt(val, 10) : undefined;
+                        const nextCache: Record<string, unknown> = {
+                          ...cacheConfig,
+                          enabled: true,
+                        };
+                        if (parsed && !Number.isNaN(parsed)) {
+                          nextCache.ttl_seconds = parsed;
+                        } else {
+                          delete nextCache.ttl_seconds;
+                        }
+                        onChangeConfig({ ...config, cache: nextCache });
+                      }}
+                      placeholder={String(defaultCacheTTL)}
+                      className="text-sm"
+                      min={1}
+                    />
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Uses input + config hash to reuse node outputs.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Timeout */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">

@@ -19,6 +19,20 @@ type pauseState struct {
 	graphJSON      string
 }
 
+type checkpointState struct {
+	nodeID         string
+	stepIndex      int
+	stateSnapshot  map[string]any
+	completedNodes []string
+	skippedNodes   []string
+	graphJSON      string
+}
+
+type cacheEntry struct {
+	output    any
+	expiresAt time.Time
+}
+
 // MemoryRunRepository is an in-memory implementation of RunRepository for testing.
 // It is thread-safe and stores runs and node runs in memory.
 type MemoryRunRepository struct {
@@ -26,6 +40,8 @@ type MemoryRunRepository struct {
 	runs        map[string]*entity.Run
 	nodeRuns    map[string]*entity.NodeRun // key: runID-nodeID
 	pauseStates map[string]*pauseState     // key: runID
+	checkpoints map[string]*checkpointState
+	cache       map[string]*cacheEntry
 }
 
 // NewMemoryRunRepository creates a new in-memory run repository
@@ -34,6 +50,8 @@ func NewMemoryRunRepository() *MemoryRunRepository {
 		runs:        make(map[string]*entity.Run),
 		nodeRuns:    make(map[string]*entity.NodeRun),
 		pauseStates: make(map[string]*pauseState),
+		checkpoints: make(map[string]*checkpointState),
+		cache:       make(map[string]*cacheEntry),
 	}
 }
 
@@ -210,6 +228,8 @@ func (r *MemoryRunRepository) Clear() {
 	r.runs = make(map[string]*entity.Run)
 	r.nodeRuns = make(map[string]*entity.NodeRun)
 	r.pauseStates = make(map[string]*pauseState)
+	r.checkpoints = make(map[string]*checkpointState)
+	r.cache = make(map[string]*cacheEntry)
 }
 
 // SavePauseState saves the execution state when a run is paused at a human gate
@@ -258,6 +278,100 @@ func (r *MemoryRunRepository) ClearPauseState(ctx context.Context, runID string)
 	}
 
 	delete(r.pauseStates, runID)
+	return nil
+}
+
+// SaveCheckpoint persists the latest execution state for durable resume
+func (r *MemoryRunRepository) SaveCheckpoint(ctx context.Context, runID, nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return domain.ErrRunNotFound
+	}
+
+	if existing, ok := r.checkpoints[runID]; ok && existing.stepIndex > stepIndex {
+		return nil
+	}
+
+	completedCopy := append([]string(nil), completedNodes...)
+	skippedCopy := append([]string(nil), skippedNodes...)
+
+	r.checkpoints[runID] = &checkpointState{
+		nodeID:         nodeID,
+		stepIndex:      stepIndex,
+		stateSnapshot:  stateSnapshot,
+		completedNodes: completedCopy,
+		skippedNodes:   skippedCopy,
+		graphJSON:      graphJSON,
+	}
+
+	return nil
+}
+
+// LoadLatestCheckpoint retrieves the most recent checkpoint for a run
+func (r *MemoryRunRepository) LoadLatestCheckpoint(ctx context.Context, runID string) (nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return "", 0, nil, nil, nil, "", domain.ErrRunNotFound
+	}
+
+	checkpoint, ok := r.checkpoints[runID]
+	if !ok {
+		return "", 0, nil, nil, nil, "", domain.ErrCheckpointNotFound
+	}
+
+	completedCopy := append([]string(nil), checkpoint.completedNodes...)
+	skippedCopy := append([]string(nil), checkpoint.skippedNodes...)
+
+	return checkpoint.nodeID, checkpoint.stepIndex, checkpoint.stateSnapshot, completedCopy, skippedCopy, checkpoint.graphJSON, nil
+}
+
+// ClearCheckpoints removes all checkpoints for a run
+func (r *MemoryRunRepository) ClearCheckpoints(ctx context.Context, runID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return domain.ErrRunNotFound
+	}
+
+	delete(r.checkpoints, runID)
+	return nil
+}
+
+// GetCachedNodeResult retrieves a cached node output by key if not expired
+func (r *MemoryRunRepository) GetCachedNodeResult(ctx context.Context, cacheKey string) (output any, found bool, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	entry, ok := r.cache[cacheKey]
+	if !ok {
+		return nil, false, nil
+	}
+
+	if time.Now().After(entry.expiresAt) {
+		delete(r.cache, cacheKey)
+		return nil, false, nil
+	}
+
+	return entry.output, true, nil
+}
+
+// SaveCachedNodeResult stores a cached node output with TTL seconds
+func (r *MemoryRunRepository) SaveCachedNodeResult(ctx context.Context, cacheKey string, output any, ttlSeconds int) error {
+	if ttlSeconds <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.cache[cacheKey] = &cacheEntry{
+		output:    output,
+		expiresAt: time.Now().Add(time.Duration(ttlSeconds) * time.Second),
+	}
 	return nil
 }
 

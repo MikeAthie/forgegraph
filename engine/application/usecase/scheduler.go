@@ -3,10 +3,16 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/forgegraph/engine/application/port"
@@ -16,10 +22,20 @@ import (
 	"github.com/forgegraph/engine/domain/value"
 )
 
+// CheckpointMode controls durable checkpoint behavior.
+type CheckpointMode string
+
+const (
+	CheckpointModeNone CheckpointMode = "none"
+	CheckpointModeNode CheckpointMode = "node"
+)
+
 // SchedulerConfig holds scheduler configuration
 type SchedulerConfig struct {
 	MaxWorkers       int // Maximum concurrent node executions
 	DefaultTimeoutMs int // Default timeout for node execution
+	CheckpointMode   CheckpointMode
+	CacheDefaultTTLSeconds int
 }
 
 // DefaultSchedulerConfig returns sensible defaults
@@ -27,6 +43,8 @@ func DefaultSchedulerConfig() SchedulerConfig {
 	return SchedulerConfig{
 		MaxWorkers:       10,
 		DefaultTimeoutMs: 30000, // 30 seconds
+		CheckpointMode:   CheckpointModeNode,
+		CacheDefaultTTLSeconds: 3600,
 	}
 }
 
@@ -48,6 +66,12 @@ func NewScheduler(
 	repository port.RunRepository,
 	emitter port.EventEmitter,
 ) *Scheduler {
+	if config.CheckpointMode == "" {
+		config.CheckpointMode = CheckpointModeNode
+	}
+	if config.CacheDefaultTTLSeconds == 0 {
+		config.CacheDefaultTTLSeconds = 3600
+	}
 	return &Scheduler{
 		config:     config,
 		registry:   registry,
@@ -65,6 +89,7 @@ type runContext struct {
 	state       *entity.State
 	callbackURL string
 	graphJSON   string // Original graph JSON for pause/resume
+	initialNodes []string
 
 	// Synchronization
 	pendingMu sync.Mutex
@@ -84,19 +109,50 @@ type runContext struct {
 	// Current node being executed (for status queries)
 	currentNodeMu sync.RWMutex
 	currentNodeID string
+
+	checkpointSeq int64
 }
 
 // StartRun begins executing a workflow
 func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string) error {
+	type checkpointData struct {
+		nodeID         string
+		stepIndex      int
+		stateSnapshot  map[string]any
+		completedNodes []string
+		skippedNodes   []string
+		graphJSON      string
+	}
+
+	var checkpoint *checkpointData
+	if s.isCheckpointingEnabled() {
+		nodeID, stepIndex, snapshot, completedNodes, skippedNodes, checkpointGraphJSON, err := s.repository.LoadLatestCheckpoint(ctx, runID)
+		if err == nil {
+			if checkpointGraphJSON != "" {
+				graphJSON = checkpointGraphJSON
+			}
+			checkpoint = &checkpointData{
+				nodeID:         nodeID,
+				stepIndex:      stepIndex,
+				stateSnapshot:  snapshot,
+				completedNodes: completedNodes,
+				skippedNodes:   skippedNodes,
+				graphJSON:      checkpointGraphJSON,
+			}
+		} else if !errors.Is(err, domain.ErrCheckpointNotFound) && !errors.Is(err, domain.ErrRunNotFound) {
+			return fmt.Errorf("failed to load checkpoint: %w", err)
+		}
+	}
+
 	// Parse graph JSON
 	var graph entity.Graph
 	if err := json.Unmarshal([]byte(graphJSON), &graph); err != nil {
 		return fmt.Errorf("invalid graph JSON: %w", err)
 	}
 
-	// Parse input JSON
+	// Parse input JSON when starting fresh
 	var input map[string]any
-	if inputJSON != "" {
+	if checkpoint == nil && inputJSON != "" {
 		if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
 			return fmt.Errorf("invalid input JSON: %w", err)
 		}
@@ -119,8 +175,16 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	planner := service.NewExecutionPlanner()
 	plan := planner.Plan(&graph)
 
-	// Initialize state with input
-	state := entity.NewStateWithInput(input)
+	// Initialize state
+	var state *entity.State
+	if checkpoint != nil {
+		if checkpoint.stateSnapshot == nil {
+			checkpoint.stateSnapshot = map[string]any{}
+		}
+		state = entity.NewStateFromSnapshot(checkpoint.stateSnapshot)
+	} else {
+		state = entity.NewStateWithInput(input)
+	}
 
 	// Create run context
 	runCtx, cancel := context.WithCancel(ctx)
@@ -139,6 +203,18 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		workChan:    make(chan string, len(plan.NodeMap)),
 	}
 
+	if checkpoint != nil {
+		rc.checkpointSeq = int64(checkpoint.stepIndex)
+		for _, completedID := range checkpoint.completedNodes {
+			rc.completed[completedID] = true
+		}
+		for _, skippedID := range checkpoint.skippedNodes {
+			rc.skipped[skippedID] = true
+		}
+		s.applyCheckpointToPending(rc)
+		rc.initialNodes = s.computeReadyNodes(rc)
+	}
+
 	// Store active run
 	s.activeRuns.Store(runID, rc)
 
@@ -147,8 +223,12 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		log.Printf("Failed to update run status: %v", err)
 	}
 
-	// Emit run started event
-	s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunStarted, runID))
+	// Emit run started/resumed event
+	if checkpoint != nil {
+		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunResumed, runID))
+	} else {
+		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunStarted, runID))
+	}
 
 	// Start execution in background
 	go s.executeRun(rc)
@@ -171,7 +251,11 @@ func (s *Scheduler) executeRun(rc *runContext) {
 	}
 
 	// Enqueue start nodes (add to WaitGroup for each)
-	for _, nodeID := range rc.plan.StartNodes {
+	startNodes := rc.initialNodes
+	if len(startNodes) == 0 {
+		startNodes = rc.plan.StartNodes
+	}
+	for _, nodeID := range startNodes {
 		rc.wg.Add(1)
 		rc.workChan <- nodeID
 	}
@@ -253,6 +337,25 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			WithAttempt(1),
 	)
 
+	// Try cache before execution
+	cacheEnabled, cacheTTLSeconds := s.getCacheConfig(node)
+	cacheKey := ""
+	if cacheEnabled {
+		key, err := s.computeCacheKey(node, nodeRun.InputJSON)
+		if err != nil {
+			log.Printf("Failed to compute cache key for node %s: %v", nodeID, err)
+		} else {
+			cacheKey = key
+			if cachedOutput, found, err := s.repository.GetCachedNodeResult(rc.ctx, cacheKey); err != nil {
+				log.Printf("Failed to read cache for node %s: %v", nodeID, err)
+			} else if found {
+				result := &port.NodeExecutionResult{Output: cachedOutput}
+				s.handleNodeSuccess(rc, node, nodeRun, result, 0)
+				return
+			}
+		}
+	}
+
 	// Execute with timeout and retries
 	startTime := time.Now()
 	result, err := s.executeWithRetries(rc, node, executor, nodeRun)
@@ -319,34 +422,13 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		return
 	}
 
-	// Store output in state
-	if result.Output != nil {
-		rc.state.SetNodeOutput(nodeID, result.Output)
+	s.handleNodeSuccess(rc, node, nodeRun, result, duration)
+
+	if cacheEnabled && cacheKey != "" && result.Output != nil {
+		if err := s.repository.SaveCachedNodeResult(context.Background(), cacheKey, result.Output, cacheTTLSeconds); err != nil {
+			log.Printf("Failed to save cache for node %s: %v", nodeID, err)
+		}
 	}
-
-	// Update node run as completed
-	nodeRun.Status = string(value.NodeRunStatusSucceeded)
-	nodeRun.SetEnded(time.Now())
-	if result.Output != nil {
-		nodeRun.OutputJSON = map[string]any{"output": result.Output}
-	}
-	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
-
-	// Emit node completed
-	s.emitter.EmitAsync(
-		port.NewEvent(port.EventTypeNodeCompleted, rc.runID).
-			WithNode(nodeID, node.Type, node.Name).
-			WithOutput(nodeRun.OutputJSON).
-			WithDuration(duration),
-	)
-
-	// Mark completed
-	rc.pendingMu.Lock()
-	rc.completed[nodeID] = true
-	rc.pendingMu.Unlock()
-
-	// Determine next nodes and enqueue them
-	s.enqueueNextNodes(rc, node, result)
 }
 
 // executeWithRetries handles retry logic
@@ -423,8 +505,28 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 
 	// For branch nodes, only enqueue specified next nodes
 	if result.HasNextNodes() {
+		outgoingSet := make(map[string]bool)
+		for _, edge := range edges {
+			outgoingSet[edge.To] = true
+		}
+
+		validNext := make([]string, 0, len(result.NextNodes))
+		var invalid []string
+		for _, nextID := range result.NextNodes {
+			if outgoingSet[nextID] {
+				validNext = append(validNext, nextID)
+			} else {
+				invalid = append(invalid, nextID)
+			}
+		}
+
+		if len(invalid) > 0 {
+			s.setError(rc, domain.NewValidationError("next_nodes", fmt.Sprintf("invalid next_nodes: %v", invalid)))
+			return
+		}
+
 		nextSet := make(map[string]bool)
-		for _, n := range result.NextNodes {
+		for _, n := range validNext {
 			nextSet[n] = true
 		}
 
@@ -436,7 +538,7 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 		}
 
 		// Enqueue taken branches
-		for _, nextID := range result.NextNodes {
+		for _, nextID := range validNext {
 			s.decrementAndEnqueue(rc, nextID)
 		}
 		return
@@ -446,6 +548,237 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 	for _, edge := range edges {
 		s.decrementAndEnqueue(rc, edge.To)
 	}
+}
+
+func extractNextNodesFromOutput(output any) ([]string, bool, error) {
+	outputMap, ok := output.(map[string]any)
+	if !ok {
+		return nil, false, nil
+	}
+
+	var raw any
+	if value, ok := outputMap["next_nodes"]; ok {
+		raw = value
+	} else if value, ok := outputMap["next_node"]; ok {
+		raw = value
+	} else {
+		return nil, false, nil
+	}
+
+	switch typed := raw.(type) {
+	case string:
+		if typed == "" {
+			return nil, true, domain.NewValidationError("next_nodes", "next_node cannot be empty")
+		}
+		return []string{typed}, true, nil
+	case []string:
+		return typed, true, nil
+	case []any:
+		parsed := make([]string, 0, len(typed))
+		for _, item := range typed {
+			value, ok := item.(string)
+			if !ok || value == "" {
+				return nil, true, domain.NewValidationError("next_nodes", "next_nodes must contain non-empty strings")
+			}
+			parsed = append(parsed, value)
+		}
+		return parsed, true, nil
+	default:
+		return nil, true, domain.NewValidationError("next_nodes", "next_nodes must be a string or list of strings")
+	}
+}
+
+func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, result *port.NodeExecutionResult, durationMs int64) {
+	nodeID := node.ID
+
+	// Allow any node to emit routing directives via output.next_nodes / output.next_node
+	if !result.HasNextNodes() {
+		nextNodes, hasDirective, directiveErr := extractNextNodesFromOutput(result.Output)
+		if directiveErr != nil {
+			// Treat invalid routing directive as node failure
+			nodeRun.Status = string(value.NodeRunStatusFailed)
+			nodeRun.SetEnded(time.Now())
+			nodeRun.ErrorJSON = map[string]any{"error": directiveErr.Error()}
+			s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+
+			s.emitter.EmitAsync(
+				port.NewEvent(port.EventTypeNodeFailed, rc.runID).
+					WithNode(nodeID, node.Type, node.Name).
+					WithError(directiveErr.Error()).
+					WithDuration(durationMs),
+			)
+			s.setError(rc, domain.NewNodeError(nodeID, node.Type, directiveErr))
+			return
+		}
+		if hasDirective && len(nextNodes) > 0 {
+			result.NextNodes = nextNodes
+			if outputMap, ok := result.Output.(map[string]any); ok {
+				delete(outputMap, "next_nodes")
+				delete(outputMap, "next_node")
+			}
+		}
+	}
+
+	// Store output in state
+	if result.Output != nil {
+		rc.state.SetNodeOutput(nodeID, result.Output)
+	}
+
+	// Update node run as completed
+	nodeRun.Status = string(value.NodeRunStatusSucceeded)
+	nodeRun.SetEnded(time.Now())
+	if result.Output != nil {
+		nodeRun.OutputJSON = map[string]any{"output": result.Output}
+	}
+	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+
+	// Emit node completed
+	s.emitter.EmitAsync(
+		port.NewEvent(port.EventTypeNodeCompleted, rc.runID).
+			WithNode(nodeID, node.Type, node.Name).
+			WithOutput(nodeRun.OutputJSON).
+			WithDuration(durationMs),
+	)
+
+	// Mark completed
+	rc.pendingMu.Lock()
+	rc.completed[nodeID] = true
+	rc.pendingMu.Unlock()
+
+	// Determine next nodes and enqueue them
+	s.enqueueNextNodes(rc, node, result)
+
+	s.saveCheckpoint(rc, nodeID)
+}
+
+func (s *Scheduler) isCheckpointingEnabled() bool {
+	return s.config.CheckpointMode != CheckpointModeNone
+}
+
+func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
+	if !s.isCheckpointingEnabled() {
+		return
+	}
+
+	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
+	stateSnapshot := rc.state.Snapshot()
+
+	rc.pendingMu.Lock()
+	completedNodes := make([]string, 0, len(rc.completed))
+	for id := range rc.completed {
+		completedNodes = append(completedNodes, id)
+	}
+	skippedNodes := make([]string, 0, len(rc.skipped))
+	for id := range rc.skipped {
+		skippedNodes = append(skippedNodes, id)
+	}
+	rc.pendingMu.Unlock()
+
+	if err := s.repository.SaveCheckpoint(context.Background(), rc.runID, nodeID, stepIndex, stateSnapshot, completedNodes, skippedNodes, rc.graphJSON); err != nil {
+		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
+	}
+}
+
+func (s *Scheduler) applyCheckpointToPending(rc *runContext) {
+	for nodeID := range rc.completed {
+		s.decrementPendingForCheckpoint(rc, nodeID)
+	}
+	for nodeID := range rc.skipped {
+		s.decrementPendingForCheckpoint(rc, nodeID)
+	}
+}
+
+func (s *Scheduler) decrementPendingForCheckpoint(rc *runContext, nodeID string) {
+	for _, edge := range rc.plan.GetOutgoingEdges(nodeID) {
+		rc.pending[edge.To]--
+	}
+}
+
+func (s *Scheduler) computeReadyNodes(rc *runContext) []string {
+	ready := make([]string, 0, len(rc.plan.NodeMap))
+	for nodeID := range rc.plan.NodeMap {
+		if rc.completed[nodeID] || rc.skipped[nodeID] {
+			continue
+		}
+		if rc.pending[nodeID] <= 0 {
+			ready = append(ready, nodeID)
+		}
+	}
+	return ready
+}
+
+func (s *Scheduler) getCacheConfig(node *entity.Node) (enabled bool, ttlSeconds int) {
+	if node.Config == nil {
+		return false, 0
+	}
+	cacheRaw, ok := node.Config["cache"].(map[string]any)
+	if !ok {
+		return false, 0
+	}
+	enabled, _ = cacheRaw["enabled"].(bool)
+	if !enabled {
+		return false, 0
+	}
+
+	ttlSeconds = coerceInt(cacheRaw["ttl_seconds"])
+	if ttlSeconds <= 0 {
+		ttlSeconds = s.config.CacheDefaultTTLSeconds
+	}
+	if ttlSeconds <= 0 {
+		return false, 0
+	}
+
+	return true, ttlSeconds
+}
+
+func (s *Scheduler) computeCacheKey(node *entity.Node, inputSnapshot map[string]any) (string, error) {
+	payload := map[string]any{
+		"node_type": node.Type,
+		"config":    sanitizeConfig(node.Config),
+		"input":     inputSnapshot,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func sanitizeConfig(config map[string]any) map[string]any {
+	if config == nil {
+		return nil
+	}
+	sanitized := make(map[string]any, len(config))
+	for key, value := range config {
+		if key == "cache" || strings.HasPrefix(key, "_") {
+			continue
+		}
+		sanitized[key] = value
+	}
+	return sanitized
+}
+
+func coerceInt(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	case json.Number:
+		if parsed, err := v.Int64(); err == nil {
+			return int(parsed)
+		}
+	case string:
+		if parsed, err := strconv.Atoi(v); err == nil {
+			return parsed
+		}
+	}
+	return 0
 }
 
 // decrementAndEnqueue reduces pending count and enqueues if ready
@@ -542,6 +875,8 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 
 	// Update run in database
 	s.repository.SetRunEnded(context.Background(), rc.runID, string(finalStatus), output, errorMsg)
+
+	// Keep the latest checkpoint to enable threaded run continuation.
 
 	// Emit final event
 	var event *port.ExecutionEvent
@@ -688,17 +1023,23 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	// Create run context for resumed execution
 	runCtx, cancel := context.WithCancel(ctx)
 	rc := &runContext{
-		runID:       runID,
-		ctx:         runCtx,
-		cancel:      cancel,
-		plan:        plan,
-		state:       state,
-		graphJSON:   graphJSON,
-		pending:     plan.CloneIndegree(),
-		completed:   make(map[string]bool),
-		skipped:     make(map[string]bool),
-		running:     make(map[string]bool),
-		workChan:    make(chan string, len(plan.NodeMap)),
+		runID:     runID,
+		ctx:       runCtx,
+		cancel:    cancel,
+		plan:      plan,
+		state:     state,
+		graphJSON: graphJSON,
+		pending:   plan.CloneIndegree(),
+		completed: make(map[string]bool),
+		skipped:   make(map[string]bool),
+		running:   make(map[string]bool),
+		workChan:  make(chan string, len(plan.NodeMap)),
+	}
+
+	if s.isCheckpointingEnabled() {
+		if _, stepIndex, _, _, _, _, err := s.repository.LoadLatestCheckpoint(ctx, runID); err == nil {
+			rc.checkpointSeq = int64(stepIndex)
+		}
 	}
 
 	// Mark previously completed nodes

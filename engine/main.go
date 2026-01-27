@@ -28,6 +28,7 @@ type Config struct {
 	DatabaseURL    string
 	MaxWorkers     int
 	DefaultTimeout int
+	CacheTTLSeconds int
 }
 
 // LoadConfig loads configuration from environment variables
@@ -37,6 +38,7 @@ func LoadConfig() *Config {
 		DatabaseURL:    getEnv("DATABASE_URL", ""),
 		MaxWorkers:     getEnvInt("MAX_WORKERS", 10),
 		DefaultTimeout: getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
+		CacheTTLSeconds: getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
 	}
 	return cfg
 }
@@ -218,6 +220,7 @@ func main() {
 		"grpc_port", cfg.GRPCPort,
 		"max_workers", cfg.MaxWorkers,
 		"default_timeout_ms", cfg.DefaultTimeout,
+		"cache_default_ttl_seconds", cfg.CacheTTLSeconds,
 	)
 
 	// Initialize repository
@@ -274,6 +277,7 @@ func main() {
 	schedulerConfig := usecase.SchedulerConfig{
 		MaxWorkers:       cfg.MaxWorkers,
 		DefaultTimeoutMs: cfg.DefaultTimeout,
+		CacheDefaultTTLSeconds: cfg.CacheTTLSeconds,
 	}
 	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter)
 	log.Info("scheduler_initialized")

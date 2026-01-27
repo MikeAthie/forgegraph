@@ -15,6 +15,14 @@ class RunStartSerializer(serializers.Serializer):
 
     graph_version_id = serializers.UUIDField()
     input_json = serializers.JSONField(required=False, default=dict)
+    thread_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class RunInvokeSerializer(serializers.Serializer):
+    """Serializer for invoking a threaded run."""
+
+    thread_id = serializers.UUIDField()
+    input_json = serializers.JSONField(required=False, default=dict)
 
 
 class RunResumeSerializer(serializers.Serializer):
@@ -28,6 +36,7 @@ class RunListSerializer(serializers.Serializer):
     """Serializer for run list output."""
 
     id = serializers.UUIDField(read_only=True)
+    thread_id = serializers.UUIDField(read_only=True, allow_null=True)
     graph_id = serializers.UUIDField(read_only=True)
     graph_name = serializers.CharField(read_only=True)
     graph_version_id = serializers.UUIDField(read_only=True)
@@ -43,6 +52,7 @@ class RunDetailSerializer(serializers.Serializer):
 
     id = serializers.UUIDField(read_only=True)
     owner_id = serializers.UUIDField(read_only=True)
+    thread_id = serializers.UUIDField(read_only=True, allow_null=True)
     graph_id = serializers.UUIDField(read_only=True)
     graph_name = serializers.CharField(read_only=True)
     graph_version_id = serializers.UUIDField(read_only=True)

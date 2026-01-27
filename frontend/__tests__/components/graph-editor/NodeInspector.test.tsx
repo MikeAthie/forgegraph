@@ -13,15 +13,23 @@ import { NODE_TYPES } from "@/lib/graph-types";
 
 describe("NodeInspector", () => {
   const mockOnUpdateNode = jest.fn();
+  const mockOnUpdateEdge = jest.fn();
   const mockOnDeleteNode = jest.fn();
+  const mockOnDeleteEdge = jest.fn();
+  const mockOnDuplicateNode = jest.fn();
   const mockOnUpdateMetadata = jest.fn();
 
   const defaultProps = {
     selectedNode: null,
+    selectedEdge: null,
+    nodes: [],
     graphName: "Test Graph",
     graphDescription: "A test graph description",
     onUpdateNode: mockOnUpdateNode,
+    onUpdateEdge: mockOnUpdateEdge,
     onDeleteNode: mockOnDeleteNode,
+    onDeleteEdge: mockOnDeleteEdge,
+    onDuplicateNode: mockOnDuplicateNode,
     onUpdateMetadata: mockOnUpdateMetadata,
   };
 
@@ -515,6 +523,80 @@ describe("NodeInspector", () => {
       render(<NodeInspector {...defaultProps} selectedNode={nodeWithoutConfig} />);
 
       expect(screen.getByText("Output Configuration")).toBeInTheDocument();
+    });
+  });
+
+  describe("Node Cache Configuration", () => {
+    const cacheNode: Node = {
+      id: "cache-node",
+      type: NODE_TYPES.TRANSFORM,
+      position: { x: 0, y: 0 },
+      data: {
+        label: "Cache Node",
+        nodeType: NODE_TYPES.TRANSFORM,
+        config: {},
+      },
+    };
+
+    it("should allow enabling cache from advanced section", async () => {
+      const user = userEvent.setup();
+      render(<NodeInspector {...defaultProps} selectedNode={cacheNode} />);
+
+      await user.click(screen.getByRole("button", { name: /advanced/i }));
+
+      const toggle = screen.getByRole("switch", { name: /enable cache/i });
+      await user.click(toggle);
+
+      expect(mockOnUpdateNode).toHaveBeenCalledWith("cache-node", {
+        config: expect.objectContaining({
+          cache: expect.objectContaining({ enabled: true }),
+        }),
+      });
+    });
+
+    it("should show TTL input when cache is enabled", async () => {
+      const user = userEvent.setup();
+      const nodeWithCache: Node = {
+        ...cacheNode,
+        data: {
+          ...cacheNode.data,
+          config: {
+            cache: { enabled: true, ttl_seconds: 120 },
+          },
+        },
+      };
+
+      render(<NodeInspector {...defaultProps} selectedNode={nodeWithCache} />);
+
+      await user.click(screen.getByRole("button", { name: /advanced/i }));
+
+      expect(screen.getByDisplayValue("120")).toBeInTheDocument();
+    });
+
+    it("should allow switching from global TTL to custom TTL", async () => {
+      const user = userEvent.setup();
+      const nodeWithGlobalCache: Node = {
+        ...cacheNode,
+        data: {
+          ...cacheNode.data,
+          config: {
+            cache: { enabled: true },
+          },
+        },
+      };
+
+      render(<NodeInspector {...defaultProps} selectedNode={nodeWithGlobalCache} />);
+
+      await user.click(screen.getByRole("button", { name: /advanced/i }));
+
+      const globalToggle = screen.getByRole("switch", { name: /use global ttl/i });
+      await user.click(globalToggle);
+
+      expect(mockOnUpdateNode).toHaveBeenCalledWith("cache-node", {
+        config: expect.objectContaining({
+          cache: expect.objectContaining({ enabled: true, ttl_seconds: 3600 }),
+        }),
+      });
     });
   });
 });

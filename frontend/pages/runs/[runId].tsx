@@ -237,6 +237,11 @@ export default function RunDetailPage() {
   const [wsToken, setWsToken] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
+  const [sseError, setSseError] = useState<string | null>(null);
+  const [lastStreamTimestamp, setLastStreamTimestamp] = useState<string | null>(null);
+  const [streamReconnectCount, setStreamReconnectCount] = useState(0);
+  const [lastReconnectFrom, setLastReconnectFrom] = useState<string | null>(null);
 
   const runStatusRef = useRef<string | null>(null);
 
@@ -396,6 +401,68 @@ export default function RunDetailPage() {
     return formatJsonForDisplay(latestSucceededNodeRun.output_json);
   }, [latestSucceededNodeRun]);
 
+  const handleStreamMessage = useCallback((message: RunsWsMessage | null) => {
+    if (!message) return;
+
+    if (message.type === "connected") {
+      return;
+    }
+
+    if (message.type === "run.updated" && "run" in message) {
+      const messageTimestamp =
+        typeof (message as { timestamp?: string }).timestamp === "string"
+          ? (message as { timestamp: string }).timestamp
+          : null;
+      if (messageTimestamp) {
+        setLastStreamTimestamp(messageTimestamp);
+      }
+      const runDelta = (message as { run: RunDeltaPayload }).run;
+      setRun((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          ...runDelta,
+        };
+      });
+      setLastUpdatedAt(new Date());
+      return;
+    }
+
+    if (message.type === "node_run.updated" && "node_run" in message) {
+      const messageTimestamp =
+        typeof (message as { timestamp?: string }).timestamp === "string"
+          ? (message as { timestamp: string }).timestamp
+          : null;
+      if (messageTimestamp) {
+        setLastStreamTimestamp(messageTimestamp);
+      }
+      const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
+      setRun((prev) => {
+        if (!prev) return prev;
+
+        const existingById = prev.node_runs.findIndex((nodeRun) => nodeRun.id === updatedNodeRun.id);
+        const existingByKey =
+          existingById === -1
+            ? prev.node_runs.findIndex(
+                (nodeRun) =>
+                  nodeRun.node_id === updatedNodeRun.node_id && nodeRun.attempt === updatedNodeRun.attempt,
+              )
+            : existingById;
+
+        const nextNodeRuns =
+          existingByKey === -1
+            ? [...prev.node_runs, updatedNodeRun]
+            : prev.node_runs.map((nodeRun, index) => (index === existingByKey ? updatedNodeRun : nodeRun));
+
+        return {
+          ...prev,
+          node_runs: sortNodeRuns(nextNodeRuns),
+        };
+      });
+      setLastUpdatedAt(new Date());
+    }
+  }, []);
+
   useEffect(() => {
     if (!run || String(run.status) !== "paused") {
       hasPrefilledApprovalFieldsRef.current = false;
@@ -527,10 +594,12 @@ export default function RunDetailPage() {
     socket.onerror = () => {
       setWsConnected(false);
       setWsError("WebSocket error.");
+      setStreamReconnectCount((prev) => prev + 1);
     };
 
     socket.onclose = () => {
       setWsConnected(false);
+      setStreamReconnectCount((prev) => prev + 1);
     };
 
     socket.onmessage = (event) => {
@@ -544,62 +613,16 @@ export default function RunDetailPage() {
         return;
       }
 
-      if (!message) return;
-
-      if (message.type === "connected") {
-        setWsConnected(true);
-        return;
-      }
-
-      if (message.type === "run.updated" && "run" in message) {
-        const runDelta = (message as { run: RunDeltaPayload }).run;
-        setRun((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            ...runDelta,
-          };
-        });
-        setLastUpdatedAt(new Date());
-        return;
-      }
-
-      if (message.type === "node_run.updated" && "node_run" in message) {
-        const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
-        setRun((prev) => {
-          if (!prev) return prev;
-
-          const existingById = prev.node_runs.findIndex((nodeRun) => nodeRun.id === updatedNodeRun.id);
-          const existingByKey =
-            existingById === -1
-              ? prev.node_runs.findIndex(
-                  (nodeRun) =>
-                    nodeRun.node_id === updatedNodeRun.node_id && nodeRun.attempt === updatedNodeRun.attempt,
-                )
-              : existingById;
-
-          const nextNodeRuns =
-            existingByKey === -1
-              ? [...prev.node_runs, updatedNodeRun]
-              : prev.node_runs.map((nodeRun, index) => (index === existingByKey ? updatedNodeRun : nodeRun));
-
-          return {
-            ...prev,
-            node_runs: sortNodeRuns(nextNodeRuns),
-          };
-        });
-        setLastUpdatedAt(new Date());
-        return;
-      }
+      handleStreamMessage(message);
     };
 
     return () => {
       socket.close();
     };
-  }, [runId, wsToken, runStatus]);
+  }, [runId, wsToken, runStatus, handleStreamMessage]);
 
   useEffect(() => {
-    if (wsConnected) return;
+    if (wsConnected || sseConnected) return;
     if (!runId) return;
 
     const interval = window.setInterval(() => {
@@ -611,7 +634,65 @@ export default function RunDetailPage() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [runId, fetchRun, wsConnected]);
+  }, [runId, fetchRun, wsConnected, sseConnected]);
+
+  useEffect(() => {
+    if (!runId || !wsToken) return;
+    if (wsConnected) return;
+
+    if (runStatus && isTerminalRunStatus(String(runStatus))) {
+      setSseConnected(false);
+      return;
+    }
+
+    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+    const sinceParam = lastStreamTimestamp ? `&since=${encodeURIComponent(lastStreamTimestamp)}` : "";
+    const sseUrl = `${apiBaseUrl}/api/runs/${runId}/stream?token=${encodeURIComponent(wsToken)}${sinceParam}`;
+
+    let source: EventSource;
+    try {
+      source = new EventSource(sseUrl);
+    } catch {
+      setSseConnected(false);
+      setSseError("Failed to open SSE stream.");
+      return;
+    }
+
+    setSseError(null);
+
+    source.onopen = () => {
+      setSseConnected(true);
+      if (streamReconnectCount > 0 && lastStreamTimestamp) {
+        setLastReconnectFrom(lastStreamTimestamp);
+      }
+    };
+
+    source.onerror = () => {
+      setSseConnected(false);
+      setSseError("SSE error.");
+      setStreamReconnectCount((prev) => prev + 1);
+      source.close();
+    };
+
+    const handleSseEvent = (event: MessageEvent<string>) => {
+      try {
+        const parsed = JSON.parse(event.data) as RunsWsMessage;
+        handleStreamMessage(parsed);
+      } catch {
+        return;
+      }
+    };
+
+    source.addEventListener("run.updated", handleSseEvent);
+    source.addEventListener("node_run.updated", handleSseEvent);
+    source.addEventListener("connected", () => setSseConnected(true));
+    source.onmessage = handleSseEvent;
+
+    return () => {
+      source.close();
+      setSseConnected(false);
+    };
+  }, [runId, wsToken, wsConnected, runStatus, handleStreamMessage, lastStreamTimestamp]);
 
   useEffect(() => {
     if (!runId) return;
@@ -677,8 +758,13 @@ export default function RunDetailPage() {
                 )}
                 {run && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Live updates: {wsConnected ? "websocket" : "polling"}
+                    Live updates: {wsConnected ? "websocket" : sseConnected ? "sse" : "polling"}
                     {wsError ? ` (${wsError})` : ""}
+                    {lastReconnectFrom && (wsConnected || sseConnected) ? (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        Reconnected from {formatDateTime(lastReconnectFrom)}
+                      </span>
+                    ) : null}
                   </p>
                 )}
               </div>
