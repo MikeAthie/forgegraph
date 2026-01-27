@@ -46,6 +46,9 @@ const nodeTypes: NodeTypes = {
   [NODE_TYPES.BRANCH]: GraphNodeComponent,
   [NODE_TYPES.MERGE]: GraphNodeComponent,
   [NODE_TYPES.HUMAN_GATE]: GraphNodeComponent,
+  [NODE_TYPES.MEMORY]: GraphNodeComponent,
+  [NODE_TYPES.TOOL]: GraphNodeComponent,
+  [NODE_TYPES.SUBGRAPH]: GraphNodeComponent,
   [NOTE_NODE_TYPE]: NoteNodeComponent,
 };
 

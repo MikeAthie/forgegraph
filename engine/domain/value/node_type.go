@@ -11,6 +11,9 @@ const (
 	NodeTypeBranch    NodeType = "branch"
 	NodeTypeMerge     NodeType = "merge"
 	NodeTypeHumanGate NodeType = "human_gate"
+	NodeTypeMemory    NodeType = "memory"
+	NodeTypeTool      NodeType = "tool"
+	NodeTypeSubgraph  NodeType = "subgraph"
 	NodeTypeOutput    NodeType = "output"
 )
 
@@ -23,7 +26,7 @@ func (t NodeType) String() string {
 func (t NodeType) IsValid() bool {
 	switch t {
 	case NodeTypePrompt, NodeTypeHTTP, NodeTypeTransform,
-		NodeTypeBranch, NodeTypeMerge, NodeTypeHumanGate, NodeTypeOutput:
+		NodeTypeBranch, NodeTypeMerge, NodeTypeHumanGate, NodeTypeMemory, NodeTypeTool, NodeTypeSubgraph, NodeTypeOutput:
 		return true
 	}
 	return false
@@ -56,6 +59,9 @@ func AllNodeTypes() []NodeType {
 		NodeTypeBranch,
 		NodeTypeMerge,
 		NodeTypeHumanGate,
+		NodeTypeMemory,
+		NodeTypeTool,
+		NodeTypeSubgraph,
 		NodeTypeOutput,
 	}
 }

@@ -19,6 +19,9 @@ export const NODE_TYPES = {
   BRANCH: "branch",
   MERGE: "merge",
   HUMAN_GATE: "human_gate",
+  MEMORY: "memory",
+  TOOL: "tool",
+  SUBGRAPH: "subgraph",
   OUTPUT: "output",
 } as const;
 
@@ -103,6 +106,47 @@ export interface BranchNodeConfig extends BaseNodeConfig {
  */
 export interface MergeNodeConfig extends BaseNodeConfig {
   merge_strategy?: "last_write_wins" | "namespaced";
+}
+
+/**
+ * Memory node configuration.
+ */
+export interface MemoryNodeConfig extends BaseNodeConfig {
+  action?: "get" | "set" | "delete";
+  key?: string;
+  namespace?: string;
+  namespace_path?: string;
+  value?: unknown;
+  value_path?: string;
+  value_template?: string;
+  ttl_seconds?: number;
+}
+
+/**
+ * Tool node configuration.
+ */
+export interface ToolNodeConfig extends BaseNodeConfig {
+  tool?: string;
+  version?: string;
+  input?: unknown;
+  input_path?: string;
+  input_template?: string;
+  config?: Record<string, unknown>;
+}
+
+/**
+ * Subgraph node configuration.
+ */
+export interface SubgraphNodeConfig extends BaseNodeConfig {
+  graph_json?: GraphJson | string;
+  graph_id?: string;
+  graph_version_id?: string;
+  graph_version?: number;
+  input?: Record<string, unknown>;
+  input_path?: string;
+  input_mapping?: Record<string, string>;
+  output_mapping?: Record<string, string>;
+  output_key?: string;
 }
 
 /**
@@ -314,6 +358,24 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
     type: NODE_TYPES.HUMAN_GATE,
     label: "Human Gate",
     description: "Pause for human approval",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.MEMORY,
+    label: "Memory",
+    description: "Store or retrieve shared memory values",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.TOOL,
+    label: "Tool",
+    description: "Call a tool from the tool registry",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.SUBGRAPH,
+    label: "Subgraph",
+    description: "Run another graph inline",
     enabled: true,
   },
 ];

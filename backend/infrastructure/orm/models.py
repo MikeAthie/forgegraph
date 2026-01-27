@@ -292,6 +292,31 @@ class RunEvent(models.Model):
         return f"RunEvent {self.run_id} - {self.event_type}"
 
 
+class MemoryEntry(models.Model):
+    """MemoryEntry stores key/value memory entries for memory nodes."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    namespace = models.CharField(max_length=255, default="global")
+    key = models.CharField(max_length=255)
+    value_json = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "memory_entries"
+        indexes = [
+            models.Index(fields=["namespace", "key"], name="memory_entries_ns_key_idx"),
+            models.Index(fields=["expires_at"], name="memory_entries_exp_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["namespace", "key"], name="memory_entries_ns_key_uniq"),
+        ]
+
+    def __str__(self):
+        return f"MemoryEntry {self.namespace}:{self.key}"
+
+
 class RunCheckpoint(models.Model):
     """RunCheckpoint model representing the latest durable checkpoint for a run."""
 

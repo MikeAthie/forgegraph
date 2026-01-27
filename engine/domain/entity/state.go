@@ -1,6 +1,9 @@
 package entity
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 // State holds the execution state for a run.
 // It is thread-safe for concurrent node execution.
@@ -92,6 +95,19 @@ func (s *State) Snapshot() map[string]any {
 	return snapshot
 }
 
+// SnapshotNested returns a nested representation of the state.
+// Keys are split on ".", producing a structured map useful for schema validation.
+func (s *State) SnapshotNested() map[string]any {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	root := make(map[string]any, len(s.values))
+	for key, value := range s.values {
+		insertNestedValue(root, key, value)
+	}
+	return root
+}
+
 // Merge adds all values from another map into the state
 func (s *State) Merge(values map[string]any) {
 	s.mu.Lock()
@@ -159,4 +175,34 @@ func (s *State) GetBool(key string) bool {
 		return b
 	}
 	return false
+}
+
+func insertNestedValue(root map[string]any, key string, value any) {
+	if key == "" {
+		return
+	}
+	parts := strings.Split(key, ".")
+	current := root
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		if i == len(parts)-1 {
+			current[part] = value
+			return
+		}
+		next, ok := current[part]
+		if !ok {
+			child := make(map[string]any)
+			current[part] = child
+			current = child
+			continue
+		}
+		child, ok := next.(map[string]any)
+		if !ok {
+			child = make(map[string]any)
+			current[part] = child
+		}
+		current = child
+	}
 }

@@ -9,6 +9,8 @@ type Graph struct {
 	Description string `json:"description"`
 	Nodes       []Node `json:"nodes"`
 	Edges       []Edge `json:"edges"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	EditorState map[string]any `json:"editor_state,omitempty"`
 }
 
 // Node represents a single node in the workflow

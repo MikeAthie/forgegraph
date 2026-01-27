@@ -16,6 +16,7 @@ const (
 	EventTypeRunPaused    EventType = "run_paused"
 	EventTypeRunResumed   EventType = "run_resumed"
 	EventTypeRunCanceled  EventType = "run_canceled"
+	EventTypeRunSchemaValidation EventType = "run.schema_validation"
 
 	// Node-level events
 	EventTypeNodeStarted   EventType = "node_started"
@@ -34,7 +35,7 @@ func (t EventType) String() string {
 func (t EventType) IsRunEvent() bool {
 	switch t {
 	case EventTypeRunStarted, EventTypeRunCompleted, EventTypeRunFailed,
-		EventTypeRunPaused, EventTypeRunResumed, EventTypeRunCanceled:
+		EventTypeRunPaused, EventTypeRunResumed, EventTypeRunCanceled, EventTypeRunSchemaValidation:
 		return true
 	}
 	return false

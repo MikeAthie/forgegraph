@@ -20,6 +20,9 @@ class NodeType(str, Enum):
     BRANCH = "branch"
     MERGE = "merge"
     HUMAN_GATE = "human_gate"
+    MEMORY = "memory"
+    TOOL = "tool"
+    SUBGRAPH = "subgraph"
     OUTPUT = "output"
 
     @classmethod

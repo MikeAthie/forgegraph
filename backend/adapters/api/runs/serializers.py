@@ -136,9 +136,12 @@ class RunUpdateDeltaSerializer(serializers.Serializer):
 class RunEventSerializer(serializers.Serializer):
     """Run event wrapper used by the broadcast endpoint."""
 
-    event_type = serializers.ChoiceField(choices=["node_run.updated", "run.updated"])
+    event_type = serializers.ChoiceField(
+        choices=["node_run.updated", "run.updated", "run.schema_validation"]
+    )
     node_run = NodeRunDeltaSerializer(required=False)
     run = RunUpdateDeltaSerializer(required=False)
+    payload = serializers.JSONField(required=False)
 
     def validate(self, attrs):
         event_type = attrs.get("event_type")
@@ -149,5 +152,9 @@ class RunEventSerializer(serializers.Serializer):
             )
         if event_type == "run.updated" and "run" not in attrs:
             raise serializers.ValidationError({"run": ["run is required for run.updated"]})
+        if event_type == "run.schema_validation" and "payload" not in attrs:
+            raise serializers.ValidationError(
+                {"payload": ["payload is required for run.schema_validation"]}
+            )
 
         return attrs

@@ -12,13 +12,15 @@ from jsonschema import exceptions as jsonschema_exceptions
 from jsonschema import validators
 
 
-def extract_schema_metadata(graph_json: dict[str, Any] | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str]:
+def extract_schema_metadata(
+    graph_json: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, str]:
     if not isinstance(graph_json, dict):
-        return None, None, "warn"
+        return None, None, None, "warn"
 
     metadata = graph_json.get("metadata")
     if not isinstance(metadata, dict):
-        return None, None, "warn"
+        return None, None, None, "warn"
 
     input_schema = metadata.get("input_schema")
     if not isinstance(input_schema, dict):
@@ -34,7 +36,11 @@ def extract_schema_metadata(graph_json: dict[str, Any] | None) -> tuple[dict[str
     else:
         mode = "warn"
 
-    return input_schema, output_schema, mode
+    state_schema = metadata.get("state_schema")
+    if not isinstance(state_schema, dict):
+        state_schema = None
+
+    return input_schema, output_schema, state_schema, mode
 
 
 def validate_json_schema(data: Any, schema: dict[str, Any]) -> list[dict[str, Any]]:

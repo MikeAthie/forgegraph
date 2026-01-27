@@ -202,7 +202,7 @@ export function NodeInspector({
               placeholder='Example: vars.status == "done"'
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              Note: edge conditions are stored, but runtime routing currently relies on Branch nodes.
+              Edge conditions influence routing when no explicit next_nodes are emitted.
             </p>
           </div>
         </div>
@@ -511,6 +511,27 @@ export function NodeInspector({
 
         {nodeType === NODE_TYPES.MERGE && (
           <MergeNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.MEMORY && (
+          <MemoryNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.TOOL && (
+          <ToolNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.SUBGRAPH && (
+          <SubgraphNodeConfig
             config={(nodeData.config as Record<string, unknown>) ?? {}}
             onChange={(config) => onUpdateNode(selectedNode.id, { config })}
           />
@@ -1132,6 +1153,433 @@ function MergeNodeConfig({
           <p className="font-medium text-foreground">Last Write Wins:</p>
           <p>Later branches overwrite earlier values for same keys</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Memory Node Config
+function MemoryNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  const action = (config.action as string) ?? "get";
+  const ttlSeconds =
+    typeof config.ttl_seconds === "number" ? config.ttl_seconds : "";
+  const valueText =
+    config.value === undefined
+      ? ""
+      : typeof config.value === "string"
+        ? config.value
+        : JSON.stringify(config.value, null, 2);
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Memory Configuration</h4>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Action
+        </label>
+        <select
+          value={action}
+          onChange={(e) => onChange({ ...config, action: e.target.value })}
+          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
+        >
+          <option value="get">Get</option>
+          <option value="set">Set</option>
+          <option value="delete">Delete</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Key
+        </label>
+        <Input
+          value={(config.key as string) ?? ""}
+          onChange={(e) => onChange({ ...config, key: e.target.value })}
+          placeholder="memory_key"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Namespace
+        </label>
+        <Input
+          value={(config.namespace as string) ?? ""}
+          onChange={(e) => onChange({ ...config, namespace: e.target.value })}
+          placeholder="global"
+          className="text-sm"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Optional namespace prefix for key isolation.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Namespace Path
+        </label>
+        <Input
+          value={(config.namespace_path as string) ?? ""}
+          onChange={(e) => onChange({ ...config, namespace_path: e.target.value })}
+          placeholder="input.thread_id"
+          className="text-sm"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          If set, resolves namespace from state (overrides Namespace).
+        </p>
+      </div>
+
+      {action === "set" && (
+        <>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Value Path
+            </label>
+            <Input
+              value={(config.value_path as string) ?? ""}
+              onChange={(e) => onChange({ ...config, value_path: e.target.value })}
+              placeholder="input.payload"
+              className="text-sm"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Reads a value from state (takes precedence over Value).
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Value Template
+            </label>
+            <Input
+              value={(config.value_template as string) ?? ""}
+              onChange={(e) => onChange({ ...config, value_template: e.target.value })}
+              placeholder="User {{input.user_id}} summary"
+              className="text-sm"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Template values from state if Value Path is empty.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Value (JSON or text)
+            </label>
+            <Textarea
+              value={valueText}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw.trim()) {
+                  const next = { ...config };
+                  delete next.value;
+                  onChange(next);
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(raw);
+                  onChange({ ...config, value: parsed });
+                } catch {
+                  onChange({ ...config, value: raw });
+                }
+              }}
+              placeholder='{"user_id": "123"}'
+              rows={3}
+              className="text-sm font-mono"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Static value used when Value Path and Template are empty.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              TTL (seconds)
+            </label>
+            <Input
+              type="number"
+              value={ttlSeconds}
+              onChange={(e) => {
+                const next = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                if (!next || Number.isNaN(next)) {
+                  const updated = { ...config };
+                  delete updated.ttl_seconds;
+                  onChange(updated);
+                  return;
+                }
+                onChange({ ...config, ttl_seconds: next });
+              }}
+              placeholder="3600"
+              className="text-sm"
+              min={1}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Tool Node Config
+function ToolNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  const toolName = (config.tool as string) ?? "";
+  const version = (config.version as string) ?? "";
+  const inputTemplate = (config.input_template as string) ?? "";
+  const inputPath = (config.input_path as string) ?? "";
+  const configText =
+    config.config && typeof config.config === "object"
+      ? JSON.stringify(config.config, null, 2)
+      : "";
+  const inputText =
+    config.input === undefined
+      ? ""
+      : typeof config.input === "string"
+        ? config.input
+        : JSON.stringify(config.input, null, 2);
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tool Configuration</h4>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Tool Name
+        </label>
+        <Input
+          value={toolName}
+          onChange={(e) => onChange({ ...config, tool: e.target.value })}
+          placeholder="vector.search"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Version
+        </label>
+        <Input
+          value={version}
+          onChange={(e) => onChange({ ...config, version: e.target.value })}
+          placeholder="1.0.0 (optional)"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Input Path
+        </label>
+        <Input
+          value={inputPath}
+          onChange={(e) => onChange({ ...config, input_path: e.target.value })}
+          placeholder="vars.query"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Input Template
+        </label>
+        <Input
+          value={inputTemplate}
+          onChange={(e) => onChange({ ...config, input_template: e.target.value })}
+          placeholder="Search for {{vars.query}}"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Static Input (JSON or text)
+        </label>
+        <Textarea
+          value={inputText}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (!raw.trim()) {
+              const next = { ...config };
+              delete next.input;
+              onChange(next);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(raw);
+              onChange({ ...config, input: parsed });
+            } catch {
+              onChange({ ...config, input: raw });
+            }
+          }}
+          rows={3}
+          className="text-sm font-mono"
+          placeholder='{"query": "hello"}'
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Tool Config Overrides (JSON)
+        </label>
+        <Textarea
+          value={configText}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (!raw.trim()) {
+              const next = { ...config };
+              delete next.config;
+              onChange(next);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(raw);
+              onChange({ ...config, config: parsed });
+            } catch {
+              // ignore invalid json
+            }
+          }}
+          rows={4}
+          className="text-sm font-mono"
+          placeholder='{"top_k": 5}'
+        />
+      </div>
+    </div>
+  );
+}
+
+// Subgraph Node Config
+function SubgraphNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  const inputMappingText =
+    config.input_mapping && typeof config.input_mapping === "object"
+      ? JSON.stringify(config.input_mapping, null, 2)
+      : "";
+  const outputMappingText =
+    config.output_mapping && typeof config.output_mapping === "object"
+      ? JSON.stringify(config.output_mapping, null, 2)
+      : "";
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subgraph Configuration</h4>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Graph ID
+        </label>
+        <Input
+          value={(config.graph_id as string) ?? ""}
+          onChange={(e) => onChange({ ...config, graph_id: e.target.value })}
+          placeholder="UUID of graph"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Graph Version ID (optional)
+        </label>
+        <Input
+          value={(config.graph_version_id as string) ?? ""}
+          onChange={(e) => onChange({ ...config, graph_version_id: e.target.value })}
+          placeholder="UUID of graph version"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Input Path
+        </label>
+        <Input
+          value={(config.input_path as string) ?? ""}
+          onChange={(e) => onChange({ ...config, input_path: e.target.value })}
+          placeholder="vars.subgraph_input"
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Input Mapping (JSON)
+        </label>
+        <Textarea
+          value={inputMappingText}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (!raw.trim()) {
+              const next = { ...config };
+              delete next.input_mapping;
+              onChange(next);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(raw);
+              onChange({ ...config, input_mapping: parsed });
+            } catch {
+              // ignore invalid json
+            }
+          }}
+          rows={3}
+          className="text-sm font-mono"
+          placeholder='{"query": "vars.search_query"}'
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Output Mapping (JSON)
+        </label>
+        <Textarea
+          value={outputMappingText}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (!raw.trim()) {
+              const next = { ...config };
+              delete next.output_mapping;
+              onChange(next);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(raw);
+              onChange({ ...config, output_mapping: parsed });
+            } catch {
+              // ignore invalid json
+            }
+          }}
+          rows={3}
+          className="text-sm font-mono"
+          placeholder='{"vars.summary": "report.summary"}'
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Output Key
+        </label>
+        <Input
+          value={(config.output_key as string) ?? ""}
+          onChange={(e) => onChange({ ...config, output_key: e.target.value })}
+          placeholder="vars.subgraph_output"
+          className="text-sm"
+        />
       </div>
     </div>
   );

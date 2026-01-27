@@ -28,6 +28,7 @@ type CheckpointMode string
 const (
 	CheckpointModeNone CheckpointMode = "none"
 	CheckpointModeNode CheckpointMode = "node"
+	CheckpointModeBatch CheckpointMode = "batch"
 )
 
 // SchedulerConfig holds scheduler configuration
@@ -35,6 +36,8 @@ type SchedulerConfig struct {
 	MaxWorkers       int // Maximum concurrent node executions
 	DefaultTimeoutMs int // Default timeout for node execution
 	CheckpointMode   CheckpointMode
+	CheckpointBatchSize int // Save checkpoint every N nodes when mode=batch
+	CheckpointIntervalMs int // Save checkpoint at least every N ms when mode=batch
 	CacheDefaultTTLSeconds int
 }
 
@@ -44,6 +47,8 @@ func DefaultSchedulerConfig() SchedulerConfig {
 		MaxWorkers:       10,
 		DefaultTimeoutMs: 30000, // 30 seconds
 		CheckpointMode:   CheckpointModeNode,
+		CheckpointBatchSize: 10,
+		CheckpointIntervalMs: 0,
 		CacheDefaultTTLSeconds: 3600,
 	}
 }
@@ -54,6 +59,7 @@ type Scheduler struct {
 	registry   port.ExecutorRegistry
 	repository port.RunRepository
 	emitter    port.EventEmitter
+	conditions *service.ConditionEvaluator
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -69,6 +75,14 @@ func NewScheduler(
 	if config.CheckpointMode == "" {
 		config.CheckpointMode = CheckpointModeNode
 	}
+	if config.CheckpointMode == CheckpointModeBatch {
+		if config.CheckpointBatchSize <= 0 {
+			config.CheckpointBatchSize = 10
+		}
+		if config.CheckpointIntervalMs < 0 {
+			config.CheckpointIntervalMs = 0
+		}
+	}
 	if config.CacheDefaultTTLSeconds == 0 {
 		config.CacheDefaultTTLSeconds = 3600
 	}
@@ -77,6 +91,7 @@ func NewScheduler(
 		registry:   registry,
 		repository: repository,
 		emitter:    emitter,
+		conditions: service.NewConditionEvaluator(),
 	}
 }
 
@@ -111,6 +126,10 @@ type runContext struct {
 	currentNodeID string
 
 	checkpointSeq int64
+	lastCheckpointAt time.Time
+
+	stateSchema *service.SchemaValidator
+	schemaMode  string
 }
 
 // StartRun begins executing a workflow
@@ -186,6 +205,13 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		state = entity.NewStateWithInput(input)
 	}
 
+	// Extract optional state schema validation metadata
+	stateSchemaRaw, schemaMode := extractStateSchemaMetadata(graph.Metadata)
+	stateSchema, err := service.CompileSchema(stateSchemaRaw)
+	if err != nil {
+		return fmt.Errorf("invalid state_schema: %w", err)
+	}
+
 	// Create run context
 	runCtx, cancel := context.WithCancel(ctx)
 	rc := &runContext{
@@ -196,6 +222,8 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		state:       state,
 		callbackURL: callbackURL,
 		graphJSON:   graphJSON,
+		stateSchema: stateSchema,
+		schemaMode:  schemaMode,
 		pending:     plan.CloneIndegree(),
 		completed:   make(map[string]bool),
 		skipped:     make(map[string]bool),
@@ -548,6 +576,24 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 		return
 	}
 
+	// Edge-level conditional routing for any node (when no explicit next_nodes set)
+	if len(edges) > 0 {
+		nextIDs, skippedIDs, usedConditions, err := s.evaluateEdgeConditions(rc, edges)
+		if err != nil {
+			s.setError(rc, domain.NewValidationError("edge_condition", err.Error()))
+			return
+		}
+		if usedConditions {
+			for _, skippedID := range skippedIDs {
+				s.markSkipped(rc, skippedID)
+			}
+			for _, nextID := range nextIDs {
+				s.decrementAndEnqueue(rc, nextID)
+			}
+			return
+		}
+	}
+
 	// For all other nodes, enqueue all children
 	for _, edge := range edges {
 		s.decrementAndEnqueue(rc, edge.To)
@@ -628,6 +674,10 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 		rc.state.SetNodeOutput(nodeID, result.Output)
 	}
 
+	if !s.validateStateSchema(rc, node, nodeRun, durationMs) {
+		return
+	}
+
 	// Update node run as completed
 	nodeRun.Status = string(value.NodeRunStatusSucceeded)
 	nodeRun.SetEnded(time.Now())
@@ -665,6 +715,11 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 	}
 
 	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
+	if s.config.CheckpointMode == CheckpointModeBatch {
+		if !s.shouldSaveBatchCheckpoint(rc, stepIndex) {
+			return
+		}
+	}
 	stateSnapshot := rc.state.Snapshot()
 
 	rc.pendingMu.Lock()
@@ -680,7 +735,26 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 
 	if err := s.repository.SaveCheckpoint(context.Background(), rc.runID, nodeID, stepIndex, stateSnapshot, completedNodes, skippedNodes, rc.graphJSON); err != nil {
 		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
+		return
 	}
+	rc.lastCheckpointAt = time.Now()
+}
+
+func (s *Scheduler) shouldSaveBatchCheckpoint(rc *runContext, stepIndex int) bool {
+	if s.config.CheckpointBatchSize > 0 && stepIndex%s.config.CheckpointBatchSize == 0 {
+		return true
+	}
+
+	if s.config.CheckpointIntervalMs > 0 {
+		if rc.lastCheckpointAt.IsZero() {
+			return true
+		}
+		if time.Since(rc.lastCheckpointAt) >= time.Duration(s.config.CheckpointIntervalMs)*time.Millisecond {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *Scheduler) applyCheckpointToPending(rc *runContext) {
@@ -998,6 +1072,12 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		return fmt.Errorf("invalid stored graph JSON: %w", err)
 	}
 
+	stateSchemaRaw, schemaMode := extractStateSchemaMetadata(graph.Metadata)
+	stateSchema, err := service.CompileSchema(stateSchemaRaw)
+	if err != nil {
+		return fmt.Errorf("invalid state_schema: %w", err)
+	}
+
 	// Build execution plan
 	planner := service.NewExecutionPlanner()
 	plan := planner.Plan(&graph)
@@ -1033,6 +1113,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		plan:      plan,
 		state:     state,
 		graphJSON: graphJSON,
+		stateSchema: stateSchema,
+		schemaMode:  schemaMode,
 		pending:   plan.CloneIndegree(),
 		completed: make(map[string]bool),
 		skipped:   make(map[string]bool),
@@ -1149,4 +1231,113 @@ func (s *Scheduler) injectNodeMetadata(rc *runContext, node *entity.Node) {
 		// Inject predecessor node IDs for merge collection
 		node.Config["_input_nodes"] = rc.plan.GetPredecessors(node.ID)
 	}
+}
+
+func (s *Scheduler) evaluateEdgeConditions(rc *runContext, edges []*entity.Edge) ([]string, []string, bool, error) {
+	hasCondition := false
+	for _, edge := range edges {
+		if strings.TrimSpace(edge.Condition) != "" {
+			hasCondition = true
+			break
+		}
+	}
+	if !hasCondition {
+		return nil, nil, false, nil
+	}
+
+	var next []string
+	var skipped []string
+	var defaultEdges []string
+
+	for _, edge := range edges {
+		target := edge.To
+		condition := strings.TrimSpace(edge.Condition)
+		if condition == "" {
+			defaultEdges = append(defaultEdges, target)
+			continue
+		}
+
+		ok, err := s.conditions.EvaluateBool(condition, rc.state)
+		if err != nil {
+			return nil, nil, true, err
+		}
+		if ok {
+			next = append(next, target)
+		} else {
+			skipped = append(skipped, target)
+		}
+	}
+
+	if len(next) == 0 {
+		next = defaultEdges
+	} else if len(defaultEdges) > 0 {
+		skipped = append(skipped, defaultEdges...)
+	}
+
+	return next, skipped, true, nil
+}
+
+func (s *Scheduler) validateStateSchema(rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, durationMs int64) bool {
+	if rc.stateSchema == nil {
+		return true
+	}
+
+	issues, err := rc.stateSchema.Validate(rc.state.SnapshotNested())
+	if err != nil {
+		s.setError(rc, domain.NewValidationError("state_schema", err.Error()))
+		return false
+	}
+	if len(issues) == 0 {
+		return true
+	}
+
+	payload := map[string]any{
+		"errors": issues,
+		"mode":   rc.schemaMode,
+	}
+	s.emitter.EmitAsync(
+		port.NewEvent(port.EventTypeRunSchemaValidation, rc.runID).
+			WithNode(node.ID, node.Type, node.Name).
+			WithOutput(payload),
+	)
+
+	if strings.ToLower(rc.schemaMode) == "strict" {
+		errMsg := fmt.Sprintf("state schema validation failed: %v", issues[0]["message"])
+		nodeRun.Status = string(value.NodeRunStatusFailed)
+		nodeRun.SetEnded(time.Now())
+		nodeRun.ErrorJSON = map[string]any{
+			"error":  errMsg,
+			"issues": issues,
+		}
+		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+
+		s.emitter.EmitAsync(
+			port.NewEvent(port.EventTypeNodeFailed, rc.runID).
+				WithNode(node.ID, node.Type, node.Name).
+				WithError(errMsg).
+				WithDuration(durationMs),
+		)
+		s.setError(rc, domain.NewNodeError(node.ID, node.Type, fmt.Errorf(errMsg)))
+		return false
+	}
+
+	return true
+}
+
+func extractStateSchemaMetadata(metadata map[string]any) (map[string]any, string) {
+	mode := "warn"
+	if metadata == nil {
+		return nil, mode
+	}
+
+	if rawMode, ok := metadata["schema_mode"].(string); ok && strings.ToLower(rawMode) == "strict" {
+		mode = "strict"
+	} else if rawMode, ok := metadata["validation_mode"].(string); ok && strings.ToLower(rawMode) == "strict" {
+		mode = "strict"
+	}
+
+	if rawSchema, ok := metadata["state_schema"].(map[string]any); ok && rawSchema != nil {
+		return rawSchema, mode
+	}
+	return nil, mode
 }

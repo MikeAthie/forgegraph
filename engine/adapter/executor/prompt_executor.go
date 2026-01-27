@@ -2,11 +2,14 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
+	"github.com/forgegraph/engine/domain/service"
 	"github.com/forgegraph/engine/domain/value"
 )
 
@@ -171,6 +174,51 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 
 	if response.FinishReason != "" {
 		output["finish_reason"] = response.FinishReason
+	}
+
+	if schemaRaw, ok := node.Config["output_schema"].(map[string]any); ok {
+		mode := strings.ToLower(node.GetConfigString("schema_mode"))
+		if mode == "" {
+			mode = strings.ToLower(node.GetConfigString("validation_mode"))
+		}
+		if mode == "" {
+			mode = "strict"
+		}
+
+		target := any(output)
+		targetMode := strings.ToLower(node.GetConfigString("output_schema_target"))
+		if targetMode == "" {
+			targetMode = "response"
+		}
+		if targetMode == "response" {
+			target = response.Content
+			if schemaType, ok := schemaRaw["type"].(string); ok && (schemaType == "object" || schemaType == "array") {
+				trimmed := strings.TrimSpace(response.Content)
+				if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+					var parsed any
+					if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+						target = parsed
+					}
+				}
+			}
+		}
+
+		validator, err := service.CompileSchema(schemaRaw)
+		if err != nil {
+			return port.NewErrorResult(domain.NewValidationError("output_schema", err.Error())), nil
+		}
+
+		issues, err := validator.Validate(target)
+		if err != nil {
+			return port.NewErrorResult(domain.NewValidationError("output_schema", err.Error())), nil
+		}
+		if len(issues) > 0 {
+			if mode == "warn" {
+				output["schema_errors"] = issues
+			} else {
+				return port.NewErrorResult(domain.NewValidationError("output_schema", fmt.Sprintf("prompt output invalid: %v", issues[0]["message"]))), nil
+			}
+		}
 	}
 
 	return port.NewSuccessResult(output), nil

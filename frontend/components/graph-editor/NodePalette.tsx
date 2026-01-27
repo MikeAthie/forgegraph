@@ -18,6 +18,9 @@ const nodeTypeIcons: Record<string, string> = {
   branch: "B",
   merge: "M",
   human_gate: "G",
+  memory: "S",
+  tool: "TL",
+  subgraph: "SG",
   note: "N",
 };
 
@@ -29,6 +32,9 @@ const nodeTypeColors: Record<string, string> = {
   branch: "bg-rose-500",
   merge: "bg-emerald-500",
   human_gate: "bg-orange-500",
+  memory: "bg-teal-500",
+  tool: "bg-cyan-500",
+  subgraph: "bg-fuchsia-500",
   note: "bg-amber-500",
 };
 
@@ -58,10 +64,13 @@ const NODE_CATEGORIES: Record<string, string> = {
   branch: "Logic",
   merge: "Logic",
   human_gate: "Logic",
+  memory: "Memory",
+  tool: "Extensibility",
+  subgraph: "Extensibility",
   note: "Annotations",
 };
 
-const CATEGORY_ORDER = ["AI", "Logic", "I/O", "Annotations"];
+const CATEGORY_ORDER = ["AI", "Logic", "Extensibility", "Memory", "I/O", "Annotations"];
 
 export function NodePalette({
   onAddNode,

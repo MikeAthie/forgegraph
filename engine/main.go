@@ -7,10 +7,13 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/forgegraph/engine/adapter/executor"
 	"github.com/forgegraph/engine/adapter/gateway"
 	"github.com/forgegraph/engine/adapter/repository"
+	"github.com/forgegraph/engine/adapter/store"
+	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/infrastructure/logger"
@@ -29,6 +32,10 @@ type Config struct {
 	MaxWorkers     int
 	DefaultTimeout int
 	CacheTTLSeconds int
+	CheckpointMode string
+	CheckpointBatchSize int
+	CheckpointIntervalMs int
+	ToolManifestDir string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -39,6 +46,10 @@ func LoadConfig() *Config {
 		MaxWorkers:     getEnvInt("MAX_WORKERS", 10),
 		DefaultTimeout: getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
 		CacheTTLSeconds: getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
+		CheckpointMode: strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
+		CheckpointBatchSize: getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
+		CheckpointIntervalMs: getEnvInt("CHECKPOINT_INTERVAL_MS", 0),
+		ToolManifestDir: getEnv("TOOL_MANIFEST_DIR", ""),
 	}
 	return cfg
 }
@@ -221,13 +232,20 @@ func main() {
 		"max_workers", cfg.MaxWorkers,
 		"default_timeout_ms", cfg.DefaultTimeout,
 		"cache_default_ttl_seconds", cfg.CacheTTLSeconds,
+		"checkpoint_mode", cfg.CheckpointMode,
+		"checkpoint_batch_size", cfg.CheckpointBatchSize,
+		"checkpoint_interval_ms", cfg.CheckpointIntervalMs,
+		"tool_manifest_dir", cfg.ToolManifestDir,
 	)
 
-	// Initialize repository
+	// Initialize repository and memory store
 	var repo port.RunRepository
+	var memoryStore port.MemoryStore
+	var db *sql.DB
+	var err error
 	if cfg.DatabaseURL != "" {
 		// Connect to PostgreSQL
-		db, err := sql.Open("postgres", cfg.DatabaseURL)
+		db, err = sql.Open("postgres", cfg.DatabaseURL)
 		if err != nil {
 			log.Error("database_connection_failed", "error", err.Error())
 			os.Exit(1)
@@ -242,9 +260,11 @@ func main() {
 		log.Info("database_connected", "driver", "postgres")
 
 		repo = repository.NewPostgresRunRepository(db)
+		memoryStore = store.NewPostgresMemoryStore(db)
 	} else {
 		log.Warn("database_url_not_set", "fallback", "in-memory")
 		repo = repository.NewMemoryRunRepository()
+		memoryStore = store.NewInMemoryMemoryStore()
 	}
 
 	// Initialize event emitter (no-op for now, callback URL comes per-request)
@@ -253,6 +273,10 @@ func main() {
 
 	// Initialize node executors
 	registry := port.NewExecutorRegistry()
+	toolRegistry := tool.NewRegistry()
+	if err := toolRegistry.LoadManifests(cfg.ToolManifestDir); err != nil {
+		log.Warn("tool_manifest_load_failed", "error", err.Error())
+	}
 	registry.RegisterAll(
 		executor.NewOutputExecutor(),
 		executor.NewTransformExecutor(),
@@ -260,6 +284,9 @@ func main() {
 		executor.NewBranchExecutor(),
 		executor.NewMergeExecutor(),
 		executor.NewHumanGateExecutor(),
+		executor.NewMemoryExecutor(memoryStore),
+		executor.NewToolExecutor(toolRegistry),
+		executor.NewSubgraphExecutor(registry),
 	)
 
 	// Initialize LLM client for Prompt nodes
@@ -271,12 +298,15 @@ func main() {
 		log.Info("openai_client_initialized", "note", "Prompt nodes enabled")
 	}
 
-	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate", "prompt"})
+	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate", "memory", "tool", "subgraph", "prompt"})
 
 	// Initialize scheduler
 	schedulerConfig := usecase.SchedulerConfig{
 		MaxWorkers:       cfg.MaxWorkers,
 		DefaultTimeoutMs: cfg.DefaultTimeout,
+		CheckpointMode: usecase.CheckpointMode(cfg.CheckpointMode),
+		CheckpointBatchSize: cfg.CheckpointBatchSize,
+		CheckpointIntervalMs: cfg.CheckpointIntervalMs,
 		CacheDefaultTTLSeconds: cfg.CacheTTLSeconds,
 	}
 	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter)

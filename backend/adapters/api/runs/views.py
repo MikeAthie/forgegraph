@@ -5,6 +5,7 @@ Clean Architecture: Interface Adapters layer.
 """
 
 import asyncio
+import copy
 import logging
 import json as pyjson
 
@@ -94,6 +95,98 @@ def strip_sentinel_edges(graph_json: dict) -> dict:
     cleaned = dict(graph_json)
     cleaned["edges"] = filtered_edges
     return cleaned
+
+
+def expand_subgraphs(graph_json: dict, owner) -> dict:
+    """Inline subgraph graph_json for subgraph nodes."""
+    if not isinstance(graph_json, dict):
+        return graph_json
+
+    data = copy.deepcopy(graph_json)
+    nodes = data.get("nodes")
+    if not isinstance(nodes, list):
+        return data
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") != "subgraph":
+            continue
+
+        config = node.get("config")
+        if not isinstance(config, dict):
+            config = {}
+
+        if isinstance(config.get("graph_json"), dict):
+            config["graph_json"] = expand_subgraphs(config["graph_json"], owner)
+            node["config"] = config
+            continue
+
+        graph_version_id = config.get("graph_version_id")
+        graph_id = config.get("graph_id")
+        graph_version = None
+        if graph_version_id:
+            graph_version = (
+                GraphVersion.objects.select_related("graph")
+                .filter(id=graph_version_id, graph__owner=owner)
+                .first()
+            )
+        elif graph_id:
+            graph_version = (
+                GraphVersion.objects.select_related("graph")
+                .filter(graph_id=graph_id, graph__owner=owner)
+                .order_by("-version")
+                .first()
+            )
+
+        if graph_version is None:
+            raise ValueError("Subgraph reference is invalid or not accessible.")
+
+        subgraph_json = strip_sentinel_edges(graph_version.graph_json)
+        config["graph_json"] = expand_subgraphs(subgraph_json, owner)
+        config["graph_id"] = str(graph_version.graph_id)
+        config["graph_version_id"] = str(graph_version.id)
+        config["graph_version"] = graph_version.version
+        node["config"] = config
+
+    return data
+
+
+def apply_memory_namespace_prefix(graph_json: dict, owner_id) -> dict:
+    """Ensure memory nodes are isolated per user via namespace_prefix."""
+    if not isinstance(graph_json, dict):
+        return graph_json
+
+    data = copy.deepcopy(graph_json)
+    nodes = data.get("nodes")
+    if not isinstance(nodes, list):
+        return data
+
+    prefix = f"user:{owner_id}"
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = node.get("type")
+        config = node.get("config")
+        if not isinstance(config, dict):
+            config = {}
+
+        if node_type == "memory":
+            config["namespace_prefix"] = prefix
+            node["config"] = config
+        elif node_type == "subgraph" and isinstance(config.get("graph_json"), dict):
+            config["graph_json"] = apply_memory_namespace_prefix(config["graph_json"], owner_id)
+            node["config"] = config
+
+    return data
+
+
+def prepare_graph_for_engine(graph_json: dict, owner) -> dict:
+    """Prepare graph JSON for engine execution (strip sentinels, expand subgraphs, enforce memory isolation)."""
+    cleaned = strip_sentinel_edges(graph_json)
+    expanded = expand_subgraphs(cleaned, owner)
+    return apply_memory_namespace_prefix(expanded, owner.id)
 
 
 class RunListView(APIView):
@@ -282,7 +375,7 @@ class RunStartView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        input_schema, _, _ = extract_schema_metadata(graph_version.graph_json)
+        input_schema, _, _, _ = extract_schema_metadata(graph_version.graph_json)
         if input_schema:
             try:
                 schema_errors = validate_json_schema(input_json, input_schema)
@@ -315,13 +408,23 @@ class RunStartView(APIView):
         )
         broadcast_run_updated(run)
 
+        # Prepare graph for engine (inline subgraphs, enforce memory namespace)
+        try:
+            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, request.user)
+        except ValueError as exc:
+            return error_response(
+                code="INVALID_SUBGRAPH",
+                message=str(exc),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Send run to the engine
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
         try:
             with get_engine_client(callback_url) as engine:
                 engine.start_run(
                     run_id=run.id,
-                    graph_json=strip_sentinel_edges(graph_version.graph_json),
+                    graph_json=prepared_graph,
                     input_json=input_json,
                 )
                 # Update status to running once engine accepts
@@ -455,10 +558,17 @@ class RunInvokeView(APIView):
             )
 
         graph_version = latest_run.graph_version
-        graph_json = strip_sentinel_edges(graph_version.graph_json)
+        try:
+            graph_json = prepare_graph_for_engine(graph_version.graph_json, request.user)
+        except ValueError as exc:
+            return error_response(
+                code="INVALID_SUBGRAPH",
+                message=str(exc),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         checkpoint_graph_json = pyjson.dumps(graph_json)
 
-        input_schema, _, _ = extract_schema_metadata(graph_version.graph_json)
+        input_schema, _, _, _ = extract_schema_metadata(graph_version.graph_json)
         if input_schema:
             try:
                 schema_errors = validate_json_schema(input_json, input_schema)
@@ -827,7 +937,7 @@ class RunEventsView(APIView):
             output_schema = None
             schema_mode = "warn"
             try:
-                _, output_schema, schema_mode = extract_schema_metadata(
+                _, output_schema, _, schema_mode = extract_schema_metadata(
                     run.graph_version.graph_json
                 )
             except Exception:
@@ -921,6 +1031,19 @@ class RunEventsView(APIView):
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)
+
+        if event_type == "run.schema_validation":
+            payload = serializer.validated_data.get("payload") or {}
+            try:
+                RunEvent.objects.create(
+                    run=run,
+                    event_type=event_type,
+                    payload=payload,
+                )
+            except Exception as exc:  # pragma: no cover - log and continue
+                logger.warning("Failed to persist schema validation event: %s", exc)
+
+            return success_response({"received": True})
 
         return error_response(
             code="VALIDATION_ERROR",

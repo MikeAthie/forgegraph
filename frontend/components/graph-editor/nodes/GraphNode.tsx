@@ -34,6 +34,18 @@ const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
     strip: "bg-orange-500",
     pill: "bg-orange-500/15 text-orange-800 dark:text-orange-300",
   },
+  [NODE_TYPES.MEMORY]: {
+    strip: "bg-teal-500",
+    pill: "bg-teal-500/15 text-teal-800 dark:text-teal-300",
+  },
+  [NODE_TYPES.TOOL]: {
+    strip: "bg-cyan-500",
+    pill: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300",
+  },
+  [NODE_TYPES.SUBGRAPH]: {
+    strip: "bg-fuchsia-500",
+    pill: "bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300",
+  },
 };
 
 const nodeTypeLabels: Record<string, string> = {
@@ -44,6 +56,9 @@ const nodeTypeLabels: Record<string, string> = {
   [NODE_TYPES.BRANCH]: "Branch",
   [NODE_TYPES.MERGE]: "Merge",
   [NODE_TYPES.HUMAN_GATE]: "Human Gate",
+  [NODE_TYPES.MEMORY]: "Memory",
+  [NODE_TYPES.TOOL]: "Tool",
+  [NODE_TYPES.SUBGRAPH]: "Subgraph",
 };
 
 interface GraphNodeData {
@@ -283,6 +298,30 @@ function getConfigPreview(
       return config.prompt_message
         ? `${String(config.prompt_message).slice(0, 30)}...`
         : "Requires approval";
+    case NODE_TYPES.MEMORY: {
+      const action = (config.action as string) ?? "get";
+      const key = (config.key as string) ?? "";
+      if (key) {
+        return `${action.toUpperCase()} ${key}`.slice(0, 32);
+      }
+      return "Memory action";
+    }
+    case NODE_TYPES.TOOL: {
+      const toolName = (config.tool as string) ?? (config.name as string) ?? "";
+      const version = (config.version as string) ?? "";
+      if (toolName) {
+        return version ? `${toolName}@${version}`.slice(0, 32) : toolName.slice(0, 32);
+      }
+      return "Tool call";
+    }
+    case NODE_TYPES.SUBGRAPH: {
+      const graphId = (config.graph_id as string) ?? "";
+      const graphVersion = config.graph_version as number | undefined;
+      if (graphId) {
+        return graphVersion ? `Graph ${graphId} v${graphVersion}`.slice(0, 32) : `Graph ${graphId}`.slice(0, 32);
+      }
+      return "Subgraph";
+    }
     default:
       return "";
   }
