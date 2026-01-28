@@ -599,4 +599,141 @@ describe("NodeInspector", () => {
       });
     });
   });
+
+  describe("Prompt Node Extended Configuration", () => {
+    const promptNode: Node = {
+      id: "prompt-extended",
+      type: NODE_TYPES.PROMPT,
+      position: { x: 0, y: 0 },
+      data: {
+        label: "Extended Prompt",
+        nodeType: NODE_TYPES.PROMPT,
+        config: {
+          prompt_template: "Hello {{name}}",
+          system_prompt: "You are a helpful assistant",
+          model: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 1000,
+        },
+      },
+    };
+
+    it("should display system prompt field", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
+
+      expect(screen.getByText(/System Prompt/i)).toBeInTheDocument();
+      expect(screen.getByDisplayValue("You are a helpful assistant")).toBeInTheDocument();
+    });
+
+    it("should display model field", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
+
+      expect(screen.getByText("Model")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("gpt-4")).toBeInTheDocument();
+    });
+
+    it("should display temperature field", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
+
+      expect(screen.getByText(/Temperature/i)).toBeInTheDocument();
+      expect(screen.getByDisplayValue("0.7")).toBeInTheDocument();
+    });
+
+    it("should display max tokens field", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
+
+      expect(screen.getByText(/Max Tokens/i)).toBeInTheDocument();
+      expect(screen.getByDisplayValue("1000")).toBeInTheDocument();
+    });
+
+    it("should update model config when changed", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
+
+      const modelInput = screen.getByDisplayValue("gpt-4");
+      fireEvent.change(modelInput, { target: { value: "claude-3" } });
+
+      expect(mockOnUpdateNode).toHaveBeenCalledWith("prompt-extended", {
+        config: expect.objectContaining({ model: "claude-3" }),
+      });
+    });
+  });
+
+  describe("HTTP Node URL Validation", () => {
+    const httpNode: Node = {
+      id: "http-validation",
+      type: NODE_TYPES.HTTP,
+      position: { x: 0, y: 0 },
+      data: {
+        label: "HTTP Validation",
+        nodeType: NODE_TYPES.HTTP,
+        config: { method: "GET", url: "" },
+      },
+    };
+
+    it("should show URL validation error for invalid URL", async () => {
+      const user = userEvent.setup();
+      render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
+
+      const urlInput = screen.getByPlaceholderText(/https:\/\/api.example.com/i);
+      await user.type(urlInput, "not-a-valid-url");
+      fireEvent.blur(urlInput);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Invalid URL format/i)).toBeInTheDocument();
+      });
+    });
+
+    it("should not show error for valid URL", async () => {
+      const user = userEvent.setup();
+      render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
+
+      const urlInput = screen.getByPlaceholderText(/https:\/\/api.example.com/i);
+      await user.type(urlInput, "https://api.example.com/test");
+      fireEvent.blur(urlInput);
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Invalid URL format/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it("should display headers section", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
+
+      expect(screen.getByText("Headers")).toBeInTheDocument();
+    });
+
+    it("should display body textarea", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
+
+      expect(screen.getByText(/Request Body/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("Output Node KeyValueEditor", () => {
+    const outputNode: Node = {
+      id: "output-node",
+      type: NODE_TYPES.OUTPUT,
+      position: { x: 0, y: 0 },
+      data: {
+        label: "Output",
+        nodeType: NODE_TYPES.OUTPUT,
+        config: {
+          output_mapping: { result: "node.prompt_1.output" },
+        },
+      },
+    };
+
+    it("should display output mapping section", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={outputNode} />);
+
+      expect(screen.getByText("Output Mapping")).toBeInTheDocument();
+    });
+
+    it("should display existing mapping entries", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={outputNode} />);
+
+      expect(screen.getByDisplayValue("result")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("node.prompt_1.output")).toBeInTheDocument();
+    });
+  });
 });

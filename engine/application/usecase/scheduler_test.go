@@ -1309,3 +1309,133 @@ func waitForRunInactive(t *testing.T, scheduler *Scheduler, runID string, timeou
 	}
 	t.Fatalf("Run %s did not become inactive within %v", runID, timeout)
 }
+
+// =============================================================================
+// Test: Disabled Nodes
+// =============================================================================
+
+func TestScheduler_DisabledNodeIsSkipped(t *testing.T) {
+	// Create a graph with a disabled node that should be skipped
+	nodes := []entity.Node{
+		{ID: "start", Type: "transform", Name: "Start", Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "started",
+			"output_key":      "status",
+		}},
+		{ID: "disabled_node", Type: "transform", Name: "Disabled Node", Disabled: true, Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "should_not_run",
+			"output_key":      "disabled_output",
+		}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "start", To: "disabled_node"},
+		{From: "disabled_node", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"node_id": node.ID}}, nil
+	})
+
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return &port.NodeExecutionResult{Output: map[string]any{"done": true}}, nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), "run-disabled", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-disabled", 5*time.Second)
+
+	// Verify disabled node was not executed
+	if transformExec.getNodeExecuteCount("disabled_node") != 0 {
+		t.Errorf("Expected disabled_node to be skipped (0 executes), got %d", transformExec.getNodeExecuteCount("disabled_node"))
+	}
+
+	// Verify start node was executed
+	if transformExec.getNodeExecuteCount("start") != 1 {
+		t.Errorf("Expected start to execute once, got %d", transformExec.getNodeExecuteCount("start"))
+	}
+
+	// Verify output node was executed (downstream of disabled node)
+	if outputExec.getNodeExecuteCount("output1") != 1 {
+		t.Errorf("Expected output1 to execute once, got %d", outputExec.getNodeExecuteCount("output1"))
+	}
+
+	// Verify run completed successfully
+	if repo.getRunStatus("run-disabled") != string(value.RunStatusSucceeded) {
+		t.Errorf("Expected run status succeeded, got %s", repo.getRunStatus("run-disabled"))
+	}
+
+	// Verify skipped event was emitted
+	if !emitter.hasEventType(port.EventTypeNodeSkipped) {
+		t.Error("Expected node_skipped event for disabled node")
+	}
+}
+
+func TestScheduler_DisabledNodeWithMultipleDownstream(t *testing.T) {
+	// Test that a disabled node properly propagates to its downstream nodes
+	nodes := []entity.Node{
+		{ID: "start", Type: "transform", Name: "Start", Config: map[string]any{}},
+		{ID: "disabled", Type: "transform", Name: "Disabled", Disabled: true, Config: map[string]any{}},
+		{ID: "after_disabled", Type: "transform", Name: "After Disabled", Config: map[string]any{}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "start", To: "disabled"},
+		{From: "disabled", To: "after_disabled"},
+		{From: "after_disabled", To: "output"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ran": node.ID}), nil
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	err := scheduler.StartRun(context.Background(), "run-disabled-chain", graphJSON, "{}", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-disabled-chain", 5*time.Second)
+
+	// Verify disabled node was skipped
+	if transformExec.getNodeExecuteCount("disabled") != 0 {
+		t.Errorf("Expected disabled node to be skipped, got %d", transformExec.getNodeExecuteCount("disabled"))
+	}
+
+	// The after_disabled node should be skipped because its only upstream is skipped
+	// This tests the recursive skip behavior
+	if transformExec.getNodeExecuteCount("after_disabled") != 0 {
+		t.Errorf("Expected after_disabled to be skipped (only upstream is skipped), got %d", transformExec.getNodeExecuteCount("after_disabled"))
+	}
+
+	// Output should also be skipped since its only upstream is skipped
+	if outputExec.getNodeExecuteCount("output") != 0 {
+		t.Errorf("Expected output to be skipped, got %d", outputExec.getNodeExecuteCount("output"))
+	}
+}

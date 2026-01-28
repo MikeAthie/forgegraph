@@ -87,7 +87,8 @@ export function reactFlowToGraphJson(
   edges: Edge[],
   metadata: GraphMetadata,
   graphId?: string,
-  versionId?: string
+  versionId?: string,
+  viewport?: { x: number; y: number; zoom: number }
 ): GraphJson {
   const executableNodes = nodes.filter((node): node is Node & { type: NodeType } =>
     isValidNodeType(node.type ?? "")
@@ -173,6 +174,7 @@ export function reactFlowToGraphJson(
     editor_state: {
       nodePositions,
       notes: notes.length > 0 ? notes : undefined,
+      viewport: viewport ?? undefined,
     },
   };
 }

@@ -20,7 +20,10 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2 } from "lucide-react";
+import { Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
+
+import { WizardProvider, useWizard } from "@/contexts/WizardContext";
+import { AgentWizard } from "./wizard";
 
 import type { GraphJson, NodeType } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
@@ -119,6 +122,25 @@ const formatDuration = (durationMs: number | null | undefined) => {
   return `${totalSeconds}s`;
 };
 
+// Wizard button component - uses wizard context
+function WizardButton() {
+  const { startWizard, state } = useWizard();
+
+  return (
+    <button
+      type="button"
+      aria-label="Agent Wizard"
+      onClick={() => startWizard(false)}
+      disabled={state.isActive}
+      title="Open Agent Wizard (Ctrl+Shift+W)"
+      className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
+    >
+      <Wand2 aria-hidden="true" className="h-4 w-4" />
+      <span className="hidden sm:inline">Wizard</span>
+    </button>
+  );
+}
+
 export function GraphEditor({
   graphId,
   graphName,
@@ -158,6 +180,11 @@ export function GraphEditor({
 
   const [promptWizardOpen, setPromptWizardOpen] = useState(false);
   const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<string | null>(null);
+
+  // Viewport state for preserving pan/zoom across saves
+  const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
+    initialGraphJson?.editor_state?.viewport
+  );
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
 
@@ -844,6 +871,19 @@ export function GraphEditor({
     let addedEnds = 0;
 
     const executableNodes = nodes.filter((node) => node.type !== NOTE_NODE_TYPE);
+
+    // Validation: Cannot save empty graph
+    if (executableNodes.length === 0) {
+      showError("Cannot save empty graph", "Add at least one node to the graph");
+      return;
+    }
+
+    // Validation: Must have at least one output node
+    const hasOutputNode = executableNodes.some((node) => node.type === NODE_TYPES.OUTPUT);
+    if (!hasOutputNode) {
+      showError("Graph needs an output node", "Add an Output node to define the graph's result");
+      return;
+    }
     if (executableNodes.length > 0) {
       const hasTrigger = executableNodes.some((node) => (node.data as any)?.isTrigger === true);
       if (!hasTrigger) {
@@ -897,11 +937,13 @@ export function GraphEditor({
       normalizedNodes,
       edges,
       { name: graphName, description: graphDescription },
-      graphId
+      graphId,
+      undefined,
+      currentViewport
     );
     await onSave(graphJson);
     setIsDirty(false);
-  }, [nodes, edges, graphName, graphDescription, graphId, onSave]);
+  }, [nodes, edges, graphName, graphDescription, graphId, onSave, currentViewport]);
 
   const runDisabledReason =
     startingRun
@@ -1070,11 +1112,17 @@ export function GraphEditor({
       : [];
 
   return (
-    <div className="flex h-full">
-      <PromptNodeWizardDialog
-        open={promptWizardOpen}
-        onOpenChange={(nextOpen) => {
-          setPromptWizardOpen(nextOpen);
+    <WizardProvider>
+      <div className="flex h-full">
+        <AgentWizard
+          onComplete={() => {
+            showSuccess("Agent wizard completed", "Your agent workflow is ready");
+          }}
+        />
+        <PromptNodeWizardDialog
+          open={promptWizardOpen}
+          onOpenChange={(nextOpen) => {
+            setPromptWizardOpen(nextOpen);
           if (!nextOpen) {
             setPromptWizardSourceNodeId(null);
           }
@@ -1112,6 +1160,7 @@ export function GraphEditor({
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           onPaneClick={onPaneClick}
+          onMoveEnd={(_, viewport) => setCurrentViewport(viewport)}
           nodeTypes={nodeTypes}
           fitView
           snapToGrid
@@ -1192,6 +1241,7 @@ export function GraphEditor({
             </div>
             {!isEditingMetadata && (
               <>
+                <WizardButton />
                 <button
                   type="button"
                   aria-label={runDisabledReason ?? "Run workflow"}
@@ -1344,5 +1394,6 @@ export function GraphEditor({
         />
       </div>
     </div>
+    </WizardProvider>
   );
 }

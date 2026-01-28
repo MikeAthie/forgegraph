@@ -5,6 +5,7 @@ import { NODE_TYPES, type RetryPolicy } from "../../lib/graph-types";
 import { getApiErrorMessage, promptsApi } from "../../lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KeyValueEditor } from "@/components/ui/key-value-editor";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -669,6 +670,81 @@ function PromptNodeConfig({
           This is what the engine executes. Editing detaches from the Prompt Library ID.
         </p>
       </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          System Prompt (optional)
+        </label>
+        <Textarea
+          value={(config.system_prompt as string) ?? ""}
+          onChange={(e) => onChange({ ...config, system_prompt: e.target.value })}
+          placeholder="You are a helpful assistant..."
+          rows={4}
+          className="text-sm font-mono"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          System instructions prepended to the conversation.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Model
+          </label>
+          <Input
+            value={(config.model as string) ?? "gpt-4"}
+            onChange={(e) => onChange({ ...config, model: e.target.value })}
+            placeholder="gpt-4"
+            className="text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Temperature (0-2)
+          </label>
+          <Input
+            type="number"
+            value={(config.temperature as number) ?? 0.7}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              onChange({ ...config, temperature: isNaN(val) ? undefined : val });
+            }}
+            min={0}
+            max={2}
+            step={0.1}
+            className="text-sm"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Max Tokens (optional)
+        </label>
+        <Input
+          type="number"
+          value={(config.max_tokens as number) ?? ""}
+          onChange={(e) => {
+            const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+            onChange({ ...config, max_tokens: val });
+          }}
+          min={1}
+          placeholder="No limit"
+          className="text-sm"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Variables
+        </label>
+        <KeyValueEditor
+          value={(config.variables as Record<string, string>) ?? {}}
+          onChange={(variables) => onChange({ ...config, variables })}
+          keyPlaceholder="Variable"
+          valuePlaceholder="State path (e.g., input.name)"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Map variable names to state paths for template substitution.
+        </p>
+      </div>
     </div>
   );
 }
@@ -681,6 +757,21 @@ function HttpNodeConfig({
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
 }) {
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  const validateUrl = (url: string) => {
+    if (!url.trim()) {
+      setUrlError(null);
+      return;
+    }
+    try {
+      new URL(url);
+      setUrlError(null);
+    } catch {
+      setUrlError("Invalid URL format");
+    }
+  };
+
   return (
     <div className="space-y-3 pt-3 border-t border-border">
       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">HTTP Configuration</h4>
@@ -706,10 +797,44 @@ function HttpNodeConfig({
         </label>
         <Input
           value={(config.url as string) ?? ""}
-          onChange={(e) => onChange({ ...config, url: e.target.value })}
+          onChange={(e) => {
+            setUrlError(null);
+            onChange({ ...config, url: e.target.value });
+          }}
+          onBlur={(e) => validateUrl(e.target.value)}
           placeholder="https://api.example.com/..."
           className="text-sm"
+          aria-invalid={!!urlError}
         />
+        {urlError && (
+          <p className="mt-1 text-xs text-destructive">{urlError}</p>
+        )}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Headers
+        </label>
+        <KeyValueEditor
+          value={(config.headers as Record<string, string>) ?? {}}
+          onChange={(headers) => onChange({ ...config, headers })}
+          keyPlaceholder="Header"
+          valuePlaceholder="Value"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Request Body (JSON)
+        </label>
+        <Textarea
+          value={(config.body as string) ?? ""}
+          onChange={(e) => onChange({ ...config, body: e.target.value })}
+          placeholder='{"key": "value"}'
+          rows={4}
+          className="text-sm font-mono"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          JSON body for POST/PUT/PATCH requests
+        </p>
       </div>
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -778,30 +903,25 @@ function OutputNodeConfig({
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
 }) {
+  // Convert output_mapping to Record<string, string> for KeyValueEditor
+  const outputMapping = (config.output_mapping as Record<string, unknown>) ?? {};
+  const mappingAsStrings: Record<string, string> = {};
+  for (const [key, value] of Object.entries(outputMapping)) {
+    mappingAsStrings[key] = typeof value === "string" ? value : JSON.stringify(value);
+  }
+
   return (
     <div className="space-y-3 pt-3 border-t border-border">
       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Output Configuration</h4>
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Output Mapping (JSON)
+          Output Mapping
         </label>
-        <Textarea
-          value={
-            config.output_mapping
-              ? JSON.stringify(config.output_mapping, null, 2)
-              : ""
-          }
-          onChange={(e) => {
-            try {
-              const parsed = e.target.value ? JSON.parse(e.target.value) : {};
-              onChange({ ...config, output_mapping: parsed });
-            } catch {
-              // Invalid JSON, don't update
-            }
-          }}
-          placeholder='{"result": "state.final_output"}'
-          rows={4}
-          className="text-sm font-mono"
+        <KeyValueEditor
+          value={mappingAsStrings}
+          onChange={(mapping) => onChange({ ...config, output_mapping: mapping })}
+          keyPlaceholder="Output key"
+          valuePlaceholder="State path (e.g., node.prompt_1.output)"
         />
         <p className="mt-1 text-xs text-muted-foreground">
           Map state values to output keys
@@ -1593,6 +1713,7 @@ function HumanGateNodeConfig({
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
 }) {
+  const [promptError, setPromptError] = useState<string | null>(null);
   const requiredFields = (config.required_fields as string[]) || [];
 
   const addField = (field: string) => {
@@ -1606,6 +1727,14 @@ function HumanGateNodeConfig({
     onChange({ ...config, required_fields: updated });
   };
 
+  const validatePromptMessage = (value: string) => {
+    if (!value.trim()) {
+      setPromptError("Prompt message is required");
+    } else {
+      setPromptError(null);
+    }
+  };
+
   return (
     <div className="space-y-3 pt-3 border-t border-border">
       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Human Gate Configuration</h4>
@@ -1616,14 +1745,23 @@ function HumanGateNodeConfig({
         </label>
         <Textarea
           value={(config.prompt_message as string) ?? ""}
-          onChange={(e) => onChange({ ...config, prompt_message: e.target.value })}
+          onChange={(e) => {
+            setPromptError(null);
+            onChange({ ...config, prompt_message: e.target.value });
+          }}
+          onBlur={(e) => validatePromptMessage(e.target.value)}
           placeholder="Please review and approve this step..."
           rows={3}
           className="text-sm"
+          aria-invalid={!!promptError}
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Message shown to the reviewer when the workflow pauses
-        </p>
+        {promptError ? (
+          <p className="mt-1 text-xs text-destructive">{promptError}</p>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Message shown to the reviewer when the workflow pauses
+          </p>
+        )}
       </div>
 
       <div>

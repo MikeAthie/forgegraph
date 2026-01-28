@@ -18,6 +18,7 @@ type Node struct {
 	ID          string         `json:"id"`
 	Type        string         `json:"type"`
 	Name        string         `json:"name"`
+	Disabled    bool           `json:"disabled,omitempty"`
 	Config      map[string]any `json:"config"`
 	RetryPolicy *RetryPolicy   `json:"retry_policy,omitempty"`
 	TimeoutMs   int            `json:"timeout_ms,omitempty"`

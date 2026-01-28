@@ -53,6 +53,11 @@ class GraphValidator:
             edge_errors = self._validate_edge(edge, node_ids)
             errors.extend(edge_errors)
 
+        # Check start/output node requirements
+        if not errors:
+            requirement_errors = self._validate_start_output_requirements(nodes, edges)
+            errors.extend(requirement_errors)
+
         # Check for cycles (DAG validation)
         if not errors:
             cycle_error = self._check_for_cycles(nodes, edges)
@@ -145,6 +150,35 @@ class GraphValidator:
             errors.append(
                 {"type": "edge_self_reference", "edge_id": edge_id, "node_id": edge["from"]}
             )
+
+        return errors
+
+    def _validate_start_output_requirements(
+        self, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """
+        Validate that the graph has at least one start node and one output node.
+
+        - Start node: A node that receives an edge from START sentinel
+        - Output node: A node with type "output"
+        """
+        errors = []
+
+        # Check for at least one START edge (defines entry points)
+        start_edges = [e for e in edges if e.get("from") == self.START_NODE_ID]
+        if not start_edges:
+            errors.append({
+                "type": "no_start_node",
+                "message": "Graph must have at least one start node (connected from START)",
+            })
+
+        # Check for at least one output node
+        output_nodes = [n for n in nodes if n.get("type") == "output"]
+        if not output_nodes:
+            errors.append({
+                "type": "no_output_node",
+                "message": "Graph must have at least one output node",
+            })
 
         return errors
 

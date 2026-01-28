@@ -39,7 +39,8 @@
       "Skill(frontend-design:*)",
       "Bash(dir:*)",
       "Bash(docker compose up --build)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(git -C /c/Users/mathi/projects/forgegraph log --oneline -20)"
     ]
   }
 }

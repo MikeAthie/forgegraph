@@ -320,6 +320,12 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		return
 	}
 
+	// Check if node is disabled - skip execution
+	if node.Disabled {
+		s.markSkipped(rc, nodeID)
+		return
+	}
+
 	// Mark as running
 	rc.pendingMu.Lock()
 	if rc.completed[nodeID] || rc.skipped[nodeID] {

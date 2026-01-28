@@ -1,283 +1,232 @@
 # ForgeGraph
 
-A visual, high-performance workflow engine for AI agents and automation, built for production.
+A visual workflow graph execution platform for building, testing, and running AI-powered automation pipelines.
 
-**Design agent workflows visually. Run them reliably at scale. Debug them like software.**
+![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## What is ForgeGraph?
+## Features
 
-ForgeGraph uses a **schema-driven, LangGraph-style runtime** with an **n8n-inspired UX**. Users build workflows as directed graphs of Nodes connected by Edges. The execution engine runs the graph deterministically while supporting conditional branching, parallelism, validation, and final outputs.
-
-### Core Principles
-
-- **Agnostic execution primitives** - A small, stable set of node types that can express most workflows
-- **Schema-first reliability** - Outputs can be validated and structured (e.g., JSON Schema) to reduce hallucinations
-- **N8n-like UX, LangGraph-like semantics** - Easy graph building with real runtime logic (start nodes, conditional edges, merging, final output)
-- **State-driven execution** - Nodes read from and write to a shared run state
-
-### Key Features (MVP)
-
-- **Visual Graph Builder** - Drag-and-drop workflow design with real-time validation
-- **Prompt Library** - Built-in prompt templates for research, summarization, extraction, and more
-- **High-Performance Engine** - Go-based execution with parallel branches, retries, and timeouts
-- **Debug Like Software** - Full run history with per-node traces, timings, and error details
-- **Human-in-the-Loop** - Pause workflows for human approval or input
+- **Visual Graph Editor** — Drag-and-drop interface for building workflow graphs with real-time validation
+- **Multiple Node Types** — Prompt, Tool, Transform, Branch, Merge, Output, Memory, and Subgraph nodes
+- **Human-in-the-Loop** — Approval gates that pause execution for human review
+- **Version Control** — Graph versioning with SHA256 checksums for reproducibility
+- **Real-time Monitoring** — WebSocket-powered run status updates and event streaming
+- **Checkpoints & Caching** — Resume failed runs and cache node outputs for efficiency
+- **JSON Schema Validation** — Validate node inputs and outputs against schemas
 
 ## Architecture
 
-```text
-┌─────────────────┐     REST      ┌─────────────────┐     gRPC      ┌─────────────────┐
-│    Frontend     │ ───────────▶  │  Control Plane  │ ───────────▶  │     Engine      │
-│    (NextJS)     │               │    (Django)     │               │    (Go gRPC)    │
-│   Port: 3000    │               │   Port: 8000    │               │   Port: 50051   │
-└─────────────────┘               └─────────────────┘               └─────────────────┘
-                                         │                                  │
-                                         ▼                                  ▼
-                                  ┌─────────────────┐               ┌─────────────────┐
-                                  │   PostgreSQL    │               │      Redis      │
-                                  │   Port: 5432    │               │   Port: 6379    │
-                                  └─────────────────┘               └─────────────────┘
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│    Frontend     │────▶│     Backend     │────▶│     Engine      │
+│   (Next.js)     │ WS  │    (Django)     │gRPC │      (Go)       │
+│   Port 3000     │     │   Port 8000     │     │   Port 50051    │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                        ┌────────┴────────┐
+                        │   PostgreSQL    │
+                        │   + Redis       │
+                        └─────────────────┘
 ```
 
-### Why Django + Go?
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Frontend | Next.js 14, React 18, TypeScript | Visual graph editor and monitoring UI |
+| Backend | Django 5, DRF, Channels | REST API, WebSocket, authentication |
+| Engine | Go 1.22, gRPC | High-performance graph execution |
+| Database | PostgreSQL 16 | Persistent storage |
+| Cache | Redis 7 | Caching and message broker |
 
-- **Django (Control Plane):** Fast shipping for auth, admin, CRUD, API surface
-- **Go (Engine):** High-performance runtime for concurrency, scheduling, timeouts
+## Getting Started
 
-## Prerequisites
+### Prerequisites
 
-- Docker (version 20.10 or higher)
-- Docker Compose (version 2.0 or higher)
+- Docker & Docker Compose
+- Node.js 20+ (for frontend development)
+- Python 3.12+ (for backend development)
+- Go 1.22+ (for engine development)
 
-## Quick Start
-
-1. Clone the repository:
-
-   ```bash
-   git clone <repository-url>
-   cd forgegraph
-   ```
-
-2. Make the dev script executable (macOS/Linux/WSL):
-
-   ```bash
-   chmod +x dev
-   ```
-
-3. Start all services:
-
-   ```bash
-   ./dev up
-   # or (PowerShell):
-   docker compose up --build -d
-   ```
-
-4. Access the services:
-   - **Frontend**: http://localhost:3000
-   - **Django API**: http://localhost:8000
-   - **gRPC Engine**: localhost:50051
-
-## Development Commands
+### Quick Start with Docker
 
 ```bash
+# Clone the repository
+git clone https://github.com/your-org/forgegraph.git
+cd forgegraph
+
 # Start all services
 ./dev up
 
-# Stop all services
-./dev down
-
-# View logs
-./dev logs
-
-# Restart services
-./dev restart
-
-# Rebuild services
-./dev build
-
-# Check service status
-./dev ps
+# The application is now running:
+# - Frontend: http://localhost:3000
+# - Backend API: http://localhost:8000
+# - Engine gRPC: localhost:50051
 ```
 
-## Verifying Services
+### Local Development Setup
 
-### Frontend
-
-Open http://localhost:3000 in your browser. You should see "ForgeGraph running" and the backend health status.
-
-## Graph Builder
-
-1. Create a graph in the UI and open it (routes under `/graphs/[graphId]`).
-2. Add nodes from the left palette (click to add; if a node is selected, click-to-add will auto-connect).
-3. Connect nodes on the canvas and configure them in the right inspector panel.
-4. Save a new version with the save button or `Ctrl+S` / `Cmd+S`, then use the version dropdown to load older versions.
-
-**Tips**
-- Use `Tidy` to auto-layout, `Ctrl+A` / `Cmd+A` to select all, and `Delete` to remove selected nodes/edges.
-- Use the MiniMap + zoom controls for large workflows.
-- "Note" nodes are editor-only annotations (saved in `editor_state`, not executed by the engine).
-
-## Demo Workflows
-
-ForgeGraph includes three demo workflows showcasing its capabilities. To seed them:
-
+#### Frontend
 ```bash
-# Set your OpenAI API key (required for Prompt nodes)
-export OPENAI_API_KEY=sk-your-key-here
-
-# Start services
-./dev up
-
-# Seed demo workflows
-./dev manage seed_phase7_demos
+cd frontend
+npm install
+npm run dev
 ```
 
-### Available Demos
-
-1. **Research Assistant** - Parallel LLM calls analyzing a topic from multiple angles, merged into a synthesis report. Demonstrates parallel execution and merge synchronization.
-
-2. **Email Drafting Agent** - Drafts a professional email, then pauses for human review before finalizing. Demonstrates human-in-the-loop approval.
-
-3. **Data Extraction Agent** - Parses unstructured text into structured JSON with confidence scoring. Low-confidence results route to human verification. Demonstrates conditional branching.
-
-## Observability Demo (Phase 4)
-
-Use the seed commands to validate the run viewer and WebSocket delta updates without the Go engine.
-
+#### Backend
 ```bash
 cd backend
-
-# Seed a demo graph + 3 demo runs (succeeded/failed/running)
-uv run python manage.py seed_phase4_demo
-
-# Stream a live execution trace over WebSockets (open /runs first)
-uv run python manage.py stream_run_trace <graph_version_id> --run-status succeeded
+python -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install -e ".[dev]"
+python manage.py migrate
+python -m daphne config.asgi:application
 ```
 
-UI flow:
-- Open `/runs` to see the run history.
-- Open a run to view the node-by-node trace (polling + WebSocket deltas).
-- Use **Open in editor** to jump to `/graphs/{graphId}?runId={runId}` and see the execution overlay on the canvas + the execution side panel.
+#### Engine
+```bash
+cd engine
+go build -o engine .
+./engine
+```
 
-### Backend
+## Development Commands
+
+### Using the `dev` Script
 
 ```bash
-curl http://localhost:8000/health
+./dev up          # Start all services with build
+./dev down        # Stop all services
+./dev logs        # Stream logs from all services
+./dev migrate     # Run database migrations
+./dev test        # Run backend tests
+./dev shell       # Open Django shell
+./dev ps          # Show running services
 ```
 
-Expected response:
+### Running Tests
 
-```json
-{"status": "ok"}
+```bash
+# Full test suite (PowerShell)
+./test-all.ps1
+
+# Quick mode - key tests only
+./test-all.ps1 -Fast
+
+# Skip E2E tests
+./test-all.ps1 -SkipE2E
 ```
 
-### gRPC Engine
+#### Component-specific tests
 
-The gRPC engine runs on port 50051 and implements a Ping RPC that returns "pong".
+```bash
+# Backend
+cd backend
+python -m pytest                      # All tests
+python -m pytest tests/unit/          # Unit tests
+python -m pytest tests/integration/   # Integration tests
+ruff check .                          # Linting
+mypy .                                # Type checking
 
-## Execution Model
+# Engine
+cd engine
+go test ./...                         # All tests
+go test -race -v ./...                # With race detection
 
-**Shared Runtime State:** Execution maintains a shared state map. After each node runs, it writes output under a namespaced key (`state["node.<id>.output"]`). Downstream nodes reference previous outputs via state paths.
-
-**Start Nodes:** Any node with no incoming edges (indegree = 0). Multiple start nodes run in parallel.
-
-**Scheduling:** Queue-based execution with worker pool. Nodes become ready when all upstream dependencies are satisfied. Ready nodes execute concurrently.
-
-**Branching:** Branch nodes evaluate boolean conditions and activate exactly one outgoing edge path (true or false). Non-selected branches are skipped.
-
-**Merging:** Merge nodes wait until all incoming branches complete, then continue downstream.
-
-## Node Types
-
-| Node | Description |
-|------|-------------|
-| **Prompt** | Calls LLM with structured instructions, can target an output schema, writes validated output to state |
-| **Tool (HTTP)** | Generic tool executor (HTTP as baseline), UX uses "service pills" as presets, writes response to state |
-| **Transform** | Deterministic state transforms (mapping, formatting, extraction), writes derived values to state |
-| **Branch** | Evaluates conditions → routes execution to exactly one path |
-| **Merge** | Waits for multiple inputs → continues downstream |
-| **Human Gate** | Pauses run → resumes on approval/input |
-| **Output** | Collects + validates final result → ends run |
+# Frontend
+cd frontend
+npm test                              # Jest unit tests
+npm run test:e2e                      # Playwright E2E tests
+npm run lint                          # ESLint
+```
 
 ## Project Structure
 
-```text
-forgegraph/
-├── dev                     # Development CLI script
-├── docker-compose.yml      # Docker Compose configuration
-├── CLAUDE.md               # Claude Code guidance
-├── SPECS.md                # Full project specification
-├── README.md
-├── backend/                # Django REST API (Control Plane)
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── manage.py
-│   └── app/
-├── frontend/               # NextJS application
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── next.config.js
-│   └── pages/
-└── engine/                 # Go gRPC service
-    ├── Dockerfile
-    ├── go.mod
-    ├── main.go
-    ├── internal/
-    └── proto/
 ```
+forgegraph/
+├── backend/                 # Django REST API
+│   ├── domain/              # Business entities and services
+│   ├── application/         # Use cases and DTOs
+│   ├── adapters/            # API routes, repositories
+│   ├── infrastructure/      # ORM, gRPC client, auth
+│   └── tests/               # pytest tests
+│
+├── engine/                  # Go execution engine
+│   ├── domain/              # Core entities (Graph, Node, Run)
+│   ├── application/         # Scheduler, RunManager
+│   ├── adapter/             # gRPC server, executors
+│   └── proto/               # Protobuf definitions
+│
+├── frontend/                # Next.js application
+│   ├── pages/               # Next.js routes
+│   ├── components/          # React components
+│   ├── lib/                 # Utilities and API client
+│   └── __tests__/           # Jest and Playwright tests
+│
+├── docker-compose.yml       # Service orchestration
+├── dev                      # Development utility script
+└── test-all.ps1             # Full test runner
+```
+
+## API Overview
+
+The Backend exposes a REST API with the following main endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/graphs` | GET, POST | List and create graphs |
+| `/api/graphs/{id}` | GET, PUT, DELETE | Graph operations |
+| `/api/graphs/{id}/versions` | POST | Save new graph version |
+| `/api/runs` | POST | Start graph execution |
+| `/api/runs/{id}` | GET | Get run status |
+| `/api/runs/{id}/events` | GET | Stream run events |
+| `/api/approvals` | GET, POST | Human gate approvals |
+| `/api/auth/login` | POST | JWT authentication |
+
+Full API documentation available at `http://localhost:8000/api/docs/` when running.
 
 ## Environment Variables
 
-### Backend
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEBUG` | `False` | Django debug mode |
+| `SECRET_KEY` | — | Django secret key |
+| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `5433` | PostgreSQL port |
+| `DB_NAME` | `forgegraph` | Database name |
+| `DB_USER` | `postgres` | Database user |
+| `DB_PASSWORD` | — | Database password |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `ENGINE_HOST` | `localhost` | gRPC engine host |
+| `ENGINE_PORT` | `50051` | gRPC engine port |
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| DB_HOST | PostgreSQL host | postgres |
-| DB_PORT | PostgreSQL port | 5432 |
-| DB_NAME | Database name | forgegraph |
-| DB_USER | Database user | forgegraph |
-| DB_PASSWORD | Database password | forgegraph_secret |
-| REDIS_HOST | Redis host | redis |
-| REDIS_PORT | Redis port | 6379 |
-| DEBUG | Django debug mode | true |
+## Contributing
 
-### Engine
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run tests (`./test-all.ps1`)
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| GRPC_PORT | gRPC server port | 50051 |
-| OPENAI_API_KEY | OpenAI API key for Prompt nodes | (required for LLM features) |
+### Code Style
 
-### Frontend
+- **Python**: Follow PEP 8, enforced by `ruff` and `mypy`
+- **Go**: Follow standard Go conventions, use `go fmt`
+- **TypeScript**: ESLint configuration in `frontend/.eslintrc.json`
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| NEXT_PUBLIC_API_URL | Backend API URL | http://localhost:8000 |
+### Clean Architecture
 
-## Development Roadmap
-
-- [x] Phase 0: Monorepo scaffolding + Docker + gRPC ping
-- [x] Phase 1: Django models + auth + prompt library
-- [x] Phase 2: NextJS graph builder + save/load JSON
-- [x] Phase 3: Go engine basic execution
-- [x] Phase 4: Run viewer + persistence
-- [x] Phase 5: Branch/merge + retry/timeout
-- [x] Phase 6: Human gate
-- [x] Phase 7: Polish + demo workflows + docs
-
-See [SPECS.md](SPECS.md) for the full project specification.
+All components follow Clean Architecture with strict layer separation:
+- **Domain** — Business entities and logic (no external dependencies)
+- **Application** — Use cases orchestrating domain logic
+- **Adapters** — External interfaces (API, repositories, UI)
+- **Infrastructure** — Frameworks and external services
 
 ## License
 
-MIT
-
-## Acknowledgments
-
-ForgeGraph is built with these excellent open source projects:
-
-- [React Flow](https://reactflow.dev/) - Graph visualization and interaction
-- [Django](https://www.djangoproject.com/) & [Django REST Framework](https://www.django-rest-framework.org/) - Backend API
-- [Next.js](https://nextjs.org/) - Frontend framework
-- [gRPC](https://grpc.io/) - High-performance RPC
-- [Tailwind CSS](https://tailwindcss.com/) - Styling
-- [Radix UI](https://www.radix-ui.com/) - Accessible UI primitives
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

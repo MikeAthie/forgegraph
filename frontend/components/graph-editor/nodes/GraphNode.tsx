@@ -115,7 +115,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
     <div
       className={cn(
         "group relative min-w-[200px] rounded-xl border border-border bg-card shadow-sm transition-all",
-        isDisabled && "opacity-60",
+        isDisabled && "opacity-50 grayscale border-dashed border-muted-foreground/40",
         isSkipped && "opacity-70",
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
       )}
@@ -163,7 +163,9 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
             </span>
           )}
           {isDisabled && (
-            <span className="text-xs text-muted-foreground italic">disabled</span>
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-dashed border-muted-foreground/30">
+              disabled
+            </span>
           )}
           {executionDotClass && (
             <span
