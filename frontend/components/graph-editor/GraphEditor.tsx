@@ -23,7 +23,9 @@ import {
 import { Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
 
 import { WizardProvider, useWizard } from "@/contexts/WizardContext";
+import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
 import { AgentWizard } from "./wizard";
+import { ValidationOverlay, ValidationStatusBar } from "./validation";
 
 import type { GraphJson, NodeType } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
@@ -37,6 +39,8 @@ import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
 import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
 import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
+import { NodeConfigDialog, type NodeConfig } from "./NodeConfigDialog";
+import { getNodeTypeInfo } from "./forms/node-form-registry";
 
 const NOTE_NODE_TYPE = "note";
 
@@ -141,6 +145,17 @@ function WizardButton() {
   );
 }
 
+// Validation trigger component - triggers validation on node/edge changes
+function ValidationTrigger({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
+  const { validate } = useValidation();
+
+  useEffect(() => {
+    validate(nodes, edges);
+  }, [nodes, edges, validate]);
+
+  return null;
+}
+
 export function GraphEditor({
   graphId,
   graphName,
@@ -180,6 +195,12 @@ export function GraphEditor({
 
   const [promptWizardOpen, setPromptWizardOpen] = useState(false);
   const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<string | null>(null);
+
+  // Node config dialog state
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [configDialogNodeType, setConfigDialogNodeType] = useState<NodeType | null>(null);
+  const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
+  const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
 
   // Viewport state for preserving pan/zoom across saves
   const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
@@ -733,15 +754,42 @@ export function GraphEditor({
           ? selectedNodeId
           : null;
 
+      // For prompt nodes, use the special wizard
       if (nodeType === NODE_TYPES.PROMPT) {
         setPromptWizardSourceNodeId(sourceNodeId);
         setPromptWizardOpen(true);
         return;
       }
 
+      // For other nodes, open the config dialog
+      const formInfo = getNodeTypeInfo(nodeType);
+      if (formInfo) {
+        setConfigDialogNodeType(nodeType);
+        setConfigDialogSourceNodeId(sourceNodeId);
+        setConfigDialogInitialConfig({});
+        setConfigDialogOpen(true);
+        return;
+      }
+
+      // Fallback: add node directly without config dialog
       addExecutableNode(nodeType, { sourceNodeId, config: {} });
     },
     [addExecutableNode, nodes, selectedNodeId]
+  );
+
+  const handleConfigDialogComplete = useCallback(
+    (config: NodeConfig) => {
+      if (!configDialogNodeType) return;
+      addExecutableNode(configDialogNodeType, {
+        sourceNodeId: configDialogSourceNodeId,
+        config,
+      });
+      setConfigDialogOpen(false);
+      setConfigDialogNodeType(null);
+      setConfigDialogSourceNodeId(null);
+      setConfigDialogInitialConfig({});
+    },
+    [addExecutableNode, configDialogNodeType, configDialogSourceNodeId]
   );
 
   const handleAddNote = useCallback(() => {
@@ -1111,13 +1159,80 @@ export function GraphEditor({
         )
       : [];
 
+  // Handlers for validation quick fixes
+  const handleAddStartNode = useCallback(() => {
+    // Mark the first executable node as trigger if one exists
+    const executableNodes = nodes.filter((n) => n.type !== NOTE_NODE_TYPE);
+    if (executableNodes.length > 0) {
+      const firstNode = executableNodes[0];
+      handleUpdateNode(firstNode.id, { isTrigger: true });
+      showSuccess("Start node added", `"${(firstNode.data as Record<string, unknown>).label}" is now the entry point`);
+    } else {
+      // Open the prompt wizard to add a new prompt node as start
+      setPromptWizardSourceNodeId(null);
+      setPromptWizardOpen(true);
+    }
+  }, [nodes, handleUpdateNode]);
+
+  const handleAddOutputNode = useCallback(() => {
+    addExecutableNode(NODE_TYPES.OUTPUT, { sourceNodeId: selectedNodeId, config: {} });
+  }, [addExecutableNode, selectedNodeId]);
+
+  const handleFocusNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const handleFocusEdge = useCallback((edgeId: string) => {
+    setSelectedEdgeId(edgeId);
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleQuickFix = useCallback((error: import("@/lib/graph-validator").ValidationError, fixLabel: string) => {
+    if (error.code === "NO_START_NODE" && fixLabel === "Add Start") {
+      handleAddStartNode();
+    } else if (error.code === "NO_OUTPUT_NODE" && fixLabel === "Add Output") {
+      handleAddOutputNode();
+    } else if (error.code === "DISCONNECTED_NODE" && fixLabel === "Remove" && error.nodeId) {
+      handleDeleteNode(error.nodeId);
+    }
+  }, [handleAddStartNode, handleAddOutputNode, handleDeleteNode]);
+
+  // Handler for wizard to add nodes from quick presets
+  const handleWizardAddNode = useCallback((preset: import("@/lib/quick-node-presets").QuickNodePreset) => {
+    // For prompt nodes, the first one should be marked as trigger (start)
+    const executableNodes = nodes.filter((n) => n.type !== NOTE_NODE_TYPE);
+    const isFirstNode = executableNodes.length === 0;
+    const config = {
+      ...preset.defaultConfig,
+      ...(isFirstNode && preset.nodeType === NODE_TYPES.PROMPT ? {} : {}),
+    };
+    addExecutableNode(preset.nodeType, {
+      sourceNodeId: selectedNodeId,
+      config,
+    });
+    // If this is the first node, mark it as trigger
+    if (isFirstNode) {
+      setTimeout(() => {
+        const newNodes = nodes.filter((n) => n.type !== NOTE_NODE_TYPE);
+        if (newNodes.length === 1) {
+          handleUpdateNode(newNodes[0].id, { isTrigger: true });
+        }
+      }, 100);
+    }
+  }, [nodes, selectedNodeId, addExecutableNode, handleUpdateNode]);
+
   return (
+    <ValidationProvider>
     <WizardProvider>
-      <div className="flex h-full">
+      <ValidationTrigger nodes={nodes} edges={edges} />
+      <div className="flex h-full flex-col">
+        <div className="flex flex-1 overflow-hidden">
         <AgentWizard
           onComplete={() => {
             showSuccess("Agent wizard completed", "Your agent workflow is ready");
           }}
+          onAddNode={handleWizardAddNode}
         />
         <PromptNodeWizardDialog
           open={promptWizardOpen}
@@ -1134,6 +1249,20 @@ export function GraphEditor({
           });
           setPromptWizardSourceNodeId(null);
         }}
+      />
+      <NodeConfigDialog
+        open={configDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setConfigDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setConfigDialogNodeType(null);
+            setConfigDialogSourceNodeId(null);
+            setConfigDialogInitialConfig({});
+          }
+        }}
+        nodeType={configDialogNodeType || ""}
+        initialConfig={configDialogInitialConfig}
+        onSave={handleConfigDialogComplete}
       />
       {/* Left Panel - Node Palette */}
       <div className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
@@ -1265,6 +1394,11 @@ export function GraphEditor({
             )}
           </Panel>
         </ReactFlow>
+        {/* Validation Overlay - shows missing start/output indicators */}
+        <ValidationOverlay
+          onAddStartNode={handleAddStartNode}
+          onAddOutputNode={handleAddOutputNode}
+        />
       </div>
 
       {/* Right Panel - Inspector */}
@@ -1393,7 +1527,15 @@ export function GraphEditor({
           onEditingMetadataChange={setIsEditingMetadata}
         />
       </div>
+      </div>
+      {/* Validation Status Bar - shows errors/warnings */}
+      <ValidationStatusBar
+        onFocusNode={handleFocusNode}
+        onFocusEdge={handleFocusEdge}
+        onQuickFix={handleQuickFix}
+      />
     </div>
     </WizardProvider>
+    </ValidationProvider>
   );
 }

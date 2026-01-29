@@ -1,9 +1,10 @@
 import { memo, useState } from "react";
 import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
-import { X } from "lucide-react";
+import { X, AlertCircle, AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { NODE_TYPES } from "../../../lib/graph-types";
+import { useNodeValidation } from "@/contexts/ValidationContext";
 
 const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
   [NODE_TYPES.PROMPT]: {
@@ -85,6 +86,10 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
   const isDisabled = nodeData.disabled === true;
   const executionStatus = nodeData.executionStatus;
 
+  // Validation state
+  const { hasError, hasWarning, errors, warnings } = useNodeValidation(id);
+  const validationMessages = [...errors, ...warnings].map((e) => e.message).join(", ");
+
   const executionDotClass: string | null =
     executionStatus === "succeeded"
       ? "bg-emerald-500"
@@ -118,14 +123,38 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
         isDisabled && "opacity-50 grayscale border-dashed border-muted-foreground/40",
         isSkipped && "opacity-70",
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+        // Validation error/warning styles
+        hasError && !selected && "border-destructive/60 shadow-destructive/20 shadow-md",
+        hasWarning && !hasError && !selected && "border-amber-500/60 shadow-amber-500/20 shadow-md",
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      title={validationMessages || undefined}
     >
       <div
         data-testid="node-accent-strip"
-        className={cn("pointer-events-none absolute inset-x-0 top-0 h-1", styles.strip)}
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 h-1",
+          hasError ? "bg-destructive" : hasWarning ? "bg-amber-500" : styles.strip
+        )}
       />
+
+      {/* Validation Error Badge */}
+      {(hasError || hasWarning) && (
+        <div
+          className={cn(
+            "absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center z-30",
+            hasError ? "bg-destructive" : "bg-amber-500"
+          )}
+          title={validationMessages}
+        >
+          {hasError ? (
+            <AlertCircle className="w-3 h-3 text-white" />
+          ) : (
+            <AlertTriangle className="w-3 h-3 text-white" />
+          )}
+        </div>
+      )}
 
       {/* Delete button on hover */}
       {(isHovered || selected) && (
