@@ -349,3 +349,67 @@ class GraphVersionLatestView(APIView):
         ).data
 
         return success_response(version_data)
+
+
+class GraphValidateView(APIView):
+    """Validate a graph JSON without saving it."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """
+        Validate a graph JSON structure.
+
+        Request body:
+            graph_json: dict - The graph to validate
+            strict: bool (optional) - Enable strict config validation
+
+        Response:
+            valid: bool - Whether the graph is valid (no errors)
+            errors: list - Validation errors
+            warnings: list - Validation warnings
+        """
+        graph_json = request.data.get("graph_json")
+        strict = request.data.get("strict", False)
+
+        if not graph_json:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="Missing 'graph_json' in request body",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(graph_json, dict):
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="'graph_json' must be an object",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        validator = GraphValidator()
+
+        try:
+            all_issues = validator.validate(graph_json, strict=strict)
+        except Exception as e:
+            return error_response(
+                code="GRAPH_VALIDATION_ERROR",
+                message=str(e),
+                status=status.HTTP_400_BAD_REQUEST,
+                details=getattr(e, "errors", []),
+            )
+
+        # Separate errors from warnings
+        errors = [
+            issue for issue in all_issues
+            if issue.get("severity") != "warning"
+        ]
+        warnings = [
+            issue for issue in all_issues
+            if issue.get("severity") == "warning"
+        ]
+
+        return success_response({
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+        })

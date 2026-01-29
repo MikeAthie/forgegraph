@@ -207,6 +207,31 @@ func (p *ExecutionPlan) SerializeEdgesForConfig(nodeID string) []map[string]any 
 			"to":        edge.To,
 			"label":     edge.Label,
 			"condition": edge.Condition,
+			"data_type": edge.DataType,
+		}
+	}
+	return result
+}
+
+// GetIncomingEdges returns all edges that lead to this node.
+// Used for debugging and data type tracking.
+func (p *ExecutionPlan) GetIncomingEdges(nodeID string) []*entity.Edge {
+	var result []*entity.Edge
+	for _, edge := range p.Graph.Edges {
+		if edge.To == nodeID {
+			result = append(result, &edge)
+		}
+	}
+	return result
+}
+
+// GetIncomingDataTypes returns a map of source node ID to data type
+// for all edges leading to this node.
+func (p *ExecutionPlan) GetIncomingDataTypes(nodeID string) map[string]string {
+	result := make(map[string]string)
+	for _, edge := range p.Graph.Edges {
+		if edge.To == nodeID && edge.DataType != "" {
+			result[edge.From] = edge.DataType
 		}
 	}
 	return result

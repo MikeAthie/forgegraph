@@ -1,0 +1,483 @@
+/**
+ * Unit tests for ToolNodeForm component.
+ *
+ * Tests tool selection, parameters editor, custom tool fields,
+ * JSON schema validation, and integration with AgentFields and AdvancedSettings.
+ */
+
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ToolNodeForm } from "@/components/graph-editor/forms/ToolNodeForm";
+import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
+
+// Mock validation utilities
+jest.mock("@/lib/form-validation", () => ({
+  validateJson: jest.fn((value: string) => {
+    if (value) {
+      try {
+        JSON.parse(value);
+        return null;
+      } catch {
+        return { field: "input_schema", message: "Invalid JSON format" };
+      }
+    }
+    return null;
+  }),
+}));
+
+// Mock child components
+jest.mock("@/components/graph-editor/forms/AgentFields", () => ({
+  AgentFields: () => <div data-testid="agent-fields">Agent Fields</div>,
+}));
+
+jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
+  AdvancedSettings: () => <div data-testid="advanced-settings">Advanced Settings</div>,
+}));
+
+jest.mock("@/components/ui/key-value-editor", () => ({
+  KeyValueEditor: ({ value, onChange }: any) => (
+    <div data-testid="key-value-editor">
+      <button
+        data-testid="add-parameter"
+        onClick={() => onChange({ ...value, param1: "value1" })}
+      >
+        Add Parameter
+      </button>
+      <div data-testid="parameters-display">{JSON.stringify(value)}</div>
+    </div>
+  ),
+}));
+
+describe("ToolNodeForm", () => {
+  const mockOnChange = jest.fn();
+  const mockSetErrors = jest.fn();
+
+  const defaultProps: NodeFormProps = {
+    config: {},
+    onChange: mockOnChange,
+    errors: {},
+    setErrors: mockSetErrors,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe("Initial Render", () => {
+    it("should render with empty config", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByText(/tool configuration/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^tool$/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/output key/i)).toBeInTheDocument();
+      expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
+      expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
+    });
+
+    it("should render all built-in tool options", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByRole("option", { name: /custom tool/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /web search/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /code interpreter/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /file reader/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /calculator/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /database query/i })).toBeInTheDocument();
+    });
+
+    it("should default to custom tool", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      const toolSelect = screen.getByLabelText(/^tool$/i);
+      expect(toolSelect).toHaveValue("custom");
+    });
+
+    it("should render with populated config", () => {
+      const config = {
+        tool_name: "web_search",
+        parameters: { query: "test" },
+        output_key: "search_results",
+      };
+
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(screen.getByDisplayValue("web_search")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("search_results")).toBeInTheDocument();
+    });
+  });
+
+  describe("Tool Selection", () => {
+    it("should call onChange when tool is changed", async () => {
+      const user = userEvent.setup();
+      render(<ToolNodeForm {...defaultProps} />);
+
+      const toolSelect = screen.getByLabelText(/^tool$/i);
+      await user.selectOptions(toolSelect, "web_search");
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tool_name: "web_search",
+          })
+        );
+      });
+    });
+
+    it("should select different built-in tools", async () => {
+      const user = userEvent.setup();
+      render(<ToolNodeForm {...defaultProps} />);
+
+      const toolSelect = screen.getByLabelText(/^tool$/i);
+      await user.selectOptions(toolSelect, "code_interpreter");
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tool_name: "code_interpreter",
+          })
+        );
+      });
+    });
+  });
+
+  describe("Custom Tool Fields", () => {
+    it("should show tool description field for custom tool", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(screen.getByLabelText(/tool description/i)).toBeInTheDocument();
+    });
+
+    it("should show input schema field for custom tool", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(screen.getByLabelText(/input schema \(json\)/i)).toBeInTheDocument();
+    });
+
+    it("should not show custom fields for built-in tools", () => {
+      const config = { tool_name: "web_search" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(screen.queryByLabelText(/tool description/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/input schema \(json\)/i)).not.toBeInTheDocument();
+    });
+
+    it("should show custom fields when tool is undefined", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByLabelText(/tool description/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/input schema \(json\)/i)).toBeInTheDocument();
+    });
+
+    it("should update tool description", async () => {
+      const user = userEvent.setup();
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const descriptionInput = screen.getByLabelText(/tool description/i);
+      await user.type(descriptionInput, "Custom tool for testing");
+
+      await waitFor(() => {
+        const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
+        expect(lastCall.tool_description).toContain("Custom tool for testing");
+      });
+    });
+
+    it("should update input schema", async () => {
+      const user = userEvent.setup();
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const schemaInput = screen.getByLabelText(/input schema \(json\)/i);
+      await user.type(schemaInput, '{"type": "object"}');
+
+      await waitFor(() => {
+        const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
+        expect(lastCall.input_schema).toContain("type");
+      });
+    });
+  });
+
+  describe("Parameters Editor", () => {
+    it("should render KeyValueEditor for parameters", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByTestId("key-value-editor")).toBeInTheDocument();
+    });
+
+    it("should display existing parameters", () => {
+      const config = {
+        parameters: { query: "search term", max_results: "10" },
+      };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const parametersDisplay = screen.getByTestId("parameters-display");
+      expect(parametersDisplay.textContent).toContain("query");
+      expect(parametersDisplay.textContent).toContain("search term");
+    });
+
+    it("should call onChange when parameters are updated", async () => {
+      const user = userEvent.setup();
+      render(<ToolNodeForm {...defaultProps} />);
+
+      const addButton = screen.getByTestId("add-parameter");
+      await user.click(addButton);
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            parameters: expect.objectContaining({ param1: "value1" }),
+          })
+        );
+      });
+    });
+  });
+
+  describe("Output Key Field", () => {
+    it("should render output key input", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByLabelText(/output key/i)).toBeInTheDocument();
+    });
+
+    it("should call onChange when output key is modified", async () => {
+      const user = userEvent.setup();
+      render(<ToolNodeForm {...defaultProps} />);
+
+      const outputKey = screen.getByLabelText(/output key/i);
+      await user.type(outputKey, "result");
+
+      await waitFor(() => {
+        const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
+        expect(lastCall.output_key).toContain("result");
+      });
+    });
+
+    it("should have appropriate placeholder", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByPlaceholderText("tool_result")).toBeInTheDocument();
+    });
+  });
+
+  describe("JSON Schema Validation", () => {
+    it("should validate input schema as JSON", async () => {
+      const config = { tool_name: "custom", input_schema: "{invalid json" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      await waitFor(() => {
+        expect(mockSetErrors).toHaveBeenCalledWith(
+          expect.objectContaining({
+            input_schema: "Invalid JSON format",
+          })
+        );
+      });
+    });
+
+    it("should not set error for valid JSON schema", async () => {
+      const config = {
+        tool_name: "custom",
+        input_schema: '{"type": "object", "properties": {}}',
+      };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      await waitFor(() => {
+        const calls = mockSetErrors.mock.calls;
+        if (calls.length > 0) {
+          const lastCall = calls[calls.length - 1][0];
+          expect(lastCall.input_schema).toBeUndefined();
+        }
+      });
+    });
+
+    it("should not validate schema for built-in tools", async () => {
+      const config = { tool_name: "web_search" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      await waitFor(() => {
+        const calls = mockSetErrors.mock.calls;
+        if (calls.length > 0) {
+          const lastCall = calls[calls.length - 1][0];
+          expect(lastCall.input_schema).toBeUndefined();
+        }
+      });
+    });
+
+    it("should display schema validation error", () => {
+      const config = { tool_name: "custom" };
+      const errors = { input_schema: "Invalid JSON schema" };
+      render(<ToolNodeForm {...defaultProps} config={config} errors={errors} />);
+
+      expect(screen.getByText("Invalid JSON schema")).toBeInTheDocument();
+    });
+  });
+
+  describe("Conditional Field Rendering", () => {
+    it("should hide custom fields when switching from custom to built-in tool", async () => {
+      const user = userEvent.setup();
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(screen.getByLabelText(/tool description/i)).toBeInTheDocument();
+
+      const toolSelect = screen.getByLabelText(/^tool$/i);
+      await user.selectOptions(toolSelect, "web_search");
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/tool description/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it("should show custom fields when switching from built-in to custom tool", async () => {
+      const user = userEvent.setup();
+      const config = { tool_name: "web_search" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(screen.queryByLabelText(/tool description/i)).not.toBeInTheDocument();
+
+      const toolSelect = screen.getByLabelText(/^tool$/i);
+      await user.selectOptions(toolSelect, "custom");
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/tool description/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Field Descriptions", () => {
+    it("should display helpful description for tool selection", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(
+        screen.getByText(/select a built-in tool or create a custom one/i)
+      ).toBeInTheDocument();
+    });
+
+    it("should display description for tool description field", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      expect(
+        screen.getByText(/describe what this tool does \(helps llm decide when to use it\)/i)
+      ).toBeInTheDocument();
+    });
+
+    it("should display description for parameters", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(
+        screen.getByText(/map parameter names to values or state paths/i)
+      ).toBeInTheDocument();
+    });
+
+    it("should display tool usage documentation", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByText(/tool usage/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/tools are functions the agent can call to interact with external systems/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("Integration with Sub-components", () => {
+    it("should render AgentFields", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
+    });
+
+    it("should render AdvancedSettings", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
+    });
+  });
+
+  describe("Input Schema Textarea", () => {
+    it("should be a multiline textarea", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const schemaInput = screen.getByLabelText(/input schema \(json\)/i);
+      expect(schemaInput.tagName).toBe("TEXTAREA");
+      expect(schemaInput).toHaveAttribute("rows", "6");
+    });
+
+    it("should have monospace font class", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const schemaInput = screen.getByLabelText(/input schema \(json\)/i);
+      expect(schemaInput).toHaveClass("font-mono");
+    });
+
+    it("should have helpful placeholder", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const schemaInput = screen.getByLabelText(/input schema \(json\)/i);
+      expect(schemaInput).toHaveAttribute("placeholder");
+      expect(schemaInput.getAttribute("placeholder")).toContain("type");
+      expect(schemaInput.getAttribute("placeholder")).toContain("object");
+    });
+  });
+
+  describe("Tool Description Textarea", () => {
+    it("should mark tool description as required for custom tools", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const descriptionLabel = screen.getByText(/tool description/i);
+      expect(descriptionLabel.closest("div")).toBeInTheDocument();
+    });
+
+    it("should have appropriate rows", () => {
+      const config = { tool_name: "custom" };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const descriptionInput = screen.getByLabelText(/tool description/i);
+      expect(descriptionInput.tagName).toBe("TEXTAREA");
+      expect(descriptionInput).toHaveAttribute("rows", "3");
+    });
+  });
+
+  describe("Form Layout", () => {
+    it("should display section headers", () => {
+      render(<ToolNodeForm {...defaultProps} />);
+
+      expect(screen.getByText(/^tool configuration$/i)).toBeInTheDocument();
+    });
+
+    it("should render separators between sections", () => {
+      const { container } = render(<ToolNodeForm {...defaultProps} />);
+
+      const separators = container.querySelectorAll("[role='separator']");
+      expect(separators.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Preserving Config", () => {
+    it("should preserve parameters when changing tool type", async () => {
+      const user = userEvent.setup();
+      const config = {
+        tool_name: "custom",
+        parameters: { key: "value" },
+      };
+      render(<ToolNodeForm {...defaultProps} config={config} />);
+
+      const toolSelect = screen.getByLabelText(/^tool$/i);
+      await user.selectOptions(toolSelect, "web_search");
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tool_name: "web_search",
+            parameters: { key: "value" },
+          })
+        );
+      });
+    });
+  });
+});

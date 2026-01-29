@@ -400,3 +400,113 @@ class TestGraphAPIResponseFormat:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "details" in response.data["error"]
         assert isinstance(response.data["error"]["details"], list)
+
+
+class TestGraphValidateEndpoint:
+    """Tests for POST /api/graphs/validate"""
+
+    def test_validate_requires_authentication(self, api_client):
+        """Unauthenticated requests should be rejected."""
+        response = api_client.post("/api/graphs/validate", {}, format="json")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_validate_requires_graph_json(self, authenticated_client):
+        """Should return error if graph_json is missing."""
+        response = authenticated_client.post("/api/graphs/validate", {}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_validate_valid_graph(self, authenticated_client):
+        """Should return valid=true for a valid graph."""
+        valid_graph = {
+            "nodes": [
+                {"id": "node1", "type": "prompt", "name": "First", "config": {}},
+                {"id": "node2", "type": "output", "name": "End", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "START", "to": "node1"},
+                {"id": "e2", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/validate",
+            {"graph_json": valid_graph},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["valid"] is True
+        assert len(response.data["data"]["errors"]) == 0
+
+    def test_validate_missing_start_node(self, authenticated_client):
+        """Should return error for missing start edge."""
+        graph = {
+            "nodes": [
+                {"id": "node1", "type": "prompt", "name": "First", "config": {}},
+                {"id": "node2", "type": "output", "name": "End", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/validate",
+            {"graph_json": graph},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["valid"] is False
+        error_types = [e["type"] for e in response.data["data"]["errors"]]
+        assert "no_start_node" in error_types
+
+    def test_validate_missing_output_node(self, authenticated_client):
+        """Should return error for missing output node."""
+        graph = {
+            "nodes": [
+                {"id": "node1", "type": "prompt", "name": "First", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "START", "to": "node1"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/validate",
+            {"graph_json": graph},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["valid"] is False
+        error_types = [e["type"] for e in response.data["data"]["errors"]]
+        assert "no_output_node" in error_types
+
+    def test_validate_disconnected_node_warning(self, authenticated_client):
+        """Should return warning for disconnected nodes."""
+        graph = {
+            "nodes": [
+                {"id": "node1", "type": "prompt", "name": "First", "config": {}},
+                {"id": "node2", "type": "output", "name": "End", "config": {}},
+                {"id": "orphan", "type": "transform", "name": "Orphan", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "START", "to": "node1"},
+                {"id": "e2", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/validate",
+            {"graph_json": graph},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        # Graph is still valid (warnings don't make it invalid)
+        assert response.data["data"]["valid"] is True
+        warning_types = [w["type"] for w in response.data["data"]["warnings"]]
+        assert "disconnected_node" in warning_types

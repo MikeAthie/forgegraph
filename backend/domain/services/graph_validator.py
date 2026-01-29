@@ -19,20 +19,37 @@ class GraphValidator:
     START_NODE_ID = "START"
     END_NODE_ID = "END"
 
-    def validate(self, graph_json: dict[str, Any]) -> list[dict[str, Any]]:
+    def validate(
+        self, graph_json: dict[str, Any], *, strict: bool = False
+    ) -> list[dict[str, Any]]:
         """
         Validate a graph JSON structure.
 
         Returns a list of validation errors. Empty list means valid.
         Raises GraphValidationError for critical structural issues.
+
+        Args:
+            graph_json: The graph structure to validate
+            strict: If True, also validates node configs against schemas
         """
         errors = []
+        warnings = []
 
         # Check required top-level keys
         if "nodes" not in graph_json:
-            errors.append({"type": "missing_key", "key": "nodes"})
+            errors.append({
+                "type": "missing_key",
+                "key": "nodes",
+                "message": "Graph JSON is missing required 'nodes' array",
+                "suggestion": "Add a 'nodes' array to your graph JSON",
+            })
         if "edges" not in graph_json:
-            errors.append({"type": "missing_key", "key": "edges"})
+            errors.append({
+                "type": "missing_key",
+                "key": "edges",
+                "message": "Graph JSON is missing required 'edges' array",
+                "suggestion": "Add an 'edges' array to your graph JSON",
+            })
 
         if errors:
             raise GraphValidationError("Graph JSON missing required keys", errors=errors)
@@ -58,13 +75,24 @@ class GraphValidator:
             requirement_errors = self._validate_start_output_requirements(nodes, edges)
             errors.extend(requirement_errors)
 
+        # Check for disconnected nodes (warning, not error)
+        if not errors:
+            disconnected = self._find_disconnected_nodes(nodes, edges)
+            warnings.extend(disconnected)
+
         # Check for cycles (DAG validation)
         if not errors:
             cycle_error = self._check_for_cycles(nodes, edges)
             if cycle_error:
                 errors.append(cycle_error)
 
-        return errors
+        # Strict mode: validate node configs against schemas
+        if strict and not errors:
+            config_errors = self._validate_node_configs(nodes)
+            errors.extend(config_errors)
+
+        # Combine errors and warnings
+        return errors + warnings
 
     def validate_or_raise(self, graph_json: dict[str, Any]) -> None:
         """
@@ -227,3 +255,87 @@ class GraphValidator:
                     return {"type": "cycle_detected", "nodes": list(reversed(cycle_nodes))}
 
         return None
+
+    def _find_disconnected_nodes(
+        self, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """
+        Find nodes that have no incoming or outgoing edges.
+
+        Returns warnings for disconnected nodes.
+        """
+        warnings = []
+        node_ids = {node["id"] for node in nodes}
+
+        # Build sets of connected nodes
+        nodes_with_incoming = set()
+        nodes_with_outgoing = set()
+
+        for edge in edges:
+            from_node = edge.get("from")
+            to_node = edge.get("to")
+
+            if from_node and from_node != self.START_NODE_ID:
+                nodes_with_outgoing.add(from_node)
+            if to_node and to_node != self.END_NODE_ID:
+                nodes_with_incoming.add(to_node)
+
+            # START edges give the target node an incoming edge
+            if from_node == self.START_NODE_ID and to_node:
+                nodes_with_incoming.add(to_node)
+            # END edges give the source node an outgoing edge
+            if to_node == self.END_NODE_ID and from_node:
+                nodes_with_outgoing.add(from_node)
+
+        # Find completely disconnected nodes (no edges at all)
+        for node_id in node_ids:
+            has_incoming = node_id in nodes_with_incoming
+            has_outgoing = node_id in nodes_with_outgoing
+
+            if not has_incoming and not has_outgoing:
+                warnings.append({
+                    "type": "disconnected_node",
+                    "severity": "warning",
+                    "node_id": node_id,
+                    "message": f"Node '{node_id}' has no connections",
+                    "suggestion": "Connect this node to the workflow or remove it",
+                })
+
+        return warnings
+
+    def _validate_node_configs(
+        self, nodes: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """
+        Validate node configs against their type schemas.
+
+        Only called in strict mode.
+        """
+        errors = []
+
+        try:
+            from domain.value_objects.node_schemas import validate_node_config
+        except ImportError:
+            # Schemas not defined yet, skip validation
+            return errors
+
+        for node in nodes:
+            node_id = node.get("id", "unknown")
+            node_type = node.get("type")
+            config = node.get("config", {})
+
+            if not node_type:
+                continue
+
+            config_errors = validate_node_config(node_type, config)
+            for error in config_errors:
+                errors.append({
+                    "type": "invalid_node_config",
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "field": error.get("field"),
+                    "message": error.get("message"),
+                    "suggestion": error.get("suggestion"),
+                })
+
+        return errors

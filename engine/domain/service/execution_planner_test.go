@@ -265,3 +265,408 @@ func TestExecutionPlanner_GetNodeCount_GetEdgeCount(t *testing.T) {
 		t.Errorf("Expected 2 edges, got %d", plan.GetEdgeCount())
 	}
 }
+
+func TestExecutionPlanner_GetPredecessors_SinglePredecessor(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	preds := plan.GetPredecessors("b")
+	if len(preds) != 1 {
+		t.Errorf("Expected 1 predecessor for 'b', got %d", len(preds))
+	}
+	if len(preds) > 0 && preds[0] != "a" {
+		t.Errorf("Expected predecessor 'a', got '%s'", preds[0])
+	}
+}
+
+func TestExecutionPlanner_GetPredecessors_MultiplePredecessors(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "start1", Type: "transform", Name: "Start 1"},
+			{ID: "start2", Type: "transform", Name: "Start 2"},
+			{ID: "start3", Type: "transform", Name: "Start 3"},
+			{ID: "merge", Type: "merge", Name: "Merge"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "start1", To: "merge"},
+			{ID: "e2", From: "start2", To: "merge"},
+			{ID: "e3", From: "start3", To: "merge"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	preds := plan.GetPredecessors("merge")
+	if len(preds) != 3 {
+		t.Errorf("Expected 3 predecessors for 'merge', got %d", len(preds))
+	}
+
+	// Check that all expected predecessors are present
+	predMap := make(map[string]bool)
+	for _, pred := range preds {
+		predMap[pred] = true
+	}
+	for _, expected := range []string{"start1", "start2", "start3"} {
+		if !predMap[expected] {
+			t.Errorf("Expected predecessor '%s' not found", expected)
+		}
+	}
+}
+
+func TestExecutionPlanner_GetPredecessors_NoPredecessors(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	preds := plan.GetPredecessors("a")
+	if len(preds) != 0 {
+		t.Errorf("Expected 0 predecessors for 'a', got %d", len(preds))
+	}
+}
+
+func TestExecutionPlanner_GetEdgesByLabel_MatchingLabel(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "branch", Type: "branch", Name: "Branch"},
+			{ID: "true_path", Type: "transform", Name: "True"},
+			{ID: "false_path", Type: "transform", Name: "False"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "branch", To: "true_path", Label: "true"},
+			{ID: "e2", From: "branch", To: "false_path", Label: "false"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	trueEdges := plan.GetEdgesByLabel("branch", "true")
+	if len(trueEdges) != 1 {
+		t.Errorf("Expected 1 edge with label 'true', got %d", len(trueEdges))
+	}
+	if len(trueEdges) > 0 && trueEdges[0].To != "true_path" {
+		t.Errorf("Expected edge to 'true_path', got '%s'", trueEdges[0].To)
+	}
+
+	falseEdges := plan.GetEdgesByLabel("branch", "false")
+	if len(falseEdges) != 1 {
+		t.Errorf("Expected 1 edge with label 'false', got %d", len(falseEdges))
+	}
+	if len(falseEdges) > 0 && falseEdges[0].To != "false_path" {
+		t.Errorf("Expected edge to 'false_path', got '%s'", falseEdges[0].To)
+	}
+}
+
+func TestExecutionPlanner_GetEdgesByLabel_NoMatches(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b", Label: "primary"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	edges := plan.GetEdgesByLabel("a", "nonexistent")
+	if len(edges) != 0 {
+		t.Errorf("Expected 0 edges with label 'nonexistent', got %d", len(edges))
+	}
+}
+
+func TestExecutionPlanner_GetEdgesByLabel_EmptyLabel(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+			{ID: "c", Type: "output", Name: "C"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b", Label: "labeled"},
+			{ID: "e2", From: "a", To: "c", Label: ""},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	emptyLabelEdges := plan.GetEdgesByLabel("a", "")
+	if len(emptyLabelEdges) != 1 {
+		t.Errorf("Expected 1 edge with empty label, got %d", len(emptyLabelEdges))
+	}
+	if len(emptyLabelEdges) > 0 && emptyLabelEdges[0].To != "c" {
+		t.Errorf("Expected edge to 'c', got '%s'", emptyLabelEdges[0].To)
+	}
+}
+
+func TestExecutionPlanner_SerializeEdgesForConfig_AllFields(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+			{ID: "c", Type: "output", Name: "C"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b", Label: "primary", Condition: "x > 0", DataType: "string"},
+			{ID: "e2", From: "a", To: "c", Label: "secondary", Condition: "", DataType: "number"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	serialized := plan.SerializeEdgesForConfig("a")
+	if len(serialized) != 2 {
+		t.Fatalf("Expected 2 serialized edges, got %d", len(serialized))
+	}
+
+	// Find the first edge by ID
+	var edge1, edge2 map[string]any
+	for _, e := range serialized {
+		if e["id"] == "e1" {
+			edge1 = e
+		} else if e["id"] == "e2" {
+			edge2 = e
+		}
+	}
+
+	if edge1 == nil || edge2 == nil {
+		t.Fatal("Expected to find both edges in serialized output")
+	}
+
+	// Verify edge1 fields
+	if edge1["from"] != "a" {
+		t.Errorf("Expected edge1 from='a', got '%v'", edge1["from"])
+	}
+	if edge1["to"] != "b" {
+		t.Errorf("Expected edge1 to='b', got '%v'", edge1["to"])
+	}
+	if edge1["label"] != "primary" {
+		t.Errorf("Expected edge1 label='primary', got '%v'", edge1["label"])
+	}
+	if edge1["condition"] != "x > 0" {
+		t.Errorf("Expected edge1 condition='x > 0', got '%v'", edge1["condition"])
+	}
+	if edge1["data_type"] != "string" {
+		t.Errorf("Expected edge1 data_type='string', got '%v'", edge1["data_type"])
+	}
+
+	// Verify edge2 fields
+	if edge2["data_type"] != "number" {
+		t.Errorf("Expected edge2 data_type='number', got '%v'", edge2["data_type"])
+	}
+	if edge2["condition"] != "" {
+		t.Errorf("Expected edge2 condition='', got '%v'", edge2["condition"])
+	}
+}
+
+func TestExecutionPlanner_SerializeEdgesForConfig_NoEdges(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	serialized := plan.SerializeEdgesForConfig("b")
+	if len(serialized) != 0 {
+		t.Errorf("Expected 0 serialized edges for node 'b', got %d", len(serialized))
+	}
+}
+
+func TestExecutionPlanner_GetIncomingEdges_SingleEdge(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b", DataType: "string"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	incoming := plan.GetIncomingEdges("b")
+	if len(incoming) != 1 {
+		t.Fatalf("Expected 1 incoming edge for 'b', got %d", len(incoming))
+	}
+	if incoming[0].ID != "e1" {
+		t.Errorf("Expected edge ID 'e1', got '%s'", incoming[0].ID)
+	}
+	if incoming[0].From != "a" {
+		t.Errorf("Expected edge from 'a', got '%s'", incoming[0].From)
+	}
+	if incoming[0].DataType != "string" {
+		t.Errorf("Expected data_type 'string', got '%s'", incoming[0].DataType)
+	}
+}
+
+func TestExecutionPlanner_GetIncomingEdges_MultipleEdges(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "start1", Type: "transform", Name: "Start 1"},
+			{ID: "start2", Type: "transform", Name: "Start 2"},
+			{ID: "merge", Type: "merge", Name: "Merge"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "start1", To: "merge", DataType: "array"},
+			{ID: "e2", From: "start2", To: "merge", DataType: "object"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	incoming := plan.GetIncomingEdges("merge")
+	if len(incoming) != 2 {
+		t.Fatalf("Expected 2 incoming edges for 'merge', got %d", len(incoming))
+	}
+
+	// Check that both edges are present
+	edgeMap := make(map[string]*entity.Edge)
+	for _, edge := range incoming {
+		edgeMap[edge.ID] = edge
+	}
+
+	if edgeMap["e1"] == nil {
+		t.Error("Expected to find edge 'e1'")
+	}
+	if edgeMap["e2"] == nil {
+		t.Error("Expected to find edge 'e2'")
+	}
+}
+
+func TestExecutionPlanner_GetIncomingEdges_NoEdges(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	incoming := plan.GetIncomingEdges("a")
+	if len(incoming) != 0 {
+		t.Errorf("Expected 0 incoming edges for 'a', got %d", len(incoming))
+	}
+}
+
+func TestExecutionPlanner_GetIncomingDataTypes_WithDataTypes(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "start1", Type: "transform", Name: "Start 1"},
+			{ID: "start2", Type: "transform", Name: "Start 2"},
+			{ID: "merge", Type: "merge", Name: "Merge"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "start1", To: "merge", DataType: "string"},
+			{ID: "e2", From: "start2", To: "merge", DataType: "number"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	dataTypes := plan.GetIncomingDataTypes("merge")
+	if len(dataTypes) != 2 {
+		t.Fatalf("Expected 2 data types for 'merge', got %d", len(dataTypes))
+	}
+
+	if dataTypes["start1"] != "string" {
+		t.Errorf("Expected data type 'string' from 'start1', got '%s'", dataTypes["start1"])
+	}
+	if dataTypes["start2"] != "number" {
+		t.Errorf("Expected data type 'number' from 'start2', got '%s'", dataTypes["start2"])
+	}
+}
+
+func TestExecutionPlanner_GetIncomingDataTypes_WithoutDataTypes(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	dataTypes := plan.GetIncomingDataTypes("b")
+	if len(dataTypes) != 0 {
+		t.Errorf("Expected 0 data types for 'b', got %d", len(dataTypes))
+	}
+}
+
+func TestExecutionPlanner_GetIncomingDataTypes_Mixed(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "start1", Type: "transform", Name: "Start 1"},
+			{ID: "start2", Type: "transform", Name: "Start 2"},
+			{ID: "start3", Type: "transform", Name: "Start 3"},
+			{ID: "merge", Type: "merge", Name: "Merge"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "start1", To: "merge", DataType: "array"},
+			{ID: "e2", From: "start2", To: "merge", DataType: ""},
+			{ID: "e3", From: "start3", To: "merge", DataType: "object"},
+		},
+	}
+
+	planner := NewExecutionPlanner()
+	plan := planner.Plan(graph)
+
+	dataTypes := plan.GetIncomingDataTypes("merge")
+	// Should only include edges with non-empty data types
+	if len(dataTypes) != 2 {
+		t.Fatalf("Expected 2 data types for 'merge', got %d", len(dataTypes))
+	}
+
+	if dataTypes["start1"] != "array" {
+		t.Errorf("Expected data type 'array' from 'start1', got '%s'", dataTypes["start1"])
+	}
+	if dataTypes["start3"] != "object" {
+		t.Errorf("Expected data type 'object' from 'start3', got '%s'", dataTypes["start3"])
+	}
+	if _, exists := dataTypes["start2"]; exists {
+		t.Error("Did not expect data type from 'start2' (empty data type)")
+	}
+}

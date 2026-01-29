@@ -1,10 +1,12 @@
-import { memo, useState } from "react";
+import { memo, useState, useMemo } from "react";
 import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
 import { X, AlertCircle, AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { NODE_TYPES } from "../../../lib/graph-types";
+import { NODE_TYPES, type NodeType } from "../../../lib/graph-types";
 import { useNodeValidation } from "@/contexts/ValidationContext";
+import { DataTypeIndicator, NodeTypeBadge } from "../DataTypeIndicator";
+import { getPrimaryInputType, getPrimaryOutputType } from "@/lib/type-inference";
 
 const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
   [NODE_TYPES.PROMPT]: {
@@ -109,6 +111,20 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
 
   const isSkipped = executionStatus === "skipped";
   const hasAdvancedConfig = Boolean(nodeData.retry_policy?.max_attempts && nodeData.retry_policy.max_attempts > 1) || Boolean(nodeData.timeout_ms);
+
+  // Get input/output types for this node
+  const { inputType, outputType } = useMemo(() => {
+    const graphNode = {
+      id,
+      type: nodeType as NodeType,
+      name: nodeData.label || id,
+      config: nodeData.config || {},
+    };
+    return {
+      inputType: getPrimaryInputType(graphNode),
+      outputType: getPrimaryOutputType(graphNode),
+    };
+  }, [id, nodeType, nodeData.label, nodeData.config]);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -232,6 +248,11 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
             )}
           </div>
         )}
+
+        {/* Data Type Indicators */}
+        <div className="mt-2 flex items-center justify-end">
+          <NodeTypeBadge inputType={inputType} outputType={outputType} />
+        </div>
       </div>
 
       {/* Input Handles */}

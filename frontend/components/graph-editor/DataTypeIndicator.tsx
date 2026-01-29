@@ -15,11 +15,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataType, DATA_TYPE_INFO, getDataTypeInfo } from "@/lib/data-types";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 /**
  * Icon mapping for data types
@@ -40,7 +35,6 @@ interface DataTypeIndicatorProps {
   type: DataType;
   size?: "sm" | "md" | "lg";
   showLabel?: boolean;
-  showTooltip?: boolean;
   isInferred?: boolean;
   className?: string;
 }
@@ -52,7 +46,6 @@ export function DataTypeIndicator({
   type,
   size = "sm",
   showLabel = false,
-  showTooltip = true,
   isInferred = false,
   className,
 }: DataTypeIndicatorProps) {
@@ -71,15 +64,18 @@ export function DataTypeIndicator({
     lg: "h-4 w-4",
   };
 
-  const content = (
+  const tooltipText = `${typeInfo.label}: ${typeInfo.description}${isInferred ? " (inferred)" : ""}`;
+
+  return (
     <div
       className={cn(
-        "inline-flex items-center gap-1 rounded-full",
+        "inline-flex items-center gap-1 rounded-full cursor-help",
         typeInfo.bgColor,
         sizeClasses[size],
         showLabel ? "px-2 py-0.5" : "p-1",
         className
       )}
+      title={tooltipText}
     >
       <IconComponent className={cn(typeInfo.color, iconSizeClasses[size])} />
       {showLabel && (
@@ -91,25 +87,6 @@ export function DataTypeIndicator({
         <span className="text-gray-400 text-[8px]">?</span>
       )}
     </div>
-  );
-
-  if (!showTooltip) {
-    return content;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{content}</TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[200px]">
-        <div className="space-y-1">
-          <p className="font-medium">{typeInfo.label}</p>
-          <p className="text-xs text-muted-foreground">{typeInfo.description}</p>
-          {isInferred && (
-            <p className="text-xs text-amber-500">Type is inferred</p>
-          )}
-        </div>
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -165,38 +142,21 @@ export function TypeMismatchWarning({
   const sourceInfo = getDataTypeInfo(sourceType);
   const targetInfo = getDataTypeInfo(targetType);
 
+  const tooltipText = `Type Mismatch: ${sourceInfo.label} → ${targetInfo.label}${suggestion ? `. ${suggestion}` : ""}`;
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            "inline-flex items-center gap-1 px-2 py-1 rounded-md",
-            "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-            "border border-amber-500/30",
-            className
-          )}
-        >
-          <AlertCircle className="h-3 w-3" />
-          <span className="text-xs font-medium">Type Mismatch</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[280px]">
-        <div className="space-y-2">
-          <p className="font-medium">Type Mismatch</p>
-          <div className="flex items-center gap-2 text-sm">
-            <DataTypeIndicator type={sourceType} showLabel size="sm" />
-            <span className="text-muted-foreground">→</span>
-            <DataTypeIndicator type={targetType} showLabel size="sm" />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {sourceInfo.label} cannot be directly used as {targetInfo.label}
-          </p>
-          {suggestion && (
-            <p className="text-xs text-amber-500">{suggestion}</p>
-          )}
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <div
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-help",
+        "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        "border border-amber-500/30",
+        className
+      )}
+      title={tooltipText}
+    >
+      <AlertCircle className="h-3 w-3" />
+      <span className="text-xs font-medium">Type Mismatch</span>
+    </div>
   );
 }
 
@@ -219,33 +179,19 @@ export function PortTypeIndicator({
   className,
 }: PortTypeIndicatorProps) {
   const typeInfo = getDataTypeInfo(type);
+  const tooltipText = `${portName ? `${portName}: ` : ""}${typeInfo.label}${isRequired ? " (required)" : ""}`;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            "w-2.5 h-2.5 rounded-full border-2",
-            typeInfo.bgColor,
-            isRequired ? "border-current" : "border-transparent",
-            typeInfo.color,
-            className
-          )}
-        />
-      </TooltipTrigger>
-      <TooltipContent side={isInput ? "left" : "right"}>
-        <div className="space-y-0.5">
-          {portName && <p className="font-medium text-xs">{portName}</p>}
-          <div className="flex items-center gap-1.5">
-            <DataTypeIndicator type={type} size="sm" showTooltip={false} />
-            <span className="text-xs">{typeInfo.label}</span>
-          </div>
-          {isRequired && (
-            <p className="text-xs text-amber-500">Required</p>
-          )}
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <div
+      className={cn(
+        "w-2.5 h-2.5 rounded-full border-2 cursor-help",
+        typeInfo.bgColor,
+        isRequired ? "border-current" : "border-transparent",
+        typeInfo.color,
+        className
+      )}
+      title={tooltipText}
+    />
   );
 }
 

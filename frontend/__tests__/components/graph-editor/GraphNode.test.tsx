@@ -27,6 +27,17 @@ jest.mock("@xyflow/react", () => ({
   }),
 }));
 
+// Mock ValidationContext
+jest.mock("@/contexts/ValidationContext", () => ({
+  useNodeValidation: () => ({
+    hasError: false,
+    hasWarning: false,
+    errors: [],
+    warnings: [],
+  }),
+  ValidationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 describe("GraphNode", () => {
   const createNodeProps = (
     nodeType: string,

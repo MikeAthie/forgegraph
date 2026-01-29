@@ -410,8 +410,8 @@ export default function RunDetailPage() {
 
     if (message.type === "run.updated" && "run" in message) {
       const messageTimestamp =
-        typeof (message as { timestamp?: string }).timestamp === "string"
-          ? (message as { timestamp: string }).timestamp
+        typeof (message as unknown as { timestamp?: string }).timestamp === "string"
+          ? (message as unknown as { timestamp: string }).timestamp
           : null;
       if (messageTimestamp) {
         setLastStreamTimestamp(messageTimestamp);
@@ -430,8 +430,8 @@ export default function RunDetailPage() {
 
     if (message.type === "node_run.updated" && "node_run" in message) {
       const messageTimestamp =
-        typeof (message as { timestamp?: string }).timestamp === "string"
-          ? (message as { timestamp: string }).timestamp
+        typeof (message as unknown as { timestamp?: string }).timestamp === "string"
+          ? (message as unknown as { timestamp: string }).timestamp
           : null;
       if (messageTimestamp) {
         setLastStreamTimestamp(messageTimestamp);

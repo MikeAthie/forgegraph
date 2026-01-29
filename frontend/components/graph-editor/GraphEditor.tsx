@@ -17,6 +17,7 @@ import {
   type Node,
   type Edge,
   type NodeTypes,
+  type EdgeTypes,
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
@@ -27,7 +28,7 @@ import { ValidationProvider, useValidation } from "@/contexts/ValidationContext"
 import { AgentWizard } from "./wizard";
 import { ValidationOverlay, ValidationStatusBar } from "./validation";
 
-import type { GraphJson, NodeType } from "../../lib/graph-types";
+import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
 import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
@@ -39,10 +40,17 @@ import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
 import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
 import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
-import { NodeConfigDialog, type NodeConfig } from "./NodeConfigDialog";
+import { NodeConfigDialog } from "./NodeConfigDialog";
 import { getNodeTypeInfo } from "./forms/node-form-registry";
+import { TypedEdge } from "./TypedEdge";
+import { useEdgeTypes } from "@/hooks/useEdgeTypes";
 
 const NOTE_NODE_TYPE = "note";
+
+// Custom edge types for React Flow
+const edgeTypes: EdgeTypes = {
+  typed: TypedEdge,
+};
 
 // Custom node types for React Flow
 const nodeTypes: NodeTypes = {
@@ -182,6 +190,10 @@ export function GraphEditor({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+
+  // Enrich edges with type information for visual display
+  const typedEdges = useEdgeTypes(nodes, edges);
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -675,7 +687,7 @@ export function GraphEditor({
   }, []);
 
   const addExecutableNode = useCallback(
-    (nodeType: NodeType, options?: { sourceNodeId?: string | null; config?: Record<string, unknown> }) => {
+    (nodeType: NodeType, options?: { sourceNodeId?: string | null; config?: Record<string, unknown>; label?: string }) => {
       const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
       if (!typeInfo) return;
 
@@ -715,7 +727,7 @@ export function GraphEditor({
           type: nodeType,
           position,
           data: {
-            label: `${typeInfo.label} Node`,
+            label: options?.label || `${typeInfo.label} Node`,
             nodeType: nodeType,
             config: options?.config ?? {},
             ...(hasTrigger ? {} : { isTrigger: true }),
@@ -778,11 +790,12 @@ export function GraphEditor({
   );
 
   const handleConfigDialogComplete = useCallback(
-    (config: NodeConfig) => {
+    (config: NodeConfig, label: string) => {
       if (!configDialogNodeType) return;
       addExecutableNode(configDialogNodeType, {
         sourceNodeId: configDialogSourceNodeId,
         config,
+        label,
       });
       setConfigDialogOpen(false);
       setConfigDialogNodeType(null);
@@ -1251,16 +1264,14 @@ export function GraphEditor({
         }}
       />
       <NodeConfigDialog
-        open={configDialogOpen}
-        onOpenChange={(nextOpen) => {
-          setConfigDialogOpen(nextOpen);
-          if (!nextOpen) {
-            setConfigDialogNodeType(null);
-            setConfigDialogSourceNodeId(null);
-            setConfigDialogInitialConfig({});
-          }
+        isOpen={configDialogOpen}
+        onClose={() => {
+          setConfigDialogOpen(false);
+          setConfigDialogNodeType(null);
+          setConfigDialogSourceNodeId(null);
+          setConfigDialogInitialConfig({});
         }}
-        nodeType={configDialogNodeType || ""}
+        nodeType={configDialogNodeType}
         initialConfig={configDialogInitialConfig}
         onSave={handleConfigDialogComplete}
       />
@@ -1279,7 +1290,7 @@ export function GraphEditor({
         <ReactFlow
           className="bg-background"
           nodes={nodes}
-          edges={edges}
+          edges={typedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -1291,6 +1302,7 @@ export function GraphEditor({
           onPaneClick={onPaneClick}
           onMoveEnd={(_, viewport) => setCurrentViewport(viewport)}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           snapToGrid
           snapGrid={[15, 15]}
@@ -1299,8 +1311,8 @@ export function GraphEditor({
           selectNodesOnDrag={false}
           panOnDrag={[1, 2]}
           defaultEdgeOptions={{
-            type: "smoothstep",
-            style: { strokeWidth: 2, stroke: "var(--muted-foreground)" },
+            type: "typed",
+            style: { strokeWidth: 2 },
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />

@@ -9,6 +9,7 @@ from django.urls import path
 from adapters.api.graphs.views import (
     GraphDetailView,
     GraphListCreateView,
+    GraphValidateView,
     GraphVersionDetailView,
     GraphVersionLatestView,
     GraphVersionListCreateView,
@@ -16,6 +17,7 @@ from adapters.api.graphs.views import (
 
 urlpatterns = [
     path("", GraphListCreateView.as_view(), name="graph-list-create"),
+    path("validate", GraphValidateView.as_view(), name="graph-validate"),
     path("<uuid:graph_id>", GraphDetailView.as_view(), name="graph-detail"),
     path(
         "<uuid:graph_id>/versions",

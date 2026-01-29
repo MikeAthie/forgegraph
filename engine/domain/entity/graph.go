@@ -32,6 +32,7 @@ type Edge struct {
 	To        string `json:"to"`
 	Condition string `json:"condition,omitempty"`
 	Label     string `json:"label,omitempty"`
+	DataType  string `json:"data_type,omitempty"` // Type of data flowing through edge (metadata only)
 }
 
 // Position stores x,y coordinates (UI metadata, not used by engine)

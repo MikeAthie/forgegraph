@@ -390,7 +390,7 @@ export function PromptNodeWizardDialog({
               <div className="mt-2 flex flex-col gap-2">
                 <Button
                   type="button"
-                  variant={mode === "existing" ? "default" : "outline"}
+                  variant={(mode as WizardMode) === "existing" ? "default" : "outline"}
                   onClick={() => setMode("existing")}
                   disabled={submitting || loadingExisting}
                 >

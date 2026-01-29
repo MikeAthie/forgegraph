@@ -320,6 +320,14 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		return
 	}
 
+	// Debug: log incoming data types for this node
+	incomingTypes := rc.plan.GetIncomingDataTypes(nodeID)
+	if len(incomingTypes) > 0 {
+		for fromNode, dataType := range incomingTypes {
+			log.Printf("[DEBUG] Node %s receiving %s data from %s", nodeID, dataType, fromNode)
+		}
+	}
+
 	// Check if node is disabled - skip execution
 	if node.Disabled {
 		s.markSkipped(rc, nodeID)
