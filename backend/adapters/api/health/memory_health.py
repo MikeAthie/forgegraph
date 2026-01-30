@@ -4,7 +4,11 @@ Memory health endpoints.
 Checks Redis connectivity used for caching/channels.
 """
 
+import os
 import time
+
+import grpc
+from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from django.core.cache import cache
 from rest_framework import status
@@ -30,6 +34,8 @@ class MemoryHealthView(APIView):
                     "latency_ms": latency_ms,
                 }
             }
+            payload["grpc"] = _check_memory_grpc()
+            payload["metrics"] = _get_memory_metrics()
             status_code = status.HTTP_200_OK if healthy else status.HTTP_503_SERVICE_UNAVAILABLE
             return Response(payload, status=status_code)
         except Exception as exc:  # noqa: BLE001
@@ -44,3 +50,36 @@ class MemoryHealthView(APIView):
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+def _check_memory_grpc() -> dict:
+    host = os.getenv("MEMORY_GRPC_HOST", "")
+    port = os.getenv("MEMORY_GRPC_PORT", "")
+    if not host or not port:
+        return {"configured": False}
+
+    target = f"{host}:{port}"
+    try:
+        with grpc.insecure_channel(target) as channel:
+            stub = health_pb2_grpc.HealthStub(channel)
+            response = stub.Check(health_pb2.HealthCheckRequest(service="memory"), timeout=0.2)
+            healthy = response.status == health_pb2.HealthCheckResponse.SERVING
+            return {"configured": True, "healthy": healthy}
+    except Exception as exc:  # noqa: BLE001
+        return {"configured": True, "healthy": False, "error": str(exc)}
+
+
+def _get_memory_metrics() -> dict:
+    from django.core.cache import cache
+
+    return {
+        "memory_gc_deleted_retention_total": cache.get("memory_gc_deleted_retention_total", 0),
+        "memory_gc_deleted_tenant_total": cache.get("memory_gc_deleted_tenant_total", 0),
+        "memory_gc_deleted_missing_users_total": cache.get(
+            "memory_gc_deleted_missing_users_total", 0
+        ),
+        "memory_gc_last_run_at": cache.get("memory_gc_last_run_at"),
+        "memory_gc_last_reindex": cache.get("memory_gc_last_reindex"),
+        "memory_grpc_requests_total": cache.get("memory_grpc_requests_total", 0),
+        "memory_grpc_errors_total": cache.get("memory_grpc_errors_total", 0),
+    }

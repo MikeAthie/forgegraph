@@ -50,6 +50,8 @@ type Config struct {
 	RedisWriteTimeoutMs  int
 	TenantID             string
 	MetricsPort          string
+	MemoryGRPCHost       string
+	MemoryGRPCPort       string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -73,6 +75,8 @@ func LoadConfig() *Config {
 		RedisWriteTimeoutMs:  getEnvInt("REDIS_WRITE_TIMEOUT_MS", 0),
 		TenantID:             getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000000"),
 		MetricsPort:          getEnv("METRICS_PORT", "9090"),
+		MemoryGRPCHost:       getEnv("MEMORY_GRPC_HOST", ""),
+		MemoryGRPCPort:       getEnv("MEMORY_GRPC_PORT", ""),
 	}
 	return cfg
 }
@@ -357,6 +361,16 @@ func main() {
 	}
 	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter)
 	log.Info("scheduler_initialized")
+
+	if cfg.MemoryGRPCHost != "" && cfg.MemoryGRPCPort != "" {
+		retriever, err := NewGrpcMemoryRetriever(cfg.MemoryGRPCHost, cfg.MemoryGRPCPort)
+		if err != nil {
+			log.Warn("memory_retriever_init_failed", "error", err.Error())
+		} else {
+			scheduler.SetMemoryRetriever(retriever)
+			log.Info("memory_retriever_initialized", "host", cfg.MemoryGRPCHost, "port", cfg.MemoryGRPCPort)
+		}
+	}
 
 	if llmClient != nil {
 		var summaryStore port.SummaryStore

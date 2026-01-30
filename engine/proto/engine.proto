@@ -22,6 +22,12 @@ service EngineService {
   rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
 }
 
+// MemoryService provides semantic memory retrieval for Tier 3.
+service MemoryService {
+  // RetrieveMemory returns relevant memory chunks for a query.
+  rpc RetrieveMemory(RetrieveMemoryRequest) returns (RetrieveMemoryResponse);
+}
+
 // =============================================================================
 // Health Check
 // =============================================================================
@@ -124,5 +130,40 @@ message ResumeRunResponse {
   bool accepted = 1;
 
   // Error message if resumption failed
+  string error = 2;
+}
+
+// =============================================================================
+// Memory Retrieval
+// =============================================================================
+
+message RetrieveMemoryRequest {
+  // Tenant identifier for isolation
+  string tenant_id = 1;
+
+  // Query text to embed and search
+  string query = 2;
+
+  // Optional scoping identifiers
+  string agent_id = 3;
+  string run_id = 4;
+  string session_id = 5;
+
+  // Retrieval parameters
+  int32 top_k = 6;
+  double threshold = 7;
+  double recency_weight = 8;
+  string embedding_model = 9;
+}
+
+message MemoryChunk {
+  string content = 1;
+  double score = 2;
+  string source_timestamp = 3;
+  string metadata_json = 4;
+}
+
+message RetrieveMemoryResponse {
+  repeated MemoryChunk chunks = 1;
   string error = 2;
 }

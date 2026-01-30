@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
@@ -117,8 +119,42 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	// Substitute variables in prompt
 	basePrompt := SubstituteTemplate(promptTemplate, state)
 	prompt := basePrompt
-	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend && runCtx.MemoryBuffer != nil {
-		prompt = buildPromptWithMemory(basePrompt, runCtx.MemoryBuffer, runCtx.CurrentSummary)
+
+	var vectorMemories []port.MemoryChunk
+	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
+		tenantID := port.TenantIDFrom(ctx)
+		if tenantID != "" {
+			req := port.MemoryRetrieveRequest{
+				TenantID:       tenantID,
+				Query:          basePrompt,
+				TopK:           runCtx.MemoryConfig.Tier3.TopK,
+				Threshold:      runCtx.MemoryConfig.Tier3.Threshold,
+				RecencyWeight:  runCtx.MemoryConfig.Tier3.RecencyWeight,
+				EmbeddingModel: runCtx.MemoryConfig.Tier3.EmbeddingModel,
+			}
+			retrieveCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			response, err := runCtx.MemoryRetriever.Retrieve(retrieveCtx, req)
+			cancel()
+			if err != nil {
+				log.Printf("memory_retrieve_failed: %v", err)
+			} else {
+				vectorMemories = response.Chunks
+			}
+		}
+	}
+
+	shouldAugment := (runCtx != nil &&
+		runCtx.MemoryConfig != nil &&
+		runCtx.MemoryConfig.Tier1.AutoPrepend &&
+		runCtx.MemoryBuffer != nil) || len(vectorMemories) > 0
+	if shouldAugment {
+		var buffer *entity.MessageBuffer
+		var summary *entity.Summary
+		if runCtx != nil {
+			buffer = runCtx.MemoryBuffer
+			summary = runCtx.CurrentSummary
+		}
+		prompt = buildPromptWithMemory(basePrompt, buffer, summary, vectorMemories)
 	}
 
 	// Get optional system prompt
@@ -247,16 +283,23 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	return port.NewSuccessResult(output), nil
 }
 
-func buildPromptWithMemory(basePrompt string, buffer *entity.MessageBuffer, summary *entity.Summary) string {
+func buildPromptWithMemory(
+	basePrompt string,
+	buffer *entity.MessageBuffer,
+	summary *entity.Summary,
+	vectorMemories []port.MemoryChunk,
+) string {
 	if buffer == nil && summary == nil {
-		return basePrompt
+		if len(vectorMemories) == 0 {
+			return basePrompt
+		}
 	}
 
 	var messages []entity.Message
 	if buffer != nil {
 		messages = buffer.GetAll()
 	}
-	if len(messages) == 0 && (summary == nil || strings.TrimSpace(summary.Content) == "") {
+	if len(messages) == 0 && (summary == nil || strings.TrimSpace(summary.Content) == "") && len(vectorMemories) == 0 {
 		return basePrompt
 	}
 
@@ -281,6 +324,17 @@ func buildPromptWithMemory(basePrompt string, buffer *entity.MessageBuffer, summ
 		for _, msg := range messages {
 			role := strings.Title(msg.Role)
 			sb.WriteString(fmt.Sprintf("%s: %s\n", role, msg.Content))
+		}
+		sb.WriteString("\n")
+	}
+	if len(vectorMemories) > 0 {
+		sb.WriteString("Relevant memories:\n")
+		for _, memory := range vectorMemories {
+			content := strings.TrimSpace(memory.Content)
+			if content == "" {
+				continue
+			}
+			sb.WriteString(fmt.Sprintf("- %s\n", content))
 		}
 		sb.WriteString("\n")
 	}

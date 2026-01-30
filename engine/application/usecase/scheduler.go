@@ -56,12 +56,13 @@ func DefaultSchedulerConfig() SchedulerConfig {
 
 // Scheduler orchestrates workflow execution
 type Scheduler struct {
-	config     SchedulerConfig
-	registry   port.ExecutorRegistry
-	repository port.RunRepository
-	emitter    port.EventEmitter
-	conditions *service.ConditionEvaluator
-	summarizer *SummarizationWorker
+	config          SchedulerConfig
+	registry        port.ExecutorRegistry
+	repository      port.RunRepository
+	emitter         port.EventEmitter
+	conditions      *service.ConditionEvaluator
+	summarizer      *SummarizationWorker
+	memoryRetriever port.MemoryRetriever
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -100,6 +101,11 @@ func NewScheduler(
 // SetSummarizationWorker attaches an async summarization worker.
 func (s *Scheduler) SetSummarizationWorker(worker *SummarizationWorker) {
 	s.summarizer = worker
+}
+
+// SetMemoryRetriever attaches the memory retriever used for Tier 3 lookups.
+func (s *Scheduler) SetMemoryRetriever(retriever port.MemoryRetriever) {
+	s.memoryRetriever = retriever
 }
 
 // runContext holds runtime state for a single run
@@ -331,10 +337,11 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		workChan:    make(chan string, len(plan.NodeMap)),
 	}
 	rc.memoryCtx = &port.RunContext{
-		MemoryBuffer:   rc.messageBuffer,
-		MemoryConfig:   rc.memoryConfig,
-		CurrentSummary: rc.currentSummary,
-		TrackMessage:   rc.trackMessages,
+		MemoryBuffer:    rc.messageBuffer,
+		MemoryConfig:    rc.memoryConfig,
+		CurrentSummary:  rc.currentSummary,
+		TrackMessage:    rc.trackMessages,
+		MemoryRetriever: s.memoryRetriever,
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)

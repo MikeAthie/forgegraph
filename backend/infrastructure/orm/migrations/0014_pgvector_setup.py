@@ -3,14 +3,25 @@
 from django.db import migrations
 
 
+def enable_vector_extension(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+
+
+def disable_vector_extension(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("DROP EXTENSION IF EXISTS vector;")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("orm", "0013_memory_usage"),
     ]
 
     operations = [
-        migrations.RunSQL(
-            "CREATE EXTENSION IF NOT EXISTS vector;",
-            reverse_sql="DROP EXTENSION IF EXISTS vector;",
-        ),
+        migrations.RunPython(enable_vector_extension, disable_vector_extension),
     ]

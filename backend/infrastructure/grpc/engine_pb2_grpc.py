@@ -275,3 +275,79 @@ class EngineService(object):
             timeout,
             metadata,
             _registered_method=True)
+
+
+class MemoryServiceStub(object):
+    """MemoryService provides semantic memory retrieval for Tier 3.
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.RetrieveMemory = channel.unary_unary(
+                '/engine.MemoryService/RetrieveMemory',
+                request_serializer=engine__pb2.RetrieveMemoryRequest.SerializeToString,
+                response_deserializer=engine__pb2.RetrieveMemoryResponse.FromString,
+                _registered_method=True)
+
+
+class MemoryServiceServicer(object):
+    """MemoryService provides semantic memory retrieval for Tier 3.
+    """
+
+    def RetrieveMemory(self, request, context):
+        """RetrieveMemory returns relevant memory chunks for a query.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_MemoryServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'RetrieveMemory': grpc.unary_unary_rpc_method_handler(
+                    servicer.RetrieveMemory,
+                    request_deserializer=engine__pb2.RetrieveMemoryRequest.FromString,
+                    response_serializer=engine__pb2.RetrieveMemoryResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'engine.MemoryService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('engine.MemoryService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class MemoryService(object):
+    """MemoryService provides semantic memory retrieval for Tier 3.
+    """
+
+    @staticmethod
+    def RetrieveMemory(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/engine.MemoryService/RetrieveMemory',
+            engine__pb2.RetrieveMemoryRequest.SerializeToString,
+            engine__pb2.RetrieveMemoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

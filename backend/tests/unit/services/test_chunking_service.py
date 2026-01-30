@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from application.services.chunking_service import (
     Message,
@@ -9,7 +9,7 @@ from application.services.chunking_service import (
 
 
 def _messages(count: int) -> list[Message]:
-    start = datetime.utcnow()
+    start = datetime.now(timezone.utc)
     return [
         Message(role="user", content=f"msg-{i}", timestamp=start + timedelta(seconds=i))
         for i in range(count)
@@ -34,9 +34,9 @@ def test_sliding_window_chunking():
 
 def test_topic_based_chunking_respects_topic():
     messages = [
-        Message(role="user", content="a", timestamp=datetime.utcnow(), metadata={"topic": "t1"}),
-        Message(role="assistant", content="b", timestamp=datetime.utcnow(), metadata={"topic": "t1"}),
-        Message(role="user", content="c", timestamp=datetime.utcnow(), metadata={"topic": "t2"}),
+        Message(role="user", content="a", timestamp=datetime.now(timezone.utc), metadata={"topic": "t1"}),
+        Message(role="assistant", content="b", timestamp=datetime.now(timezone.utc), metadata={"topic": "t1"}),
+        Message(role="user", content="c", timestamp=datetime.now(timezone.utc), metadata={"topic": "t2"}),
     ]
     chunker = TopicBasedChunking()
     chunks = chunker.chunk(messages)

@@ -4,14 +4,17 @@ from .engine_pb2 import (
     CancelRunResponse,
     GetRunStatusRequest,
     GetRunStatusResponse,
+    MemoryChunk,
     PingRequest,
     PingResponse,
+    RetrieveMemoryRequest,
+    RetrieveMemoryResponse,
     ResumeRunRequest,
     ResumeRunResponse,
     StartRunRequest,
     StartRunResponse,
 )
-from .engine_pb2_grpc import EngineServiceStub
+from .engine_pb2_grpc import EngineServiceStub, MemoryServiceServicer, MemoryServiceStub
 
 __all__ = [
     "PingRequest",
@@ -25,4 +28,9 @@ __all__ = [
     "ResumeRunRequest",
     "ResumeRunResponse",
     "EngineServiceStub",
+    "RetrieveMemoryRequest",
+    "RetrieveMemoryResponse",
+    "MemoryChunk",
+    "MemoryServiceServicer",
+    "MemoryServiceStub",
 ]

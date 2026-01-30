@@ -9,6 +9,7 @@ import copy
 import hashlib
 import json
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
@@ -115,6 +116,32 @@ class Graph(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.owner.email})"
+
+    def save(self, *args, **kwargs):
+        is_create = self._state.adding
+        prev_updated = None
+        if not is_create and self.pk:
+            prev_updated = (
+                Graph.objects.filter(pk=self.pk).values_list("updated_at", flat=True).first()
+            )
+
+        super().save(*args, **kwargs)
+
+        if is_create:
+            latest = (
+                Graph.objects.exclude(pk=self.pk)
+                .order_by("-updated_at")
+                .values_list("updated_at", flat=True)
+                .first()
+            )
+            if latest and self.updated_at <= latest:
+                bumped = latest + timedelta(microseconds=1)
+                Graph.objects.filter(pk=self.pk).update(updated_at=bumped)
+                self.updated_at = bumped
+        elif prev_updated and self.updated_at <= prev_updated:
+            bumped = prev_updated + timedelta(microseconds=1)
+            Graph.objects.filter(pk=self.pk).update(updated_at=bumped)
+            self.updated_at = bumped
 
 
 class MemoryConfiguration(models.Model):
@@ -255,6 +282,23 @@ class PromptTemplate(models.Model):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        is_create = self._state.adding
+        super().save(*args, **kwargs)
+
+        if is_create:
+            latest = (
+                PromptTemplate.objects.exclude(pk=self.pk)
+                .order_by("-created_at")
+                .values_list("created_at", flat=True)
+                .first()
+            )
+            if latest and self.created_at <= latest:
+                bumped = latest + timedelta(microseconds=1)
+                PromptTemplate.objects.filter(pk=self.pk).update(created_at=bumped, updated_at=bumped)
+                self.created_at = bumped
+                self.updated_at = bumped
 
     @property
     def is_builtin(self) -> bool:

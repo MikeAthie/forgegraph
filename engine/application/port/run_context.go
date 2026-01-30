@@ -8,10 +8,11 @@ import (
 
 // RunContext provides execution-scoped memory context to executors.
 type RunContext struct {
-	MemoryBuffer   *entity.MessageBuffer
-	MemoryConfig   *entity.MemoryConfig
-	CurrentSummary *entity.Summary
-	TrackMessage   func(count int)
+	MemoryBuffer    *entity.MessageBuffer
+	MemoryConfig    *entity.MemoryConfig
+	CurrentSummary  *entity.Summary
+	TrackMessage    func(count int)
+	MemoryRetriever MemoryRetriever
 }
 
 type runContextKey struct{}

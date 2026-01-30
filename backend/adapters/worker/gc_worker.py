@@ -17,10 +17,16 @@ def run_memory_gc(self) -> dict[str, int | bool]:
     retention_days = int(os.getenv("MEMORY_RETENTION_DAYS", "30"))
     reindex = os.getenv("MEMORY_GC_REINDEX", "false").lower() in {"1", "true", "yes"}
     tenant_ids = _parse_tenant_ids(os.getenv("MEMORY_GC_TENANT_IDS"))
+    prune_missing_users = os.getenv("MEMORY_GC_PRUNE_MISSING_USERS", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
     service = MemoryGCService()
     return service.cleanup(
         retention_days=retention_days,
         tenant_ids_to_delete=tenant_ids,
+        prune_missing_users=prune_missing_users,
         reindex=reindex,
     )

@@ -31,6 +31,16 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Invoke-Exec -Name "Engine (Go) tests" -WorkDir (Join-Path $root "engine") -Exe "go" -Args @("test", "./...")
 
+if (-not $Fast) {
+  Write-Host ""
+  Write-Host "=== Backend DB preflight ==="
+  $postgresRunning = docker ps --format "{{.Names}}" | Select-String -SimpleMatch "forgegraph-postgres"
+  if (-not $postgresRunning) {
+    Write-Host "Starting postgres container..."
+    docker compose up -d postgres
+  }
+}
+
 Push-Location (Join-Path $root "backend")
 try {
   python -c "import pytest_asyncio" *> $null
@@ -58,12 +68,22 @@ function Set-ScopedEnvVar {
 $old_USE_SQLITE = $env:USE_SQLITE
 $old_SQLITE_DB_PATH = $env:SQLITE_DB_PATH
 $old_USE_IN_MEMORY_CHANNEL_LAYER = $env:USE_IN_MEMORY_CHANNEL_LAYER
+$old_DB_HOST = $env:DB_HOST
+$old_DB_PORT = $env:DB_PORT
+$old_DB_NAME = $env:DB_NAME
+$old_DB_USER = $env:DB_USER
+$old_DB_PASSWORD = $env:DB_PASSWORD
 
 try {
-  # Ensure backend tests don't touch the tracked dev DB at backend/db.sqlite3.
-  Set-ScopedEnvVar -Name "USE_SQLITE" -Value "true"
+  # Use Postgres for backend tests to match production parity.
+  Set-ScopedEnvVar -Name "USE_SQLITE" -Value "false"
   Set-ScopedEnvVar -Name "USE_IN_MEMORY_CHANNEL_LAYER" -Value "true"
-  Set-ScopedEnvVar -Name "SQLITE_DB_PATH" -Value (Join-Path $env:TEMP "forgegraph-test-db.sqlite3")
+  Set-ScopedEnvVar -Name "SQLITE_DB_PATH" -Value ""
+  Set-ScopedEnvVar -Name "DB_HOST" -Value "localhost"
+  Set-ScopedEnvVar -Name "DB_PORT" -Value "5433"
+  Set-ScopedEnvVar -Name "DB_NAME" -Value "forgegraph"
+  Set-ScopedEnvVar -Name "DB_USER" -Value "forgegraph"
+  Set-ScopedEnvVar -Name "DB_PASSWORD" -Value "forgegraph_secret"
 
   if ($Fast) {
     Invoke-Exec `
@@ -78,6 +98,11 @@ try {
   Set-ScopedEnvVar -Name "USE_SQLITE" -Value $old_USE_SQLITE
   Set-ScopedEnvVar -Name "USE_IN_MEMORY_CHANNEL_LAYER" -Value $old_USE_IN_MEMORY_CHANNEL_LAYER
   Set-ScopedEnvVar -Name "SQLITE_DB_PATH" -Value $old_SQLITE_DB_PATH
+  Set-ScopedEnvVar -Name "DB_HOST" -Value $old_DB_HOST
+  Set-ScopedEnvVar -Name "DB_PORT" -Value $old_DB_PORT
+  Set-ScopedEnvVar -Name "DB_NAME" -Value $old_DB_NAME
+  Set-ScopedEnvVar -Name "DB_USER" -Value $old_DB_USER
+  Set-ScopedEnvVar -Name "DB_PASSWORD" -Value $old_DB_PASSWORD
 }
 
 Invoke-Exec -Name "Frontend (Jest) tests" -WorkDir (Join-Path $root "frontend") -Exe "npm" -Args @("test")

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain/entity"
@@ -22,6 +23,20 @@ func (m *testMockLLMClient) Complete(ctx context.Context, request *LLMRequest) (
 	m.received = request
 	if m.err != nil {
 		return nil, m.err
+	}
+	return m.response, nil
+}
+
+type testMemoryRetriever struct {
+	lastRequest *port.MemoryRetrieveRequest
+	response    port.MemoryRetrieveResponse
+	err         error
+}
+
+func (m *testMemoryRetriever) Retrieve(ctx context.Context, request port.MemoryRetrieveRequest) (port.MemoryRetrieveResponse, error) {
+	m.lastRequest = &request
+	if m.err != nil {
+		return port.MemoryRetrieveResponse{}, m.err
 	}
 	return m.response, nil
 }
@@ -106,6 +121,62 @@ func TestPromptExecutor_Execute_Success(t *testing.T) {
 	}
 	if usage["total_tokens"] != 18 {
 		t.Errorf("total_tokens = %v, want 18", usage["total_tokens"])
+	}
+}
+
+func TestPromptExecutor_Execute_WithVectorMemories(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{Content: "response", Model: "gpt-4"},
+	}
+	retriever := &testMemoryRetriever{
+		response: port.MemoryRetrieveResponse{
+			Chunks: []port.MemoryChunk{
+				{
+					Content:         "We agreed to ship on Friday.",
+					Score:           0.9,
+					SourceTimestamp: time.Now().UTC(),
+				},
+			},
+		},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+
+	runCtx := &port.RunContext{
+		MemoryConfig: &entity.MemoryConfig{
+			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: false},
+			Tier3: entity.Tier3Config{Enabled: true, TopK: 5, Threshold: 0.7, RecencyWeight: 0.2},
+		},
+		MemoryRetriever: retriever,
+	}
+
+	ctx := port.WithRunContext(context.Background(), runCtx)
+	ctx = port.WithTenantID(ctx, "tenant-1")
+
+	node := &entity.Node{
+		ID:   "prompt_1",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "What is our timeline?",
+		},
+	}
+
+	_, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if retriever.lastRequest == nil || retriever.lastRequest.Query == "" {
+		t.Fatal("expected memory retriever to be called with query")
+	}
+
+	prompt := mockClient.received.Prompt
+	if !strings.Contains(prompt, "Relevant memories:") {
+		t.Fatalf("expected relevant memories section, got prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "We agreed to ship on Friday.") {
+		t.Fatalf("expected memory content in prompt, got prompt: %s", prompt)
 	}
 }
 

@@ -262,7 +262,8 @@ class GraphVersionListCreateView(APIView):
 
         # Validate graph structure
         validator = GraphValidator()
-        errors = validator.validate(graph_json)
+        issues = validator.validate(graph_json, require_entry_exit=False)
+        errors = [issue for issue in issues if issue.get("severity") != "warning"]
         if errors:
             return error_response(
                 code="GRAPH_VALIDATION_ERROR",

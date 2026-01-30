@@ -20,7 +20,11 @@ class GraphValidator:
     END_NODE_ID = "END"
 
     def validate(
-        self, graph_json: dict[str, Any], *, strict: bool = False
+        self,
+        graph_json: dict[str, Any],
+        *,
+        strict: bool = False,
+        require_entry_exit: bool = True,
     ) -> list[dict[str, Any]]:
         """
         Validate a graph JSON structure.
@@ -71,7 +75,7 @@ class GraphValidator:
             errors.extend(edge_errors)
 
         # Check start/output node requirements
-        if not errors:
+        if require_entry_exit and not errors:
             requirement_errors = self._validate_start_output_requirements(nodes, edges)
             errors.extend(requirement_errors)
 

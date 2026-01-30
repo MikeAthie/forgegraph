@@ -23,6 +23,17 @@ The implementation is divided into four phases:
 - Message-count based limits initially (defer token counting to Phase 4)
 - Redis provides cross-instance consistency; local buffers are per-instance
 - Multi-tenant isolation via namespaced keys with tenant ID prefix
+- Production parity: PostgreSQL is required for Phase 3+ (pgvector); SQLite is no longer supported for memory features
+
+---
+
+## Current Status (2026-01-30)
+
+- Phase 1: complete (buffer, Redis integration, memory config, engine wiring).
+- Phase 2: complete (summarization pipeline, config, UI, cost tracking).
+- Phase 3: in progress.
+  - Done: pgvector DB setup, MemoryChunk model/migrations, embedding + chunking services, vector search service, vector config fields/UI, memory GC scaffolding.
+  - Pending: gRPC memory retrieval endpoint, prompt executor Tier3 integration, embedding pipeline integration tests, GC metrics, and remaining Phase 3 checklist items.
 
 ---
 
@@ -2774,6 +2785,10 @@ FEATURE_FLAGS = {
                     "minimum": 0,
                     "maximum": 1,
                     "default": 0.2
+                },
+                "embedding_model": {
+                    "type": "string",
+                    "default": "text-embedding-ada-002"
                 }
             }
         },
@@ -2945,11 +2960,11 @@ components:
 |-----------|-------|-------------|
 | `0011_memory_configuration.py` | P1 | MemoryConfiguration model |
 | `0012_summarization_config.py` | P2 | Summarization fields |
-| `0013_pgvector_setup.py` | P3 | Enable pgvector extension |
-| `0014_memory_chunks.py` | P3 | MemoryChunk with vector field |
-| `0015_vector_config.py` | P3 | Vector configuration fields |
-| `0016_memory_sessions.py` | P4 | MemorySession model |
-| `0017_memory_analytics.py` | P4 | MemoryUsageLog model |
+| `0014_pgvector_setup.py` | P3 | Enable pgvector extension |
+| `0015_memory_chunks.py` | P3 | MemoryChunk with vector field |
+| `0016_vector_config.py` | P3 | Vector configuration fields |
+| `0017_memory_sessions.py` | P4 | MemorySession model |
+| `0018_memory_analytics.py` | P4 | MemoryUsageLog model |
 
 ### Rollback Commands
 
@@ -3047,4 +3062,4 @@ groups:
 
 *Document generated for ForgeGraph Memory System Implementation*
 *Version: 1.0.0*
-*Last Updated: 2026-01-29*
+*Last Updated: 2026-01-30*

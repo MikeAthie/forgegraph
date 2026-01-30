@@ -177,11 +177,11 @@ LIMIT %s;
 - Regenerate `engine/proto/engine.pb.go`
 - `backend/adapters/grpc/memory_service.py`
 
-- [ ] Add RetrieveMemoryRequest/Response to proto.
-- [ ] Implement Django gRPC service for retrieval.
-- [ ] Generate Go client and wire into engine.
-- [ ] Add timeout and fallback behavior.
-- [ ] Add integration test for gRPC retrieval.
+- [x] Add RetrieveMemoryRequest/Response to proto.
+- [x] Implement Django gRPC service for retrieval.
+- [x] Generate Go client and wire into engine.
+- [x] Add timeout and fallback behavior.
+- [x] Add integration test for gRPC retrieval.
 
 **Acceptance Criteria:**
 - [ ] gRPC endpoint responds within 100ms
@@ -194,10 +194,10 @@ LIMIT %s;
 **Files:**
 - `engine/adapter/executor/prompt_executor.go`
 
-- [ ] Retrieve memories via gRPC when Tier3 enabled.
-- [ ] Format memories block in prompt.
-- [ ] Log retrieval failures without blocking execution.
-- [ ] Add integration test verifying prompt includes memories.
+- [x] Retrieve memories via gRPC when Tier3 enabled.
+- [x] Format memories block in prompt.
+- [x] Log retrieval failures without blocking execution.
+- [x] Add integration test verifying prompt includes memories.
 
 **Acceptance Criteria:**
 - [ ] Relevant memories included in prompt
@@ -239,17 +239,17 @@ embedding_model = models.CharField(max_length=50, default='text-embedding-ada-00
 - `backend/application/services/memory_gc.py`
 - `backend/adapters/worker/gc_worker.py`
 
-- [ ] Remove chunks for deleted tenants/users.
+- [x] Remove chunks for deleted tenants/users.
 - [x] Clean old chunks based on retention policy.
 - [x] Reindex vector indices periodically.
 - [x] Schedule daily Celery beat task.
-- [ ] Add metrics for storage and cleanup.
+- [x] Add metrics for storage and cleanup.
 
 **Acceptance Criteria:**
-- [ ] Deleted user chunks removed within 24 hours
+- [x] Deleted user chunks removed within 24 hours
 - [x] Old chunks cleaned by age policy
 - [x] Batch cleanup avoids spikes
-- [ ] Metrics reflect cleanup activity
+- [x] Metrics reflect cleanup activity
 
 ---
 

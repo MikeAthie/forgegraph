@@ -83,11 +83,41 @@ services:
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MEMORY_GRPC_HOST: memory-grpc
+      MEMORY_GRPC_PORT: 50052
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
+      memory-grpc:
+        condition: service_started
+
+  memory-grpc:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: forgegraph-memory-grpc
+    command: ["python", "-m", "adapters.grpc.server"]
+    ports:
+      - "50052:50052"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DEBUG: "true"
+      ALLOWED_HOSTS: "*"
+      MEMORY_GRPC_HOST: 0.0.0.0
+      MEMORY_GRPC_PORT: 50052
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:
