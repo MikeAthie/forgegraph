@@ -46,7 +46,19 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Enable GPU acceleration for faster rendering (requires GPU)
+        launchOptions: {
+          args: [
+            '--enable-gpu',
+            '--enable-webgl',
+            '--use-gl=desktop',
+            '--enable-accelerated-2d-canvas',
+            '--ignore-gpu-blocklist',
+          ],
+        },
+      },
     },
 
     {

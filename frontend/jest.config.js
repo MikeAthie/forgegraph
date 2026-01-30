@@ -28,6 +28,10 @@ const customJestConfig = {
     '!**/.next/**',
     '!**/coverage/**',
   ],
+  // Memory management - restart workers when they consume too much memory
+  workerIdleMemoryLimit: '512MB',
+  // Limit parallel workers to reduce memory pressure
+  maxWorkers: '50%',
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

@@ -65,7 +65,10 @@ test.describe("Runs", () => {
         { id: "start", type: "prompt", name: "Start", config: {} },
         { id: "end", type: "output", name: "End", config: {} },
       ],
-      edges: [{ id: "e1", from: "start", to: "end" }],
+      edges: [
+        { id: "e0", from: "START", to: "start" },
+        { id: "e1", from: "start", to: "end" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -129,6 +132,7 @@ test.describe("Runs", () => {
         { id: "end", type: "output", name: "End", config: {} },
       ],
       edges: [
+        { id: "e0", from: "START", to: "start" },
         { id: "e1", from: "start", to: "gate" },
         { id: "e2", from: "gate", to: "end" },
       ],
@@ -187,8 +191,14 @@ test.describe("Runs", () => {
     const graphId = createdGraph.data.id;
 
     const graphJson = {
-      nodes: [{ id: "node_1", type: "prompt", name: "Node", config: {} }],
-      edges: [],
+      nodes: [
+        { id: "node_1", type: "prompt", name: "Node", config: {} },
+        { id: "output", type: "output", name: "Output", config: {} },
+      ],
+      edges: [
+        { id: "e0", from: "START", to: "node_1" },
+        { id: "e1", from: "node_1", to: "output" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -237,8 +247,14 @@ test.describe("Runs", () => {
     const graphId = createdGraph.data.id;
 
     const graphJson = {
-      nodes: [{ id: "node_1", type: "prompt", name: "Test Node", config: {} }],
-      edges: [],
+      nodes: [
+        { id: "node_1", type: "prompt", name: "Test Node", config: {} },
+        { id: "output", type: "output", name: "Output", config: {} },
+      ],
+      edges: [
+        { id: "e0", from: "START", to: "node_1" },
+        { id: "e1", from: "node_1", to: "output" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -287,8 +303,13 @@ test.describe("Runs", () => {
       nodes: [
         { id: "node_1", type: "prompt", name: "First Node", config: {} },
         { id: "node_2", type: "http", name: "Second Node", config: {} },
+        { id: "output", type: "output", name: "Output", config: {} },
       ],
-      edges: [{ id: "e1", from: "node_1", to: "node_2" }],
+      edges: [
+        { id: "e0", from: "START", to: "node_1" },
+        { id: "e1", from: "node_1", to: "node_2" },
+        { id: "e2", from: "node_2", to: "output" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -338,8 +359,14 @@ test.describe("Runs", () => {
     const graphId = createdGraph.data.id;
 
     const graphJson = {
-      nodes: [{ id: "node_1", type: "prompt", name: "Failing Node", config: {} }],
-      edges: [],
+      nodes: [
+        { id: "node_1", type: "prompt", name: "Failing Node", config: {} },
+        { id: "output", type: "output", name: "Output", config: {} },
+      ],
+      edges: [
+        { id: "e0", from: "START", to: "node_1" },
+        { id: "e1", from: "node_1", to: "output" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -394,8 +421,14 @@ test.describe("Runs", () => {
     const graphId = createdGraph.data.id;
 
     const graphJson = {
-      nodes: [{ id: "node_1", type: "prompt", name: "Node", config: {} }],
-      edges: [],
+      nodes: [
+        { id: "node_1", type: "prompt", name: "Node", config: {} },
+        { id: "output", type: "output", name: "Output", config: {} },
+      ],
+      edges: [
+        { id: "e0", from: "START", to: "node_1" },
+        { id: "e1", from: "node_1", to: "output" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -437,7 +470,10 @@ test.describe("Runs", () => {
         { id: "node_1", type: "http", name: "Retrying Node", config: {} },
         { id: "end", type: "output", name: "End", config: {} },
       ],
-      edges: [{ id: "e1", from: "node_1", to: "end" }],
+      edges: [
+        { id: "e0", from: "START", to: "node_1" },
+        { id: "e1", from: "node_1", to: "end" },
+      ],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
@@ -536,7 +572,7 @@ test.describe("Runs", () => {
 
     const graphJson = {
       nodes: [{ id: "node_1", type: "output", name: "Output", config: {} }],
-      edges: [],
+      edges: [{ id: "e0", from: "START", to: "node_1" }],
     };
 
     const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {

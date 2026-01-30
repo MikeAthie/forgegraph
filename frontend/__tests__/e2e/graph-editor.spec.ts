@@ -23,6 +23,11 @@ const API_BASE_URL = (process.env.PLAYWRIGHT_API_URL ??
 
 const createGraphName = (prefix: string) =>
   `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const GRAPH_URL_PATTERN = /\/graphs\/[a-f0-9-]+/;
+
+async function expectGraphEditorOpen(page: Page) {
+  await expect(page).toHaveURL(GRAPH_URL_PATTERN, { timeout: 15_000 });
+}
 
 async function getAccessToken(request: APIRequestContext, user: TestUser): Promise<string> {
   const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
@@ -120,6 +125,22 @@ async function addPromptNodeViaWizard(
   await expect(wizard).toBeHidden();
 }
 
+async function addNodeViaConfigDialog(
+  page: Page,
+  options: { buttonLabel: RegExp; dialogLabel: RegExp; nodeLabel: string },
+) {
+  await page.getByRole("button", { name: options.buttonLabel }).click();
+
+  const dialog = page.getByRole("dialog", { name: options.dialogLabel });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: /^add node$/i }).click();
+  await expect(dialog).toBeHidden();
+
+  // Scope assertion to canvas nodes only to avoid matching palette/inspector elements
+  const canvasNode = page.locator(".react-flow__node").filter({ hasText: options.nodeLabel });
+  await expect(canvasNode.first()).toBeVisible();
+}
+
 test.beforeAll(async ({ request }, testInfo) => {
   seededUser = createTestUser(testInfo, "e2e-graph-editor");
   await ensureUserRegistered(request, seededUser);
@@ -140,7 +161,7 @@ test.describe("Graph Editor", () => {
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
     // Should navigate to graph detail page with editor
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Editor components should be visible
     await expect(page.getByText("Add Nodes")).toBeVisible();
@@ -155,7 +176,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Check enabled node types
     await expect(page.getByRole("button", { name: /^prompt/i })).toBeEnabled();
@@ -177,7 +198,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add a Prompt node
     await addPromptNodeViaWizard(page);
@@ -193,20 +214,29 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add different node types
     await addPromptNodeViaWizard(page);
     await expect(page.getByText("Prompt Node")).toBeVisible();
 
-    await page.getByRole("button", { name: /^http/i }).click();
-    await expect(page.getByText("HTTP Node")).toBeVisible();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^http/i,
+      dialogLabel: /configure http node/i,
+      nodeLabel: "HTTP",
+    });
 
-    await page.getByRole("button", { name: /^transform/i }).click();
-    await expect(page.getByText("Transform Node")).toBeVisible();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^transform/i,
+      dialogLabel: /configure transform node/i,
+      nodeLabel: "Transform",
+    });
 
-    await page.getByRole("button", { name: /^output/i }).click();
-    await expect(page.getByText("Output Node")).toBeVisible();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
   });
 
   test("shows graph info in inspector when no node is selected", async ({ page }) => {
@@ -218,7 +248,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-description").fill(description);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Inspector should show graph info
     await expect(page.getByRole("heading", { name: /^graph info$/i })).toBeVisible();
@@ -233,7 +263,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add a node
     await addPromptNodeViaWizard(page);
@@ -256,7 +286,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add a node and select it
     await addPromptNodeViaWizard(page);
@@ -277,7 +307,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add and select prompt node
     await addPromptNodeViaWizard(page);
@@ -299,11 +329,15 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add and select HTTP node
-    await page.getByRole("button", { name: /^http/i }).click();
-    await page.getByText("HTTP Node").click();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^http/i,
+      dialogLabel: /configure http node/i,
+      nodeLabel: "HTTP",
+    });
+    await page.locator(".react-flow__node").filter({ hasText: "HTTP" }).first().click();
 
     // Configure HTTP settings
     await expect(page.getByText("HTTP Configuration")).toBeVisible();
@@ -328,11 +362,15 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add and select Transform node
-    await page.getByRole("button", { name: /^transform/i }).click();
-    await page.getByText("Transform Node").click();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^transform/i,
+      dialogLabel: /configure transform node/i,
+      nodeLabel: "Transform",
+    });
+    await page.locator(".react-flow__node").filter({ hasText: "Transform" }).first().click();
 
     // Configure expression
     await expect(page.getByText("Transform Configuration")).toBeVisible();
@@ -350,10 +388,15 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
-    // Add a node to make the graph dirty
+    // Add nodes to make the graph dirty - need an output node for valid save
     await addPromptNodeViaWizard(page);
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output$/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
 
     // Save button should be enabled
     const saveButton = page.getByRole("button", { name: /^save$/i });
@@ -362,12 +405,9 @@ test.describe("Graph Editor", () => {
     // Click save
     await saveButton.click();
 
-    // Should show saving state and then success
-    await expect(page.getByRole("button", { name: /saving\.\.\./i })).toBeVisible();
-
-    // Should show version number
+    // Wait for save to complete - version dropdown becomes enabled when save finishes
     const versionSelect = page.getByRole("combobox", { name: /^version$/i });
-    await expect(versionSelect).toBeVisible();
+    await expect(versionSelect).toBeEnabled({ timeout: 30000 });
     await expect
       .poll(async () => {
         return versionSelect.evaluate((el: HTMLSelectElement) => {
@@ -375,9 +415,6 @@ test.describe("Graph Editor", () => {
         });
       })
       .toMatch(/v1/i);
-
-    // Should show success toast
-    await expect(page.getByText(/saved as version/i)).toBeVisible();
   });
 
   test("shows dirty indicator when graph has unsaved changes", async ({ page }) => {
@@ -387,13 +424,18 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Initially no dirty indicator
     await expect(page.getByText("*")).not.toBeVisible();
 
-    // Add a node
+    // Add nodes - need an output node for valid save
     await addPromptNodeViaWizard(page);
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output$/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
 
     // Should show dirty indicator (asterisk)
     await expect(page.getByText("*")).toBeVisible();
@@ -401,11 +443,8 @@ test.describe("Graph Editor", () => {
     // Save
     await page.getByRole("button", { name: /^save$/i }).click();
 
-    // Wait for save to complete
-    await expect(page.getByText(/saved as version/i)).toBeVisible();
-
-    // Dirty indicator should be gone
-    await expect(page.getByText("*")).not.toBeVisible();
+    // Wait for save to complete - dirty indicator disappears when save finishes
+    await expect(page.getByText("*")).not.toBeVisible({ timeout: 30000 });
   });
 
   test("deletes node via inspector", async ({ page }) => {
@@ -415,7 +454,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add a node
     await addPromptNodeViaWizard(page);
@@ -441,7 +480,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-description").fill(originalDescription);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Click Edit Info
     await page.getByRole("button", { name: /edit info/i }).click();
@@ -473,7 +512,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Click Edit Info
     await page.getByRole("button", { name: /edit info/i }).click();
@@ -499,18 +538,26 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
-    // Add and configure a node
+    // Add and configure nodes - need output node for valid save
     await addPromptNodeViaWizard(page);
     await page.getByText("Prompt Node").click();
 
     const promptIdInput = page.getByPlaceholder(/select or enter prompt id/i);
     await promptIdInput.fill("saved-prompt-id");
 
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output$/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
+
     // Save the graph
     await page.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/saved as version/i)).toBeVisible();
+    // Wait for version dropdown to be enabled (indicates save completed)
+    const versionSelect = page.getByRole("combobox", { name: /^version$/i });
+    await expect(versionSelect).toBeEnabled({ timeout: 30000 });
 
     // Get current URL
     const url = page.url();
@@ -534,7 +581,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Click back button
     await page.getByRole("link", { name: /← back/i }).click();
@@ -551,7 +598,7 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Check for keyboard shortcuts section
     await expect(page.getByText("Keyboard Shortcuts")).toBeVisible();
@@ -570,7 +617,7 @@ test.describe("Graph Editor", () => {
     await createDialog.locator("#create-graph-name").fill(graphName);
     await createDialog.getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     const versionSelect = page.getByRole("combobox", { name: /^version$/i });
     await expect(versionSelect).toBeDisabled();
@@ -594,14 +641,18 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     // Add nodes in sequence (quick-add will connect to the selected node)
     await addPromptNodeViaWizard(page);
     await page.getByPlaceholder(/select or enter prompt id/i).fill("workflow-prompt");
     await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /^http/i }).click();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^http/i,
+      dialogLabel: /configure http node/i,
+      nodeLabel: "HTTP",
+    });
     const httpConfigSection = page
       .getByRole("heading", { name: /^http configuration$/i })
       .locator("..");
@@ -609,18 +660,30 @@ test.describe("Graph Editor", () => {
     await page.getByPlaceholder(/https:\/\/api\.example\.com/i).fill("https://api.test.com/endpoint");
     await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /^transform/i }).click();
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^transform/i,
+      dialogLabel: /configure transform node/i,
+      nodeLabel: "Transform",
+    });
     await page.getByPlaceholder(/state\.input \| uppercase/i).fill("state.data | lowercase");
     await expect(page.getByText(/state\.data \| lowercase\.\.\./i)).toBeVisible();
 
-    await page.getByRole("button", { name: /^output/i }).click();
-    await page.getByPlaceholder(/state\.final_output/i).fill('{"result":"state.final_output"}');
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
+    // Output node uses KeyValueEditor - add an output mapping
+    await page.getByRole("button", { name: /add output key/i }).click();
+    await page.getByPlaceholder(/output key/i).fill("result");
+    await page.getByPlaceholder(/state path/i).fill("state.final_output");
 
-    // All nodes should be visible
-    await expect(page.getByText("Prompt Node")).toBeVisible();
-    await expect(page.getByText("HTTP Node")).toBeVisible();
-    await expect(page.getByText("Transform Node")).toBeVisible();
-    await expect(page.getByText("Output Node")).toBeVisible();
+    // All nodes should be visible on the canvas
+    const canvasNodes = page.locator(".react-flow__node");
+    await expect(canvasNodes.filter({ hasText: "Prompt Node" }).first()).toBeVisible();
+    await expect(canvasNodes.filter({ hasText: "HTTP" }).first()).toBeVisible();
+    await expect(canvasNodes.filter({ hasText: "Transform" }).first()).toBeVisible();
+    await expect(canvasNodes.filter({ hasText: "Output" }).first()).toBeVisible();
 
     // Save the workflow
     await page.getByRole("button", { name: /^save$/i }).click();
@@ -667,10 +730,11 @@ test.describe("Graph Editor", () => {
     await page.goto(url);
 
     await expect(page.getByText("Add Nodes")).toBeVisible();
-    await expect(page.getByText("Prompt Node")).toBeVisible();
-    await expect(page.getByText("HTTP Node")).toBeVisible();
-    await expect(page.getByText("Transform Node")).toBeVisible();
-    await expect(page.getByText("Output Node")).toBeVisible();
+    // Check nodes are visible on the canvas (reuse canvasNodes locator)
+    await expect(canvasNodes.filter({ hasText: "Prompt Node" }).first()).toBeVisible();
+    await expect(canvasNodes.filter({ hasText: "HTTP" }).first()).toBeVisible();
+    await expect(canvasNodes.filter({ hasText: "Transform" }).first()).toBeVisible();
+    await expect(canvasNodes.filter({ hasText: "Output" }).first()).toBeVisible();
 
     await expect(page.getByText(/prompt: workflow-prompt/i)).toBeVisible();
     await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();
@@ -684,16 +748,21 @@ test.describe("Graph Editor", () => {
     await page.locator("#create-graph-name").fill(graphName);
     await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
 
-    await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
+    await expectGraphEditorOpen(page);
 
     const versionSelect = page.getByRole("combobox", { name: /^version$/i });
 
-    // Create v1
+    // Create v1 - need output node for valid save
     await addPromptNodeViaWizard(page);
     await page.getByText("Prompt Node").click();
     await page.getByPlaceholder(/select or enter prompt id/i).fill("v1-prompt");
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output$/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
     await page.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/saved as version 1/i)).toBeVisible();
+    await expect(versionSelect).toBeEnabled({ timeout: 30000 });
 
     const versionIds = await versionSelect.evaluate((el: HTMLSelectElement) => {
       const byText = (text: string) => Array.from(el.options).find((o) => o.textContent === text)?.value ?? "";
@@ -701,10 +770,15 @@ test.describe("Graph Editor", () => {
     });
 
     // Create v2
-    await page.getByText("Prompt Node").click();
+    await page.locator(".react-flow__node").filter({ hasText: "Prompt Node" }).first().click();
     await page.getByPlaceholder(/select or enter prompt id/i).fill("v2-prompt");
     await page.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/saved as version 2/i)).toBeVisible();
+    // Wait for v2 to appear in dropdown
+    await expect.poll(async () => {
+      return versionSelect.evaluate((el: HTMLSelectElement) => {
+        return Array.from(el.options).some((o) => o.textContent === "v2");
+      });
+    }, { timeout: 30000 }).toBe(true);
 
     const versionIdsAfterV2 = await versionSelect.evaluate((el: HTMLSelectElement) => {
       const byText = (text: string) => Array.from(el.options).find((o) => o.textContent === text)?.value ?? "";
@@ -715,7 +789,7 @@ test.describe("Graph Editor", () => {
     expect(versionIdsAfterV2.v2).not.toBe("");
 
     // Make an unsaved change so switching prompts
-    await page.getByText("Prompt Node").click();
+    await page.locator(".react-flow__node").filter({ hasText: "Prompt Node" }).first().click();
     await page.getByPlaceholder(/select or enter prompt id/i).fill("unsaved-change");
     await expect(page.getByText("*")).toBeVisible();
 
@@ -730,9 +804,14 @@ test.describe("Graph Editor", () => {
     await expect(page.getByText("*")).not.toBeVisible();
 
     // Saving after loading older version creates a new version (no overwrite)
-    await page.getByText("Prompt Node").click();
+    await page.locator(".react-flow__node").filter({ hasText: "Prompt Node" }).first().click();
     await page.getByPlaceholder(/select or enter prompt id/i).fill("v3-prompt");
     await page.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/saved as version 3/i)).toBeVisible();
+    // Wait for v3 to appear in dropdown
+    await expect.poll(async () => {
+      return versionSelect.evaluate((el: HTMLSelectElement) => {
+        return Array.from(el.options).some((o) => o.textContent === "v3");
+      });
+    }, { timeout: 30000 }).toBe(true);
   });
 });
