@@ -28,7 +28,10 @@ describe("NodePalette", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       PHASE2_NODE_TYPES.forEach((nodeType) => {
-        expect(screen.getByText(nodeType.label)).toBeInTheDocument();
+        expect(
+          screen.getAllByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") })
+            .length
+        ).toBeGreaterThan(0);
         expect(screen.getByText(nodeType.description)).toBeInTheDocument();
       });
     });

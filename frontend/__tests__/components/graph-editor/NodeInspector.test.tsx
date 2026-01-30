@@ -415,38 +415,22 @@ describe("NodeInspector", () => {
       expect(screen.getByText("Output Configuration")).toBeInTheDocument();
     });
 
-    it("should display output mapping as formatted JSON", () => {
+    it("should display output mapping inputs", () => {
       render(<NodeInspector {...defaultProps} selectedNode={outputNode} />);
 
-      const jsonText = screen.getByDisplayValue(/"result": "state.final_output"/);
-      expect(jsonText).toBeInTheDocument();
+      expect(screen.getByDisplayValue("result")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("state.final_output")).toBeInTheDocument();
     });
 
-    it("should parse and update valid JSON", () => {
+    it("should update mapping value when edited", () => {
       render(<NodeInspector {...defaultProps} selectedNode={outputNode} />);
 
-      const jsonInput = screen.getByDisplayValue(/"result": "state.final_output"/) as HTMLTextAreaElement;
-
-      // Use fireEvent.change to properly trigger React onChange
-      fireEvent.change(jsonInput, { target: { value: '{"new": "value"}' } });
+      const valueInput = screen.getByDisplayValue("state.final_output");
+      fireEvent.change(valueInput, { target: { value: "state.updated_output" } });
 
       expect(mockOnUpdateNode).toHaveBeenCalledWith("output-node", {
-        config: { output_mapping: { new: "value" } },
+        config: { output_mapping: { result: "state.updated_output" } },
       });
-    });
-
-    it("should not update config with invalid JSON", () => {
-      mockOnUpdateNode.mockClear();
-
-      render(<NodeInspector {...defaultProps} selectedNode={outputNode} />);
-
-      const jsonInput = screen.getByDisplayValue(/"result": "state.final_output"/) as HTMLTextAreaElement;
-
-      // Try to set invalid JSON
-      fireEvent.change(jsonInput, { target: { value: '{invalid json' } });
-
-      // Should not call onUpdateNode because JSON is invalid
-      expect(mockOnUpdateNode).not.toHaveBeenCalled();
     });
   });
 

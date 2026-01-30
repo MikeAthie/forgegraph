@@ -26,6 +26,7 @@ const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const httpConfig = config as HttpConfig;
+  const effectiveMethod = httpConfig.method ?? "GET";
 
   const handleChange = useCallback(
     <K extends keyof HttpConfig>(field: K, value: HttpConfig[K]) => {
@@ -57,7 +58,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
       newErrors.url = urlError.message;
     }
 
-    if (httpConfig.body && httpConfig.method !== "GET") {
+    if (httpConfig.body && effectiveMethod !== "GET") {
       const bodyError = validateJson(httpConfig.body, "Body");
       if (bodyError) {
         newErrors.body = bodyError.message;
@@ -65,9 +66,9 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     }
 
     setErrors(newErrors);
-  }, [httpConfig.url, httpConfig.body, httpConfig.method, setErrors]);
+  }, [httpConfig.url, httpConfig.body, effectiveMethod, setErrors]);
 
-  const showBody = httpConfig.method !== "GET";
+  const showBody = effectiveMethod !== "GET";
 
   return (
     <div className="space-y-6">
@@ -89,7 +90,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           <FormField label="Method" htmlFor="method" className="w-32">
             <select
               id="method"
-              value={httpConfig.method || "GET"}
+              value={effectiveMethod}
               onChange={(e) =>
                 handleChange("method", e.target.value as HttpConfig["method"])
               }

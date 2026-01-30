@@ -7,6 +7,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { MergeNodeForm } from "@/components/graph-editor/forms/MergeNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
@@ -23,11 +24,27 @@ describe("MergeNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
 
-  const defaultProps: NodeFormProps = {
-    config: {},
-    onChange: mockOnChange,
-    errors: {},
-    setErrors: mockSetErrors,
+  const renderWithConfig = (
+    initialConfig: NodeFormProps["config"] = {}
+  ) => {
+    const Wrapper = () => {
+      const [config, setConfig] = useState(initialConfig);
+      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+        setConfig(nextConfig);
+        mockOnChange(nextConfig);
+      };
+
+      return (
+        <MergeNodeForm
+          config={config}
+          onChange={handleChange}
+          errors={{}}
+          setErrors={mockSetErrors}
+        />
+      );
+    };
+
+    return render(<Wrapper />);
   };
 
   beforeEach(() => {
@@ -36,7 +53,7 @@ describe("MergeNodeForm", () => {
 
   describe("Initial Render", () => {
     it("should render with empty config", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/merge configuration/i)).toBeInTheDocument();
       expect(screen.getByText(/merge strategy/i)).toBeInTheDocument();
@@ -46,7 +63,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should render all merge strategy options", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getAllByText("Wait for All").length).toBeGreaterThan(0);
       expect(screen.getAllByText("First Complete").length).toBeGreaterThan(0);
@@ -55,7 +72,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should display strategy descriptions", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/wait for all incoming branches before proceeding/i)
@@ -77,7 +94,7 @@ describe("MergeNodeForm", () => {
         output_key: "merged_result",
       };
 
-      render(<MergeNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const combineRadio = screen.getByRole("radio", { name: /combine all/i });
       expect(combineRadio).toBeChecked();
@@ -87,7 +104,7 @@ describe("MergeNodeForm", () => {
 
   describe("Merge Strategy Selection", () => {
     it("should select 'all' strategy by default", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       // No strategy specified, check if any is selected as default
       const allRadio = screen.getByRole("radio", { name: /wait for all/i });
@@ -97,7 +114,7 @@ describe("MergeNodeForm", () => {
 
     it("should call onChange when strategy is changed to 'first'", async () => {
       const user = userEvent.setup();
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const firstRadio = screen.getByRole("radio", { name: /first complete/i });
       await user.click(firstRadio);
@@ -113,7 +130,7 @@ describe("MergeNodeForm", () => {
 
     it("should call onChange when strategy is changed to 'latest'", async () => {
       const user = userEvent.setup();
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const latestRadio = screen.getByRole("radio", { name: /latest value/i });
       await user.click(latestRadio);
@@ -129,7 +146,7 @@ describe("MergeNodeForm", () => {
 
     it("should call onChange when strategy is changed to 'combine'", async () => {
       const user = userEvent.setup();
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const combineRadio = screen.getByRole("radio", { name: /combine all/i });
       await user.click(combineRadio);
@@ -146,7 +163,7 @@ describe("MergeNodeForm", () => {
     it("should call onChange when strategy is changed to 'all'", async () => {
       const user = userEvent.setup();
       const config = { merge_strategy: "first" as const };
-      render(<MergeNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const allRadio = screen.getByRole("radio", { name: /wait for all/i });
       await user.click(allRadio);
@@ -162,7 +179,7 @@ describe("MergeNodeForm", () => {
 
     it("should visually highlight selected strategy", () => {
       const config = { merge_strategy: "combine" as const };
-      render(<MergeNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const combineRadio = screen.getByRole("radio", { name: /combine all/i });
       expect(combineRadio).toBeChecked();
@@ -171,14 +188,14 @@ describe("MergeNodeForm", () => {
 
   describe("Output Key Field", () => {
     it("should render output key input", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByLabelText(/output key/i)).toBeInTheDocument();
     });
 
     it("should call onChange when output key is modified", async () => {
       const user = userEvent.setup();
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const outputKey = screen.getByLabelText(/output key/i);
       await user.type(outputKey, "r");
@@ -190,14 +207,14 @@ describe("MergeNodeForm", () => {
     });
 
     it("should have appropriate placeholder", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByPlaceholderText("merged")).toBeInTheDocument();
     });
 
     it("should display existing output key value", () => {
       const config = { output_key: "my_output" };
-      render(<MergeNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByDisplayValue("my_output")).toBeInTheDocument();
     });
@@ -205,7 +222,7 @@ describe("MergeNodeForm", () => {
 
   describe("Field Descriptions", () => {
     it("should display helpful description for merge configuration", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/configure how this node merges data from multiple incoming branches/i)
@@ -213,7 +230,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should display description for output key", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/key to store the merged data under in state/i)
@@ -221,7 +238,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should display strategy behavior documentation", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/strategy behavior/i)).toBeInTheDocument();
       expect(
@@ -235,13 +252,13 @@ describe("MergeNodeForm", () => {
 
   describe("Integration with Sub-components", () => {
     it("should render AgentFields", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
     });
 
     it("should render AdvancedSettings", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
@@ -249,7 +266,7 @@ describe("MergeNodeForm", () => {
 
   describe("Strategy Radio Buttons", () => {
     it("should render radio buttons as clickable labels", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const labels = screen.getAllByRole("radio").map(r => r.closest("label"));
       expect(labels.length).toBeGreaterThan(0);
@@ -260,7 +277,7 @@ describe("MergeNodeForm", () => {
 
     it("should allow only one strategy to be selected at a time", async () => {
       const user = userEvent.setup();
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const firstRadio = screen.getByRole("radio", { name: /first complete/i });
       const latestRadio = screen.getByRole("radio", { name: /latest value/i });
@@ -276,13 +293,13 @@ describe("MergeNodeForm", () => {
 
   describe("Form Layout", () => {
     it("should display section headers", () => {
-      render(<MergeNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^merge configuration$/i)).toBeInTheDocument();
     });
 
     it("should have proper spacing between strategy options", () => {
-      const { container } = render(<MergeNodeForm {...defaultProps} />);
+      const { container } = renderWithConfig();
 
       const strategyContainer = container.querySelector(".space-y-2");
       expect(strategyContainer).toBeInTheDocument();
@@ -293,7 +310,7 @@ describe("MergeNodeForm", () => {
     it("should preserve existing config when updating output key", async () => {
       const user = userEvent.setup();
       const config = { merge_strategy: "combine" as const };
-      render(<MergeNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const outputKey = screen.getByLabelText(/output key/i);
       await user.type(outputKey, "new");
@@ -314,7 +331,7 @@ describe("MergeNodeForm", () => {
         merge_strategy: "first" as const,
         output_key: "existing_key",
       };
-      render(<MergeNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const latestRadio = screen.getByRole("radio", { name: /latest value/i });
       await user.click(latestRadio);

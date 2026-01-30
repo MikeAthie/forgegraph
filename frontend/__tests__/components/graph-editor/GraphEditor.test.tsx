@@ -90,6 +90,23 @@ jest.mock("next/router", () => ({
   useRouter: jest.fn(),
 }));
 
+jest.mock("@/components/graph-editor/PromptNodeWizardDialog", () => ({
+  PromptNodeWizardDialog: ({ open, onOpenChange, onComplete }: any) =>
+    open ? (
+      <div role="dialog">
+        <button
+          type="button"
+          onClick={() => {
+            onComplete({});
+            onOpenChange?.(false);
+          }}
+        >
+          Finish
+        </button>
+      </div>
+    ) : null,
+}));
+
 import { GraphEditor } from "@/components/graph-editor/GraphEditor";
 
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
@@ -118,15 +135,23 @@ async function addPromptNodeViaWizard(user: ReturnType<typeof userEvent.setup>, 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
 
-  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Role -> Task
-  await user.type(dialogScope.getByPlaceholderText(/write a clear task description/i), task);
-  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Task -> Examples
-  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Examples -> Output
-  await user.click(dialogScope.getByRole("button", { name: /^next$/i })); // Output -> Review
-
-  // Avoid API calls in unit tests.
-  await user.click(dialogScope.getByRole("checkbox", { name: /save to prompt library/i }));
   await user.click(dialogScope.getByRole("button", { name: /^finish$/i }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+}
+
+async function addNodeViaConfigDialog(
+  user: ReturnType<typeof userEvent.setup>,
+  label: RegExp
+) {
+  await user.click(screen.getByRole("button", { name: label }));
+
+  const dialog = await screen.findByRole("dialog");
+  const dialogScope = within(dialog);
+
+  await user.click(dialogScope.getByRole("button", { name: /add node/i }));
 
   await waitFor(() => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -152,7 +177,7 @@ describe("GraphEditor", () => {
     renderGraphEditor();
 
     await addPromptNodeViaWizard(user);
-    await user.click(screen.getByRole("button", { name: /^http$/i }));
+    await addNodeViaConfigDialog(user, /^http$/i);
 
     const flow = screen.getByTestId("reactflow");
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(2);
@@ -164,7 +189,7 @@ describe("GraphEditor", () => {
     renderGraphEditor();
 
     await addPromptNodeViaWizard(user);
-    await user.click(screen.getByRole("button", { name: /^http$/i }));
+    await addNodeViaConfigDialog(user, /^http$/i);
 
     const flow = screen.getByTestId("reactflow");
     expect(within(flow).getAllByTestId(/edge-/)).toHaveLength(1);
@@ -181,7 +206,7 @@ describe("GraphEditor", () => {
     renderGraphEditor();
 
     await addPromptNodeViaWizard(user);
-    await user.click(screen.getByRole("button", { name: /^http$/i }));
+    await addNodeViaConfigDialog(user, /^http$/i);
 
     const flow = screen.getByTestId("reactflow");
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(2);
@@ -198,18 +223,19 @@ describe("GraphEditor", () => {
     const user = userEvent.setup();
     renderGraphEditor();
 
-    await user.click(screen.getByRole("button", { name: /^branch$/i }));
+    await addNodeViaConfigDialog(user, /^branch$/i);
 
-    const branchNodeButton = screen.getByRole("button", { name: /branch node/i });
+    const nodesContainer = screen.getByTestId("reactflow-nodes");
+    const branchNodeButton = within(nodesContainer).getByRole("button", { name: /^branch$/i });
     const branchTestId = branchNodeButton.getAttribute("data-testid") ?? "";
     const branchId = branchTestId.replace(/^node-/, "");
 
     // Clear selection so the next node doesn't auto-connect.
     await user.click(screen.getByTestId("reactflow"));
 
-    await user.click(screen.getByRole("button", { name: /^output$/i }));
+    await addNodeViaConfigDialog(user, /^output$/i);
 
-    const outputNodeButton = screen.getByRole("button", { name: /output node/i });
+    const outputNodeButton = within(nodesContainer).getByRole("button", { name: /^output$/i });
     const outputTestId = outputNodeButton.getAttribute("data-testid") ?? "";
     const outputId = outputTestId.replace(/^node-/, "");
 

@@ -7,18 +7,18 @@
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { BranchNodeForm } from "@/components/graph-editor/forms/BranchNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
 // Mock validation utilities
-jest.mock("@/lib/form-validation", () => ({
-  validateExpression: jest.fn((value: string) => {
-    if (value && value.includes("}{")) {
-      return { field: "expression", message: "Unbalanced brackets in expression" };
-    }
-    return null;
-  }),
-}));
+jest.mock("@/lib/form-validation", () => {
+  const actual = jest.requireActual("@/lib/form-validation");
+  return {
+    ...actual,
+    validateExpression: jest.fn(actual.validateExpression),
+  };
+});
 
 // Mock child components
 jest.mock("@/components/graph-editor/forms/AgentFields", () => ({
@@ -33,11 +33,28 @@ describe("BranchNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
 
-  const defaultProps: NodeFormProps = {
-    config: {},
-    onChange: mockOnChange,
-    errors: {},
-    setErrors: mockSetErrors,
+  const renderWithConfig = (
+    initialConfig: NodeFormProps["config"] = {},
+    options: { errors?: NodeFormProps["errors"] } = {}
+  ) => {
+    const Wrapper = () => {
+      const [config, setConfig] = useState(initialConfig);
+      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+        setConfig(nextConfig);
+        mockOnChange(nextConfig);
+      };
+
+      return (
+        <BranchNodeForm
+          config={config}
+          onChange={handleChange}
+          errors={options.errors ?? {}}
+          setErrors={mockSetErrors}
+        />
+      );
+    };
+
+    return render(<Wrapper />);
   };
 
   beforeEach(() => {
@@ -46,7 +63,7 @@ describe("BranchNodeForm", () => {
 
   describe("Initial Render", () => {
     it("should render with empty config", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/branch conditions/i)).toBeInTheDocument();
       expect(screen.getByText(/add condition/i)).toBeInTheDocument();
@@ -56,7 +73,7 @@ describe("BranchNodeForm", () => {
     });
 
     it("should show empty state message when no conditions", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/no conditions defined. add a condition to create branches/i)
@@ -80,7 +97,7 @@ describe("BranchNodeForm", () => {
         default_branch: "low_priority",
       };
 
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByDisplayValue("High Priority")).toBeInTheDocument();
       expect(screen.getByDisplayValue("state.priority === 'high'")).toBeInTheDocument();
@@ -97,7 +114,7 @@ describe("BranchNodeForm", () => {
         ],
       };
 
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByText("Condition 1")).toBeInTheDocument();
       expect(screen.getByText("Condition 2")).toBeInTheDocument();
@@ -107,7 +124,7 @@ describe("BranchNodeForm", () => {
   describe("Adding Conditions", () => {
     it("should add a new condition when Add Condition button is clicked", async () => {
       const user = userEvent.setup();
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
       await user.click(addButton);
@@ -132,7 +149,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Branch 1", expression: "true" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
       await user.click(addButton);
@@ -151,7 +168,7 @@ describe("BranchNodeForm", () => {
 
     it("should generate unique IDs for new conditions", async () => {
       const user = userEvent.setup();
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
       await user.click(addButton);
@@ -175,27 +192,24 @@ describe("BranchNodeForm", () => {
           { id: "c2", name: "Condition 2", expression: "false" },
         ],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
-      const deleteButtons = screen.getAllByRole("button", { name: "" });
-      // Find the trash icon button (should be the first one after "Add Condition")
-      const firstDeleteButton = deleteButtons.find((btn) =>
-        btn.querySelector('[data-lucide="trash-2"]')
-      );
+      const conditionLabels = screen.getAllByText(/condition \d/i);
+      const firstCard = conditionLabels[0]?.closest("div")?.parentElement;
+      expect(firstCard).toBeTruthy();
 
-      if (firstDeleteButton) {
-        await user.click(firstDeleteButton);
+      const firstDeleteButton = within(firstCard as HTMLElement).getByRole("button");
+      await user.click(firstDeleteButton);
 
-        await waitFor(() => {
-          expect(mockOnChange).toHaveBeenCalledWith(
-            expect.objectContaining({
-              conditions: expect.arrayContaining([
-                expect.objectContaining({ name: "Condition 2" }),
-              ]),
-            })
-          );
-        });
-      }
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            conditions: expect.arrayContaining([
+              expect.objectContaining({ name: "Condition 2" }),
+            ]),
+          })
+        );
+      });
     });
 
     it("should remove correct condition by index", async () => {
@@ -207,24 +221,26 @@ describe("BranchNodeForm", () => {
           { id: "c3", name: "Third", expression: "3" },
         ],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       // Get all condition cards
-      const conditionCards = screen.getAllByText(/condition \d/i).map(el => el.closest("div")?.parentElement);
+      const conditionCards = screen
+        .getAllByText(/condition \d/i)
+        .map((el) => el.closest("div")?.parentElement)
+        .filter(Boolean);
 
       // Find delete button in the second condition card
-      const secondCard = conditionCards[1];
-      if (secondCard) {
-        const deleteButton = within(secondCard).getByRole("button", { name: "" });
-        await user.click(deleteButton);
+      expect(conditionCards.length).toBeGreaterThan(1);
+      const secondCard = conditionCards[1] as HTMLElement;
+      const deleteButton = within(secondCard).getByRole("button");
+      await user.click(deleteButton);
 
-        await waitFor(() => {
-          const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
-          expect(lastCall.conditions).toHaveLength(2);
-          expect(lastCall.conditions[0].name).toBe("First");
-          expect(lastCall.conditions[1].name).toBe("Third");
-        });
-      }
+      await waitFor(() => {
+        const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
+        expect(lastCall.conditions).toHaveLength(2);
+        expect(lastCall.conditions[0].name).toBe("First");
+        expect(lastCall.conditions[1].name).toBe("Third");
+      });
     });
 
     it("should show empty state after removing all conditions", async () => {
@@ -232,9 +248,12 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Only One", expression: "true" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
-      const deleteButton = screen.getByRole("button", { name: "" });
+      const conditionLabel = screen.getByText(/condition 1/i);
+      const card = conditionLabel.closest("div")?.parentElement;
+      expect(card).toBeTruthy();
+      const deleteButton = within(card as HTMLElement).getByRole("button");
       await user.click(deleteButton);
 
       await waitFor(() => {
@@ -253,7 +272,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Original", expression: "true" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const nameInput = screen.getByDisplayValue("Original");
       await user.clear(nameInput);
@@ -270,7 +289,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const expressionInput = screen.getByPlaceholderText("state.score > 0.8");
       await user.type(expressionInput, "state.value === true");
@@ -289,7 +308,7 @@ describe("BranchNodeForm", () => {
           { id: "c2", name: "Second", expression: "2" },
         ],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const firstExpression = screen.getByDisplayValue("1");
       await user.type(firstExpression, "00");
@@ -306,7 +325,7 @@ describe("BranchNodeForm", () => {
   describe("Default Branch Field", () => {
     it("should update default branch value", async () => {
       const user = userEvent.setup();
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const defaultBranch = screen.getByLabelText(/default branch/i);
       await user.type(defaultBranch, "fallback");
@@ -319,13 +338,13 @@ describe("BranchNodeForm", () => {
 
     it("should display existing default branch value", () => {
       const config = { default_branch: "my_default" };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByDisplayValue("my_default")).toBeInTheDocument();
     });
 
     it("should have appropriate placeholder", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const defaultBranch = screen.getByPlaceholderText("default");
       expect(defaultBranch).toBeInTheDocument();
@@ -337,7 +356,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "bad }{" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       await waitFor(() => {
         expect(mockSetErrors).toHaveBeenCalledWith(
@@ -356,7 +375,7 @@ describe("BranchNodeForm", () => {
           { id: "c3", name: "Bad2", expression: "}}" },
         ],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       await waitFor(() => {
         const calls = mockSetErrors.mock.calls;
@@ -373,7 +392,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "bad" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} errors={errors} />);
+      renderWithConfig(config, { errors });
 
       expect(screen.getByText("Invalid syntax in condition 1")).toBeInTheDocument();
     });
@@ -382,7 +401,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       await waitFor(() => {
         const calls = mockSetErrors.mock.calls;
@@ -396,7 +415,7 @@ describe("BranchNodeForm", () => {
 
   describe("Field Descriptions", () => {
     it("should display helpful description for branch conditions", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(
@@ -406,7 +425,7 @@ describe("BranchNodeForm", () => {
     });
 
     it("should display description for default branch", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/branch to use when no conditions match/i)
@@ -414,7 +433,7 @@ describe("BranchNodeForm", () => {
     });
 
     it("should display expression examples", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/expression examples/i)).toBeInTheDocument();
       expect(screen.getByText(/state.sentiment === "positive"/)).toBeInTheDocument();
@@ -423,13 +442,13 @@ describe("BranchNodeForm", () => {
 
   describe("Integration with Sub-components", () => {
     it("should render AgentFields", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
     });
 
     it("should render AdvancedSettings", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
@@ -440,7 +459,7 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "true" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByText(/branch name/i)).toBeInTheDocument();
     });
@@ -449,16 +468,16 @@ describe("BranchNodeForm", () => {
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "true" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
-      expect(screen.getByText(/^expression$/i)).toBeInTheDocument();
+      expect(screen.getByText(/expression/i, { selector: "label" })).toBeInTheDocument();
     });
 
     it("should have appropriate placeholder for branch name", () => {
       const config = {
         conditions: [{ id: "c1", name: "", expression: "" }],
       };
-      render(<BranchNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByPlaceholderText("e.g., High Priority")).toBeInTheDocument();
     });
@@ -466,18 +485,18 @@ describe("BranchNodeForm", () => {
 
   describe("Form Layout", () => {
     it("should display section headers", () => {
-      render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^branch conditions$/i)).toBeInTheDocument();
     });
 
     it("should have Add Condition button with icon", () => {
-      const { container } = render(<BranchNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
       expect(addButton).toBeInTheDocument();
 
-      const plusIcon = container.querySelector('[data-lucide="plus"]');
+      const plusIcon = addButton.querySelector("svg");
       expect(plusIcon).toBeInTheDocument();
     });
   });

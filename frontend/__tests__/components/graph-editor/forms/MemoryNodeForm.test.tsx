@@ -5,8 +5,9 @@
  * memory key, and integration with AgentFields and AdvancedSettings.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { MemoryNodeForm } from "@/components/graph-editor/forms/MemoryNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
@@ -23,11 +24,25 @@ describe("MemoryNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
 
-  const defaultProps: NodeFormProps = {
-    config: {},
-    onChange: mockOnChange,
-    errors: {},
-    setErrors: mockSetErrors,
+  const renderWithConfig = (initialConfig: NodeFormProps["config"] = {}) => {
+    const Wrapper = () => {
+      const [config, setConfig] = useState(initialConfig);
+      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+        setConfig(nextConfig);
+        mockOnChange(nextConfig);
+      };
+
+      return (
+        <MemoryNodeForm
+          config={config}
+          onChange={handleChange}
+          errors={{}}
+          setErrors={mockSetErrors}
+        />
+      );
+    };
+
+    return render(<Wrapper />);
   };
 
   beforeEach(() => {
@@ -36,7 +51,7 @@ describe("MemoryNodeForm", () => {
 
   describe("Initial Render", () => {
     it("should render with empty config", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/memory configuration/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/memory type/i)).toBeInTheDocument();
@@ -46,7 +61,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should render all memory type options", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByRole("option", { name: /conversation buffer/i })).toBeInTheDocument();
       expect(screen.getByRole("option", { name: /rolling buffer/i })).toBeInTheDocument();
@@ -55,7 +70,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should default to conversation memory type", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const memoryTypeSelect = screen.getByLabelText(/memory type/i);
       expect(memoryTypeSelect).toHaveValue("conversation");
@@ -68,9 +83,10 @@ describe("MemoryNodeForm", () => {
         max_messages: 50,
       };
 
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
-      expect(screen.getByDisplayValue("buffer")).toBeInTheDocument();
+      const memoryTypeSelect = screen.getByLabelText(/memory type/i);
+      expect(memoryTypeSelect).toHaveValue("buffer");
       expect(screen.getByDisplayValue("chat_history")).toBeInTheDocument();
       expect(screen.getByDisplayValue("50")).toBeInTheDocument();
     });
@@ -79,7 +95,7 @@ describe("MemoryNodeForm", () => {
   describe("Memory Type Selection", () => {
     it("should call onChange when memory type is changed", async () => {
       const user = userEvent.setup();
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const memoryTypeSelect = screen.getByLabelText(/memory type/i);
       await user.selectOptions(memoryTypeSelect, "buffer");
@@ -95,7 +111,7 @@ describe("MemoryNodeForm", () => {
 
     it("should display memory type description", () => {
       const config = { memory_type: "vector" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(
         screen.getByText(/semantic search over stored memories/i)
@@ -106,14 +122,14 @@ describe("MemoryNodeForm", () => {
   describe("Conditional Fields - Buffer Memory", () => {
     it("should show max messages field for buffer memory type", () => {
       const config = { memory_type: "buffer" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByLabelText(/max messages/i)).toBeInTheDocument();
     });
 
     it("should not show max messages field for conversation type", () => {
       const config = { memory_type: "conversation" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.queryByLabelText(/max messages/i)).not.toBeInTheDocument();
     });
@@ -121,7 +137,7 @@ describe("MemoryNodeForm", () => {
     it("should update max messages value", async () => {
       const user = userEvent.setup();
       const config = { memory_type: "buffer" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const maxMessages = screen.getByLabelText(/max messages/i);
       await user.type(maxMessages, "100");
@@ -136,14 +152,14 @@ describe("MemoryNodeForm", () => {
   describe("Conditional Fields - Summary Memory", () => {
     it("should show max tokens field for summary memory type", () => {
       const config = { memory_type: "summary" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByLabelText(/max tokens/i)).toBeInTheDocument();
     });
 
     it("should not show max tokens field for buffer type", () => {
       const config = { memory_type: "buffer" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.queryByLabelText(/max tokens/i)).not.toBeInTheDocument();
     });
@@ -151,7 +167,7 @@ describe("MemoryNodeForm", () => {
     it("should update max tokens value", async () => {
       const user = userEvent.setup();
       const config = { memory_type: "summary" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.type(maxTokens, "4000");
@@ -166,7 +182,7 @@ describe("MemoryNodeForm", () => {
   describe("Conditional Fields - Vector Memory", () => {
     it("should show retrieval query and top k fields for vector memory", () => {
       const config = { memory_type: "vector" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByLabelText(/retrieval query/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/top k results/i)).toBeInTheDocument();
@@ -174,19 +190,18 @@ describe("MemoryNodeForm", () => {
 
     it("should not show vector fields for conversation type", () => {
       const config = { memory_type: "conversation" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.queryByLabelText(/retrieval query/i)).not.toBeInTheDocument();
       expect(screen.queryByLabelText(/top k results/i)).not.toBeInTheDocument();
     });
 
     it("should update retrieval query", async () => {
-      const user = userEvent.setup();
       const config = { memory_type: "vector" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const retrievalQuery = screen.getByLabelText(/retrieval query/i);
-      await user.type(retrievalQuery, "{{input.question}}");
+      fireEvent.change(retrievalQuery, { target: { value: "{{input.question}}" } });
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -197,7 +212,7 @@ describe("MemoryNodeForm", () => {
     it("should update top k value", async () => {
       const user = userEvent.setup();
       const config = { memory_type: "vector" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const topK = screen.getByLabelText(/top k results/i);
       await user.type(topK, "10");
@@ -211,14 +226,14 @@ describe("MemoryNodeForm", () => {
 
   describe("Memory Key Field", () => {
     it("should render memory key input", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByLabelText(/memory key/i)).toBeInTheDocument();
     });
 
     it("should call onChange when memory key is modified", async () => {
       const user = userEvent.setup();
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const memoryKey = screen.getByLabelText(/memory key/i);
       await user.type(memoryKey, "session_memory");
@@ -230,7 +245,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should have appropriate placeholder", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByPlaceholderText("conversation_history")).toBeInTheDocument();
     });
@@ -240,7 +255,7 @@ describe("MemoryNodeForm", () => {
     it("should hide buffer fields when switching from buffer to conversation", async () => {
       const user = userEvent.setup();
       const config = { memory_type: "buffer" as const, max_messages: 50 };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByLabelText(/max messages/i)).toBeInTheDocument();
 
@@ -254,7 +269,7 @@ describe("MemoryNodeForm", () => {
 
     it("should show vector fields when switching to vector memory", async () => {
       const user = userEvent.setup();
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.queryByLabelText(/retrieval query/i)).not.toBeInTheDocument();
 
@@ -270,7 +285,7 @@ describe("MemoryNodeForm", () => {
 
   describe("Field Descriptions", () => {
     it("should display helpful description for memory type", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/strategy for storing and managing memory/i)
@@ -278,7 +293,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should display description for memory key", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/state key to store\/retrieve memory from/i)
@@ -287,7 +302,7 @@ describe("MemoryNodeForm", () => {
 
     it("should display description for max messages", () => {
       const config = { memory_type: "buffer" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(
         screen.getByText(/maximum number of messages to keep in buffer/i)
@@ -296,7 +311,7 @@ describe("MemoryNodeForm", () => {
 
     it("should display description for max tokens", () => {
       const config = { memory_type: "summary" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(
         screen.getByText(/token limit before triggering summarization/i)
@@ -306,13 +321,13 @@ describe("MemoryNodeForm", () => {
 
   describe("Integration with Sub-components", () => {
     it("should render AgentFields", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
     });
 
     it("should render AdvancedSettings", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
@@ -321,7 +336,7 @@ describe("MemoryNodeForm", () => {
   describe("Input Constraints", () => {
     it("should have appropriate constraints on max messages", () => {
       const config = { memory_type: "buffer" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const maxMessages = screen.getByLabelText(/max messages/i);
       expect(maxMessages).toHaveAttribute("type", "number");
@@ -331,7 +346,7 @@ describe("MemoryNodeForm", () => {
 
     it("should have appropriate constraints on max tokens", () => {
       const config = { memory_type: "summary" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       expect(maxTokens).toHaveAttribute("type", "number");
@@ -341,7 +356,7 @@ describe("MemoryNodeForm", () => {
 
     it("should have appropriate constraints on top k", () => {
       const config = { memory_type: "vector" as const };
-      render(<MemoryNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const topK = screen.getByLabelText(/top k results/i);
       expect(topK).toHaveAttribute("type", "number");
@@ -352,13 +367,13 @@ describe("MemoryNodeForm", () => {
 
   describe("Form Layout", () => {
     it("should display section headers", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^memory configuration$/i)).toBeInTheDocument();
     });
 
     it("should display helpful main description", () => {
-      render(<MemoryNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(

@@ -7,6 +7,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { SubgraphNodeForm } from "@/components/graph-editor/forms/SubgraphNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
@@ -37,11 +38,27 @@ describe("SubgraphNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
 
-  const defaultProps: NodeFormProps = {
-    config: {},
-    onChange: mockOnChange,
-    errors: {},
-    setErrors: mockSetErrors,
+  const renderWithConfig = (
+    initialConfig: NodeFormProps["config"] = {}
+  ) => {
+    const Wrapper = () => {
+      const [config, setConfig] = useState(initialConfig);
+      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+        setConfig(nextConfig);
+        mockOnChange(nextConfig);
+      };
+
+      return (
+        <SubgraphNodeForm
+          config={config}
+          onChange={handleChange}
+          errors={{}}
+          setErrors={mockSetErrors}
+        />
+      );
+    };
+
+    return render(<Wrapper />);
   };
 
   beforeEach(() => {
@@ -50,7 +67,7 @@ describe("SubgraphNodeForm", () => {
 
   describe("Initial Render", () => {
     it("should render with empty config", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/subgraph reference/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/graph id/i)).toBeInTheDocument();
@@ -69,14 +86,14 @@ describe("SubgraphNodeForm", () => {
         output_mapping: { answer: "output.response" },
       };
 
-      render(<SubgraphNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByDisplayValue("graph_abc123")).toBeInTheDocument();
       expect(screen.getByDisplayValue("v1.0.0")).toBeInTheDocument();
     });
 
     it("should display helpful description", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(
@@ -88,14 +105,14 @@ describe("SubgraphNodeForm", () => {
 
   describe("Graph ID Field", () => {
     it("should render graph ID input", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByLabelText(/graph id/i)).toBeInTheDocument();
     });
 
     it("should call onChange when graph ID is modified", async () => {
       const user = userEvent.setup();
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const graphIdInput = screen.getByLabelText(/graph id/i);
       await user.type(graphIdInput, "graph_123");
@@ -107,13 +124,13 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should have appropriate placeholder", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByPlaceholderText("graph_abc123")).toBeInTheDocument();
     });
 
     it("should have monospace font class", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const graphIdInput = screen.getByLabelText(/graph id/i);
       expect(graphIdInput).toHaveClass("font-mono");
@@ -123,7 +140,7 @@ describe("SubgraphNodeForm", () => {
   describe("External Link", () => {
     it("should show external link when graph_id is set", () => {
       const config = { graph_id: "graph_test123" };
-      render(<SubgraphNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const link = screen.getByRole("link");
       expect(link).toBeInTheDocument();
@@ -133,7 +150,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should not show external link when graph_id is empty", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
@@ -141,30 +158,32 @@ describe("SubgraphNodeForm", () => {
     it("should update link href when graph_id changes", async () => {
       const user = userEvent.setup();
       const config = { graph_id: "graph_old" };
-      const { rerender } = render(<SubgraphNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByRole("link")).toHaveAttribute("href", "/graphs/graph_old");
 
-      // Simulate config update
-      const newConfig = { graph_id: "graph_new" };
-      rerender(<SubgraphNodeForm {...defaultProps} config={newConfig} />);
+      const graphIdInput = screen.getByLabelText(/graph id/i);
+      await user.clear(graphIdInput);
+      await user.type(graphIdInput, "graph_new");
 
-      expect(screen.getByRole("link")).toHaveAttribute("href", "/graphs/graph_new");
+      await waitFor(() => {
+        expect(screen.getByRole("link")).toHaveAttribute("href", "/graphs/graph_new");
+      });
     });
   });
 
   describe("Version Field", () => {
     it("should render version input", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      expect(screen.getByLabelText(/^version$/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/version/i)).toBeInTheDocument();
     });
 
     it("should call onChange when version is modified", async () => {
       const user = userEvent.setup();
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      const versionInput = screen.getByLabelText(/^version$/i);
+      const versionInput = screen.getByLabelText(/version/i);
       await user.type(versionInput, "v2.0.0");
 
       await waitFor(() => {
@@ -174,13 +193,13 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should have appropriate placeholder", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByPlaceholderText("latest")).toBeInTheDocument();
     });
 
     it("should show description about version being optional", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/specific version \(blank = latest\)/i)).toBeInTheDocument();
     });
@@ -188,14 +207,14 @@ describe("SubgraphNodeForm", () => {
 
   describe("Input Mapping", () => {
     it("should render KeyValueEditor for input mapping", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("key-value-editor-Subgraph input key")).toBeInTheDocument();
     });
 
     it("should call onChange when input mapping is updated", async () => {
       const user = userEvent.setup();
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const addButton = screen.getByTestId("add-mapping-Subgraph input key");
       await user.click(addButton);
@@ -213,7 +232,7 @@ describe("SubgraphNodeForm", () => {
       const config = {
         input_mapping: { query: "node.prompt_1.output", context: "input.data" },
       };
-      render(<SubgraphNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const mappingDisplay = screen.getByTestId("mapping-display-Subgraph input key");
       expect(mappingDisplay.textContent).toContain("query");
@@ -221,7 +240,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should display description for input mapping", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/map values from parent state to subgraph inputs/i)
@@ -231,14 +250,14 @@ describe("SubgraphNodeForm", () => {
 
   describe("Output Mapping", () => {
     it("should render KeyValueEditor for output mapping", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("key-value-editor-Parent state key")).toBeInTheDocument();
     });
 
     it("should call onChange when output mapping is updated", async () => {
       const user = userEvent.setup();
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const addButton = screen.getByTestId("add-mapping-Parent state key");
       await user.click(addButton);
@@ -256,7 +275,7 @@ describe("SubgraphNodeForm", () => {
       const config = {
         output_mapping: { result: "output.final", status: "output.status" },
       };
-      render(<SubgraphNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const mappingDisplay = screen.getByTestId("mapping-display-Parent state key");
       expect(mappingDisplay.textContent).toContain("result");
@@ -264,7 +283,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should display description for output mapping", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/map subgraph outputs back to parent state/i)
@@ -274,29 +293,31 @@ describe("SubgraphNodeForm", () => {
 
   describe("Mapping Examples", () => {
     it("should display mapping examples section", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/mapping examples/i)).toBeInTheDocument();
     });
 
     it("should show input mapping example", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      expect(screen.getByText(/query/)).toBeInTheDocument();
-      expect(screen.getByText(/node.prompt_1.output/)).toBeInTheDocument();
+      expect(screen.getByText("query", { selector: "code" })).toBeInTheDocument();
+      expect(
+        screen.getByText(/node.prompt_1.output/, { selector: "code" })
+      ).toBeInTheDocument();
     });
 
     it("should show output mapping example", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      expect(screen.getByText(/sub_result/)).toBeInTheDocument();
-      expect(screen.getByText(/output.final/)).toBeInTheDocument();
+      expect(screen.getByText(/sub_result/, { selector: "code" })).toBeInTheDocument();
+      expect(screen.getByText(/output.final/, { selector: "code" })).toBeInTheDocument();
     });
   });
 
   describe("Version Warning", () => {
     it("should display version pinning warning", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/version pinning recommended/i)).toBeInTheDocument();
       expect(
@@ -307,7 +328,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should style warning appropriately", () => {
-      const { container } = render(<SubgraphNodeForm {...defaultProps} />);
+      const { container } = renderWithConfig();
 
       const warning = container.querySelector(".bg-amber-500\\/10");
       expect(warning).toBeInTheDocument();
@@ -316,13 +337,13 @@ describe("SubgraphNodeForm", () => {
 
   describe("Integration with Sub-components", () => {
     it("should render AgentFields", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
     });
 
     it("should render AdvancedSettings", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
@@ -330,21 +351,21 @@ describe("SubgraphNodeForm", () => {
 
   describe("Form Layout", () => {
     it("should display section headers", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^subgraph reference$/i)).toBeInTheDocument();
       expect(screen.getByText(/^data mapping$/i)).toBeInTheDocument();
     });
 
     it("should render separators between sections", () => {
-      const { container } = render(<SubgraphNodeForm {...defaultProps} />);
+      const { container } = renderWithConfig();
 
-      const separators = container.querySelectorAll("[role='separator']");
+      const separators = container.querySelectorAll("[data-slot='separator']");
       expect(separators.length).toBeGreaterThan(0);
     });
 
     it("should use grid layout for graph ID and version", () => {
-      const { container } = render(<SubgraphNodeForm {...defaultProps} />);
+      const { container } = renderWithConfig();
 
       const grid = container.querySelector(".grid-cols-2");
       expect(grid).toBeInTheDocument();
@@ -353,17 +374,17 @@ describe("SubgraphNodeForm", () => {
 
   describe("Field Requirements", () => {
     it("should mark graph ID as required", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      const graphIdLabel = screen.getByText(/^graph id$/i);
-      expect(graphIdLabel.closest("div")).toBeInTheDocument();
+      const graphIdLabel = screen.getByText(/graph id/i, { selector: "label" });
+      expect(graphIdLabel).toBeInTheDocument();
     });
 
     it("should not mark version as required", () => {
-      render(<SubgraphNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       // Version field should not have required indicator
-      const versionLabel = screen.getByText(/^version$/i);
+      const versionLabel = screen.getByText(/version/i, { selector: "label" });
       expect(versionLabel).toBeInTheDocument();
     });
   });
@@ -376,7 +397,7 @@ describe("SubgraphNodeForm", () => {
         input_mapping: { key: "value" },
         output_mapping: { out: "result" },
       };
-      render(<SubgraphNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const graphIdInput = screen.getByLabelText(/graph id/i);
       await user.clear(graphIdInput);

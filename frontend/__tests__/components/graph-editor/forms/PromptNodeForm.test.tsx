@@ -5,8 +5,9 @@
  * variables editor, and integration with AgentFields and AdvancedSettings.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { PromptNodeForm } from "@/components/graph-editor/forms/PromptNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
@@ -54,11 +55,28 @@ describe("PromptNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
 
-  const defaultProps: NodeFormProps = {
-    config: {},
-    onChange: mockOnChange,
-    errors: {},
-    setErrors: mockSetErrors,
+  const renderWithConfig = (
+    initialConfig: NodeFormProps["config"] = {},
+    options: { errors?: NodeFormProps["errors"] } = {}
+  ) => {
+    const Wrapper = () => {
+      const [config, setConfig] = useState(initialConfig);
+      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+        setConfig(nextConfig);
+        mockOnChange(nextConfig);
+      };
+
+      return (
+        <PromptNodeForm
+          config={config}
+          onChange={handleChange}
+          errors={options.errors ?? {}}
+          setErrors={mockSetErrors}
+        />
+      );
+    };
+
+    return render(<Wrapper />);
   };
 
   beforeEach(() => {
@@ -67,7 +85,7 @@ describe("PromptNodeForm", () => {
 
   describe("Initial Render", () => {
     it("should render with empty config", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByLabelText(/system prompt/i)).toBeInTheDocument();
@@ -87,17 +105,17 @@ describe("PromptNodeForm", () => {
         variables: { input: "test" },
       };
 
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByDisplayValue("Test prompt: {{input}}")).toBeInTheDocument();
       expect(screen.getByDisplayValue("You are a helpful assistant")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("gpt-4-turbo")).toBeInTheDocument();
+      expect(screen.getByLabelText(/model/i)).toHaveValue("gpt-4-turbo");
       expect(screen.getByDisplayValue("2000")).toBeInTheDocument();
     });
 
     it("should display temperature value correctly", () => {
       const config = { temperature: 1.5 };
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const slider = screen.getByLabelText(/temperature/i);
       expect(slider).toHaveValue("1.5");
@@ -105,7 +123,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should display default temperature of 0.7 when not set", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
       expect(slider).toHaveValue("0.7");
@@ -113,7 +131,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should render all model options", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const modelSelect = screen.getByLabelText(/model/i);
       expect(modelSelect).toBeInTheDocument();
@@ -129,7 +147,7 @@ describe("PromptNodeForm", () => {
   describe("Field Changes", () => {
     it("should call onChange when system prompt is modified", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const systemPrompt = screen.getByLabelText(/system prompt/i);
       await user.type(systemPrompt, "New system prompt");
@@ -143,7 +161,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when prompt template is modified", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const promptTemplate = screen.getByLabelText(/prompt template/i);
       await user.type(promptTemplate, "Test template");
@@ -157,7 +175,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when model is changed", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const modelSelect = screen.getByLabelText(/model/i);
       await user.selectOptions(modelSelect, "claude-3-opus");
@@ -172,12 +190,10 @@ describe("PromptNodeForm", () => {
     });
 
     it("should call onChange when temperature slider is adjusted", async () => {
-      const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
-      await user.clear(slider);
-      await user.type(slider, "1.2");
+      fireEvent.change(slider, { target: { value: "1.2" } });
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -190,7 +206,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when max tokens is set", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.type(maxTokens, "4096");
@@ -205,7 +221,7 @@ describe("PromptNodeForm", () => {
     it("should handle clearing max tokens", async () => {
       const user = userEvent.setup();
       const config = { max_tokens: 2000 };
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.clear(maxTokens);
@@ -221,7 +237,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when variables are updated", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const addButton = screen.getByTestId("add-variable");
       await user.click(addButton);
@@ -239,13 +255,13 @@ describe("PromptNodeForm", () => {
   describe("Error Display", () => {
     it("should display error for prompt_template field", () => {
       const errors = { prompt_template: "Prompt template is required" };
-      render(<PromptNodeForm {...defaultProps} errors={errors} />);
+      renderWithConfig({}, { errors });
 
       expect(screen.getByText("Prompt template is required")).toBeInTheDocument();
     });
 
     it("should not display errors when errors object is empty", () => {
-      render(<PromptNodeForm {...defaultProps} errors={{}} />);
+      renderWithConfig({}, { errors: {} });
 
       expect(screen.queryByText(/required/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/invalid/i)).not.toBeInTheDocument();
@@ -255,7 +271,7 @@ describe("PromptNodeForm", () => {
   describe("Integration with Sub-components", () => {
     it("should render AgentFields with correct props", () => {
       const config = { role: "Test Role" };
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByTestId("agent-role")).toHaveValue("Test Role");
@@ -263,7 +279,7 @@ describe("PromptNodeForm", () => {
 
     it("should propagate AgentFields changes to parent config", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const roleInput = screen.getByTestId("agent-role");
       await user.type(roleInput, "New Role");
@@ -278,14 +294,14 @@ describe("PromptNodeForm", () => {
     });
 
     it("should render AdvancedSettings with correct props", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
 
     it("should propagate AdvancedSettings changes to parent config", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const cacheCheckbox = screen.getByTestId("cache-enabled");
       await user.click(cacheCheckbox);
@@ -306,7 +322,7 @@ describe("PromptNodeForm", () => {
         model: "gpt-4",
         temperature: 0.8,
       };
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const roleInput = screen.getByTestId("agent-role");
       await user.type(roleInput, "Test");
@@ -326,7 +342,7 @@ describe("PromptNodeForm", () => {
 
   describe("Field Descriptions and Labels", () => {
     it("should display helpful descriptions for each field", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/instructions that define the assistant's behavior/i)
@@ -336,17 +352,17 @@ describe("PromptNodeForm", () => {
     });
 
     it("should mark prompt template as required", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       // Check that the FormField with prompt template has required prop
-      const promptLabel = screen.getByText(/prompt template/i);
-      expect(promptLabel.closest("div")).toHaveTextContent("Prompt Template");
+      const promptLabel = screen.getByText(/prompt template/i, { selector: "label" });
+      expect(promptLabel).toBeInTheDocument();
     });
   });
 
   describe("Temperature Slider", () => {
     it("should have correct min, max, and step attributes", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
       expect(slider).toHaveAttribute("min", "0");
@@ -355,12 +371,10 @@ describe("PromptNodeForm", () => {
     });
 
     it("should update displayed value when slider moves", async () => {
-      const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
-      await user.clear(slider);
-      await user.type(slider, "0.3");
+      fireEvent.change(slider, { target: { value: "0.3" } });
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -374,7 +388,7 @@ describe("PromptNodeForm", () => {
 
   describe("Variables Editor", () => {
     it("should render KeyValueEditor for variables", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("key-value-editor")).toBeInTheDocument();
     });
@@ -383,7 +397,7 @@ describe("PromptNodeForm", () => {
       const config = {
         variables: { input: "test input", context: "test context" },
       };
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const variablesDisplay = screen.getByTestId("variables-display");
       expect(variablesDisplay.textContent).toContain("input");
@@ -392,7 +406,7 @@ describe("PromptNodeForm", () => {
 
     it("should handle empty variables object", () => {
       const config = { variables: {} };
-      render(<PromptNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const variablesDisplay = screen.getByTestId("variables-display");
       expect(variablesDisplay.textContent).toBe("{}");
@@ -402,7 +416,7 @@ describe("PromptNodeForm", () => {
   describe("Max Tokens Input", () => {
     it("should accept numeric input", async () => {
       const user = userEvent.setup();
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.type(maxTokens, "8000");
@@ -414,7 +428,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should have appropriate min and max constraints", () => {
-      render(<PromptNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       expect(maxTokens).toHaveAttribute("type", "number");

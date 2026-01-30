@@ -8,6 +8,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { HumanGateNodeForm } from "@/components/graph-editor/forms/HumanGateNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
@@ -24,11 +25,27 @@ describe("HumanGateNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
 
-  const defaultProps: NodeFormProps = {
-    config: {},
-    onChange: mockOnChange,
-    errors: {},
-    setErrors: mockSetErrors,
+  const renderWithConfig = (
+    initialConfig: NodeFormProps["config"] = {}
+  ) => {
+    const Wrapper = () => {
+      const [config, setConfig] = useState(initialConfig);
+      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+        setConfig(nextConfig);
+        mockOnChange(nextConfig);
+      };
+
+      return (
+        <HumanGateNodeForm
+          config={config}
+          onChange={handleChange}
+          errors={{}}
+          setErrors={mockSetErrors}
+        />
+      );
+    };
+
+    return render(<Wrapper />);
   };
 
   beforeEach(() => {
@@ -37,7 +54,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Initial Render", () => {
     it("should render with empty config", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/approval configuration/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/approval message/i)).toBeInTheDocument();
@@ -58,7 +75,7 @@ describe("HumanGateNodeForm", () => {
         show_context: false,
       };
 
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByDisplayValue("Please review this output")).toBeInTheDocument();
       expect(screen.getByDisplayValue("Check for accuracy and tone")).toBeInTheDocument();
@@ -69,7 +86,7 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should display helpful description", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(
@@ -81,14 +98,14 @@ describe("HumanGateNodeForm", () => {
 
   describe("Approval Message Field", () => {
     it("should render approval message textarea", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByLabelText(/approval message/i)).toBeInTheDocument();
     });
 
     it("should call onChange when approval message is modified", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const approvalMessage = screen.getByLabelText(/approval message/i);
       await user.type(approvalMessage, "Review needed");
@@ -100,14 +117,14 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should mark approval message as required", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      const approvalLabel = screen.getByText(/^approval message$/i);
-      expect(approvalLabel.closest("div")).toBeInTheDocument();
+      const approvalLabel = screen.getByText(/approval message/i, { selector: "label" });
+      expect(approvalLabel).toBeInTheDocument();
     });
 
     it("should have appropriate rows", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const approvalMessage = screen.getByLabelText(/approval message/i);
       expect(approvalMessage.tagName).toBe("TEXTAREA");
@@ -117,16 +134,16 @@ describe("HumanGateNodeForm", () => {
 
   describe("Instructions Field", () => {
     it("should render instructions textarea", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      expect(screen.getByLabelText(/^instructions$/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/instructions/i)).toBeInTheDocument();
     });
 
     it("should call onChange when instructions are modified", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      const instructions = screen.getByLabelText(/^instructions$/i);
+      const instructions = screen.getByLabelText(/instructions/i);
       await user.type(instructions, "Check compliance");
 
       await waitFor(() => {
@@ -136,9 +153,9 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should have appropriate rows", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
-      const instructions = screen.getByLabelText(/^instructions$/i);
+      const instructions = screen.getByLabelText(/instructions/i);
       expect(instructions.tagName).toBe("TEXTAREA");
       expect(instructions).toHaveAttribute("rows", "3");
     });
@@ -146,14 +163,14 @@ describe("HumanGateNodeForm", () => {
 
   describe("Timeout Field", () => {
     it("should render timeout input", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByLabelText(/timeout \(hours\)/i)).toBeInTheDocument();
     });
 
     it("should call onChange when timeout is modified", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const timeout = screen.getByLabelText(/timeout \(hours\)/i);
       await user.type(timeout, "72");
@@ -165,7 +182,7 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should have appropriate constraints", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const timeout = screen.getByLabelText(/timeout \(hours\)/i);
       expect(timeout).toHaveAttribute("type", "number");
@@ -174,7 +191,7 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should have appropriate placeholder", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByPlaceholderText("24")).toBeInTheDocument();
     });
@@ -182,7 +199,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Notify Emails Field", () => {
     it("should render notify emails input", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByLabelText(/notify emails/i)).toBeInTheDocument();
     });
@@ -191,7 +208,7 @@ describe("HumanGateNodeForm", () => {
       const config = {
         notify_emails: ["user1@example.com", "user2@example.com"],
       };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(
         screen.getByDisplayValue("user1@example.com, user2@example.com")
@@ -200,7 +217,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should call onChange with parsed email array", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const emailsInput = screen.getByLabelText(/notify emails/i);
       await user.type(emailsInput, "test@example.com, admin@example.com");
@@ -219,7 +236,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should filter out empty email entries", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const emailsInput = screen.getByLabelText(/notify emails/i);
       await user.type(emailsInput, "test@example.com, , admin@example.com");
@@ -235,7 +252,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Auto-approve Switch", () => {
     it("should render auto-approve switch", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/auto-approve on timeout/i)).toBeInTheDocument();
       expect(
@@ -245,7 +262,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should call onChange when auto-approve is toggled", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
       const autoApproveSwitch = switches.find((s) =>
@@ -266,7 +283,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should show checked state when enabled", () => {
       const config = { auto_approve_after_timeout: true };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const switches = screen.getAllByRole("switch");
       const autoApproveSwitch = switches[0];
@@ -275,7 +292,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should show unchecked state when disabled", () => {
       const config = { auto_approve_after_timeout: false };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const switches = screen.getAllByRole("switch");
       const autoApproveSwitch = switches[0];
@@ -285,7 +302,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Require Comment Switch", () => {
     it("should render require comment switch", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^require comment$/i)).toBeInTheDocument();
       expect(
@@ -295,7 +312,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should call onChange when require comment is toggled", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
       const requireCommentSwitch = switches[1];
@@ -314,7 +331,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Show Context Switch", () => {
     it("should render show context switch", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^show context$/i)).toBeInTheDocument();
       expect(
@@ -324,7 +341,7 @@ describe("HumanGateNodeForm", () => {
 
     it("should call onChange when show context is toggled", async () => {
       const user = userEvent.setup();
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
       const showContextSwitch = switches[2];
@@ -337,7 +354,7 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should default to true when not set", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
       const showContextSwitch = switches[2];
@@ -348,7 +365,7 @@ describe("HumanGateNodeForm", () => {
   describe("Auto-approve Warning", () => {
     it("should display warning when auto-approve is enabled", () => {
       const config = { auto_approve_after_timeout: true };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByText(/auto-approval warning/i)).toBeInTheDocument();
       expect(
@@ -358,28 +375,28 @@ describe("HumanGateNodeForm", () => {
 
     it("should not display warning when auto-approve is disabled", () => {
       const config = { auto_approve_after_timeout: false };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.queryByText(/auto-approval warning/i)).not.toBeInTheDocument();
     });
 
     it("should include timeout hours in warning message", () => {
       const config = { auto_approve_after_timeout: true, timeout_hours: 48 };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByText(/48 hours/i)).toBeInTheDocument();
     });
 
     it("should use default 24 hours when timeout not set", () => {
       const config = { auto_approve_after_timeout: true };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       expect(screen.getByText(/24 hours/i)).toBeInTheDocument();
     });
 
     it("should style warning with amber colors", () => {
       const config = { auto_approve_after_timeout: true };
-      const { container } = render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      const { container } = renderWithConfig(config);
 
       const warning = container.querySelector(".bg-amber-500\\/10");
       expect(warning).toBeInTheDocument();
@@ -388,7 +405,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Section Headers", () => {
     it("should display all section headers", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/^approval configuration$/i)).toBeInTheDocument();
       expect(screen.getByText(/timeout & notifications/i)).toBeInTheDocument();
@@ -398,13 +415,13 @@ describe("HumanGateNodeForm", () => {
 
   describe("Integration with Sub-components", () => {
     it("should render AgentFields", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
     });
 
     it("should render AdvancedSettings", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
@@ -412,14 +429,14 @@ describe("HumanGateNodeForm", () => {
 
   describe("Form Layout", () => {
     it("should render separators between sections", () => {
-      const { container } = render(<HumanGateNodeForm {...defaultProps} />);
+      const { container } = renderWithConfig();
 
-      const separators = container.querySelectorAll("[role='separator']");
+      const separators = container.querySelectorAll("[data-slot='separator']");
       expect(separators.length).toBeGreaterThan(0);
     });
 
     it("should use grid layout for timeout and emails", () => {
-      const { container } = render(<HumanGateNodeForm {...defaultProps} />);
+      const { container } = renderWithConfig();
 
       const grid = container.querySelector(".grid-cols-2");
       expect(grid).toBeInTheDocument();
@@ -428,19 +445,19 @@ describe("HumanGateNodeForm", () => {
 
   describe("Field Descriptions", () => {
     it("should display description for approval message", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/message shown to the reviewer/i)).toBeInTheDocument();
     });
 
     it("should display description for instructions", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/detailed instructions for the reviewer/i)).toBeInTheDocument();
     });
 
     it("should display description for timeout", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(
         screen.getByText(/max wait time before timeout action/i)
@@ -448,7 +465,7 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should display description for notify emails", () => {
-      render(<HumanGateNodeForm {...defaultProps} />);
+      renderWithConfig();
 
       expect(screen.getByText(/comma-separated email addresses/i)).toBeInTheDocument();
     });
@@ -462,9 +479,9 @@ describe("HumanGateNodeForm", () => {
         timeout_hours: 24,
         auto_approve_after_timeout: true,
       };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
-      const instructions = screen.getByLabelText(/^instructions$/i);
+      const instructions = screen.getByLabelText(/instructions/i);
       await user.type(instructions, "New instructions");
 
       await waitFor(() => {
@@ -484,7 +501,7 @@ describe("HumanGateNodeForm", () => {
     it("should toggle switch from false to true", async () => {
       const user = userEvent.setup();
       const config = { require_comment: false };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const switches = screen.getAllByRole("switch");
       const requireCommentSwitch = switches[1];
@@ -502,7 +519,7 @@ describe("HumanGateNodeForm", () => {
     it("should toggle switch from true to false", async () => {
       const user = userEvent.setup();
       const config = { require_comment: true };
-      render(<HumanGateNodeForm {...defaultProps} config={config} />);
+      renderWithConfig(config);
 
       const switches = screen.getAllByRole("switch");
       const requireCommentSwitch = switches[1];

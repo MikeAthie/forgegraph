@@ -7,6 +7,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { NodeConfigDialog, type NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 import { NODE_TYPES } from "@/lib/graph-types";
 
@@ -725,8 +726,9 @@ describe("NodeConfigDialog", () => {
     it("should not call onSave when save button is clicked with errors", async () => {
       const user = userEvent.setup();
       const CustomForm = ({ setErrors }: NodeFormProps) => {
-        // Set error immediately on mount
-        setErrors({ field: "Error" });
+        useEffect(() => {
+          setErrors({ field: "Error" });
+        }, [setErrors]);
         return <div>Form with error</div>;
       };
 
