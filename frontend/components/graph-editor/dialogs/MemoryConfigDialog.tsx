@@ -27,6 +27,11 @@ type MemoryConfigFormState = {
   autoPrepend: boolean;
   summaryTtlHours: number;
   factsTtlDays: number;
+  vectorEnabled: boolean;
+  vectorTopK: number;
+  vectorThreshold: number;
+  vectorRecencyWeight: number;
+  embeddingModel: string;
   summarizationEnabled: boolean;
   summarizationThreshold: number;
   summarizationKeepRecent: number;
@@ -60,6 +65,11 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
     autoPrepend: true,
     summaryTtlHours: 24,
     factsTtlDays: 7,
+    vectorEnabled: false,
+    vectorTopK: 5,
+    vectorThreshold: 0.7,
+    vectorRecencyWeight: 0.2,
+    embeddingModel: "text-embedding-ada-002",
     summarizationEnabled: false,
     summarizationThreshold: 30,
     summarizationKeepRecent: 10,
@@ -92,6 +102,11 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
         autoPrepend: data.auto_prepend,
         summaryTtlHours: toHours(data.redis_summary_ttl),
         factsTtlDays: toDays(data.redis_facts_ttl),
+        vectorEnabled: data.vector_enabled,
+        vectorTopK: data.vector_top_k,
+        vectorThreshold: data.vector_threshold,
+        vectorRecencyWeight: data.vector_recency_weight,
+        embeddingModel: data.embedding_model || "text-embedding-ada-002",
         summarizationEnabled: data.summarization_enabled,
         summarizationThreshold: data.summarization_threshold,
         summarizationKeepRecent: data.summarization_keep_recent,
@@ -128,6 +143,18 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
       showError("Summarization threshold must be at least keep recent + 10.");
       return;
     }
+    if (formState.vectorEnabled && (formState.vectorThreshold < 0.5 || formState.vectorThreshold > 0.99)) {
+      showError("Vector threshold must be between 0.5 and 0.99.");
+      return;
+    }
+    if (formState.vectorEnabled && (formState.vectorRecencyWeight < 0 || formState.vectorRecencyWeight > 1)) {
+      showError("Vector recency weight must be between 0 and 1.");
+      return;
+    }
+    if (formState.vectorEnabled && (formState.vectorTopK < 1 || formState.vectorTopK > 50)) {
+      showError("Vector top-k must be between 1 and 50.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -138,9 +165,11 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
         redis_enabled: formState.enablePersistence,
         redis_summary_ttl: Math.max(1, formState.summaryTtlHours) * 3600,
         redis_facts_ttl: Math.max(1, formState.factsTtlDays) * 86400,
-        vector_enabled: config?.vector_enabled ?? false,
-        vector_top_k: config?.vector_top_k ?? 5,
-        vector_threshold: config?.vector_threshold ?? 0.7,
+        vector_enabled: formState.vectorEnabled,
+        vector_top_k: Math.max(1, formState.vectorTopK),
+        vector_threshold: formState.vectorThreshold,
+        vector_recency_weight: formState.vectorRecencyWeight,
+        embedding_model: formState.embeddingModel.trim() || "text-embedding-ada-002",
         summarization_enabled: formState.summarizationEnabled,
         summarization_threshold: Math.max(1, formState.summarizationThreshold),
         summarization_keep_recent: Math.max(1, formState.summarizationKeepRecent),
@@ -248,6 +277,106 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
                     }
                   />
                 </FormField>
+
+                <Separator />
+
+                <FormField
+                  label="Enable vector memory"
+                  htmlFor="vector-enabled"
+                  description="Retrieve long-term memories via semantic search."
+                >
+                  <Switch
+                    id="vector-enabled"
+                    checked={formState.vectorEnabled}
+                    onCheckedChange={(checked) =>
+                      setFormState((prev) => ({ ...prev, vectorEnabled: checked }))
+                    }
+                  />
+                </FormField>
+
+                {formState.vectorEnabled && (
+                  <>
+                    <FormField
+                      label="Vector top-k"
+                      htmlFor="vector-top-k"
+                      description="How many memory chunks to retrieve per prompt."
+                    >
+                      <Input
+                        id="vector-top-k"
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={formState.vectorTopK}
+                        onChange={(event) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            vectorTopK: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Vector threshold"
+                      htmlFor="vector-threshold"
+                      description="Minimum similarity score for a memory to be included."
+                    >
+                      <Input
+                        id="vector-threshold"
+                        type="number"
+                        step="0.01"
+                        min={0.5}
+                        max={0.99}
+                        value={formState.vectorThreshold}
+                        onChange={(event) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            vectorThreshold: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Recency weight"
+                      htmlFor="vector-recency-weight"
+                      description="Weight recent memories vs semantic similarity (0-1)."
+                    >
+                      <Input
+                        id="vector-recency-weight"
+                        type="number"
+                        step="0.05"
+                        min={0}
+                        max={1}
+                        value={formState.vectorRecencyWeight}
+                        onChange={(event) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            vectorRecencyWeight: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Embedding model"
+                      htmlFor="embedding-model"
+                      description="Model used for generating embeddings."
+                    >
+                      <Input
+                        id="embedding-model"
+                        type="text"
+                        value={formState.embeddingModel}
+                        onChange={(event) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            embeddingModel: event.target.value,
+                          }))
+                        }
+                      />
+                    </FormField>
+                  </>
+                )}
 
                 <FormField
                   label="Summary TTL (hours)"

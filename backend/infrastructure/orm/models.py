@@ -13,6 +13,7 @@ import uuid
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+from pgvector.django import IvfflatIndex, VectorField
 
 
 class UserManager(BaseUserManager):
@@ -150,6 +151,8 @@ class MemoryConfiguration(models.Model):
     vector_enabled = models.BooleanField(default=False)
     vector_top_k = models.PositiveIntegerField(default=5)
     vector_threshold = models.FloatField(default=0.7)
+    vector_recency_weight = models.FloatField(default=0.2)
+    embedding_model = models.CharField(max_length=50, default="text-embedding-ada-002")
     summarization_enabled = models.BooleanField(default=False)
     summarization_threshold = models.PositiveIntegerField(default=30)
     summarization_keep_recent = models.PositiveIntegerField(default=10)
@@ -403,6 +406,40 @@ class MemoryUsage(models.Model):
 
     def __str__(self):
         return f"MemoryUsage {self.tenant_id} {self.usage_date}"
+
+
+class MemoryChunk(models.Model):
+    """MemoryChunk stores embedded long-term memory chunks."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    agent_id = models.UUIDField(null=True, blank=True, db_index=True)
+    run_id = models.UUIDField(null=True, blank=True, db_index=True)
+    session_id = models.UUIDField(null=True, blank=True, db_index=True)
+    content = models.TextField()
+    chunk_type = models.CharField(max_length=20)
+    metadata = models.JSONField(default=dict, blank=True)
+    embedding = VectorField(dimensions=1536)
+    embedding_model = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    source_timestamp = models.DateTimeField()
+
+    class Meta:
+        db_table = "memory_chunks"
+        indexes = [
+            models.Index(fields=["tenant_id"], name="memory_chunks_tenant_idx"),
+            models.Index(fields=["tenant_id", "agent_id"], name="memory_chunks_agent_idx"),
+            models.Index(fields=["tenant_id", "run_id"], name="memory_chunks_run_idx"),
+            models.Index(fields=["tenant_id", "session_id"], name="memory_chunks_session_idx"),
+            IvfflatIndex(
+                name="memory_chunks_embedding_ivfflat",
+                fields=["embedding"],
+                lists=100,
+            ),
+        ]
+
+    def __str__(self):
+        return f"MemoryChunk {self.id} ({self.chunk_type})"
 
 
 class RunCheckpoint(models.Model):

@@ -18,8 +18,11 @@ dependencies = [
     "drf-spectacular>=0.27.1",
     # Database
     "psycopg2-binary>=2.9.9",
+    "pgvector>=0.2.5",
     # Cache
     "redis>=5.0.1",
+    # Tasks
+    "celery>=5.3.6",
     # Server
     "gunicorn>=21.2.0",
     # Environment

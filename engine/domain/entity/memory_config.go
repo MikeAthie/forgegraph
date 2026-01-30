@@ -25,9 +25,11 @@ type Tier2Config struct {
 
 // Tier3Config controls vector memory retrieval (Phase 3).
 type Tier3Config struct {
-	Enabled   bool    `json:"enabled"`
-	TopK      int     `json:"top_k"`
-	Threshold float64 `json:"threshold"`
+	Enabled        bool    `json:"enabled"`
+	TopK           int     `json:"top_k"`
+	Threshold      float64 `json:"threshold"`
+	RecencyWeight  float64 `json:"recency_weight"`
+	EmbeddingModel string  `json:"embedding_model"`
 }
 
 // SummarizationConfig controls when and how to summarize memory.

@@ -1122,9 +1122,11 @@ func defaultMemoryConfig() *entity.MemoryConfig {
 			FactsTTL:   604800,
 		},
 		Tier3: entity.Tier3Config{
-			Enabled:   false,
-			TopK:      5,
-			Threshold: 0.7,
+			Enabled:        false,
+			TopK:           5,
+			Threshold:      0.7,
+			RecencyWeight:  0.2,
+			EmbeddingModel: "text-embedding-ada-002",
 		},
 		Summarization: entity.SummarizationConfig{
 			Enabled:          false,
@@ -1184,6 +1186,12 @@ func parseMemoryConfig(memoryConfigJSON string) *entity.MemoryConfig {
 		}
 		if v, ok := coerceFloat(tier3Raw["threshold"]); ok && v > 0 {
 			cfg.Tier3.Threshold = v
+		}
+		if v, ok := coerceFloat(tier3Raw["recency_weight"]); ok && v >= 0 {
+			cfg.Tier3.RecencyWeight = v
+		}
+		if v, ok := tier3Raw["embedding_model"].(string); ok && v != "" {
+			cfg.Tier3.EmbeddingModel = v
 		}
 	}
 
@@ -1292,6 +1300,12 @@ func decodeMemoryConfig(raw any) *entity.MemoryConfig {
 	}
 	if cfg.Tier3.Threshold <= 0 {
 		cfg.Tier3.Threshold = 0.7
+	}
+	if cfg.Tier3.RecencyWeight < 0 {
+		cfg.Tier3.RecencyWeight = 0.2
+	}
+	if cfg.Tier3.EmbeddingModel == "" {
+		cfg.Tier3.EmbeddingModel = "text-embedding-ada-002"
 	}
 	return &cfg
 }

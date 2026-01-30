@@ -87,6 +87,8 @@ class GraphListCreateView(APIView):
                 vector_enabled=default_config.vector_enabled,
                 vector_top_k=default_config.vector_top_k,
                 vector_threshold=default_config.vector_threshold,
+                vector_recency_weight=default_config.vector_recency_weight,
+                embedding_model=default_config.embedding_model,
             )
         else:
             MemoryConfiguration.objects.create(graph=graph)
@@ -397,6 +399,8 @@ class GraphMemoryConfigView(APIView):
                 vector_enabled=default_config.vector_enabled,
                 vector_top_k=default_config.vector_top_k,
                 vector_threshold=default_config.vector_threshold,
+                vector_recency_weight=default_config.vector_recency_weight,
+                embedding_model=default_config.embedding_model,
             )
 
         return MemoryConfiguration.objects.create(graph=graph)

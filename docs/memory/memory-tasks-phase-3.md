@@ -212,10 +212,10 @@ LIMIT %s;
 - `backend/infrastructure/orm/migrations/0015_vector_config.py`
 - `frontend/components/graph-editor/dialogs/MemoryConfigDialog.tsx`
 
-- [ ] Add vector config fields to MemoryConfiguration.
-- [ ] Serialize new fields in API responses.
-- [ ] Add UI controls for top_k, threshold, recency weight, model.
-- [ ] Validate thresholds and ranges.
+- [x] Add vector config fields to MemoryConfiguration.
+- [x] Serialize new fields in API responses.
+- [x] Add UI controls for top_k, threshold, recency weight, model.
+- [x] Validate thresholds and ranges.
 
 Model fields:
 ```python
@@ -227,10 +227,10 @@ embedding_model = models.CharField(max_length=50, default='text-embedding-ada-00
 ```
 
 **Acceptance Criteria:**
-- [ ] Migration adds vector fields
-- [ ] Frontend shows vector settings
-- [ ] Validation enforces threshold 0.5-0.99
-- [ ] Config passed to engine
+- [x] Migration adds vector fields
+- [x] Frontend shows vector settings
+- [x] Validation enforces threshold 0.5-0.99
+- [x] Config passed to engine
 
 ---
 
@@ -240,15 +240,15 @@ embedding_model = models.CharField(max_length=50, default='text-embedding-ada-00
 - `backend/adapters/worker/gc_worker.py`
 
 - [ ] Remove chunks for deleted tenants/users.
-- [ ] Clean old chunks based on retention policy.
-- [ ] Reindex vector indices periodically.
-- [ ] Schedule daily Celery beat task.
+- [x] Clean old chunks based on retention policy.
+- [x] Reindex vector indices periodically.
+- [x] Schedule daily Celery beat task.
 - [ ] Add metrics for storage and cleanup.
 
 **Acceptance Criteria:**
 - [ ] Deleted user chunks removed within 24 hours
-- [ ] Old chunks cleaned by age policy
-- [ ] Batch cleanup avoids spikes
+- [x] Old chunks cleaned by age policy
+- [x] Batch cleanup avoids spikes
 - [ ] Metrics reflect cleanup activity
 
 ---
@@ -263,7 +263,7 @@ embedding_model = models.CharField(max_length=50, default='text-embedding-ada-00
 6. Vector configuration editable in UI
 7. Garbage collection keeps storage bounded
 
-## Status: NOT STARTED
+## Status: IN PROGRESS
 
 ## Dependencies
 

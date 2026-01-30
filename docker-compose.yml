@@ -1,7 +1,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: forgegraph-postgres
     environment:
       POSTGRES_DB: forgegraph

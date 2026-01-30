@@ -105,6 +105,8 @@ def build_memory_config_json(graph, user) -> str:
             "enabled": config.vector_enabled,
             "top_k": config.vector_top_k,
             "threshold": config.vector_threshold,
+            "recency_weight": config.vector_recency_weight,
+            "embedding_model": config.embedding_model,
         },
         "summarization": {
             "enabled": config.summarization_enabled,

@@ -4,6 +4,7 @@
 # No framework dependencies allowed.
 
 from domain.entities.graph import Graph, GraphVersion
+from domain.entities.memory_chunk import MemoryChunkEntity
 from domain.entities.memory_config import MemoryConfigEntity
 from domain.entities.memory_usage import MemoryUsageEntity
 from domain.entities.prompt import PromptTemplate
@@ -14,6 +15,7 @@ __all__ = [
     "User",
     "Graph",
     "GraphVersion",
+    "MemoryChunkEntity",
     "MemoryConfigEntity",
     "MemoryUsageEntity",
     "PromptTemplate",

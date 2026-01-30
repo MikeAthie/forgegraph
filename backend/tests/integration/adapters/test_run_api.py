@@ -276,6 +276,8 @@ class TestRunStart:
             vector_enabled=True,
             vector_top_k=8,
             vector_threshold=0.85,
+            vector_recency_weight=0.35,
+            embedding_model="text-embedding-3-small",
             summarization_enabled=True,
             summarization_threshold=40,
             summarization_keep_recent=12,
@@ -305,6 +307,8 @@ class TestRunStart:
         assert memory_config["tier3"]["enabled"] is True
         assert memory_config["tier3"]["top_k"] == 8
         assert memory_config["tier3"]["threshold"] == 0.85
+        assert memory_config["tier3"]["recency_weight"] == 0.35
+        assert memory_config["tier3"]["embedding_model"] == "text-embedding-3-small"
         assert memory_config["summarization"]["enabled"] is True
         assert memory_config["summarization"]["trigger_threshold"] == 40
         assert memory_config["summarization"]["keep_recent_count"] == 12

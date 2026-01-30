@@ -110,6 +110,8 @@ class MemoryConfigurationSerializer(serializers.ModelSerializer):
             "vector_enabled",
             "vector_top_k",
             "vector_threshold",
+            "vector_recency_weight",
+            "embedding_model",
             "summarization_enabled",
             "summarization_threshold",
             "summarization_keep_recent",
@@ -128,6 +130,21 @@ class MemoryConfigurationSerializer(serializers.ModelSerializer):
         if value < 0.5 or value > 0.99:
             raise serializers.ValidationError("vector_threshold must be between 0.5 and 0.99")
         return value
+
+    def validate_vector_recency_weight(self, value):
+        if value < 0 or value > 1:
+            raise serializers.ValidationError("vector_recency_weight must be between 0 and 1")
+        return value
+
+    def validate_vector_top_k(self, value):
+        if value < 1 or value > 50:
+            raise serializers.ValidationError("vector_top_k must be between 1 and 50")
+        return value
+
+    def validate_embedding_model(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("embedding_model cannot be empty")
+        return value.strip()
 
     def validate(self, attrs):
         instance = getattr(self, "instance", None)

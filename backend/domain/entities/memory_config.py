@@ -25,6 +25,8 @@ class MemoryConfigEntity:
     vector_enabled: bool = False
     vector_top_k: int = 5
     vector_threshold: float = 0.7
+    vector_recency_weight: float = 0.2
+    embedding_model: str = "text-embedding-ada-002"
 
     # Summarization (Phase 2)
     summarization_enabled: bool = False

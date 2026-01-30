@@ -322,6 +322,8 @@ export interface MemoryConfig {
   vector_enabled: boolean;
   vector_top_k: number;
   vector_threshold: number;
+  vector_recency_weight: number;
+  embedding_model: string;
   summarization_enabled: boolean;
   summarization_threshold: number;
   summarization_keep_recent: number;
