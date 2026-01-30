@@ -3,8 +3,10 @@ package executor
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/value"
 )
@@ -179,6 +181,65 @@ func TestPromptExecutor_Execute_DefaultValues(t *testing.T) {
 	}
 	if mockClient.received.MaxTokens != 1000 {
 		t.Errorf("MaxTokens = %v, want 1000 (default)", mockClient.received.MaxTokens)
+	}
+}
+
+func TestPromptExecutor_Execute_WithSummaryAndFacts(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{Content: "response", Model: "gpt-4"},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+
+	buffer := entity.NewMessageBuffer(5)
+	buffer.Push(entity.Message{Role: "user", Content: "Earlier question"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "Earlier answer"})
+
+	runCtx := &port.RunContext{
+		MemoryBuffer: buffer,
+		MemoryConfig: &entity.MemoryConfig{
+			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: true},
+		},
+		CurrentSummary: &entity.Summary{
+			Content: "We discussed memory.",
+			FactsExtracted: []entity.Fact{
+				{Key: "owner", Value: "Ada"},
+			},
+		},
+	}
+
+	ctx := port.WithRunContext(context.Background(), runCtx)
+
+	node := &entity.Node{
+		ID:   "prompt_1",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Current question?",
+		},
+	}
+
+	_, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if mockClient.received == nil {
+		t.Fatal("Expected request to be received")
+	}
+
+	prompt := mockClient.received.Prompt
+	if !strings.Contains(prompt, "Summary of earlier conversation:") {
+		t.Fatalf("expected summary section, got prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Key facts:") || !strings.Contains(prompt, "owner: Ada") {
+		t.Fatalf("expected facts section, got prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Recent messages:") || !strings.Contains(prompt, "User: Earlier question") {
+		t.Fatalf("expected recent messages section, got prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Current input:") || !strings.Contains(prompt, "Current question?") {
+		t.Fatalf("expected current input section, got prompt: %s", prompt)
 	}
 }
 

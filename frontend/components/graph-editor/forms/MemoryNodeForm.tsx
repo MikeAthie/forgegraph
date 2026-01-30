@@ -28,8 +28,19 @@ const MEMORY_TYPES = [
   { value: "vector", label: "Vector Store", description: "Semantic search over stored memories" },
 ] as const;
 
+const MEMORY_DEPTH_OPTIONS = [
+  { value: "short", label: "Short (last 10 messages)", bufferSize: 10 },
+  { value: "medium", label: "Medium (last 20 messages)", bufferSize: 20 },
+  { value: "long", label: "Long (last 50 messages)", bufferSize: 50 },
+  { value: "extended", label: "Extended (last 100 messages)", bufferSize: 100 },
+  { value: "custom", label: "Custom...", bufferSize: null },
+] as const;
+
 export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
   const memoryConfig = config as MemoryConfig;
+  const selectedDepth =
+    MEMORY_DEPTH_OPTIONS.find((option) => option.bufferSize === memoryConfig.max_messages)?.value ||
+    "custom";
 
   const handleChange = useCallback(
     <K extends keyof MemoryConfig>(field: K, value: MemoryConfig[K]) => {
@@ -116,27 +127,58 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         </FormField>
 
         {showBufferOptions && (
-          <FormField
-            label="Max Messages"
-            htmlFor="max-messages"
-            description="Maximum number of messages to keep in buffer"
-          >
-            <Input
-              id="max-messages"
-              type="number"
-              min={1}
-              max={1000}
-              value={memoryConfig.max_messages || ""}
-              onChange={(e) =>
-                handleChange(
-                  "max_messages",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined
-                )
-              }
-              placeholder="100"
-              className="text-sm"
-            />
-          </FormField>
+          <>
+            <FormField
+              label="Memory Depth"
+              htmlFor="memory-depth"
+              description="How many recent messages to keep in the rolling buffer"
+            >
+              <select
+                id="memory-depth"
+                value={selectedDepth}
+                onChange={(e) => {
+                  const option = MEMORY_DEPTH_OPTIONS.find((o) => o.value === e.target.value);
+                  if (!option) return;
+                  if (option.bufferSize) {
+                    handleChange("max_messages", option.bufferSize);
+                  } else {
+                    handleChange("max_messages", undefined);
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+              >
+                {MEMORY_DEPTH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            {selectedDepth === "custom" && (
+              <FormField
+                label="Custom Buffer Size"
+                htmlFor="max-messages"
+                description="Maximum number of messages to keep in buffer"
+              >
+                <Input
+                  id="max-messages"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={memoryConfig.max_messages || ""}
+                  onChange={(e) =>
+                    handleChange(
+                      "max_messages",
+                      e.target.value ? parseInt(e.target.value, 10) : undefined
+                    )
+                  }
+                  placeholder="100"
+                  className="text-sm"
+                />
+              </FormField>
+            )}
+          </>
         )}
 
         {showSummaryOptions && (

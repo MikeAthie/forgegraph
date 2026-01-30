@@ -48,6 +48,7 @@ from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run
 from infrastructure.orm.models import (
     ApprovalTask,
     GraphVersion,
+    MemoryConfiguration,
     NodeRun,
     Run,
     RunCheckpoint,
@@ -64,6 +65,55 @@ def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
         port=settings.ENGINE_PORT,
         callback_url=callback_url,
     )
+
+
+def get_tenant_id(request: Request) -> str:
+    """Get tenant ID from the authenticated user."""
+    user = request.user
+    if hasattr(user, "tenant_id") and user.tenant_id:
+        return str(user.tenant_id)
+    return str(user.id)
+
+
+def get_memory_config_for_graph(graph, user):
+    if hasattr(graph, "memory_config") and graph.memory_config:
+        return graph.memory_config
+    default_config = MemoryConfiguration.objects.filter(user=user).first()
+    if default_config:
+        return default_config
+    return None
+
+
+def build_memory_config_json(graph, user) -> str:
+    config = get_memory_config_for_graph(graph, user)
+    if not config:
+        return ""
+
+    payload = {
+        "tier1": {
+            "enabled": config.buffer_enabled,
+            "buffer_size": config.buffer_size,
+            "auto_prepend": config.auto_prepend,
+        },
+        "tier2": {
+            "enabled": config.redis_enabled,
+            "namespace": "",
+            "summary_ttl_seconds": config.redis_summary_ttl,
+            "facts_ttl_seconds": config.redis_facts_ttl,
+        },
+        "tier3": {
+            "enabled": config.vector_enabled,
+            "top_k": config.vector_top_k,
+            "threshold": config.vector_threshold,
+        },
+        "summarization": {
+            "enabled": config.summarization_enabled,
+            "trigger_threshold": config.summarization_threshold,
+            "keep_recent_count": config.summarization_keep_recent,
+            "model": config.summarization_model,
+        },
+    }
+    return pyjson.dumps(payload)
 
 
 START_NODE_ID = "START"
@@ -420,12 +470,16 @@ class RunStartView(APIView):
 
         # Send run to the engine
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        memory_config_json = build_memory_config_json(graph_version.graph, request.user)
+        tenant_id = get_tenant_id(request)
         try:
             with get_engine_client(callback_url) as engine:
                 engine.start_run(
                     run_id=run.id,
                     graph_json=prepared_graph,
                     input_json=input_json,
+                    memory_config_json=memory_config_json,
+                    tenant_id=tenant_id,
                 )
                 # Update status to running once engine accepts
                 run.status = "running"
@@ -619,12 +673,16 @@ class RunInvokeView(APIView):
         broadcast_run_updated(run)
 
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        memory_config_json = build_memory_config_json(graph_version.graph, request.user)
+        tenant_id = get_tenant_id(request)
         try:
             with get_engine_client(callback_url) as engine:
                 engine.start_run(
                     run_id=run.id,
                     graph_json=graph_json,
                     input_json=input_json,
+                    memory_config_json=memory_config_json,
+                    tenant_id=tenant_id,
                 )
                 run.status = "running"
                 run.save(update_fields=["status"])

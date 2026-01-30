@@ -441,4 +441,4 @@ npm run test:e2e:ui
 
 - [User Guide](../user-guide/agent-wizard.md) - End-user documentation
 - [Quick Reference](../user-guide/wizard-quick-reference.md) - One-page reference
-- [Implementation Plan](../wizard-implementation-plan.md) - Original design document
+- [Implementation Plan](../wizard/wizard-implementation-plan.md) - Original design document

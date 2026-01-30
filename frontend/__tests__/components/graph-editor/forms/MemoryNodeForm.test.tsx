@@ -88,7 +88,7 @@ describe("MemoryNodeForm", () => {
       const memoryTypeSelect = screen.getByLabelText(/memory type/i);
       expect(memoryTypeSelect).toHaveValue("buffer");
       expect(screen.getByDisplayValue("chat_history")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("50")).toBeInTheDocument();
+      expect(screen.getByLabelText(/memory depth/i)).toHaveValue("long");
     });
   });
 
@@ -120,31 +120,33 @@ describe("MemoryNodeForm", () => {
   });
 
   describe("Conditional Fields - Buffer Memory", () => {
-    it("should show max messages field for buffer memory type", () => {
+    it("should show memory depth field for buffer memory type", () => {
       const config = { memory_type: "buffer" as const };
       renderWithConfig(config);
 
-      expect(screen.getByLabelText(/max messages/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/memory depth/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/custom buffer size/i)).toBeInTheDocument();
     });
 
-    it("should not show max messages field for conversation type", () => {
+    it("should not show buffer fields for conversation type", () => {
       const config = { memory_type: "conversation" as const };
       renderWithConfig(config);
 
-      expect(screen.queryByLabelText(/max messages/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/memory depth/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/custom buffer size/i)).not.toBeInTheDocument();
     });
 
-    it("should update max messages value", async () => {
+    it("should update custom buffer size value", async () => {
       const user = userEvent.setup();
       const config = { memory_type: "buffer" as const };
       renderWithConfig(config);
 
-      const maxMessages = screen.getByLabelText(/max messages/i);
-      await user.type(maxMessages, "100");
+      const customBufferSize = screen.getByLabelText(/custom buffer size/i);
+      await user.type(customBufferSize, "55");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
-        expect(lastCall.max_messages).toBe(100);
+        expect(lastCall.max_messages).toBe(55);
       });
     });
   });
@@ -257,13 +259,13 @@ describe("MemoryNodeForm", () => {
       const config = { memory_type: "buffer" as const, max_messages: 50 };
       renderWithConfig(config);
 
-      expect(screen.getByLabelText(/max messages/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/memory depth/i)).toBeInTheDocument();
 
       const memoryTypeSelect = screen.getByLabelText(/memory type/i);
       await user.selectOptions(memoryTypeSelect, "conversation");
 
       await waitFor(() => {
-        expect(screen.queryByLabelText(/max messages/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/memory depth/i)).not.toBeInTheDocument();
       });
     });
 
@@ -334,14 +336,14 @@ describe("MemoryNodeForm", () => {
   });
 
   describe("Input Constraints", () => {
-    it("should have appropriate constraints on max messages", () => {
+    it("should have appropriate constraints on custom buffer size", () => {
       const config = { memory_type: "buffer" as const };
       renderWithConfig(config);
 
-      const maxMessages = screen.getByLabelText(/max messages/i);
-      expect(maxMessages).toHaveAttribute("type", "number");
-      expect(maxMessages).toHaveAttribute("min", "1");
-      expect(maxMessages).toHaveAttribute("max", "1000");
+      const customBufferSize = screen.getByLabelText(/custom buffer size/i);
+      expect(customBufferSize).toHaveAttribute("type", "number");
+      expect(customBufferSize).toHaveAttribute("min", "1");
+      expect(customBufferSize).toHaveAttribute("max", "1000");
     });
 
     it("should have appropriate constraints on max tokens", () => {

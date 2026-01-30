@@ -85,6 +85,7 @@ const API_PATHS = {
     latestVersion: (graphId: string) => `/api/graphs/${graphId}/versions/latest`,
     versionDetail: (graphId: string, versionId: string) =>
       `/api/graphs/${graphId}/versions/${versionId}`,
+    memoryConfig: (graphId: string) => `/api/graphs/${graphId}/memory-config`,
   },
   prompts: {
     listCreate: "/api/prompts/",
@@ -308,6 +309,27 @@ export interface GraphDetail {
   versions: GraphVersionSummary[];
 }
 
+export interface MemoryConfig {
+  id: string;
+  graph: string | null;
+  user: string | null;
+  buffer_enabled: boolean;
+  buffer_size: number;
+  auto_prepend: boolean;
+  redis_enabled: boolean;
+  redis_summary_ttl: number;
+  redis_facts_ttl: number;
+  vector_enabled: boolean;
+  vector_top_k: number;
+  vector_threshold: number;
+  summarization_enabled: boolean;
+  summarization_threshold: number;
+  summarization_keep_recent: number;
+  summarization_model: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type GraphCreateInput = {
   name: string;
   description?: string;
@@ -378,6 +400,24 @@ export const graphsApi = {
   createVersion: async (graphId: string, input: CreateGraphVersionInput): Promise<GraphVersion> => {
     const response = await api.post<ApiSuccessResponse<GraphVersion>>(
       API_PATHS.graphs.versions(graphId),
+      input,
+    );
+    return response.data.data;
+  },
+
+  getMemoryConfig: async (graphId: string): Promise<MemoryConfig> => {
+    const response = await api.get<ApiSuccessResponse<MemoryConfig>>(
+      API_PATHS.graphs.memoryConfig(graphId),
+    );
+    return response.data.data;
+  },
+
+  updateMemoryConfig: async (
+    graphId: string,
+    input: Partial<MemoryConfig>,
+  ): Promise<MemoryConfig> => {
+    const response = await api.patch<ApiSuccessResponse<MemoryConfig>>(
+      API_PATHS.graphs.memoryConfig(graphId),
       input,
     );
     return response.data.data;

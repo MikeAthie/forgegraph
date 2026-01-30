@@ -21,7 +21,7 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
+import { Brain, Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
 
 import { WizardProvider, useWizard } from "@/contexts/WizardContext";
 import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
@@ -41,6 +41,7 @@ import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
 import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
 import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
 import { NodeConfigDialog } from "./NodeConfigDialog";
+import { MemoryConfigDialog } from "./dialogs/MemoryConfigDialog";
 import { getNodeTypeInfo } from "./forms/node-form-registry";
 import { TypedEdge } from "./TypedEdge";
 import { useEdgeTypes } from "@/hooks/useEdgeTypes";
@@ -213,6 +214,7 @@ export function GraphEditor({
   const [configDialogNodeType, setConfigDialogNodeType] = useState<NodeType | null>(null);
   const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
   const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
+  const [memoryConfigOpen, setMemoryConfigOpen] = useState(false);
 
   // Viewport state for preserving pan/zoom across saves
   const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
@@ -1275,6 +1277,11 @@ export function GraphEditor({
         initialConfig={configDialogInitialConfig}
         onSave={handleConfigDialogComplete}
       />
+      <MemoryConfigDialog
+        graphId={graphId ?? null}
+        open={memoryConfigOpen}
+        onOpenChange={setMemoryConfigOpen}
+      />
       {/* Left Panel - Node Palette */}
       <div className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
         <NodePalette
@@ -1383,6 +1390,15 @@ export function GraphEditor({
             {!isEditingMetadata && (
               <>
                 <WizardButton />
+                <button
+                  type="button"
+                  aria-label="Memory settings"
+                  onClick={() => setMemoryConfigOpen(true)}
+                  className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
+                >
+                  <Brain aria-hidden="true" className="h-4 w-4" />
+                  <span className="hidden sm:inline">Memory</span>
+                </button>
                 <button
                   type="button"
                   aria-label={runDisabledReason ?? "Run workflow"}

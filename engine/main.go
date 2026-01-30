@@ -3,22 +3,27 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/forgegraph/engine/adapter/executor"
 	"github.com/forgegraph/engine/adapter/gateway"
 	"github.com/forgegraph/engine/adapter/repository"
 	"github.com/forgegraph/engine/adapter/store"
+	"github.com/forgegraph/engine/adapter/summarizer"
 	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/infrastructure/logger"
 
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -27,29 +32,47 @@ import (
 
 // Config holds engine configuration
 type Config struct {
-	GRPCPort       string
-	DatabaseURL    string
-	MaxWorkers     int
-	DefaultTimeout int
-	CacheTTLSeconds int
-	CheckpointMode string
-	CheckpointBatchSize int
+	GRPCPort             string
+	DatabaseURL          string
+	MaxWorkers           int
+	DefaultTimeout       int
+	CacheTTLSeconds      int
+	CheckpointMode       string
+	CheckpointBatchSize  int
 	CheckpointIntervalMs int
-	ToolManifestDir string
+	ToolManifestDir      string
+	RedisAddr            string
+	RedisPassword        string
+	RedisDB              int
+	RedisPoolSize        int
+	RedisDialTimeoutMs   int
+	RedisReadTimeoutMs   int
+	RedisWriteTimeoutMs  int
+	TenantID             string
+	MetricsPort          string
 }
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
 	cfg := &Config{
-		GRPCPort:       getEnv("GRPC_PORT", "50051"),
-		DatabaseURL:    getEnv("DATABASE_URL", ""),
-		MaxWorkers:     getEnvInt("MAX_WORKERS", 10),
-		DefaultTimeout: getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
-		CacheTTLSeconds: getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
-		CheckpointMode: strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
-		CheckpointBatchSize: getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
+		GRPCPort:             getEnv("GRPC_PORT", "50051"),
+		DatabaseURL:          getEnv("DATABASE_URL", ""),
+		MaxWorkers:           getEnvInt("MAX_WORKERS", 10),
+		DefaultTimeout:       getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
+		CacheTTLSeconds:      getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
+		CheckpointMode:       strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
+		CheckpointBatchSize:  getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
 		CheckpointIntervalMs: getEnvInt("CHECKPOINT_INTERVAL_MS", 0),
-		ToolManifestDir: getEnv("TOOL_MANIFEST_DIR", ""),
+		ToolManifestDir:      getEnv("TOOL_MANIFEST_DIR", ""),
+		RedisAddr:            getEnv("REDIS_ADDR", ""),
+		RedisPassword:        getEnv("REDIS_PASSWORD", ""),
+		RedisDB:              getEnvInt("REDIS_DB", 0),
+		RedisPoolSize:        getEnvInt("REDIS_POOL_SIZE", 0),
+		RedisDialTimeoutMs:   getEnvInt("REDIS_DIAL_TIMEOUT_MS", 0),
+		RedisReadTimeoutMs:   getEnvInt("REDIS_READ_TIMEOUT_MS", 0),
+		RedisWriteTimeoutMs:  getEnvInt("REDIS_WRITE_TIMEOUT_MS", 0),
+		TenantID:             getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000000"),
+		MetricsPort:          getEnv("METRICS_PORT", "9090"),
 	}
 	return cfg
 }
@@ -114,7 +137,7 @@ func (s *EngineServer) StartRun(ctx context.Context, req *StartRunRequest) (*Sta
 	}
 
 	// Start the run
-	err := s.scheduler.StartRun(ctx, req.RunId, req.GraphJson, req.InputJson, req.CallbackUrl)
+	err := s.scheduler.StartRun(ctx, req.RunId, req.GraphJson, req.InputJson, req.CallbackUrl, req.MemoryConfigJson, req.TenantId)
 	if err != nil {
 		s.logger.Error("start_run_failed", "run_id", req.RunId, "error", err.Error())
 		return &StartRunResponse{
@@ -241,6 +264,8 @@ func main() {
 	// Initialize repository and memory store
 	var repo port.RunRepository
 	var memoryStore port.MemoryStore
+	var redisStore *store.RedisMemoryStore
+	var redisHealth *store.RedisHealthChecker
 	var db *sql.DB
 	var err error
 	if cfg.DatabaseURL != "" {
@@ -265,6 +290,27 @@ func main() {
 		log.Warn("database_url_not_set", "fallback", "in-memory")
 		repo = repository.NewMemoryRunRepository()
 		memoryStore = store.NewInMemoryMemoryStore()
+	}
+
+	// Optional Redis-backed memory store
+	if cfg.RedisAddr != "" {
+		redisCfg := store.RedisConfig{
+			Addr:         cfg.RedisAddr,
+			Password:     cfg.RedisPassword,
+			DB:           cfg.RedisDB,
+			PoolSize:     cfg.RedisPoolSize,
+			DialTimeout:  time.Duration(cfg.RedisDialTimeoutMs) * time.Millisecond,
+			ReadTimeout:  time.Duration(cfg.RedisReadTimeoutMs) * time.Millisecond,
+			WriteTimeout: time.Duration(cfg.RedisWriteTimeoutMs) * time.Millisecond,
+		}
+		redisStore, err = store.NewRedisMemoryStore(redisCfg, cfg.TenantID, memoryStore)
+		if err != nil {
+			log.Error("redis_store_init_failed", "error", err.Error())
+		} else {
+			log.Info("redis_store_initialized", "addr", cfg.RedisAddr)
+			memoryStore = redisStore
+			redisHealth = store.NewRedisHealthChecker(redisStore)
+		}
 	}
 
 	// Initialize event emitter (no-op for now, callback URL comes per-request)
@@ -302,15 +348,54 @@ func main() {
 
 	// Initialize scheduler
 	schedulerConfig := usecase.SchedulerConfig{
-		MaxWorkers:       cfg.MaxWorkers,
-		DefaultTimeoutMs: cfg.DefaultTimeout,
-		CheckpointMode: usecase.CheckpointMode(cfg.CheckpointMode),
-		CheckpointBatchSize: cfg.CheckpointBatchSize,
-		CheckpointIntervalMs: cfg.CheckpointIntervalMs,
+		MaxWorkers:             cfg.MaxWorkers,
+		DefaultTimeoutMs:       cfg.DefaultTimeout,
+		CheckpointMode:         usecase.CheckpointMode(cfg.CheckpointMode),
+		CheckpointBatchSize:    cfg.CheckpointBatchSize,
+		CheckpointIntervalMs:   cfg.CheckpointIntervalMs,
 		CacheDefaultTTLSeconds: cfg.CacheTTLSeconds,
 	}
 	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter)
 	log.Info("scheduler_initialized")
+
+	if llmClient != nil {
+		var summaryStore port.SummaryStore
+		if redisStore != nil {
+			summaryStore = redisStore
+		}
+		var costTracker *summarizer.CostTracker
+		if db != nil {
+			costTracker = summarizer.NewCostTracker(db)
+		}
+		summaryAdapter := summarizer.NewLLMSummarizerWithTracker(llmClient, "", costTracker)
+		summaryWorker := usecase.NewSummarizationWorker(summaryAdapter, summaryStore, 2, 100)
+		summaryWorker.Start(context.Background())
+		scheduler.SetSummarizationWorker(summaryWorker)
+		log.Info("summarization_worker_initialized")
+	}
+
+	// Metrics & health server
+	if cfg.MetricsPort != "" {
+		go func() {
+			mux := http.NewServeMux()
+			mux.Handle("/metrics", promhttp.Handler())
+			mux.HandleFunc("/health/redis", func(w http.ResponseWriter, r *http.Request) {
+				status := store.HealthStatus{Healthy: false, Error: "redis not configured"}
+				if redisHealth != nil {
+					status = redisHealth.Check(r.Context())
+				}
+				payload, _ := json.Marshal(status)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(payload)
+			})
+
+			log.Info("metrics_server_listening", "port", cfg.MetricsPort)
+			if err := http.ListenAndServe(":"+cfg.MetricsPort, mux); err != nil {
+				log.Error("metrics_server_failed", "error", err.Error())
+			}
+		}()
+	}
 
 	// Create gRPC server
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))

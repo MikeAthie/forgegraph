@@ -9,6 +9,7 @@ from django.urls import path
 from adapters.api.graphs.views import (
     GraphDetailView,
     GraphListCreateView,
+    GraphMemoryConfigView,
     GraphValidateView,
     GraphVersionDetailView,
     GraphVersionLatestView,
@@ -33,5 +34,10 @@ urlpatterns = [
         "<uuid:graph_id>/versions/<uuid:version_id>",
         GraphVersionDetailView.as_view(),
         name="graph-version-detail",
+    ),
+    path(
+        "<uuid:graph_id>/memory-config",
+        GraphMemoryConfigView.as_view(),
+        name="graph-memory-config",
     ),
 ]

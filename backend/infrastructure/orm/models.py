@@ -10,6 +10,7 @@ import hashlib
 import json
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
@@ -113,6 +114,66 @@ class Graph(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.owner.email})"
+
+
+class MemoryConfiguration(models.Model):
+    """Memory configuration for graphs or user defaults."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    graph = models.OneToOneField(
+        Graph,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="memory_config",
+    )
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="default_memory_config",
+    )
+
+    # Tier 1: Local Buffer
+    buffer_enabled = models.BooleanField(default=True)
+    buffer_size = models.PositiveIntegerField(default=20)
+    auto_prepend = models.BooleanField(default=True)
+
+    # Tier 2: Redis
+    redis_enabled = models.BooleanField(default=False)
+    redis_summary_ttl = models.PositiveIntegerField(default=86400)
+    redis_facts_ttl = models.PositiveIntegerField(default=604800)
+
+    # Tier 3: Vector (Phase 3)
+    vector_enabled = models.BooleanField(default=False)
+    vector_top_k = models.PositiveIntegerField(default=5)
+    vector_threshold = models.FloatField(default=0.7)
+    summarization_enabled = models.BooleanField(default=False)
+    summarization_threshold = models.PositiveIntegerField(default=30)
+    summarization_keep_recent = models.PositiveIntegerField(default=10)
+    summarization_model = models.CharField(max_length=50, default="gpt-4")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "memory_configurations"
+        constraints = [
+            models.CheckConstraint(
+                condition=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
+                name="memory_config_requires_scope",
+            ),
+            models.CheckConstraint(
+                condition=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
+                name="memory_config_single_scope",
+            ),
+        ]
+
+    def __str__(self):
+        scope = "graph" if self.graph_id else "user"
+        return f"MemoryConfiguration({scope}:{self.id})"
 
 
 class GraphVersion(models.Model):
@@ -315,6 +376,33 @@ class MemoryEntry(models.Model):
 
     def __str__(self):
         return f"MemoryEntry {self.namespace}:{self.key}"
+
+
+class MemoryUsage(models.Model):
+    """Daily memory usage totals per tenant."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField()
+    usage_date = models.DateField()
+    summarization_prompt_tokens = models.PositiveIntegerField(default=0)
+    summarization_completion_tokens = models.PositiveIntegerField(default=0)
+    summarization_total_tokens = models.PositiveIntegerField(default=0)
+    summarization_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "memory_usage"
+        ordering = ["-usage_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant_id", "usage_date"],
+                name="memory_usage_tenant_date_uniq",
+            ),
+        ]
+
+    def __str__(self):
+        return f"MemoryUsage {self.tenant_id} {self.usage_date}"
 
 
 class RunCheckpoint(models.Model):

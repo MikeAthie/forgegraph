@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x65ngine.proto\x12\x06\x65ngine\"\x1e\n\x0bPingRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x1f\n\x0cPingResponse\x12\x0f\n\x07message\x18\x01 \x01(\t\"_\n\x0fStartRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\ngraph_json\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\x12\x14\n\x0c\x63\x61llback_url\x18\x04 \x01(\t\"3\n\x10StartRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"%\n\x13GetRunStatusRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"^\n\x14GetRunStatusResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\x12\x17\n\x0f\x63urrent_node_id\x18\x03 \x01(\t\x12\r\n\x05\x65rror\x18\x04 \x01(\t\"\"\n\x10\x43\x61ncelRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"3\n\x11\x43\x61ncelRunResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"G\n\x10ResumeRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0f\n\x07node_id\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\"4\n\x11ResumeRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t2\xd0\x02\n\rEngineService\x12\x31\n\x04Ping\x12\x13.engine.PingRequest\x1a\x14.engine.PingResponse\x12=\n\x08StartRun\x12\x17.engine.StartRunRequest\x1a\x18.engine.StartRunResponse\x12I\n\x0cGetRunStatus\x12\x1b.engine.GetRunStatusRequest\x1a\x1c.engine.GetRunStatusResponse\x12@\n\tCancelRun\x12\x18.engine.CancelRunRequest\x1a\x19.engine.CancelRunResponse\x12@\n\tResumeRun\x12\x18.engine.ResumeRunRequest\x1a\x19.engine.ResumeRunResponseB#Z!github.com/forgegraph/engine;mainb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x65ngine.proto\x12\x06\x65ngine\"\x1e\n\x0bPingRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x1f\n\x0cPingResponse\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x8e\x01\n\x0fStartRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\ngraph_json\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\x12\x14\n\x0c\x63\x61llback_url\x18\x04 \x01(\t\x12\x1a\n\x12memory_config_json\x18\x05 \x01(\t\x12\x11\n\ttenant_id\x18\x06 \x01(\t\"3\n\x10StartRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"%\n\x13GetRunStatusRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"^\n\x14GetRunStatusResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\x12\x17\n\x0f\x63urrent_node_id\x18\x03 \x01(\t\x12\r\n\x05\x65rror\x18\x04 \x01(\t\"\"\n\x10\x43\x61ncelRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"3\n\x11\x43\x61ncelRunResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"G\n\x10ResumeRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0f\n\x07node_id\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\"4\n\x11ResumeRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t2\xd0\x02\n\rEngineService\x12\x31\n\x04Ping\x12\x13.engine.PingRequest\x1a\x14.engine.PingResponse\x12=\n\x08StartRun\x12\x17.engine.StartRunRequest\x1a\x18.engine.StartRunResponse\x12I\n\x0cGetRunStatus\x12\x1b.engine.GetRunStatusRequest\x1a\x1c.engine.GetRunStatusResponse\x12@\n\tCancelRun\x12\x18.engine.CancelRunRequest\x1a\x19.engine.CancelRunResponse\x12@\n\tResumeRun\x12\x18.engine.ResumeRunRequest\x1a\x19.engine.ResumeRunResponseB#Z!github.com/forgegraph/engine;mainb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,22 +36,22 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PINGREQUEST']._serialized_end=54
   _globals['_PINGRESPONSE']._serialized_start=56
   _globals['_PINGRESPONSE']._serialized_end=87
-  _globals['_STARTRUNREQUEST']._serialized_start=89
-  _globals['_STARTRUNREQUEST']._serialized_end=184
-  _globals['_STARTRUNRESPONSE']._serialized_start=186
-  _globals['_STARTRUNRESPONSE']._serialized_end=237
-  _globals['_GETRUNSTATUSREQUEST']._serialized_start=239
-  _globals['_GETRUNSTATUSREQUEST']._serialized_end=276
-  _globals['_GETRUNSTATUSRESPONSE']._serialized_start=278
-  _globals['_GETRUNSTATUSRESPONSE']._serialized_end=372
-  _globals['_CANCELRUNREQUEST']._serialized_start=374
-  _globals['_CANCELRUNREQUEST']._serialized_end=408
-  _globals['_CANCELRUNRESPONSE']._serialized_start=410
-  _globals['_CANCELRUNRESPONSE']._serialized_end=461
-  _globals['_RESUMERUNREQUEST']._serialized_start=463
-  _globals['_RESUMERUNREQUEST']._serialized_end=534
-  _globals['_RESUMERUNRESPONSE']._serialized_start=536
-  _globals['_RESUMERUNRESPONSE']._serialized_end=588
-  _globals['_ENGINESERVICE']._serialized_start=591
-  _globals['_ENGINESERVICE']._serialized_end=927
+  _globals['_STARTRUNREQUEST']._serialized_start=90
+  _globals['_STARTRUNREQUEST']._serialized_end=232
+  _globals['_STARTRUNRESPONSE']._serialized_start=234
+  _globals['_STARTRUNRESPONSE']._serialized_end=285
+  _globals['_GETRUNSTATUSREQUEST']._serialized_start=287
+  _globals['_GETRUNSTATUSREQUEST']._serialized_end=324
+  _globals['_GETRUNSTATUSRESPONSE']._serialized_start=326
+  _globals['_GETRUNSTATUSRESPONSE']._serialized_end=420
+  _globals['_CANCELRUNREQUEST']._serialized_start=422
+  _globals['_CANCELRUNREQUEST']._serialized_end=456
+  _globals['_CANCELRUNRESPONSE']._serialized_start=458
+  _globals['_CANCELRUNRESPONSE']._serialized_end=509
+  _globals['_RESUMERUNREQUEST']._serialized_start=511
+  _globals['_RESUMERUNREQUEST']._serialized_end=582
+  _globals['_RESUMERUNRESPONSE']._serialized_start=584
+  _globals['_RESUMERUNRESPONSE']._serialized_end=636
+  _globals['_ENGINESERVICE']._serialized_start=639
+  _globals['_ENGINESERVICE']._serialized_end=975
 # @@protoc_insertion_point(module_scope)

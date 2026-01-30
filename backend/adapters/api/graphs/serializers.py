@@ -6,6 +6,8 @@ Clean Architecture: Interface Adapters layer.
 
 from rest_framework import serializers
 
+from infrastructure.orm.models import MemoryConfiguration
+
 
 class GraphCreateSerializer(serializers.Serializer):
     """Serializer for creating a graph."""
@@ -88,3 +90,57 @@ class GraphVersionDetailSerializer(serializers.Serializer):
     graph_json = serializers.JSONField(read_only=True)
     checksum = serializers.CharField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
+
+
+class MemoryConfigurationSerializer(serializers.ModelSerializer):
+    """Serializer for memory configuration."""
+
+    class Meta:
+        model = MemoryConfiguration
+        fields = [
+            "id",
+            "graph",
+            "user",
+            "buffer_enabled",
+            "buffer_size",
+            "auto_prepend",
+            "redis_enabled",
+            "redis_summary_ttl",
+            "redis_facts_ttl",
+            "vector_enabled",
+            "vector_top_k",
+            "vector_threshold",
+            "summarization_enabled",
+            "summarization_threshold",
+            "summarization_keep_recent",
+            "summarization_model",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "graph", "user", "created_at", "updated_at"]
+
+    def validate_buffer_size(self, value):
+        if value < 1 or value > 200:
+            raise serializers.ValidationError("buffer_size must be between 1 and 200")
+        return value
+
+    def validate_vector_threshold(self, value):
+        if value < 0.5 or value > 0.99:
+            raise serializers.ValidationError("vector_threshold must be between 0.5 and 0.99")
+        return value
+
+    def validate(self, attrs):
+        instance = getattr(self, "instance", None)
+        threshold = attrs.get(
+            "summarization_threshold",
+            instance.summarization_threshold if instance else 30,
+        )
+        keep_recent = attrs.get(
+            "summarization_keep_recent",
+            instance.summarization_keep_recent if instance else 10,
+        )
+        if threshold < keep_recent + 10:
+            raise serializers.ValidationError(
+                "summarization_threshold must be at least keep_recent + 10"
+            )
+        return attrs

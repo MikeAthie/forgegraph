@@ -12,7 +12,16 @@ import pytest
 from django.utils import timezone
 from rest_framework import status
 
-from infrastructure.orm.models import ApprovalTask, Graph, GraphVersion, NodeRun, Run, RunCheckpoint, User
+from infrastructure.orm.models import (
+    ApprovalTask,
+    Graph,
+    GraphVersion,
+    MemoryConfiguration,
+    NodeRun,
+    Run,
+    RunCheckpoint,
+    User,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -250,6 +259,56 @@ class TestRunStart:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data["error"]["code"] == "INVALID_INPUT_SCHEMA"
+
+    def test_start_run_sends_memory_config_to_engine(self, authenticated_client, user, mock_engine_client):
+        graph = Graph.objects.create(owner=user, name="Memory Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        MemoryConfiguration.objects.create(
+            graph=graph,
+            buffer_enabled=True,
+            buffer_size=50,
+            auto_prepend=False,
+            redis_enabled=True,
+            redis_summary_ttl=7200,
+            redis_facts_ttl=172800,
+            vector_enabled=True,
+            vector_top_k=8,
+            vector_threshold=0.85,
+            summarization_enabled=True,
+            summarization_threshold=40,
+            summarization_keep_recent=12,
+            summarization_model="gpt-4",
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "world"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        call_payload = start_calls[0][1]
+        assert call_payload["tenant_id"] == str(user.id)
+
+        memory_config = json.loads(call_payload["memory_config_json"])
+        assert memory_config["tier1"]["enabled"] is True
+        assert memory_config["tier1"]["buffer_size"] == 50
+        assert memory_config["tier1"]["auto_prepend"] is False
+        assert memory_config["tier2"]["enabled"] is True
+        assert memory_config["tier2"]["summary_ttl_seconds"] == 7200
+        assert memory_config["tier2"]["facts_ttl_seconds"] == 172800
+        assert memory_config["tier3"]["enabled"] is True
+        assert memory_config["tier3"]["top_k"] == 8
+        assert memory_config["tier3"]["threshold"] == 0.85
+        assert memory_config["summarization"]["enabled"] is True
+        assert memory_config["summarization"]["trigger_threshold"] == 40
+        assert memory_config["summarization"]["keep_recent_count"] == 12
+        assert memory_config["summarization"]["model"] == "gpt-4"
 
 
 class TestRunInvoke:

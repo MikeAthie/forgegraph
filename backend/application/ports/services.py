@@ -38,6 +38,8 @@ class IEngineClient(ABC):
         run_id: UUID,
         graph_json: dict[str, Any],
         input_json: dict[str, Any],
+        memory_config_json: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         """Start a workflow run on the engine."""
         ...

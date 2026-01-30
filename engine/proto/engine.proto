@@ -53,6 +53,12 @@ message StartRunRequest {
 
   // URL to POST execution events back to control plane
   string callback_url = 4;
+
+  // Memory configuration as JSON string
+  string memory_config_json = 5;
+
+  // Tenant identifier for multi-tenant isolation
+  string tenant_id = 6;
 }
 
 // StartRunResponse confirms run acceptance

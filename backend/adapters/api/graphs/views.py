@@ -18,10 +18,11 @@ from adapters.api.graphs.serializers import (
     GraphVersionCreateSerializer,
     GraphVersionDetailSerializer,
     GraphVersionSummarySerializer,
+    MemoryConfigurationSerializer,
 )
 from adapters.api.responses import error_response, success_response
 from domain.services.graph_validator import GraphValidator
-from infrastructure.orm.models import Graph, GraphVersion
+from infrastructure.orm.models import Graph, GraphVersion, MemoryConfiguration
 
 
 class GraphListCreateView(APIView):
@@ -72,6 +73,23 @@ class GraphListCreateView(APIView):
             name=serializer.validated_data["name"],
             description=serializer.validated_data.get("description", ""),
         )
+
+        default_config = MemoryConfiguration.objects.filter(user=request.user).first()
+        if default_config:
+            MemoryConfiguration.objects.create(
+                graph=graph,
+                buffer_enabled=default_config.buffer_enabled,
+                buffer_size=default_config.buffer_size,
+                auto_prepend=default_config.auto_prepend,
+                redis_enabled=default_config.redis_enabled,
+                redis_summary_ttl=default_config.redis_summary_ttl,
+                redis_facts_ttl=default_config.redis_facts_ttl,
+                vector_enabled=default_config.vector_enabled,
+                vector_top_k=default_config.vector_top_k,
+                vector_threshold=default_config.vector_threshold,
+            )
+        else:
+            MemoryConfiguration.objects.create(graph=graph)
 
         graph_data = GraphListSerializer(
             {
@@ -350,6 +368,76 @@ class GraphVersionLatestView(APIView):
 
         return success_response(version_data)
 
+
+class GraphMemoryConfigView(APIView):
+    """Get or update memory configuration for a graph."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, graph_id, user):
+        try:
+            return Graph.objects.get(id=graph_id, owner=user)
+        except Graph.DoesNotExist:
+            return None
+
+    def get_or_create_config(self, graph, user):
+        if hasattr(graph, "memory_config") and graph.memory_config:
+            return graph.memory_config
+
+        default_config = MemoryConfiguration.objects.filter(user=user).first()
+        if default_config:
+            return MemoryConfiguration.objects.create(
+                graph=graph,
+                buffer_enabled=default_config.buffer_enabled,
+                buffer_size=default_config.buffer_size,
+                auto_prepend=default_config.auto_prepend,
+                redis_enabled=default_config.redis_enabled,
+                redis_summary_ttl=default_config.redis_summary_ttl,
+                redis_facts_ttl=default_config.redis_facts_ttl,
+                vector_enabled=default_config.vector_enabled,
+                vector_top_k=default_config.vector_top_k,
+                vector_threshold=default_config.vector_threshold,
+            )
+
+        return MemoryConfiguration.objects.create(graph=graph)
+
+    def get(self, request: Request, graph_id) -> Response:
+        graph = self.get_object(graph_id, request.user)
+        if not graph:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Graph with id '{graph_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        config = self.get_or_create_config(graph, request.user)
+        data = MemoryConfigurationSerializer(config).data
+        return success_response(data)
+
+    def patch(self, request: Request, graph_id) -> Response:
+        graph = self.get_object(graph_id, request.user)
+        if not graph:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Graph with id '{graph_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        config = self.get_or_create_config(graph, request.user)
+        serializer = MemoryConfigurationSerializer(config, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        serializer.save()
+        return success_response(serializer.data)
 
 class GraphValidateView(APIView):
     """Validate a graph JSON without saving it."""

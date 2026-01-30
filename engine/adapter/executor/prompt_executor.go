@@ -106,6 +106,8 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		return port.NewErrorResult(domain.NewValidationError("client", "prompt executor requires LLM client")), nil
 	}
 
+	runCtx := port.RunContextFrom(ctx)
+
 	// Get prompt template (required)
 	promptTemplate, ok := node.Config["prompt_template"].(string)
 	if !ok || promptTemplate == "" {
@@ -113,7 +115,11 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	// Substitute variables in prompt
-	prompt := SubstituteTemplate(promptTemplate, state)
+	basePrompt := SubstituteTemplate(promptTemplate, state)
+	prompt := basePrompt
+	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend && runCtx.MemoryBuffer != nil {
+		prompt = buildPromptWithMemory(basePrompt, runCtx.MemoryBuffer, runCtx.CurrentSummary)
+	}
 
 	// Get optional system prompt
 	systemPrompt, _ := node.Config["system_prompt"].(string)
@@ -155,6 +161,23 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	if err != nil {
 		// Network/API errors are typically retryable
 		return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: %w", err), "LLM API error")), nil
+	}
+
+	// Capture messages in buffer
+	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.Enabled && runCtx.MemoryBuffer != nil {
+		runCtx.MemoryBuffer.Push(entity.Message{
+			Role:    "user",
+			Content: basePrompt,
+			NodeID:  node.ID,
+		})
+		runCtx.MemoryBuffer.Push(entity.Message{
+			Role:    "assistant",
+			Content: response.Content,
+			NodeID:  node.ID,
+		})
+		if runCtx.TrackMessage != nil {
+			runCtx.TrackMessage(2)
+		}
 	}
 
 	// Build output
@@ -222,4 +245,46 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	return port.NewSuccessResult(output), nil
+}
+
+func buildPromptWithMemory(basePrompt string, buffer *entity.MessageBuffer, summary *entity.Summary) string {
+	if buffer == nil && summary == nil {
+		return basePrompt
+	}
+
+	var messages []entity.Message
+	if buffer != nil {
+		messages = buffer.GetAll()
+	}
+	if len(messages) == 0 && (summary == nil || strings.TrimSpace(summary.Content) == "") {
+		return basePrompt
+	}
+
+	var sb strings.Builder
+	if summary != nil && strings.TrimSpace(summary.Content) != "" {
+		sb.WriteString("Summary of earlier conversation:\n")
+		sb.WriteString(strings.TrimSpace(summary.Content))
+		sb.WriteString("\n\n")
+		if len(summary.FactsExtracted) > 0 {
+			sb.WriteString("Key facts:\n")
+			for _, fact := range summary.FactsExtracted {
+				if fact.Key == "" && fact.Value == "" {
+					continue
+				}
+				sb.WriteString(fmt.Sprintf("- %s: %s\n", fact.Key, fact.Value))
+			}
+			sb.WriteString("\n")
+		}
+	}
+	if len(messages) > 0 {
+		sb.WriteString("Recent messages:\n")
+		for _, msg := range messages {
+			role := strings.Title(msg.Role)
+			sb.WriteString(fmt.Sprintf("%s: %s\n", role, msg.Content))
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("Current input:\n")
+	sb.WriteString(basePrompt)
+	return sb.String()
 }

@@ -102,6 +102,8 @@ class GrpcEngineClient(IEngineClient):
         run_id: UUID,
         graph_json: dict[str, Any],
         input_json: dict[str, Any],
+        memory_config_json: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         """
         Start a workflow run on the engine.
@@ -122,6 +124,8 @@ class GrpcEngineClient(IEngineClient):
                 graph_json=json.dumps(graph_json),
                 input_json=json.dumps(input_json) if input_json else "{}",
                 callback_url=self.callback_url,
+                memory_config_json=memory_config_json or "",
+                tenant_id=tenant_id or "",
             )
 
             logger.info(f"Starting run {run_id} on engine")
@@ -265,11 +269,19 @@ class MockEngineClient(IEngineClient):
         run_id: UUID,
         graph_json: dict[str, Any],
         input_json: dict[str, Any],
+        memory_config_json: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self.calls.append(
             (
                 "start_run",
-                {"run_id": run_id, "graph_json": graph_json, "input_json": input_json},
+                {
+                    "run_id": run_id,
+                    "graph_json": graph_json,
+                    "input_json": input_json,
+                    "memory_config_json": memory_config_json,
+                    "tenant_id": tenant_id,
+                },
             )
         )
         if self.start_run_error:

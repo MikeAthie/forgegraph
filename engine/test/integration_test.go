@@ -117,7 +117,7 @@ func TestSimpleTransformToOutput(t *testing.T) {
 	})
 
 	// Execute
-	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "")
+	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to start run: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestLinearWorkflow(t *testing.T) {
 	})
 
 	// Execute
-	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "")
+	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to start run: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestCancelRun(t *testing.T) {
 	})
 
 	// Start the run
-	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), "{}", "")
+	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to start run: %v", err)
 	}

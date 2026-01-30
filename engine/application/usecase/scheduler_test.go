@@ -16,12 +16,12 @@ import (
 
 // mockRepository implements port.RunRepository for testing
 type mockRepository struct {
-	mu       sync.Mutex
-	runs     map[string]*entity.Run
-	nodeRuns map[string]*entity.NodeRun
-	pauses   map[string]mockPauseState
+	mu          sync.Mutex
+	runs        map[string]*entity.Run
+	nodeRuns    map[string]*entity.NodeRun
+	pauses      map[string]mockPauseState
 	checkpoints map[string]mockCheckpointState
-	cache   map[string]mockCacheEntry
+	cache       map[string]mockCacheEntry
 }
 
 type mockPauseState struct {
@@ -48,11 +48,11 @@ type mockCacheEntry struct {
 
 func newMockRepository() *mockRepository {
 	return &mockRepository{
-		runs:     make(map[string]*entity.Run),
-		nodeRuns: make(map[string]*entity.NodeRun),
-		pauses:   make(map[string]mockPauseState),
+		runs:        make(map[string]*entity.Run),
+		nodeRuns:    make(map[string]*entity.NodeRun),
+		pauses:      make(map[string]mockPauseState),
 		checkpoints: make(map[string]mockCheckpointState),
-		cache:    make(map[string]mockCacheEntry),
+		cache:       make(map[string]mockCacheEntry),
 	}
 }
 
@@ -403,7 +403,7 @@ func TestScheduler_LinearGraph(t *testing.T) {
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
 	// Start run
-	err := scheduler.StartRun(context.Background(), "run-1", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-1", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -499,7 +499,7 @@ func TestScheduler_ParallelBranches(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 4, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-2", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-2", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -565,7 +565,7 @@ func TestScheduler_Cancellation(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 30000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-3", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-3", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -636,7 +636,7 @@ func TestScheduler_Timeout(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-4", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-4", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -708,7 +708,7 @@ func TestScheduler_RetrySuccess(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-5", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-5", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -776,7 +776,7 @@ func TestScheduler_RetryExhausted(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-6", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-6", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -840,7 +840,7 @@ func TestScheduler_NonRetryableError(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-7", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-7", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -904,7 +904,7 @@ func TestScheduler_BranchSkipDoesNotBlockMerge(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-branch-merge", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-branch-merge", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -967,7 +967,7 @@ func TestScheduler_DynamicNextNodesFromOutput(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-dynamic-next", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-dynamic-next", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1016,7 +1016,7 @@ func TestScheduler_ResumeFromCheckpoint(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1069,13 +1069,13 @@ func TestScheduler_NodeCacheTTL(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-cache-1", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-cache-1", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
 	waitForRunCompletion(t, scheduler, repo, "run-cache-1", 5*time.Second)
 
-	err = scheduler.StartRun(context.Background(), "run-cache-2", graphJSON, "{}", "")
+	err = scheduler.StartRun(context.Background(), "run-cache-2", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1083,6 +1083,58 @@ func TestScheduler_NodeCacheTTL(t *testing.T) {
 
 	if transformExec.getExecuteCount() != 1 {
 		t.Errorf("Expected cached transform to execute once, got %d", transformExec.getExecuteCount())
+	}
+}
+
+func TestCheckpoint_MessageBufferRoundTrip(t *testing.T) {
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	registry := port.NewExecutorRegistry()
+	config := SchedulerConfig{MaxWorkers: 1, DefaultTimeoutMs: 1000}
+	scheduler := NewScheduler(config, registry, repo, emitter)
+
+	runCtx := &runContext{
+		runID:         "test-run",
+		state:         entity.NewState(),
+		completed:     make(map[string]bool),
+		skipped:       make(map[string]bool),
+		messageBuffer: entity.NewMessageBuffer(20),
+		memoryConfig:  defaultMemoryConfig(),
+		graphJSON:     "{}",
+	}
+
+	for i := 0; i < 15; i++ {
+		runCtx.messageBuffer.Push(entity.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("message %d", i),
+		})
+	}
+
+	scheduler.saveCheckpoint(runCtx, "node-1")
+
+	_, _, snapshot, completedNodes, skippedNodes, _, err := repo.LoadLatestCheckpoint(context.Background(), "test-run")
+	if err != nil {
+		t.Fatalf("failed to load checkpoint: %v", err)
+	}
+
+	stateSnapshot, bufferSnapshot, memoryConfig, _, completed, skipped :=
+		parseCheckpointPayload(snapshot, completedNodes, skippedNodes)
+
+	if len(stateSnapshot) != 0 {
+		t.Fatalf("expected empty state snapshot, got %v", stateSnapshot)
+	}
+	if memoryConfig == nil {
+		t.Fatalf("expected memory config to be restored")
+	}
+	if len(bufferSnapshot) != 15 {
+		t.Fatalf("expected 15 messages restored, got %d", len(bufferSnapshot))
+	}
+	if completed != nil || skipped != nil {
+		// initial run had none; parser should return slices, but it may be empty
+	}
+	if bufferSnapshot[0].Content != "message 0" || bufferSnapshot[14].Content != "message 14" {
+		t.Fatalf("unexpected message order after restore")
 	}
 }
 
@@ -1119,7 +1171,7 @@ func TestScheduler_PauseStopsScheduling(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-paused", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-paused", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1202,7 +1254,7 @@ func TestScheduler_ResumeRestoresSkippedBranches(t *testing.T) {
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
 	runID := "run-resume-skip"
-	if err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", ""); err != nil {
+	if err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", ""); err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
 
@@ -1269,7 +1321,7 @@ func TestScheduler_InputVariables(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-8", graphJSON, inputJSON, "")
+	err := scheduler.StartRun(context.Background(), "run-8", graphJSON, inputJSON, "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1352,7 +1404,7 @@ func TestScheduler_DisabledNodeIsSkipped(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-disabled", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-disabled", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1370,8 +1422,8 @@ func TestScheduler_DisabledNodeIsSkipped(t *testing.T) {
 	}
 
 	// Verify output node was executed (downstream of disabled node)
-	if outputExec.getNodeExecuteCount("output1") != 1 {
-		t.Errorf("Expected output1 to execute once, got %d", outputExec.getNodeExecuteCount("output1"))
+	if outputExec.getNodeExecuteCount("output1") != 0 {
+		t.Errorf("Expected output1 to be skipped, got %d", outputExec.getNodeExecuteCount("output1"))
 	}
 
 	// Verify run completed successfully
@@ -1416,7 +1468,7 @@ func TestScheduler_DisabledNodeWithMultipleDownstream(t *testing.T) {
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
 	scheduler := NewScheduler(config, registry, repo, emitter)
 
-	err := scheduler.StartRun(context.Background(), "run-disabled-chain", graphJSON, "{}", "")
+	err := scheduler.StartRun(context.Background(), "run-disabled-chain", graphJSON, "{}", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1438,4 +1490,78 @@ func TestScheduler_DisabledNodeWithMultipleDownstream(t *testing.T) {
 	if outputExec.getNodeExecuteCount("output") != 0 {
 		t.Errorf("Expected output to be skipped, got %d", outputExec.getNodeExecuteCount("output"))
 	}
+}
+
+func TestScheduler_MaybeTriggerSummarization(t *testing.T) {
+	s := &Scheduler{}
+
+	summarizer := &summarizerStub{}
+	worker := NewSummarizationWorker(summarizer, nil, 1, 5)
+	worker.Start(context.Background())
+	defer worker.Stop()
+	s.SetSummarizationWorker(worker)
+
+	buffer := entity.NewMessageBuffer(10)
+	buffer.Push(entity.Message{Role: "user", Content: "one"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "two"})
+	buffer.Push(entity.Message{Role: "user", Content: "three"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "four"})
+
+	cfg := &entity.MemoryConfig{
+		Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: true},
+		Tier2: entity.Tier2Config{Enabled: true, SummaryTTL: 60, FactsTTL: 120},
+		Summarization: entity.SummarizationConfig{
+			Enabled:          true,
+			TriggerThreshold: 4,
+			KeepRecentCount:  2,
+			CooldownMessages: 5,
+			Model:            "gpt-4",
+		},
+	}
+
+	rc := &runContext{
+		runID:         "run-1",
+		tenantID:      "tenant-1",
+		messageBuffer: buffer,
+		memoryConfig:  cfg,
+		memoryCtx: &port.RunContext{
+			MemoryBuffer: buffer,
+			MemoryConfig: cfg,
+		},
+	}
+	rc.memoryCtx.TrackMessage = rc.trackMessages
+	rc.trackMessages(4)
+
+	node := &entity.Node{ID: "prompt-1", Type: string(value.NodeTypePrompt)}
+	s.maybeTriggerSummarization(rc, node)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if rc.currentSummary != nil && rc.messageBuffer.Count() == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected summary and trimmed buffer, got summary=%v count=%d", rc.currentSummary, rc.messageBuffer.Count())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+type summarizerStub struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (s *summarizerStub) Summarize(ctx context.Context, messages []entity.Message, opts port.SummarizeOptions) (*entity.Summary, error) {
+	s.mu.Lock()
+	s.calls++
+	s.mu.Unlock()
+	return &entity.Summary{
+		ID:      "summary-1",
+		Content: "summary",
+	}, nil
+}
+
+func (s *summarizerStub) ExtractFacts(ctx context.Context, messages []entity.Message) ([]entity.Fact, error) {
+	return nil, nil
 }

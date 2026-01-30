@@ -20,35 +20,36 @@ import (
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/service"
 	"github.com/forgegraph/engine/domain/value"
+	"github.com/forgegraph/engine/infrastructure/metrics"
 )
 
 // CheckpointMode controls durable checkpoint behavior.
 type CheckpointMode string
 
 const (
-	CheckpointModeNone CheckpointMode = "none"
-	CheckpointModeNode CheckpointMode = "node"
+	CheckpointModeNone  CheckpointMode = "none"
+	CheckpointModeNode  CheckpointMode = "node"
 	CheckpointModeBatch CheckpointMode = "batch"
 )
 
 // SchedulerConfig holds scheduler configuration
 type SchedulerConfig struct {
-	MaxWorkers       int // Maximum concurrent node executions
-	DefaultTimeoutMs int // Default timeout for node execution
-	CheckpointMode   CheckpointMode
-	CheckpointBatchSize int // Save checkpoint every N nodes when mode=batch
-	CheckpointIntervalMs int // Save checkpoint at least every N ms when mode=batch
+	MaxWorkers             int // Maximum concurrent node executions
+	DefaultTimeoutMs       int // Default timeout for node execution
+	CheckpointMode         CheckpointMode
+	CheckpointBatchSize    int // Save checkpoint every N nodes when mode=batch
+	CheckpointIntervalMs   int // Save checkpoint at least every N ms when mode=batch
 	CacheDefaultTTLSeconds int
 }
 
 // DefaultSchedulerConfig returns sensible defaults
 func DefaultSchedulerConfig() SchedulerConfig {
 	return SchedulerConfig{
-		MaxWorkers:       10,
-		DefaultTimeoutMs: 30000, // 30 seconds
-		CheckpointMode:   CheckpointModeNode,
-		CheckpointBatchSize: 10,
-		CheckpointIntervalMs: 0,
+		MaxWorkers:             10,
+		DefaultTimeoutMs:       30000, // 30 seconds
+		CheckpointMode:         CheckpointModeNode,
+		CheckpointBatchSize:    10,
+		CheckpointIntervalMs:   0,
 		CacheDefaultTTLSeconds: 3600,
 	}
 }
@@ -60,6 +61,7 @@ type Scheduler struct {
 	repository port.RunRepository
 	emitter    port.EventEmitter
 	conditions *service.ConditionEvaluator
+	summarizer *SummarizationWorker
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -95,16 +97,30 @@ func NewScheduler(
 	}
 }
 
+// SetSummarizationWorker attaches an async summarization worker.
+func (s *Scheduler) SetSummarizationWorker(worker *SummarizationWorker) {
+	s.summarizer = worker
+}
+
 // runContext holds runtime state for a single run
 type runContext struct {
-	runID       string
-	ctx         context.Context
-	cancel      context.CancelFunc
-	plan        *service.ExecutionPlan
-	state       *entity.State
-	callbackURL string
-	graphJSON   string // Original graph JSON for pause/resume
-	initialNodes []string
+	runID                string
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	plan                 *service.ExecutionPlan
+	state                *entity.State
+	callbackURL          string
+	graphJSON            string // Original graph JSON for pause/resume
+	initialNodes         []string
+	tenantID             string
+	messageBuffer        *entity.MessageBuffer
+	memoryConfig         *entity.MemoryConfig
+	currentSummary       *entity.Summary
+	memoryCtx            *port.RunContext
+	summaryMu            sync.Mutex
+	messagesSinceSummary int
+	cooldownRemaining    int
+	summaryInFlight      bool
 
 	// Synchronization
 	pendingMu sync.Mutex
@@ -125,15 +141,64 @@ type runContext struct {
 	currentNodeMu sync.RWMutex
 	currentNodeID string
 
-	checkpointSeq int64
+	checkpointSeq    int64
 	lastCheckpointAt time.Time
 
 	stateSchema *service.SchemaValidator
 	schemaMode  string
 }
 
+func (rc *runContext) trackMessages(count int) {
+	if count <= 0 {
+		return
+	}
+	rc.summaryMu.Lock()
+	defer rc.summaryMu.Unlock()
+	rc.messagesSinceSummary += count
+	if rc.cooldownRemaining > 0 {
+		rc.cooldownRemaining -= count
+		if rc.cooldownRemaining < 0 {
+			rc.cooldownRemaining = 0
+		}
+	}
+}
+
+func (rc *runContext) canSummarize(cfg entity.SummarizationConfig) bool {
+	rc.summaryMu.Lock()
+	defer rc.summaryMu.Unlock()
+	if rc.summaryInFlight {
+		return false
+	}
+	if rc.cooldownRemaining > 0 {
+		return false
+	}
+	return rc.messagesSinceSummary >= cfg.TriggerThreshold
+}
+
+func (rc *runContext) markSummaryInFlight() {
+	rc.summaryMu.Lock()
+	rc.summaryInFlight = true
+	rc.summaryMu.Unlock()
+}
+
+func (rc *runContext) applySummary(summary *entity.Summary, cfg entity.SummarizationConfig) {
+	rc.summaryMu.Lock()
+	rc.currentSummary = summary
+	rc.memoryCtx.CurrentSummary = summary
+	rc.messagesSinceSummary = 0
+	rc.cooldownRemaining = cfg.CooldownMessages
+	rc.summaryInFlight = false
+	rc.summaryMu.Unlock()
+}
+
+func (rc *runContext) clearSummaryInFlight() {
+	rc.summaryMu.Lock()
+	rc.summaryInFlight = false
+	rc.summaryMu.Unlock()
+}
+
 // StartRun begins executing a workflow
-func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string) error {
+func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string, memoryConfigJSON string, tenantID string) error {
 	type checkpointData struct {
 		nodeID         string
 		stepIndex      int
@@ -141,6 +206,9 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		completedNodes []string
 		skippedNodes   []string
 		graphJSON      string
+		messageBuffer  []entity.Message
+		memoryConfig   *entity.MemoryConfig
+		currentSummary *entity.Summary
 	}
 
 	var checkpoint *checkpointData
@@ -150,13 +218,17 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 			if checkpointGraphJSON != "" {
 				graphJSON = checkpointGraphJSON
 			}
+			stateSnapshot, bufferSnapshot, memoryConfig, summary, completed, skipped := parseCheckpointPayload(snapshot, completedNodes, skippedNodes)
 			checkpoint = &checkpointData{
 				nodeID:         nodeID,
 				stepIndex:      stepIndex,
-				stateSnapshot:  snapshot,
-				completedNodes: completedNodes,
-				skippedNodes:   skippedNodes,
+				stateSnapshot:  stateSnapshot,
+				completedNodes: completed,
+				skippedNodes:   skipped,
 				graphJSON:      checkpointGraphJSON,
+				messageBuffer:  bufferSnapshot,
+				memoryConfig:   memoryConfig,
+				currentSummary: summary,
 			}
 		} else if !errors.Is(err, domain.ErrCheckpointNotFound) && !errors.Is(err, domain.ErrRunNotFound) {
 			return fmt.Errorf("failed to load checkpoint: %w", err)
@@ -212,16 +284,44 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		return fmt.Errorf("invalid state_schema: %w", err)
 	}
 
+	// Parse memory configuration
+	parsedMemoryConfig := parseMemoryConfig(memoryConfigJSON)
+	if checkpoint != nil && checkpoint.memoryConfig != nil {
+		parsedMemoryConfig = checkpoint.memoryConfig
+	}
+
+	// Initialize buffer with configured size
+	var messageBuffer *entity.MessageBuffer
+	if parsedMemoryConfig.Tier1.Enabled {
+		bufferSize := parsedMemoryConfig.Tier1.BufferSize
+		if bufferSize <= 0 {
+			bufferSize = 20
+		}
+		messageBuffer = entity.NewMessageBuffer(bufferSize)
+		if checkpoint != nil && len(checkpoint.messageBuffer) > 0 {
+			messageBuffer.Restore(checkpoint.messageBuffer)
+		}
+	}
+
 	// Create run context
 	runCtx, cancel := context.WithCancel(ctx)
 	rc := &runContext{
-		runID:       runID,
-		ctx:         runCtx,
-		cancel:      cancel,
-		plan:        plan,
-		state:       state,
-		callbackURL: callbackURL,
-		graphJSON:   graphJSON,
+		runID:         runID,
+		ctx:           runCtx,
+		cancel:        cancel,
+		plan:          plan,
+		state:         state,
+		callbackURL:   callbackURL,
+		graphJSON:     graphJSON,
+		tenantID:      tenantID,
+		messageBuffer: messageBuffer,
+		memoryConfig:  parsedMemoryConfig,
+		currentSummary: func() *entity.Summary {
+			if checkpoint != nil {
+				return checkpoint.currentSummary
+			}
+			return nil
+		}(),
 		stateSchema: stateSchema,
 		schemaMode:  schemaMode,
 		pending:     plan.CloneIndegree(),
@@ -230,6 +330,15 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		running:     make(map[string]bool),
 		workChan:    make(chan string, len(plan.NodeMap)),
 	}
+	rc.memoryCtx = &port.RunContext{
+		MemoryBuffer:   rc.messageBuffer,
+		MemoryConfig:   rc.memoryConfig,
+		CurrentSummary: rc.currentSummary,
+		TrackMessage:   rc.trackMessages,
+	}
+	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
+	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
+	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
 
 	if checkpoint != nil {
 		rc.checkpointSeq = int64(checkpoint.stepIndex)
@@ -716,7 +825,82 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 	// Determine next nodes and enqueue them
 	s.enqueueNextNodes(rc, node, result)
 
+	// Trigger summarization if configured
+	s.maybeTriggerSummarization(rc, node)
+
 	s.saveCheckpoint(rc, nodeID)
+}
+
+func (s *Scheduler) maybeTriggerSummarization(rc *runContext, node *entity.Node) {
+	if s.summarizer == nil || rc == nil || rc.memoryConfig == nil || rc.messageBuffer == nil {
+		return
+	}
+	if node == nil || node.Type != string(value.NodeTypePrompt) {
+		return
+	}
+
+	cfg := rc.memoryConfig.Summarization
+	if !cfg.Enabled || cfg.TriggerThreshold <= 0 {
+		return
+	}
+
+	if !rc.canSummarize(cfg) {
+		return
+	}
+
+	messages := rc.messageBuffer.Snapshot()
+	if len(messages) == 0 {
+		return
+	}
+
+	rc.markSummaryInFlight()
+
+	req := SummarizationRequest{
+		RunID:             rc.runID,
+		TenantID:          rc.tenantID,
+		Messages:          messages,
+		Options:           port.SummarizeOptions{Model: cfg.Model, PreserveFacts: true},
+		SummaryTTLSeconds: rc.memoryConfig.Tier2.SummaryTTL,
+		FactsTTLSeconds:   rc.memoryConfig.Tier2.FactsTTL,
+		Callback: func(summary *entity.Summary, err error) {
+			if err != nil {
+				rc.clearSummaryInFlight()
+				metrics.RecordSummarizationTrigger("error")
+				log.Printf("Summarization failed for run %s: %v", rc.runID, err)
+				return
+			}
+
+			rc.applySummary(summary, cfg)
+			s.trimMemoryBuffer(rc, cfg.KeepRecentCount)
+			metrics.RecordSummarizationTrigger("success")
+		},
+	}
+
+	if err := s.summarizer.Submit(req); err != nil {
+		rc.clearSummaryInFlight()
+		metrics.RecordSummarizationTrigger("queue_full")
+		log.Printf("Summarization queue full for run %s: %v", rc.runID, err)
+		return
+	}
+	metrics.RecordSummarizationTrigger("submitted")
+}
+
+func (s *Scheduler) trimMemoryBuffer(rc *runContext, keepRecent int) {
+	if rc == nil || rc.messageBuffer == nil {
+		return
+	}
+
+	if keepRecent <= 0 {
+		rc.messageBuffer.Clear()
+		return
+	}
+
+	messages := rc.messageBuffer.GetAll()
+	if len(messages) <= keepRecent {
+		return
+	}
+
+	rc.messageBuffer.RemoveFirst(len(messages) - keepRecent)
 }
 
 func (s *Scheduler) isCheckpointingEnabled() bool {
@@ -734,7 +918,6 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 			return
 		}
 	}
-	stateSnapshot := rc.state.Snapshot()
 
 	rc.pendingMu.Lock()
 	completedNodes := make([]string, 0, len(rc.completed))
@@ -747,7 +930,22 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 	}
 	rc.pendingMu.Unlock()
 
-	if err := s.repository.SaveCheckpoint(context.Background(), rc.runID, nodeID, stepIndex, stateSnapshot, completedNodes, skippedNodes, rc.graphJSON); err != nil {
+	checkpointPayload := map[string]any{
+		"state":     rc.state.Snapshot(),
+		"completed": completedNodes,
+		"skipped":   skippedNodes,
+	}
+	if rc.messageBuffer != nil {
+		checkpointPayload["message_buffer"] = rc.messageBuffer.Snapshot()
+	}
+	if rc.memoryConfig != nil {
+		checkpointPayload["memory_config"] = rc.memoryConfig
+	}
+	if rc.currentSummary != nil {
+		checkpointPayload["current_summary"] = rc.currentSummary
+	}
+
+	if err := s.repository.SaveCheckpoint(context.Background(), rc.runID, nodeID, stepIndex, checkpointPayload, completedNodes, skippedNodes, rc.graphJSON); err != nil {
 		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
 		return
 	}
@@ -871,6 +1069,243 @@ func coerceInt(value any) int {
 		}
 	}
 	return 0
+}
+
+func coerceBool(value any) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		if v == "true" || v == "1" {
+			return true, true
+		}
+		if v == "false" || v == "0" {
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func coerceFloat(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		if parsed, err := v.Float64(); err == nil {
+			return parsed, true
+		}
+	case string:
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			return parsed, true
+		}
+	}
+	return 0, false
+}
+
+func defaultMemoryConfig() *entity.MemoryConfig {
+	return &entity.MemoryConfig{
+		Tier1: entity.Tier1Config{
+			Enabled:     true,
+			BufferSize:  20,
+			AutoPrepend: true,
+		},
+		Tier2: entity.Tier2Config{
+			Enabled:    false,
+			Namespace:  "",
+			SummaryTTL: 86400,
+			FactsTTL:   604800,
+		},
+		Tier3: entity.Tier3Config{
+			Enabled:   false,
+			TopK:      5,
+			Threshold: 0.7,
+		},
+		Summarization: entity.SummarizationConfig{
+			Enabled:          false,
+			TriggerThreshold: 30,
+			KeepRecentCount:  10,
+			CooldownMessages: 10,
+			Model:            "gpt-4",
+		},
+	}
+}
+
+func parseMemoryConfig(memoryConfigJSON string) *entity.MemoryConfig {
+	cfg := defaultMemoryConfig()
+	if memoryConfigJSON == "" {
+		return cfg
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(memoryConfigJSON), &raw); err != nil {
+		log.Printf("Invalid memory config JSON, using defaults: %v", err)
+		return cfg
+	}
+
+	if tier1Raw, ok := raw["tier1"].(map[string]any); ok {
+		if v, ok := coerceBool(tier1Raw["enabled"]); ok {
+			cfg.Tier1.Enabled = v
+		}
+		if v := coerceInt(tier1Raw["buffer_size"]); v > 0 {
+			cfg.Tier1.BufferSize = v
+		}
+		if v, ok := coerceBool(tier1Raw["auto_prepend"]); ok {
+			cfg.Tier1.AutoPrepend = v
+		}
+	}
+
+	if tier2Raw, ok := raw["tier2"].(map[string]any); ok {
+		if v, ok := coerceBool(tier2Raw["enabled"]); ok {
+			cfg.Tier2.Enabled = v
+		}
+		if v, ok := tier2Raw["namespace"].(string); ok {
+			cfg.Tier2.Namespace = v
+		}
+		if v := coerceInt(tier2Raw["summary_ttl_seconds"]); v > 0 {
+			cfg.Tier2.SummaryTTL = v
+		}
+		if v := coerceInt(tier2Raw["facts_ttl_seconds"]); v > 0 {
+			cfg.Tier2.FactsTTL = v
+		}
+	}
+
+	if tier3Raw, ok := raw["tier3"].(map[string]any); ok {
+		if v, ok := coerceBool(tier3Raw["enabled"]); ok {
+			cfg.Tier3.Enabled = v
+		}
+		if v := coerceInt(tier3Raw["top_k"]); v > 0 {
+			cfg.Tier3.TopK = v
+		}
+		if v, ok := coerceFloat(tier3Raw["threshold"]); ok && v > 0 {
+			cfg.Tier3.Threshold = v
+		}
+	}
+
+	if summarizationRaw, ok := raw["summarization"].(map[string]any); ok {
+		if v, ok := coerceBool(summarizationRaw["enabled"]); ok {
+			cfg.Summarization.Enabled = v
+		}
+		if v := coerceInt(summarizationRaw["trigger_threshold"]); v > 0 {
+			cfg.Summarization.TriggerThreshold = v
+		}
+		if v := coerceInt(summarizationRaw["keep_recent_count"]); v > 0 {
+			cfg.Summarization.KeepRecentCount = v
+		}
+		if v := coerceInt(summarizationRaw["cooldown_messages"]); v > 0 {
+			cfg.Summarization.CooldownMessages = v
+		}
+		if v, ok := summarizationRaw["model"].(string); ok && v != "" {
+			cfg.Summarization.Model = v
+		}
+	}
+
+	return cfg
+}
+
+func parseCheckpointPayload(stateSnapshot map[string]any, completedNodes []string, skippedNodes []string) (map[string]any, []entity.Message, *entity.MemoryConfig, *entity.Summary, []string, []string) {
+	if stateSnapshot == nil {
+		return map[string]any{}, nil, nil, nil, completedNodes, skippedNodes
+	}
+
+	rawState, hasState := stateSnapshot["state"].(map[string]any)
+	if !hasState {
+		return stateSnapshot, nil, nil, nil, completedNodes, skippedNodes
+	}
+
+	parsedCompleted := completedNodes
+	if rawCompleted, ok := stateSnapshot["completed"].([]any); ok {
+		parsedCompleted = toStringSlice(rawCompleted)
+	}
+
+	parsedSkipped := skippedNodes
+	if rawSkipped, ok := stateSnapshot["skipped"].([]any); ok {
+		parsedSkipped = toStringSlice(rawSkipped)
+	}
+
+	var bufferSnapshot []entity.Message
+	if rawBuffer, ok := stateSnapshot["message_buffer"]; ok {
+		bufferSnapshot = decodeMessages(rawBuffer)
+	}
+
+	var memoryConfig *entity.MemoryConfig
+	if rawConfig, ok := stateSnapshot["memory_config"]; ok {
+		memoryConfig = decodeMemoryConfig(rawConfig)
+	}
+
+	var summary *entity.Summary
+	if rawSummary, ok := stateSnapshot["current_summary"]; ok {
+		summary = decodeSummary(rawSummary)
+	}
+
+	return rawState, bufferSnapshot, memoryConfig, summary, parsedCompleted, parsedSkipped
+}
+
+func toStringSlice(raw []any) []string {
+	out := make([]string, 0, len(raw))
+	for _, value := range raw {
+		if str, ok := value.(string); ok && str != "" {
+			out = append(out, str)
+		}
+	}
+	return out
+}
+
+func decodeMessages(raw any) []entity.Message {
+	bytes, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var msgs []entity.Message
+	if err := json.Unmarshal(bytes, &msgs); err != nil {
+		return nil
+	}
+	return msgs
+}
+
+func decodeMemoryConfig(raw any) *entity.MemoryConfig {
+	bytes, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var cfg entity.MemoryConfig
+	if err := json.Unmarshal(bytes, &cfg); err != nil {
+		return nil
+	}
+	// Ensure defaults for missing numeric fields.
+	if cfg.Tier1.BufferSize <= 0 {
+		cfg.Tier1.BufferSize = 20
+	}
+	if cfg.Tier2.SummaryTTL <= 0 {
+		cfg.Tier2.SummaryTTL = 86400
+	}
+	if cfg.Tier2.FactsTTL <= 0 {
+		cfg.Tier2.FactsTTL = 604800
+	}
+	if cfg.Tier3.TopK <= 0 {
+		cfg.Tier3.TopK = 5
+	}
+	if cfg.Tier3.Threshold <= 0 {
+		cfg.Tier3.Threshold = 0.7
+	}
+	return &cfg
+}
+
+func decodeSummary(raw any) *entity.Summary {
+	bytes, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var summary entity.Summary
+	if err := json.Unmarshal(bytes, &summary); err != nil {
+		return nil
+	}
+	return &summary
 }
 
 // decrementAndEnqueue reduces pending count and enqueues if ready
@@ -1120,21 +1555,36 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 
 	// Create run context for resumed execution
 	runCtx, cancel := context.WithCancel(ctx)
-	rc := &runContext{
-		runID:     runID,
-		ctx:       runCtx,
-		cancel:    cancel,
-		plan:      plan,
-		state:     state,
-		graphJSON: graphJSON,
-		stateSchema: stateSchema,
-		schemaMode:  schemaMode,
-		pending:   plan.CloneIndegree(),
-		completed: make(map[string]bool),
-		skipped:   make(map[string]bool),
-		running:   make(map[string]bool),
-		workChan:  make(chan string, len(plan.NodeMap)),
+	resumeMemoryConfig := defaultMemoryConfig()
+	var resumeBuffer *entity.MessageBuffer
+	if resumeMemoryConfig.Tier1.Enabled {
+		resumeBuffer = entity.NewMessageBuffer(resumeMemoryConfig.Tier1.BufferSize)
 	}
+	rc := &runContext{
+		runID:         runID,
+		ctx:           runCtx,
+		cancel:        cancel,
+		plan:          plan,
+		state:         state,
+		graphJSON:     graphJSON,
+		tenantID:      "",
+		messageBuffer: resumeBuffer,
+		memoryConfig:  resumeMemoryConfig,
+		stateSchema:   stateSchema,
+		schemaMode:    schemaMode,
+		pending:       plan.CloneIndegree(),
+		completed:     make(map[string]bool),
+		skipped:       make(map[string]bool),
+		running:       make(map[string]bool),
+		workChan:      make(chan string, len(plan.NodeMap)),
+	}
+	rc.memoryCtx = &port.RunContext{
+		MemoryBuffer:   rc.messageBuffer,
+		MemoryConfig:   rc.memoryConfig,
+		CurrentSummary: rc.currentSummary,
+		TrackMessage:   rc.trackMessages,
+	}
+	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 
 	if s.isCheckpointingEnabled() {
 		if _, stepIndex, _, _, _, _, err := s.repository.LoadLatestCheckpoint(ctx, runID); err == nil {
