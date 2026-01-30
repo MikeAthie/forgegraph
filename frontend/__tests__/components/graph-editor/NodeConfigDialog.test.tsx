@@ -68,8 +68,8 @@ describe("NodeConfigDialog", () => {
         />
       );
 
-      const dialog = screen.getByTestId("dialog");
-      expect(dialog).toHaveAttribute("data-open", "false");
+      const dialogs = screen.getAllByTestId("dialog");
+      expect(dialogs.every((dialog) => dialog.getAttribute("data-open") === "false")).toBe(true);
     });
 
     it("should render when isOpen is true", () => {
@@ -82,8 +82,8 @@ describe("NodeConfigDialog", () => {
         />
       );
 
-      const dialog = screen.getByTestId("dialog");
-      expect(dialog).toHaveAttribute("data-open", "true");
+      const dialogs = screen.getAllByTestId("dialog");
+      expect(dialogs.some((dialog) => dialog.getAttribute("data-open") === "true")).toBe(true);
       expect(screen.getByTestId("dialog-content")).toBeInTheDocument();
     });
 

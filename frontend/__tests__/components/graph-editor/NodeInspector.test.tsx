@@ -655,12 +655,10 @@ describe("NodeInspector", () => {
     };
 
     it("should show URL validation error for invalid URL", async () => {
-      const user = userEvent.setup();
       render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
 
       const urlInput = screen.getByPlaceholderText(/https:\/\/api.example.com/i);
-      await user.type(urlInput, "not-a-valid-url");
-      fireEvent.blur(urlInput);
+      fireEvent.blur(urlInput, { target: { value: "not-a-valid-url" } });
 
       await waitFor(() => {
         expect(screen.getByText(/Invalid URL format/i)).toBeInTheDocument();
@@ -668,12 +666,10 @@ describe("NodeInspector", () => {
     });
 
     it("should not show error for valid URL", async () => {
-      const user = userEvent.setup();
       render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
 
       const urlInput = screen.getByPlaceholderText(/https:\/\/api.example.com/i);
-      await user.type(urlInput, "https://api.example.com/test");
-      fireEvent.blur(urlInput);
+      fireEvent.blur(urlInput, { target: { value: "https://api.example.com/test" } });
 
       await waitFor(() => {
         expect(screen.queryByText(/Invalid URL format/i)).not.toBeInTheDocument();

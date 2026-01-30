@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -70,26 +70,28 @@ export function NodeConfigDialog({
   isOpen,
   onClose,
   nodeType,
-  initialConfig = {},
+  initialConfig,
   onSave,
   FormComponent,
 }: NodeConfigDialogProps) {
-  const [config, setConfig] = useState<NodeConfig>(initialConfig);
+  const fallbackConfigRef = useRef<NodeConfig>({});
+  const resolvedInitialConfig = initialConfig ?? fallbackConfigRef.current;
+  const [config, setConfig] = useState<NodeConfig>(resolvedInitialConfig);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [label, setLabel] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Reset state when dialog opens with new node type
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isOpen && nodeType) {
-      setConfig(initialConfig);
+      setConfig(resolvedInitialConfig);
       setErrors({});
       setLabel(NODE_TYPE_INFO[nodeType]?.label || nodeType);
       setIsDirty(false);
       setShowCloseConfirm(false);
     }
-  }, [isOpen, nodeType, initialConfig]);
+  }, [isOpen, nodeType, resolvedInitialConfig]);
 
   const handleConfigChange = useCallback((newConfig: NodeConfig) => {
     setConfig(newConfig);
@@ -169,8 +171,11 @@ export function NodeConfigDialog({
 
           {/* Node Label */}
           <div className="px-1">
-            <label className="text-sm font-medium">Node Label</label>
+            <label className="text-sm font-medium" htmlFor="node-label">
+              Node Label
+            </label>
             <input
+              id="node-label"
               type="text"
               value={label}
               onChange={(e) => {
