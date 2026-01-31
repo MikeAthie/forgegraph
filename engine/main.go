@@ -141,7 +141,7 @@ func (s *EngineServer) StartRun(ctx context.Context, req *StartRunRequest) (*Sta
 	}
 
 	// Start the run
-	err := s.scheduler.StartRun(ctx, req.RunId, req.GraphJson, req.InputJson, req.CallbackUrl, req.MemoryConfigJson, req.TenantId)
+	err := s.scheduler.StartRun(ctx, req.RunId, req.GraphJson, req.InputJson, req.CallbackUrl, req.MemoryConfigJson, req.TenantId, req.SessionId)
 	if err != nil {
 		s.logger.Error("start_run_failed", "run_id", req.RunId, "error", err.Error())
 		return &StartRunResponse{
@@ -359,7 +359,7 @@ func main() {
 		CheckpointIntervalMs:   cfg.CheckpointIntervalMs,
 		CacheDefaultTTLSeconds: cfg.CacheTTLSeconds,
 	}
-	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter)
+	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter, memoryStore)
 	log.Info("scheduler_initialized")
 
 	if cfg.MemoryGRPCHost != "" && cfg.MemoryGRPCPort != "" {

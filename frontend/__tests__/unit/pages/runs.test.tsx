@@ -2,7 +2,7 @@
  * Unit tests for Runs pages (Phase 4 observability).
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/router";
 
@@ -16,6 +16,10 @@ jest.mock("next/router");
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
+
+const actClick = (element: HTMLElement) => act(async () => userEvent.click(element));
+const actSelect = (element: HTMLElement, value: string) =>
+  act(async () => userEvent.selectOptions(element, value));
 
 describe("Runs List Page", () => {
   beforeEach(() => {
@@ -227,7 +231,7 @@ describe("Runs List Page", () => {
       });
 
       const viewLink = screen.getByRole("link", { name: /view/i });
-      await userEvent.click(viewLink);
+      await actClick(viewLink);
 
       expect(mockPush).toHaveBeenCalledWith("/runs/run1");
     });
@@ -262,7 +266,7 @@ describe("Runs List Page", () => {
 
       const row = screen.getByText("Graph 1").closest("tr");
       if (row) {
-        await userEvent.click(row);
+        await actClick(row);
         expect(mockPush).toHaveBeenCalledWith("/runs/run1");
       }
     });
@@ -297,7 +301,7 @@ describe("Runs List Page", () => {
       // Find and interact with status filter
       const statusFilter = screen.queryByLabelText(/filter.*status/i);
       if (statusFilter) {
-        await userEvent.selectOptions(statusFilter, "succeeded");
+        await actSelect(statusFilter, "succeeded");
 
         // After filtering, should only show succeeded runs
         await waitFor(() => {
@@ -493,7 +497,7 @@ describe("Run Detail Page", () => {
       const initialDuration = screen.getByText(/\d+[ms|s]/);
       expect(initialDuration).toBeInTheDocument();
 
-      jest.advanceTimersByTime(1000);
+      act(() => { jest.advanceTimersByTime(1000); });
 
       // Duration should have changed
       await waitFor(() => {
@@ -750,7 +754,7 @@ describe("Run Detail Page", () => {
       });
 
       const nodeButton = screen.getByRole("button", { name: /Start/i });
-      await userEvent.click(nodeButton);
+      await actClick(nodeButton);
 
       await waitFor(() => {
         expect(screen.getByText(/"prompt": "Hello"/i)).toBeInTheDocument();
@@ -791,7 +795,7 @@ describe("Run Detail Page", () => {
       });
 
       const nodeButton = screen.getByRole("button", { name: /Start/i });
-      await userEvent.click(nodeButton);
+      await actClick(nodeButton);
 
       await waitFor(() => {
         // Check for formatted JSON (with proper indentation)
@@ -833,7 +837,7 @@ describe("Run Detail Page", () => {
       });
 
       const nodeButton = screen.getByRole("button", { name: /API Call/i });
-      await userEvent.click(nodeButton);
+      await actClick(nodeButton);
 
       await waitFor(() => {
         expect(screen.getByText(/TIMEOUT/i)).toBeInTheDocument();
@@ -917,7 +921,7 @@ describe("Run Detail Page", () => {
         expect(getSpy).toHaveBeenCalledTimes(1);
       });
 
-      jest.advanceTimersByTime(3000);
+      act(() => { jest.advanceTimersByTime(3000); });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
@@ -957,14 +961,14 @@ describe("Run Detail Page", () => {
         expect(getSpy).toHaveBeenCalledTimes(1);
       });
 
-      jest.advanceTimersByTime(3000);
+      act(() => { jest.advanceTimersByTime(3000); });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
       });
 
       // Should not poll again after succeeded
-      jest.advanceTimersByTime(10000);
+      act(() => { jest.advanceTimersByTime(10000); });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
@@ -997,7 +1001,7 @@ describe("Run Detail Page", () => {
       });
 
       // Should not poll again after failed
-      jest.advanceTimersByTime(10000);
+      act(() => { jest.advanceTimersByTime(10000); });
 
       expect(getSpy).toHaveBeenCalledTimes(1);
 
@@ -1028,7 +1032,7 @@ describe("Run Detail Page", () => {
       });
 
       // Should not poll again after canceled
-      jest.advanceTimersByTime(10000);
+      act(() => { jest.advanceTimersByTime(10000); });
 
       expect(getSpy).toHaveBeenCalledTimes(1);
 
@@ -1068,14 +1072,14 @@ describe("Run Detail Page", () => {
       });
 
       // First poll fails
-      jest.advanceTimersByTime(3000);
+      act(() => { jest.advanceTimersByTime(3000); });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
       });
 
       // Should continue polling after error
-      jest.advanceTimersByTime(3000);
+      act(() => { jest.advanceTimersByTime(3000); });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(3);

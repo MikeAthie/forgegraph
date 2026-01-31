@@ -21,6 +21,11 @@ type MessageBuffer struct {
 	capacity int
 	head     int // Next write position (oldest message when full)
 	count    int // Current number of messages (0 to capacity)
+
+	tokenLimit     int
+	tokenCount     int
+	tokenCounts    []int
+	tokenCountFunc func(Message) int
 }
 
 // NewMessageBuffer creates a new buffer with the provided capacity.
@@ -34,6 +39,35 @@ func NewMessageBuffer(capacity int) *MessageBuffer {
 	}
 }
 
+// ConfigureTokenLimit enables token-based eviction using the provided counter.
+func (b *MessageBuffer) ConfigureTokenLimit(maxTokens int, countFunc func(Message) int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if maxTokens <= 0 || countFunc == nil {
+		b.tokenLimit = 0
+		b.tokenCount = 0
+		b.tokenCounts = nil
+		b.tokenCountFunc = nil
+		return
+	}
+
+	b.tokenLimit = maxTokens
+	b.tokenCountFunc = countFunc
+	b.tokenCounts = make([]int, b.capacity)
+	b.tokenCount = 0
+
+	ordered := b.getAllUnlocked()
+	if len(ordered) == 0 {
+		return
+	}
+
+	b.resetUnlocked()
+	for _, msg := range ordered {
+		b.pushUnlocked(msg)
+	}
+}
+
 // Push adds a message to the buffer, evicting the oldest if full.
 func (b *MessageBuffer) Push(msg Message) {
 	b.mu.Lock()
@@ -43,11 +77,7 @@ func (b *MessageBuffer) Push(msg Message) {
 		msg.Timestamp = time.Now()
 	}
 
-	b.messages[b.head] = msg
-	b.head = (b.head + 1) % b.capacity
-	if b.count < b.capacity {
-		b.count++
-	}
+	b.pushUnlocked(msg)
 }
 
 // GetAll returns all messages in chronological order.
@@ -102,12 +132,14 @@ func (b *MessageBuffer) RemoveFirst(n int) {
 	}
 
 	remaining := b.getAllUnlocked()[n:]
-	b.resetUnlocked()
-	for _, msg := range remaining {
-		b.messages[b.head] = msg
-		b.head = (b.head + 1) % b.capacity
-		b.count++
+	var remainingTokenCounts []int
+	if b.tokenCounts != nil {
+		orderedCounts := b.getTokenCountsUnlocked()
+		if len(orderedCounts) >= n {
+			remainingTokenCounts = orderedCounts[n:]
+		}
 	}
+	b.restoreOrderedUnlocked(remaining, remainingTokenCounts)
 }
 
 // Clear removes all messages from the buffer.
@@ -122,6 +154,20 @@ func (b *MessageBuffer) Count() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.count
+}
+
+// TokenCount returns the total token count tracked in the buffer.
+func (b *MessageBuffer) TokenCount() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.tokenCount
+}
+
+// TokenLimit returns the configured token limit.
+func (b *MessageBuffer) TokenLimit() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.tokenLimit
 }
 
 // Capacity returns the maximum number of messages the buffer can hold.
@@ -153,21 +199,7 @@ func (b *MessageBuffer) Restore(messages []Message) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.resetUnlocked()
-	for _, msg := range messages {
-		if b.count >= b.capacity {
-			break
-		}
-		b.messages[b.head] = Message{
-			Role:      msg.Role,
-			Content:   msg.Content,
-			Timestamp: msg.Timestamp,
-			NodeID:    msg.NodeID,
-			Metadata:  copyMap(msg.Metadata),
-		}
-		b.head = (b.head + 1) % b.capacity
-		b.count++
-	}
+	b.restoreOrderedUnlocked(messages, nil)
 }
 
 func (b *MessageBuffer) getAllUnlocked() []Message {
@@ -188,10 +220,140 @@ func (b *MessageBuffer) getAllUnlocked() []Message {
 	return result
 }
 
+func (b *MessageBuffer) getTokenCountsUnlocked() []int {
+	if b.count == 0 || b.tokenCounts == nil {
+		return nil
+	}
+
+	result := make([]int, b.count)
+	if b.count < b.capacity {
+		copy(result, b.tokenCounts[:b.count])
+		return result
+	}
+
+	firstPart := b.tokenCounts[b.head:]
+	secondPart := b.tokenCounts[:b.head]
+	copy(result, firstPart)
+	copy(result[len(firstPart):], secondPart)
+	return result
+}
+
 func (b *MessageBuffer) resetUnlocked() {
 	b.head = 0
 	b.count = 0
 	b.messages = make([]Message, b.capacity)
+	if b.tokenCounts != nil {
+		b.tokenCounts = make([]int, b.capacity)
+	}
+	b.tokenCount = 0
+}
+
+func (b *MessageBuffer) pushUnlocked(msg Message) {
+	if b.tokenLimit > 0 && b.tokenCountFunc != nil {
+		if b.tokenCounts == nil {
+			b.tokenCounts = make([]int, b.capacity)
+		}
+		if b.count == b.capacity {
+			b.tokenCount -= b.tokenCounts[b.head]
+		}
+		tokens := b.countTokens(msg)
+		b.tokenCounts[b.head] = tokens
+		b.tokenCount += tokens
+	}
+
+	b.messages[b.head] = msg
+	b.head = (b.head + 1) % b.capacity
+	if b.count < b.capacity {
+		b.count++
+	}
+
+	b.trimToTokenLimitUnlocked()
+}
+
+func (b *MessageBuffer) countTokens(msg Message) int {
+	if b.tokenCountFunc == nil {
+		return 0
+	}
+	tokens := b.tokenCountFunc(msg)
+	if tokens <= 0 {
+		return 1
+	}
+	return tokens
+}
+
+func (b *MessageBuffer) restoreOrderedUnlocked(messages []Message, tokenCounts []int) {
+	b.resetUnlocked()
+	if len(messages) == 0 {
+		return
+	}
+
+	for i, msg := range messages {
+		if b.count >= b.capacity {
+			break
+		}
+		copyMsg := Message{
+			Role:      msg.Role,
+			Content:   msg.Content,
+			Timestamp: msg.Timestamp,
+			NodeID:    msg.NodeID,
+			Metadata:  copyMap(msg.Metadata),
+		}
+		b.messages[b.head] = copyMsg
+		if b.tokenLimit > 0 && b.tokenCountFunc != nil {
+			if b.tokenCounts == nil {
+				b.tokenCounts = make([]int, b.capacity)
+			}
+			if len(tokenCounts) == len(messages) {
+				b.tokenCounts[b.head] = tokenCounts[i]
+				b.tokenCount += tokenCounts[i]
+			} else {
+				tokens := b.countTokens(copyMsg)
+				b.tokenCounts[b.head] = tokens
+				b.tokenCount += tokens
+			}
+		}
+		b.head = (b.head + 1) % b.capacity
+		b.count++
+	}
+	b.trimToTokenLimitUnlocked()
+}
+
+func (b *MessageBuffer) trimToTokenLimitUnlocked() {
+	if b.tokenLimit <= 0 || b.tokenCountFunc == nil || b.tokenCount <= b.tokenLimit {
+		return
+	}
+
+	ordered := b.getAllUnlocked()
+	if len(ordered) == 0 {
+		return
+	}
+
+	orderedCounts := b.getTokenCountsUnlocked()
+	total := 0
+	for _, count := range orderedCounts {
+		total += count
+	}
+
+	cutIndex := 0
+	for total > b.tokenLimit && cutIndex < len(ordered) {
+		if cutIndex < len(orderedCounts) {
+			total -= orderedCounts[cutIndex]
+		} else {
+			total -= b.countTokens(ordered[cutIndex])
+		}
+		cutIndex++
+	}
+
+	if cutIndex == 0 {
+		return
+	}
+
+	remaining := ordered[cutIndex:]
+	var remainingCounts []int
+	if len(orderedCounts) >= cutIndex {
+		remainingCounts = orderedCounts[cutIndex:]
+	}
+	b.restoreOrderedUnlocked(remaining, remainingCounts)
 }
 
 func copyMap(input map[string]any) map[string]any {

@@ -33,6 +33,17 @@ describe("NodeInspector", () => {
     onUpdateMetadata: mockOnUpdateMetadata,
   };
 
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      select: (element: HTMLElement, value: string) =>
+        act(async () => user.selectOptions(element, value)),
+    };
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -81,21 +92,21 @@ describe("NodeInspector", () => {
 
   describe("Graph Metadata Editing", () => {
     it("should show edit form when 'Edit Info' is clicked", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       render(<NodeInspector {...defaultProps} />);
 
       const editButton = screen.getByRole("button", { name: /edit info/i });
-      await user.click(editButton);
+      await click(editButton);
 
       expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^cancel$/i })).toBeInTheDocument();
     });
 
     it("should populate form with current values", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       render(<NodeInspector {...defaultProps} />);
 
-      await user.click(screen.getByRole("button", { name: /edit info/i }));
+      await click(screen.getByRole("button", { name: /edit info/i }));
 
       const nameInput = screen.getByDisplayValue("Test Graph");
       const descInput = screen.getByDisplayValue("A test graph description");
@@ -105,44 +116,44 @@ describe("NodeInspector", () => {
     });
 
     it("should allow editing graph name", async () => {
-      const user = userEvent.setup();
+      const { click, clear, type } = setupUser();
       render(<NodeInspector {...defaultProps} />);
 
-      await user.click(screen.getByRole("button", { name: /edit info/i }));
+      await click(screen.getByRole("button", { name: /edit info/i }));
 
       const nameInput = screen.getByDisplayValue("Test Graph");
-      await user.clear(nameInput);
-      await user.type(nameInput, "Updated Graph Name");
+      await clear(nameInput);
+      await type(nameInput, "Updated Graph Name");
 
       expect(nameInput).toHaveValue("Updated Graph Name");
     });
 
     it("should allow editing graph description", async () => {
-      const user = userEvent.setup();
+      const { click, clear, type } = setupUser();
       render(<NodeInspector {...defaultProps} />);
 
-      await user.click(screen.getByRole("button", { name: /edit info/i }));
+      await click(screen.getByRole("button", { name: /edit info/i }));
 
       const descInput = screen.getByDisplayValue("A test graph description");
-      await user.clear(descInput);
-      await user.type(descInput, "New description");
+      await clear(descInput);
+      await type(descInput, "New description");
 
       expect(descInput).toHaveValue("New description");
     });
 
     it("should call onUpdateMetadata when Save is clicked", async () => {
-      const user = userEvent.setup();
+      const { click, clear, type } = setupUser();
       mockOnUpdateMetadata.mockResolvedValue(undefined);
 
       render(<NodeInspector {...defaultProps} />);
 
-      await user.click(screen.getByRole("button", { name: /edit info/i }));
+      await click(screen.getByRole("button", { name: /edit info/i }));
 
       const nameInput = screen.getByDisplayValue("Test Graph");
-      await user.clear(nameInput);
-      await user.type(nameInput, "New Name");
+      await clear(nameInput);
+      await type(nameInput, "New Name");
 
-      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await click(screen.getByRole("button", { name: /^save$/i }));
 
       await waitFor(() => {
         expect(mockOnUpdateMetadata).toHaveBeenCalledWith("New Name", "A test graph description");
@@ -150,15 +161,15 @@ describe("NodeInspector", () => {
     });
 
     it("should cancel editing when Cancel is clicked", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       render(<NodeInspector {...defaultProps} />);
 
-      await user.click(screen.getByRole("button", { name: /edit info/i }));
+      await click(screen.getByRole("button", { name: /edit info/i }));
 
       const nameInput = screen.getByDisplayValue("Test Graph");
       fireEvent.change(nameInput, { target: { value: "Should Not Save" } });
 
-      await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+      await click(screen.getByRole("button", { name: /^cancel$/i }));
 
       // Should return to display mode with original values
       await waitFor(() => {
@@ -227,11 +238,11 @@ describe("NodeInspector", () => {
     });
 
     it("should call onDeleteNode when Delete button is clicked", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
 
       const deleteButton = screen.getByRole("button", { name: /delete/i });
-      await user.click(deleteButton);
+      await click(deleteButton);
 
       expect(mockOnDeleteNode).toHaveBeenCalledWith("node-1");
     });
@@ -325,11 +336,11 @@ describe("NodeInspector", () => {
     });
 
     it("should update config when method changes", async () => {
-      const user = userEvent.setup();
+      const { select } = setupUser();
       render(<NodeInspector {...defaultProps} selectedNode={httpNode} />);
 
       const methodSelect = screen.getByDisplayValue("POST");
-      await user.selectOptions(methodSelect, "GET");
+      await select(methodSelect, "GET");
 
       expect(mockOnUpdateNode).toHaveBeenCalledWith("http-node", {
         config: expect.objectContaining({ method: "GET" }),
@@ -523,13 +534,13 @@ describe("NodeInspector", () => {
     };
 
     it("should allow enabling cache from advanced section", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       render(<NodeInspector {...defaultProps} selectedNode={cacheNode} />);
 
-      await user.click(screen.getByRole("button", { name: /advanced/i }));
+      await click(screen.getByRole("button", { name: /advanced/i }));
 
       const toggle = screen.getByRole("switch", { name: /enable cache/i });
-      await user.click(toggle);
+      await click(toggle);
 
       expect(mockOnUpdateNode).toHaveBeenCalledWith("cache-node", {
         config: expect.objectContaining({
@@ -539,7 +550,7 @@ describe("NodeInspector", () => {
     });
 
     it("should show TTL input when cache is enabled", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const nodeWithCache: Node = {
         ...cacheNode,
         data: {
@@ -552,13 +563,13 @@ describe("NodeInspector", () => {
 
       render(<NodeInspector {...defaultProps} selectedNode={nodeWithCache} />);
 
-      await user.click(screen.getByRole("button", { name: /advanced/i }));
+      await click(screen.getByRole("button", { name: /advanced/i }));
 
       expect(screen.getByDisplayValue("120")).toBeInTheDocument();
     });
 
     it("should allow switching from global TTL to custom TTL", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const nodeWithGlobalCache: Node = {
         ...cacheNode,
         data: {
@@ -571,10 +582,10 @@ describe("NodeInspector", () => {
 
       render(<NodeInspector {...defaultProps} selectedNode={nodeWithGlobalCache} />);
 
-      await user.click(screen.getByRole("button", { name: /advanced/i }));
+      await click(screen.getByRole("button", { name: /advanced/i }));
 
       const globalToggle = screen.getByRole("switch", { name: /use global ttl/i });
-      await user.click(globalToggle);
+      await click(globalToggle);
 
       expect(mockOnUpdateNode).toHaveBeenCalledWith("cache-node", {
         config: expect.objectContaining({

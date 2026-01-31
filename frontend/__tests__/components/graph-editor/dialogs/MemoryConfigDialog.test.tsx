@@ -1,7 +1,16 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryConfigDialog } from "@/components/graph-editor/dialogs/MemoryConfigDialog";
 import type { MemoryConfig } from "@/lib/api";
+
+jest.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children, open }: any) => <div data-testid="dialog">{open ? children : null}</div>,
+  DialogContent: ({ children }: any) => <div data-testid="dialog-content">{children}</div>,
+  DialogHeader: ({ children }: any) => <div data-testid="dialog-header">{children}</div>,
+  DialogTitle: ({ children }: any) => <h2 data-testid="dialog-title">{children}</h2>,
+  DialogDescription: ({ children }: any) => <p data-testid="dialog-description">{children}</p>,
+  DialogFooter: ({ children }: any) => <div data-testid="dialog-footer">{children}</div>,
+}));
 
 jest.mock("@/lib/api", () => {
   const actual = jest.requireActual("@/lib/api");
@@ -38,6 +47,8 @@ const baseConfig: MemoryConfig = {
   vector_enabled: false,
   vector_top_k: 5,
   vector_threshold: 0.7,
+  vector_recency_weight: undefined,
+  embedding_model: "text-embedding-ada-002",
   summarization_enabled: false,
   summarization_threshold: 30,
   summarization_keep_recent: 10,
@@ -47,6 +58,17 @@ const baseConfig: MemoryConfig = {
 };
 
 describe("MemoryConfigDialog", () => {
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      select: (element: HTMLElement, value: string) =>
+        act(async () => user.selectOptions(element, value)),
+    };
+  };
+
   const getMocks = () => {
     const api = jest.requireMock("@/lib/api") as typeof import("@/lib/api");
     return {
@@ -78,12 +100,12 @@ describe("MemoryConfigDialog", () => {
   it("shows custom buffer size input when custom depth is selected", async () => {
     const { mockGetMemoryConfig } = getMocks();
     mockGetMemoryConfig.mockResolvedValue(baseConfig);
-    const user = userEvent.setup();
+    const { select } = setupUser();
 
     render(<MemoryConfigDialog graphId="graph-1" open={true} onOpenChange={jest.fn()} />);
 
     const memoryDepth = await screen.findByLabelText(/memory depth/i);
-    await user.selectOptions(memoryDepth, "custom");
+    await select(memoryDepth, "custom");
 
     expect(await screen.findByLabelText(/custom buffer size/i)).toBeInTheDocument();
   });
@@ -97,32 +119,32 @@ describe("MemoryConfigDialog", () => {
       redis_enabled: false,
     });
     const onOpenChange = jest.fn();
-    const user = userEvent.setup();
+    const { click, clear, select, type } = setupUser();
 
     render(<MemoryConfigDialog graphId="graph-1" open={true} onOpenChange={onOpenChange} />);
 
     const memoryDepth = await screen.findByLabelText(/memory depth/i);
-    await user.selectOptions(memoryDepth, "custom");
+    await select(memoryDepth, "custom");
 
     const customSizeInput = await screen.findByLabelText(/custom buffer size/i);
-    await user.clear(customSizeInput);
-    await user.type(customSizeInput, "42");
+    await clear(customSizeInput);
+    await type(customSizeInput, "42");
 
     const persistenceSwitch = screen.getByRole("switch", { name: /enable persistence/i });
-    await user.click(persistenceSwitch);
+    await click(persistenceSwitch);
 
     const advancedButton = screen.getByRole("button", { name: /show advanced settings/i });
-    await user.click(advancedButton);
+    await click(advancedButton);
 
     const summaryInput = await screen.findByLabelText(/summary ttl/i);
-    await user.clear(summaryInput);
-    await user.type(summaryInput, "48");
+    await clear(summaryInput);
+    await type(summaryInput, "48");
 
     const factsInput = await screen.findByLabelText(/facts ttl/i);
-    await user.clear(factsInput);
-    await user.type(factsInput, "10");
+    await clear(factsInput);
+    await type(factsInput, "10");
 
-    await user.click(screen.getByRole("button", { name: /save settings/i }));
+    await click(screen.getByRole("button", { name: /save settings/i }));
 
     await waitFor(() => {
       expect(mockUpdateMemoryConfig).toHaveBeenCalledWith("graph-1", {
@@ -135,6 +157,8 @@ describe("MemoryConfigDialog", () => {
         vector_enabled: baseConfig.vector_enabled,
         vector_top_k: baseConfig.vector_top_k,
         vector_threshold: baseConfig.vector_threshold,
+        vector_recency_weight: baseConfig.vector_recency_weight,
+        embedding_model: baseConfig.embedding_model,
         summarization_enabled: baseConfig.summarization_enabled,
         summarization_threshold: baseConfig.summarization_threshold,
         summarization_keep_recent: baseConfig.summarization_keep_recent,
@@ -149,18 +173,18 @@ describe("MemoryConfigDialog", () => {
   it("blocks save when buffer size is invalid", async () => {
     const { mockGetMemoryConfig, mockUpdateMemoryConfig } = getMocks();
     mockGetMemoryConfig.mockResolvedValue(baseConfig);
-    const user = userEvent.setup();
+    const { click, clear, select, type } = setupUser();
 
     render(<MemoryConfigDialog graphId="graph-1" open={true} onOpenChange={jest.fn()} />);
 
     const memoryDepth = await screen.findByLabelText(/memory depth/i);
-    await user.selectOptions(memoryDepth, "custom");
+    await select(memoryDepth, "custom");
 
     const customSizeInput = await screen.findByLabelText(/custom buffer size/i);
-    await user.clear(customSizeInput);
-    await user.type(customSizeInput, "0");
+    await clear(customSizeInput);
+    await type(customSizeInput, "0");
 
-    await user.click(screen.getByRole("button", { name: /save settings/i }));
+    await click(screen.getByRole("button", { name: /save settings/i }));
 
     await waitFor(() => {
       expect(showError).toHaveBeenCalledWith("Buffer size must be between 1 and 200.");

@@ -192,11 +192,11 @@ class MemoryConfiguration(models.Model):
         db_table = "memory_configurations"
         constraints = [
             models.CheckConstraint(
-                condition=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
+                check=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
                 name="memory_config_requires_scope",
             ),
             models.CheckConstraint(
-                condition=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
+                check=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
                 name="memory_config_single_scope",
             ),
         ]
@@ -204,6 +204,31 @@ class MemoryConfiguration(models.Model):
     def __str__(self):
         scope = "graph" if self.graph_id else "user"
         return f"MemoryConfiguration({scope}:{self.id})"
+
+
+class MemorySession(models.Model):
+    """MemorySession tracks cross-run shared memory buffers."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session_id = models.UUIDField(unique=True, db_index=True)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="memory_sessions",
+    )
+    agent_id = models.UUIDField(null=True, blank=True, db_index=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "memory_sessions"
+        indexes = [
+            models.Index(fields=["owner", "session_id"], name="memory_sessions_owner_idx"),
+        ]
+
+    def __str__(self):
+        return f"MemorySession({self.session_id})"
 
 
 class GraphVersion(models.Model):

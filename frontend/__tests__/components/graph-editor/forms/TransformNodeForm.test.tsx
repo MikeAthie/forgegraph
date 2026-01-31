@@ -5,7 +5,7 @@
  * and integration with AgentFields and AdvancedSettings.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { TransformNodeForm } from "@/components/graph-editor/forms/TransformNodeForm";
@@ -51,6 +51,13 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 describe("TransformNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
@@ -116,11 +123,11 @@ describe("TransformNodeForm", () => {
 
   describe("Field Changes", () => {
     it("should call onChange when expression is modified", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const expressionInput = screen.getByLabelText(/expression/i);
-      await user.type(expressionInput, "state.value * 2");
+      await type(expressionInput, "state.value * 2");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalled();
@@ -130,11 +137,11 @@ describe("TransformNodeForm", () => {
     });
 
     it("should call onChange when output key is modified", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const outputKey = screen.getByLabelText(/output key/i);
-      await user.type(outputKey, "result");
+      await type(outputKey, "result");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalled();
@@ -229,11 +236,11 @@ describe("TransformNodeForm", () => {
     });
 
     it("should propagate AgentFields changes to parent config", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const notesInput = screen.getByTestId("agent-notes");
-      await user.type(notesInput, "Transform notes");
+      await type(notesInput, "Transform notes");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -251,11 +258,11 @@ describe("TransformNodeForm", () => {
     });
 
     it("should propagate AdvancedSettings changes", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const timeoutInput = screen.getByTestId("timeout-ms");
-      await user.type(timeoutInput, "5000");
+      await type(timeoutInput, "5000");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -267,7 +274,7 @@ describe("TransformNodeForm", () => {
     });
 
     it("should preserve existing config when updating from sub-components", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       const config = {
         expression: "state.value * 2",
         output_key: "result",
@@ -275,7 +282,7 @@ describe("TransformNodeForm", () => {
       renderWithConfig(config);
 
       const notesInput = screen.getByTestId("agent-notes");
-      await user.type(notesInput, "Note");
+      await type(notesInput, "Note");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -333,12 +340,12 @@ describe("TransformNodeForm", () => {
     });
 
     it("should support multiline expressions", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const expressionInput = screen.getByLabelText(/expression/i);
       const multilineExpr = "const x = state.data;\nreturn x.map(i => i * 2);";
-      await user.type(expressionInput, multilineExpr);
+      await type(expressionInput, multilineExpr);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalled();
@@ -363,11 +370,11 @@ describe("TransformNodeForm", () => {
     });
 
     it("should accept any string value", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const outputKey = screen.getByLabelText(/output key/i);
-      await user.type(outputKey, "my_custom_key_123");
+      await type(outputKey, "my_custom_key_123");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];

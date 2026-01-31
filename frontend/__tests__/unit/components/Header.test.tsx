@@ -4,7 +4,7 @@
  * Tests navigation, authentication state display, and user menu functionality.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/router';
 
@@ -14,9 +14,44 @@ import { useAuth } from '@/contexts/AuthContext';
 // Mock dependencies
 jest.mock('@/contexts/AuthContext');
 jest.mock('next/router');
+jest.mock('next/link', () => ({
+  __esModule: true,
+  default: ({ href, children, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+jest.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, onSelect, disabled, className }: any) => (
+    <button
+      type="button"
+      data-slot="dropdown-menu-item"
+      data-disabled={disabled ? '' : undefined}
+      className={className}
+      disabled={disabled}
+      onClick={(event) => onSelect?.({ ...event, preventDefault: () => {} })}
+    >
+      {children}
+    </button>
+  ),
+  DropdownMenuLabel: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuSeparator: () => <div />,
+}));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
+
+const setupUser = () => {
+  const user = userEvent.setup();
+  return {
+    ...user,
+    click: (element: HTMLElement) => act(async () => user.click(element)),
+  };
+};
 
 describe('Header', () => {
   const mockLogout = jest.fn();
@@ -118,7 +153,7 @@ describe('Header', () => {
     it('should display user email in dropdown trigger', () => {
       render(<Header />);
 
-      expect(screen.getByText('user@example.com')).toBeInTheDocument();
+      expect(screen.getAllByText('user@example.com').length).toBeGreaterThan(0);
     });
 
     it('should display user menu with dropdown button', () => {
@@ -153,7 +188,7 @@ describe('Header', () => {
     });
 
     it('should open dropdown menu on click', async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<Header />);
 
       const dropdownTrigger = screen.getByRole('button', { name: /user@example.com/i });
@@ -166,7 +201,7 @@ describe('Header', () => {
     });
 
     it('should call logout when Sign out is clicked', async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<Header />);
 
       // Open dropdown
@@ -187,7 +222,7 @@ describe('Header', () => {
     });
 
     it('should show loading state while logging out', async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
 
       // Mock logout to simulate delay
       mockLogout.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
@@ -213,7 +248,7 @@ describe('Header', () => {
     });
 
     it('should disable Sign out button while logging out', async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
 
       // Mock logout to simulate delay
       mockLogout.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
@@ -228,15 +263,13 @@ describe('Header', () => {
         expect(screen.getByText('Sign out')).toBeInTheDocument();
       });
 
-      const signOutButton = screen.getByText('Sign out').closest('div');
-      await user.click(signOutButton!);
+      const signOutButton = screen.getByRole('button', { name: /sign out/i });
+      await user.click(signOutButton);
 
       // Button should be disabled
       await waitFor(() => {
-        const signingOutButton = screen
-          .getByText('Signing out...')
-          .closest('[data-slot="dropdown-menu-item"]');
-        expect(signingOutButton).toHaveAttribute('data-disabled');
+        const signingOutButton = screen.getByText('Signing out...').closest('button');
+        expect(signingOutButton).toBeDisabled();
       });
     });
   });
@@ -279,7 +312,7 @@ describe('Header', () => {
       render(<Header />);
 
       // Email should be rendered (even if truncated visually with CSS)
-      expect(screen.getByText('verylongemailaddress@exampledomain.com')).toBeInTheDocument();
+      expect(screen.getAllByText('verylongemailaddress@exampledomain.com').length).toBeGreaterThan(0);
     });
   });
 

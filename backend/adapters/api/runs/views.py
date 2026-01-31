@@ -8,6 +8,7 @@ import asyncio
 import copy
 import logging
 import json as pyjson
+from datetime import timedelta
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -49,6 +50,7 @@ from infrastructure.orm.models import (
     ApprovalTask,
     GraphVersion,
     MemoryConfiguration,
+    MemorySession,
     NodeRun,
     Run,
     RunCheckpoint,
@@ -84,10 +86,12 @@ def get_memory_config_for_graph(graph, user):
     return None
 
 
-def build_memory_config_json(graph, user) -> str:
+def build_memory_config_json(graph, user, session_id: str | None = None) -> str:
     config = get_memory_config_for_graph(graph, user)
     if not config:
         return ""
+
+    cross_session_enabled = session_id is not None
 
     payload = {
         "tier1": {
@@ -114,8 +118,23 @@ def build_memory_config_json(graph, user) -> str:
             "keep_recent_count": config.summarization_keep_recent,
             "model": config.summarization_model,
         },
+        "cross_session": {
+            "enabled": cross_session_enabled,
+            "session_ttl_hours": 24,
+            "share_with_agent": False,
+        },
     }
     return pyjson.dumps(payload)
+
+
+def upsert_memory_session(user, session_id: str | None, ttl_hours: int = 24) -> None:
+    if not session_id:
+        return
+    expires_at = timezone.now() + timedelta(hours=ttl_hours)
+    MemorySession.objects.update_or_create(
+        session_id=session_id,
+        defaults={"owner": user, "expires_at": expires_at},
+    )
 
 
 START_NODE_ID = "START"
@@ -415,6 +434,7 @@ class RunStartView(APIView):
         graph_version_id = serializer.validated_data["graph_version_id"]
         input_json = serializer.validated_data.get("input_json") or {}
         thread_id = serializer.validated_data.get("thread_id")
+        session_id = str(thread_id) if thread_id else None
 
         try:
             graph_version = GraphVersion.objects.select_related("graph").get(
@@ -470,9 +490,12 @@ class RunStartView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Track memory session for cross-run buffers.
+        upsert_memory_session(request.user, session_id)
+
         # Send run to the engine
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
-        memory_config_json = build_memory_config_json(graph_version.graph, request.user)
+        memory_config_json = build_memory_config_json(graph_version.graph, request.user, session_id=session_id)
         tenant_id = get_tenant_id(request)
         try:
             with get_engine_client(callback_url) as engine:
@@ -482,6 +505,7 @@ class RunStartView(APIView):
                     input_json=input_json,
                     memory_config_json=memory_config_json,
                     tenant_id=tenant_id,
+                    session_id=session_id,
                 )
                 # Update status to running once engine accepts
                 run.status = "running"
@@ -555,6 +579,7 @@ class RunInvokeView(APIView):
             )
 
         thread_id = serializer.validated_data["thread_id"]
+        session_id = str(thread_id)
         input_json = serializer.validated_data.get("input_json") or {}
 
         if input_json and not isinstance(input_json, dict):
@@ -674,8 +699,10 @@ class RunInvokeView(APIView):
 
         broadcast_run_updated(run)
 
+        upsert_memory_session(request.user, session_id)
+
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
-        memory_config_json = build_memory_config_json(graph_version.graph, request.user)
+        memory_config_json = build_memory_config_json(graph_version.graph, request.user, session_id=session_id)
         tenant_id = get_tenant_id(request)
         try:
             with get_engine_client(callback_url) as engine:
@@ -685,6 +712,7 @@ class RunInvokeView(APIView):
                     input_json=input_json,
                     memory_config_json=memory_config_json,
                     tenant_id=tenant_id,
+                    session_id=session_id,
                 )
                 run.status = "running"
                 run.save(update_fields=["status"])

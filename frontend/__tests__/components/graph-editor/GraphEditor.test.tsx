@@ -111,6 +111,9 @@ import { GraphEditor } from "@/components/graph-editor/GraphEditor";
 
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
+const actClick = (user: ReturnType<typeof userEvent.setup>, element: HTMLElement) =>
+  act(async () => user.click(element));
+
 function renderGraphEditor() {
   return render(
     <GraphEditor
@@ -129,13 +132,16 @@ function renderGraphEditor() {
   );
 }
 
-async function addPromptNodeViaWizard(user: ReturnType<typeof userEvent.setup>, task = "Write a short response.") {
-  await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+async function addPromptNodeViaWizard(
+  user: ReturnType<typeof userEvent.setup>,
+  task = "Write a short response."
+) {
+  await actClick(user, screen.getByRole("button", { name: /^prompt$/i }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
 
-  await user.click(dialogScope.getByRole("button", { name: /^finish$/i }));
+  await actClick(user, dialogScope.getByRole("button", { name: /^finish$/i }));
 
   await waitFor(() => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -146,12 +152,12 @@ async function addNodeViaConfigDialog(
   user: ReturnType<typeof userEvent.setup>,
   label: RegExp
 ) {
-  await user.click(screen.getByRole("button", { name: label }));
+  await actClick(user, screen.getByRole("button", { name: label }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
 
-  await user.click(dialogScope.getByRole("button", { name: /add node/i }));
+  await actClick(user, dialogScope.getByRole("button", { name: /add node/i }));
 
   await waitFor(() => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -194,7 +200,7 @@ describe("GraphEditor", () => {
     const flow = screen.getByTestId("reactflow");
     expect(within(flow).getAllByTestId(/edge-/)).toHaveLength(1);
 
-    await user.click(within(flow).getAllByTestId(/edge-/)[0]);
+    await actClick(user, within(flow).getAllByTestId(/edge-/)[0] as HTMLElement);
     fireEvent.keyDown(window, { key: "Delete" });
 
     expect(within(flow).queryAllByTestId(/edge-/)).toHaveLength(0);
@@ -212,7 +218,7 @@ describe("GraphEditor", () => {
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(2);
     expect(within(flow).getAllByTestId(/edge-/)).toHaveLength(1);
 
-    await user.click(within(flow).getByRole("button", { name: /prompt node/i }));
+    await actClick(user, within(flow).getByRole("button", { name: /prompt node/i }));
     fireEvent.keyDown(window, { key: "Delete" });
 
     expect(within(flow).queryAllByTestId(/edge-/)).toHaveLength(0);
@@ -231,7 +237,7 @@ describe("GraphEditor", () => {
     const branchId = branchTestId.replace(/^node-/, "");
 
     // Clear selection so the next node doesn't auto-connect.
-    await user.click(screen.getByTestId("reactflow"));
+    await actClick(user, screen.getByTestId("reactflow"));
 
     await addNodeViaConfigDialog(user, /^output$/i);
 

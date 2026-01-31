@@ -119,6 +119,49 @@ func TestMessageBuffer_SnapshotRestore(t *testing.T) {
 	}
 }
 
+func TestMessageBuffer_TokenLimitEviction(t *testing.T) {
+	buf := NewMessageBuffer(5)
+	buf.ConfigureTokenLimit(4, func(msg Message) int {
+		return len(msg.Content)
+	})
+
+	buf.Push(Message{Content: "aa"})  // 2 tokens
+	buf.Push(Message{Content: "bbb"}) // 3 tokens -> total 5, evict oldest
+
+	all := buf.GetAll()
+	if len(all) != 1 {
+		t.Fatalf("expected 1 message after token eviction, got %d", len(all))
+	}
+	if all[0].Content != "bbb" {
+		t.Fatalf("unexpected remaining message: %#v", all)
+	}
+	if buf.TokenCount() != 3 {
+		t.Fatalf("expected token count 3, got %d", buf.TokenCount())
+	}
+}
+
+func TestMessageBuffer_TokenLimitKeepsOrder(t *testing.T) {
+	buf := NewMessageBuffer(4)
+	buf.ConfigureTokenLimit(5, func(msg Message) int {
+		return len(msg.Content)
+	})
+
+	buf.Push(Message{Content: "a"})   // 1
+	buf.Push(Message{Content: "bb"})  // 2 -> total 3
+	buf.Push(Message{Content: "ccc"}) // 3 -> total 6, evict "a"
+
+	all := buf.GetAll()
+	if len(all) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(all))
+	}
+	if all[0].Content != "bb" || all[1].Content != "ccc" {
+		t.Fatalf("unexpected order after eviction: %#v", all)
+	}
+	if buf.TokenCount() != 5 {
+		t.Fatalf("expected token count 5, got %d", buf.TokenCount())
+	}
+}
+
 func TestMessageBuffer_Concurrency(t *testing.T) {
 	buf := NewMessageBuffer(50)
 	var wg sync.WaitGroup
@@ -156,5 +199,16 @@ func BenchmarkMessageBuffer_GetAll(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = buf.GetAll()
+	}
+}
+
+func BenchmarkMessageBuffer_Push_TokenLimit(b *testing.B) {
+	buf := NewMessageBuffer(100)
+	buf.ConfigureTokenLimit(200, func(msg Message) int {
+		return len(msg.Content)
+	})
+	msg := Message{Role: "user", Content: "test message", Timestamp: time.Now()}
+	for i := 0; i < b.N; i++ {
+		buf.Push(msg)
 	}
 }

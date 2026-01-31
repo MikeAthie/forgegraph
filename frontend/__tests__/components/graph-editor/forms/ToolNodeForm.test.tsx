@@ -5,7 +5,7 @@
  * JSON schema validation, and integration with AgentFields and AdvancedSettings.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { ToolNodeForm } from "@/components/graph-editor/forms/ToolNodeForm";
@@ -52,6 +52,18 @@ jest.mock("@/components/ui/key-value-editor", () => ({
 describe("ToolNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      selectOptions: (element: HTMLElement, values: string | string[]) =>
+        act(async () => user.selectOptions(element, values)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
@@ -126,7 +138,7 @@ describe("ToolNodeForm", () => {
 
   describe("Tool Selection", () => {
     it("should call onChange when tool is changed", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const toolSelect = screen.getByLabelText(/^tool$/i);
@@ -142,7 +154,7 @@ describe("ToolNodeForm", () => {
     });
 
     it("should select different built-in tools", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const toolSelect = screen.getByLabelText(/^tool$/i);
@@ -189,7 +201,7 @@ describe("ToolNodeForm", () => {
     });
 
     it("should update tool description", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { tool_name: "custom" };
       renderWithConfig(config);
 
@@ -235,7 +247,7 @@ describe("ToolNodeForm", () => {
     });
 
     it("should call onChange when parameters are updated", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByTestId("add-parameter");
@@ -259,7 +271,7 @@ describe("ToolNodeForm", () => {
     });
 
     it("should call onChange when output key is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const outputKey = screen.getByLabelText(/output key/i);
@@ -332,7 +344,7 @@ describe("ToolNodeForm", () => {
 
   describe("Conditional Field Rendering", () => {
     it("should hide custom fields when switching from custom to built-in tool", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { tool_name: "custom" };
       renderWithConfig(config);
 
@@ -347,7 +359,7 @@ describe("ToolNodeForm", () => {
     });
 
     it("should show custom fields when switching from built-in to custom tool", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { tool_name: "web_search" };
       renderWithConfig(config);
 
@@ -477,7 +489,7 @@ describe("ToolNodeForm", () => {
 
   describe("Preserving Config", () => {
     it("should preserve parameters when changing tool type", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = {
         tool_name: "custom",
         parameters: { key: "value" },

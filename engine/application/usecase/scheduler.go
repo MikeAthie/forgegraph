@@ -32,6 +32,11 @@ const (
 	CheckpointModeBatch CheckpointMode = "batch"
 )
 
+const (
+	sessionNamespacePrefix = "session"
+	sessionBufferKeyPrefix = "buffer"
+)
+
 // SchedulerConfig holds scheduler configuration
 type SchedulerConfig struct {
 	MaxWorkers             int // Maximum concurrent node executions
@@ -63,6 +68,7 @@ type Scheduler struct {
 	conditions      *service.ConditionEvaluator
 	summarizer      *SummarizationWorker
 	memoryRetriever port.MemoryRetriever
+	memoryStore     port.MemoryStore
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -74,6 +80,7 @@ func NewScheduler(
 	registry port.ExecutorRegistry,
 	repository port.RunRepository,
 	emitter port.EventEmitter,
+	memoryStore port.MemoryStore,
 ) *Scheduler {
 	if config.CheckpointMode == "" {
 		config.CheckpointMode = CheckpointModeNode
@@ -90,11 +97,12 @@ func NewScheduler(
 		config.CacheDefaultTTLSeconds = 3600
 	}
 	return &Scheduler{
-		config:     config,
-		registry:   registry,
-		repository: repository,
-		emitter:    emitter,
-		conditions: service.NewConditionEvaluator(),
+		config:      config,
+		registry:    registry,
+		repository:  repository,
+		emitter:     emitter,
+		conditions:  service.NewConditionEvaluator(),
+		memoryStore: memoryStore,
 	}
 }
 
@@ -119,6 +127,7 @@ type runContext struct {
 	graphJSON            string // Original graph JSON for pause/resume
 	initialNodes         []string
 	tenantID             string
+	sessionID            string
 	messageBuffer        *entity.MessageBuffer
 	memoryConfig         *entity.MemoryConfig
 	currentSummary       *entity.Summary
@@ -204,7 +213,7 @@ func (rc *runContext) clearSummaryInFlight() {
 }
 
 // StartRun begins executing a workflow
-func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string, memoryConfigJSON string, tenantID string) error {
+func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string, memoryConfigJSON string, tenantID string, sessionID string) error {
 	type checkpointData struct {
 		nodeID         string
 		stepIndex      int
@@ -304,8 +313,21 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 			bufferSize = 20
 		}
 		messageBuffer = entity.NewMessageBuffer(bufferSize)
+		if strings.EqualFold(parsedMemoryConfig.Tier1.LimitMode, "tokens") && parsedMemoryConfig.Tier1.MaxTokens > 0 {
+			counter, err := service.NewDefaultTokenCounter()
+			if err != nil {
+				log.Printf("Failed to initialize token counter: %v (falling back to message count)", err)
+			} else {
+				safeCounter := service.NewSafeTokenCounter(counter, service.NaiveTokenCounter{})
+				messageBuffer.ConfigureTokenLimit(parsedMemoryConfig.Tier1.MaxTokens, safeCounter.CountMessage)
+			}
+		}
 		if checkpoint != nil && len(checkpoint.messageBuffer) > 0 {
 			messageBuffer.Restore(checkpoint.messageBuffer)
+		} else if sessionID != "" && s.shouldUseSessionMemory(parsedMemoryConfig) {
+			if sessionMessages := s.loadSessionBuffer(ctx, tenantID, sessionID); len(sessionMessages) > 0 {
+				messageBuffer.Restore(sessionMessages)
+			}
 		}
 	}
 
@@ -320,6 +342,7 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		callbackURL:   callbackURL,
 		graphJSON:     graphJSON,
 		tenantID:      tenantID,
+		sessionID:     sessionID,
 		messageBuffer: messageBuffer,
 		memoryConfig:  parsedMemoryConfig,
 		currentSummary: func() *entity.Summary {
@@ -943,7 +966,9 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 		"skipped":   skippedNodes,
 	}
 	if rc.messageBuffer != nil {
-		checkpointPayload["message_buffer"] = rc.messageBuffer.Snapshot()
+		bufferSnapshot := rc.messageBuffer.Snapshot()
+		checkpointPayload["message_buffer"] = bufferSnapshot
+		s.persistSessionBuffer(rc, bufferSnapshot)
 	}
 	if rc.memoryConfig != nil {
 		checkpointPayload["memory_config"] = rc.memoryConfig
@@ -1120,6 +1145,8 @@ func defaultMemoryConfig() *entity.MemoryConfig {
 		Tier1: entity.Tier1Config{
 			Enabled:     true,
 			BufferSize:  20,
+			LimitMode:   "messages",
+			MaxTokens:   4000,
 			AutoPrepend: true,
 		},
 		Tier2: entity.Tier2Config{
@@ -1142,6 +1169,11 @@ func defaultMemoryConfig() *entity.MemoryConfig {
 			CooldownMessages: 10,
 			Model:            "gpt-4",
 		},
+		CrossSession: entity.CrossSessionConfig{
+			Enabled:         false,
+			SessionTTLHours: 24,
+			ShareWithAgent:  false,
+		},
 	}
 }
 
@@ -1163,6 +1195,15 @@ func parseMemoryConfig(memoryConfigJSON string) *entity.MemoryConfig {
 		}
 		if v := coerceInt(tier1Raw["buffer_size"]); v > 0 {
 			cfg.Tier1.BufferSize = v
+		}
+		if v, ok := tier1Raw["limit_mode"].(string); ok {
+			switch strings.ToLower(v) {
+			case "tokens", "messages":
+				cfg.Tier1.LimitMode = strings.ToLower(v)
+			}
+		}
+		if v := coerceInt(tier1Raw["max_tokens"]); v > 0 {
+			cfg.Tier1.MaxTokens = v
 		}
 		if v, ok := coerceBool(tier1Raw["auto_prepend"]); ok {
 			cfg.Tier1.AutoPrepend = v
@@ -1217,6 +1258,18 @@ func parseMemoryConfig(memoryConfigJSON string) *entity.MemoryConfig {
 		}
 		if v, ok := summarizationRaw["model"].(string); ok && v != "" {
 			cfg.Summarization.Model = v
+		}
+	}
+
+	if crossSessionRaw, ok := raw["cross_session"].(map[string]any); ok {
+		if v, ok := coerceBool(crossSessionRaw["enabled"]); ok {
+			cfg.CrossSession.Enabled = v
+		}
+		if v := coerceInt(crossSessionRaw["session_ttl_hours"]); v > 0 {
+			cfg.CrossSession.SessionTTLHours = v
+		}
+		if v, ok := coerceBool(crossSessionRaw["share_with_agent"]); ok {
+			cfg.CrossSession.ShareWithAgent = v
 		}
 	}
 
@@ -1296,6 +1349,12 @@ func decodeMemoryConfig(raw any) *entity.MemoryConfig {
 	if cfg.Tier1.BufferSize <= 0 {
 		cfg.Tier1.BufferSize = 20
 	}
+	if cfg.Tier1.LimitMode == "" {
+		cfg.Tier1.LimitMode = "messages"
+	}
+	if cfg.Tier1.MaxTokens <= 0 {
+		cfg.Tier1.MaxTokens = 4000
+	}
 	if cfg.Tier2.SummaryTTL <= 0 {
 		cfg.Tier2.SummaryTTL = 86400
 	}
@@ -1314,6 +1373,9 @@ func decodeMemoryConfig(raw any) *entity.MemoryConfig {
 	if cfg.Tier3.EmbeddingModel == "" {
 		cfg.Tier3.EmbeddingModel = "text-embedding-ada-002"
 	}
+	if cfg.CrossSession.SessionTTLHours <= 0 {
+		cfg.CrossSession.SessionTTLHours = 24
+	}
 	return &cfg
 }
 
@@ -1327,6 +1389,53 @@ func decodeSummary(raw any) *entity.Summary {
 		return nil
 	}
 	return &summary
+}
+
+func (s *Scheduler) shouldUseSessionMemory(cfg *entity.MemoryConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.CrossSession.Enabled
+}
+
+func (s *Scheduler) loadSessionBuffer(ctx context.Context, tenantID, sessionID string) []entity.Message {
+	if s.memoryStore == nil || sessionID == "" {
+		return nil
+	}
+	namespace := sessionNamespace(tenantID)
+	key := sessionBufferKey(sessionID)
+	value, found, err := s.memoryStore.Get(ctx, namespace, key)
+	if err != nil || !found {
+		if err != nil {
+			log.Printf("Failed to load session buffer for %s: %v", sessionID, err)
+		}
+		return nil
+	}
+	return decodeMessages(value)
+}
+
+func (s *Scheduler) persistSessionBuffer(rc *runContext, snapshot []entity.Message) {
+	if s.memoryStore == nil || rc == nil || rc.sessionID == "" || !s.shouldUseSessionMemory(rc.memoryConfig) {
+		return
+	}
+	ttlSeconds := 24 * 3600
+	if rc.memoryConfig != nil && rc.memoryConfig.CrossSession.SessionTTLHours > 0 {
+		ttlSeconds = rc.memoryConfig.CrossSession.SessionTTLHours * 3600
+	}
+	if err := s.memoryStore.Set(context.Background(), sessionNamespace(rc.tenantID), sessionBufferKey(rc.sessionID), snapshot, ttlSeconds); err != nil {
+		log.Printf("Failed to persist session buffer for %s: %v", rc.sessionID, err)
+	}
+}
+
+func sessionNamespace(tenantID string) string {
+	if tenantID == "" {
+		return sessionNamespacePrefix
+	}
+	return fmt.Sprintf("%s:%s", sessionNamespacePrefix, tenantID)
+}
+
+func sessionBufferKey(sessionID string) string {
+	return fmt.Sprintf("%s:%s", sessionBufferKeyPrefix, sessionID)
 }
 
 // decrementAndEnqueue reduces pending count and enqueues if ready
@@ -1423,6 +1532,11 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 
 	// Update run in database
 	s.repository.SetRunEnded(context.Background(), rc.runID, string(finalStatus), output, errorMsg)
+
+	// Persist session memory snapshot on completion/cancel.
+	if rc.messageBuffer != nil && rc.sessionID != "" {
+		s.persistSessionBuffer(rc, rc.messageBuffer.Snapshot())
+	}
 
 	// Keep the latest checkpoint to enable threaded run continuation.
 

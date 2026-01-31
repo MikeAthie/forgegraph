@@ -65,6 +65,9 @@ message StartRunRequest {
 
   // Tenant identifier for multi-tenant isolation
   string tenant_id = 6;
+
+  // Session identifier for cross-run memory sharing
+  string session_id = 7;
 }
 
 // StartRunResponse confirms run acceptance

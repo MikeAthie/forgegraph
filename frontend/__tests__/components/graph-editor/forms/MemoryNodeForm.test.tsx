@@ -5,7 +5,7 @@
  * memory key, and integration with AgentFields and AdvancedSettings.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MemoryNodeForm } from "@/components/graph-editor/forms/MemoryNodeForm";
@@ -23,6 +23,18 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 describe("MemoryNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      selectOptions: (element: HTMLElement, values: string | string[]) =>
+        act(async () => user.selectOptions(element, values)),
+    };
+  };
 
   const renderWithConfig = (initialConfig: NodeFormProps["config"] = {}) => {
     const Wrapper = () => {
@@ -94,7 +106,7 @@ describe("MemoryNodeForm", () => {
 
   describe("Memory Type Selection", () => {
     it("should call onChange when memory type is changed", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const memoryTypeSelect = screen.getByLabelText(/memory type/i);
@@ -137,7 +149,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should update custom buffer size value", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { memory_type: "buffer" as const };
       renderWithConfig(config);
 
@@ -167,7 +179,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should update max tokens value", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { memory_type: "summary" as const };
       renderWithConfig(config);
 
@@ -212,7 +224,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should update top k value", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { memory_type: "vector" as const };
       renderWithConfig(config);
 
@@ -234,7 +246,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should call onChange when memory key is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const memoryKey = screen.getByLabelText(/memory key/i);
@@ -255,7 +267,7 @@ describe("MemoryNodeForm", () => {
 
   describe("Switching Memory Types", () => {
     it("should hide buffer fields when switching from buffer to conversation", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { memory_type: "buffer" as const, max_messages: 50 };
       renderWithConfig(config);
 
@@ -270,7 +282,7 @@ describe("MemoryNodeForm", () => {
     });
 
     it("should show vector fields when switching to vector memory", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       expect(screen.queryByLabelText(/retrieval query/i)).not.toBeInTheDocument();

@@ -17,9 +17,10 @@ Add vector-based long-term memory with pgvector, embedding pipeline, semantic se
 - `docker-compose.yml`
 - `backend/infrastructure/orm/migrations/0013_pgvector_setup.py`
 
-- [ ] Update postgres image to pgvector build.
-- [ ] Add migration to enable vector extension.
-- [ ] Verify extension available in DB.
+- [x] Update postgres image to pgvector build.
+- [x] Add migration to enable vector extension.
+- [x] Verify extension available in DB.
+ 
 
 ```python
 operations = [
@@ -43,10 +44,10 @@ operations = [
 - `backend/infrastructure/orm/migrations/0014_memory_chunks.py`
 - `backend/infrastructure/orm/models.py`
 
-- [ ] Add MemoryChunk model with VectorField.
-- [ ] Include tenant, agent, run, session scopes.
-- [ ] Add IVFFlat vector index.
-- [ ] Add basic indexes for tenant and agent lookups.
+- [x] Add MemoryChunk model with VectorField.
+- [x] Include tenant, agent, run, session scopes.
+- [x] Add IVFFlat vector index.
+- [x] Add basic indexes for tenant and agent lookups.
 
 ```python
 class MemoryChunk(models.Model):
@@ -77,11 +78,11 @@ class MemoryChunk(models.Model):
 - `backend/adapters/embedding/openai_embedder.py`
 - `backend/adapters/embedding/voyage_embedder.py`
 
-- [ ] Define EmbeddingService interface.
-- [ ] Implement OpenAI embedder (default) and optional Voyage embedder.
-- [ ] Support batching and rate limiting.
-- [ ] Cache embeddings for duplicate text.
-- [ ] Add unit tests with mocked API.
+- [x] Define EmbeddingService interface.
+- [x] Implement OpenAI embedder (default) and optional Voyage embedder.
+- [x] Support batching and rate limiting.
+- [x] Cache embeddings for duplicate text.
+- [x] Add unit tests with mocked API.
 
 ```python
 class EmbeddingService(ABC):
@@ -105,10 +106,10 @@ class EmbeddingService(ABC):
 **Files:**
 - `backend/application/services/chunking_service.py`
 
-- [ ] Define ChunkingStrategy interface.
-- [ ] Implement TurnBased, TopicBased, and SlidingWindow strategies.
-- [ ] Set default to TurnBased with overlap.
-- [ ] Add unit tests for chunk boundaries.
+- [x] Define ChunkingStrategy interface.
+- [x] Implement TurnBased, TopicBased, and SlidingWindow strategies.
+- [x] Set default to TurnBased with overlap.
+- [x] Add unit tests for chunk boundaries.
 
 ```python
 class ChunkingStrategy(ABC):
@@ -129,11 +130,11 @@ class ChunkingStrategy(ABC):
 - `backend/application/services/embedding_pipeline.py`
 - `backend/adapters/worker/embedding_worker.py`
 
-- [ ] Build pipeline: chunk -> embed -> store.
-- [ ] Integrate Celery task for async processing.
-- [ ] Add retries with exponential backoff.
-- [ ] Add bulk create to repository.
-- [ ] Add integration test with sample messages.
+- [x] Build pipeline: chunk -> embed -> store.
+- [x] Integrate Celery task for async processing.
+- [x] Add retries with exponential backoff.
+- [x] Add bulk create to repository.
+- [x] Add integration test with sample messages.
 
 **Acceptance Criteria:**
 - [ ] Messages processed end-to-end
@@ -149,11 +150,11 @@ class ChunkingStrategy(ABC):
 - `backend/application/services/vector_search_service.py`
 - `backend/adapters/repository/memory_chunk_repository.py`
 
-- [ ] Embed query text.
-- [ ] Run similarity search with pgvector.
-- [ ] Apply hybrid ranking (semantic + recency).
-- [ ] Filter by threshold and top_k.
-- [ ] Add unit and integration tests.
+- [x] Embed query text.
+- [x] Run similarity search with pgvector.
+- [x] Apply hybrid ranking (semantic + recency).
+- [x] Filter by threshold and top_k.
+- [x] Add unit and integration tests.
 
 ```sql
 SELECT *, 1 - (embedding <=> %s) as similarity

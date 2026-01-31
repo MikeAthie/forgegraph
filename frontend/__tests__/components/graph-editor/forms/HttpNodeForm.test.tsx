@@ -5,7 +5,7 @@
  * output key, URL validation, and JSON body validation.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { HttpNodeForm } from "@/components/graph-editor/forms/HttpNodeForm";
@@ -75,6 +75,18 @@ jest.mock("@/components/ui/key-value-editor", () => ({
 describe("HttpNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      selectOptions: (element: HTMLElement, value: string) =>
+        act(async () => user.selectOptions(element, value)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
@@ -186,7 +198,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should hide body field when switching from POST to GET", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { method: "POST" as const, body: '{"test": "data"}' };
       renderWithConfig(config);
 
@@ -201,7 +213,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should show body field when switching from GET to POST", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       expect(screen.queryByLabelText(/request body/i)).not.toBeInTheDocument();
@@ -217,7 +229,7 @@ describe("HttpNodeForm", () => {
 
   describe("Field Changes", () => {
     it("should call onChange when method is changed", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const methodSelect = screen.getByLabelText(/method/i);
@@ -233,7 +245,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should call onChange when URL is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const urlInput = screen.getByLabelText(/url/i);
@@ -261,7 +273,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should call onChange when output key is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const outputKey = screen.getByLabelText(/output key/i);
@@ -275,7 +287,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should call onChange when headers are updated", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByTestId("add-header");
@@ -437,7 +449,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should propagate AgentFields changes to parent config", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const roleInput = screen.getByTestId("agent-role");
@@ -459,7 +471,7 @@ describe("HttpNodeForm", () => {
     });
 
     it("should propagate AdvancedSettings changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const cacheCheckbox = screen.getByTestId("cache-enabled");

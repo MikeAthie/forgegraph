@@ -5,7 +5,7 @@
  * variables editor, and integration with AgentFields and AdvancedSettings.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { PromptNodeForm } from "@/components/graph-editor/forms/PromptNodeForm";
@@ -54,6 +54,18 @@ jest.mock("@/components/ui/key-value-editor", () => ({
 describe("PromptNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      selectOptions: (element: HTMLElement, values: string | string[]) =>
+        act(async () => user.selectOptions(element, values)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
@@ -146,7 +158,7 @@ describe("PromptNodeForm", () => {
 
   describe("Field Changes", () => {
     it("should call onChange when system prompt is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const systemPrompt = screen.getByLabelText(/system prompt/i);
@@ -160,7 +172,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should call onChange when prompt template is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const promptTemplate = screen.getByLabelText(/prompt template/i);
@@ -174,7 +186,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should call onChange when model is changed", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const modelSelect = screen.getByLabelText(/model/i);
@@ -205,7 +217,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should call onChange when max tokens is set", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
@@ -219,7 +231,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should handle clearing max tokens", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { max_tokens: 2000 };
       renderWithConfig(config);
 
@@ -236,7 +248,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should call onChange when variables are updated", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByTestId("add-variable");
@@ -278,7 +290,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should propagate AgentFields changes to parent config", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const roleInput = screen.getByTestId("agent-role");
@@ -300,7 +312,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should propagate AdvancedSettings changes to parent config", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const cacheCheckbox = screen.getByTestId("cache-enabled");
@@ -316,7 +328,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should preserve existing config when updating from sub-components", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = {
         prompt_template: "Existing prompt",
         model: "gpt-4",
@@ -415,7 +427,7 @@ describe("PromptNodeForm", () => {
 
   describe("Max Tokens Input", () => {
     it("should accept numeric input", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);

@@ -5,7 +5,7 @@
  * unsaved changes handling, keyboard shortcuts, and save callbacks.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { NodeConfigDialog, type NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
@@ -45,8 +45,19 @@ jest.mock("lucide-react", () => ({
 }));
 
 describe("NodeConfigDialog", () => {
-  const mockOnClose = jest.fn();
-  const mockOnSave = jest.fn();
+const mockOnClose = jest.fn();
+const mockOnSave = jest.fn();
+
+const setupUser = () => {
+  const user = userEvent.setup();
+  return {
+    ...user,
+    click: (element: HTMLElement) => act(async () => user.click(element)),
+    type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+    clear: (element: HTMLElement) => act(async () => user.clear(element)),
+    keyboard: (text: string) => act(async () => user.keyboard(text)),
+  };
+};
 
   // Use stable config objects to avoid infinite loops in component's useEffect
   const emptyConfig = {};
@@ -101,7 +112,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onClose when Cancel button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -118,7 +129,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onClose when backdrop is clicked without changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -403,7 +414,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should allow editing node label", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -421,7 +432,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should mark dialog as dirty when label is edited", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -457,7 +468,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should trim whitespace from label on save", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -478,7 +489,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should use default label when label is empty on save", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -578,7 +589,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onChange when FormComponent updates config", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ config, onChange }: NodeFormProps) => (
         <button onClick={() => onChange({ ...config, updated: true })}>Update Config</button>
       );
@@ -641,7 +652,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should show error summary when errors exist", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ setErrors }: NodeFormProps) => (
         <button onClick={() => setErrors({ url: "URL is required" })}>Add Error</button>
       );
@@ -665,7 +676,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should display multiple errors in summary", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ setErrors }: NodeFormProps) => (
         <button
           onClick={() =>
@@ -699,7 +710,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should disable save button when errors exist", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ setErrors }: NodeFormProps) => (
         <button onClick={() => setErrors({ field: "Error" })}>Add Error</button>
       );
@@ -724,7 +735,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should not call onSave when save button is clicked with errors", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ setErrors }: NodeFormProps) => {
         useEffect(() => {
           setErrors({ field: "Error" });
@@ -752,7 +763,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should enable save button when errors are cleared", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ errors, setErrors }: NodeFormProps) => (
         <div>
           <button onClick={() => setErrors({ field: "Error" })}>Add Error</button>
@@ -784,7 +795,7 @@ describe("NodeConfigDialog", () => {
 
   describe("Unsaved Changes Confirmation", () => {
     it("should not show confirmation dialog when closing without changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -802,7 +813,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should show confirmation dialog when closing with unsaved label changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -824,7 +835,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should show confirmation dialog when closing with unsaved config changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ onChange, config }: NodeFormProps) => (
         <button onClick={() => onChange({ ...config, field: "value" })}>Update</button>
       );
@@ -849,7 +860,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should close dialog when Keep Editing is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -873,7 +884,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onClose when Discard is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -896,7 +907,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should show confirmation when closing via backdrop with changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -919,7 +930,7 @@ describe("NodeConfigDialog", () => {
 
   describe("Escape Key Handling", () => {
     it("should close dialog when Escape is pressed without changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -935,7 +946,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should show confirmation when Escape is pressed with changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -955,7 +966,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should not respond to Escape when dialog is closed", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={false}
@@ -973,7 +984,7 @@ describe("NodeConfigDialog", () => {
 
   describe("onSave Callback", () => {
     it("should call onSave with config and label when save button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -991,7 +1002,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onSave with updated config", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ onChange, config }: NodeFormProps) => (
         <button onClick={() => onChange({ ...config, url: "https://api.example.com" })}>
           Set URL
@@ -1021,7 +1032,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onSave with custom label", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -1042,7 +1053,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onSave with initial config if provided", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
 
       render(
         <NodeConfigDialog
@@ -1061,7 +1072,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should call onClose after successful save", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(
         <NodeConfigDialog
           isOpen={true}
@@ -1079,7 +1090,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should handle complex config objects", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ onChange }: NodeFormProps) => (
         <button
           onClick={() =>
@@ -1148,7 +1159,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should reset config when dialog is reopened", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ onChange, config }: NodeFormProps) => (
         <div>
           <button onClick={() => onChange({ ...config, field: "modified" })}>Modify</button>
@@ -1196,7 +1207,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should reset errors when dialog is reopened", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const CustomForm = ({ setErrors }: NodeFormProps) => (
         <button onClick={() => setErrors({ field: "Error message" })}>Add Error</button>
       );
@@ -1241,7 +1252,7 @@ describe("NodeConfigDialog", () => {
     });
 
     it("should reset isDirty flag when dialog is reopened", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const { rerender } = render(
         <NodeConfigDialog
           isOpen={true}

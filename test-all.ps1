@@ -48,7 +48,15 @@ try {
   Write-Host ""
   Write-Host "=== Backend deps ==="
   Write-Host "Installing missing test dependency: pytest-asyncio"
-  python -m pip install pytest-asyncio
+  python -m pip install --user pytest-asyncio
+}
+try {
+  python -c "from grpc_health.v1 import health" *> $null
+} catch {
+  Write-Host ""
+  Write-Host "=== Backend deps ==="
+  Write-Host "Installing missing dependency: grpcio-health-checking"
+  python -m pip install --user grpcio-health-checking
 }
 Pop-Location
 

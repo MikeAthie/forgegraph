@@ -9,6 +9,7 @@ import (
 	"github.com/forgegraph/engine/adapter/executor"
 	"github.com/forgegraph/engine/adapter/gateway"
 	"github.com/forgegraph/engine/adapter/repository"
+	"github.com/forgegraph/engine/adapter/store"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/domain/entity"
@@ -68,7 +69,7 @@ func TestSimpleTransformToOutput(t *testing.T) {
 		MaxWorkers:       2,
 		DefaultTimeoutMs: 5000,
 	}
-	scheduler := usecase.NewScheduler(config, registry, repo, emitter)
+	scheduler := usecase.NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
 	// Create a simple graph: Transform → Output
 	graph := map[string]any{
@@ -117,7 +118,7 @@ func TestSimpleTransformToOutput(t *testing.T) {
 	})
 
 	// Execute
-	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "", "", "")
+	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "", "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to start run: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestLinearWorkflow(t *testing.T) {
 		MaxWorkers:       2,
 		DefaultTimeoutMs: 5000,
 	}
-	scheduler := usecase.NewScheduler(config, registry, repo, emitter)
+	scheduler := usecase.NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
 	// Create a workflow with chained transforms
 	graph := map[string]any{
@@ -240,7 +241,7 @@ func TestLinearWorkflow(t *testing.T) {
 	})
 
 	// Execute
-	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "", "", "")
+	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), inputJSON, "", "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to start run: %v", err)
 	}
@@ -276,7 +277,7 @@ func TestCancelRun(t *testing.T) {
 		MaxWorkers:       1,
 		DefaultTimeoutMs: 30000, // Long timeout
 	}
-	scheduler := usecase.NewScheduler(config, registry, repo, emitter)
+	scheduler := usecase.NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
 	// Create a simple graph
 	graph := map[string]any{
@@ -324,7 +325,7 @@ func TestCancelRun(t *testing.T) {
 	})
 
 	// Start the run
-	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), "{}", "", "", "")
+	err = scheduler.StartRun(context.Background(), runID, string(graphJSON), "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to start run: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/forgegraph/engine/adapter/store"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
@@ -400,10 +401,10 @@ func TestScheduler_LinearGraph(t *testing.T) {
 
 	// Create scheduler
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
 	// Start run
-	err := scheduler.StartRun(context.Background(), "run-1", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-1", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -497,9 +498,9 @@ func TestScheduler_ParallelBranches(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 4, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-2", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-2", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -563,9 +564,9 @@ func TestScheduler_Cancellation(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 30000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-3", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-3", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -634,9 +635,9 @@ func TestScheduler_Timeout(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-4", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-4", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -706,9 +707,9 @@ func TestScheduler_RetrySuccess(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-5", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-5", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -774,9 +775,9 @@ func TestScheduler_RetryExhausted(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-6", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-6", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -838,9 +839,9 @@ func TestScheduler_NonRetryableError(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-7", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-7", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -902,9 +903,9 @@ func TestScheduler_BranchSkipDoesNotBlockMerge(t *testing.T) {
 	registry.RegisterAll(branchExec, transformExec, mergeExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-branch-merge", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-branch-merge", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -965,9 +966,9 @@ func TestScheduler_DynamicNextNodesFromOutput(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-dynamic-next", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-dynamic-next", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1014,9 +1015,9 @@ func TestScheduler_ResumeFromCheckpoint(t *testing.T) {
 	_ = repo.SaveCheckpoint(context.Background(), runID, "step1", 1, map[string]any{"node.step1.output": "done"}, []string{"step1"}, []string{}, graphJSON)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1067,15 +1068,15 @@ func TestScheduler_NodeCacheTTL(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-cache-1", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-cache-1", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
 	waitForRunCompletion(t, scheduler, repo, "run-cache-1", 5*time.Second)
 
-	err = scheduler.StartRun(context.Background(), "run-cache-2", graphJSON, "{}", "", "", "")
+	err = scheduler.StartRun(context.Background(), "run-cache-2", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1092,7 +1093,7 @@ func TestCheckpoint_MessageBufferRoundTrip(t *testing.T) {
 
 	registry := port.NewExecutorRegistry()
 	config := SchedulerConfig{MaxWorkers: 1, DefaultTimeoutMs: 1000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
 	runCtx := &runContext{
 		runID:         "test-run",
@@ -1138,6 +1139,35 @@ func TestCheckpoint_MessageBufferRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSessionBufferPersistence(t *testing.T) {
+	memoryStore := store.NewInMemoryMemoryStore()
+	scheduler := NewScheduler(DefaultSchedulerConfig(), port.NewExecutorRegistry(), newMockRepository(), port.NewNoOpEventEmitter(), memoryStore)
+
+	buffer := entity.NewMessageBuffer(10)
+	buffer.Push(entity.Message{Role: "user", Content: "hello"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "world"})
+	snapshot := buffer.Snapshot()
+
+	rc := &runContext{
+		tenantID:      "tenant-1",
+		sessionID:     "session-1",
+		messageBuffer: buffer,
+		memoryConfig: &entity.MemoryConfig{
+			CrossSession: entity.CrossSessionConfig{Enabled: true, SessionTTLHours: 1},
+		},
+	}
+
+	scheduler.persistSessionBuffer(rc, snapshot)
+	loaded := scheduler.loadSessionBuffer(context.Background(), rc.tenantID, rc.sessionID)
+
+	if len(loaded) != len(snapshot) {
+		t.Fatalf("expected %d messages, got %d", len(snapshot), len(loaded))
+	}
+	if loaded[0].Content != "hello" || loaded[1].Content != "world" {
+		t.Fatalf("unexpected loaded messages: %#v", loaded)
+	}
+}
+
 func TestScheduler_PauseStopsScheduling(t *testing.T) {
 	nodes := []entity.Node{
 		{ID: "start", Type: "transform", Name: "Start", Config: map[string]any{}},
@@ -1169,9 +1199,9 @@ func TestScheduler_PauseStopsScheduling(t *testing.T) {
 	registry.RegisterAll(transformExec, humanGateExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-paused", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-paused", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1251,10 +1281,10 @@ func TestScheduler_ResumeRestoresSkippedBranches(t *testing.T) {
 	registry.RegisterAll(branchExec, transformExec, humanGateExec, mergeExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
 	runID := "run-resume-skip"
-	if err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", ""); err != nil {
+	if err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "", ""); err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
 
@@ -1319,9 +1349,9 @@ func TestScheduler_InputVariables(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-8", graphJSON, inputJSON, "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-8", graphJSON, inputJSON, "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1402,9 +1432,9 @@ func TestScheduler_DisabledNodeIsSkipped(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-disabled", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-disabled", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -1466,9 +1496,9 @@ func TestScheduler_DisabledNodeWithMultipleDownstream(t *testing.T) {
 	registry.RegisterAll(transformExec, outputExec)
 
 	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
-	scheduler := NewScheduler(config, registry, repo, emitter)
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
 
-	err := scheduler.StartRun(context.Background(), "run-disabled-chain", graphJSON, "{}", "", "", "")
+	err := scheduler.StartRun(context.Background(), "run-disabled-chain", graphJSON, "{}", "", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}

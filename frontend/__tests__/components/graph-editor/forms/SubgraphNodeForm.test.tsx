@@ -5,7 +5,7 @@
  * and integration with AgentFields and AdvancedSettings.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { SubgraphNodeForm } from "@/components/graph-editor/forms/SubgraphNodeForm";
@@ -37,6 +37,18 @@ jest.mock("@/components/ui/key-value-editor", () => ({
 describe("SubgraphNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      selectOptions: (element: HTMLElement, value: string) =>
+        act(async () => user.selectOptions(element, value)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {}
@@ -111,7 +123,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should call onChange when graph ID is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const graphIdInput = screen.getByLabelText(/graph id/i);
@@ -156,7 +168,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should update link href when graph_id changes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { graph_id: "graph_old" };
       renderWithConfig(config);
 
@@ -180,7 +192,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should call onChange when version is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const versionInput = screen.getByLabelText(/version/i);
@@ -213,7 +225,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should call onChange when input mapping is updated", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByTestId("add-mapping-Subgraph input key");
@@ -256,7 +268,7 @@ describe("SubgraphNodeForm", () => {
     });
 
     it("should call onChange when output mapping is updated", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByTestId("add-mapping-Parent state key");
@@ -391,7 +403,7 @@ describe("SubgraphNodeForm", () => {
 
   describe("Preserving Config", () => {
     it("should preserve mappings when updating graph ID", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = {
         graph_id: "old_graph",
         input_mapping: { key: "value" },

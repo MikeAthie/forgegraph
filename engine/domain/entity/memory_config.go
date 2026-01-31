@@ -6,13 +6,16 @@ type MemoryConfig struct {
 	Tier2         Tier2Config         `json:"tier2"`
 	Tier3         Tier3Config         `json:"tier3"`
 	Summarization SummarizationConfig `json:"summarization"`
+	CrossSession  CrossSessionConfig  `json:"cross_session"`
 }
 
 // Tier1Config controls the local message buffer.
 type Tier1Config struct {
-	Enabled     bool `json:"enabled"`
-	BufferSize  int  `json:"buffer_size"`
-	AutoPrepend bool `json:"auto_prepend"`
+	Enabled     bool   `json:"enabled"`
+	BufferSize  int    `json:"buffer_size"`
+	LimitMode   string `json:"limit_mode"`
+	MaxTokens   int    `json:"max_tokens"`
+	AutoPrepend bool   `json:"auto_prepend"`
 }
 
 // Tier2Config controls Redis-backed summaries/facts.
@@ -39,4 +42,11 @@ type SummarizationConfig struct {
 	KeepRecentCount  int    `json:"keep_recent_count"`
 	CooldownMessages int    `json:"cooldown_messages"`
 	Model            string `json:"model"`
+}
+
+// CrossSessionConfig controls shared memory across runs.
+type CrossSessionConfig struct {
+	Enabled         bool `json:"enabled"`
+	SessionTTLHours int  `json:"session_ttl_hours"`
+	ShareWithAgent  bool `json:"share_with_agent"`
 }

@@ -6,7 +6,7 @@
  * with AgentFields and AdvancedSettings.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { HumanGateNodeForm } from "@/components/graph-editor/forms/HumanGateNodeForm";
@@ -24,6 +24,14 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 describe("HumanGateNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {}
@@ -104,11 +112,11 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange when approval message is modified", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const approvalMessage = screen.getByLabelText(/approval message/i);
-      await user.type(approvalMessage, "Review needed");
+      await type(approvalMessage, "Review needed");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -140,11 +148,11 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange when instructions are modified", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const instructions = screen.getByLabelText(/instructions/i);
-      await user.type(instructions, "Check compliance");
+      await type(instructions, "Check compliance");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -169,11 +177,11 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange when timeout is modified", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const timeout = screen.getByLabelText(/timeout \(hours\)/i);
-      await user.type(timeout, "72");
+      await type(timeout, "72");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -216,11 +224,11 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange with parsed email array", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const emailsInput = screen.getByLabelText(/notify emails/i);
-      await user.type(emailsInput, "test@example.com, admin@example.com");
+      await type(emailsInput, "test@example.com, admin@example.com");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -235,11 +243,11 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should filter out empty email entries", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const emailsInput = screen.getByLabelText(/notify emails/i);
-      await user.type(emailsInput, "test@example.com, , admin@example.com");
+      await type(emailsInput, "test@example.com, , admin@example.com");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -261,7 +269,7 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange when auto-approve is toggled", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
@@ -270,7 +278,7 @@ describe("HumanGateNodeForm", () => {
         s.closest("div")?.textContent?.includes("Auto-approve")
       ) || switches[0];
 
-      await user.click(autoApproveSwitch);
+      await click(autoApproveSwitch as HTMLElement);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -311,13 +319,13 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange when require comment is toggled", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
       const requireCommentSwitch = switches[1];
 
-      await user.click(requireCommentSwitch);
+      await click(requireCommentSwitch);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -340,13 +348,13 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should call onChange when show context is toggled", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
       const showContextSwitch = switches[2];
 
-      await user.click(showContextSwitch);
+      await click(showContextSwitch);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalled();
@@ -473,7 +481,7 @@ describe("HumanGateNodeForm", () => {
 
   describe("Preserving Config", () => {
     it("should preserve all config when updating one field", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       const config = {
         approval_message: "Review this",
         timeout_hours: 24,
@@ -482,7 +490,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig(config);
 
       const instructions = screen.getByLabelText(/instructions/i);
-      await user.type(instructions, "New instructions");
+      await type(instructions, "New instructions");
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -499,13 +507,13 @@ describe("HumanGateNodeForm", () => {
 
   describe("Switches Behavior", () => {
     it("should toggle switch from false to true", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const config = { require_comment: false };
       renderWithConfig(config);
 
       const switches = screen.getAllByRole("switch");
       const requireCommentSwitch = switches[1];
-      await user.click(requireCommentSwitch);
+      await click(requireCommentSwitch);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -517,13 +525,13 @@ describe("HumanGateNodeForm", () => {
     });
 
     it("should toggle switch from true to false", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const config = { require_comment: true };
       renderWithConfig(config);
 
       const switches = screen.getAllByRole("switch");
       const requireCommentSwitch = switches[1];
-      await user.click(requireCommentSwitch);
+      await click(requireCommentSwitch);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(

@@ -5,7 +5,7 @@
  * default branch, and integration with AgentFields and AdvancedSettings.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { BranchNodeForm } from "@/components/graph-editor/forms/BranchNodeForm";
@@ -32,6 +32,15 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 describe("BranchNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
@@ -123,11 +132,11 @@ describe("BranchNodeForm", () => {
 
   describe("Adding Conditions", () => {
     it("should add a new condition when Add Condition button is clicked", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
-      await user.click(addButton);
+      await click(addButton);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -145,14 +154,14 @@ describe("BranchNodeForm", () => {
     });
 
     it("should increment branch name when adding multiple conditions", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const config = {
         conditions: [{ id: "c1", name: "Branch 1", expression: "true" }],
       };
       renderWithConfig(config);
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
-      await user.click(addButton);
+      await click(addButton);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -167,12 +176,12 @@ describe("BranchNodeForm", () => {
     });
 
     it("should generate unique IDs for new conditions", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       renderWithConfig();
 
       const addButton = screen.getByRole("button", { name: /add condition/i });
-      await user.click(addButton);
-      await user.click(addButton);
+      await click(addButton);
+      await click(addButton);
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -185,7 +194,7 @@ describe("BranchNodeForm", () => {
 
   describe("Removing Conditions", () => {
     it("should remove a condition when delete button is clicked", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const config = {
         conditions: [
           { id: "c1", name: "Condition 1", expression: "true" },
@@ -199,7 +208,7 @@ describe("BranchNodeForm", () => {
       expect(firstCard).toBeTruthy();
 
       const firstDeleteButton = within(firstCard as HTMLElement).getByRole("button");
-      await user.click(firstDeleteButton);
+      await click(firstDeleteButton);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -213,7 +222,7 @@ describe("BranchNodeForm", () => {
     });
 
     it("should remove correct condition by index", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const config = {
         conditions: [
           { id: "c1", name: "First", expression: "1" },
@@ -233,7 +242,7 @@ describe("BranchNodeForm", () => {
       expect(conditionCards.length).toBeGreaterThan(1);
       const secondCard = conditionCards[1] as HTMLElement;
       const deleteButton = within(secondCard).getByRole("button");
-      await user.click(deleteButton);
+      await click(deleteButton);
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -244,7 +253,7 @@ describe("BranchNodeForm", () => {
     });
 
     it("should show empty state after removing all conditions", async () => {
-      const user = userEvent.setup();
+      const { click } = setupUser();
       const config = {
         conditions: [{ id: "c1", name: "Only One", expression: "true" }],
       };
@@ -254,7 +263,7 @@ describe("BranchNodeForm", () => {
       const card = conditionLabel.closest("div")?.parentElement;
       expect(card).toBeTruthy();
       const deleteButton = within(card as HTMLElement).getByRole("button");
-      await user.click(deleteButton);
+      await click(deleteButton);
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
@@ -268,15 +277,15 @@ describe("BranchNodeForm", () => {
 
   describe("Condition Field Changes", () => {
     it("should update condition name", async () => {
-      const user = userEvent.setup();
+      const { clear, type } = setupUser();
       const config = {
         conditions: [{ id: "c1", name: "Original", expression: "true" }],
       };
       renderWithConfig(config);
 
       const nameInput = screen.getByDisplayValue("Original");
-      await user.clear(nameInput);
-      await user.type(nameInput, "Updated Name");
+      await clear(nameInput);
+      await type(nameInput, "Updated Name");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -285,14 +294,14 @@ describe("BranchNodeForm", () => {
     });
 
     it("should update condition expression", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       const config = {
         conditions: [{ id: "c1", name: "Test", expression: "" }],
       };
       renderWithConfig(config);
 
       const expressionInput = screen.getByPlaceholderText("state.score > 0.8");
-      await user.type(expressionInput, "state.value === true");
+      await type(expressionInput, "state.value === true");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -301,7 +310,7 @@ describe("BranchNodeForm", () => {
     });
 
     it("should preserve other conditions when updating one", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       const config = {
         conditions: [
           { id: "c1", name: "First", expression: "1" },
@@ -311,7 +320,7 @@ describe("BranchNodeForm", () => {
       renderWithConfig(config);
 
       const firstExpression = screen.getByDisplayValue("1");
-      await user.type(firstExpression, "00");
+      await type(firstExpression, "00");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
@@ -324,11 +333,11 @@ describe("BranchNodeForm", () => {
 
   describe("Default Branch Field", () => {
     it("should update default branch value", async () => {
-      const user = userEvent.setup();
+      const { type } = setupUser();
       renderWithConfig();
 
       const defaultBranch = screen.getByLabelText(/default branch/i);
-      await user.type(defaultBranch, "fallback");
+      await type(defaultBranch, "fallback");
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];

@@ -5,7 +5,7 @@
  * AgentFields and AdvancedSettings.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MergeNodeForm } from "@/components/graph-editor/forms/MergeNodeForm";
@@ -23,6 +23,18 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 describe("MergeNodeForm", () => {
   const mockOnChange = jest.fn();
   const mockSetErrors = jest.fn();
+
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      selectOptions: (element: HTMLElement, value: string) =>
+        act(async () => user.selectOptions(element, value)),
+    };
+  };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {}
@@ -113,7 +125,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should call onChange when strategy is changed to 'first'", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const firstRadio = screen.getByRole("radio", { name: /first complete/i });
@@ -129,7 +141,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should call onChange when strategy is changed to 'latest'", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const latestRadio = screen.getByRole("radio", { name: /latest value/i });
@@ -145,7 +157,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should call onChange when strategy is changed to 'combine'", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const combineRadio = screen.getByRole("radio", { name: /combine all/i });
@@ -161,7 +173,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should call onChange when strategy is changed to 'all'", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { merge_strategy: "first" as const };
       renderWithConfig(config);
 
@@ -194,7 +206,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should call onChange when output key is modified", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const outputKey = screen.getByLabelText(/output key/i);
@@ -276,7 +288,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should allow only one strategy to be selected at a time", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       renderWithConfig();
 
       const firstRadio = screen.getByRole("radio", { name: /first complete/i });
@@ -308,7 +320,7 @@ describe("MergeNodeForm", () => {
 
   describe("Preserving Config", () => {
     it("should preserve existing config when updating output key", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = { merge_strategy: "combine" as const };
       renderWithConfig(config);
 
@@ -326,7 +338,7 @@ describe("MergeNodeForm", () => {
     });
 
     it("should preserve output key when changing strategy", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const config = {
         merge_strategy: "first" as const,
         output_key: "existing_key",

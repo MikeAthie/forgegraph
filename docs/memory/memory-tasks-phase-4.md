@@ -16,11 +16,11 @@ Deliver advanced memory features: token-aware limits, cross-session memory, anal
 - `engine/domain/service/token_counter.go`
 - `engine/domain/entity/message_buffer.go`
 
-- [ ] Add TokenCounter interface with tiktoken implementation.
-- [ ] Extend MessageBuffer to support token-based limits.
-- [ ] Cache token counts to reduce overhead.
-- [ ] Fallback to message count on failure.
-- [ ] Add unit tests and benchmarks.
+- [x] Add TokenCounter interface with tiktoken implementation.
+- [x] Extend MessageBuffer to support token-based limits.
+- [x] Cache token counts to reduce overhead.
+- [x] Fallback to message count on failure.
+- [x] Add unit tests and benchmarks.
 
 ```go
 type TokenCounter interface {
@@ -43,11 +43,11 @@ type TokenCounter interface {
 - `backend/domain/entities/memory_session.py`
 - `backend/infrastructure/orm/migrations/0016_memory_sessions.py`
 
-- [ ] Add session-level memory keys in Redis.
-- [ ] Create MemorySession model with expiration.
-- [ ] Pass session ID in StartRunRequest.
-- [ ] Share buffer across runs in same session.
-- [ ] Add integration tests for session sharing.
+- [x] Add session-level memory keys in Redis.
+- [x] Create MemorySession model with expiration.
+- [x] Pass session ID in StartRunRequest.
+- [x] Share buffer across runs in same session.
+- [x] Add integration tests for session sharing.
 
 Key structure:
 ```
