@@ -28,6 +28,7 @@ export default function Header() {
     { href: "/graphs", label: "Graphs" },
     { href: "/prompts", label: "Prompts" },
     { href: "/runs", label: "Runs" },
+    { href: "/analytics/memory", label: "Analytics" },
     { href: "/approvals", label: "Approvals" },
   ] as const;
 
@@ -35,6 +36,7 @@ export default function Header() {
     if (router.pathname.startsWith("/graphs")) return "/graphs";
     if (router.pathname.startsWith("/prompts")) return "/prompts";
     if (router.pathname.startsWith("/runs")) return "/runs";
+    if (router.pathname.startsWith("/analytics")) return "/analytics/memory";
     if (router.pathname.startsWith("/approvals")) return "/approvals";
     return null;
   })();

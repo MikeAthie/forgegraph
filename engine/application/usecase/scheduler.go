@@ -385,6 +385,8 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	// Store active run
 	s.activeRuns.Store(runID, rc)
 
+	s.preloadMemory(rc)
+
 	// Update run status to running
 	if err := s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning)); err != nil {
 		log.Printf("Failed to update run status: %v", err)
@@ -1553,6 +1555,68 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 	if event != nil {
 		s.emitter.EmitAsync(event)
 	}
+}
+
+func (s *Scheduler) preloadMemory(rc *runContext) {
+	if rc == nil || rc.messageBuffer == nil || rc.memoryConfig == nil {
+		return
+	}
+	if !s.shouldUseSessionMemory(rc.memoryConfig) && !(rc.memoryConfig.Tier3.Enabled && s.memoryRetriever != nil) {
+		return
+	}
+
+	go func() {
+		if s.shouldUseSessionMemory(rc.memoryConfig) && rc.sessionID != "" && s.memoryStore != nil && rc.messageBuffer.Count() == 0 {
+			start := time.Now()
+			namespace := sessionNamespace(rc.tenantID)
+			key := sessionBufferKey(rc.sessionID)
+			value, found, err := s.memoryStore.Get(context.Background(), namespace, key)
+			if err != nil {
+				log.Printf("Failed to load session buffer for %s: %v", rc.sessionID, err)
+				metrics.RecordPreloadOperation("session_restore", "error", time.Since(start))
+			} else if found {
+				messages := decodeMessages(value)
+				if len(messages) > 0 {
+					rc.messageBuffer.Restore(messages)
+					metrics.RecordPreloadOperation("session_restore", "hit", time.Since(start))
+				} else {
+					metrics.RecordPreloadOperation("session_restore", "miss", time.Since(start))
+				}
+			} else {
+				metrics.RecordPreloadOperation("session_restore", "miss", time.Since(start))
+			}
+		}
+
+		if rc.memoryConfig.Tier3.Enabled && s.memoryRetriever != nil && rc.currentSummary != nil {
+			s.warmupVectorCache(rc)
+		}
+	}()
+}
+
+func (s *Scheduler) warmupVectorCache(rc *runContext) {
+	if rc == nil || s.memoryRetriever == nil || rc.memoryConfig == nil || rc.currentSummary == nil {
+		return
+	}
+
+	req := port.MemoryRetrieveRequest{
+		TenantID:       rc.tenantID,
+		Query:          rc.currentSummary.Content,
+		AgentID:        "",
+		RunID:          rc.runID,
+		SessionID:      rc.sessionID,
+		TopK:           rc.memoryConfig.Tier3.TopK,
+		Threshold:      rc.memoryConfig.Tier3.Threshold,
+		RecencyWeight:  rc.memoryConfig.Tier3.RecencyWeight,
+		EmbeddingModel: rc.memoryConfig.Tier3.EmbeddingModel,
+	}
+
+	start := time.Now()
+	if _, err := s.memoryRetriever.Retrieve(context.Background(), req); err != nil {
+		log.Printf("Vector cache warmup failed for run %s: %v", rc.runID, err)
+		metrics.RecordPreloadOperation("vector_warmup", "error", time.Since(start))
+		return
+	}
+	metrics.RecordPreloadOperation("vector_warmup", "success", time.Since(start))
 }
 
 // extractFinalOutput collects output from Output node(s)

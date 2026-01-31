@@ -63,6 +63,21 @@ var (
 		},
 		[]string{"model"},
 	)
+	preloadOpsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "forgegraph_memory_preload_operations_total",
+			Help: "Total memory preload operations.",
+		},
+		[]string{"operation", "status"},
+	)
+	preloadLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "forgegraph_memory_preload_latency_seconds",
+			Help:    "Memory preload latency.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"operation"},
+	)
 )
 
 func init() {
@@ -75,6 +90,8 @@ func init() {
 		tier1BufferSize,
 		summarizationTriggers,
 		summarizationCostTotal,
+		preloadOpsTotal,
+		preloadLatency,
 	)
 	redisCircuitState.WithLabelValues("open").Set(0)
 	redisCircuitState.WithLabelValues("closed").Set(1)
@@ -136,4 +153,16 @@ func RecordSummarizationCost(model string, cost float64) {
 		return
 	}
 	summarizationCostTotal.WithLabelValues(model).Add(cost)
+}
+
+// RecordPreloadOperation tracks preload operation metrics.
+func RecordPreloadOperation(operation string, status string, duration time.Duration) {
+	if operation == "" {
+		operation = "unknown"
+	}
+	if status == "" {
+		status = "success"
+	}
+	preloadOpsTotal.WithLabelValues(operation, status).Inc()
+	preloadLatency.WithLabelValues(operation).Observe(duration.Seconds())
 }

@@ -68,10 +68,10 @@ forgegraph:tenant:{tenant_id}:agent:{agent_id}:memory
 - `backend/adapters/api/analytics/memory_analytics.py`
 - `frontend/pages/analytics/memory.tsx`
 
-- [ ] Implement analytics API endpoints for usage, costs, performance.
-- [ ] Build dashboard with charts for tier usage and costs.
-- [ ] Add tenant isolation for analytics queries.
-- [ ] Add export/report functionality.
+- [x] Implement analytics API endpoints for usage, costs, performance.
+- [x] Build dashboard with charts for tier usage and costs.
+- [x] Add tenant isolation for analytics queries.
+- [x] Add export/report functionality.
 
 **Acceptance Criteria:**
 - [ ] API returns accurate usage metrics
@@ -85,10 +85,10 @@ forgegraph:tenant:{tenant_id}:agent:{agent_id}:memory
 **Files:**
 - `engine/application/usecase/scheduler.go`
 
-- [ ] Add preloadMemory step on run start.
-- [ ] Restore session buffer asynchronously.
-- [ ] Warm vector cache when Tier3 enabled.
-- [ ] Track preload metrics.
+- [x] Add preloadMemory step on run start.
+- [x] Restore session buffer asynchronously.
+- [x] Warm vector cache when Tier3 enabled.
+- [x] Track preload metrics.
 
 **Acceptance Criteria:**
 - [ ] Preload happens in background
@@ -101,9 +101,9 @@ forgegraph:tenant:{tenant_id}:agent:{agent_id}:memory
 **Files:**
 - `engine/adapter/store/redis_memory_store.go`
 
-- [ ] Add BatchGet using Redis pipelining.
-- [ ] Handle per-key errors gracefully.
-- [ ] Add benchmarks for batch vs single get.
+- [x] Add BatchGet using Redis pipelining.
+- [x] Handle per-key errors gracefully.
+- [x] Add benchmarks for batch vs single get.
 
 **Acceptance Criteria:**
 - [ ] BatchGet reduces round trips to 1
@@ -116,10 +116,10 @@ forgegraph:tenant:{tenant_id}:agent:{agent_id}:memory
 **Files:**
 - `engine/adapter/store/redis_memory_store.go`
 
-- [ ] Compress values over threshold before storage.
-- [ ] Add transparent decompression on get.
-- [ ] Store compression flag prefix.
-- [ ] Add compression benchmark.
+- [x] Compress values over threshold before storage.
+- [x] Add transparent decompression on get.
+- [x] Store compression flag prefix.
+- [x] Add compression benchmark.
 
 ```go
 const compressionThreshold = 1024 // bytes

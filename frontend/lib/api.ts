@@ -106,6 +106,11 @@ const API_PATHS = {
     count: "/api/approvals/count",
     detail: (approvalId: string) => `/api/approvals/${approvalId}`,
   },
+  analytics: {
+    memoryUsage: "/api/analytics/memory/usage",
+    memoryCosts: "/api/analytics/memory/costs",
+    memoryPerformance: "/api/analytics/memory/performance",
+  },
 } as const;
 
 const api: AxiosInstance = axios.create({
@@ -669,6 +674,107 @@ export const approvalsApi = {
 
   get: async (approvalId: string): Promise<ApprovalTask> => {
     const response = await api.get<ApiSuccessResponse<ApprovalTask>>(API_PATHS.approvals.detail(approvalId));
+    return response.data.data;
+  },
+};
+
+export type MemoryAnalyticsUsage = {
+  period: string;
+  start_date: string;
+  end_date: string;
+  tier1: {
+    total_messages: number;
+    avg_buffer_size: number;
+    peak_buffer_size: number;
+  };
+  tier2: {
+    redis_keys: number;
+    storage_mb: number;
+    hit_rate: number | null;
+  };
+  tier3: {
+    chunks_stored: number;
+    embeddings_generated: number;
+    search_queries: number;
+    avg_search_latency_ms: number | null;
+  };
+  costs: {
+    summarization_usd: number;
+    embedding_usd: number;
+    total_usd: number;
+  };
+  usage_series: Array<{
+    date: string;
+    summarization_prompt_tokens: number;
+    summarization_completion_tokens: number;
+    summarization_total_tokens: number;
+    summarization_cost_usd: number;
+  }>;
+  top_agents: Array<{
+    agent_id: string | null;
+    chunks: number;
+  }>;
+  totals: {
+    summarization_prompt_tokens: number;
+    summarization_completion_tokens: number;
+    summarization_total_tokens: number;
+  };
+};
+
+export type MemoryAnalyticsCosts = {
+  period: string;
+  start_date: string;
+  end_date: string;
+  currency: string;
+  summarization_total_usd: number;
+  embedding_total_usd: number;
+  series: Array<{
+    date: string;
+    summarization_cost_usd: number;
+  }>;
+};
+
+export type MemoryAnalyticsPerformance = {
+  period: string;
+  start_date: string;
+  end_date: string;
+  vector: {
+    search_queries: number;
+    avg_search_latency_ms: number | null;
+    chunks_indexed: number;
+  };
+  summarization: {
+    runs: number;
+    avg_latency_ms: number | null;
+  };
+  grpc: {
+    requests_total: number;
+    errors_total: number;
+  };
+  maintenance: {
+    memory_gc_last_run_at: string | null;
+    memory_gc_last_reindex: string | null;
+  };
+};
+
+export const analyticsApi = {
+  getMemoryUsage: async (period: string): Promise<MemoryAnalyticsUsage> => {
+    const response = await api.get<ApiSuccessResponse<MemoryAnalyticsUsage>>(API_PATHS.analytics.memoryUsage, {
+      params: { period },
+    });
+    return response.data.data;
+  },
+  getMemoryCosts: async (period: string): Promise<MemoryAnalyticsCosts> => {
+    const response = await api.get<ApiSuccessResponse<MemoryAnalyticsCosts>>(API_PATHS.analytics.memoryCosts, {
+      params: { period },
+    });
+    return response.data.data;
+  },
+  getMemoryPerformance: async (period: string): Promise<MemoryAnalyticsPerformance> => {
+    const response = await api.get<ApiSuccessResponse<MemoryAnalyticsPerformance>>(
+      API_PATHS.analytics.memoryPerformance,
+      { params: { period } },
+    );
     return response.data.data;
   },
 };

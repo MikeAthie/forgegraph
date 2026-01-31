@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func newTestRedisStore(t *testing.T) (*RedisMemoryStore, *miniredis.Miniredis, *InMemoryMemoryStore) {
+func newTestRedisStore(t testing.TB) (*RedisMemoryStore, *miniredis.Miniredis, *InMemoryMemoryStore) {
 	t.Helper()
 
 	mini, err := miniredis.Run()
@@ -141,6 +142,58 @@ func TestRedisMemoryStore_TenantIsolation(t *testing.T) {
 	}
 }
 
+func TestRedisMemoryStore_BatchGet(t *testing.T) {
+	store, mini, _ := newTestRedisStore(t)
+	defer mini.Close()
+
+	ctx := context.Background()
+	if err := store.Set(ctx, "ns", "a", "one", 0); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+	if err := store.Set(ctx, "ns", "b", "two", 0); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+
+	results, err := store.BatchGet(ctx, "ns", []string{"a", "b", "missing"})
+	if err != nil {
+		t.Fatalf("batch get failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results["a"] != "one" || results["b"] != "two" {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+}
+
+func TestRedisMemoryStore_CompressionRoundTrip(t *testing.T) {
+	store, mini, _ := newTestRedisStore(t)
+	defer mini.Close()
+
+	ctx := context.Background()
+	payload := map[string]any{
+		"data": string(make([]byte, compressionThreshold+10)),
+	}
+	if err := store.Set(ctx, "ns", "big", payload, 0); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+
+	value, found, err := store.Get(ctx, "ns", "big")
+	if err != nil {
+		t.Fatalf("get failed: %v", err)
+	}
+	if !found {
+		t.Fatalf("expected value to be found")
+	}
+	decoded, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map value, got %T", value)
+	}
+	if _, ok := decoded["data"]; !ok {
+		t.Fatalf("expected data key in decoded payload")
+	}
+}
+
 func TestRedisMemoryStore_ConcurrentAccess(t *testing.T) {
 	store, mini, _ := newTestRedisStore(t)
 	defer mini.Close()
@@ -253,5 +306,89 @@ func TestRedisMemoryStore_SummaryVersionRetention(t *testing.T) {
 	}
 	if !mini.Exists(store.buildSummaryKey("run-2", "v6")) {
 		t.Fatalf("expected v6 to remain")
+	}
+}
+
+func BenchmarkRedisMemoryStore_BatchGet(b *testing.B) {
+	store, mini, _ := newTestRedisStore(b)
+	defer mini.Close()
+
+	ctx := context.Background()
+	keys := make([]string, 10)
+	for i := range keys {
+		key := fmt.Sprintf("bench-%d", i)
+		keys[i] = key
+		if err := store.Set(ctx, "ns", key, "value", 0); err != nil {
+			b.Fatalf("set failed: %v", err)
+		}
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := store.BatchGet(ctx, "ns", keys); err != nil {
+			b.Fatalf("batch get failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkRedisMemoryStore_GetMulti(b *testing.B) {
+	store, mini, _ := newTestRedisStore(b)
+	defer mini.Close()
+
+	ctx := context.Background()
+	keys := make([]string, 10)
+	for i := range keys {
+		key := fmt.Sprintf("bench-%d", i)
+		keys[i] = key
+		if err := store.Set(ctx, "ns", key, "value", 0); err != nil {
+			b.Fatalf("set failed: %v", err)
+		}
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, key := range keys {
+			if _, _, err := store.Get(ctx, "ns", key); err != nil {
+				b.Fatalf("get failed: %v", err)
+			}
+		}
+	}
+}
+
+func BenchmarkRedisMemoryStore_CompressLargeSet(b *testing.B) {
+	store, mini, _ := newTestRedisStore(b)
+	defer mini.Close()
+
+	ctx := context.Background()
+	payload := map[string]any{
+		"data": strings.Repeat("x", compressionThreshold+2048),
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := store.Set(ctx, "ns", "large", payload, 0); err != nil {
+			b.Fatalf("set failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkRedisMemoryStore_UncompressedSet(b *testing.B) {
+	store, mini, _ := newTestRedisStore(b)
+	defer mini.Close()
+
+	ctx := context.Background()
+	payload := map[string]any{
+		"data": "small",
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := store.Set(ctx, "ns", "small", payload, 0); err != nil {
+			b.Fatalf("set failed: %v", err)
+		}
 	}
 }

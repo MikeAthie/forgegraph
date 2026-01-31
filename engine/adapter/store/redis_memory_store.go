@@ -1,10 +1,13 @@
 package store
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -25,6 +28,10 @@ const (
 	circuitOpenDuration = 30 * time.Second
 	failureThreshold    = 5
 	defaultSummaryTTL   = 7 * 24 * time.Hour
+
+	compressionThreshold = 1024
+	compressionFlagNone  = byte(0x00)
+	compressionFlagZlib  = byte(0x01)
 )
 
 var errCircuitOpen = errors.New("redis circuit open")
@@ -100,7 +107,7 @@ func (s *RedisMemoryStore) Get(ctx context.Context, namespace, key string) (valu
 	}
 
 	fullKey := s.buildKey(namespace, key)
-	val, err := s.client.Get(ctx, fullKey).Result()
+	raw, err := s.client.Get(ctx, fullKey).Bytes()
 	if err == redis.Nil {
 		return nil, false, nil
 	}
@@ -111,8 +118,12 @@ func (s *RedisMemoryStore) Get(ctx context.Context, namespace, key string) (valu
 	}
 
 	s.resetFailures()
+	val, err := s.decodePayload(raw)
+	if err != nil {
+		return nil, false, err
+	}
 	var result any
-	if err := json.Unmarshal([]byte(val), &result); err != nil {
+	if err := json.Unmarshal(val, &result); err != nil {
 		return nil, false, fmt.Errorf("redis unmarshal error: %w", err)
 	}
 	return result, true, nil
@@ -135,13 +146,18 @@ func (s *RedisMemoryStore) Set(ctx context.Context, namespace, key string, value
 		return fmt.Errorf("redis marshal error: %w", err)
 	}
 
+	payload, err := s.encodePayload(data)
+	if err != nil {
+		return fmt.Errorf("redis encode error: %w", err)
+	}
+
 	fullKey := s.buildKey(namespace, key)
 	ttl := time.Duration(ttlSeconds) * time.Second
 	if ttlSeconds <= 0 {
 		ttl = 0
 	}
 
-	if err := s.client.Set(ctx, fullKey, data, ttl).Err(); err != nil {
+	if err := s.client.Set(ctx, fullKey, payload, ttl).Err(); err != nil {
 		s.recordFailure()
 		metrics.RecordFallback()
 		err = s.fallbackSet(ctx, namespace, key, value, ttlSeconds, err)
@@ -150,6 +166,51 @@ func (s *RedisMemoryStore) Set(ctx context.Context, namespace, key string, value
 
 	s.resetFailures()
 	return nil
+}
+
+// BatchGet retrieves multiple values by namespace and keys.
+func (s *RedisMemoryStore) BatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error) {
+	if len(keys) == 0 {
+		return map[string]any{}, nil
+	}
+	if s.isCircuitOpen() {
+		return nil, errCircuitOpen
+	}
+
+	pipe := s.client.Pipeline()
+	cmds := make(map[string]*redis.StringCmd, len(keys))
+	for _, key := range keys {
+		fullKey := s.buildKey(namespace, key)
+		cmds[key] = pipe.Get(ctx, fullKey)
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		s.recordFailure()
+		return nil, err
+	}
+	s.resetFailures()
+
+	results := make(map[string]any)
+	for key, cmd := range cmds {
+		raw, err := cmd.Bytes()
+		if err == redis.Nil {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		val, err := s.decodePayload(raw)
+		if err != nil {
+			return nil, err
+		}
+		var decoded any
+		if err := json.Unmarshal(val, &decoded); err != nil {
+			return nil, err
+		}
+		results[key] = decoded
+	}
+
+	return results, nil
 }
 
 // Delete removes a key/value entry. Returns true if an entry was deleted.
@@ -458,4 +519,60 @@ func (s *RedisMemoryStore) fallbackDelete(ctx context.Context, namespace, key st
 		cause = errCircuitOpen
 	}
 	return false, cause
+}
+
+func (s *RedisMemoryStore) encodePayload(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return []byte{compressionFlagNone}, nil
+	}
+	if len(data) <= compressionThreshold {
+		out := make([]byte, 1+len(data))
+		out[0] = compressionFlagNone
+		copy(out[1:], data)
+		return out, nil
+	}
+
+	var buf bytes.Buffer
+	zw := zlib.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		_ = zw.Close()
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+
+	compressed := buf.Bytes()
+	out := make([]byte, 1+len(compressed))
+	out[0] = compressionFlagZlib
+	copy(out[1:], compressed)
+	return out, nil
+}
+
+func (s *RedisMemoryStore) decodePayload(raw []byte) ([]byte, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	flag := raw[0]
+	payload := raw[1:]
+
+	// Backward compatibility: plain JSON stored without flag.
+	if flag != compressionFlagNone && flag != compressionFlagZlib {
+		return raw, nil
+	}
+
+	switch flag {
+	case compressionFlagNone:
+		return payload, nil
+	case compressionFlagZlib:
+		reader, err := zlib.NewReader(bytes.NewReader(payload))
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		return io.ReadAll(reader)
+	default:
+		return raw, nil
+	}
 }
