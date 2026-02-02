@@ -86,9 +86,13 @@ func (s *LLMSummarizer) Summarize(ctx context.Context, messages []entity.Message
 		_ = s.costs.RecordSummarizationUsage(ctx, tenantID, model, response.Usage)
 	}
 
-	payload, err := extractJSON(response.Content)
+	payload, err := ExtractJSON(response.Content)
 	if err != nil {
-		return nil, err
+		cleaned := stripMarkdownCodeBlocks(response.Content)
+		payload, err = ExtractJSON(cleaned)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract JSON: %w", err)
+		}
 	}
 
 	var parsed struct {
@@ -135,9 +139,13 @@ func (s *LLMSummarizer) ExtractFacts(ctx context.Context, messages []entity.Mess
 		_ = s.costs.RecordSummarizationUsage(ctx, tenantID, s.model, response.Usage)
 	}
 
-	payload, err := extractJSON(response.Content)
+	payload, err := ExtractJSON(response.Content)
 	if err != nil {
-		return nil, err
+		cleaned := stripMarkdownCodeBlocks(response.Content)
+		payload, err = ExtractJSON(cleaned)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract JSON: %w", err)
+		}
 	}
 
 	var parsed struct {
@@ -228,14 +236,4 @@ func formatMessages(messages []entity.Message) string {
 		builder.WriteString("\n")
 	}
 	return strings.TrimSpace(builder.String())
-}
-
-func extractJSON(content string) (string, error) {
-	trimmed := strings.TrimSpace(content)
-	start := strings.Index(trimmed, "{")
-	end := strings.LastIndex(trimmed, "}")
-	if start == -1 || end == -1 || end < start {
-		return "", fmt.Errorf("no JSON object found in response")
-	}
-	return trimmed[start : end+1], nil
 }
