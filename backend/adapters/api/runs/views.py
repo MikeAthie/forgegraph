@@ -6,8 +6,8 @@ Clean Architecture: Interface Adapters layer.
 
 import asyncio
 import copy
-import logging
 import json as pyjson
+import logging
 from datetime import timedelta
 
 from asgiref.sync import async_to_sync
@@ -35,17 +35,17 @@ from adapters.api.runs.serializers import (
     RunResumeSerializer,
     RunStartSerializer,
 )
-from application.services.schema_validation import (
-    SchemaError,
-    extract_schema_metadata,
-    validate_json_schema,
-)
 from adapters.gateways.grpc_engine_client import (
     EngineConnectionError,
     EngineExecutionError,
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
+from application.services.schema_validation import (
+    SchemaError,
+    extract_schema_metadata,
+    validate_json_schema,
+)
 from infrastructure.orm.models import (
     ApprovalTask,
     GraphVersion,
@@ -495,7 +495,9 @@ class RunStartView(APIView):
 
         # Send run to the engine
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
-        memory_config_json = build_memory_config_json(graph_version.graph, request.user, session_id=session_id)
+        memory_config_json = build_memory_config_json(
+            graph_version.graph, request.user, session_id=session_id
+        )
         tenant_id = get_tenant_id(request)
         try:
             with get_engine_client(callback_url) as engine:
@@ -702,7 +704,9 @@ class RunInvokeView(APIView):
         upsert_memory_session(request.user, session_id)
 
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
-        memory_config_json = build_memory_config_json(graph_version.graph, request.user, session_id=session_id)
+        memory_config_json = build_memory_config_json(
+            graph_version.graph, request.user, session_id=session_id
+        )
         tenant_id = get_tenant_id(request)
         try:
             with get_engine_client(callback_url) as engine:
@@ -1050,7 +1054,9 @@ class RunEventsView(APIView):
 
                 if schema_mode == "strict":
                     run.status = "failed"
-                    run.error_message = f"Output schema validation failed: {schema_errors[0]['message']}"
+                    run.error_message = (
+                        f"Output schema validation failed: {schema_errors[0]['message']}"
+                    )
                     run.save(update_fields=["status", "error_message"])
                     payload["status"] = run.status
                     payload["error_message"] = run.error_message
@@ -1197,7 +1203,7 @@ def _get_user_from_request(request: Request):
 async def _receive_with_timeout(channel_layer, channel_name: str, timeout: float):
     try:
         return await asyncio.wait_for(channel_layer.receive(channel_name), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return None
 
 
@@ -1230,7 +1236,9 @@ class RunEventsStreamView(APIView):
             )
 
             if since:
-                for event in RunEvent.objects.filter(run=run, created_at__gt=since).order_by("created_at"):
+                for event in RunEvent.objects.filter(run=run, created_at__gt=since).order_by(
+                    "created_at"
+                ):
                     message = _build_stream_message(run=run, event=event)
                     yield _format_sse(message, event_name=event.event_type)
 

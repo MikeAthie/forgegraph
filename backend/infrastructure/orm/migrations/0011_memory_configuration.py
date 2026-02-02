@@ -15,7 +15,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="MemoryConfiguration",
             fields=[
-                ("id", models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        primary_key=True, default=uuid.uuid4, editable=False, serialize=False
+                    ),
+                ),
                 ("buffer_enabled", models.BooleanField(default=True)),
                 ("buffer_size", models.PositiveIntegerField(default=20)),
                 ("auto_prepend", models.BooleanField(default=True)),

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Iterable
-
 from adapters.repositories.memory_chunk_repository import MemoryChunkRepository
 from application.services.chunking_service import Chunk, ChunkingStrategy, Message
 from application.services.embedding_service import EmbeddingService

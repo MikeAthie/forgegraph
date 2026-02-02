@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 
@@ -8,8 +7,8 @@ class MemoryConfigEntity:
     id: UUID
 
     # Scope (one must be set)
-    graph_id: Optional[UUID] = None
-    user_id: Optional[UUID] = None
+    graph_id: UUID | None = None
+    user_id: UUID | None = None
 
     # Tier 1: Local Buffer
     buffer_enabled: bool = True

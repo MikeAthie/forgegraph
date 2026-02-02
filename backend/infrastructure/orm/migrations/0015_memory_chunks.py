@@ -2,8 +2,8 @@
 
 import uuid
 
-from django.db import migrations, models
 import pgvector.django
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -15,7 +15,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="MemoryChunk",
             fields=[
-                ("id", models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        primary_key=True, default=uuid.uuid4, editable=False, serialize=False
+                    ),
+                ),
                 ("tenant_id", models.UUIDField(db_index=True)),
                 ("agent_id", models.UUIDField(blank=True, null=True, db_index=True)),
                 ("run_id", models.UUIDField(blank=True, null=True, db_index=True)),
@@ -46,7 +51,9 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="memorychunk",
-            index=models.Index(fields=["tenant_id", "session_id"], name="memory_chunks_session_idx"),
+            index=models.Index(
+                fields=["tenant_id", "session_id"], name="memory_chunks_session_idx"
+            ),
         ),
         migrations.AddIndex(
             model_name="memorychunk",

@@ -11,7 +11,6 @@ from typing import Any
 
 from domain.value_objects.node_types import NodeType
 
-
 # Schema definitions for each node type
 # Format: {field_name: {required: bool, type: str, min_length?: int, ...}}
 
@@ -137,11 +136,13 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict]:
 
         # Check required fields
         if is_required and value is None:
-            errors.append({
-                "field": field_name,
-                "message": f"Required field '{field_name}' is missing",
-                "suggestion": f"Add a value for '{field_name}'",
-            })
+            errors.append(
+                {
+                    "field": field_name,
+                    "message": f"Required field '{field_name}' is missing",
+                    "suggestion": f"Add a value for '{field_name}'",
+                }
+            )
             continue
 
         # Skip validation if value is not present and not required
@@ -157,34 +158,42 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict]:
         # Min/max validation for numbers
         if field_type in ("number", "integer"):
             if "min" in field_schema and value < field_schema["min"]:
-                errors.append({
-                    "field": field_name,
-                    "message": f"'{field_name}' must be at least {field_schema['min']}",
-                    "suggestion": f"Set '{field_name}' to {field_schema['min']} or higher",
-                })
+                errors.append(
+                    {
+                        "field": field_name,
+                        "message": f"'{field_name}' must be at least {field_schema['min']}",
+                        "suggestion": f"Set '{field_name}' to {field_schema['min']} or higher",
+                    }
+                )
             if "max" in field_schema and value > field_schema["max"]:
-                errors.append({
-                    "field": field_name,
-                    "message": f"'{field_name}' must be at most {field_schema['max']}",
-                    "suggestion": f"Set '{field_name}' to {field_schema['max']} or lower",
-                })
+                errors.append(
+                    {
+                        "field": field_name,
+                        "message": f"'{field_name}' must be at most {field_schema['max']}",
+                        "suggestion": f"Set '{field_name}' to {field_schema['max']} or lower",
+                    }
+                )
 
         # Min length validation for strings
         if field_type == "string" and "min_length" in field_schema:
             if len(value) < field_schema["min_length"]:
-                errors.append({
-                    "field": field_name,
-                    "message": f"'{field_name}' is too short",
-                    "suggestion": f"Provide a longer value for '{field_name}'",
-                })
+                errors.append(
+                    {
+                        "field": field_name,
+                        "message": f"'{field_name}' is too short",
+                        "suggestion": f"Provide a longer value for '{field_name}'",
+                    }
+                )
 
         # Enum validation
         if "enum" in field_schema and value not in field_schema["enum"]:
-            errors.append({
-                "field": field_name,
-                "message": f"'{field_name}' must be one of: {', '.join(field_schema['enum'])}",
-                "suggestion": f"Use one of the allowed values: {', '.join(field_schema['enum'])}",
-            })
+            errors.append(
+                {
+                    "field": field_name,
+                    "message": f"'{field_name}' must be one of: {', '.join(field_schema['enum'])}",
+                    "suggestion": f"Use one of the allowed values: {', '.join(field_schema['enum'])}",
+                }
+            )
 
     return errors
 

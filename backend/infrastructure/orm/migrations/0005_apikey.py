@@ -8,27 +8,53 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orm', '0004_run_pause_state_json_run_paused_node_id_and_more'),
+        ("orm", "0004_run_pause_state_json_run_paused_node_id_and_more"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='APIKey',
+            name="APIKey",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('provider', models.CharField(choices=[('openai', 'OpenAI'), ('anthropic', 'Anthropic'), ('google', 'Google AI')], max_length=32)),
-                ('name', models.CharField(help_text='User-friendly name for this key', max_length=100)),
-                ('encrypted_key', models.BinaryField(help_text='Fernet-encrypted API key')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='api_keys', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                (
+                    "provider",
+                    models.CharField(
+                        choices=[
+                            ("openai", "OpenAI"),
+                            ("anthropic", "Anthropic"),
+                            ("google", "Google AI"),
+                        ],
+                        max_length=32,
+                    ),
+                ),
+                (
+                    "name",
+                    models.CharField(help_text="User-friendly name for this key", max_length=100),
+                ),
+                ("encrypted_key", models.BinaryField(help_text="Fernet-encrypted API key")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="api_keys",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'db_table': 'api_keys',
-                'ordering': ['-created_at'],
-                'indexes': [models.Index(fields=['user', 'provider'], name='api_keys_user_provider_idx')],
-                'unique_together': {('user', 'provider', 'name')},
+                "db_table": "api_keys",
+                "ordering": ["-created_at"],
+                "indexes": [
+                    models.Index(fields=["user", "provider"], name="api_keys_user_provider_idx")
+                ],
+                "unique_together": {("user", "provider", "name")},
             },
         ),
     ]

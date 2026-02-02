@@ -40,7 +40,7 @@ class EncryptionService:
             if not key:
                 raise EncryptionError(
                     "ENCRYPTION_KEY not configured in settings. "
-                    "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                    'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
                 )
 
         try:
@@ -93,9 +93,7 @@ class EncryptionService:
         try:
             return self.cipher.decrypt(ciphertext).decode("utf-8")
         except InvalidToken as e:
-            raise EncryptionError(
-                "Decryption failed: invalid token or key mismatch"
-            ) from e
+            raise EncryptionError("Decryption failed: invalid token or key mismatch") from e
         except Exception as e:
             raise EncryptionError(f"Decryption failed: {e}") from e
 

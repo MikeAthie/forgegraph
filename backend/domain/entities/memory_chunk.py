@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 
@@ -13,8 +13,8 @@ class MemoryChunkEntity:
     embedding: list[float]
     embedding_model: str
     source_timestamp: datetime
-    agent_id: Optional[UUID] = None
-    run_id: Optional[UUID] = None
-    session_id: Optional[UUID] = None
+    agent_id: UUID | None = None
+    run_id: UUID | None = None
+    session_id: UUID | None = None
     metadata: dict[str, Any] | None = None
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None

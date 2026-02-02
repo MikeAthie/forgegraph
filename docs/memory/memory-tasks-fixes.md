@@ -348,6 +348,8 @@ func extractJSON(content string) (string, error) {
 
 ### FIX-02: Cost Tracking Error Handling 🔴
 **Priority:** Critical
+**Status:** ❌ Incomplete.
+
 **Files:**
 - `engine/adapter/summarizer/llm_summarizer.go`
 - `engine/adapter/summarizer/cost_tracker.go`
@@ -355,6 +357,11 @@ func extractJSON(content string) (string, error) {
 
 **Problem:**
 Cost tracking errors are silently ignored, leading to billing inaccuracies.
+
+**Review Notes:**
+- **Missing:** The Dead Letter Queue (DLQ) mechanism is missing from `cost_tracker.go`.
+- **Incorrect:** The retry loop in `recordCostsWithRetry` does not check for non-retryable validation errors as planned.
+- **Inconsistent:** The failure metric `memoryCostTrackingFailures` is not recorded in the main `Summarize` function upon failure.
 
 ```go
 // Current - error ignored
@@ -656,12 +663,18 @@ _ = s.costs.RecordSummarizationUsage(ctx, tenantID, model, response.Usage)
 
 ### FIX-03: MemoryGCService Safe Deletion Logic 🔴
 **Priority:** Critical
+**Status:** ❌ Incomplete.
+
 **Files:**
 - `backend/application/services/memory_gc.py`
 - `backend/tests/unit/application/services/test_memory_gc.py`
 
 **Problem:**
 Current implementation assumes `tenant_id` equals `User.id`, but graph-scoped configurations also exist. This would incorrectly delete all graph memory.
+
+**Review Notes:**
+- **Missing:** Unit tests are missing (`test_memory_gc.py` was not found).
+- **Missing:** The admin API endpoint to trigger the GC service is missing (`admin/views.py` was not found).
 
 ```python
 # Current broken implementation
@@ -1245,285 +1258,15 @@ if prune_missing_users:
 
 ### FIX-04: TieredMemoryStore Error Handling 🔴
 **Priority:** Critical
+**Status:** ✅ Fully implemented and verified.
+
 **Files:**
 - `engine/adapter/store/tiered_memory_store.go`
+- `engine/adapter/store/tiered_errors.go`
 - `engine/adapter/store/tiered_memory_store_test.go`
 
 **Problem:**
 Write operations that partially succeed leave data in inconsistent state. Callers can't distinguish which tiers failed.
-
-**Implementation:**
-
-- [ ] Create structured error type:
-  ```go
-  // engine/adapter/store/tiered_errors.go
-
-  package store
-
-  import (
-      "fmt"
-      "strings"
-  )
-
-  // TieredWriteError represents failures in one or more tiers during a write operation.
-  type TieredWriteError struct {
-      Operation   string
-      Namespace   string
-      Key         string
-      TierErrors  map[int]error
-      TierSuccess []int
-  }
-
-  func (e *TieredWriteError) Error() string {
-      var failed []string
-      for tier, err := range e.TierErrors {
-          failed = append(failed, fmt.Sprintf("tier%d: %v", tier, err))
-      }
-      return fmt.Sprintf(
-          "tiered %s partially failed (succeeded: %v, failed: %s)",
-          e.Operation,
-          e.TierSuccess,
-          strings.Join(failed, "; "),
-      )
-  }
-
-  // IsPartialSuccess returns true if at least one tier succeeded.
-  func (e *TieredWriteError) IsPartialSuccess() bool {
-      return len(e.TierSuccess) > 0
-  }
-
-  // FailedTiers returns the list of tiers that failed.
-  func (e *TieredWriteError) FailedTiers() []int {
-      tiers := make([]int, 0, len(e.TierErrors))
-      for tier := range e.TierErrors {
-          tiers = append(tiers, tier)
-      }
-      return tiers
-  }
-
-  // TierError returns the error for a specific tier, or nil if it succeeded.
-  func (e *TieredWriteError) TierError(tier int) error {
-      return e.TierErrors[tier]
-  }
-  ```
-
-- [ ] Update TieredMemoryStore with proper error handling:
-  ```go
-  // engine/adapter/store/tiered_memory_store.go
-
-  func (s *TieredMemoryStore) Set(ctx context.Context, namespace, key string, value any, ttlSeconds int) error {
-      var mu sync.Mutex
-      tierErrors := make(map[int]error)
-      tierSuccess := make([]int, 0)
-
-      var wg sync.WaitGroup
-      for _, tier := range s.config.WriteOrder {
-          store := s.getTierStore(tier)
-          if store == nil {
-              continue
-          }
-
-          wg.Add(1)
-          go func(t int, st port.MemoryStore) {
-              defer wg.Done()
-
-              start := time.Now()
-              err := st.Set(ctx, namespace, key, value, ttlSeconds)
-              duration := time.Since(start)
-
-              mu.Lock()
-              defer mu.Unlock()
-
-              if err != nil {
-                  tierErrors[t] = err
-                  s.metrics.RecordTierError(t, "set")
-                  log.Warn("tier write failed",
-                      "tier", t,
-                      "namespace", namespace,
-                      "key", key,
-                      "duration", duration,
-                      "error", err,
-                  )
-              } else {
-                  tierSuccess = append(tierSuccess, t)
-                  s.metrics.RecordTierWrite(t, duration)
-              }
-          }(tier, store)
-      }
-
-      wg.Wait()
-
-      // All failed
-      if len(tierSuccess) == 0 && len(tierErrors) > 0 {
-          return &TieredWriteError{
-              Operation:   "set",
-              Namespace:   namespace,
-              Key:         key,
-              TierErrors:  tierErrors,
-              TierSuccess: tierSuccess,
-          }
-      }
-
-      // Partial failure - return error but data is in some tiers
-      if len(tierErrors) > 0 {
-          return &TieredWriteError{
-              Operation:   "set",
-              Namespace:   namespace,
-              Key:         key,
-              TierErrors:  tierErrors,
-              TierSuccess: tierSuccess,
-          }
-      }
-
-      return nil
-  }
-
-  func (s *TieredMemoryStore) Delete(ctx context.Context, namespace, key string) (bool, error) {
-      var mu sync.Mutex
-      tierErrors := make(map[int]error)
-      tierSuccess := make([]int, 0)
-      anyDeleted := false
-
-      var wg sync.WaitGroup
-      for _, tier := range s.config.WriteOrder {
-          store := s.getTierStore(tier)
-          if store == nil {
-              continue
-          }
-
-          wg.Add(1)
-          go func(t int, st port.MemoryStore) {
-              defer wg.Done()
-
-              deleted, err := st.Delete(ctx, namespace, key)
-
-              mu.Lock()
-              defer mu.Unlock()
-
-              if err != nil {
-                  tierErrors[t] = err
-                  log.Warn("tier delete failed", "tier", t, "error", err)
-              } else {
-                  tierSuccess = append(tierSuccess, t)
-                  if deleted {
-                      anyDeleted = true
-                  }
-              }
-          }(tier, store)
-      }
-
-      wg.Wait()
-
-      if len(tierErrors) > 0 {
-          return anyDeleted, &TieredWriteError{
-              Operation:   "delete",
-              Namespace:   namespace,
-              Key:         key,
-              TierErrors:  tierErrors,
-              TierSuccess: tierSuccess,
-          }
-      }
-
-      return anyDeleted, nil
-  }
-  ```
-
-- [ ] Add helper to check error type in callers:
-  ```go
-  // Helper function for callers
-  func IsTieredPartialSuccess(err error) bool {
-      var tieredErr *TieredWriteError
-      if errors.As(err, &tieredErr) {
-          return tieredErr.IsPartialSuccess()
-      }
-      return false
-  }
-
-  // Example usage in scheduler:
-  func (s *Scheduler) saveToMemory(ctx context.Context, key string, value any) error {
-      err := s.memoryStore.Set(ctx, "default", key, value, 3600)
-      if err != nil {
-          if IsTieredPartialSuccess(err) {
-              // Data saved to at least one tier - log but continue
-              log.Warn("memory save partially failed", "error", err)
-              return nil
-          }
-          // Complete failure
-          return err
-      }
-      return nil
-  }
-  ```
-
-- [ ] Write tests:
-  ```go
-  func TestTieredMemoryStore_PartialFailure(t *testing.T) {
-      tier1 := NewInMemoryMemoryStore()
-      tier2 := &FailingStore{err: errors.New("connection refused")}
-
-      tiered := NewTieredMemoryStore(tier1, tier2, TieredConfig{
-          Tier1Enabled: true,
-          Tier2Enabled: true,
-          WriteOrder:   []int{1, 2},
-      })
-
-      err := tiered.Set(context.Background(), "ns", "key", "value", 0)
-
-      // Should return error
-      require.Error(t, err)
-
-      // Should be TieredWriteError
-      var tieredErr *TieredWriteError
-      require.True(t, errors.As(err, &tieredErr))
-
-      // Should indicate partial success
-      assert.True(t, tieredErr.IsPartialSuccess())
-      assert.Contains(t, tieredErr.TierSuccess, 1)
-      assert.Contains(t, tieredErr.FailedTiers(), 2)
-
-      // Data should be in tier 1
-      val, found, _ := tier1.Get(context.Background(), "ns", "key")
-      assert.True(t, found)
-      assert.Equal(t, "value", val)
-  }
-
-  func TestTieredMemoryStore_AllFailed(t *testing.T) {
-      tier1 := &FailingStore{err: errors.New("tier1 failed")}
-      tier2 := &FailingStore{err: errors.New("tier2 failed")}
-
-      tiered := NewTieredMemoryStore(tier1, tier2, TieredConfig{
-          Tier1Enabled: true,
-          Tier2Enabled: true,
-          WriteOrder:   []int{1, 2},
-      })
-
-      err := tiered.Set(context.Background(), "ns", "key", "value", 0)
-
-      require.Error(t, err)
-
-      var tieredErr *TieredWriteError
-      require.True(t, errors.As(err, &tieredErr))
-      assert.False(t, tieredErr.IsPartialSuccess())
-      assert.Len(t, tieredErr.TierErrors, 2)
-  }
-
-  func TestIsTieredPartialSuccess(t *testing.T) {
-      partialErr := &TieredWriteError{
-          TierErrors:  map[int]error{2: errors.New("failed")},
-          TierSuccess: []int{1},
-      }
-      assert.True(t, IsTieredPartialSuccess(partialErr))
-
-      fullErr := &TieredWriteError{
-          TierErrors:  map[int]error{1: errors.New("failed"), 2: errors.New("failed")},
-          TierSuccess: []int{},
-      }
-      assert.False(t, IsTieredPartialSuccess(fullErr))
-
-      otherErr := errors.New("random error")
-      assert.False(t, IsTieredPartialSuccess(otherErr))
-  }
-  ```
 
 **Success Criteria:**
 - [ ] `TieredWriteError` captures which tiers succeeded and failed
@@ -1543,262 +1286,15 @@ Write operations that partially succeed leave data in inconsistent state. Caller
 
 ### FIX-05: BatchGet Fallback Consistency 🔴
 **Priority:** Critical
+**Status:** ✅ Fully implemented and verified.
+
 **Files:**
 - `engine/adapter/store/redis_memory_store.go`
+- `engine/application/port/memory_store.go`
 - `engine/adapter/store/redis_memory_store_test.go`
 
 **Problem:**
 `Get()` has fallback behavior on Redis failure, but `BatchGet()` returns error without attempting fallback, causing inconsistent behavior.
-
-**Implementation:**
-
-- [ ] Add fallback support to BatchGet:
-  ```go
-  // engine/adapter/store/redis_memory_store.go
-
-  func (s *RedisMemoryStore) BatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error) {
-      if len(keys) == 0 {
-          return make(map[string]any), nil
-      }
-
-      // Circuit breaker check with fallback
-      if s.isCircuitOpen() {
-          metrics.RecordFallback()
-          log.Info("circuit open, using fallback for batch get",
-              "namespace", namespace,
-              "key_count", len(keys),
-          )
-          return s.fallbackBatchGet(ctx, namespace, keys)
-      }
-
-      // Build pipeline
-      pipe := s.client.Pipeline()
-      cmds := make(map[string]*redis.StringCmd, len(keys))
-
-      for _, key := range keys {
-          fullKey := s.buildKey(namespace, key)
-          cmds[key] = pipe.Get(ctx, fullKey)
-      }
-
-      // Execute pipeline
-      start := time.Now()
-      _, err := pipe.Exec(ctx)
-      duration := time.Since(start)
-
-      // Handle complete pipeline failure
-      if err != nil && err != redis.Nil {
-          s.recordFailure()
-          metrics.RecordRedisOperation("batch_get", duration, err)
-
-          if s.fallback != nil {
-              log.Warn("redis batch get failed, using fallback",
-                  "namespace", namespace,
-                  "key_count", len(keys),
-                  "duration", duration,
-                  "error", err,
-              )
-              metrics.RecordFallback()
-              return s.fallbackBatchGet(ctx, namespace, keys)
-          }
-          return nil, fmt.Errorf("batch get failed: %w", err)
-      }
-
-      s.resetFailures()
-      metrics.RecordRedisOperation("batch_get", duration, nil)
-
-      // Collect results
-      results := make(map[string]any, len(keys))
-      for key, cmd := range cmds {
-          val, err := cmd.Result()
-          if err == redis.Nil {
-              continue // Key not found
-          }
-          if err != nil {
-              // Individual key error - log but continue
-              log.Debug("batch get key error", "key", key, "error", err)
-              continue
-          }
-
-          decoded, err := s.decodePayload([]byte(val))
-          if err != nil {
-              log.Warn("batch get decode error", "key", key, "error", err)
-              continue
-          }
-
-          var result any
-          if err := json.Unmarshal(decoded, &result); err != nil {
-              log.Warn("batch get unmarshal error", "key", key, "error", err)
-              continue
-          }
-
-          results[key] = result
-      }
-
-      return results, nil
-  }
-
-  func (s *RedisMemoryStore) fallbackBatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error) {
-      if s.fallback == nil {
-          return nil, errCircuitOpen
-      }
-
-      results := make(map[string]any, len(keys))
-      var mu sync.Mutex
-      var wg sync.WaitGroup
-
-      // Parallel fetches from fallback (it's in-memory, so fast)
-      for _, key := range keys {
-          wg.Add(1)
-          go func(k string) {
-              defer wg.Done()
-
-              val, found, err := s.fallback.Get(ctx, namespace, k)
-              if err != nil || !found {
-                  return
-              }
-
-              mu.Lock()
-              results[k] = val
-              mu.Unlock()
-          }(key)
-      }
-
-      wg.Wait()
-      return results, nil
-  }
-  ```
-
-- [ ] Add BatchSet with same fallback pattern:
-  ```go
-  func (s *RedisMemoryStore) BatchSet(ctx context.Context, namespace string, items map[string]any, ttlSeconds int) error {
-      if len(items) == 0 {
-          return nil
-      }
-
-      if s.isCircuitOpen() {
-          metrics.RecordFallback()
-          return s.fallbackBatchSet(ctx, namespace, items, ttlSeconds)
-      }
-
-      pipe := s.client.Pipeline()
-      ttl := time.Duration(ttlSeconds) * time.Second
-
-      for key, value := range items {
-          data, err := json.Marshal(value)
-          if err != nil {
-              return fmt.Errorf("marshal error for key %s: %w", key, err)
-          }
-
-          encoded := s.encodePayload(data)
-          fullKey := s.buildKey(namespace, key)
-
-          if ttlSeconds > 0 {
-              pipe.Set(ctx, fullKey, encoded, ttl)
-          } else {
-              pipe.Set(ctx, fullKey, encoded, 0)
-          }
-      }
-
-      start := time.Now()
-      _, err := pipe.Exec(ctx)
-      duration := time.Since(start)
-
-      if err != nil {
-          s.recordFailure()
-          metrics.RecordRedisOperation("batch_set", duration, err)
-
-          if s.fallback != nil {
-              log.Warn("redis batch set failed, using fallback", "error", err)
-              metrics.RecordFallback()
-              return s.fallbackBatchSet(ctx, namespace, items, ttlSeconds)
-          }
-          return err
-      }
-
-      s.resetFailures()
-      metrics.RecordRedisOperation("batch_set", duration, nil)
-      return nil
-  }
-
-  func (s *RedisMemoryStore) fallbackBatchSet(ctx context.Context, namespace string, items map[string]any, ttlSeconds int) error {
-      if s.fallback == nil {
-          return errCircuitOpen
-      }
-
-      var lastErr error
-      for key, value := range items {
-          if err := s.fallback.Set(ctx, namespace, key, value, ttlSeconds); err != nil {
-              lastErr = err
-          }
-      }
-      return lastErr
-  }
-  ```
-
-- [ ] Update interface to include batch operations:
-  ```go
-  // engine/application/port/memory_store.go
-
-  type MemoryStore interface {
-      Get(ctx context.Context, namespace, key string) (value any, found bool, err error)
-      Set(ctx context.Context, namespace, key string, value any, ttlSeconds int) error
-      Delete(ctx context.Context, namespace, key string) (deleted bool, err error)
-
-      // Batch operations (optional - check with type assertion)
-      // BatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error)
-      // BatchSet(ctx context.Context, namespace string, items map[string]any, ttlSeconds int) error
-  }
-
-  // BatchMemoryStore extends MemoryStore with batch operations
-  type BatchMemoryStore interface {
-      MemoryStore
-      BatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error)
-      BatchSet(ctx context.Context, namespace string, items map[string]any, ttlSeconds int) error
-  }
-  ```
-
-- [ ] Write tests:
-  ```go
-  func TestBatchGet_FallbackOnCircuitOpen(t *testing.T) {
-      fallback := NewInMemoryMemoryStore()
-      fallback.Set(context.Background(), "ns", "key1", "value1", 0)
-      fallback.Set(context.Background(), "ns", "key2", "value2", 0)
-
-      redis := NewRedisMemoryStore(cfg, "tenant", fallback)
-
-      // Force circuit open
-      for i := 0; i < 6; i++ {
-          redis.recordFailure()
-      }
-
-      // Should use fallback
-      results, err := redis.BatchGet(context.Background(), "ns", []string{"key1", "key2", "key3"})
-
-      require.NoError(t, err)
-      assert.Equal(t, "value1", results["key1"])
-      assert.Equal(t, "value2", results["key2"])
-      assert.NotContains(t, results, "key3") // Not in fallback
-  }
-
-  func TestBatchGet_FallbackOnError(t *testing.T) {
-      // Use invalid Redis config to trigger errors
-      badCfg := RedisConfig{Addr: "localhost:9999"}
-      fallback := NewInMemoryMemoryStore()
-      fallback.Set(context.Background(), "ns", "key1", "value1", 0)
-
-      redis, _ := NewRedisMemoryStore(badCfg, "tenant", fallback)
-
-      results, err := redis.BatchGet(context.Background(), "ns", []string{"key1"})
-
-      require.NoError(t, err) // Fallback should succeed
-      assert.Equal(t, "value1", results["key1"])
-  }
-
-  func TestBatchGet_MetricsRecorded(t *testing.T) {
-      // Reset metrics
-      // ... test that fallback metric is incremented
-  }
-  ```
 
 **Success Criteria:**
 - [ ] `BatchGet` uses fallback when circuit is open (same as `Get`)

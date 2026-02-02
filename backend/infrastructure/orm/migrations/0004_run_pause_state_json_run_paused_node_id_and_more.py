@@ -8,44 +8,89 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orm', '0003_add_run_indexes'),
+        ("orm", "0003_add_run_indexes"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='run',
-            name='pause_state_json',
+            model_name="run",
+            name="pause_state_json",
             field=models.JSONField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='run',
-            name='paused_node_id',
+            model_name="run",
+            name="paused_node_id",
             field=models.CharField(blank=True, max_length=64, null=True),
         ),
         migrations.AlterField(
-            model_name='noderun',
-            name='status',
-            field=models.CharField(choices=[('pending', 'Pending'), ('running', 'Running'), ('waiting', 'Waiting'), ('succeeded', 'Succeeded'), ('failed', 'Failed'), ('skipped', 'Skipped')], default='pending', max_length=16),
+            model_name="noderun",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("pending", "Pending"),
+                    ("running", "Running"),
+                    ("waiting", "Waiting"),
+                    ("succeeded", "Succeeded"),
+                    ("failed", "Failed"),
+                    ("skipped", "Skipped"),
+                ],
+                default="pending",
+                max_length=16,
+            ),
         ),
         migrations.CreateModel(
-            name='ApprovalTask',
+            name="ApprovalTask",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('node_id', models.CharField(max_length=64)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected')], default='pending', max_length=16)),
-                ('payload', models.JSONField(default=dict)),
-                ('result', models.JSONField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('resolved_at', models.DateTimeField(blank=True, null=True)),
-                ('assignee', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approval_tasks', to=settings.AUTH_USER_MODEL)),
-                ('run', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='approval_tasks', to='orm.run')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                ("node_id", models.CharField(max_length=64)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("approved", "Approved"),
+                            ("rejected", "Rejected"),
+                        ],
+                        default="pending",
+                        max_length=16,
+                    ),
+                ),
+                ("payload", models.JSONField(default=dict)),
+                ("result", models.JSONField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("resolved_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "assignee",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="approval_tasks",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "run",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="approval_tasks",
+                        to="orm.run",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'approval_tasks',
-                'ordering': ['-created_at'],
-                'indexes': [models.Index(fields=['assignee', 'status'], name='approval_tasks_assignee_idx'), models.Index(fields=['run', 'status'], name='approval_tasks_run_idx')],
+                "db_table": "approval_tasks",
+                "ordering": ["-created_at"],
+                "indexes": [
+                    models.Index(fields=["assignee", "status"], name="approval_tasks_assignee_idx"),
+                    models.Index(fields=["run", "status"], name="approval_tasks_run_idx"),
+                ],
             },
         ),
     ]

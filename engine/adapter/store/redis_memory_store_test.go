@@ -166,6 +166,173 @@ func TestRedisMemoryStore_BatchGet(t *testing.T) {
 	}
 }
 
+func TestRedisMemoryStore_BatchGet_FallbackOnCircuitOpen(t *testing.T) {
+	store, mini, fallback := newTestRedisStore(t)
+	defer mini.Close()
+
+	ctx := context.Background()
+
+	// Set data in fallback
+	if err := fallback.Set(ctx, "ns", "key1", "value1", 0); err != nil {
+		t.Fatalf("fallback set failed: %v", err)
+	}
+	if err := fallback.Set(ctx, "ns", "key2", "value2", 0); err != nil {
+		t.Fatalf("fallback set failed: %v", err)
+	}
+
+	// Force circuit open
+	for i := 0; i < failureThreshold+1; i++ {
+		store.recordFailure()
+	}
+
+	// Should use fallback
+	results, err := store.BatchGet(ctx, "ns", []string{"key1", "key2", "key3"})
+
+	if err != nil {
+		t.Fatalf("expected no error with fallback, got: %v", err)
+	}
+	if results["key1"] != "value1" {
+		t.Fatalf("expected value1, got %v", results["key1"])
+	}
+	if results["key2"] != "value2" {
+		t.Fatalf("expected value2, got %v", results["key2"])
+	}
+	if _, exists := results["key3"]; exists {
+		t.Fatal("key3 should not exist in results")
+	}
+}
+
+func TestRedisMemoryStore_BatchGet_FallbackOnError(t *testing.T) {
+	store, mini, fallback := newTestRedisStore(t)
+
+	ctx := context.Background()
+
+	// Set data in fallback
+	if err := fallback.Set(ctx, "ns", "key1", "fallback-value", 0); err != nil {
+		t.Fatalf("fallback set failed: %v", err)
+	}
+
+	// Close miniredis to trigger error
+	mini.Close()
+
+	results, err := store.BatchGet(ctx, "ns", []string{"key1"})
+
+	if err != nil {
+		t.Fatalf("expected fallback to succeed, got error: %v", err)
+	}
+	if results["key1"] != "fallback-value" {
+		t.Fatalf("expected fallback-value, got %v", results["key1"])
+	}
+}
+
+func TestRedisMemoryStore_BatchSet(t *testing.T) {
+	store, mini, _ := newTestRedisStore(t)
+	defer mini.Close()
+
+	ctx := context.Background()
+
+	items := map[string]any{
+		"a": "one",
+		"b": "two",
+		"c": "three",
+	}
+
+	if err := store.BatchSet(ctx, "ns", items, 0); err != nil {
+		t.Fatalf("batch set failed: %v", err)
+	}
+
+	// Verify values
+	for key, expected := range items {
+		val, found, err := store.Get(ctx, "ns", key)
+		if err != nil {
+			t.Fatalf("get %s failed: %v", key, err)
+		}
+		if !found {
+			t.Fatalf("expected %s to be found", key)
+		}
+		if val != expected {
+			t.Fatalf("expected %s=%v, got %v", key, expected, val)
+		}
+	}
+}
+
+func TestRedisMemoryStore_BatchSet_FallbackOnCircuitOpen(t *testing.T) {
+	store, mini, fallback := newTestRedisStore(t)
+	defer mini.Close()
+
+	ctx := context.Background()
+
+	// Force circuit open
+	for i := 0; i < failureThreshold+1; i++ {
+		store.recordFailure()
+	}
+
+	items := map[string]any{
+		"key1": "value1",
+	}
+
+	// Should use fallback
+	err := store.BatchSet(ctx, "ns", items, 0)
+
+	if err != nil {
+		t.Fatalf("expected no error with fallback, got: %v", err)
+	}
+
+	// Verify data in fallback
+	val, found, _ := fallback.Get(ctx, "ns", "key1")
+	if !found || val != "value1" {
+		t.Fatalf("expected data in fallback, got found=%v val=%v", found, val)
+	}
+}
+
+func TestRedisMemoryStore_BatchSet_FallbackOnError(t *testing.T) {
+	store, mini, fallback := newTestRedisStore(t)
+
+	ctx := context.Background()
+
+	// Close miniredis to trigger error
+	mini.Close()
+
+	items := map[string]any{
+		"key1": "fallback-value",
+	}
+
+	err := store.BatchSet(ctx, "ns", items, 0)
+
+	if err != nil {
+		t.Fatalf("expected fallback to succeed, got error: %v", err)
+	}
+
+	// Verify data in fallback
+	val, found, _ := fallback.Get(ctx, "ns", "key1")
+	if !found || val != "fallback-value" {
+		t.Fatalf("expected data in fallback, got found=%v val=%v", found, val)
+	}
+}
+
+func TestRedisMemoryStore_BatchSet_WithTTL(t *testing.T) {
+	store, mini, _ := newTestRedisStore(t)
+	defer mini.Close()
+
+	ctx := context.Background()
+
+	items := map[string]any{
+		"expiring": "value",
+	}
+
+	if err := store.BatchSet(ctx, "ns", items, 1); err != nil {
+		t.Fatalf("batch set failed: %v", err)
+	}
+
+	// Fast forward past TTL
+	mini.FastForward(2 * time.Second)
+
+	_, found, _ := store.Get(ctx, "ns", "expiring")
+	if found {
+		t.Fatal("expected key to expire")
+	}
+}
+
 func TestRedisMemoryStore_CompressionRoundTrip(t *testing.T) {
 	store, mini, _ := newTestRedisStore(t)
 	defer mini.Close()

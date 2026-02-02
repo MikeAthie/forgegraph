@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from adapters.embedding.openai_embedder import OpenAIEmbedder
@@ -19,9 +19,9 @@ def _parse_messages(messages: list[dict[str, Any]]) -> list[Message]:
             try:
                 timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             except ValueError:
-                timestamp = datetime.now(timezone.utc)
+                timestamp = datetime.now(UTC)
         if not isinstance(timestamp, datetime):
-            timestamp = datetime.now(timezone.utc)
+            timestamp = datetime.now(UTC)
         parsed.append(
             Message(
                 role=message.get("role", "user"),

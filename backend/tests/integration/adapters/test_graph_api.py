@@ -271,7 +271,9 @@ class TestGraphVersionListCreate:
         assert "checksum" in response.data["data"]
         assert len(response.data["data"]["checksum"]) == 64  # SHA256
 
-    def test_create_version_preserves_edge_labels_and_node_policies(self, authenticated_client, user):
+    def test_create_version_preserves_edge_labels_and_node_policies(
+        self, authenticated_client, user
+    ):
         graph = Graph.objects.create(owner=user, name="Test")
 
         graph_json = {
@@ -281,7 +283,11 @@ class TestGraphVersionListCreate:
                     "type": "prompt",
                     "name": "Prompt",
                     "config": {"prompt_id": "p1"},
-                    "retry_policy": {"max_attempts": 4, "backoff_ms": 250, "backoff_strategy": "fixed"},
+                    "retry_policy": {
+                        "max_attempts": 4,
+                        "backoff_ms": 250,
+                        "backoff_strategy": "fixed",
+                    },
                     "timeout_ms": 1500,
                 },
                 {

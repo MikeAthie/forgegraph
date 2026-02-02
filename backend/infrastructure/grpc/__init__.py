@@ -7,10 +7,10 @@ from .engine_pb2 import (
     MemoryChunk,
     PingRequest,
     PingResponse,
-    RetrieveMemoryRequest,
-    RetrieveMemoryResponse,
     ResumeRunRequest,
     ResumeRunResponse,
+    RetrieveMemoryRequest,
+    RetrieveMemoryResponse,
     StartRunRequest,
     StartRunResponse,
 )

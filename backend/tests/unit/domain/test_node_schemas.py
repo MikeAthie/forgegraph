@@ -4,20 +4,8 @@ Unit tests for node configuration schemas.
 Tests the JSON Schema-like validation rules for each node type.
 """
 
-import pytest
-
 from domain.value_objects.node_schemas import (
     NODE_SCHEMAS,
-    PROMPT_NODE_SCHEMA,
-    HTTP_NODE_SCHEMA,
-    TRANSFORM_NODE_SCHEMA,
-    BRANCH_NODE_SCHEMA,
-    MERGE_NODE_SCHEMA,
-    HUMAN_GATE_NODE_SCHEMA,
-    MEMORY_NODE_SCHEMA,
-    TOOL_NODE_SCHEMA,
-    SUBGRAPH_NODE_SCHEMA,
-    OUTPUT_NODE_SCHEMA,
     get_schema_for_type,
     validate_node_config,
 )

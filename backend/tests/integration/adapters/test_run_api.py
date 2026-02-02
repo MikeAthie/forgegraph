@@ -4,8 +4,8 @@ Integration tests for Run APIs.
 Tests run history and run detail endpoints for Phase 4 observability MVP.
 """
 
-from datetime import timedelta
 import json
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -260,7 +260,9 @@ class TestRunStart:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data["error"]["code"] == "INVALID_INPUT_SCHEMA"
 
-    def test_start_run_sends_memory_config_to_engine(self, authenticated_client, user, mock_engine_client):
+    def test_start_run_sends_memory_config_to_engine(
+        self, authenticated_client, user, mock_engine_client
+    ):
         graph = Graph.objects.create(owner=user, name="Memory Graph")
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
@@ -371,6 +373,7 @@ class TestRunInvoke:
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
         assert start_calls[0][1]["run_id"] == new_run.id
+
 
 class TestRunCancel:
     """Tests for POST /api/runs/{run_id}/cancel"""
@@ -525,7 +528,6 @@ class TestRunEvents:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data["error"]["code"] == "NOT_FOUND"
 
-
     def test_run_paused_event_creates_approval_task(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="My Graph")
         version = GraphVersion.objects.create(
@@ -547,9 +549,7 @@ class TestRunEvents:
             },
         }
 
-        response = authenticated_client.post(
-            f"/api/runs/{run.id}/events", payload, format="json"
-        )
+        response = authenticated_client.post(f"/api/runs/{run.id}/events", payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         run.refresh_from_db()
@@ -566,7 +566,10 @@ class TestRunEvents:
 
         # Idempotent: second identical event should not create a duplicate task
         authenticated_client.post(f"/api/runs/{run.id}/events", payload, format="json")
-        assert ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count() == 1
+        assert (
+            ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count()
+            == 1
+        )
 
     def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Schema Graph")
@@ -591,9 +594,7 @@ class TestRunEvents:
             "run": {"status": "succeeded", "output_json": {"value": "nope"}},
         }
 
-        response = authenticated_client.post(
-            f"/api/runs/{run.id}/events", payload, format="json"
-        )
+        response = authenticated_client.post(f"/api/runs/{run.id}/events", payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         run.refresh_from_db()
@@ -609,7 +610,9 @@ class TestRunResume:
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
-        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
 
         response = api_client.post(
             f"/api/runs/{run.id}/resume",
@@ -623,7 +626,9 @@ class TestRunResume:
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
-        run = Run.objects.create(owner=user, graph_version=version, status="running", paused_node_id="gate")
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="running", paused_node_id="gate"
+        )
 
         response = authenticated_client.post(
             f"/api/runs/{run.id}/resume",
@@ -639,7 +644,9 @@ class TestRunResume:
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
-        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
 
         response = authenticated_client.post(
             f"/api/runs/{run.id}/resume",
@@ -650,12 +657,16 @@ class TestRunResume:
         assert response.data["error"]["code"] == "INVALID_NODE"
         assert not any(call[0] == "resume_run" for call in mock_engine_client.calls)
 
-    def test_resume_calls_engine_and_marks_task_approved(self, authenticated_client, mock_engine_client, user):
+    def test_resume_calls_engine_and_marks_task_approved(
+        self, authenticated_client, mock_engine_client, user
+    ):
         graph = Graph.objects.create(owner=user, name="My Graph")
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
-        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
         task = ApprovalTask.objects.create(
             run=run,
             node_id="gate",
@@ -687,12 +698,16 @@ class TestRunResume:
         assert task.result == input_json
         assert task.resolved_at is not None
 
-    def test_resume_calls_engine_and_marks_task_rejected(self, authenticated_client, mock_engine_client, user):
+    def test_resume_calls_engine_and_marks_task_rejected(
+        self, authenticated_client, mock_engine_client, user
+    ):
         graph = Graph.objects.create(owner=user, name="My Graph")
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
-        run = Run.objects.create(owner=user, graph_version=version, status="paused", paused_node_id="gate")
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
         task = ApprovalTask.objects.create(
             run=run,
             node_id="gate",

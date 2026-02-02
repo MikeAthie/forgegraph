@@ -107,8 +107,12 @@ class Command(BaseCommand):
         elif run_status == "paused":
             if paused_node_id is None:
                 # Prefer pausing at a Human Gate if present, otherwise pause at the last node.
-                human_gate = next((n for n in node_order if str(n.get("type")) == "human_gate"), None)
-                paused_node_id = str(human_gate.get("id")) if human_gate and human_gate.get("id") else None
+                human_gate = next(
+                    (n for n in node_order if str(n.get("type")) == "human_gate"), None
+                )
+                paused_node_id = (
+                    str(human_gate.get("id")) if human_gate and human_gate.get("id") else None
+                )
 
             if paused_node_id is None:
                 paused_node_id = node_ids_in_order[-1] if node_ids_in_order else None

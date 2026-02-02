@@ -1,6 +1,6 @@
 import json
 from concurrent import futures
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import grpc
 
@@ -26,7 +26,7 @@ def _start_server(service):
 
 
 def test_memory_service_retrieve_memory_returns_chunks():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     results = [
         MemorySearchResult(
             content="Remember to call Sam",

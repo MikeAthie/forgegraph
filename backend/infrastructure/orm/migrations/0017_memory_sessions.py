@@ -1,10 +1,10 @@
+import uuid
+
 from django.conf import settings
 from django.db import migrations, models
-import uuid
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("orm", "0016_vector_config"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
@@ -14,7 +14,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="MemorySession",
             fields=[
-                ("id", models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        primary_key=True, default=uuid.uuid4, editable=False, serialize=False
+                    ),
+                ),
                 ("session_id", models.UUIDField(unique=True, db_index=True)),
                 ("agent_id", models.UUIDField(null=True, blank=True, db_index=True)),
                 ("expires_at", models.DateTimeField()),

@@ -41,19 +41,23 @@ class GraphValidator:
 
         # Check required top-level keys
         if "nodes" not in graph_json:
-            errors.append({
-                "type": "missing_key",
-                "key": "nodes",
-                "message": "Graph JSON is missing required 'nodes' array",
-                "suggestion": "Add a 'nodes' array to your graph JSON",
-            })
+            errors.append(
+                {
+                    "type": "missing_key",
+                    "key": "nodes",
+                    "message": "Graph JSON is missing required 'nodes' array",
+                    "suggestion": "Add a 'nodes' array to your graph JSON",
+                }
+            )
         if "edges" not in graph_json:
-            errors.append({
-                "type": "missing_key",
-                "key": "edges",
-                "message": "Graph JSON is missing required 'edges' array",
-                "suggestion": "Add an 'edges' array to your graph JSON",
-            })
+            errors.append(
+                {
+                    "type": "missing_key",
+                    "key": "edges",
+                    "message": "Graph JSON is missing required 'edges' array",
+                    "suggestion": "Add an 'edges' array to your graph JSON",
+                }
+            )
 
         if errors:
             raise GraphValidationError("Graph JSON missing required keys", errors=errors)
@@ -152,7 +156,9 @@ class GraphValidator:
         else:
             from_node = edge["from"]
             if from_node == self.END_NODE_ID:
-                errors.append({"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node})
+                errors.append(
+                    {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
+                )
             elif from_node != self.START_NODE_ID and from_node not in node_ids:
                 errors.append(
                     {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
@@ -171,11 +177,21 @@ class GraphValidator:
         from_node = edge.get("from")
         to_node = edge.get("to")
         if from_node == self.START_NODE_ID:
-            if to_node == self.END_NODE_ID or to_node == self.START_NODE_ID or to_node not in node_ids:
+            if (
+                to_node == self.END_NODE_ID
+                or to_node == self.START_NODE_ID
+                or to_node not in node_ids
+            ):
                 errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": to_node})
         if to_node == self.END_NODE_ID:
-            if from_node == self.START_NODE_ID or from_node == self.END_NODE_ID or from_node not in node_ids:
-                errors.append({"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node})
+            if (
+                from_node == self.START_NODE_ID
+                or from_node == self.END_NODE_ID
+                or from_node not in node_ids
+            ):
+                errors.append(
+                    {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
+                )
 
         # Check for self-referencing edge
         if "from" in edge and "to" in edge and edge["from"] == edge["to"]:
@@ -199,18 +215,22 @@ class GraphValidator:
         # Check for at least one START edge (defines entry points)
         start_edges = [e for e in edges if e.get("from") == self.START_NODE_ID]
         if not start_edges:
-            errors.append({
-                "type": "no_start_node",
-                "message": "Graph must have at least one start node (connected from START)",
-            })
+            errors.append(
+                {
+                    "type": "no_start_node",
+                    "message": "Graph must have at least one start node (connected from START)",
+                }
+            )
 
         # Check for at least one output node
         output_nodes = [n for n in nodes if n.get("type") == "output"]
         if not output_nodes:
-            errors.append({
-                "type": "no_output_node",
-                "message": "Graph must have at least one output node",
-            })
+            errors.append(
+                {
+                    "type": "no_output_node",
+                    "message": "Graph must have at least one output node",
+                }
+            )
 
         return errors
 
@@ -297,19 +317,19 @@ class GraphValidator:
             has_outgoing = node_id in nodes_with_outgoing
 
             if not has_incoming and not has_outgoing:
-                warnings.append({
-                    "type": "disconnected_node",
-                    "severity": "warning",
-                    "node_id": node_id,
-                    "message": f"Node '{node_id}' has no connections",
-                    "suggestion": "Connect this node to the workflow or remove it",
-                })
+                warnings.append(
+                    {
+                        "type": "disconnected_node",
+                        "severity": "warning",
+                        "node_id": node_id,
+                        "message": f"Node '{node_id}' has no connections",
+                        "suggestion": "Connect this node to the workflow or remove it",
+                    }
+                )
 
         return warnings
 
-    def _validate_node_configs(
-        self, nodes: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _validate_node_configs(self, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Validate node configs against their type schemas.
 
@@ -333,13 +353,15 @@ class GraphValidator:
 
             config_errors = validate_node_config(node_type, config)
             for error in config_errors:
-                errors.append({
-                    "type": "invalid_node_config",
-                    "node_id": node_id,
-                    "node_type": node_type,
-                    "field": error.get("field"),
-                    "message": error.get("message"),
-                    "suggestion": error.get("suggestion"),
-                })
+                errors.append(
+                    {
+                        "type": "invalid_node_config",
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "field": error.get("field"),
+                        "message": error.get("message"),
+                        "suggestion": error.get("suggestion"),
+                    }
+                )
 
         return errors

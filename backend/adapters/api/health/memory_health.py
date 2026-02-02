@@ -8,9 +8,8 @@ import os
 import time
 
 import grpc
-from grpc_health.v1 import health_pb2, health_pb2_grpc
-
 from django.core.cache import cache
+from grpc_health.v1 import health_pb2, health_pb2_grpc
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response

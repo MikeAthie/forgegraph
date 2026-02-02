@@ -5,7 +5,6 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any
 
 from application.services.embedding_service import EmbeddingService, RateLimiter
 

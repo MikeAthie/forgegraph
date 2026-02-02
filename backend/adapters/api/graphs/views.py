@@ -444,6 +444,7 @@ class GraphMemoryConfigView(APIView):
         serializer.save()
         return success_response(serializer.data)
 
+
 class GraphValidateView(APIView):
     """Validate a graph JSON without saving it."""
 
@@ -492,17 +493,13 @@ class GraphValidateView(APIView):
             )
 
         # Separate errors from warnings
-        errors = [
-            issue for issue in all_issues
-            if issue.get("severity") != "warning"
-        ]
-        warnings = [
-            issue for issue in all_issues
-            if issue.get("severity") == "warning"
-        ]
+        errors = [issue for issue in all_issues if issue.get("severity") != "warning"]
+        warnings = [issue for issue in all_issues if issue.get("severity") == "warning"]
 
-        return success_response({
-            "valid": len(errors) == 0,
-            "errors": errors,
-            "warnings": warnings,
-        })
+        return success_response(
+            {
+                "valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings,
+            }
+        )

@@ -219,9 +219,7 @@ class Command(BaseCommand):
             description=description,
         )
         latest_version = (
-            GraphVersion.objects.filter(graph=graph)
-            .aggregate(Max("version"))
-            .get("version__max")
+            GraphVersion.objects.filter(graph=graph).aggregate(Max("version")).get("version__max")
             or 0
         )
         version = GraphVersion.objects.create(
@@ -230,9 +228,7 @@ class Command(BaseCommand):
             graph_json=graph_json,
         )
         self.stdout.write(
-            self.style.SUCCESS(
-                f"Created '{name}' (graph={graph.id}, version={version.id})"
-            )
+            self.style.SUCCESS(f"Created '{name}' (graph={graph.id}, version={version.id})")
         )
         return version
 

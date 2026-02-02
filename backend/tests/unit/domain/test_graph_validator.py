@@ -5,8 +5,6 @@ Tests graph validation including start/output node requirements,
 sentinel edge validation, and structural checks.
 """
 
-import pytest
-
 from domain.services.graph_validator import GraphValidator
 
 

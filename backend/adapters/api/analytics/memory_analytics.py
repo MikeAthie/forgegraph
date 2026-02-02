@@ -10,8 +10,8 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import models
-from django.db.models import Count, Sum
-from django.db.models.functions import Cast, Length
+from django.db.models import Count, Sum, Value
+from django.db.models.functions import Cast, Coalesce, Length
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -19,7 +19,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
-from infrastructure.orm.models import MemoryChunk, MemoryConfiguration, MemoryEntry, MemoryUsage, NodeRun
+from infrastructure.orm.models import (
+    MemoryChunk,
+    MemoryConfiguration,
+    MemoryEntry,
+    MemoryUsage,
+    NodeRun,
+)
 
 
 def _tenant_id_for_user(user) -> str:
@@ -98,19 +104,20 @@ class MemoryUsageAnalyticsView(APIView):
             for record in usage_qs
         ]
 
+        # Single aggregated query for usage totals with Coalesce for null safety
         usage_totals = MemoryUsage.objects.filter(
             tenant_id=tenant_id, usage_date__gte=start_date, usage_date__lte=end_date
         ).aggregate(
-            total_prompt=models.Sum("summarization_prompt_tokens"),
-            total_completion=models.Sum("summarization_completion_tokens"),
-            total_tokens=models.Sum("summarization_total_tokens"),
-            total_cost=models.Sum("summarization_cost_usd"),
+            total_prompt=Coalesce(Sum("summarization_prompt_tokens"), Value(0)),
+            total_completion=Coalesce(Sum("summarization_completion_tokens"), Value(0)),
+            total_tokens=Coalesce(Sum("summarization_total_tokens"), Value(0)),
+            total_cost=Coalesce(Sum("summarization_cost_usd"), Value(0.0)),
         )
 
-        total_prompt = int(usage_totals["total_prompt"] or 0)
-        total_completion = int(usage_totals["total_completion"] or 0)
-        total_tokens = int(usage_totals["total_tokens"] or 0)
-        total_cost = float(usage_totals["total_cost"] or 0)
+        total_prompt = int(usage_totals["total_prompt"])
+        total_completion = int(usage_totals["total_completion"])
+        total_tokens = int(usage_totals["total_tokens"])
+        total_cost = float(usage_totals["total_cost"])
 
         buffer_sizes = list(
             MemoryConfiguration.objects.filter(
@@ -148,11 +155,8 @@ class MemoryUsageAnalyticsView(APIView):
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
         )
-        top_agents = (
-            chunk_qs.values("agent_id")
-            .annotate(chunks=Count("id"))
-            .order_by("-chunks")
-        )
+        # Limit top agents to 10 for performance
+        top_agents = chunk_qs.values("agent_id").annotate(chunks=Count("id")).order_by("-chunks")[:10]
 
         payload = {
             "period": f"{days}d",
@@ -181,7 +185,10 @@ class MemoryUsageAnalyticsView(APIView):
             },
             "usage_series": usage_series,
             "top_agents": [
-                {"agent_id": str(row["agent_id"]) if row["agent_id"] else None, "chunks": row["chunks"]}
+                {
+                    "agent_id": str(row["agent_id"]) if row["agent_id"] else None,
+                    "chunks": row["chunks"],
+                }
                 for row in top_agents
             ],
             "totals": {
@@ -215,7 +222,10 @@ class MemoryCostsAnalyticsView(APIView):
         )
 
         series = [
-            {"date": record["usage_date"].isoformat(), "summarization_cost_usd": float(record["summarization_cost_usd"])}
+            {
+                "date": record["usage_date"].isoformat(),
+                "summarization_cost_usd": float(record["summarization_cost_usd"]),
+            }
             for record in usage_qs
         ]
         total = float(

@@ -321,7 +321,9 @@ class PromptTemplate(models.Model):
             )
             if latest and self.created_at <= latest:
                 bumped = latest + timedelta(microseconds=1)
-                PromptTemplate.objects.filter(pk=self.pk).update(created_at=bumped, updated_at=bumped)
+                PromptTemplate.objects.filter(pk=self.pk).update(
+                    created_at=bumped, updated_at=bumped
+                )
                 self.created_at = bumped
                 self.updated_at = bumped
 

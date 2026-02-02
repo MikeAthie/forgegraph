@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 
 from django.core.cache import cache
 
@@ -14,23 +17,71 @@ from infrastructure.grpc import engine_pb2, engine_pb2_grpc
 logger = logging.getLogger(__name__)
 
 
-class MemoryService(engine_pb2_grpc.MemoryServiceServicer):
-    def __init__(self, search_service: VectorSearchService | None = None) -> None:
+class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
+    """
+    gRPC servicer for memory retrieval.
+
+    Handles async-to-sync bridging for gRPC which uses sync handlers.
+    Uses a dedicated event loop running in a background thread for async operations.
+    """
+
+    def __init__(
+        self,
+        search_service: VectorSearchService | None = None,
+        max_workers: int = 4,
+        default_timeout: float = 10.0,
+    ) -> None:
         if search_service is None:
             embedder = CachedEmbeddingService(OpenAIEmbedder())
             search_service = VectorSearchService(embedder)
+
         self._search_service = search_service
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._default_timeout = default_timeout
+
+        # Create dedicated event loop for async operations
+        self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
+        self._loop_thread: Optional[threading.Thread] = None
+        self._start_loop()
+
+    def _start_loop(self) -> None:
+        """Start the async event loop in a background thread."""
+
+        def run_loop():
+            asyncio.set_event_loop(self._loop)
+            self._loop.run_forever()
+
+        self._loop_thread = threading.Thread(target=run_loop, daemon=True)
+        self._loop_thread.start()
+
+    def _run_async(self, coro, timeout: Optional[float] = None):
+        """Run async coroutine from sync context."""
+        if timeout is None:
+            timeout = self._default_timeout
+
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout=timeout)
+        except asyncio.TimeoutError:
+            future.cancel()
+            raise
 
     def RetrieveMemory(self, request, context):
+        """Retrieve relevant memories for a query."""
         _increment_metric("memory_grpc_requests_total", 1)
-        if not request.tenant_id or not request.query:
+
+        # Validate request
+        if not request.query:
             _increment_metric("memory_grpc_errors_total", 1)
-            return engine_pb2.RetrieveMemoryResponse(
-                error="tenant_id and query are required"
-            )
+            return engine_pb2.RetrieveMemoryResponse(error="query is required")
+
+        if not request.tenant_id:
+            _increment_metric("memory_grpc_errors_total", 1)
+            return engine_pb2.RetrieveMemoryResponse(error="tenant_id is required")
 
         try:
-            results = asyncio.run(
+            # Execute search asynchronously
+            results = self._run_async(
                 self._search_service.search(
                     tenant_id=request.tenant_id,
                     query=request.query,
@@ -38,28 +89,63 @@ class MemoryService(engine_pb2_grpc.MemoryServiceServicer):
                     run_id=request.run_id or None,
                     session_id=request.session_id or None,
                     top_k=request.top_k or 5,
-                    threshold=request.threshold or 0.5,
+                    threshold=request.threshold or 0.7,
                     recency_weight=request.recency_weight or 0.2,
                     model=request.embedding_model or None,
-                )
+                ),
+                timeout=self._default_timeout,
             )
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.exception("memory_retrieve_failed")
-            _increment_metric("memory_grpc_errors_total", 1)
-            return engine_pb2.RetrieveMemoryResponse(error=str(exc))
 
-        chunks = []
-        for result in results:
-            chunks.append(
-                engine_pb2.MemoryChunk(
+            # Convert to proto
+            chunks = []
+            for result in results:
+                chunk = engine_pb2.MemoryChunk(
                     content=result.content,
-                    score=float(result.similarity),
-                    source_timestamp=result.source_timestamp.isoformat(),
+                    score=float(result.combined_score),
+                    source_timestamp=result.source_timestamp.isoformat()
+                    if result.source_timestamp
+                    else "",
                     metadata_json=json.dumps(result.metadata or {}),
                 )
-            )
+                # Add similarity and recency if the proto supports it
+                if hasattr(chunk, "similarity"):
+                    chunk.similarity = float(result.similarity)
+                if hasattr(chunk, "recency_score"):
+                    chunk.recency_score = float(result.recency_score)
+                chunks.append(chunk)
 
-        return engine_pb2.RetrieveMemoryResponse(chunks=chunks)
+            return engine_pb2.RetrieveMemoryResponse(chunks=chunks)
+
+        except asyncio.TimeoutError:
+            logger.error(
+                "Memory search timed out",
+                extra={"query": request.query[:50] if request.query else ""},
+            )
+            _increment_metric("memory_grpc_errors_total", 1)
+            return engine_pb2.RetrieveMemoryResponse(error="search timed out")
+        except Exception as exc:
+            logger.exception("Memory search failed")
+            _increment_metric("memory_grpc_errors_total", 1)
+            return engine_pb2.RetrieveMemoryResponse(error=f"internal error: {str(exc)}")
+
+    def shutdown(self) -> None:
+        """Clean shutdown of async resources."""
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._loop_thread:
+            self._loop_thread.join(timeout=5.0)
+        self._executor.shutdown(wait=True)
+
+
+# Legacy alias for backward compatibility
+MemoryService = AsyncMemoryServicer
+
+
+def create_memory_servicer(
+    search_service: VectorSearchService | None = None,
+) -> AsyncMemoryServicer:
+    """Factory function for creating memory servicer."""
+    return AsyncMemoryServicer(search_service)
 
 
 def _increment_metric(key: str, amount: int) -> None:

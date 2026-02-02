@@ -14,13 +14,21 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="MemoryUsage",
             fields=[
-                ("id", models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        primary_key=True, default=uuid.uuid4, editable=False, serialize=False
+                    ),
+                ),
                 ("tenant_id", models.UUIDField()),
                 ("usage_date", models.DateField()),
                 ("summarization_prompt_tokens", models.PositiveIntegerField(default=0)),
                 ("summarization_completion_tokens", models.PositiveIntegerField(default=0)),
                 ("summarization_total_tokens", models.PositiveIntegerField(default=0)),
-                ("summarization_cost_usd", models.DecimalField(default=0, max_digits=12, decimal_places=6)),
+                (
+                    "summarization_cost_usd",
+                    models.DecimalField(default=0, max_digits=12, decimal_places=6),
+                ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],

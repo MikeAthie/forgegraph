@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -168,13 +169,17 @@ func (s *RedisMemoryStore) Set(ctx context.Context, namespace, key string, value
 	return nil
 }
 
-// BatchGet retrieves multiple values by namespace and keys.
+// BatchGet retrieves multiple values by namespace and keys with fallback support.
 func (s *RedisMemoryStore) BatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error) {
 	if len(keys) == 0 {
 		return map[string]any{}, nil
 	}
+
+	// Circuit breaker check with fallback
 	if s.isCircuitOpen() {
-		return nil, errCircuitOpen
+		metrics.RecordFallback()
+		log.Printf("circuit open, using fallback for batch get (namespace=%s key_count=%d)", namespace, len(keys))
+		return s.fallbackBatchGet(ctx, namespace, keys)
 	}
 
 	pipe := s.client.Pipeline()
@@ -184,33 +189,111 @@ func (s *RedisMemoryStore) BatchGet(ctx context.Context, namespace string, keys 
 		cmds[key] = pipe.Get(ctx, fullKey)
 	}
 
-	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
-		s.recordFailure()
-		return nil, err
-	}
-	s.resetFailures()
+	start := time.Now()
+	_, err := pipe.Exec(ctx)
+	duration := time.Since(start)
 
-	results := make(map[string]any)
+	// Handle complete pipeline failure
+	if err != nil && err != redis.Nil {
+		s.recordFailure()
+		metrics.RecordRedisOperation("batch_get", duration, err)
+
+		if s.fallback != nil {
+			log.Printf("redis batch get failed, using fallback (namespace=%s key_count=%d duration=%v error=%v)",
+				namespace, len(keys), duration, err)
+			metrics.RecordFallback()
+			return s.fallbackBatchGet(ctx, namespace, keys)
+		}
+		return nil, fmt.Errorf("batch get failed: %w", err)
+	}
+
+	s.resetFailures()
+	metrics.RecordRedisOperation("batch_get", duration, nil)
+
+	// Collect results
+	results := make(map[string]any, len(keys))
 	for key, cmd := range cmds {
 		raw, err := cmd.Bytes()
 		if err == redis.Nil {
+			continue // Key not found
+		}
+		if err != nil {
+			// Individual key error - log but continue
+			log.Printf("batch get key error (key=%s error=%v)", key, err)
 			continue
 		}
-		if err != nil {
-			return nil, err
-		}
+
 		val, err := s.decodePayload(raw)
 		if err != nil {
-			return nil, err
+			log.Printf("batch get decode error (key=%s error=%v)", key, err)
+			continue
 		}
+
 		var decoded any
 		if err := json.Unmarshal(val, &decoded); err != nil {
-			return nil, err
+			log.Printf("batch get unmarshal error (key=%s error=%v)", key, err)
+			continue
 		}
+
 		results[key] = decoded
 	}
 
 	return results, nil
+}
+
+// BatchSet stores multiple values with optional TTL and fallback support.
+func (s *RedisMemoryStore) BatchSet(ctx context.Context, namespace string, items map[string]any, ttlSeconds int) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	if s.isCircuitOpen() {
+		metrics.RecordFallback()
+		return s.fallbackBatchSet(ctx, namespace, items, ttlSeconds)
+	}
+
+	pipe := s.client.Pipeline()
+	ttl := time.Duration(ttlSeconds) * time.Second
+
+	for key, value := range items {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("marshal error for key %s: %w", key, err)
+		}
+
+		encoded, err := s.encodePayload(data)
+		if err != nil {
+			return fmt.Errorf("encode error for key %s: %w", key, err)
+		}
+
+		fullKey := s.buildKey(namespace, key)
+
+		if ttlSeconds > 0 {
+			pipe.Set(ctx, fullKey, encoded, ttl)
+		} else {
+			pipe.Set(ctx, fullKey, encoded, 0)
+		}
+	}
+
+	start := time.Now()
+	_, err := pipe.Exec(ctx)
+	duration := time.Since(start)
+
+	if err != nil {
+		s.recordFailure()
+		metrics.RecordRedisOperation("batch_set", duration, err)
+
+		if s.fallback != nil {
+			log.Printf("redis batch set failed, using fallback (error=%v)", err)
+			metrics.RecordFallback()
+			return s.fallbackBatchSet(ctx, namespace, items, ttlSeconds)
+		}
+		return err
+	}
+
+	s.resetFailures()
+	metrics.RecordRedisOperation("batch_set", duration, nil)
+	return nil
 }
 
 // Delete removes a key/value entry. Returns true if an entry was deleted.
@@ -259,7 +342,7 @@ func (s *RedisMemoryStore) StoreSummary(ctx context.Context, tenantID, runID str
 		return fmt.Errorf("tenant mismatch: %s", tenantID)
 	}
 	if s.isCircuitOpen() {
-		return errCircuitOpen
+		return s.fallbackStoreSummary(ctx, runID, summary, ttlSeconds)
 	}
 
 	payload, err := json.Marshal(summary)
@@ -267,37 +350,150 @@ func (s *RedisMemoryStore) StoreSummary(ctx context.Context, tenantID, runID str
 		return fmt.Errorf("summary marshal error: %w", err)
 	}
 
-	ttl := time.Duration(ttlSeconds) * time.Second
-	if ttlSeconds <= 0 {
-		ttl = defaultSummaryTTL
+	encoded, err := s.encodePayload(payload)
+	if err != nil {
+		return fmt.Errorf("summary encode error: %w", err)
 	}
 
+	ttl := ttlSeconds
+	if ttl <= 0 {
+		ttl = int(defaultSummaryTTL.Seconds())
+	}
+
+	// Build keys for Lua script
 	versionKey := s.buildSummaryVersionKey(runID)
-	version, err := s.client.Incr(ctx, versionKey).Result()
+	currentKey := s.buildSummaryKey(runID, "current")
+	versionedPrefix := s.buildSummaryKey(runID, "")
+
+	// Execute atomic Lua script
+	start := time.Now()
+	_, err = storeSummaryScript.Run(
+		ctx,
+		s.client,
+		[]string{versionKey, currentKey, versionedPrefix},
+		encoded,
+		ttl,
+	).Int64()
+	duration := time.Since(start)
+
 	if err != nil {
 		s.recordFailure()
-		return err
-	}
-	_ = s.client.Expire(ctx, versionKey, ttl).Err()
+		metrics.RecordRedisOperation("store_summary", duration, err)
 
-	currentKey := s.buildSummaryKey(runID, "current")
-	versionedKey := s.buildSummaryKey(runID, fmt.Sprintf("v%d", version))
-
-	pipe := s.client.TxPipeline()
-	pipe.Set(ctx, currentKey, payload, ttl)
-	pipe.Set(ctx, versionedKey, payload, ttl)
-	if version > 5 {
-		oldKey := s.buildSummaryKey(runID, fmt.Sprintf("v%d", version-5))
-		pipe.Del(ctx, oldKey)
-	}
-
-	if _, err := pipe.Exec(ctx); err != nil {
-		s.recordFailure()
-		return err
+		if s.fallback != nil {
+			log.Printf("redis store summary failed, using fallback (run_id=%s error=%v)", runID, err)
+			return s.fallbackStoreSummary(ctx, runID, summary, ttlSeconds)
+		}
+		return fmt.Errorf("store summary: %w", err)
 	}
 
 	s.resetFailures()
+	metrics.RecordRedisOperation("store_summary", duration, nil)
 	return nil
+}
+
+func (s *RedisMemoryStore) fallbackStoreSummary(ctx context.Context, runID string, summary *entity.Summary, ttlSeconds int) error {
+	if s.fallback == nil {
+		return errCircuitOpen
+	}
+
+	key := fmt.Sprintf("summary:%s:current", runID)
+	return s.fallback.Set(ctx, s.tenantID, key, summary, ttlSeconds)
+}
+
+// SummaryWithVersion holds a summary along with its version number.
+type SummaryWithVersion struct {
+	Summary *entity.Summary
+	Version int64
+}
+
+// GetSummaryWithVersion retrieves the current summary and its version for a run.
+func (s *RedisMemoryStore) GetSummaryWithVersion(ctx context.Context, tenantID, runID string) (*SummaryWithVersion, error) {
+	if runID == "" {
+		return nil, errors.New("run ID is required")
+	}
+	if tenantID == "" {
+		tenantID = s.tenantID
+	}
+	if tenantID != s.tenantID {
+		return nil, fmt.Errorf("tenant mismatch: %s", tenantID)
+	}
+	if s.isCircuitOpen() {
+		// Fallback doesn't track versions
+		summary, found, err := s.fallbackGetSummary(ctx, runID)
+		if err != nil || !found {
+			return nil, err
+		}
+		return &SummaryWithVersion{Summary: summary, Version: 0}, nil
+	}
+
+	versionKey := s.buildSummaryVersionKey(runID)
+	currentKey := s.buildSummaryKey(runID, "current")
+
+	result, err := getSummaryWithVersionScript.Run(
+		ctx,
+		s.client,
+		[]string{versionKey, currentKey},
+	).Slice()
+
+	if err != nil {
+		s.recordFailure()
+		return nil, err
+	}
+
+	s.resetFailures()
+
+	versionStr, ok := result[0].(string)
+	if !ok {
+		versionStr = "0"
+	}
+	dataStr, ok := result[1].(string)
+	if !ok || dataStr == "" {
+		return nil, nil
+	}
+
+	version, _ := strconv.ParseInt(versionStr, 10, 64)
+
+	decoded, err := s.decodePayload([]byte(dataStr))
+	if err != nil {
+		return nil, err
+	}
+
+	var summary entity.Summary
+	if err := json.Unmarshal(decoded, &summary); err != nil {
+		return nil, err
+	}
+
+	return &SummaryWithVersion{
+		Summary: &summary,
+		Version: version,
+	}, nil
+}
+
+func (s *RedisMemoryStore) fallbackGetSummary(ctx context.Context, runID string) (*entity.Summary, bool, error) {
+	if s.fallback == nil {
+		return nil, false, errCircuitOpen
+	}
+
+	key := fmt.Sprintf("summary:%s:current", runID)
+	val, found, err := s.fallback.Get(ctx, s.tenantID, key)
+	if err != nil || !found {
+		return nil, false, err
+	}
+
+	summary, ok := val.(*entity.Summary)
+	if !ok {
+		// Try to unmarshal if it's stored as map
+		if m, ok := val.(map[string]any); ok {
+			data, _ := json.Marshal(m)
+			var s entity.Summary
+			if err := json.Unmarshal(data, &s); err == nil {
+				return &s, true, nil
+			}
+		}
+		return nil, false, nil
+	}
+	return summary, true, nil
 }
 
 // StoreFacts stores extracted facts for a run.
@@ -519,6 +715,50 @@ func (s *RedisMemoryStore) fallbackDelete(ctx context.Context, namespace, key st
 		cause = errCircuitOpen
 	}
 	return false, cause
+}
+
+func (s *RedisMemoryStore) fallbackBatchGet(ctx context.Context, namespace string, keys []string) (map[string]any, error) {
+	if s.fallback == nil {
+		return nil, errCircuitOpen
+	}
+
+	results := make(map[string]any, len(keys))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Parallel fetches from fallback (it's in-memory, so fast)
+	for _, key := range keys {
+		wg.Add(1)
+		go func(k string) {
+			defer wg.Done()
+
+			val, found, err := s.fallback.Get(ctx, namespace, k)
+			if err != nil || !found {
+				return
+			}
+
+			mu.Lock()
+			results[k] = val
+			mu.Unlock()
+		}(key)
+	}
+
+	wg.Wait()
+	return results, nil
+}
+
+func (s *RedisMemoryStore) fallbackBatchSet(ctx context.Context, namespace string, items map[string]any, ttlSeconds int) error {
+	if s.fallback == nil {
+		return errCircuitOpen
+	}
+
+	var lastErr error
+	for key, value := range items {
+		if err := s.fallback.Set(ctx, namespace, key, value, ttlSeconds); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func (s *RedisMemoryStore) encodePayload(data []byte) ([]byte, error) {

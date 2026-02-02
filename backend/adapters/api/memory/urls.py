@@ -4,8 +4,10 @@ Memory API routes.
 
 from django.urls import path
 
+from adapters.api.memory.gc_views import MemoryGCView
 from adapters.api.memory.usage_views import MemoryUsageView
 
 urlpatterns = [
     path("usage", MemoryUsageView.as_view(), name="memory-usage"),
+    path("gc", MemoryGCView.as_view(), name="memory-gc"),
 ]

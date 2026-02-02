@@ -14,6 +14,12 @@ type Message struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
+// EvictionCallback is called when messages are evicted from the buffer.
+// reason: "capacity" for capacity eviction, "token_limit" for token limit eviction.
+// count: number of messages evicted.
+// tokens: number of tokens evicted (may be 0 if token counting is disabled).
+type EvictionCallback func(reason string, count int, tokens int)
+
 // MessageBuffer is a goroutine-safe circular buffer of messages.
 type MessageBuffer struct {
 	mu       sync.RWMutex
@@ -26,6 +32,8 @@ type MessageBuffer struct {
 	tokenCount     int
 	tokenCounts    []int
 	tokenCountFunc func(Message) int
+
+	onEviction EvictionCallback
 }
 
 // NewMessageBuffer creates a new buffer with the provided capacity.
@@ -175,6 +183,13 @@ func (b *MessageBuffer) Capacity() int {
 	return b.capacity
 }
 
+// SetEvictionCallback registers a callback to be invoked when messages are evicted.
+func (b *MessageBuffer) SetEvictionCallback(cb EvictionCallback) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.onEviction = cb
+}
+
 // Snapshot returns a deep copy of the current buffer in chronological order.
 func (b *MessageBuffer) Snapshot() []Message {
 	b.mu.RLock()
@@ -249,6 +264,18 @@ func (b *MessageBuffer) resetUnlocked() {
 }
 
 func (b *MessageBuffer) pushUnlocked(msg Message) {
+	var evictedTokens int
+
+	// Track capacity eviction
+	if b.count == b.capacity {
+		if b.tokenCounts != nil && len(b.tokenCounts) > b.head {
+			evictedTokens = b.tokenCounts[b.head]
+		}
+		if b.onEviction != nil {
+			b.onEviction("capacity", 1, evictedTokens)
+		}
+	}
+
 	if b.tokenLimit > 0 && b.tokenCountFunc != nil {
 		if b.tokenCounts == nil {
 			b.tokenCounts = make([]int, b.capacity)
@@ -335,17 +362,26 @@ func (b *MessageBuffer) trimToTokenLimitUnlocked() {
 	}
 
 	cutIndex := 0
+	evictedTokens := 0
 	for total > b.tokenLimit && cutIndex < len(ordered) {
 		if cutIndex < len(orderedCounts) {
+			evictedTokens += orderedCounts[cutIndex]
 			total -= orderedCounts[cutIndex]
 		} else {
-			total -= b.countTokens(ordered[cutIndex])
+			tokens := b.countTokens(ordered[cutIndex])
+			evictedTokens += tokens
+			total -= tokens
 		}
 		cutIndex++
 	}
 
 	if cutIndex == 0 {
 		return
+	}
+
+	// Report token limit eviction
+	if b.onEviction != nil {
+		b.onEviction("token_limit", cutIndex, evictedTokens)
 	}
 
 	remaining := ordered[cutIndex:]

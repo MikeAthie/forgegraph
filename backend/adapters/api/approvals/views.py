@@ -23,11 +23,13 @@ class ApprovalListView(APIView):
         # Filter by assignee (current user) and status
         status_filter = request.query_params.get("status", "pending")
 
-        tasks = ApprovalTask.objects.filter(
-            assignee=request.user,
-        ).select_related(
-            "run__graph_version__graph"
-        ).order_by("-created_at")
+        tasks = (
+            ApprovalTask.objects.filter(
+                assignee=request.user,
+            )
+            .select_related("run__graph_version__graph")
+            .order_by("-created_at")
+        )
 
         # Apply status filter if specified
         if status_filter != "all":
@@ -49,17 +51,19 @@ class ApprovalListView(APIView):
                         node_name = node.get("name", task.node_id)
                         break
 
-            result.append({
-                "id": task.id,
-                "run_id": run.id,
-                "run_name": f"Run {str(run.id)[:8]}",
-                "graph_name": graph.name if graph else "Unknown",
-                "node_id": task.node_id,
-                "node_name": node_name,
-                "status": task.status,
-                "prompt_message": task.payload.get("prompt_message", ""),
-                "created_at": task.created_at,
-            })
+            result.append(
+                {
+                    "id": task.id,
+                    "run_id": run.id,
+                    "run_name": f"Run {str(run.id)[:8]}",
+                    "graph_name": graph.name if graph else "Unknown",
+                    "node_id": task.node_id,
+                    "node_name": node_name,
+                    "status": task.status,
+                    "prompt_message": task.payload.get("prompt_message", ""),
+                    "created_at": task.created_at,
+                }
+            )
 
         return success_response(result)
 
@@ -74,9 +78,9 @@ class ApprovalDetailView(APIView):
         from adapters.api.responses import error_response
 
         try:
-            task = ApprovalTask.objects.select_related(
-                "run__graph_version__graph"
-            ).get(id=approval_id)
+            task = ApprovalTask.objects.select_related("run__graph_version__graph").get(
+                id=approval_id
+            )
         except ApprovalTask.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -105,19 +109,21 @@ class ApprovalDetailView(APIView):
                     node_name = node.get("name", task.node_id)
                     break
 
-        return success_response({
-            "id": task.id,
-            "run_id": run.id,
-            "run_name": f"Run {str(run.id)[:8]}",
-            "graph_name": graph.name if graph else "Unknown",
-            "node_id": task.node_id,
-            "node_name": node_name,
-            "status": task.status,
-            "payload": task.payload,
-            "result": task.result,
-            "created_at": task.created_at,
-            "resolved_at": task.resolved_at,
-        })
+        return success_response(
+            {
+                "id": task.id,
+                "run_id": run.id,
+                "run_name": f"Run {str(run.id)[:8]}",
+                "graph_name": graph.name if graph else "Unknown",
+                "node_id": task.node_id,
+                "node_name": node_name,
+                "status": task.status,
+                "payload": task.payload,
+                "result": task.result,
+                "created_at": task.created_at,
+                "resolved_at": task.resolved_at,
+            }
+        )
 
 
 class ApprovalCountView(APIView):

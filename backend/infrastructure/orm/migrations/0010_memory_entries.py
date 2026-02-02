@@ -14,7 +14,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="MemoryEntry",
             fields=[
-                ("id", models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        primary_key=True, default=uuid.uuid4, editable=False, serialize=False
+                    ),
+                ),
                 ("namespace", models.CharField(max_length=255, default="global")),
                 ("key", models.CharField(max_length=255)),
                 ("value_json", models.JSONField(default=dict)),
@@ -29,7 +34,9 @@ class Migration(migrations.Migration):
                     models.Index(fields=["expires_at"], name="memory_entries_exp_idx"),
                 ],
                 "constraints": [
-                    models.UniqueConstraint(fields=["namespace", "key"], name="memory_entries_ns_key_uniq"),
+                    models.UniqueConstraint(
+                        fields=["namespace", "key"], name="memory_entries_ns_key_uniq"
+                    ),
                 ],
             },
         ),

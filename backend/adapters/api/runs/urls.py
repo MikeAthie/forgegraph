@@ -9,8 +9,8 @@ from django.urls import path
 from adapters.api.runs.views import (
     RunCancelView,
     RunDetailView,
-    RunEventsView,
     RunEventsStreamView,
+    RunEventsView,
     RunInvokeView,
     RunListView,
     RunResumeView,
