@@ -4,26 +4,28 @@ Graphs API serializers.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import Any
+
 from rest_framework import serializers
 
 from infrastructure.orm.models import MemoryConfiguration
 
 
-class GraphCreateSerializer(serializers.Serializer):
+class GraphCreateSerializer(serializers.Serializer[Any]):
     """Serializer for creating a graph."""
 
     name = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, default="", allow_blank=True)
 
 
-class GraphUpdateSerializer(serializers.Serializer):
+class GraphUpdateSerializer(serializers.Serializer[Any]):
     """Serializer for updating a graph."""
 
     name = serializers.CharField(max_length=255, required=False)
     description = serializers.CharField(required=False, allow_blank=True)
 
 
-class GraphVersionSummarySerializer(serializers.Serializer):
+class GraphVersionSummarySerializer(serializers.Serializer[Any]):
     """Serializer for graph version in list views."""
 
     id = serializers.UUIDField(read_only=True)
@@ -32,7 +34,7 @@ class GraphVersionSummarySerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
 
 
-class GraphListSerializer(serializers.Serializer):
+class GraphListSerializer(serializers.Serializer[Any]):
     """Serializer for graph list output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -44,7 +46,7 @@ class GraphListSerializer(serializers.Serializer):
     latest_version = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class GraphDetailSerializer(serializers.Serializer):
+class GraphDetailSerializer(serializers.Serializer[Any]):
     """Serializer for graph detail output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -56,12 +58,12 @@ class GraphDetailSerializer(serializers.Serializer):
     versions = GraphVersionSummarySerializer(many=True, read_only=True)
 
 
-class GraphVersionCreateSerializer(serializers.Serializer):
+class GraphVersionCreateSerializer(serializers.Serializer[Any]):
     """Serializer for creating a graph version."""
 
     graph_json = serializers.JSONField()
 
-    def validate_graph_json(self, value):
+    def validate_graph_json(self, value: Any) -> dict[str, Any]:
         """Validate the graph JSON structure."""
         if not isinstance(value, dict):
             raise serializers.ValidationError("graph_json must be an object")
@@ -81,7 +83,7 @@ class GraphVersionCreateSerializer(serializers.Serializer):
         return value
 
 
-class GraphVersionDetailSerializer(serializers.Serializer):
+class GraphVersionDetailSerializer(serializers.Serializer[Any]):
     """Serializer for graph version detail output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -92,7 +94,7 @@ class GraphVersionDetailSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
 
 
-class MemoryConfigurationSerializer(serializers.ModelSerializer):
+class MemoryConfigurationSerializer(serializers.ModelSerializer[MemoryConfiguration]):
     """Serializer for memory configuration."""
 
     class Meta:
@@ -121,32 +123,32 @@ class MemoryConfigurationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "graph", "user", "created_at", "updated_at"]
 
-    def validate_buffer_size(self, value):
+    def validate_buffer_size(self, value: int) -> int:
         if value < 1 or value > 200:
             raise serializers.ValidationError("buffer_size must be between 1 and 200")
         return value
 
-    def validate_vector_threshold(self, value):
+    def validate_vector_threshold(self, value: float) -> float:
         if value < 0.5 or value > 0.99:
             raise serializers.ValidationError("vector_threshold must be between 0.5 and 0.99")
         return value
 
-    def validate_vector_recency_weight(self, value):
+    def validate_vector_recency_weight(self, value: float) -> float:
         if value < 0 or value > 1:
             raise serializers.ValidationError("vector_recency_weight must be between 0 and 1")
         return value
 
-    def validate_vector_top_k(self, value):
+    def validate_vector_top_k(self, value: int) -> int:
         if value < 1 or value > 50:
             raise serializers.ValidationError("vector_top_k must be between 1 and 50")
         return value
 
-    def validate_embedding_model(self, value):
+    def validate_embedding_model(self, value: str) -> str:
         if not value or not value.strip():
             raise serializers.ValidationError("embedding_model cannot be empty")
         return value.strip()
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         instance = getattr(self, "instance", None)
         threshold = attrs.get(
             "summarization_threshold",

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
+from adapters.repositories.memory_chunk_repository import MemoryChunkRepository
 from application.services.embedding_service import EmbeddingService
 from application.services.vector_search_service import VectorSearchService
 
@@ -22,14 +24,14 @@ class FakeChunk:
     content: str
     similarity: float
     source_timestamp: datetime
-    metadata: dict
+    metadata: dict[str, Any]
 
 
-class FakeRepository:
+class FakeRepository(MemoryChunkRepository):
     def __init__(self, chunks: list[FakeChunk]) -> None:
         self._chunks = chunks
 
-    def search(self, **kwargs):
+    def search(self, **kwargs: Any) -> list[FakeChunk]:  # type: ignore[override]
         return self._chunks
 
 

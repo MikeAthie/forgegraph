@@ -4,6 +4,9 @@ Graphs API views.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import Any, cast
+from uuid import UUID
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -22,7 +25,7 @@ from adapters.api.graphs.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from domain.services.graph_validator import GraphValidator
-from infrastructure.orm.models import Graph, GraphVersion, MemoryConfiguration
+from infrastructure.orm.models import Graph, GraphVersion, MemoryConfiguration, User
 
 
 class GraphListCreateView(APIView):
@@ -32,7 +35,8 @@ class GraphListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         """List user's graphs."""
-        graphs = Graph.objects.for_user(request.user).order_by("-updated_at")
+        user = cast(User, request.user)
+        graphs = Graph.objects.for_user(user).order_by("-updated_at")
 
         # Add version counts
         result = []
@@ -68,13 +72,14 @@ class GraphListCreateView(APIView):
                 ],
             )
 
+        user = cast(User, request.user)
         graph = Graph.objects.create(
-            owner=request.user,
+            owner=user,
             name=serializer.validated_data["name"],
             description=serializer.validated_data.get("description", ""),
         )
 
-        default_config = MemoryConfiguration.objects.filter(user=request.user).first()
+        default_config = MemoryConfiguration.objects.filter(user=user).first()
         if default_config:
             MemoryConfiguration.objects.create(
                 graph=graph,
@@ -113,16 +118,16 @@ class GraphDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get_object(self, graph_id, user):
+    def get_object(self, graph_id: UUID, user: User) -> Graph | None:
         """Get graph or raise 404."""
         try:
-            return Graph.objects.get(id=graph_id, owner=user)
+            return cast(Graph, Graph.objects.get(id=graph_id, owner=user))
         except Graph.DoesNotExist:
             return None
 
-    def get(self, request: Request, graph_id) -> Response:
+    def get(self, request: Request, graph_id: UUID) -> Response:
         """Get graph details with versions."""
-        graph = self.get_object(graph_id, request.user)
+        graph = self.get_object(graph_id, cast(User, request.user))
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -148,9 +153,9 @@ class GraphDetailView(APIView):
 
         return success_response(graph_data)
 
-    def patch(self, request: Request, graph_id) -> Response:
+    def patch(self, request: Request, graph_id: UUID) -> Response:
         """Update graph metadata."""
-        graph = self.get_object(graph_id, request.user)
+        graph = self.get_object(graph_id, cast(User, request.user))
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -177,6 +182,7 @@ class GraphDetailView(APIView):
 
         graph.save()
 
+        latest_version = graph.versions.order_by("-version").first()
         graph_data = GraphListSerializer(
             {
                 "id": graph.id,
@@ -185,17 +191,15 @@ class GraphDetailView(APIView):
                 "created_at": graph.created_at,
                 "updated_at": graph.updated_at,
                 "version_count": graph.versions.count(),
-                "latest_version": graph.versions.order_by("-version").first().version
-                if graph.versions.exists()
-                else None,
+                "latest_version": latest_version.version if latest_version else None,
             }
         ).data
 
         return success_response(graph_data)
 
-    def delete(self, request: Request, graph_id) -> Response:
+    def delete(self, request: Request, graph_id: UUID) -> Response:
         """Delete graph and all versions."""
-        graph = self.get_object(graph_id, request.user)
+        graph = self.get_object(graph_id, cast(User, request.user))
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -212,16 +216,16 @@ class GraphVersionListCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get_graph(self, graph_id, user):
+    def get_graph(self, graph_id: UUID, user: User) -> Graph | None:
         """Get graph or None."""
         try:
-            return Graph.objects.get(id=graph_id, owner=user)
+            return cast(Graph, Graph.objects.get(id=graph_id, owner=user))
         except Graph.DoesNotExist:
             return None
 
-    def get(self, request: Request, graph_id) -> Response:
+    def get(self, request: Request, graph_id: UUID) -> Response:
         """List graph versions."""
-        graph = self.get_graph(graph_id, request.user)
+        graph = self.get_graph(graph_id, cast(User, request.user))
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -236,9 +240,9 @@ class GraphVersionListCreateView(APIView):
         versions_data = GraphVersionSummarySerializer(list(versions), many=True).data
         return success_response(versions_data)
 
-    def post(self, request: Request, graph_id) -> Response:
+    def post(self, request: Request, graph_id: UUID) -> Response:
         """Create a new graph version."""
-        graph = self.get_graph(graph_id, request.user)
+        graph = self.get_graph(graph_id, cast(User, request.user))
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -305,13 +309,14 @@ class GraphVersionDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, graph_id, version_id) -> Response:
+    def get(self, request: Request, graph_id: UUID, version_id: UUID) -> Response:
         """Get graph version details."""
+        user = cast(User, request.user)
         try:
             version = GraphVersion.objects.select_related("graph").get(
                 id=version_id,
                 graph_id=graph_id,
-                graph__owner=request.user,
+                graph__owner=user,
             )
         except GraphVersion.DoesNotExist:
             return error_response(
@@ -339,10 +344,10 @@ class GraphVersionLatestView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, graph_id) -> Response:
+    def get(self, request: Request, graph_id: UUID) -> Response:
         """Get latest graph version."""
         try:
-            graph = Graph.objects.get(id=graph_id, owner=request.user)
+            graph = Graph.objects.get(id=graph_id, owner=cast(User, request.user))
         except Graph.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -377,13 +382,13 @@ class GraphMemoryConfigView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get_object(self, graph_id, user):
+    def get_object(self, graph_id: UUID, user: User) -> Graph | None:
         try:
-            return Graph.objects.get(id=graph_id, owner=user)
+            return cast(Graph, Graph.objects.get(id=graph_id, owner=user))
         except Graph.DoesNotExist:
             return None
 
-    def get_or_create_config(self, graph, user):
+    def get_or_create_config(self, graph: Graph, user: User) -> MemoryConfiguration:
         if hasattr(graph, "memory_config") and graph.memory_config:
             return graph.memory_config
 
@@ -406,8 +411,9 @@ class GraphMemoryConfigView(APIView):
 
         return MemoryConfiguration.objects.create(graph=graph)
 
-    def get(self, request: Request, graph_id) -> Response:
-        graph = self.get_object(graph_id, request.user)
+    def get(self, request: Request, graph_id: UUID) -> Response:
+        user = cast(User, request.user)
+        graph = self.get_object(graph_id, user)
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -415,12 +421,13 @@ class GraphMemoryConfigView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        config = self.get_or_create_config(graph, request.user)
+        config = self.get_or_create_config(graph, user)
         data = MemoryConfigurationSerializer(config).data
         return success_response(data)
 
-    def patch(self, request: Request, graph_id) -> Response:
-        graph = self.get_object(graph_id, request.user)
+    def patch(self, request: Request, graph_id: UUID) -> Response:
+        user = cast(User, request.user)
+        graph = self.get_object(graph_id, user)
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -428,7 +435,7 @@ class GraphMemoryConfigView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        config = self.get_or_create_config(graph, request.user)
+        config = self.get_or_create_config(graph, user)
         serializer = MemoryConfigurationSerializer(config, data=request.data, partial=True)
         if not serializer.is_valid():
             return error_response(
@@ -463,7 +470,7 @@ class GraphValidateView(APIView):
             errors: list - Validation errors
             warnings: list - Validation warnings
         """
-        graph_json = request.data.get("graph_json")
+        graph_json: Any = request.data.get("graph_json")
         strict = request.data.get("strict", False)
 
         if not graph_json:

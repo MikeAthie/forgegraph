@@ -6,12 +6,14 @@ Checks Redis connectivity used for caching/channels.
 
 import os
 import time
+from typing import Any
 
 import grpc
 from django.core.cache import cache
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -19,7 +21,7 @@ from rest_framework.views import APIView
 class MemoryHealthView(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         start = time.time()
         key = "memory_health_check"
         try:
@@ -51,7 +53,7 @@ class MemoryHealthView(APIView):
             )
 
 
-def _check_memory_grpc() -> dict:
+def _check_memory_grpc() -> dict[str, Any]:
     host = os.getenv("MEMORY_GRPC_HOST", "")
     port = os.getenv("MEMORY_GRPC_PORT", "")
     if not host or not port:
@@ -68,7 +70,7 @@ def _check_memory_grpc() -> dict:
         return {"configured": True, "healthy": False, "error": str(exc)}
 
 
-def _get_memory_metrics() -> dict:
+def _get_memory_metrics() -> dict[str, Any]:
     from django.core.cache import cache
 
     return {

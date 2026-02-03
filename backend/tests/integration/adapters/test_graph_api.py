@@ -4,6 +4,8 @@ Integration tests for Graph APIs.
 Tests all Graph and GraphVersion endpoints following REST best practices.
 """
 
+from typing import Any
+
 import pytest
 from rest_framework import status
 
@@ -231,7 +233,7 @@ class TestGraphVersionListCreate:
         graph = Graph.objects.create(owner=user, name="Test")
 
         # Missing required fields
-        invalid_json = {"nodes": []}  # Missing edges
+        invalid_json: dict[str, Any] = {"nodes": []}  # Missing edges
         response = authenticated_client.post(
             f"/api/graphs/{graph.id}/versions",
             {"graph_json": invalid_json},
@@ -245,7 +247,7 @@ class TestGraphVersionListCreate:
         """Should validate node structure."""
         graph = Graph.objects.create(owner=user, name="Test")
 
-        invalid_json = {
+        invalid_json: dict[str, Any] = {
             "nodes": [{"type": "prompt"}],  # Missing id and name
             "edges": [],
         }
@@ -261,7 +263,7 @@ class TestGraphVersionListCreate:
     def test_create_version_computes_checksum(self, authenticated_client, user):
         """Should compute and store checksum."""
         graph = Graph.objects.create(owner=user, name="Test")
-        graph_json = {"nodes": [], "edges": []}
+        graph_json: dict[str, Any] = {"nodes": [], "edges": []}
 
         response = authenticated_client.post(
             f"/api/graphs/{graph.id}/versions", {"graph_json": graph_json}, format="json"

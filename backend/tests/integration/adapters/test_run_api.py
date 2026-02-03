@@ -6,6 +6,7 @@ Tests run history and run detail endpoints for Phase 4 observability MVP.
 
 import json
 from datetime import timedelta
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -481,7 +482,7 @@ class TestRunEvents:
         )
         run = Run.objects.create(owner=user, graph_version=version, status="running")
 
-        payload = {
+        payload: dict[str, Any] = {
             "event_type": "node_run.updated",
             "node_run": {
                 "node_id": "start",
@@ -560,6 +561,7 @@ class TestRunEvents:
         tasks = ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending")
         assert tasks.count() == 1
         task = tasks.first()
+        assert task is not None
         assert task.assignee == user
         assert task.payload["prompt_message"] == "Please approve"
         assert task.payload["required_fields"] == ["ticket"]

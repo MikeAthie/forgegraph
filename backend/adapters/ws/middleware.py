@@ -7,6 +7,8 @@ uses `?token=<access_jwt>` query parameters.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar, cast
 from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
@@ -17,9 +19,12 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
+F = TypeVar("F", bound=Callable[..., Any])
+database_sync_to_async_typed = cast(Callable[[F], F], database_sync_to_async)
 
-@database_sync_to_async
-def _get_user(user_id: str):
+
+@database_sync_to_async_typed
+def _get_user(user_id: str) -> Any:
     user_model = get_user_model()
     try:
         return user_model.objects.get(id=user_id)
@@ -27,8 +32,13 @@ def _get_user(user_id: str):
         return AnonymousUser()
 
 
-class JwtQueryStringAuthMiddleware(BaseMiddleware):
-    async def __call__(self, scope, receive, send):
+class JwtQueryStringAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: Callable[..., Awaitable[Any]],
+        send: Callable[..., Awaitable[Any]],
+    ) -> Any:
         scope["user"] = AnonymousUser()
 
         query_string = (scope.get("query_string") or b"").decode()

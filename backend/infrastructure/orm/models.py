@@ -12,7 +12,7 @@ import hashlib
 import json
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
@@ -20,15 +20,13 @@ from django.db import models
 from pgvector.django import IvfflatIndex, VectorField
 
 if TYPE_CHECKING:
-    from django.db.models.manager import BaseManager
+    pass
 
 
 class UserManager(BaseUserManager["User"]):
     """Custom user manager that uses email as the unique identifier."""
 
-    def create_user(
-        self, email: str, password: str | None = None, **extra_fields: Any
-    ) -> "User":
+    def create_user(self, email: str, password: str | None = None, **extra_fields: Any) -> User:
         """Create and save a regular user."""
         if not email:
             raise ValueError("The Email field must be set")
@@ -40,7 +38,7 @@ class UserManager(BaseUserManager["User"]):
 
     def create_superuser(
         self, email: str, password: str | None = None, **extra_fields: Any
-    ) -> "User":
+    ) -> User:
         """Create and save a superuser."""
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
@@ -60,10 +58,10 @@ class User(AbstractUser):
     username = None  # type: ignore[assignment]  # Remove username field
     email = models.EmailField("email address", unique=True)
 
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS: list[str] = []
+    USERNAME_FIELD: str = "email"
+    REQUIRED_FIELDS: ClassVar[list[str]] = []
 
-    objects: UserManager = UserManager()  # type: ignore[assignment]
+    objects: ClassVar[UserManager] = UserManager()  # type: ignore[assignment]
 
     class Meta:
         db_table = "users"
@@ -75,7 +73,7 @@ class User(AbstractUser):
 
 
 class GraphQuerySet(models.QuerySet["Graph"]):
-    def for_user(self, user: "User") -> "GraphQuerySet":
+    def for_user(self, user: User) -> GraphQuerySet:
         return self.filter(owner=user)
 
 
@@ -84,7 +82,7 @@ class GraphManager(models.Manager.from_queryset(GraphQuerySet)):  # type: ignore
 
 
 class GraphVersionQuerySet(models.QuerySet["GraphVersion"]):
-    def latest_for_graph(self, graph_id: uuid.UUID) -> "GraphVersion | None":
+    def latest_for_graph(self, graph_id: uuid.UUID) -> GraphVersion | None:
         return self.filter(graph_id=graph_id).order_by("-version").first()
 
 
@@ -93,10 +91,10 @@ class GraphVersionManager(models.Manager.from_queryset(GraphVersionQuerySet)):  
 
 
 class PromptTemplateQuerySet(models.QuerySet["PromptTemplate"]):
-    def public(self) -> "PromptTemplateQuerySet":
+    def public(self) -> PromptTemplateQuerySet:
         return self.filter(visibility="public")
 
-    def for_user(self, user: "User") -> "PromptTemplateQuerySet":
+    def for_user(self, user: User) -> PromptTemplateQuerySet:
         return self.filter(models.Q(owner=user) | models.Q(visibility="public"))
 
 
@@ -342,7 +340,7 @@ class PromptTemplate(models.Model):
         """Check if this is a built-in prompt."""
         return self.owner is None
 
-    def clone_for_user(self, user: "User") -> "PromptTemplate":
+    def clone_for_user(self, user: User) -> PromptTemplate:
         """Create a private copy of this prompt for the given user."""
         prompt: PromptTemplate = PromptTemplate.objects.create(
             owner=user,
@@ -355,6 +353,7 @@ class PromptTemplate(models.Model):
             license=self.license,
             visibility="private",
         )
+        return prompt
 
 
 class Run(models.Model):
@@ -701,7 +700,7 @@ class APIKey(models.Model):
         from infrastructure.crypto.encryption import decrypt_api_key
 
         try:
-            decrypted = decrypt_api_key(self.encrypted_key)
+            decrypted = decrypt_api_key(bytes(self.encrypted_key))
             return f"****{decrypted[-4:]}" if len(decrypted) >= 4 else "****"
         except Exception:
             return "****"

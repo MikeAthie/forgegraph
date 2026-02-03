@@ -14,7 +14,11 @@ from .engine_pb2 import (  # type: ignore[attr-defined]
     StartRunRequest,
     StartRunResponse,
 )
-from .engine_pb2_grpc import EngineServiceStub, MemoryServiceServicer, MemoryServiceStub  # type: ignore[attr-defined]
+from .engine_pb2_grpc import (  # type: ignore[attr-defined]
+    EngineServiceStub,
+    MemoryServiceServicer,
+    MemoryServiceStub,
+)
 
 __all__ = [
     "PingRequest",

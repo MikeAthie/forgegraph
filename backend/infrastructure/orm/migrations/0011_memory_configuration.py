@@ -57,11 +57,11 @@ class Migration(migrations.Migration):
                 "db_table": "memory_configurations",
                 "constraints": [
                     models.CheckConstraint(
-                        check=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
+                        condition=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
                         name="memory_config_requires_scope",
                     ),
                     models.CheckConstraint(
-                        check=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
+                        condition=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
                         name="memory_config_single_scope",
                     ),
                 ],

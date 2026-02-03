@@ -4,13 +4,15 @@ Runs API serializers (stub for Phase 4).
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import Any
+
 from rest_framework import serializers
 
 RUN_STATUS_CHOICES = ["pending", "running", "paused", "succeeded", "failed", "canceled"]
 NODE_RUN_STATUS_CHOICES = ["pending", "running", "waiting", "succeeded", "failed", "skipped"]
 
 
-class RunStartSerializer(serializers.Serializer):
+class RunStartSerializer(serializers.Serializer[Any]):
     """Serializer for starting a run."""
 
     graph_version_id = serializers.UUIDField()
@@ -18,21 +20,21 @@ class RunStartSerializer(serializers.Serializer):
     thread_id = serializers.UUIDField(required=False, allow_null=True)
 
 
-class RunInvokeSerializer(serializers.Serializer):
+class RunInvokeSerializer(serializers.Serializer[Any]):
     """Serializer for invoking a threaded run."""
 
     thread_id = serializers.UUIDField()
     input_json = serializers.JSONField(required=False, default=dict)
 
 
-class RunResumeSerializer(serializers.Serializer):
+class RunResumeSerializer(serializers.Serializer[Any]):
     """Serializer for resuming a run."""
 
     node_id = serializers.CharField()
     input_json = serializers.JSONField(required=False, default=dict)
 
 
-class RunListSerializer(serializers.Serializer):
+class RunListSerializer(serializers.Serializer[Any]):
     """Serializer for run list output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -47,7 +49,7 @@ class RunListSerializer(serializers.Serializer):
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class RunDetailSerializer(serializers.Serializer):
+class RunDetailSerializer(serializers.Serializer[Any]):
     """Serializer for run detail output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -67,10 +69,9 @@ class RunDetailSerializer(serializers.Serializer):
     # Human Gate pause fields
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
-    node_runs = serializers.ListField(read_only=True)
 
 
-class NodeRunSerializer(serializers.Serializer):
+class NodeRunSerializer(serializers.Serializer[Any]):
     """Serializer for node run output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -92,7 +93,7 @@ class RunDetailWithNodeRunsSerializer(RunDetailSerializer):
     node_runs = NodeRunSerializer(many=True, read_only=True)
 
 
-class RunDeltaBroadcastSerializer(serializers.Serializer):
+class RunDeltaBroadcastSerializer(serializers.Serializer[Any]):
     """Minimal run payload for WebSocket broadcast events."""
 
     id = serializers.UUIDField(read_only=True)
@@ -104,7 +105,7 @@ class RunDeltaBroadcastSerializer(serializers.Serializer):
     error_message = serializers.CharField(read_only=True)
 
 
-class NodeRunDeltaSerializer(serializers.Serializer):
+class NodeRunDeltaSerializer(serializers.Serializer[Any]):
     """NodeRun delta payload sent by the engine/control-plane."""
 
     node_id = serializers.CharField()
@@ -118,7 +119,7 @@ class NodeRunDeltaSerializer(serializers.Serializer):
     error_json = serializers.JSONField(required=False, allow_null=True)
 
 
-class RunUpdateDeltaSerializer(serializers.Serializer):
+class RunUpdateDeltaSerializer(serializers.Serializer[Any]):
     """Run delta payload sent by the engine/control-plane."""
 
     status = serializers.ChoiceField(choices=RUN_STATUS_CHOICES, required=False)
@@ -133,7 +134,7 @@ class RunUpdateDeltaSerializer(serializers.Serializer):
     pause_payload = serializers.JSONField(required=False, allow_null=True)  # From engine event
 
 
-class RunEventSerializer(serializers.Serializer):
+class RunEventSerializer(serializers.Serializer[Any]):
     """Run event wrapper used by the broadcast endpoint."""
 
     event_type = serializers.ChoiceField(
@@ -143,7 +144,7 @@ class RunEventSerializer(serializers.Serializer):
     run = RunUpdateDeltaSerializer(required=False)
     payload = serializers.JSONField(required=False)
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         event_type = attrs.get("event_type")
 
         if event_type == "node_run.updated" and "node_run" not in attrs:

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from adapters.embedding.openai_embedder import OpenAIEmbedder
 from adapters.worker.celery_app import celery_app
 from application.services.chunking_service import Message, TurnBasedChunking
 from application.services.embedding_pipeline import EmbeddingPipeline
 from application.services.embedding_service import CachedEmbeddingService
+
+F = TypeVar("F", bound=Callable[..., Any])
+celery_task = cast(Callable[..., Callable[[F], F]], celery_app.task)
 
 
 def _parse_messages(messages: list[dict[str, Any]]) -> list[Message]:
@@ -33,8 +37,8 @@ def _parse_messages(messages: list[dict[str, Any]]) -> list[Message]:
     return parsed
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
-def process_embeddings(self, payload: dict[str, Any]) -> int:
+@celery_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+def process_embeddings(self: Any, payload: dict[str, Any]) -> int:
     tenant_id = payload["tenant_id"]
     embedding_model = payload.get("embedding_model", "text-embedding-ada-002")
     messages = _parse_messages(payload.get("messages", []))

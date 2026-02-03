@@ -7,6 +7,7 @@ Tests model behavior, properties, methods, and model-level validation.
 import hashlib
 import json
 from datetime import timedelta
+from typing import Any
 
 import pytest
 from django.db import IntegrityError
@@ -163,7 +164,7 @@ class TestGraphVersionModel:
     def test_graph_version_creation(self, user):
         """Should create a graph version with required fields."""
         graph = Graph.objects.create(owner=user, name="Test")
-        graph_json = {"nodes": [{"id": "n1", "type": "prompt"}], "edges": []}
+        graph_json: dict[str, Any] = {"nodes": [{"id": "n1", "type": "prompt"}], "edges": []}
 
         version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
 
@@ -175,7 +176,7 @@ class TestGraphVersionModel:
     def test_graph_version_computes_checksum_on_save(self, user):
         """Checksum should be computed automatically on save."""
         graph = Graph.objects.create(owner=user, name="Test")
-        graph_json = {"nodes": [], "edges": []}
+        graph_json: dict[str, Any] = {"nodes": [], "edges": []}
 
         version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
 
@@ -189,7 +190,7 @@ class TestGraphVersionModel:
     def test_graph_version_checksum_is_deterministic(self, user):
         """Same graph_json should always produce same checksum."""
         graph = Graph.objects.create(owner=user, name="Test")
-        graph_json = {"nodes": [], "edges": []}
+        graph_json: dict[str, Any] = {"nodes": [], "edges": []}
 
         version1 = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
         version2 = GraphVersion.objects.create(graph=graph, version=2, graph_json=graph_json)

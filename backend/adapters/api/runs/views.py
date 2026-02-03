@@ -9,6 +9,8 @@ import copy
 import json as pyjson
 import logging
 from datetime import timedelta
+from typing import Any, cast
+from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -48,6 +50,7 @@ from application.services.schema_validation import (
 )
 from infrastructure.orm.models import (
     ApprovalTask,
+    Graph,
     GraphVersion,
     MemoryConfiguration,
     MemorySession,
@@ -55,6 +58,7 @@ from infrastructure.orm.models import (
     Run,
     RunCheckpoint,
     RunEvent,
+    User,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,13 +75,13 @@ def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
 
 def get_tenant_id(request: Request) -> str:
     """Get tenant ID from the authenticated user."""
-    user = request.user
+    user = cast(User, request.user)
     if hasattr(user, "tenant_id") and user.tenant_id:
         return str(user.tenant_id)
     return str(user.id)
 
 
-def get_memory_config_for_graph(graph, user):
+def get_memory_config_for_graph(graph: Graph, user: User) -> MemoryConfiguration | None:
     if hasattr(graph, "memory_config") and graph.memory_config:
         return graph.memory_config
     default_config = MemoryConfiguration.objects.filter(user=user).first()
@@ -86,7 +90,7 @@ def get_memory_config_for_graph(graph, user):
     return None
 
 
-def build_memory_config_json(graph, user, session_id: str | None = None) -> str:
+def build_memory_config_json(graph: Graph, user: User, session_id: str | None = None) -> str:
     config = get_memory_config_for_graph(graph, user)
     if not config:
         return ""
@@ -127,7 +131,7 @@ def build_memory_config_json(graph, user, session_id: str | None = None) -> str:
     return pyjson.dumps(payload)
 
 
-def upsert_memory_session(user, session_id: str | None, ttl_hours: int = 24) -> None:
+def upsert_memory_session(user: User, session_id: str | None, ttl_hours: int = 24) -> None:
     if not session_id:
         return
     expires_at = timezone.now() + timedelta(hours=ttl_hours)
@@ -141,7 +145,7 @@ START_NODE_ID = "START"
 END_NODE_ID = "END"
 
 
-def strip_sentinel_edges(graph_json: dict) -> dict:
+def strip_sentinel_edges(graph_json: dict[str, Any]) -> dict[str, Any]:
     """
     Remove LangGraph-style START/END edges before sending a graph to the engine.
 
@@ -168,7 +172,7 @@ def strip_sentinel_edges(graph_json: dict) -> dict:
     return cleaned
 
 
-def expand_subgraphs(graph_json: dict, owner) -> dict:
+def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
     """Inline subgraph graph_json for subgraph nodes."""
     if not isinstance(graph_json, dict):
         return graph_json
@@ -223,7 +227,9 @@ def expand_subgraphs(graph_json: dict, owner) -> dict:
     return data
 
 
-def apply_memory_namespace_prefix(graph_json: dict, owner_id) -> dict:
+def apply_memory_namespace_prefix(
+    graph_json: dict[str, Any], owner_id: UUID | str
+) -> dict[str, Any]:
     """Ensure memory nodes are isolated per user via namespace_prefix."""
     if not isinstance(graph_json, dict):
         return graph_json
@@ -253,7 +259,7 @@ def apply_memory_namespace_prefix(graph_json: dict, owner_id) -> dict:
     return data
 
 
-def prepare_graph_for_engine(graph_json: dict, owner) -> dict:
+def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
     """Prepare graph JSON for engine execution (strip sentinels, expand subgraphs, enforce memory isolation)."""
     cleaned = strip_sentinel_edges(graph_json)
     expanded = expand_subgraphs(cleaned, owner)
@@ -267,7 +273,8 @@ class RunListView(APIView):
 
     def get(self, request: Request) -> Response:
         """List user's runs."""
-        runs = Run.objects.filter(owner=request.user).select_related("graph_version__graph")
+        user = cast(User, request.user)
+        runs = Run.objects.filter(owner=user).select_related("graph_version__graph")
 
         status_filter = request.query_params.get("status")
         if status_filter:
@@ -336,8 +343,9 @@ class RunDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, run_id) -> Response:
+    def get(self, request: Request, run_id: UUID) -> Response:
         """Get run details with node runs."""
+        user = cast(User, request.user)
         node_runs_queryset = NodeRun.objects.order_by(
             Case(
                 When(started_at__isnull=True, then=1),
@@ -352,7 +360,7 @@ class RunDetailView(APIView):
             run = (
                 Run.objects.select_related("graph_version__graph")
                 .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
-                .get(id=run_id, owner=request.user)
+                .get(id=run_id, owner=user)
             )
         except Run.DoesNotExist:
             return error_response(
@@ -431,6 +439,7 @@ class RunStartView(APIView):
                 ],
             )
 
+        user = cast(User, request.user)
         graph_version_id = serializer.validated_data["graph_version_id"]
         input_json = serializer.validated_data.get("input_json") or {}
         thread_id = serializer.validated_data.get("thread_id")
@@ -438,7 +447,7 @@ class RunStartView(APIView):
 
         try:
             graph_version = GraphVersion.objects.select_related("graph").get(
-                id=graph_version_id, graph__owner=request.user
+                id=graph_version_id, graph__owner=user
             )
         except GraphVersion.DoesNotExist:
             return error_response(
@@ -468,7 +477,7 @@ class RunStartView(APIView):
                 )
 
         run = Run.objects.create(
-            owner=request.user,
+            owner=user,
             graph_version=graph_version,
             thread_id=thread_id,
             status="pending",
@@ -482,7 +491,7 @@ class RunStartView(APIView):
 
         # Prepare graph for engine (inline subgraphs, enforce memory namespace)
         try:
-            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, request.user)
+            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
         except ValueError as exc:
             return error_response(
                 code="INVALID_SUBGRAPH",
@@ -491,12 +500,12 @@ class RunStartView(APIView):
             )
 
         # Track memory session for cross-run buffers.
-        upsert_memory_session(request.user, session_id)
+        upsert_memory_session(user, session_id)
 
         # Send run to the engine
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
         memory_config_json = build_memory_config_json(
-            graph_version.graph, request.user, session_id=session_id
+            graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
         try:
@@ -580,6 +589,7 @@ class RunInvokeView(APIView):
                 ],
             )
 
+        user = cast(User, request.user)
         thread_id = serializer.validated_data["thread_id"]
         session_id = str(thread_id)
         input_json = serializer.validated_data.get("input_json") or {}
@@ -593,7 +603,7 @@ class RunInvokeView(APIView):
 
         active_run = (
             Run.objects.filter(
-                owner=request.user,
+                owner=user,
                 thread_id=thread_id,
                 status__in=["pending", "running", "paused"],
             )
@@ -608,7 +618,7 @@ class RunInvokeView(APIView):
             )
 
         latest_run = (
-            Run.objects.filter(owner=request.user, thread_id=thread_id)
+            Run.objects.filter(owner=user, thread_id=thread_id)
             .select_related("graph_version__graph")
             .order_by(
                 Case(
@@ -642,7 +652,7 @@ class RunInvokeView(APIView):
 
         graph_version = latest_run.graph_version
         try:
-            graph_json = prepare_graph_for_engine(graph_version.graph_json, request.user)
+            graph_json = prepare_graph_for_engine(graph_version.graph_json, user)
         except ValueError as exc:
             return error_response(
                 code="INVALID_SUBGRAPH",
@@ -678,7 +688,7 @@ class RunInvokeView(APIView):
 
         with transaction.atomic():
             run = Run.objects.create(
-                owner=request.user,
+                owner=user,
                 graph_version=graph_version,
                 thread_id=thread_id,
                 status="pending",
@@ -701,11 +711,11 @@ class RunInvokeView(APIView):
 
         broadcast_run_updated(run)
 
-        upsert_memory_session(request.user, session_id)
+        upsert_memory_session(user, session_id)
 
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
         memory_config_json = build_memory_config_json(
-            graph_version.graph, request.user, session_id=session_id
+            graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
         try:
@@ -775,8 +785,9 @@ class RunCancelView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, run_id) -> Response:
+    def post(self, request: Request, run_id: UUID) -> Response:
         """Cancel a running run."""
+        user = cast(User, request.user)
         node_runs_queryset = NodeRun.objects.order_by(
             Case(
                 When(started_at__isnull=True, then=1),
@@ -791,7 +802,7 @@ class RunCancelView(APIView):
             run = (
                 Run.objects.select_related("graph_version__graph")
                 .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
-                .get(id=run_id, owner=request.user)
+                .get(id=run_id, owner=user)
             )
         except Run.DoesNotExist:
             return error_response(
@@ -876,8 +887,9 @@ class RunResumeView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, run_id) -> Response:
+    def post(self, request: Request, run_id: UUID) -> Response:
         """Resume a paused run with human decision."""
+        user = cast(User, request.user)
         serializer = RunResumeSerializer(data=request.data)
         if not serializer.is_valid():
             return error_response(
@@ -892,9 +904,7 @@ class RunResumeView(APIView):
 
         # Get the run
         try:
-            run = Run.objects.select_related("graph_version__graph").get(
-                id=run_id, owner=request.user
-            )
+            run = Run.objects.select_related("graph_version__graph").get(id=run_id, owner=user)
         except Run.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -957,7 +967,7 @@ class RunEventsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, run_id) -> Response:
+    def post(self, request: Request, run_id: UUID) -> Response:
         serializer = RunEventSerializer(data=request.data)
         if not serializer.is_valid():
             return error_response(
@@ -970,8 +980,9 @@ class RunEventsView(APIView):
                 ],
             )
 
+        user = cast(User, request.user)
         try:
-            run = Run.objects.get(id=run_id, owner=request.user)
+            run = Run.objects.get(id=run_id, owner=user)
         except Run.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -1035,7 +1046,7 @@ class RunEventsView(APIView):
             except Exception:
                 output_schema = None
 
-            schema_errors: list[dict] | None = None
+            schema_errors: list[dict[str, Any]] | None = None
             if output_schema and payload.get("status") == "succeeded" and "output_json" in payload:
                 try:
                     schema_errors = validate_json_schema(payload.get("output_json"), output_schema)
@@ -1090,32 +1101,32 @@ class RunEventsView(APIView):
                     },
                 )
 
-                update_fields: list[str] = []
+                node_update_fields: list[str] = []
 
                 if not created and node_run.node_type != node_type:
                     node_run.node_type = node_type
-                    update_fields.append("node_type")
+                    node_update_fields.append("node_type")
 
                 node_run.status = payload["status"]
-                update_fields.append("status")
+                node_update_fields.append("status")
 
                 if "started_at" in payload:
                     node_run.started_at = payload["started_at"]
-                    update_fields.append("started_at")
+                    node_update_fields.append("started_at")
                 if "ended_at" in payload:
                     node_run.ended_at = payload["ended_at"]
-                    update_fields.append("ended_at")
+                    node_update_fields.append("ended_at")
                 if "input_json" in payload:
                     node_run.input_json = payload["input_json"]
-                    update_fields.append("input_json")
+                    node_update_fields.append("input_json")
                 if "output_json" in payload:
                     node_run.output_json = payload["output_json"]
-                    update_fields.append("output_json")
+                    node_update_fields.append("output_json")
                 if "error_json" in payload:
                     node_run.error_json = payload["error_json"]
-                    update_fields.append("error_json")
+                    node_update_fields.append("error_json")
 
-                node_run.save(update_fields=sorted(set(update_fields)))
+                node_run.save(update_fields=sorted(set(node_update_fields)))
 
                 RunEvent.objects.create(
                     run=run,
@@ -1146,9 +1157,9 @@ class RunEventsView(APIView):
         )
 
 
-def _build_stream_message(*, run: Run, event: RunEvent) -> dict:
-    payload = event.payload or {}
-    message = {
+def _build_stream_message(*, run: Run, event: RunEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = event.payload or {}
+    message: dict[str, Any] = {
         "event_id": str(event.id),
         "timestamp": event.created_at.isoformat(),
         "type": event.event_type,
@@ -1163,7 +1174,7 @@ def _build_stream_message(*, run: Run, event: RunEvent) -> dict:
     return message
 
 
-def _format_sse(message: dict, event_name: str | None = None) -> str:
+def _format_sse(message: dict[str, Any], event_name: str | None = None) -> str:
     payload = pyjson.dumps(message, default=str)
     lines = []
     if event_name:
@@ -1172,17 +1183,17 @@ def _format_sse(message: dict, event_name: str | None = None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def _get_user_from_request(request: Request):
+def _get_user_from_request(request: Request) -> User | None:
     user = getattr(request, "user", None)
     if user and getattr(user, "is_authenticated", False):
-        return user
+        return cast(User, user)
 
     token = request.query_params.get("token")
     if not token:
         return None
 
     try:
-        access_token = AccessToken(token)
+        access_token = AccessToken(cast(Any, token))
     except TokenError:
         return None
 
@@ -1200,7 +1211,7 @@ def _get_user_from_request(request: Request):
         return None
 
 
-async def _receive_with_timeout(channel_layer, channel_name: str, timeout: float):
+async def _receive_with_timeout(channel_layer: Any, channel_name: str, timeout: float) -> Any:
     try:
         return await asyncio.wait_for(channel_layer.receive(channel_name), timeout=timeout)
     except TimeoutError:
@@ -1212,7 +1223,7 @@ class RunEventsStreamView(APIView):
 
     permission_classes = [AllowAny]
 
-    def get(self, request: Request, run_id) -> StreamingHttpResponse | Response:
+    def get(self, request: Request, run_id: UUID) -> StreamingHttpResponse | Response:
         user = _get_user_from_request(request)
         if not user or not getattr(user, "is_authenticated", False):
             return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -1225,7 +1236,7 @@ class RunEventsStreamView(APIView):
         since_param = request.query_params.get("since")
         since = parse_datetime(since_param) if since_param else None
 
-        def event_stream():
+        def event_stream() -> Any:
             yield _format_sse(
                 {
                     "type": "connected",

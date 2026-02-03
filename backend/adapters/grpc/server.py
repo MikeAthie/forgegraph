@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import os
 from concurrent import futures
+from typing import Any, cast
 
 import django
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from adapters.grpc.memory_service import MemoryService
-from infrastructure.grpc import engine_pb2_grpc
+from infrastructure.grpc import engine_pb2_grpc as engine_pb2_grpc_module
+
+engine_pb2_grpc = cast(Any, engine_pb2_grpc_module)
 
 
 def serve() -> None:

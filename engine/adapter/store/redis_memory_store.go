@@ -552,7 +552,7 @@ func (s *RedisMemoryStore) GetSummary(ctx context.Context, tenantID, runID strin
 		return nil, false, errCircuitOpen
 	}
 
-	val, err := s.client.Get(ctx, s.buildSummaryKey(runID, "current")).Result()
+	raw, err := s.client.Get(ctx, s.buildSummaryKey(runID, "current")).Bytes()
 	if err == redis.Nil {
 		return nil, false, nil
 	}
@@ -561,8 +561,13 @@ func (s *RedisMemoryStore) GetSummary(ctx context.Context, tenantID, runID strin
 		return nil, false, err
 	}
 
+	decoded, err := s.decodePayload(raw)
+	if err != nil {
+		return nil, false, err
+	}
+
 	var summary entity.Summary
-	if err := json.Unmarshal([]byte(val), &summary); err != nil {
+	if err := json.Unmarshal(decoded, &summary); err != nil {
 		return nil, false, fmt.Errorf("summary unmarshal error: %w", err)
 	}
 	s.resetFailures()

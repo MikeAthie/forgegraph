@@ -4,13 +4,16 @@ Approvals API views for Human Gate tasks.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import cast
+from uuid import UUID
+
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from adapters.api.responses import success_response
-from infrastructure.orm.models import ApprovalTask
+from adapters.api.responses import error_response, success_response
+from infrastructure.orm.models import ApprovalTask, User
 
 
 class ApprovalListView(APIView):
@@ -22,10 +25,11 @@ class ApprovalListView(APIView):
         """Get list of pending approvals for the current user."""
         # Filter by assignee (current user) and status
         status_filter = request.query_params.get("status", "pending")
+        user = cast(User, request.user)
 
         tasks = (
             ApprovalTask.objects.filter(
-                assignee=request.user,
+                assignee=user,
             )
             .select_related("run__graph_version__graph")
             .order_by("-created_at")
@@ -73,10 +77,8 @@ class ApprovalDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, approval_id) -> Response:
+    def get(self, request: Request, approval_id: UUID) -> Response:
         """Get approval task details."""
-        from adapters.api.responses import error_response
-
         try:
             task = ApprovalTask.objects.select_related("run__graph_version__graph").get(
                 id=approval_id
@@ -85,15 +87,16 @@ class ApprovalDetailView(APIView):
             return error_response(
                 code="NOT_FOUND",
                 message="Approval task not found",
-                status_code=404,
+                status=404,
             )
 
         # Check permission - user must be assignee or run owner
-        if task.assignee != request.user and task.run.owner != request.user:
+        user = cast(User, request.user)
+        if task.assignee != user and task.run.owner != user:
             return error_response(
                 code="FORBIDDEN",
                 message="You don't have permission to view this approval",
-                status_code=403,
+                status=403,
             )
 
         run = task.run
@@ -133,8 +136,9 @@ class ApprovalCountView(APIView):
 
     def get(self, request: Request) -> Response:
         """Get count of pending approvals."""
+        user = cast(User, request.user)
         count = ApprovalTask.objects.filter(
-            assignee=request.user,
+            assignee=user,
             status="pending",
         ).count()
 

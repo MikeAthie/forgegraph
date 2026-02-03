@@ -4,18 +4,18 @@ Auth API views.
 Clean Architecture: Interface Adapters layer.
 """
 
-import datetime
-from typing import Any, Literal, cast, Union
+from datetime import timedelta
+from typing import Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated, BasePermission
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken, Token
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import (
     TokenObtainPairView as BaseTokenObtainPairView,
 )
@@ -33,39 +33,37 @@ User = get_user_model()
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    # Use a type-safe getter for the lifetime setting
-    jwt_settings = getattr(settings, "SIMPLE_JWT", {})
-    lifetime = jwt_settings.get("REFRESH_TOKEN_LIFETIME")
-    
-    # Ensure it's actually a timedelta before calling total_seconds()
-    max_age: int | None = None
-    if isinstance(lifetime, datetime.timedelta):
-        max_age = int(lifetime.total_seconds())
-
-    samesite = cast(Literal["Lax", "Strict", "None", False], 
-                    getattr(settings, "AUTH_REFRESH_COOKIE_SAMESITE", "Lax"))
-    
+    refresh_lifetime = cast(
+        timedelta,
+        settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"],
+    )
+    samesite = cast(
+        Literal["Lax", "Strict", "None", False],
+        settings.AUTH_REFRESH_COOKIE_SAMESITE,
+    )
     response.set_cookie(
         settings.AUTH_REFRESH_COOKIE,
         refresh_token,
-        max_age=max_age,
+        max_age=int(refresh_lifetime.total_seconds()),
         httponly=True,
-        secure=getattr(settings, "AUTH_REFRESH_COOKIE_SECURE", True),
+        secure=settings.AUTH_REFRESH_COOKIE_SECURE,
         samesite=samesite,
-        path=getattr(settings, "AUTH_REFRESH_COOKIE_PATH", "/"),
-        domain=getattr(settings, "AUTH_REFRESH_COOKIE_DOMAIN", None),
+        path=settings.AUTH_REFRESH_COOKIE_PATH,
+        domain=settings.AUTH_REFRESH_COOKIE_DOMAIN,
     )
 
 
 def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         settings.AUTH_REFRESH_COOKIE,
-        path=getattr(settings, "AUTH_REFRESH_COOKIE_PATH", "/"),
-        domain=getattr(settings, "AUTH_REFRESH_COOKIE_DOMAIN", None),
+        path=settings.AUTH_REFRESH_COOKIE_PATH,
+        domain=settings.AUTH_REFRESH_COOKIE_DOMAIN,
     )
 
 
 class RegisterView(APIView):
+    """User registration endpoint."""
+
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -84,15 +82,9 @@ class RegisterView(APIView):
 
 
 class LoginView(BaseTokenObtainPairView):
-    """User login endpoint."""
-    
-    # To fix the tuple[()] error without an ignore, we must match the type 
-    # expected by the underlying TokenViewBase stub exactly.
-    # If the stub says tuple[()], it effectively forbids runtime permission overrides.
-    # Instead, we define the property to return the correct type.
-    @property
-    def permission_classes(self) -> list[type[BasePermission]]:
-        return [AllowAny]
+    """User login endpoint (access token body + refresh token cookie)."""
+
+    permission_classes = (AllowAny,)  # type: ignore[assignment]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         response = super().post(request, *args, **kwargs)
@@ -101,7 +93,7 @@ class LoginView(BaseTokenObtainPairView):
 
         refresh_token = response.data.get("refresh")
         if refresh_token:
-            _set_refresh_cookie(response, str(refresh_token))
+            _set_refresh_cookie(response, refresh_token)
             response.data.pop("refresh", None)
 
         response["Cache-Control"] = "no-store"
@@ -110,34 +102,35 @@ class LoginView(BaseTokenObtainPairView):
 
 
 class LogoutView(APIView):
+    """User logout endpoint."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
         serializer = LogoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        refresh_token_raw = serializer.validated_data.get("refresh") or request.COOKIES.get(
+        refresh_token = serializer.validated_data.get("refresh") or request.COOKIES.get(
             settings.AUTH_REFRESH_COOKIE
         )
         response = Response(status=status.HTTP_204_NO_CONTENT)
         _clear_refresh_cookie(response)
 
-        if not refresh_token_raw:
+        if not refresh_token:
             return response
 
         try:
-            # RefreshToken constructor expects a 'Token' object or None according to stubs.
-            # We must use 'cast' to tell Mypy this string is being treated as the 
-            # appropriate token type for the constructor's signature.
-            token = RefreshToken(cast(Token, refresh_token_raw))
+            token = RefreshToken(cast(Any, refresh_token))
             token.blacklist()
-        except (TokenError, AttributeError):
+        except TokenError:
             return response
 
         return response
 
 
 class MeView(APIView):
+    """Get current user endpoint."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
@@ -145,9 +138,9 @@ class MeView(APIView):
 
 
 class TokenRefreshView(BaseTokenRefreshView):
-    @property
-    def permission_classes(self) -> list[type[BasePermission]]:
-        return [AllowAny]
+    """Token refresh endpoint (access token body + refresh token cookie)."""
+
+    permission_classes = (AllowAny,)  # type: ignore[assignment]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         refresh_cookie = request.COOKIES.get(settings.AUTH_REFRESH_COOKIE)
@@ -163,7 +156,7 @@ class TokenRefreshView(BaseTokenRefreshView):
 
         refresh_token = response.data.get("refresh")
         if refresh_token:
-            _set_refresh_cookie(response, str(refresh_token))
+            _set_refresh_cookie(response, refresh_token)
             response.data.pop("refresh", None)
 
         response["Cache-Control"] = "no-store"

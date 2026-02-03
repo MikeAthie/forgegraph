@@ -5,6 +5,7 @@ Provides daily summarization usage totals.
 """
 
 from datetime import timedelta
+from typing import cast
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -13,10 +14,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
-from infrastructure.orm.models import MemoryUsage
+from infrastructure.orm.models import MemoryUsage, User
 
 
-def _tenant_id_for_user(user) -> str:
+def _tenant_id_for_user(user: User) -> str:
     if hasattr(user, "tenant_id") and user.tenant_id:
         return str(user.tenant_id)
     return str(user.id)
@@ -45,7 +46,7 @@ class MemoryUsageView(APIView):
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=days - 1)
 
-        tenant_id = _tenant_id_for_user(request.user)
+        tenant_id = _tenant_id_for_user(cast(User, request.user))
         records = (
             MemoryUsage.objects.filter(
                 tenant_id=tenant_id, usage_date__gte=start_date, usage_date__lte=end_date

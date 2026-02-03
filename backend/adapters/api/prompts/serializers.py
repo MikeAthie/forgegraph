@@ -4,12 +4,14 @@ Prompts API serializers.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import Any
+
 from rest_framework import serializers
 
 from domain.value_objects import PromptCategory
 
 
-class PromptCreateSerializer(serializers.Serializer):
+class PromptCreateSerializer(serializers.Serializer[Any]):
     """Serializer for creating a prompt."""
 
     title = serializers.CharField(max_length=255)
@@ -19,7 +21,7 @@ class PromptCreateSerializer(serializers.Serializer):
     variables_schema = serializers.JSONField(required=False, default=dict)
 
 
-class PromptUpdateSerializer(serializers.Serializer):
+class PromptUpdateSerializer(serializers.Serializer[Any]):
     """Serializer for updating a prompt."""
 
     title = serializers.CharField(max_length=255, required=False)
@@ -28,13 +30,13 @@ class PromptUpdateSerializer(serializers.Serializer):
     variables_schema = serializers.JSONField(required=False)
 
 
-class PromptPublishSerializer(serializers.Serializer):
+class PromptPublishSerializer(serializers.Serializer[Any]):
     """Serializer for publishing a prompt."""
 
     license = serializers.CharField(max_length=64, required=False, default="MIT")
 
 
-class PromptListSerializer(serializers.Serializer):
+class PromptListSerializer(serializers.Serializer[Any]):
     """Serializer for prompt list output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -46,7 +48,7 @@ class PromptListSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
 
 
-class PromptDetailSerializer(serializers.Serializer):
+class PromptDetailSerializer(serializers.Serializer[Any]):
     """Serializer for prompt detail output."""
 
     id = serializers.UUIDField(read_only=True)

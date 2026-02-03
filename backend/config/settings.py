@@ -7,6 +7,7 @@ Clean Architecture: This belongs to the Frameworks & Drivers layer.
 import os
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -110,6 +111,7 @@ USE_IN_MEMORY_CHANNEL_LAYER = os.environ.get("USE_IN_MEMORY_CHANNEL_LAYER", "fal
     "true",
     "yes",
 }
+CHANNEL_LAYERS: dict[str, dict[str, Any]]
 if USE_SQLITE or USE_IN_MEMORY_CHANNEL_LAYER:
     CHANNEL_LAYERS = {
         "default": {

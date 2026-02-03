@@ -6,7 +6,8 @@ Provides usage, cost, and performance summaries for the memory system.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
+from typing import cast
 
 from django.core.cache import cache
 from django.db import models
@@ -25,10 +26,11 @@ from infrastructure.orm.models import (
     MemoryEntry,
     MemoryUsage,
     NodeRun,
+    User,
 )
 
 
-def _tenant_id_for_user(user) -> str:
+def _tenant_id_for_user(user: User) -> str:
     if hasattr(user, "tenant_id") and user.tenant_id:
         return str(user.tenant_id)
     return str(user.id)
@@ -61,7 +63,7 @@ def _parse_period(request: Request, default_days: int = 30) -> int | Response:
     return days
 
 
-def _date_window(days: int):
+def _date_window(days: int) -> tuple[date, date]:
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=days - 1)
     return start_date, end_date
@@ -77,7 +79,8 @@ class MemoryUsageAnalyticsView(APIView):
         days = parsed
 
         start_date, end_date = _date_window(days)
-        tenant_id = _tenant_id_for_user(request.user)
+        user = cast(User, request.user)
+        tenant_id = _tenant_id_for_user(user)
 
         usage_qs = (
             MemoryUsage.objects.filter(
@@ -121,7 +124,7 @@ class MemoryUsageAnalyticsView(APIView):
 
         buffer_sizes = list(
             MemoryConfiguration.objects.filter(
-                models.Q(graph__owner=request.user) | models.Q(user=request.user),
+                models.Q(graph__owner=user) | models.Q(user=user),
                 buffer_enabled=True,
             ).values_list("buffer_size", flat=True)
         )
@@ -131,13 +134,13 @@ class MemoryUsageAnalyticsView(APIView):
         peak_buffer_size = max(buffer_sizes)
 
         total_messages = NodeRun.objects.filter(
-            run__owner=request.user,
+            run__owner=user,
             node_type="prompt",
             started_at__date__gte=start_date,
             started_at__date__lte=end_date,
         ).count()
 
-        namespace_prefix = f"user:{request.user.id}"
+        namespace_prefix = f"user:{user.id}"
         entry_qs = MemoryEntry.objects.filter(
             namespace__startswith=namespace_prefix,
             created_at__date__gte=start_date,
@@ -213,7 +216,7 @@ class MemoryCostsAnalyticsView(APIView):
         days = parsed
 
         start_date, end_date = _date_window(days)
-        tenant_id = _tenant_id_for_user(request.user)
+        tenant_id = _tenant_id_for_user(cast(User, request.user))
 
         usage_qs = (
             MemoryUsage.objects.filter(
@@ -259,7 +262,7 @@ class MemoryPerformanceAnalyticsView(APIView):
         days = parsed
 
         start_date, end_date = _date_window(days)
-        tenant_id = _tenant_id_for_user(request.user)
+        tenant_id = _tenant_id_for_user(cast(User, request.user))
 
         chunk_qs = MemoryChunk.objects.filter(
             tenant_id=tenant_id,

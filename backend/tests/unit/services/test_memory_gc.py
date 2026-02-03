@@ -82,10 +82,11 @@ class TestFindOrphanedTenantIds:
 
 class TestCleanupOrphanedChunks:
     @pytest.mark.django_db
-    def test_dry_run_does_not_delete(self, memory_chunk_factory):
+    def test_dry_run_does_not_delete(self, memory_chunk_factory, user):
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
+        memory_chunk_factory(tenant_id=user.id)
         orphan_id = uuid4()
         chunk = memory_chunk_factory(tenant_id=orphan_id)
 
@@ -96,10 +97,11 @@ class TestCleanupOrphanedChunks:
         assert MemoryChunk.objects.filter(id=chunk.id).exists()
 
     @pytest.mark.django_db
-    def test_deletes_orphaned_chunks(self, memory_chunk_factory):
+    def test_deletes_orphaned_chunks(self, memory_chunk_factory, user):
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
+        memory_chunk_factory(tenant_id=user.id)
         orphan_id = uuid4()
         chunk = memory_chunk_factory(tenant_id=orphan_id)
 
@@ -234,7 +236,9 @@ def user(db):
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
-    return User.objects.create_user(username=f"test_{uuid4().hex[:8]}", password="testpass")
+    return User.objects.create_user(
+        email=f"test_{uuid4().hex[:8]}@example.com", password="testpass"
+    )
 
 
 @pytest.fixture

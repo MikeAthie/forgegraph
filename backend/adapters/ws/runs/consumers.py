@@ -7,6 +7,9 @@ Clients subscribe to a specific run:
 
 from __future__ import annotations
 
+from typing import Any
+from uuid import UUID
+
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
@@ -14,13 +17,16 @@ from django.contrib.auth.models import AnonymousUser
 from infrastructure.orm.models import Run
 
 
-@database_sync_to_async
-def _user_owns_run(*, run_id: str, user_id: str) -> bool:
-    return Run.objects.filter(id=run_id, owner_id=user_id).exists()
+async def _user_owns_run(*, run_id: str, user_id: UUID) -> bool:
+    return bool(
+        await database_sync_to_async(
+            lambda: Run.objects.filter(id=run_id, owner_id=user_id).exists()
+        )()
+    )
 
 
-class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):
-    async def connect(self):
+class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
+    async def connect(self) -> None:
         user = self.scope.get("user")
         if (
             not user
@@ -36,7 +42,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):
             return
 
         run_id = str(run_id)
-        if not await _user_owns_run(run_id=run_id, user_id=str(user.id)):
+        if not await _user_owns_run(run_id=run_id, user_id=user.id):
             await self.close(code=4403)
             return
 
@@ -53,12 +59,12 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):
             }
         )
 
-    async def disconnect(self, code):
+    async def disconnect(self, code: int) -> None:
         group_name = getattr(self, "group_name", None)
         if group_name:
             await self.channel_layer.group_discard(group_name, self.channel_name)
 
-    async def broadcast_message(self, event):
+    async def broadcast_message(self, event: dict[str, Any]) -> None:
         message = event.get("message")
         if message is None:
             return

@@ -4,6 +4,8 @@ Auth API serializers.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import Any
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -12,7 +14,7 @@ from rest_framework import serializers
 User = get_user_model()
 
 
-class RegisterSerializer(serializers.Serializer):
+class RegisterSerializer(serializers.Serializer[Any]):
     """Serializer for user registration."""
 
     email = serializers.EmailField()
@@ -34,20 +36,20 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
 
-class LoginSerializer(serializers.Serializer):
+class LoginSerializer(serializers.Serializer[Any]):
     """Serializer for user login."""
 
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
 
-class LogoutSerializer(serializers.Serializer):
+class LogoutSerializer(serializers.Serializer[Any]):
     """Serializer for user logout."""
 
     refresh = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
 
-class UserSerializer(serializers.Serializer):
+class UserSerializer(serializers.Serializer[Any]):
     """Serializer for user output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -56,7 +58,7 @@ class UserSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(read_only=True)
 
 
-class TokenSerializer(serializers.Serializer):
+class TokenSerializer(serializers.Serializer[Any]):
     """Serializer for token output."""
 
     access = serializers.CharField(read_only=True)
