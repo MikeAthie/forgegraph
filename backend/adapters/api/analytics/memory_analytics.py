@@ -156,7 +156,9 @@ class MemoryUsageAnalyticsView(APIView):
             created_at__date__lte=end_date,
         )
         # Limit top agents to 10 for performance
-        top_agents = chunk_qs.values("agent_id").annotate(chunks=Count("id")).order_by("-chunks")[:10]
+        top_agents = (
+            chunk_qs.values("agent_id").annotate(chunks=Count("id")).order_by("-chunks")[:10]
+        )
 
         payload = {
             "period": f"{days}d",

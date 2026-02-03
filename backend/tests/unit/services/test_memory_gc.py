@@ -1,9 +1,9 @@
-import pytest
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
-from unittest.mock import patch, MagicMock
 
-from application.services.memory_gc import MemoryGCService, GCResult
+import pytest
+
+from application.services.memory_gc import GCResult, MemoryGCService
 
 
 class TestGCResult:
@@ -139,14 +139,10 @@ class TestCleanupExpiredEntries:
         gc = MemoryGCService(batch_size=10)
 
         # Expired entry
-        expired = memory_entry_factory(
-            expires_at=datetime.now(UTC) - timedelta(hours=1)
-        )
+        expired = memory_entry_factory(expires_at=datetime.now(UTC) - timedelta(hours=1))
 
         # Valid entry
-        valid = memory_entry_factory(
-            expires_at=datetime.now(UTC) + timedelta(hours=1)
-        )
+        valid = memory_entry_factory(expires_at=datetime.now(UTC) + timedelta(hours=1))
 
         result = gc.cleanup_expired_entries(dry_run=False)
 
@@ -159,9 +155,7 @@ class TestCleanupExpiredEntries:
         from infrastructure.orm.models import MemoryEntry
 
         gc = MemoryGCService(batch_size=10)
-        expired = memory_entry_factory(
-            expires_at=datetime.now(UTC) - timedelta(hours=1)
-        )
+        expired = memory_entry_factory(expires_at=datetime.now(UTC) - timedelta(hours=1))
 
         result = gc.cleanup_expired_entries(dry_run=True)
 
@@ -240,9 +234,7 @@ def user(db):
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
-    return User.objects.create_user(
-        username=f"test_{uuid4().hex[:8]}", password="testpass"
-    )
+    return User.objects.create_user(username=f"test_{uuid4().hex[:8]}", password="testpass")
 
 
 @pytest.fixture

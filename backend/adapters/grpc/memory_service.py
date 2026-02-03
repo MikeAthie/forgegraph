@@ -5,7 +5,6 @@ import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 from django.core.cache import cache
 
@@ -41,7 +40,7 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
 
         # Create dedicated event loop for async operations
         self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-        self._loop_thread: Optional[threading.Thread] = None
+        self._loop_thread: threading.Thread | None = None
         self._start_loop()
 
     def _start_loop(self) -> None:
@@ -54,7 +53,7 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
         self._loop_thread = threading.Thread(target=run_loop, daemon=True)
         self._loop_thread.start()
 
-    def _run_async(self, coro, timeout: Optional[float] = None):
+    def _run_async(self, coro, timeout: float | None = None):
         """Run async coroutine from sync context."""
         if timeout is None:
             timeout = self._default_timeout
@@ -62,7 +61,7 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
             return future.result(timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             future.cancel()
             raise
 
@@ -116,7 +115,7 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
 
             return engine_pb2.RetrieveMemoryResponse(chunks=chunks)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
                 "Memory search timed out",
                 extra={"query": request.query[:50] if request.query else ""},

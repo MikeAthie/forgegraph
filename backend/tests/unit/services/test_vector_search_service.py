@@ -132,9 +132,7 @@ class TestRecencyScoring:
 
     def test_recency_decay_at_half_life(self):
         """At t=half_life (168 hours = 1 week), recency should be 0.5."""
-        service = VectorSearchService(
-            FakeEmbedder(), FakeRepository([]), recency_decay_hours=168.0
-        )
+        service = VectorSearchService(FakeEmbedder(), FakeRepository([]), recency_decay_hours=168.0)
         now = datetime.now(UTC)
         one_week_ago = now - timedelta(hours=168)
 
@@ -143,9 +141,7 @@ class TestRecencyScoring:
 
     def test_recency_decay_at_double_half_life(self):
         """At t=2*half_life, recency should be 0.25."""
-        service = VectorSearchService(
-            FakeEmbedder(), FakeRepository([]), recency_decay_hours=168.0
-        )
+        service = VectorSearchService(FakeEmbedder(), FakeRepository([]), recency_decay_hours=168.0)
         now = datetime.now(UTC)
         two_weeks_ago = now - timedelta(hours=336)
 
