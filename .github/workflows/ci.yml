@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Adjust these to match what your Django settings expect
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: forgegraph
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      SECRET_KEY: "ci-not-a-secret"
+      DEBUG: "False"
+      DJANGO_SETTINGS_MODULE: config.settings
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # If you use uv (recommended), keep this; otherwise replace with your installer
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: uv sync --dev
+
+      - name: Ruff format (check)
+        working-directory: backend
+        run: uv run ruff format --check .
+
+      - name: Ruff lint
+        working-directory: backend
+        run: uv run ruff check .
+
+      - name: Mypy (strict)
+        working-directory: backend
+        run: uv run mypy .
+
+      - name: Pytest
+        working-directory: backend
+        run: uv run pytest
+
+
+  engine:
+    name: engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Go fmt (check)
+        working-directory: engine
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt required on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Go vet
+        working-directory: engine
+        run: go vet ./...
+
+      - name: Go test
+        working-directory: engine
+        run: go test ./...
+
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
