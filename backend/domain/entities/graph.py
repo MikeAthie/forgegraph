@@ -83,14 +83,17 @@ class GraphVersion:
     @property
     def nodes(self) -> list[dict[str, Any]]:
         """Get the list of nodes from the graph JSON."""
-        return self.graph_json.get("nodes", [])
+        nodes = self.graph_json.get("nodes", [])
+        return list(nodes) if nodes else []
 
     @property
     def edges(self) -> list[dict[str, Any]]:
         """Get the list of edges from the graph JSON."""
-        return self.graph_json.get("edges", [])
+        edges = self.graph_json.get("edges", [])
+        return list(edges) if edges else []
 
     @property
     def metadata(self) -> dict[str, Any]:
         """Get the metadata from the graph JSON."""
-        return self.graph_json.get("metadata", {})
+        metadata = self.graph_json.get("metadata", {})
+        return dict(metadata) if metadata else {}

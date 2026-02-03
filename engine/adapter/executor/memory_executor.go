@@ -89,10 +89,10 @@ func (e *MemoryExecutor) Execute(ctx context.Context, node *entity.Node, state *
 			return port.NewErrorResult(err), nil
 		}
 		output := map[string]any{
-			"action":     action,
-			"namespace":  namespace,
-			"key":        key,
-			"stored":     true,
+			"action":      action,
+			"namespace":   namespace,
+			"key":         key,
+			"stored":      true,
 			"ttl_seconds": ttlSeconds,
 		}
 		return port.NewSuccessResult(output), nil

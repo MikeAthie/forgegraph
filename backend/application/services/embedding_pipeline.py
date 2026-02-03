@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from adapters.repositories.memory_chunk_repository import MemoryChunkRepository
 from application.services.chunking_service import Chunk, ChunkingStrategy, Message
 from application.services.embedding_service import EmbeddingService
@@ -54,7 +56,7 @@ class EmbeddingPipeline:
         return self._repository.bulk_create(records)
 
 
-def _chunk_metadata(chunk: Chunk) -> dict:
+def _chunk_metadata(chunk: Chunk) -> dict[str, Any]:
     return {
         "message_count": len(chunk.messages),
         "roles": [message.role for message in chunk.messages],

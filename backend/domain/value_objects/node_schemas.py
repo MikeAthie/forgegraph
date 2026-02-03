@@ -98,7 +98,7 @@ OUTPUT_NODE_SCHEMA = {
 }
 
 # Registry of node type -> schema
-NODE_SCHEMAS: dict[str, dict] = {
+NODE_SCHEMAS: dict[str, dict[str, Any]] = {
     NodeType.PROMPT.value: PROMPT_NODE_SCHEMA,
     NodeType.HTTP.value: HTTP_NODE_SCHEMA,
     NodeType.TRANSFORM.value: TRANSFORM_NODE_SCHEMA,
@@ -112,12 +112,12 @@ NODE_SCHEMAS: dict[str, dict] = {
 }
 
 
-def get_schema_for_type(node_type: str) -> dict | None:
+def get_schema_for_type(node_type: str) -> dict[str, Any] | None:
     """Get the schema for a node type."""
     return NODE_SCHEMAS.get(node_type)
 
 
-def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict]:
+def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Validate a node's config against its schema.
 
@@ -198,7 +198,7 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict]:
     return errors
 
 
-def _validate_type(field_name: str, value: Any, schema: dict) -> dict | None:
+def _validate_type(field_name: str, value: Any, schema: dict[str, Any]) -> dict[str, Any] | None:
     """Validate a value's type against the schema."""
     expected_type = schema.get("type", "any")
 

@@ -6,7 +6,7 @@ Clean Architecture: This belongs to the Frameworks & Drivers layer.
 
 from django.conf import settings
 from django.contrib import admin
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse  # Added HttpRequest
 from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -15,7 +15,7 @@ from drf_spectacular.views import (
 )
 
 
-def health_check(request):
+def health_check(request: HttpRequest) -> JsonResponse:
     """Health check endpoint."""
     return JsonResponse({"status": "ok"})
 

@@ -4,6 +4,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from application.services.embedding_cache import BoundedEmbeddingCache
 
@@ -92,7 +93,7 @@ class CachedEmbeddingService(EmbeddingService):
 
         return [cached[text] for text in texts]
 
-    async def get_cache_stats(self) -> dict:
+    async def get_cache_stats(self) -> dict[str, Any]:
         """
         Get cache statistics for monitoring.
 

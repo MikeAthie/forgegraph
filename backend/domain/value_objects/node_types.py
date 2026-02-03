@@ -42,7 +42,7 @@ class NodeConfig:
     timeout_ms: int | None = None
     retry_policy: RetryPolicy | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.node_id:
             raise ValueError("node_id cannot be empty")
         if not self.name:

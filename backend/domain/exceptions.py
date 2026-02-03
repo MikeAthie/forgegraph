@@ -5,6 +5,8 @@ Clean Architecture: Enterprise Business Rules layer.
 These exceptions represent domain-level errors, independent of any framework.
 """
 
+from typing import Any
+
 
 class DomainException(Exception):
     """Base exception for all domain errors."""
@@ -41,7 +43,7 @@ class EntityAlreadyExistsError(DomainException):
 class GraphValidationError(DomainException):
     """Raised when a graph fails validation."""
 
-    def __init__(self, message: str, errors: list[dict] | None = None):
+    def __init__(self, message: str, errors: list[dict[str, Any]] | None = None):
         super().__init__(message=message, code="graph_validation_error")
         self.errors = errors or []
 

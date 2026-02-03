@@ -5,22 +5,30 @@ Clean Architecture: Frameworks & Drivers layer.
 These models map to database tables and implement Django's ORM.
 """
 
+from __future__ import annotations
+
 import copy
 import hashlib
 import json
 import uuid
 from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from pgvector.django import IvfflatIndex, VectorField
 
+if TYPE_CHECKING:
+    from django.db.models.manager import BaseManager
 
-class UserManager(BaseUserManager):
+
+class UserManager(BaseUserManager["User"]):
     """Custom user manager that uses email as the unique identifier."""
 
-    def create_user(self, email, password=None, **extra_fields):
+    def create_user(
+        self, email: str, password: str | None = None, **extra_fields: Any
+    ) -> "User":
         """Create and save a regular user."""
         if not email:
             raise ValueError("The Email field must be set")
@@ -30,7 +38,9 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, password=None, **extra_fields):
+    def create_superuser(
+        self, email: str, password: str | None = None, **extra_fields: Any
+    ) -> "User":
         """Create and save a superuser."""
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
@@ -47,42 +57,42 @@ class User(AbstractUser):
     """Custom user model with email as the primary identifier."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    username = None  # Remove username field
+    username = None  # type: ignore[assignment]  # Remove username field
     email = models.EmailField("email address", unique=True)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS: list[str] = []
 
-    objects = UserManager()
+    objects: UserManager = UserManager()  # type: ignore[assignment]
 
     class Meta:
         db_table = "users"
         verbose_name = "user"
         verbose_name_plural = "users"
 
-    def __str__(self):
-        return self.email
+    def __str__(self) -> str:
+        return str(self.email)
 
 
-class GraphQuerySet(models.QuerySet):
+class GraphQuerySet(models.QuerySet["Graph"]):
     def for_user(self, user: "User") -> "GraphQuerySet":
         return self.filter(owner=user)
 
 
-class GraphManager(models.Manager.from_queryset(GraphQuerySet)):
+class GraphManager(models.Manager.from_queryset(GraphQuerySet)):  # type: ignore[misc]
     pass
 
 
-class GraphVersionQuerySet(models.QuerySet):
+class GraphVersionQuerySet(models.QuerySet["GraphVersion"]):
     def latest_for_graph(self, graph_id: uuid.UUID) -> "GraphVersion | None":
         return self.filter(graph_id=graph_id).order_by("-version").first()
 
 
-class GraphVersionManager(models.Manager.from_queryset(GraphVersionQuerySet)):
+class GraphVersionManager(models.Manager.from_queryset(GraphVersionQuerySet)):  # type: ignore[misc]
     pass
 
 
-class PromptTemplateQuerySet(models.QuerySet):
+class PromptTemplateQuerySet(models.QuerySet["PromptTemplate"]):
     def public(self) -> "PromptTemplateQuerySet":
         return self.filter(visibility="public")
 
@@ -90,7 +100,7 @@ class PromptTemplateQuerySet(models.QuerySet):
         return self.filter(models.Q(owner=user) | models.Q(visibility="public"))
 
 
-class PromptTemplateManager(models.Manager.from_queryset(PromptTemplateQuerySet)):
+class PromptTemplateManager(models.Manager.from_queryset(PromptTemplateQuerySet)):  # type: ignore[misc]
     pass
 
 
@@ -114,10 +124,10 @@ class Graph(models.Model):
         db_table = "graphs"
         ordering = ["-updated_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.owner.email})"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         is_create = self._state.adding
         prev_updated = None
         if not is_create and self.pk:
@@ -192,16 +202,16 @@ class MemoryConfiguration(models.Model):
         db_table = "memory_configurations"
         constraints = [
             models.CheckConstraint(
-                check=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
+                condition=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
                 name="memory_config_requires_scope",
             ),
             models.CheckConstraint(
-                check=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
+                condition=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
                 name="memory_config_single_scope",
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         scope = "graph" if self.graph_id else "user"
         return f"MemoryConfiguration({scope}:{self.id})"
 
@@ -227,7 +237,7 @@ class MemorySession(models.Model):
             models.Index(fields=["owner", "session_id"], name="memory_sessions_owner_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"MemorySession({self.session_id})"
 
 
@@ -252,14 +262,14 @@ class GraphVersion(models.Model):
         ordering = ["-version"]
         unique_together = [["graph", "version"]]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Compute checksum before saving."""
         if not self.checksum:
             json_str = json.dumps(self.graph_json, sort_keys=True, separators=(",", ":"))
             self.checksum = hashlib.sha256(json_str.encode()).hexdigest()
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.graph.name} v{self.version}"
 
 
@@ -305,10 +315,10 @@ class PromptTemplate(models.Model):
         db_table = "prompt_templates"
         ordering = ["-created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         is_create = self._state.adding
         super().save(*args, **kwargs)
 
@@ -332,9 +342,9 @@ class PromptTemplate(models.Model):
         """Check if this is a built-in prompt."""
         return self.owner is None
 
-    def clone_for_user(self, user: User) -> "PromptTemplate":
+    def clone_for_user(self, user: "User") -> "PromptTemplate":
         """Create a private copy of this prompt for the given user."""
-        return PromptTemplate.objects.create(
+        prompt: PromptTemplate = PromptTemplate.objects.create(
             owner=user,
             title=f"{self.title} (Copy)",
             description=self.description,
@@ -391,11 +401,11 @@ class Run(models.Model):
             models.Index(fields=["owner", "thread_id"], name="runs_owner_thread_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Run {self.id} - {self.status}"
 
     @property
-    def duration_ms(self):
+    def duration_ms(self) -> int | None:
         """Calculate run duration in milliseconds."""
         if self.started_at and self.ended_at:
             delta = self.ended_at - self.started_at
@@ -423,7 +433,7 @@ class RunEvent(models.Model):
             models.Index(fields=["run", "created_at"], name="run_events_run_time_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"RunEvent {self.run_id} - {self.event_type}"
 
 
@@ -448,7 +458,7 @@ class MemoryEntry(models.Model):
             models.UniqueConstraint(fields=["namespace", "key"], name="memory_entries_ns_key_uniq"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"MemoryEntry {self.namespace}:{self.key}"
 
 
@@ -475,7 +485,7 @@ class MemoryUsage(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"MemoryUsage {self.tenant_id} {self.usage_date}"
 
 
@@ -509,7 +519,7 @@ class MemoryChunk(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"MemoryChunk {self.id} ({self.chunk_type})"
 
 
@@ -538,7 +548,7 @@ class RunCheckpoint(models.Model):
             models.Index(fields=["updated_at"], name="run_checkpoints_updated_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"RunCheckpoint {self.run_id} @ {self.step_index}"
 
 
@@ -577,11 +587,11 @@ class NodeRun(models.Model):
             models.Index(fields=["run", "started_at", "attempt"], name="node_runs_run_time_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"NodeRun {self.node_id} - {self.status}"
 
     @property
-    def duration_ms(self):
+    def duration_ms(self) -> int | None:
         """Calculate node run duration in milliseconds."""
         if self.started_at and self.ended_at:
             delta = self.ended_at - self.started_at
@@ -605,7 +615,7 @@ class NodeRunCache(models.Model):
             models.Index(fields=["expires_at"], name="node_run_cache_expires_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"NodeRunCache {self.cache_key}"
 
 
@@ -650,7 +660,7 @@ class ApprovalTask(models.Model):
             models.Index(fields=["run", "status"], name="approval_tasks_run_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ApprovalTask {self.id} - {self.status}"
 
 
@@ -682,7 +692,7 @@ class APIKey(models.Model):
             models.Index(fields=["user", "provider"], name="api_keys_user_provider_idx"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.provider} - {self.name} ({self.user.email})"
 
     @property

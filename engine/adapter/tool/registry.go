@@ -11,14 +11,14 @@ import (
 
 // Definition describes a tool entry loaded from manifests.
 type Definition struct {
-	Name          string                 `json:"name"`
-	Version       string                 `json:"version"`
-	Description   string                 `json:"description,omitempty"`
-	Kind          string                 `json:"kind"` // "http" or "exec"
-	ConfigSchema  map[string]any         `json:"config_schema,omitempty"`
-	DefaultConfig map[string]any         `json:"default_config,omitempty"`
-	HTTP          *HTTPToolConfig        `json:"http,omitempty"`
-	Exec          *ExecToolConfig        `json:"exec,omitempty"`
+	Name          string          `json:"name"`
+	Version       string          `json:"version"`
+	Description   string          `json:"description,omitempty"`
+	Kind          string          `json:"kind"` // "http" or "exec"
+	ConfigSchema  map[string]any  `json:"config_schema,omitempty"`
+	DefaultConfig map[string]any  `json:"default_config,omitempty"`
+	HTTP          *HTTPToolConfig `json:"http,omitempty"`
+	Exec          *ExecToolConfig `json:"exec,omitempty"`
 }
 
 type HTTPToolConfig struct {

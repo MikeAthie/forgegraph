@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
@@ -265,7 +266,7 @@ class MemoryGCService:
             logger.warning("memory_gc_reindex_failed", extra={"error": str(exc)})
             return False
 
-    def run_full_gc(self, dry_run: bool = False) -> dict:
+    def run_full_gc(self, dry_run: bool = False) -> dict[str, Any]:
         """
         Run complete garbage collection cycle.
 

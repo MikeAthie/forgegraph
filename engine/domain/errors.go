@@ -8,24 +8,24 @@ import (
 
 // Graph validation errors
 var (
-	ErrEmptyGraph       = errors.New("graph has no nodes")
-	ErrNoStartNode      = errors.New("graph has no start node (no node with indegree 0)")
-	ErrNoOutputNode     = errors.New("graph has no output node")
-	ErrCycleDetected    = errors.New("graph contains a cycle")
-	ErrOrphanedNode     = errors.New("graph has orphaned nodes")
-	ErrInvalidNodeType  = errors.New("node has invalid type")
-	ErrDuplicateNodeID  = errors.New("duplicate node ID found")
-	ErrInvalidEdge      = errors.New("edge references non-existent node")
-	ErrSelfLoop         = errors.New("edge creates a self-loop")
+	ErrEmptyGraph      = errors.New("graph has no nodes")
+	ErrNoStartNode     = errors.New("graph has no start node (no node with indegree 0)")
+	ErrNoOutputNode    = errors.New("graph has no output node")
+	ErrCycleDetected   = errors.New("graph contains a cycle")
+	ErrOrphanedNode    = errors.New("graph has orphaned nodes")
+	ErrInvalidNodeType = errors.New("node has invalid type")
+	ErrDuplicateNodeID = errors.New("duplicate node ID found")
+	ErrInvalidEdge     = errors.New("edge references non-existent node")
+	ErrSelfLoop        = errors.New("edge creates a self-loop")
 )
 
 // Execution errors
 var (
-	ErrRunNotFound      = errors.New("run not found")
-	ErrRunAlreadyEnded  = errors.New("run has already ended")
-	ErrRunNotPaused     = errors.New("run is not paused")
-	ErrNodeNotFound     = errors.New("node not found")
-	ErrExecutorNotFound = errors.New("no executor registered for node type")
+	ErrRunNotFound        = errors.New("run not found")
+	ErrRunAlreadyEnded    = errors.New("run has already ended")
+	ErrRunNotPaused       = errors.New("run is not paused")
+	ErrNodeNotFound       = errors.New("node not found")
+	ErrExecutorNotFound   = errors.New("no executor registered for node type")
 	ErrCheckpointNotFound = errors.New("checkpoint not found")
 )
 
