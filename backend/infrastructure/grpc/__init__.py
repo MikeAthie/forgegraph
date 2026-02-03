@@ -1,5 +1,5 @@
 # gRPC generated code for ForgeGraph Engine communication
-from .engine_pb2 import (
+from .engine_pb2 import (  # type: ignore[attr-defined]
     CancelRunRequest,
     CancelRunResponse,
     GetRunStatusRequest,
@@ -14,7 +14,11 @@ from .engine_pb2 import (
     StartRunRequest,
     StartRunResponse,
 )
-from .engine_pb2_grpc import EngineServiceStub, MemoryServiceServicer, MemoryServiceStub
+from .engine_pb2_grpc import (  # type: ignore[attr-defined]
+    EngineServiceStub,
+    MemoryServiceServicer,
+    MemoryServiceStub,
+)
 
 __all__ = [
     "PingRequest",

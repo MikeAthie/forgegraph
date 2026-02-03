@@ -5,6 +5,7 @@ Broadcast helpers for Run WebSocket events.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -14,7 +15,7 @@ from adapters.api.runs.serializers import NodeRunSerializer, RunDeltaBroadcastSe
 from infrastructure.orm.models import NodeRun, Run
 
 
-def _send_to_run_group(*, run_id: str, message: dict) -> None:
+def _send_to_run_group(*, run_id: str, message: dict[str, Any]) -> None:
     channel_layer = get_channel_layer()
     if channel_layer is None:
         return
@@ -28,7 +29,7 @@ def _send_to_run_group(*, run_id: str, message: dict) -> None:
     )
 
 
-def broadcast_run_updated(run: Run) -> dict:
+def broadcast_run_updated(run: Run) -> dict[str, Any]:
     message = {
         "event_id": str(uuid.uuid4()),
         "timestamp": timezone.now().isoformat(),
@@ -40,7 +41,7 @@ def broadcast_run_updated(run: Run) -> dict:
     return message
 
 
-def broadcast_node_run_updated(*, run: Run, node_run: NodeRun) -> dict:
+def broadcast_node_run_updated(*, run: Run, node_run: NodeRun) -> dict[str, Any]:
     message = {
         "event_id": str(uuid.uuid4()),
         "timestamp": timezone.now().isoformat(),

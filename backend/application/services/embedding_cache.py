@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections import OrderedDict
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
 
 
 @dataclass
@@ -40,12 +39,12 @@ class BoundedEmbeddingCache:
             max_size: Maximum number of embeddings to cache.
                       Default 10000 = ~60MB for 1536-dim embeddings.
         """
-        self._cache: OrderedDict[Tuple[str, str], List[float]] = OrderedDict()
+        self._cache: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
         self._max_size = max_size
         self._lock = asyncio.Lock()
         self._stats = CacheStats(max_size=max_size)
 
-    async def get(self, model: str, text: str) -> Optional[List[float]]:
+    async def get(self, model: str, text: str) -> list[float] | None:
         """Get cached embedding, updating access order."""
         key = self._make_key(model, text)
 
@@ -59,9 +58,9 @@ class BoundedEmbeddingCache:
             self._stats.misses += 1
             return None
 
-    async def get_many(self, model: str, texts: List[str]) -> dict[str, List[float]]:
+    async def get_many(self, model: str, texts: list[str]) -> dict[str, list[float]]:
         """Get multiple cached embeddings."""
-        results: dict[str, List[float]] = {}
+        results: dict[str, list[float]] = {}
 
         async with self._lock:
             for text in texts:
@@ -75,7 +74,7 @@ class BoundedEmbeddingCache:
 
         return results
 
-    async def set(self, model: str, text: str, embedding: List[float]) -> None:
+    async def set(self, model: str, text: str, embedding: list[float]) -> None:
         """Cache embedding, evicting LRU if at capacity."""
         key = self._make_key(model, text)
 
@@ -96,7 +95,7 @@ class BoundedEmbeddingCache:
 
             self._stats.size = len(self._cache)
 
-    async def set_many(self, model: str, items: dict[str, List[float]]) -> None:
+    async def set_many(self, model: str, items: dict[str, list[float]]) -> None:
         """Cache multiple embeddings."""
         async with self._lock:
             for text, embedding in items.items():
@@ -133,7 +132,7 @@ class BoundedEmbeddingCache:
                 max_size=self._stats.max_size,
             )
 
-    def _make_key(self, model: str, text: str) -> Tuple[str, str]:
+    def _make_key(self, model: str, text: str) -> tuple[str, str]:
         """Create cache key from model and text."""
         # Use hash for long texts to save memory on keys
         if len(text) > 100:

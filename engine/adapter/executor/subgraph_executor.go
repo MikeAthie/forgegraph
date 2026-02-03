@@ -17,17 +17,17 @@ import (
 
 // SubgraphExecutor runs a nested graph inline and returns its output.
 type SubgraphExecutor struct {
-	registry        port.ExecutorRegistry
+	registry         port.ExecutorRegistry
 	defaultTimeoutMs int
-	conditions      *service.ConditionEvaluator
+	conditions       *service.ConditionEvaluator
 }
 
 // NewSubgraphExecutor creates a subgraph executor.
 func NewSubgraphExecutor(registry port.ExecutorRegistry) *SubgraphExecutor {
 	return &SubgraphExecutor{
-		registry:        registry,
+		registry:         registry,
 		defaultTimeoutMs: 30000,
-		conditions:      service.NewConditionEvaluator(),
+		conditions:       service.NewConditionEvaluator(),
 	}
 }
 

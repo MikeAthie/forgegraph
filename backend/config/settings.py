@@ -7,6 +7,7 @@ Clean Architecture: This belongs to the Frameworks & Drivers layer.
 import os
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -70,18 +71,18 @@ ASGI_APPLICATION = "config.asgi.application"
 # Database
 USE_SQLITE = os.environ.get("USE_SQLITE", "false").lower() in {"1", "true", "yes"}
 if USE_SQLITE:
-    sqlite_db_path = os.environ.get("SQLITE_DB_PATH")
-    if sqlite_db_path:
-        sqlite_db_path = Path(sqlite_db_path)
-        if not sqlite_db_path.is_absolute():
-            sqlite_db_path = BASE_DIR / sqlite_db_path
+    _sqlite_db_path_env = os.environ.get("SQLITE_DB_PATH")
+    if _sqlite_db_path_env:
+        _sqlite_path = Path(_sqlite_db_path_env)
+        if not _sqlite_path.is_absolute():
+            _sqlite_path = BASE_DIR / _sqlite_path
     else:
-        sqlite_db_path = BASE_DIR / "db.sqlite3"
+        _sqlite_path = BASE_DIR / "db.sqlite3"
 
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": sqlite_db_path,
+            "NAME": _sqlite_path,
         }
     }
 else:
@@ -110,6 +111,7 @@ USE_IN_MEMORY_CHANNEL_LAYER = os.environ.get("USE_IN_MEMORY_CHANNEL_LAYER", "fal
     "true",
     "yes",
 }
+CHANNEL_LAYERS: dict[str, dict[str, Any]]
 if USE_SQLITE or USE_IN_MEMORY_CHANNEL_LAYER:
     CHANNEL_LAYERS = {
         "default": {
@@ -122,10 +124,10 @@ else:
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
                 "hosts": [
-                    (
+                    [
                         os.environ.get("REDIS_HOST", "localhost"),
                         int(os.environ.get("REDIS_PORT", "6379")),
-                    )
+                    ]
                 ]
             },
         }
@@ -200,10 +202,10 @@ SPECTACULAR_SETTINGS = {
 
 # Add browsable API in debug mode
 if DEBUG:
-    REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"].append(
-        "rest_framework.renderers.BrowsableAPIRenderer"
-    )
-    REST_FRAMEWORK["DEFAULT_PARSER_CLASSES"].extend(
+    _renderer_classes: list[str] = REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"]  # type: ignore[assignment]
+    _renderer_classes.append("rest_framework.renderers.BrowsableAPIRenderer")
+    _parser_classes: list[str] = REST_FRAMEWORK["DEFAULT_PARSER_CLASSES"]  # type: ignore[assignment]
+    _parser_classes.extend(
         [
             "rest_framework.parsers.FormParser",
             "rest_framework.parsers.MultiPartParser",

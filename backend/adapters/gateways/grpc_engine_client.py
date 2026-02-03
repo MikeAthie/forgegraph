@@ -65,7 +65,8 @@ class GrpcEngineClient(IEngineClient):
             target = f"{self.host}:{self.port}"
             logger.info(f"Connecting to engine at {target}")
             self._channel = grpc.insecure_channel(target)
-            self._stub = EngineServiceStub(self._channel)
+            self._stub = EngineServiceStub(self._channel)  # type: ignore
+        assert self._stub is not None
         return self._stub
 
     def close(self) -> None:
@@ -78,7 +79,7 @@ class GrpcEngineClient(IEngineClient):
     def __enter__(self) -> "GrpcEngineClient":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()
 
     def ping(self) -> bool:
@@ -92,7 +93,7 @@ class GrpcEngineClient(IEngineClient):
             stub = self._get_stub()
             request = PingRequest(message="ping")
             response = stub.Ping(request, timeout=5.0)
-            return response.message == "pong"
+            return str(response.message) == "pong"
         except grpc.RpcError as e:
             logger.warning(f"Engine ping failed: {e}")
             return False
@@ -248,8 +249,8 @@ class MockEngineClient(IEngineClient):
     Records all calls and allows configuring responses.
     """
 
-    def __init__(self):
-        self.calls: list[tuple[str, dict]] = []
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
         self.ping_response: bool = True
         self.start_run_error: str | None = None
         self.cancel_run_error: str | None = None
@@ -259,7 +260,7 @@ class MockEngineClient(IEngineClient):
     def __enter__(self) -> "MockEngineClient":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         pass
 
     def ping(self) -> bool:

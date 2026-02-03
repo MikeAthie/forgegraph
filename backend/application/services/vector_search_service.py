@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from adapters.repositories.memory_chunk_repository import MemoryChunkRepository
@@ -18,7 +19,7 @@ class MemorySearchResult:
     recency_score: float  # Time-based recency (0-1)
     combined_score: float  # Weighted combination for ranking
     source_timestamp: datetime
-    metadata: dict
+    metadata: dict[str, Any]
 
 
 class VectorSearchService:

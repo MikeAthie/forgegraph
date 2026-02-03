@@ -10,12 +10,12 @@ type EventType string
 
 const (
 	// Run-level events
-	EventTypeRunStarted   EventType = "run_started"
-	EventTypeRunCompleted EventType = "run_completed"
-	EventTypeRunFailed    EventType = "run_failed"
-	EventTypeRunPaused    EventType = "run_paused"
-	EventTypeRunResumed   EventType = "run_resumed"
-	EventTypeRunCanceled  EventType = "run_canceled"
+	EventTypeRunStarted          EventType = "run_started"
+	EventTypeRunCompleted        EventType = "run_completed"
+	EventTypeRunFailed           EventType = "run_failed"
+	EventTypeRunPaused           EventType = "run_paused"
+	EventTypeRunResumed          EventType = "run_resumed"
+	EventTypeRunCanceled         EventType = "run_canceled"
 	EventTypeRunSchemaValidation EventType = "run.schema_validation"
 
 	// Node-level events

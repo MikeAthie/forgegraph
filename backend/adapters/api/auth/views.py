@@ -4,7 +4,8 @@ Auth API views.
 Clean Architecture: Interface Adapters layer.
 """
 
-from typing import Any
+from datetime import timedelta
+from typing import Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -32,13 +33,21 @@ User = get_user_model()
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    refresh_lifetime = cast(
+        timedelta,
+        settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"],
+    )
+    samesite = cast(
+        Literal["Lax", "Strict", "None", False],
+        settings.AUTH_REFRESH_COOKIE_SAMESITE,
+    )
     response.set_cookie(
         settings.AUTH_REFRESH_COOKIE,
         refresh_token,
-        max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
+        max_age=int(refresh_lifetime.total_seconds()),
         httponly=True,
         secure=settings.AUTH_REFRESH_COOKIE_SECURE,
-        samesite=settings.AUTH_REFRESH_COOKIE_SAMESITE,
+        samesite=samesite,
         path=settings.AUTH_REFRESH_COOKIE_PATH,
         domain=settings.AUTH_REFRESH_COOKIE_DOMAIN,
     )
@@ -75,7 +84,7 @@ class RegisterView(APIView):
 class LoginView(BaseTokenObtainPairView):
     """User login endpoint (access token body + refresh token cookie)."""
 
-    permission_classes = [AllowAny]
+    permission_classes = (AllowAny,)  # type: ignore[assignment]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         response = super().post(request, *args, **kwargs)
@@ -111,7 +120,7 @@ class LogoutView(APIView):
             return response
 
         try:
-            token = RefreshToken(refresh_token)
+            token = RefreshToken(cast(Any, refresh_token))
             token.blacklist()
         except TokenError:
             return response
@@ -131,7 +140,7 @@ class MeView(APIView):
 class TokenRefreshView(BaseTokenRefreshView):
     """Token refresh endpoint (access token body + refresh token cookie)."""
 
-    permission_classes = [AllowAny]
+    permission_classes = (AllowAny,)  # type: ignore[assignment]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         refresh_cookie = request.COOKIES.get(settings.AUTH_REFRESH_COOKIE)

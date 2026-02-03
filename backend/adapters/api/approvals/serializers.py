@@ -4,10 +4,12 @@ Approvals API serializers.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import Any
+
 from rest_framework import serializers
 
 
-class ApprovalTaskSerializer(serializers.Serializer):
+class ApprovalTaskSerializer(serializers.Serializer[Any]):
     """Serializer for approval task output."""
 
     id = serializers.UUIDField(read_only=True)
@@ -23,7 +25,7 @@ class ApprovalTaskSerializer(serializers.Serializer):
     resolved_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
-class ApprovalTaskListSerializer(serializers.Serializer):
+class ApprovalTaskListSerializer(serializers.Serializer[Any]):
     """Serializer for approval task list output (minimal fields)."""
 
     id = serializers.UUIDField(read_only=True)

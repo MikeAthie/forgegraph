@@ -17,7 +17,7 @@ class EdgeDefinition:
     condition: str | None = None
     label: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.id:
             raise ValueError("id cannot be empty")
         if not self.from_node:

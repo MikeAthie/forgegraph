@@ -43,5 +43,7 @@ def test_topic_based_chunking_respects_topic():
     chunker = TopicBasedChunking()
     chunks = chunker.chunk(messages)
     assert len(chunks) == 2
+    assert chunks[0].messages[0].metadata is not None
     assert chunks[0].messages[0].metadata["topic"] == "t1"
+    assert chunks[1].messages[0].metadata is not None
     assert chunks[1].messages[0].metadata["topic"] == "t2"

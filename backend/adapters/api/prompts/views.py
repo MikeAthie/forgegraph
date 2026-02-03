@@ -4,6 +4,9 @@ Prompts API views.
 Clean Architecture: Interface Adapters layer.
 """
 
+from typing import cast
+from uuid import UUID
+
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -19,7 +22,7 @@ from adapters.api.prompts.serializers import (
     PromptUpdateSerializer,
 )
 from adapters.api.responses import error_response, success_response
-from infrastructure.orm.models import PromptTemplate
+from infrastructure.orm.models import PromptTemplate, User
 
 
 class PromptListCreateView(APIView):
@@ -34,14 +37,15 @@ class PromptListCreateView(APIView):
         ownership = request.query_params.get("ownership", "all")  # all, mine, builtin
         search = request.query_params.get("search")
 
-        prompts = PromptTemplate.objects.for_user(request.user)
+        user = cast(User, request.user)
+        prompts = PromptTemplate.objects.for_user(user)
 
         # Apply filters
         if category:
             prompts = prompts.filter(category=category)
 
         if ownership == "mine":
-            prompts = prompts.filter(owner=request.user)
+            prompts = prompts.filter(owner=user)
         elif ownership == "builtin":
             prompts = prompts.filter(owner__isnull=True)
 
@@ -82,8 +86,9 @@ class PromptListCreateView(APIView):
                 ],
             )
 
+        user = cast(User, request.user)
         prompt = PromptTemplate.objects.create(
-            owner=request.user,
+            owner=user,
             title=serializer.validated_data["title"],
             description=serializer.validated_data.get("description", ""),
             category=serializer.validated_data["category"],
@@ -118,10 +123,10 @@ class PromptDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get_object(self, prompt_id, user):
+    def get_object(self, prompt_id: UUID, user: User) -> PromptTemplate | None:
         """Get prompt if user has access."""
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id)
+            prompt = cast(PromptTemplate, PromptTemplate.objects.get(id=prompt_id))
             # User can access if they own it or it's public
             if prompt.owner == user or prompt.visibility == "public":
                 return prompt
@@ -129,9 +134,9 @@ class PromptDetailView(APIView):
         except PromptTemplate.DoesNotExist:
             return None
 
-    def get(self, request: Request, prompt_id) -> Response:
+    def get(self, request: Request, prompt_id: UUID) -> Response:
         """Get prompt details."""
-        prompt = self.get_object(prompt_id, request.user)
+        prompt = self.get_object(prompt_id, cast(User, request.user))
         if not prompt:
             return error_response(
                 code="NOT_FOUND",
@@ -159,10 +164,10 @@ class PromptDetailView(APIView):
 
         return success_response(prompt_data)
 
-    def patch(self, request: Request, prompt_id) -> Response:
+    def patch(self, request: Request, prompt_id: UUID) -> Response:
         """Update prompt (owner only)."""
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id, owner=request.user)
+            prompt = PromptTemplate.objects.get(id=prompt_id, owner=cast(User, request.user))
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -213,10 +218,10 @@ class PromptDetailView(APIView):
 
         return success_response(prompt_data)
 
-    def delete(self, request: Request, prompt_id) -> Response:
+    def delete(self, request: Request, prompt_id: UUID) -> Response:
         """Delete prompt (owner only, not built-in)."""
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id, owner=request.user)
+            prompt = PromptTemplate.objects.get(id=prompt_id, owner=cast(User, request.user))
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -233,12 +238,13 @@ class PromptCloneView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, prompt_id) -> Response:
+    def post(self, request: Request, prompt_id: UUID) -> Response:
         """Clone a prompt."""
         try:
             original = PromptTemplate.objects.get(id=prompt_id)
             # Can clone if owner or public
-            if original.owner != request.user and original.visibility != "public":
+            user = cast(User, request.user)
+            if original.owner != user and original.visibility != "public":
                 return error_response(
                     code="NOT_FOUND",
                     message=f"Prompt with id '{prompt_id}' not found or you do not have access to it",
@@ -251,7 +257,7 @@ class PromptCloneView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        clone = original.clone_for_user(request.user)
+        clone = original.clone_for_user(cast(User, request.user))
 
         clone_data = PromptDetailSerializer(
             {
@@ -279,10 +285,10 @@ class PromptPublishView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, prompt_id) -> Response:
+    def post(self, request: Request, prompt_id: UUID) -> Response:
         """Publish a prompt."""
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id, owner=request.user)
+            prompt = PromptTemplate.objects.get(id=prompt_id, owner=cast(User, request.user))
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",

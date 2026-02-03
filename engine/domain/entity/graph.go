@@ -3,12 +3,12 @@ package entity
 
 // Graph represents a workflow graph loaded for execution
 type Graph struct {
-	ID          string `json:"id"`
-	VersionID   string `json:"version_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Nodes       []Node `json:"nodes"`
-	Edges       []Edge `json:"edges"`
+	ID          string         `json:"id"`
+	VersionID   string         `json:"version_id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Nodes       []Node         `json:"nodes"`
+	Edges       []Edge         `json:"edges"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 	EditorState map[string]any `json:"editor_state,omitempty"`
 }

@@ -4,8 +4,9 @@ import asyncio
 import json
 import logging
 import threading
+from collections.abc import Awaitable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
+from typing import Any, TypeVar, cast
 
 from django.core.cache import cache
 
@@ -15,6 +16,8 @@ from application.services.vector_search_service import VectorSearchService
 from infrastructure.grpc import engine_pb2, engine_pb2_grpc
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
+engine_pb2_any: Any = engine_pb2
 
 
 class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
@@ -41,43 +44,43 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
 
         # Create dedicated event loop for async operations
         self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-        self._loop_thread: Optional[threading.Thread] = None
+        self._loop_thread: threading.Thread | None = None
         self._start_loop()
 
     def _start_loop(self) -> None:
         """Start the async event loop in a background thread."""
 
-        def run_loop():
+        def run_loop() -> None:
             asyncio.set_event_loop(self._loop)
             self._loop.run_forever()
 
         self._loop_thread = threading.Thread(target=run_loop, daemon=True)
         self._loop_thread.start()
 
-    def _run_async(self, coro, timeout: Optional[float] = None):
+    def _run_async(self, coro: Awaitable[T], timeout: float | None = None) -> T:
         """Run async coroutine from sync context."""
         if timeout is None:
             timeout = self._default_timeout
 
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        future = asyncio.run_coroutine_threadsafe(cast(Coroutine[Any, Any, T], coro), self._loop)
         try:
             return future.result(timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             future.cancel()
             raise
 
-    def RetrieveMemory(self, request, context):
+    def RetrieveMemory(self, request: Any, context: Any) -> Any:
         """Retrieve relevant memories for a query."""
         _increment_metric("memory_grpc_requests_total", 1)
 
         # Validate request
         if not request.query:
             _increment_metric("memory_grpc_errors_total", 1)
-            return engine_pb2.RetrieveMemoryResponse(error="query is required")
+            return engine_pb2_any.RetrieveMemoryResponse(error="query is required")
 
         if not request.tenant_id:
             _increment_metric("memory_grpc_errors_total", 1)
-            return engine_pb2.RetrieveMemoryResponse(error="tenant_id is required")
+            return engine_pb2_any.RetrieveMemoryResponse(error="tenant_id is required")
 
         try:
             # Execute search asynchronously
@@ -99,7 +102,7 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
             # Convert to proto
             chunks = []
             for result in results:
-                chunk = engine_pb2.MemoryChunk(
+                chunk = engine_pb2_any.MemoryChunk(
                     content=result.content,
                     score=float(result.combined_score),
                     source_timestamp=result.source_timestamp.isoformat()
@@ -114,19 +117,19 @@ class AsyncMemoryServicer(engine_pb2_grpc.MemoryServiceServicer):
                     chunk.recency_score = float(result.recency_score)
                 chunks.append(chunk)
 
-            return engine_pb2.RetrieveMemoryResponse(chunks=chunks)
+            return engine_pb2_any.RetrieveMemoryResponse(chunks=chunks)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
                 "Memory search timed out",
                 extra={"query": request.query[:50] if request.query else ""},
             )
             _increment_metric("memory_grpc_errors_total", 1)
-            return engine_pb2.RetrieveMemoryResponse(error="search timed out")
+            return engine_pb2_any.RetrieveMemoryResponse(error="search timed out")
         except Exception as exc:
             logger.exception("Memory search failed")
             _increment_metric("memory_grpc_errors_total", 1)
-            return engine_pb2.RetrieveMemoryResponse(error=f"internal error: {str(exc)}")
+            return engine_pb2_any.RetrieveMemoryResponse(error=f"internal error: {str(exc)}")
 
     def shutdown(self) -> None:
         """Clean shutdown of async resources."""

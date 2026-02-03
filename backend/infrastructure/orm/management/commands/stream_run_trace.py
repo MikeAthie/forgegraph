@@ -75,14 +75,16 @@ class Command(BaseCommand):
             raise CommandError(f"GraphVersion '{graph_version_id}' does not exist.") from exc
 
         owner_email: str | None = options.get("owner_email")
-        owner: User
+        owner: User | None
         if owner_email:
             owner_email = owner_email.strip().lower()
             owner = User.objects.filter(email=owner_email).first()
-            if not owner:
+            if owner is None:
                 raise CommandError(f"No user found with email '{owner_email}'.")
         else:
             owner = graph_version.graph.owner
+        if owner is None:
+            raise CommandError("Run owner could not be resolved.")
 
         run_status: str = options["run_status"]
         fail_node_id: str | None = options.get("fail_node_id")

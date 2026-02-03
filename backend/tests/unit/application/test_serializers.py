@@ -4,6 +4,8 @@ Unit tests for API serializers.
 Tests serializer validation, field transformations, and error messages.
 """
 
+from typing import Any
+
 import pytest
 
 from adapters.api.auth.serializers import LoginSerializer, RegisterSerializer
@@ -143,7 +145,7 @@ class TestGraphUpdateSerializer:
 
     def test_all_fields_are_optional(self):
         """Should allow partial updates with no required fields."""
-        data = {}
+        data: dict[str, Any] = {}
         serializer = GraphUpdateSerializer(data=data)
 
         assert serializer.is_valid()
@@ -194,7 +196,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_graph_json_is_required(self):
         """Should require graph_json field."""
-        data = {}
+        data: dict[str, Any] = {}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -202,7 +204,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_graph_json_must_be_object(self):
         """Should reject non-object graph_json."""
-        data = {"graph_json": []}
+        data: dict[str, Any] = {"graph_json": []}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -210,7 +212,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_graph_json_must_contain_nodes(self):
         """Should require 'nodes' in graph_json."""
-        data = {"graph_json": {"edges": []}}
+        data: dict[str, Any] = {"graph_json": {"edges": []}}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -218,7 +220,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_graph_json_must_contain_edges(self):
         """Should require 'edges' in graph_json."""
-        data = {"graph_json": {"nodes": []}}
+        data: dict[str, Any] = {"graph_json": {"nodes": []}}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -226,7 +228,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_nodes_must_be_array(self):
         """Should require nodes to be an array."""
-        data = {"graph_json": {"nodes": {}, "edges": []}}
+        data: dict[str, Any] = {"graph_json": {"nodes": {}, "edges": []}}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -234,7 +236,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_edges_must_be_array(self):
         """Should require edges to be an array."""
-        data = {"graph_json": {"nodes": [], "edges": {}}}
+        data: dict[str, Any] = {"graph_json": {"nodes": [], "edges": {}}}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -242,7 +244,7 @@ class TestGraphVersionCreateSerializer:
 
     def test_empty_nodes_and_edges_are_valid(self):
         """Should allow empty nodes and edges arrays."""
-        data = {"graph_json": {"nodes": [], "edges": []}}
+        data: dict[str, Any] = {"graph_json": {"nodes": [], "edges": []}}
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert serializer.is_valid()
@@ -283,7 +285,7 @@ class TestPromptCreateSerializer:
 
     def test_required_fields(self):
         """Should require title, category, and content."""
-        data = {}
+        data: dict[str, Any] = {}
         serializer = PromptCreateSerializer(data=data)
 
         assert not serializer.is_valid()
@@ -376,7 +378,7 @@ class TestPromptUpdateSerializer:
 
     def test_all_fields_are_optional(self):
         """Should allow partial updates with no required fields."""
-        data = {}
+        data: dict[str, Any] = {}
         serializer = PromptUpdateSerializer(data=data)
 
         assert serializer.is_valid()
@@ -419,7 +421,7 @@ class TestPromptPublishSerializer:
 
     def test_license_is_optional(self):
         """Should allow omitting license (defaults to MIT)."""
-        data = {}
+        data: dict[str, Any] = {}
         serializer = PromptPublishSerializer(data=data)
 
         assert serializer.is_valid()

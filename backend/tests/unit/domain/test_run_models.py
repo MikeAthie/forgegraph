@@ -5,12 +5,13 @@ Tests model properties, validations, and business logic for Phase 4 observabilit
 """
 
 from datetime import timedelta
+from typing import cast
 
 import pytest
 from django.db import IntegrityError
 from django.utils import timezone
 
-from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run
+from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run, User
 
 pytestmark = pytest.mark.django_db
 
@@ -137,12 +138,16 @@ class TestRunModel:
         )
 
         with pytest.raises(IntegrityError):
-            Run.objects.create(owner=None, graph_version=version, status="pending")
+            Run.objects.create(owner=cast(User, None), graph_version=version, status="pending")
 
     def test_run_requires_graph_version(self, user):
         """Test that a run requires a graph_version."""
         with pytest.raises(IntegrityError):
-            Run.objects.create(owner=user, graph_version=None, status="pending")
+            Run.objects.create(
+                owner=user,
+                graph_version=cast(GraphVersion, None),
+                status="pending",
+            )
 
     def test_run_default_values_are_set(self, user):
         """Test that default values are correctly set on creation."""
@@ -361,7 +366,12 @@ class TestNodeRunModel:
     def test_node_run_requires_run(self, user):
         """Test that a node_run requires a run."""
         with pytest.raises(IntegrityError):
-            NodeRun.objects.create(run=None, node_id="node_1", node_type="prompt", status="pending")
+            NodeRun.objects.create(
+                run=cast(Run, None),
+                node_id="node_1",
+                node_type="prompt",
+                status="pending",
+            )
 
     def test_node_run_requires_node_id(self, user):
         """Test that a node_run requires a node_id."""
@@ -372,7 +382,12 @@ class TestNodeRunModel:
         run = Run.objects.create(owner=user, graph_version=version, status="running")
 
         with pytest.raises(IntegrityError):
-            NodeRun.objects.create(run=run, node_id=None, node_type="prompt", status="pending")
+            NodeRun.objects.create(
+                run=run,
+                node_id=cast(str, None),
+                node_type="prompt",
+                status="pending",
+            )
 
     def test_node_run_requires_node_type(self, user):
         """Test that a node_run requires a node_type."""
@@ -383,7 +398,12 @@ class TestNodeRunModel:
         run = Run.objects.create(owner=user, graph_version=version, status="running")
 
         with pytest.raises(IntegrityError):
-            NodeRun.objects.create(run=run, node_id="node_1", node_type=None, status="pending")
+            NodeRun.objects.create(
+                run=run,
+                node_id="node_1",
+                node_type=cast(str, None),
+                status="pending",
+            )
 
     def test_node_run_default_values_are_set(self, user):
         """Test that default values are correctly set on creation."""

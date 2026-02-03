@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Set
+from typing import Any
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
@@ -50,7 +50,7 @@ class MemoryGCService:
         self.entry_retention_days = entry_retention_days
         self.batch_size = batch_size
 
-    def get_valid_tenant_ids(self) -> Set[UUID]:
+    def get_valid_tenant_ids(self) -> set[UUID]:
         """
         Get all valid tenant IDs from both users and graphs.
 
@@ -77,9 +77,7 @@ class MemoryGCService:
         valid_ids = self.get_valid_tenant_ids()
 
         # Get unique tenant IDs from chunks
-        chunk_tenant_ids = set(
-            MemoryChunk.objects.values_list("tenant_id", flat=True).distinct()
-        )
+        chunk_tenant_ids = set(MemoryChunk.objects.values_list("tenant_id", flat=True).distinct())
 
         # Find orphans
         orphaned = chunk_tenant_ids - valid_ids
@@ -157,9 +155,9 @@ class MemoryGCService:
         while True:
             # Get batch of IDs to delete
             chunk_ids = list(
-                MemoryChunk.objects.filter(tenant_id=tenant_id).values_list(
-                    "id", flat=True
-                )[: self.batch_size]
+                MemoryChunk.objects.filter(tenant_id=tenant_id).values_list("id", flat=True)[
+                    : self.batch_size
+                ]
             )
 
             if not chunk_ids:
@@ -188,9 +186,7 @@ class MemoryGCService:
         # Delete in batches
         deleted_total = 0
         while True:
-            batch_ids = list(
-                expired_qs.values_list("id", flat=True)[: self.batch_size]
-            )
+            batch_ids = list(expired_qs.values_list("id", flat=True)[: self.batch_size])
             if not batch_ids:
                 break
 
@@ -270,7 +266,7 @@ class MemoryGCService:
             logger.warning("memory_gc_reindex_failed", extra={"error": str(exc)})
             return False
 
-    def run_full_gc(self, dry_run: bool = False) -> dict:
+    def run_full_gc(self, dry_run: bool = False) -> dict[str, Any]:
         """
         Run complete garbage collection cycle.
 
@@ -284,9 +280,7 @@ class MemoryGCService:
             "old_chunks": self.cleanup_old_chunks(dry_run=dry_run),
         }
 
-        total_deleted = sum(
-            r.chunks_deleted + r.entries_deleted for r in results.values()
-        )
+        total_deleted = sum(r.chunks_deleted + r.entries_deleted for r in results.values())
 
         logger.info(
             "GC cycle complete",
@@ -332,9 +326,7 @@ class MemoryGCService:
         }
 
         if tenant_ids_to_delete:
-            deleted, _ = MemoryChunk.objects.filter(
-                tenant_id__in=tenant_ids_to_delete
-            ).delete()
+            deleted, _ = MemoryChunk.objects.filter(tenant_id__in=tenant_ids_to_delete).delete()
             stats["deleted_by_tenant"] = deleted
             logger.info("memory_gc_deleted_tenants", extra={"count": deleted})
             _increment_metric("memory_gc_deleted_tenant_total", deleted)

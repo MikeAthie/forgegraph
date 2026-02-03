@@ -23,7 +23,7 @@ class RetryPolicy:
     backoff_ms: int = 1000
     backoff_strategy: BackoffStrategy = BackoffStrategy.EXPONENTIAL
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
         if self.backoff_ms < 0:
@@ -38,7 +38,7 @@ class RetryPolicy:
             return self.backoff_ms
 
         # Exponential backoff: delay * 2^(attempt-2)
-        return self.backoff_ms * (2 ** (attempt - 2))
+        return int(self.backoff_ms * (2 ** (attempt - 2)))
 
     @classmethod
     def default(cls) -> "RetryPolicy":

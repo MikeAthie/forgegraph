@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import timedelta
+from typing import Any
 from uuid import UUID
 
 from django.core.management.base import BaseCommand, CommandError
@@ -153,8 +154,8 @@ class Command(BaseCommand):
                 node_status = "pending"
                 node_started_at = None
                 node_ended_at = None
-                node_output_json = None
-                node_error_json = None
+                node_output_json: dict[str, Any] | None = None
+                node_error_json: dict[str, Any] | None = None
 
                 if run_status == "pending":
                     node_status = "pending"
@@ -247,8 +248,10 @@ class Command(BaseCommand):
             self.style.SUCCESS(f"Created run {run.id} for graph_version {graph_version.id}")
         )
 
-    def _toposort(self, nodes: list[dict], edges: list[dict]) -> list[dict]:
-        node_by_id: dict[str, dict] = {}
+    def _toposort(
+        self, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        node_by_id: dict[str, dict[str, Any]] = {}
         for node in nodes:
             node_id = node.get("id")
             if not node_id:

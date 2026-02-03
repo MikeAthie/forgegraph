@@ -74,6 +74,33 @@ python_version = "3.12"
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 strict = true
 ignore_missing_imports = true
+exclude = [
+    "infrastructure/grpc/engine_pb2\\.py$",
+    "infrastructure/grpc/engine_pb2_grpc\\.py$",
+    "infrastructure/orm/migrations/.*\\.py$",
+    "manage\\.py$",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = "infrastructure.grpc.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "infrastructure.orm.admin"
+disallow_untyped_defs = false
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+module = "infrastructure.orm.management.commands.*"
+disallow_untyped_defs = false
+disallow_any_generics = false
 
 [tool.django-stubs]
 django_settings_module = "config.settings"

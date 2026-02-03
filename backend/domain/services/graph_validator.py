@@ -36,8 +36,8 @@ class GraphValidator:
             graph_json: The graph structure to validate
             strict: If True, also validates node configs against schemas
         """
-        errors = []
-        warnings = []
+        errors: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
 
         # Check required top-level keys
         if "nodes" not in graph_json:
@@ -66,7 +66,7 @@ class GraphValidator:
         edges = graph_json.get("edges", [])
 
         # Validate nodes
-        node_ids = set()
+        node_ids: set[str] = set()
         for node in nodes:
             node_errors = self._validate_node(node, node_ids)
             errors.extend(node_errors)
@@ -114,7 +114,7 @@ class GraphValidator:
 
     def _validate_node(self, node: dict[str, Any], existing_ids: set[str]) -> list[dict[str, Any]]:
         """Validate a single node."""
-        errors = []
+        errors: list[dict[str, Any]] = []
 
         # Check required fields
         if "id" not in node:
@@ -143,7 +143,7 @@ class GraphValidator:
 
     def _validate_edge(self, edge: dict[str, Any], node_ids: set[str]) -> list[dict[str, Any]]:
         """Validate a single edge."""
-        errors = []
+        errors: list[dict[str, Any]] = []
 
         if "id" not in edge:
             errors.append({"type": "edge_missing_id", "edge": edge})
@@ -210,7 +210,7 @@ class GraphValidator:
         - Start node: A node that receives an edge from START sentinel
         - Output node: A node with type "output"
         """
-        errors = []
+        errors: list[dict[str, Any]] = []
 
         # Check for at least one START edge (defines entry points)
         start_edges = [e for e in edges if e.get("from") == self.START_NODE_ID]
@@ -288,7 +288,7 @@ class GraphValidator:
 
         Returns warnings for disconnected nodes.
         """
-        warnings = []
+        warnings: list[dict[str, Any]] = []
         node_ids = {node["id"] for node in nodes}
 
         # Build sets of connected nodes
@@ -335,7 +335,7 @@ class GraphValidator:
 
         Only called in strict mode.
         """
-        errors = []
+        errors: list[dict[str, Any]] = []
 
         try:
             from domain.value_objects.node_schemas import validate_node_config

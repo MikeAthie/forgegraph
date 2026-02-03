@@ -1,9 +1,9 @@
-import pytest
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
-from unittest.mock import patch, MagicMock
 
-from application.services.memory_gc import MemoryGCService, GCResult
+import pytest
+
+from application.services.memory_gc import GCResult, MemoryGCService
 
 
 class TestGCResult:
@@ -82,10 +82,11 @@ class TestFindOrphanedTenantIds:
 
 class TestCleanupOrphanedChunks:
     @pytest.mark.django_db
-    def test_dry_run_does_not_delete(self, memory_chunk_factory):
+    def test_dry_run_does_not_delete(self, memory_chunk_factory, user):
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
+        memory_chunk_factory(tenant_id=user.id)
         orphan_id = uuid4()
         chunk = memory_chunk_factory(tenant_id=orphan_id)
 
@@ -96,10 +97,11 @@ class TestCleanupOrphanedChunks:
         assert MemoryChunk.objects.filter(id=chunk.id).exists()
 
     @pytest.mark.django_db
-    def test_deletes_orphaned_chunks(self, memory_chunk_factory):
+    def test_deletes_orphaned_chunks(self, memory_chunk_factory, user):
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
+        memory_chunk_factory(tenant_id=user.id)
         orphan_id = uuid4()
         chunk = memory_chunk_factory(tenant_id=orphan_id)
 
@@ -139,14 +141,10 @@ class TestCleanupExpiredEntries:
         gc = MemoryGCService(batch_size=10)
 
         # Expired entry
-        expired = memory_entry_factory(
-            expires_at=datetime.now(UTC) - timedelta(hours=1)
-        )
+        expired = memory_entry_factory(expires_at=datetime.now(UTC) - timedelta(hours=1))
 
         # Valid entry
-        valid = memory_entry_factory(
-            expires_at=datetime.now(UTC) + timedelta(hours=1)
-        )
+        valid = memory_entry_factory(expires_at=datetime.now(UTC) + timedelta(hours=1))
 
         result = gc.cleanup_expired_entries(dry_run=False)
 
@@ -159,9 +157,7 @@ class TestCleanupExpiredEntries:
         from infrastructure.orm.models import MemoryEntry
 
         gc = MemoryGCService(batch_size=10)
-        expired = memory_entry_factory(
-            expires_at=datetime.now(UTC) - timedelta(hours=1)
-        )
+        expired = memory_entry_factory(expires_at=datetime.now(UTC) - timedelta(hours=1))
 
         result = gc.cleanup_expired_entries(dry_run=True)
 
@@ -241,7 +237,7 @@ def user(db):
 
     User = get_user_model()
     return User.objects.create_user(
-        username=f"test_{uuid4().hex[:8]}", password="testpass"
+        email=f"test_{uuid4().hex[:8]}@example.com", password="testpass"
     )
 
 
