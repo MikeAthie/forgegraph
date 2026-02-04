@@ -8,7 +8,7 @@ import asyncio
 import copy
 import json as pyjson
 import logging
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
@@ -1595,7 +1595,7 @@ def _datetime_from_timestamp_ms(timestamp_ms: int | None) -> datetime | None:
     if not timestamp_ms:
         return None
     try:
-        return datetime.fromtimestamp(timestamp_ms / 1000, tz=dt_timezone.utc)
+        return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC)
     except (TypeError, ValueError, OSError):
         return None
 
