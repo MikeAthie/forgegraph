@@ -271,6 +271,33 @@ class GraphVersion(models.Model):
         return f"{self.graph.name} v{self.version}"
 
 
+class GraphTemplate(models.Model):
+    """GraphTemplate model representing a reusable workflow template."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    category = models.CharField(max_length=64, blank=True, default="")
+    tags = models.JSONField(default=list, blank=True)
+    estimated_minutes = models.PositiveIntegerField(default=3)
+    graph_json = models.JSONField()
+    sample_input = models.JSONField(default=dict, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "graph_templates"
+        ordering = ["display_order", "name"]
+        indexes = [
+            models.Index(fields=["is_active", "display_order"], name="graph_templates_active_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class PromptTemplate(models.Model):
     """PromptTemplate model representing a reusable prompt template."""
 
@@ -416,6 +443,12 @@ class RunEvent(models.Model):
     """RunEvent model storing execution events for observability."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    external_id = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        help_text="Idempotency key from engine events (event_id).",
+    )
     run = models.ForeignKey(
         Run,
         on_delete=models.CASCADE,
@@ -430,6 +463,13 @@ class RunEvent(models.Model):
         ordering = ["created_at"]
         indexes = [
             models.Index(fields=["run", "created_at"], name="run_events_run_time_idx"),
+            models.Index(fields=["run", "external_id"], name="run_events_run_external_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "external_id"],
+                name="run_events_run_external_uniq",
+            )
         ]
 
     def __str__(self) -> str:
@@ -486,6 +526,54 @@ class MemoryUsage(models.Model):
 
     def __str__(self) -> str:
         return f"MemoryUsage {self.tenant_id} {self.usage_date}"
+
+
+class LLMUsage(models.Model):
+    """LLM usage per prompt node execution."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="llm_usage",
+    )
+    node_id = models.CharField(max_length=255)
+    provider = models.CharField(max_length=32)
+    model = models.CharField(max_length=64)
+    prompt_tokens = models.PositiveIntegerField(default=0)
+    completion_tokens = models.PositiveIntegerField(default=0)
+    total_tokens = models.PositiveIntegerField(default=0)
+    cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "llm_usage"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant_id", "created_at"], name="llm_usage_tenant_time_idx"),
+            models.Index(fields=["run", "node_id"], name="llm_usage_run_node_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"LLMUsage {self.run_id} {self.node_id} {self.model}"
+
+
+class LLMBudget(models.Model):
+    """Monthly LLM budget limits per tenant."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    monthly_limit_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    warning_threshold_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0.8)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "llm_budgets"
+
+    def __str__(self) -> str:
+        return f"LLMBudget {self.tenant_id} ${self.monthly_limit_usd}"
 
 
 class MemoryChunk(models.Model):

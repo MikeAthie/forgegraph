@@ -209,6 +209,9 @@ export default function GraphsPage() {
                   <RefreshCw aria-hidden="true" />
                   Refresh
                 </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/onboarding">Use template</Link>
+                </Button>
                 <Button onClick={openCreate}>
                   <Plus aria-hidden="true" />
                   New graph
@@ -235,7 +238,14 @@ export default function GraphsPage() {
               className="py-16"
               title="No graphs yet"
               description="Create your first graph to start building workflows."
-              action={<Button onClick={openCreate}>Create a graph</Button>}
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={openCreate}>Create a graph</Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/onboarding">Use template</Link>
+                  </Button>
+                </div>
+              )}
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

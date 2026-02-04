@@ -163,6 +163,18 @@ type runContext struct {
 	schemaMode  string
 }
 
+func (rc *runContext) newEvent(eventType port.EventType) *port.ExecutionEvent {
+	return port.NewEvent(eventType, rc.runID).WithTenantID(rc.tenantID)
+}
+
+func (s *Scheduler) flushEmitter(reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.emitter.Flush(ctx); err != nil {
+		log.Printf("event_flush_failed (%s): %v", reason, err)
+	}
+}
+
 func (rc *runContext) trackMessages(count int) {
 	if count <= 0 {
 		return
@@ -368,7 +380,6 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
-	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
 
 	if checkpoint != nil {
 		rc.checkpointSeq = int64(checkpoint.stepIndex)
@@ -394,9 +405,9 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 
 	// Emit run started/resumed event
 	if checkpoint != nil {
-		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunResumed, runID))
+		s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunResumed))
 	} else {
-		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunStarted, runID))
+		s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunStarted))
 	}
 
 	// Start execution in background
@@ -515,7 +526,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 
 	// Emit node started
 	s.emitter.EmitAsync(
-		port.NewEvent(port.EventTypeNodeStarted, rc.runID).
+		rc.newEvent(port.EventTypeNodeStarted).
 			WithNode(nodeID, node.Type, node.Name).
 			WithAttempt(1),
 	)
@@ -563,7 +574,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
 
 		s.emitter.EmitAsync(
-			port.NewEvent(port.EventTypeNodeFailed, rc.runID).
+			rc.newEvent(port.EventTypeNodeFailed).
 				WithNode(nodeID, node.Type, node.Name).
 				WithError(err.Error()).
 				WithDuration(duration),
@@ -594,16 +605,26 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		}
 		rc.pendingMu.Unlock()
 
-		s.repository.SavePauseState(context.Background(), rc.runID, nodeID, stateSnapshot, completedNodes, skippedNodes, rc.graphJSON)
+		s.repository.SavePauseState(
+			context.Background(),
+			rc.runID,
+			nodeID,
+			stateSnapshot,
+			completedNodes,
+			skippedNodes,
+			rc.graphJSON,
+			rc.tenantID,
+		)
 		s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
 
 		// Emit pause event with the pause payload
-		pauseEvent := port.NewEvent(port.EventTypeRunPaused, rc.runID).
+		pauseEvent := rc.newEvent(port.EventTypeRunPaused).
 			WithNode(nodeID, node.Type, node.Name)
 		if result.Output != nil {
 			pauseEvent = pauseEvent.WithOutput(map[string]any{"pause_payload": result.Output})
 		}
 		s.emitter.EmitAsync(pauseEvent)
+		s.flushEmitter("run_paused")
 
 		rc.cancel() // Stop further processing
 		return
@@ -659,7 +680,7 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 		// Emit retry event
 		if attempt < policy.MaxAttempts {
 			s.emitter.EmitAsync(
-				port.NewEvent(port.EventTypeNodeRetrying, rc.runID).
+				rc.newEvent(port.EventTypeNodeRetrying).
 					WithNode(node.ID, node.Type, node.Name).
 					WithAttempt(attempt + 1).
 					WithError(err.Error()),
@@ -807,7 +828,7 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 			s.repository.UpdateNodeRun(rc.ctx, nodeRun)
 
 			s.emitter.EmitAsync(
-				port.NewEvent(port.EventTypeNodeFailed, rc.runID).
+				rc.newEvent(port.EventTypeNodeFailed).
 					WithNode(nodeID, node.Type, node.Name).
 					WithError(directiveErr.Error()).
 					WithDuration(durationMs),
@@ -843,7 +864,7 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 
 	// Emit node completed
 	s.emitter.EmitAsync(
-		port.NewEvent(port.EventTypeNodeCompleted, rc.runID).
+		rc.newEvent(port.EventTypeNodeCompleted).
 			WithNode(nodeID, node.Type, node.Name).
 			WithOutput(nodeRun.OutputJSON).
 			WithDuration(durationMs),
@@ -1493,7 +1514,7 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 
 		// Emit skipped event
 		s.emitter.EmitAsync(
-			port.NewEvent(port.EventTypeNodeSkipped, rc.runID).
+			rc.newEvent(port.EventTypeNodeSkipped).
 				WithNode(nodeID, node.Type, node.Name),
 		)
 	}
@@ -1546,14 +1567,15 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 	var event *port.ExecutionEvent
 	switch finalStatus {
 	case value.RunStatusSucceeded:
-		event = port.NewEvent(port.EventTypeRunCompleted, rc.runID).WithOutput(output)
+		event = rc.newEvent(port.EventTypeRunCompleted).WithOutput(output)
 	case value.RunStatusFailed:
-		event = port.NewEvent(port.EventTypeRunFailed, rc.runID).WithError(errorMsg)
+		event = rc.newEvent(port.EventTypeRunFailed).WithError(errorMsg)
 	case value.RunStatusCanceled:
-		event = port.NewEvent(port.EventTypeRunCanceled, rc.runID)
+		event = rc.newEvent(port.EventTypeRunCanceled)
 	}
 	if event != nil {
 		s.emitter.EmitAsync(event)
+		s.flushEmitter("run_final")
 	}
 }
 
@@ -1660,7 +1682,8 @@ func (s *Scheduler) CancelRun(runID string) error {
 	rc.cancel()
 
 	s.repository.UpdateRunStatus(context.Background(), runID, string(value.RunStatusCanceled))
-	s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunCanceled, runID))
+	s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunCanceled))
+	s.flushEmitter("run_canceled")
 
 	return nil
 }
@@ -1668,7 +1691,7 @@ func (s *Scheduler) CancelRun(runID string) error {
 // ResumeRun resumes a paused run after human gate approval/rejection
 func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string) error {
 	// Load pause state
-	pausedNodeID, stateSnapshot, completedNodes, skippedNodes, graphJSON, err := s.repository.LoadPauseState(ctx, runID)
+	pausedNodeID, stateSnapshot, completedNodes, skippedNodes, graphJSON, tenantID, err := s.repository.LoadPauseState(ctx, runID)
 	if err != nil {
 		return fmt.Errorf("failed to load pause state: %w", err)
 	}
@@ -1710,7 +1733,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		// Mark run as failed
 		s.repository.SetRunEnded(ctx, runID, string(value.RunStatusFailed), nil, errorMsg)
 		s.repository.ClearPauseState(ctx, runID)
-		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunFailed, runID).WithError(errorMsg))
+		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunFailed, runID).WithTenantID(tenantID).WithError(errorMsg))
+		s.flushEmitter("run_failed")
 		return nil
 	}
 
@@ -1766,7 +1790,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		plan:          plan,
 		state:         state,
 		graphJSON:     graphJSON,
-		tenantID:      "",
+		tenantID:      tenantID,
 		messageBuffer: resumeBuffer,
 		memoryConfig:  resumeMemoryConfig,
 		stateSchema:   stateSchema,
@@ -1784,6 +1808,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		TrackMessage:   rc.trackMessages,
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
+	if rc.tenantID != "" {
+		rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
+	}
 
 	if s.isCheckpointingEnabled() {
 		if _, stepIndex, _, _, _, _, err := s.repository.LoadLatestCheckpoint(ctx, runID); err == nil {
@@ -1814,7 +1841,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning))
 
 	// Emit run resumed event
-	s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunResumed, runID))
+	s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunResumed))
 
 	// Start execution in background from all ready nodes
 	go s.executeResumedRun(rc, rc.initialNodes)
@@ -1959,7 +1986,7 @@ func (s *Scheduler) validateStateSchema(rc *runContext, node *entity.Node, nodeR
 		"mode":   rc.schemaMode,
 	}
 	s.emitter.EmitAsync(
-		port.NewEvent(port.EventTypeRunSchemaValidation, rc.runID).
+		rc.newEvent(port.EventTypeRunSchemaValidation).
 			WithNode(node.ID, node.Type, node.Name).
 			WithOutput(payload),
 	)
@@ -1975,7 +2002,7 @@ func (s *Scheduler) validateStateSchema(rc *runContext, node *entity.Node, nodeR
 		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
 
 		s.emitter.EmitAsync(
-			port.NewEvent(port.EventTypeNodeFailed, rc.runID).
+			rc.newEvent(port.EventTypeNodeFailed).
 				WithNode(node.ID, node.Type, node.Name).
 				WithError(errMsg).
 				WithDuration(durationMs),

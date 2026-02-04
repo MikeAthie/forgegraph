@@ -31,10 +31,30 @@ type RunRepository interface {
 	// Pause/Resume operations (for Human Gate)
 
 	// SavePauseState saves the execution state when a run is paused at a human gate
-	SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error
+	SavePauseState(
+		ctx context.Context,
+		runID,
+		pausedNodeID string,
+		stateSnapshot map[string]any,
+		completedNodes []string,
+		skippedNodes []string,
+		graphJSON string,
+		tenantID string,
+	) error
 
 	// LoadPauseState retrieves the saved pause state for resuming a run
-	LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error)
+	LoadPauseState(
+		ctx context.Context,
+		runID string,
+	) (
+		pausedNodeID string,
+		stateSnapshot map[string]any,
+		completedNodes []string,
+		skippedNodes []string,
+		graphJSON string,
+		tenantID string,
+		err error,
+	)
 
 	// ClearPauseState removes the pause state after a run is resumed
 	ClearPauseState(ctx context.Context, runID string) error

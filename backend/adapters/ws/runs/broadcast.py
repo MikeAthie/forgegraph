@@ -51,3 +51,15 @@ def broadcast_node_run_updated(*, run: Run, node_run: NodeRun) -> dict[str, Any]
     }
     _send_to_run_group(run_id=str(run.id), message=message)
     return message
+
+
+def broadcast_run_schema_validation(*, run: Run, payload: dict[str, Any]) -> dict[str, Any]:
+    message = {
+        "event_id": str(uuid.uuid4()),
+        "timestamp": timezone.now().isoformat(),
+        "type": "run.schema_validation",
+        "run_id": str(run.id),
+        "payload": payload,
+    }
+    _send_to_run_group(run_id=str(run.id), message=message)
+    return message

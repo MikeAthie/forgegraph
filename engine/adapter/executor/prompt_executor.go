@@ -27,6 +27,9 @@ type LLMRequest struct {
 	// Prompt is the text prompt to send
 	Prompt string
 
+	// Provider is the LLM provider (e.g., "openai", "anthropic")
+	Provider string
+
 	// Model is the model identifier (e.g., "gpt-4", "claude-3-opus")
 	Model string
 
@@ -41,6 +44,15 @@ type LLMRequest struct {
 
 	// Messages is for chat-style APIs (optional, overrides Prompt)
 	Messages []LLMMessage
+
+	// CredentialID is the control-plane credential identifier (optional)
+	CredentialID string
+
+	// TenantID identifies the tenant for credential resolution (optional)
+	TenantID string
+
+	// APIKey is an optional direct key override (rare; prefer CredentialID)
+	APIKey string
 }
 
 // LLMMessage represents a single message in a chat conversation
@@ -163,10 +175,27 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		systemPrompt = SubstituteTemplate(systemPrompt, state)
 	}
 
-	// Get model (default: gpt-4)
+	// Get model (default based on provider)
 	model, _ := node.Config["model"].(string)
+
+	// Get provider (default: openai if no credential is supplied)
+	provider, _ := node.Config["provider"].(string)
+	if provider != "" {
+		provider = strings.ToLower(provider)
+	}
+
+	// Get credential id (optional)
+	credentialID, _ := node.Config["credential_id"].(string)
+	if provider == "" && credentialID == "" {
+		provider = "openai"
+	}
+
 	if model == "" {
-		model = "gpt-4"
+		if provider == "anthropic" {
+			model = "claude-3-sonnet"
+		} else {
+			model = "gpt-4"
+		}
 	}
 
 	// Get temperature (default: 0.7)
@@ -186,10 +215,13 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	// Build LLM request
 	request := &LLMRequest{
 		Prompt:       prompt,
+		Provider:     provider,
 		Model:        model,
 		Temperature:  temperature,
 		MaxTokens:    maxTokens,
 		SystemPrompt: systemPrompt,
+		CredentialID: credentialID,
+		TenantID:     port.TenantIDFrom(ctx),
 	}
 
 	// Call LLM
@@ -221,6 +253,7 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		"prompt":   prompt,
 		"response": response.Content,
 		"model":    response.Model,
+		"provider": provider,
 	}
 
 	if response.Usage != nil {

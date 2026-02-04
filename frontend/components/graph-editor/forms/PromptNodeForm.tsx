@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
 import { KeyValueEditor } from "@/components/ui/key-value-editor";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { credentialsApi, getApiErrorMessage, type Credential } from "@/lib/api";
 import { AgentFields, type AgentConfig } from "./AgentFields";
 import { AdvancedSettings, type AdvancedConfig } from "./AdvancedSettings";
 import type { NodeFormProps } from "../NodeConfigDialog";
@@ -16,6 +18,8 @@ import type { NodeFormProps } from "../NodeConfigDialog";
 interface PromptConfig extends AgentConfig, AdvancedConfig {
   prompt_template?: string;
   system_prompt?: string;
+  provider?: string;
+  credential_id?: string;
   model?: string;
   temperature?: number;
   max_tokens?: number;
@@ -31,8 +35,17 @@ const AVAILABLE_MODELS = [
   { value: "claude-3-haiku", label: "Claude 3 Haiku" },
 ];
 
+const PROVIDERS = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "google", label: "Google AI" },
+];
+
 export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
   const promptConfig = config as PromptConfig;
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialsError, setCredentialsError] = useState<string | null>(null);
 
   const handleChange = useCallback(
     <K extends keyof PromptConfig>(field: K, value: PromptConfig[K]) => {
@@ -53,6 +66,39 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
       onChange({ ...config, ...advancedConfig });
     },
     [config, onChange]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCredentials = async () => {
+      setCredentialsLoading(true);
+      setCredentialsError(null);
+      try {
+        const data = await credentialsApi.list();
+        if (!cancelled) {
+          setCredentials(data);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setCredentialsError(getApiErrorMessage(err, "Failed to load credentials."));
+        }
+      } finally {
+        if (!cancelled) {
+          setCredentialsLoading(false);
+        }
+      }
+    };
+
+    void fetchCredentials();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const provider = promptConfig.provider || "openai";
+  const filteredCredentials = useMemo(
+    () => credentials.filter((item) => item.provider === provider),
+    [credentials, provider]
   );
 
   return (
@@ -124,6 +170,55 @@ Please {{task}}"
         <h3 className="text-sm font-medium">Model Settings</h3>
 
         <div className="grid grid-cols-2 gap-4">
+          <FormField label="Provider" htmlFor="provider">
+            <select
+              id="provider"
+              value={provider}
+              onChange={(e) => handleChange("provider", e.target.value)}
+              className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+            >
+              {PROVIDERS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField
+            label="Credential"
+            htmlFor="credential-id"
+            description="Select the stored API key to use for this provider."
+          >
+            <select
+              id="credential-id"
+              value={promptConfig.credential_id || ""}
+              onChange={(e) => handleChange("credential_id", e.target.value || undefined)}
+              className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+            >
+              <option value="">Use default (env)</option>
+              {filteredCredentials.map((cred) => (
+                <option key={cred.id} value={cred.id}>
+                  {cred.name} ({cred.key_hint})
+                </option>
+              ))}
+            </select>
+            {credentialsLoading && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <Spinner className="h-3 w-3" />
+                Loading credentials...
+              </div>
+            )}
+            {!credentialsLoading && credentialsError && (
+              <div className="mt-2 text-xs text-destructive">{credentialsError}</div>
+            )}
+            {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                No credentials found for this provider. Add one in the Credentials page.
+              </div>
+            )}
+          </FormField>
+
           <FormField label="Model" htmlFor="model">
             <select
               id="model"

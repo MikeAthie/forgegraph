@@ -18,6 +18,8 @@ PROMPT_NODE_SCHEMA = {
     "prompt_template": {"type": "string", "required": False},
     "prompt_id": {"type": "string", "required": False},
     "system_prompt": {"type": "string", "required": False},
+    "provider": {"type": "string", "required": False},
+    "credential_id": {"type": "string", "required": False},
     "model": {"type": "string", "required": False},
     "temperature": {"type": "number", "min": 0, "max": 2, "required": False},
     "max_tokens": {"type": "integer", "min": 1, "required": False},

@@ -4,6 +4,11 @@ Analytics API routes.
 
 from django.urls import path
 
+from adapters.api.analytics.llm_analytics import (
+    LLMBudgetView,
+    LLMCostsAnalyticsView,
+    LLMUsageAnalyticsView,
+)
 from adapters.api.analytics.memory_analytics import (
     MemoryCostsAnalyticsView,
     MemoryPerformanceAnalyticsView,
@@ -18,4 +23,7 @@ urlpatterns = [
         MemoryPerformanceAnalyticsView.as_view(),
         name="memory-analytics-performance",
     ),
+    path("llm/usage", LLMUsageAnalyticsView.as_view(), name="llm-analytics-usage"),
+    path("llm/costs", LLMCostsAnalyticsView.as_view(), name="llm-analytics-costs"),
+    path("llm/budget", LLMBudgetView.as_view(), name="llm-analytics-budget"),
 ]
