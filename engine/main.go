@@ -58,6 +58,7 @@ type Config struct {
 	EventMaxRetries      int
 	EventRetryDelayMs    int
 	EventBufferSize      int
+	EventSpoolPath       string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -89,6 +90,7 @@ func LoadConfig() *Config {
 		EventMaxRetries:      getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
 		EventRetryDelayMs:    getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
 		EventBufferSize:      getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
+		EventSpoolPath:       getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
 	}
 	return cfg
 }
@@ -337,6 +339,7 @@ func main() {
 		emitterCfg.MaxRetries = cfg.EventMaxRetries
 		emitterCfg.RetryDelay = time.Duration(cfg.EventRetryDelayMs) * time.Millisecond
 		emitterCfg.BufferSize = cfg.EventBufferSize
+		emitterCfg.SpoolPath = cfg.EventSpoolPath
 		emitter = gateway.NewHTTPEventEmitter(emitterCfg)
 	} else {
 		emitter = port.NewNoOpEventEmitter()

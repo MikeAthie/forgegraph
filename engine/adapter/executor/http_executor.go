@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -65,6 +66,10 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 
 	// Substitute variables in URL
 	urlStr = SubstituteTemplate(urlStr, state)
+
+	if !isHTTPAllowed(port.PolicyFromContext(ctx), urlStr) {
+		return port.NewErrorResult(domain.NewValidationError("url", "egress blocked by policy")), nil
+	}
 
 	// Get method (default: GET)
 	method, _ := node.Config["method"].(string)
@@ -205,4 +210,60 @@ func (e *HTTPExecutor) extractHeaders(h http.Header) map[string]string {
 		}
 	}
 	return result
+}
+
+func isHTTPAllowed(policy *entity.ExecutionPolicy, rawURL string) bool {
+	if policy == nil {
+		return true
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return false
+	}
+
+	if matchesList(host, policy.HTTPDenylist) {
+		return false
+	}
+
+	if len(policy.HTTPAllowlist) > 0 {
+		return matchesList(host, policy.HTTPAllowlist)
+	}
+
+	if policy.HTTPDefaultDeny {
+		return false
+	}
+
+	return true
+}
+
+func matchesList(host string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return false
+	}
+	for _, rawPattern := range patterns {
+		pattern := strings.ToLower(strings.TrimSpace(rawPattern))
+		if pattern == "" {
+			continue
+		}
+		if pattern == "*" {
+			return true
+		}
+		if strings.HasPrefix(pattern, "*.") {
+			suffix := strings.TrimPrefix(pattern, "*.")
+			if host == suffix || strings.HasSuffix(host, "."+suffix) {
+				return true
+			}
+			continue
+		}
+		if host == pattern {
+			return true
+		}
+	}
+	return false
 }

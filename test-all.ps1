@@ -39,6 +39,11 @@ if (-not $Fast) {
     Write-Host "Starting postgres container..."
     docker compose up -d postgres
   }
+  $redisRunning = docker ps --format "{{.Names}}" | Select-String -SimpleMatch "forgegraph-redis"
+  if (-not $redisRunning) {
+    Write-Host "Starting redis container..."
+    docker compose up -d redis
+  }
 }
 
 Push-Location (Join-Path $root "backend")

@@ -16,7 +16,7 @@ from uuid import UUID
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Case, IntegerField, Prefetch, Sum, When
 from django.http import StreamingHttpResponse
 from django.utils import timezone
@@ -36,6 +36,7 @@ from adapters.api.runs.serializers import (
     RunEventSerializer,
     RunInvokeSerializer,
     RunListSerializer,
+    RunReplaySerializer,
     RunResumeSerializer,
     RunStartSerializer,
 )
@@ -49,6 +50,7 @@ from adapters.ws.runs.broadcast import (
     broadcast_run_schema_validation,
     broadcast_run_updated,
 )
+from application.services.audit_log import record_audit_log
 from application.services.llm_pricing import calculate_cost
 from application.services.schema_validation import (
     SchemaError,
@@ -61,6 +63,7 @@ from infrastructure.orm.models import (
     Graph,
     GraphVersion,
     LLMBudget,
+    LLMQuota,
     LLMUsage,
     MemoryConfiguration,
     MemorySession,
@@ -68,6 +71,7 @@ from infrastructure.orm.models import (
     Run,
     RunCheckpoint,
     RunEvent,
+    TenantPolicy,
     User,
 )
 from infrastructure.security import s2s
@@ -115,6 +119,37 @@ def check_llm_budget(user: User) -> Response | None:
         return error_response(
             code="BUDGET_EXCEEDED",
             message="Monthly LLM budget exceeded. Increase your limit or wait for next month.",
+            status=status.HTTP_402_PAYMENT_REQUIRED,
+        )
+
+    return None
+
+
+def check_llm_quota(user: User) -> Response | None:
+    tenant_id = get_tenant_id_for_user(user)
+    quota = LLMQuota.objects.filter(tenant_id=tenant_id).first()
+    if not quota:
+        return None
+
+    month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    totals = LLMUsage.objects.filter(tenant_id=tenant_id, created_at__gte=month_start).aggregate(
+        total_tokens=Sum("total_tokens"),
+        total_cost=Sum("cost_usd"),
+    )
+    total_tokens = int(totals.get("total_tokens") or 0)
+    total_cost = totals.get("total_cost") or Decimal("0")
+
+    if quota.monthly_token_limit and total_tokens >= quota.monthly_token_limit:
+        return error_response(
+            code="QUOTA_EXCEEDED",
+            message="Monthly LLM token quota exceeded. Increase your quota or wait for next month.",
+            status=status.HTTP_402_PAYMENT_REQUIRED,
+        )
+
+    if quota.monthly_cost_limit_usd and total_cost >= quota.monthly_cost_limit_usd:
+        return error_response(
+            code="QUOTA_EXCEEDED",
+            message="Monthly LLM cost quota exceeded. Increase your quota or wait for next month.",
             status=status.HTTP_402_PAYMENT_REQUIRED,
         )
 
@@ -303,11 +338,33 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
     """Prepare graph JSON for engine execution (strip sentinels, expand subgraphs, enforce memory isolation)."""
     cleaned = strip_sentinel_edges(graph_json)
     expanded = expand_subgraphs(cleaned, owner)
-    return apply_memory_namespace_prefix(expanded, owner.id)
+    namespaced = apply_memory_namespace_prefix(expanded, owner.id)
+    policy = TenantPolicy.objects.filter(tenant_id=owner.id).first()
+    if policy:
+        metadata_raw = namespaced.get("metadata")
+        metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
+        metadata["policy"] = {
+            "http": {
+                "allowlist": policy.http_allowlist,
+                "denylist": policy.http_denylist,
+                "default_deny": policy.http_default_deny,
+            },
+            "llm": {
+                "allowed_providers": policy.allowed_providers,
+                "allowed_models": policy.allowed_models,
+            },
+        }
+        namespaced["metadata"] = metadata
+    return namespaced
 
 
 def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:
     allowed_providers = set(getattr(settings, "ALLOWED_LLM_PROVIDERS", ["openai", "anthropic"]))
+    policy = TenantPolicy.objects.filter(tenant_id=user.id).first()
+    allowed_policy_providers = (
+        {str(value).lower() for value in policy.allowed_providers} if policy else set()
+    )
+    allowed_policy_models = {str(value) for value in policy.allowed_models} if policy else set()
     nodes = graph_json.get("nodes")
     if not isinstance(nodes, list):
         return []
@@ -334,6 +391,24 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
                     "field": "provider",
                     "message": f"Prompt node '{node_id}' uses unsupported provider '{provider}'.",
                     "suggestion": f"Use one of: {', '.join(sorted(allowed_providers))}.",
+                }
+            )
+        if allowed_policy_providers and provider and provider not in allowed_policy_providers:
+            errors.append(
+                {
+                    "field": "provider",
+                    "message": f"Prompt node '{node_id}' uses a provider blocked by policy.",
+                    "suggestion": f"Use one of: {', '.join(sorted(allowed_policy_providers))}.",
+                }
+            )
+
+        model = str(config.get("model") or "").strip()
+        if allowed_policy_models and model and model not in allowed_policy_models:
+            errors.append(
+                {
+                    "field": "model",
+                    "message": f"Prompt node '{node_id}' uses a model blocked by policy.",
+                    "suggestion": f"Use one of: {', '.join(sorted(allowed_policy_models))}.",
                 }
             )
 
@@ -377,6 +452,59 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
             )
 
     return errors
+
+
+def _get_downstream_nodes(graph_json: dict[str, Any], start_node_id: str) -> set[str]:
+    nodes_raw = graph_json.get("nodes")
+    if not isinstance(nodes_raw, list):
+        return set()
+
+    node_ids: set[str] = {
+        str(node.get("id"))
+        for node in nodes_raw
+        if isinstance(node, dict) and node.get("id") is not None
+    }
+    if start_node_id not in node_ids:
+        return set()
+
+    edges_raw = graph_json.get("edges")
+    adjacency: dict[str, list[str]] = {node_id: [] for node_id in node_ids}
+    if isinstance(edges_raw, list):
+        for edge in edges_raw:
+            if not isinstance(edge, dict):
+                continue
+            from_id = edge.get("from")
+            to_id = edge.get("to")
+            if not from_id or not to_id:
+                continue
+            if str(from_id) in adjacency:
+                adjacency[str(from_id)].append(str(to_id))
+
+    visited: set[str] = set()
+    stack = [start_node_id]
+    while stack:
+        current = stack.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        for neighbor in adjacency.get(current, []):
+            if neighbor not in visited:
+                stack.append(neighbor)
+
+    return visited
+
+
+def _prune_state_for_nodes(state_json: dict[str, Any], node_ids: set[str]) -> dict[str, Any]:
+    if not node_ids:
+        return state_json
+
+    prefixes = tuple(f"node.{node_id}" for node_id in node_ids)
+    pruned: dict[str, Any] = {}
+    for key, value in state_json.items():
+        if isinstance(key, str) and key.startswith(prefixes):
+            continue
+        pruned[key] = value
+    return pruned
 
 
 class RunListView(APIView):
@@ -569,6 +697,14 @@ class RunStartView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        quota_response = check_llm_quota(user)
+        if quota_response is not None:
+            return quota_response
+
+        quota_response = check_llm_quota(user)
+        if quota_response is not None:
+            return quota_response
+
         budget_response = check_llm_budget(user)
         if budget_response is not None:
             return budget_response
@@ -624,6 +760,14 @@ class RunStartView(APIView):
             error_message="",
         )
         broadcast_run_updated(run)
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_user(user),
+            action="run.started",
+            resource_type="run",
+            resource_id=str(run.id),
+            metadata={"graph_id": str(graph_version.graph_id)},
+        )
 
         # Track memory session for cross-run buffers.
         upsert_memory_session(user, session_id)
@@ -726,6 +870,10 @@ class RunInvokeView(APIView):
                 message="input_json must be a JSON object",
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        quota_response = check_llm_quota(user)
+        if quota_response is not None:
+            return quota_response
 
         budget_response = check_llm_budget(user)
         if budget_response is not None:
@@ -849,6 +997,14 @@ class RunInvokeView(APIView):
             )
 
         broadcast_run_updated(run)
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_user(user),
+            action="run.started",
+            resource_type="run",
+            resource_id=str(run.id),
+            metadata={"graph_id": str(graph_version.graph_id)},
+        )
 
         upsert_memory_session(user, session_id)
 
@@ -912,6 +1068,228 @@ class RunInvokeView(APIView):
             "output_json": run.output_json,
             "error_message": run.error_message,
             "duration_ms": run.duration_ms,
+            "node_runs": [],
+        }
+
+        serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+        return success_response(serialized_data, status=status.HTTP_201_CREATED)
+
+
+class RunReplayView(APIView):
+    """Replay a completed run from its latest checkpoint."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, run_id: UUID) -> Response:
+        serializer = RunReplaySerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        user = cast(User, request.user)
+        node_id = str(serializer.validated_data.get("node_id") or "").strip()
+
+        try:
+            run = Run.objects.select_related("graph_version__graph").get(id=run_id, owner=user)
+        except Run.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Run with id '{run_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if run.status in {"pending", "running", "paused"}:
+            return error_response(
+                code="INVALID_STATE",
+                message=f"Cannot replay a run in status '{run.status}'. Run must be completed.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            checkpoint = run.checkpoint
+        except RunCheckpoint.DoesNotExist:
+            return error_response(
+                code="NO_CHECKPOINT",
+                message="No checkpoint available for this run.",
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if run.thread_id:
+            active_run = (
+                Run.objects.filter(
+                    owner=user,
+                    thread_id=run.thread_id,
+                    status__in=["pending", "running", "paused"],
+                )
+                .order_by("-started_at")
+                .first()
+            )
+            if active_run:
+                return error_response(
+                    code="INVALID_STATE",
+                    message=f"Thread '{run.thread_id}' has an active run ({active_run.id}).",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        budget_response = check_llm_budget(user)
+        if budget_response is not None:
+            return budget_response
+
+        graph_version = run.graph_version
+        try:
+            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
+        except ValueError as exc:
+            return error_response(
+                code="INVALID_SUBGRAPH",
+                message=str(exc),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        credential_errors = validate_prompt_credentials(prepared_graph, user)
+        if credential_errors:
+            return error_response(
+                code="INVALID_CREDENTIALS",
+                message="Prompt node credentials are missing or invalid.",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=credential_errors,
+            )
+
+        replay_nodes: set[str] = set()
+        if node_id:
+            replay_nodes = _get_downstream_nodes(prepared_graph, node_id)
+            if not replay_nodes:
+                return error_response(
+                    code="INVALID_NODE",
+                    message=f"Node '{node_id}' was not found in the graph.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        state_json = checkpoint.state_json if isinstance(checkpoint.state_json, dict) else {}
+        state_json = dict(state_json)
+        if replay_nodes:
+            state_json = _prune_state_for_nodes(state_json, replay_nodes)
+
+        completed_nodes = list(checkpoint.completed_nodes or [])
+        skipped_nodes = list(checkpoint.skipped_nodes or [])
+        if replay_nodes:
+            completed_nodes = [node for node in completed_nodes if node not in replay_nodes]
+            skipped_nodes = [node for node in skipped_nodes if node not in replay_nodes]
+
+        input_json = run.input_json if isinstance(run.input_json, dict) else {}
+        session_id = str(run.thread_id) if run.thread_id else None
+        checkpoint_graph_json = pyjson.dumps(prepared_graph)
+
+        with transaction.atomic():
+            replay_run = Run.objects.create(
+                owner=user,
+                graph_version=graph_version,
+                thread_id=run.thread_id,
+                status="pending",
+                started_at=timezone.now(),
+                ended_at=None,
+                input_json=input_json,
+                output_json=None,
+                error_message="",
+            )
+
+            RunCheckpoint.objects.create(
+                run=replay_run,
+                node_id=checkpoint.node_id,
+                step_index=checkpoint.step_index,
+                state_json=state_json,
+                completed_nodes=completed_nodes,
+                skipped_nodes=skipped_nodes,
+                graph_json=checkpoint_graph_json,
+            )
+
+            RunEvent.objects.create(
+                run=replay_run,
+                event_type="run.replay",
+                payload={
+                    "source_run_id": str(run.id),
+                    "from_node_id": node_id or None,
+                    "checkpoint_step": checkpoint.step_index,
+                },
+            )
+
+        broadcast_run_updated(replay_run)
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_user(user),
+            action="run.replayed",
+            resource_type="run",
+            resource_id=str(replay_run.id),
+            metadata={"source_run_id": str(run.id), "from_node_id": node_id or None},
+        )
+        upsert_memory_session(user, session_id)
+
+        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=replay_run.id)
+        memory_config_json = build_memory_config_json(
+            graph_version.graph, user, session_id=session_id
+        )
+        tenant_id = get_tenant_id(request)
+        try:
+            with get_engine_client(callback_url) as engine:
+                engine.start_run(
+                    run_id=replay_run.id,
+                    graph_json=prepared_graph,
+                    input_json=input_json,
+                    memory_config_json=memory_config_json,
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                )
+                replay_run.status = "running"
+                replay_run.save(update_fields=["status"])
+                broadcast_run_updated(replay_run)
+
+        except EngineConnectionError as e:
+            logger.error(f"Engine connection failed for replay {replay_run.id}: {e}")
+            replay_run.status = "failed"
+            replay_run.ended_at = timezone.now()
+            replay_run.error_message = f"Engine connection failed: {e}"
+            replay_run.save(update_fields=["status", "ended_at", "error_message"])
+            broadcast_run_updated(replay_run)
+            return error_response(
+                code="ENGINE_UNAVAILABLE",
+                message="The execution engine is not available. Please try again later.",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except EngineExecutionError as e:
+            logger.error(f"Engine rejected replay {replay_run.id}: {e}")
+            replay_run.status = "failed"
+            replay_run.ended_at = timezone.now()
+            replay_run.error_message = f"Engine rejected run: {e}"
+            replay_run.save(update_fields=["status", "ended_at", "error_message"])
+            broadcast_run_updated(replay_run)
+            return error_response(
+                code="ENGINE_ERROR",
+                message=str(e),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        run_data = {
+            "id": replay_run.id,
+            "owner_id": replay_run.owner_id,
+            "thread_id": replay_run.thread_id,
+            "graph_id": graph_version.graph_id,
+            "graph_name": graph_version.graph.name,
+            "graph_version_id": graph_version.id,
+            "graph_version": graph_version.version,
+            "status": replay_run.status,
+            "started_at": replay_run.started_at,
+            "ended_at": replay_run.ended_at,
+            "input_json": replay_run.input_json,
+            "output_json": replay_run.output_json,
+            "error_message": replay_run.error_message,
+            "duration_ms": replay_run.duration_ms,
             "node_runs": [],
         }
 
@@ -1097,6 +1475,18 @@ class RunResumeView(APIView):
             approval_task.result = input_json
             approval_task.resolved_at = timezone.now()
             approval_task.save(update_fields=["status", "result", "resolved_at"])
+            record_audit_log(
+                actor=user,
+                tenant_id=get_tenant_id_for_user(user),
+                action="approval.resolved",
+                resource_type="approval",
+                resource_id=str(approval_task.id),
+                metadata={
+                    "run_id": str(run.id),
+                    "node_id": node_id,
+                    "status": approval_task.status,
+                },
+            )
 
         return success_response({"resumed": True, "run_id": str(run.id)})
 
@@ -1160,12 +1550,22 @@ class EngineRunEventsView(APIView):
         event_time = _datetime_from_timestamp_ms(timestamp_ms)
 
         def _save_event(event_type_name: str, payload: dict[str, Any]) -> None:
-            RunEvent.objects.create(
-                run=run,
-                event_type=event_type_name,
-                payload=payload,
-                external_id=event_id,
-            )
+            try:
+                RunEvent.objects.create(
+                    run=run,
+                    event_type=event_type_name,
+                    payload=payload,
+                    external_id=event_id,
+                )
+            except IntegrityError:
+                logger.info(
+                    "Duplicate run event ignored",
+                    extra={
+                        "run_id": str(run.id),
+                        "event_id": event_id,
+                        "event_type": event_type_name,
+                    },
+                )
 
         if event_type == "run.schema_validation":
             payload = event.get("output") or {}
@@ -1258,7 +1658,7 @@ class EngineRunEventsView(APIView):
             if update_fields:
                 run.save(update_fields=sorted(set(update_fields)))
 
-            _save_event("run.updated", run_payload)
+            _save_event("run.updated", _serialize_event_payload(run_payload))
             message = broadcast_run_updated(run)
             return success_response(message)
 
@@ -1334,7 +1734,7 @@ class EngineRunEventsView(APIView):
                     node_update_fields.append("error_json")
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
-                _save_event("node_run.updated", node_payload)
+                _save_event("node_run.updated", _serialize_event_payload(node_payload))
 
                 if node_type == "prompt" and node_payload.get("output_json"):
                     output_json = node_payload.get("output_json") or {}
@@ -1598,6 +1998,16 @@ def _datetime_from_timestamp_ms(timestamp_ms: int | None) -> datetime | None:
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC)
     except (TypeError, ValueError, OSError):
         return None
+
+
+def _serialize_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    serialized: dict[str, Any] = {}
+    for key, value in payload.items():
+        if isinstance(value, datetime):
+            serialized[key] = value.isoformat()
+        else:
+            serialized[key] = value
+    return serialized
 
 
 def _get_user_from_request(request: Request) -> User | None:

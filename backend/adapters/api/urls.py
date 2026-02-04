@@ -18,4 +18,6 @@ urlpatterns = [
     path("templates/", include("adapters.api.templates.urls")),
     path("runs/", include("adapters.api.runs.urls")),
     path("approvals/", include("adapters.api.approvals.urls")),
+    path("audit-logs/", include("adapters.api.audit_logs.urls")),
+    path("policies/", include("adapters.api.policies.urls")),
 ]

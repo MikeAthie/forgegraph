@@ -5,11 +5,14 @@ Tests run history and run detail endpoints for Phase 4 observability MVP.
 """
 
 import json
+import time
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 
@@ -17,12 +20,16 @@ from infrastructure.orm.models import (
     ApprovalTask,
     Graph,
     GraphVersion,
+    LLMQuota,
+    LLMUsage,
     MemoryConfiguration,
     NodeRun,
     Run,
     RunCheckpoint,
+    RunEvent,
     User,
 )
+from infrastructure.security import s2s
 
 pytestmark = pytest.mark.django_db
 
@@ -317,6 +324,37 @@ class TestRunStart:
         assert memory_config["summarization"]["keep_recent_count"] == 12
         assert memory_config["summarization"]["model"] == "gpt-4"
 
+    def test_start_run_blocked_when_quota_exceeded(
+        self, authenticated_client, user, mock_engine_client
+    ):
+        graph = Graph.objects.create(owner=user, name="Quota Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        usage_run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+        LLMQuota.objects.create(tenant_id=user.id, monthly_token_limit=100)
+        LLMUsage.objects.create(
+            tenant_id=user.id,
+            run=usage_run,
+            node_id="prompt-1",
+            provider="openai",
+            model="gpt-4",
+            prompt_tokens=50,
+            completion_tokens=50,
+            total_tokens=100,
+            cost_usd=Decimal("0.50"),
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "world"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
+        assert response.data["error"]["code"] == "QUOTA_EXCEEDED"
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
 
 class TestRunInvoke:
     """Tests for POST /api/runs/invoke"""
@@ -572,6 +610,61 @@ class TestRunEvents:
             ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count()
             == 1
         )
+
+
+class TestEngineRunEvents:
+    """Tests for POST /api/runs/engine-events (S2S)."""
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_idempotent_by_event_id(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+        timestamp_ms = int(time.time() * 1000)
+        event_id = "evt-123"
+        payload = {
+            "event_id": event_id,
+            "type": "run_started",
+            "run_id": str(run.id),
+            "tenant_id": str(user.id),
+            "timestamp": timestamp_ms,
+        }
+        body = json.dumps(payload)
+        signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+        headers = {
+            "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
+            "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
+        }
+
+        response = api_client.post(
+            "/api/runs/engine-events",
+            data=body,
+            content_type="application/json",
+            **headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert RunEvent.objects.filter(run=run, external_id=event_id).count() == 1
+
+        run.refresh_from_db()
+        started_at = run.started_at
+        assert run.status == "running"
+
+        response = api_client.post(
+            "/api/runs/engine-events",
+            data=body,
+            content_type="application/json",
+            **headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["duplicate"] is True
+        assert RunEvent.objects.filter(run=run, external_id=event_id).count() == 1
+
+        run.refresh_from_db()
+        assert run.status == "running"
+        assert run.started_at == started_at
 
     def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Schema Graph")

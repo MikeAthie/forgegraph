@@ -177,6 +177,16 @@ const getStatusBadgeClass = (status: string) => {
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const getReconnectDelayMs = (attempt: number) => {
+  if (attempt <= 0) return 0;
+  const cappedAttempt = Math.min(attempt, 5);
+  const baseDelayMs = 1000;
+  const maxDelayMs = 10000;
+  const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** cappedAttempt);
+  const jitter = Math.floor(Math.random() * 250);
+  return delay + jitter;
+};
+
 type RunDeltaPayload = {
   id: string;
   status: string;
@@ -231,6 +241,7 @@ export default function RunDetailPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [isRerunning, setIsRerunning] = useState(false);
+  const [isReplaying, setIsReplaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -242,6 +253,7 @@ export default function RunDetailPage() {
   const [lastStreamTimestamp, setLastStreamTimestamp] = useState<string | null>(null);
   const [streamReconnectCount, setStreamReconnectCount] = useState(0);
   const [lastReconnectFrom, setLastReconnectFrom] = useState<string | null>(null);
+  const lastStreamTimestampRef = useRef<string | null>(null);
 
   const runStatusRef = useRef<string | null>(null);
 
@@ -337,6 +349,23 @@ export default function RunDetailPage() {
     }
   }, [run, router]);
 
+  const replayRun = useCallback(async () => {
+    if (!runId) return;
+
+    setIsReplaying(true);
+    setError(null);
+    try {
+      const newRun = await runsApi.replay(runId);
+      void router.push(`/runs/${newRun.id}`);
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Failed to replay run from checkpoint.");
+      setError(message);
+      showError("Replay failed", message);
+    } finally {
+      setIsReplaying(false);
+    }
+  }, [runId, router]);
+
   const resumeRun = useCallback(async (approved: boolean) => {
     if (!runId || !run?.paused_node_id) return;
 
@@ -415,6 +444,7 @@ export default function RunDetailPage() {
           : null;
       if (messageTimestamp) {
         setLastStreamTimestamp(messageTimestamp);
+        lastStreamTimestampRef.current = messageTimestamp;
       }
       const runDelta = (message as { run: RunDeltaPayload }).run;
       setRun((prev) => {
@@ -435,6 +465,7 @@ export default function RunDetailPage() {
           : null;
       if (messageTimestamp) {
         setLastStreamTimestamp(messageTimestamp);
+        lastStreamTimestampRef.current = messageTimestamp;
       }
       const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
       setRun((prev) => {
@@ -563,6 +594,7 @@ export default function RunDetailPage() {
 
   useEffect(() => {
     if (!runId || !wsToken) return;
+    if (wsConnected) return;
 
     if (runStatus && isTerminalRunStatus(String(runStatus))) {
       setWsConnected(false);
@@ -575,51 +607,77 @@ export default function RunDetailPage() {
       : apiBaseUrl.replace(/^http/, "ws");
     const wsUrl = `${wsBaseUrl}/ws/runs/${runId}/?token=${encodeURIComponent(wsToken)}`;
 
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(wsUrl);
-    } catch {
-      setWsConnected(false);
-      setWsError("Failed to open WebSocket.");
-      return;
-    }
+    const reconnectDelayMs = getReconnectDelayMs(streamReconnectCount);
+    let socket: WebSocket | null = null;
+    let reconnectScheduled = false;
+    let closed = false;
+    let timeoutId: number | null = null;
 
-    setWsError(null);
-    setWsConnected(false);
-
-    socket.onopen = () => {
-      setWsConnected(true);
-    };
-
-    socket.onerror = () => {
-      setWsConnected(false);
-      setWsError("WebSocket error.");
+    const scheduleReconnect = () => {
+      if (reconnectScheduled) return;
+      reconnectScheduled = true;
       setStreamReconnectCount((prev) => prev + 1);
     };
 
-    socket.onclose = () => {
-      setWsConnected(false);
-      setStreamReconnectCount((prev) => prev + 1);
-    };
+    const connect = () => {
+      if (closed) return;
 
-    socket.onmessage = (event) => {
-      let message: RunsWsMessage | null = null;
       try {
-        const parsed = JSON.parse(String(event.data)) as unknown;
-        if (parsed && typeof parsed === "object") {
-          message = parsed as RunsWsMessage;
-        }
+        socket = new WebSocket(wsUrl);
       } catch {
+        setWsConnected(false);
+        setWsError("Failed to open WebSocket.");
+        scheduleReconnect();
         return;
       }
 
-      handleStreamMessage(message);
+      setWsError(null);
+      setWsConnected(false);
+
+      socket.onopen = () => {
+        setWsConnected(true);
+        if (streamReconnectCount > 0 && lastStreamTimestampRef.current) {
+          setLastReconnectFrom(lastStreamTimestampRef.current);
+        }
+      };
+
+      socket.onerror = () => {
+        setWsConnected(false);
+        setWsError("WebSocket error.");
+        scheduleReconnect();
+        socket?.close();
+      };
+
+      socket.onclose = () => {
+        setWsConnected(false);
+        scheduleReconnect();
+      };
+
+      socket.onmessage = (event) => {
+        let message: RunsWsMessage | null = null;
+        try {
+          const parsed = JSON.parse(String(event.data)) as unknown;
+          if (parsed && typeof parsed === "object") {
+            message = parsed as RunsWsMessage;
+          }
+        } catch {
+          return;
+        }
+
+        handleStreamMessage(message);
+      };
     };
 
+    timeoutId = window.setTimeout(connect, reconnectDelayMs);
+
     return () => {
-      socket.close();
+      closed = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      socket?.close();
     };
-  }, [runId, wsToken, runStatus, handleStreamMessage]);
+  }, [runId, wsToken, runStatus, wsConnected, handleStreamMessage, streamReconnectCount]);
 
   useEffect(() => {
     if (wsConnected || sseConnected) return;
@@ -639,6 +697,7 @@ export default function RunDetailPage() {
   useEffect(() => {
     if (!runId || !wsToken) return;
     if (wsConnected) return;
+    if (sseConnected) return;
 
     if (runStatus && isTerminalRunStatus(String(runStatus))) {
       setSseConnected(false);
@@ -646,53 +705,85 @@ export default function RunDetailPage() {
     }
 
     const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-    const sinceParam = lastStreamTimestamp ? `&since=${encodeURIComponent(lastStreamTimestamp)}` : "";
+    const sinceParam = lastStreamTimestampRef.current
+      ? `&since=${encodeURIComponent(lastStreamTimestampRef.current)}`
+      : "";
     const sseUrl = `${apiBaseUrl}/api/runs/${runId}/stream?token=${encodeURIComponent(wsToken)}${sinceParam}`;
 
-    let source: EventSource;
-    try {
-      source = new EventSource(sseUrl);
-    } catch {
-      setSseConnected(false);
-      setSseError("Failed to open SSE stream.");
-      return;
-    }
+    const reconnectDelayMs = getReconnectDelayMs(streamReconnectCount);
+    let source: EventSource | null = null;
+    let reconnectScheduled = false;
+    let closed = false;
+    let timeoutId: number | null = null;
 
-    setSseError(null);
-
-    source.onopen = () => {
-      setSseConnected(true);
-      if (streamReconnectCount > 0 && lastStreamTimestamp) {
-        setLastReconnectFrom(lastStreamTimestamp);
-      }
-    };
-
-    source.onerror = () => {
-      setSseConnected(false);
-      setSseError("SSE error.");
+    const scheduleReconnect = () => {
+      if (reconnectScheduled) return;
+      reconnectScheduled = true;
       setStreamReconnectCount((prev) => prev + 1);
-      source.close();
     };
 
-    const handleSseEvent = (event: MessageEvent<string>) => {
+    const connect = () => {
+      if (closed) return;
+
       try {
-        const parsed = JSON.parse(event.data) as RunsWsMessage;
-        handleStreamMessage(parsed);
+        source = new EventSource(sseUrl);
       } catch {
+        setSseConnected(false);
+        setSseError("Failed to open SSE stream.");
+        scheduleReconnect();
         return;
       }
+
+      setSseError(null);
+
+      source.onopen = () => {
+        setSseConnected(true);
+        if (streamReconnectCount > 0 && lastStreamTimestampRef.current) {
+          setLastReconnectFrom(lastStreamTimestampRef.current);
+        }
+      };
+
+      source.onerror = () => {
+        setSseConnected(false);
+        setSseError("SSE error.");
+        scheduleReconnect();
+        source?.close();
+      };
+
+      const handleSseEvent = (event: MessageEvent<string>) => {
+        try {
+          const parsed = JSON.parse(event.data) as RunsWsMessage;
+          handleStreamMessage(parsed);
+        } catch {
+          return;
+        }
+      };
+
+      source.addEventListener("run.updated", handleSseEvent);
+      source.addEventListener("node_run.updated", handleSseEvent);
+      source.addEventListener("connected", () => setSseConnected(true));
+      source.onmessage = handleSseEvent;
     };
 
-    source.addEventListener("run.updated", handleSseEvent);
-    source.addEventListener("node_run.updated", handleSseEvent);
-    source.addEventListener("connected", () => setSseConnected(true));
-    source.onmessage = handleSseEvent;
+    timeoutId = window.setTimeout(connect, reconnectDelayMs);
 
     return () => {
-      source.close();
+      closed = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      source?.close();
       setSseConnected(false);
     };
-  }, [runId, wsToken, wsConnected, runStatus, handleStreamMessage, lastStreamTimestamp]);
+  }, [
+    runId,
+    wsToken,
+    wsConnected,
+    sseConnected,
+    runStatus,
+    handleStreamMessage,
+    streamReconnectCount,
+  ]);
 
   useEffect(() => {
     if (!runId) return;
@@ -728,6 +819,8 @@ export default function RunDetailPage() {
   const displayedRunDurationLabel = useMemo(() => {
     return formatDuration(displayedRunDurationMs);
   }, [displayedRunDurationMs]);
+
+  const canReplay = runStatus ? isTerminalRunStatus(String(runStatus)) : false;
 
   const hideRunStatusText = useMemo(() => {
     if (!run) return false;
@@ -779,7 +872,7 @@ export default function RunDetailPage() {
                   <Button
                     variant="outline"
                     onClick={() => void rerun()}
-                    disabled={loading || isRefreshing || isCanceling || isRerunning}
+                    disabled={loading || isRefreshing || isCanceling || isRerunning || isReplaying}
                   >
                     {isRerunning ? (
                       <>
@@ -788,6 +881,22 @@ export default function RunDetailPage() {
                       </>
                     ) : (
                       "Re-run"
+                    )}
+                  </Button>
+                )}
+                {run && canReplay && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void replayRun()}
+                    disabled={loading || isRefreshing || isCanceling || isRerunning || isReplaying}
+                  >
+                    {isReplaying ? (
+                      <>
+                        <Spinner size="xs" className="mr-2" />
+                        Replaying...
+                      </>
+                    ) : (
+                      "Replay from checkpoint"
                     )}
                   </Button>
                 )}

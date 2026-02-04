@@ -377,6 +377,7 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		CurrentSummary:  rc.currentSummary,
 		TrackMessage:    rc.trackMessages,
 		MemoryRetriever: s.memoryRetriever,
+		Policy:          entity.PolicyFromMetadata(graph.Metadata),
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)

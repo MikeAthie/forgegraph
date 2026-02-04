@@ -7,7 +7,9 @@ from django.urls import path
 from adapters.api.analytics.llm_analytics import (
     LLMBudgetView,
     LLMCostsAnalyticsView,
+    LLMQuotaView,
     LLMUsageAnalyticsView,
+    LLMUsageExportView,
 )
 from adapters.api.analytics.memory_analytics import (
     MemoryCostsAnalyticsView,
@@ -24,6 +26,8 @@ urlpatterns = [
         name="memory-analytics-performance",
     ),
     path("llm/usage", LLMUsageAnalyticsView.as_view(), name="llm-analytics-usage"),
+    path("llm/export", LLMUsageExportView.as_view(), name="llm-analytics-export"),
     path("llm/costs", LLMCostsAnalyticsView.as_view(), name="llm-analytics-costs"),
     path("llm/budget", LLMBudgetView.as_view(), name="llm-analytics-budget"),
+    path("llm/quota", LLMQuotaView.as_view(), name="llm-analytics-quota"),
 ]

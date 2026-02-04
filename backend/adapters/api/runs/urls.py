@@ -14,6 +14,7 @@ from adapters.api.runs.views import (
     RunEventsView,
     RunInvokeView,
     RunListView,
+    RunReplayView,
     RunResumeView,
     RunStartView,
 )
@@ -28,4 +29,5 @@ urlpatterns = [
     path("engine-events", EngineRunEventsView.as_view(), name="run-engine-events"),
     path("<uuid:run_id>/stream", RunEventsStreamView.as_view(), name="run-stream"),
     path("<uuid:run_id>/resume", RunResumeView.as_view(), name="run-resume"),
+    path("<uuid:run_id>/replay", RunReplayView.as_view(), name="run-replay"),
 ]

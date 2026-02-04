@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import { Plus, Search, X } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
@@ -37,9 +38,14 @@ const MODEL_OPTIONS: Record<string, string[]> = {
   anthropic: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
 };
 
+const API_KEY_PLACEHOLDERS: Record<string, string> = {
+  openai: "sk-proj-xxxxxxxxxxxxxxxxxxxx",
+  anthropic: "sk-ant-api03-xxxxxxxxxxxxxxxxxxxx",
+  google: "AIzaSyxxxxxxxxxxxxxxxxxxxx",
+};
+
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState<GraphTemplate[]>([]);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -48,6 +54,12 @@ export default function OnboardingPage() {
   const [model, setModel] = useState<string>("gpt-4");
   const [credentialId, setCredentialId] = useState<string>("");
 
+  // Template search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Credential creation state
+  const [showCredentialForm, setShowCredentialForm] = useState(false);
   const [newCredentialName, setNewCredentialName] = useState("");
   const [newCredentialKey, setNewCredentialKey] = useState("");
   const [isCreatingCredential, setIsCreatingCredential] = useState(false);
@@ -67,6 +79,43 @@ export default function OnboardingPage() {
   );
 
   const availableModels = useMemo(() => MODEL_OPTIONS[provider] ?? [], [provider]);
+
+  // Extract unique categories from templates
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    templates.forEach((t) => {
+      if (t.category) cats.add(t.category);
+    });
+    return Array.from(cats).sort();
+  }, [templates]);
+
+  // Extract unique tags from templates
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    templates.forEach((t) => {
+      t.tags?.forEach((tag) => tags.add(tag));
+    });
+    return Array.from(tags).sort();
+  }, [templates]);
+
+  // Filter templates based on search and category
+  const filteredTemplates = useMemo(() => {
+    return templates.filter((template) => {
+      const matchesSearch =
+        !searchQuery ||
+        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchesCategory = !selectedCategory || template.category === selectedCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [templates, searchQuery, selectedCategory]);
+
+  // Completion states for visual feedback
+  const hasTemplate = Boolean(selectedTemplateId);
+  const hasCredential = Boolean(credentialId);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,7 +146,15 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     setCredentialId("");
+    setShowCredentialForm(false);
   }, [provider]);
+
+  // Auto-show credential form if no credentials exist for selected provider
+  useEffect(() => {
+    if (!loading && filteredCredentials.length === 0) {
+      setShowCredentialForm(true);
+    }
+  }, [loading, filteredCredentials.length]);
 
   const handleCreateCredential = async () => {
     if (!newCredentialName.trim() || !newCredentialKey.trim()) {
@@ -116,7 +173,8 @@ export default function OnboardingPage() {
       setCredentialId(created.id);
       setNewCredentialName("");
       setNewCredentialKey("");
-      showSuccess("Credential added");
+      setShowCredentialForm(false);
+      showSuccess("Credential saved", `${created.name} is ready to use.`);
     } catch (err: unknown) {
       showError("Credential failed", getApiErrorMessage(err, "Unable to save credential."));
     } finally {
@@ -147,11 +205,10 @@ export default function OnboardingPage() {
     }
   };
 
-  const canProceed = useMemo(() => {
-    if (step === 0) return Boolean(selectedTemplateId);
-    if (step === 1) return Boolean(credentialId);
-    return true;
-  }, [step, selectedTemplateId, credentialId]);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedCategory(null);
+  };
 
   return (
     <ProtectedRoute>
@@ -190,17 +247,104 @@ export default function OnboardingPage() {
               <span className="text-sm text-muted-foreground">Loading onboarding…</span>
             </div>
           ) : (
-            <>
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Card className={`border-border/50 bg-card/60 ${step === 0 ? "shadow-lg" : ""}`}>
-                  <CardHeader>
-                    <CardTitle className="text-base">1. Pick a template</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {templates.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No templates available yet.</p>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Template Selection Card */}
+              <Card className={`border-border/50 bg-card/60 ${hasTemplate ? "border-green-500/30" : ""}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      1. Pick a template
+                      {hasTemplate && (
+                        <Badge variant="outline" className="border-green-500/50 text-green-600 dark:text-green-400 text-xs">
+                          ✓
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search templates..."
+                      className="pl-9 pr-8"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Category Pills */}
+                  {categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {categories.map((category) => (
+                        <button
+                          type="button"
+                          key={category}
+                          onClick={() => setSelectedCategory(selectedCategory === category ? null : category)}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                            selectedCategory === category
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {category}
+                        </button>
+                      ))}
+                      {(searchQuery || selectedCategory) && (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tag Pills (show if no categories or as secondary filter) */}
+                  {categories.length === 0 && allTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {allTags.slice(0, 6).map((tag) => (
+                        <button
+                          type="button"
+                          key={tag}
+                          onClick={() => setSearchQuery(tag)}
+                          className="rounded-full px-2.5 py-1 text-xs font-medium bg-muted/50 text-muted-foreground hover:bg-muted transition"
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Template List */}
+                  <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1">
+                    {filteredTemplates.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-sm text-muted-foreground">
+                          {templates.length === 0
+                            ? "No templates available yet."
+                            : "No templates match your search."}
+                        </p>
+                        {(searchQuery || selectedCategory) && (
+                          <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2">
+                            Clear filters
+                          </Button>
+                        )}
+                      </div>
                     ) : (
-                      templates.map((template) => (
+                      filteredTemplates.map((template) => (
                         <button
                           type="button"
                           key={template.id}
@@ -216,148 +360,221 @@ export default function OnboardingPage() {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-semibold">{template.name}</span>
-                            <Badge variant="secondary">{template.estimated_minutes} min</Badge>
+                            <Badge variant="secondary" className="shrink-0">
+                              {template.estimated_minutes} min
+                            </Badge>
                           </div>
-                          <p className="mt-1 text-xs text-muted-foreground">{template.description}</p>
+                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                            {template.description}
+                          </p>
+                          {template.tags && template.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {template.tags.slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </button>
                       ))
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <Card className={`border-border/50 bg-card/60 ${step === 1 ? "shadow-lg" : ""}`}>
-                  <CardHeader>
-                    <CardTitle className="text-base">2. Attach credentials</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground">Provider</label>
-                      <Select value={provider} onValueChange={setProvider}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Provider" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PROVIDERS.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Model</label>
-                      <Select value={model} onValueChange={setModel}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Model" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableModels.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+              {/* Credentials Card */}
+              <Card className={`border-border/50 bg-card/60 ${hasCredential ? "border-green-500/30" : ""}`}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    2. Attach credentials
+                    {hasCredential && (
+                      <Badge variant="outline" className="border-green-500/50 text-green-600 dark:text-green-400 text-xs">
+                        ✓
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Provider</label>
+                    <Select value={provider} onValueChange={setProvider}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROVIDERS.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Model</label>
+                    <Select value={model} onValueChange={setModel}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModels.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Credential Selection */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-muted-foreground">API Credential</label>
+                      {filteredCredentials.length > 0 && !showCredentialForm && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCredentialForm(true)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add new
+                        </button>
+                      )}
                     </div>
 
                     {filteredCredentials.length > 0 ? (
-                      <div>
-                        <label className="text-xs text-muted-foreground">Credential</label>
-                        <Select value={credentialId} onValueChange={setCredentialId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select credential" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {filteredCredentials.map((cred) => (
-                              <SelectItem key={cred.id} value={cred.id}>
-                                {cred.name} · ****{cred.key_hint}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <Select value={credentialId} onValueChange={setCredentialId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a credential" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filteredCredentials.map((cred) => (
+                            <SelectItem key={cred.id} value={cred.id}>
+                              {cred.name} · ****{cred.key_hint}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
-                      <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-xs text-muted-foreground">
-                        No {provider} credentials yet. Create one below.
+                      <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground text-center">
+                        No {provider} credentials found. Add one below.
                       </div>
                     )}
+                  </div>
 
-                    <div className="space-y-2">
-                      <Input
-                        value={newCredentialName}
-                        onChange={(e) => setNewCredentialName(e.target.value)}
-                        placeholder="Credential name"
-                      />
-                      <Input
-                        value={newCredentialKey}
-                        onChange={(e) => setNewCredentialKey(e.target.value)}
-                        placeholder="API key"
-                        type="password"
-                      />
+                  {/* Credential Creation Form */}
+                  {showCredentialForm && (
+                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground">Add {provider} API key</span>
+                        {filteredCredentials.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowCredentialForm(false)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div>
+                        <Input
+                          value={newCredentialName}
+                          onChange={(e) => setNewCredentialName(e.target.value)}
+                          placeholder="My OpenAI Key"
+                          name="api-key-label"
+                          autoComplete="one-time-code"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          data-form-type="other"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">A label to identify this key</p>
+                      </div>
+                      <div>
+                        <Input
+                          value={newCredentialKey}
+                          onChange={(e) => setNewCredentialKey(e.target.value)}
+                          placeholder={API_KEY_PLACEHOLDERS[provider] || "sk-..."}
+                          type="password"
+                          name="api-key-secret"
+                          autoComplete="one-time-code"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          data-form-type="other"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Your {provider} API key from{" "}
+                          {provider === "openai" && <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">platform.openai.com</a>}
+                          {provider === "anthropic" && <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console.anthropic.com</a>}
+                          {provider === "google" && <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">aistudio.google.com</a>}
+                        </p>
+                      </div>
                       <Button
                         variant="outline"
+                        size="sm"
                         onClick={handleCreateCredential}
-                        disabled={isCreatingCredential}
+                        disabled={isCreatingCredential || !newCredentialName.trim() || !newCredentialKey.trim()}
+                        className="w-full"
                       >
                         {isCreatingCredential ? <Spinner size="xs" className="mr-2" /> : null}
-                        Save credential
+                        Save API key
                       </Button>
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </CardContent>
+              </Card>
 
-                <Card className={`border-border/50 bg-card/60 ${step === 2 ? "shadow-lg" : ""}`}>
-                  <CardHeader>
-                    <CardTitle className="text-base">3. Launch the run</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground">Graph name</label>
-                      <Input
-                        value={graphName}
-                        onChange={(e) => setGraphName(e.target.value)}
-                        placeholder="Demo graph"
-                      />
+              {/* Launch Card */}
+              <Card className={`border-border/50 bg-card/60 ${hasTemplate && hasCredential ? "border-primary/30" : ""}`}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">3. Launch the run</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Graph name</label>
+                    <Input
+                      value={graphName}
+                      onChange={(e) => setGraphName(e.target.value)}
+                      placeholder="Demo graph"
+                    />
+                  </div>
+                  {selectedTemplate ? (
+                    <div className="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-sm">
+                      <div className="font-semibold">{selectedTemplate.name}</div>
+                      <div className="text-xs text-muted-foreground">{selectedTemplate.description}</div>
                     </div>
-                    {selectedTemplate ? (
-                      <div className="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-                        <div className="font-semibold">{selectedTemplate.name}</div>
-                        <div className="text-xs text-muted-foreground">{selectedTemplate.description}</div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Select a template to continue.</p>
-                    )}
-                    <Button
-                      onClick={handleRun}
-                      disabled={!selectedTemplate || !credentialId || isRunning}
-                    >
-                      {isRunning ? <Spinner size="xs" className="mr-2" /> : null}
-                      Create & run
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 px-3 py-4 text-sm text-muted-foreground text-center">
+                      Select a template to continue
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleRun}
+                    disabled={!selectedTemplate || !credentialId || isRunning}
+                    className="w-full"
+                  >
+                    {isRunning ? <Spinner size="xs" className="mr-2" /> : null}
+                    Create & run
+                  </Button>
 
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Step {step + 1} of 3</div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setStep((prev) => Math.max(prev - 1, 0))}
-                    disabled={step === 0}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    onClick={() => setStep((prev) => Math.min(prev + 1, 2))}
-                    disabled={!canProceed || step === 2}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </>
+                  {/* Completion checklist */}
+                  <div className="text-xs text-muted-foreground space-y-1 pt-2">
+                    <div className={`flex items-center gap-2 ${hasTemplate ? "text-green-600 dark:text-green-400" : ""}`}>
+                      <span>{hasTemplate ? "✓" : "○"}</span>
+                      <span>Template selected</span>
+                    </div>
+                    <div className={`flex items-center gap-2 ${hasCredential ? "text-green-600 dark:text-green-400" : ""}`}>
+                      <span>{hasCredential ? "✓" : "○"}</span>
+                      <span>Credential attached</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </DashboardLayout>
