@@ -88,7 +88,9 @@ def _parse_date_range(request: Request, default_days: int = 30) -> tuple[date, d
     return _date_window(default_days)
 
 
-def _parse_pagination(request: Request, default_limit: int = 200, max_limit: int = 2000) -> tuple[int, int] | Response:
+def _parse_pagination(
+    request: Request, default_limit: int = 200, max_limit: int = 2000
+) -> tuple[int, int] | Response:
     limit_raw = request.query_params.get("limit")
     offset_raw = request.query_params.get("offset")
     try:

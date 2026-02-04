@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import uuid
 from datetime import timedelta
@@ -21,6 +22,13 @@ from pgvector.django import IvfflatIndex, VectorField
 
 if TYPE_CHECKING:
     pass
+
+
+def _make_check_constraint(expr: models.Q, *, name: str) -> models.CheckConstraint:
+    params = inspect.signature(models.CheckConstraint).parameters
+    if "condition" in params:
+        return models.CheckConstraint(condition=expr, name=name)
+    return models.CheckConstraint(check=expr, name=name)
 
 
 class UserManager(BaseUserManager["User"]):
@@ -199,12 +207,12 @@ class MemoryConfiguration(models.Model):
     class Meta:
         db_table = "memory_configurations"
         constraints = [
-            models.CheckConstraint(
-                check=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
+            _make_check_constraint(
+                ~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
                 name="memory_config_requires_scope",
             ),
-            models.CheckConstraint(
-                check=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
+            _make_check_constraint(
+                ~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
                 name="memory_config_single_scope",
             ),
         ]

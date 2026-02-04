@@ -68,10 +68,10 @@ from infrastructure.orm.models import (
     MemoryConfiguration,
     MemorySession,
     NodeRun,
-    TenantPolicy,
     Run,
     RunCheckpoint,
     RunEvent,
+    TenantPolicy,
     User,
 )
 from infrastructure.security import s2s
@@ -1097,10 +1097,7 @@ class RunReplayView(APIView):
         node_id = str(serializer.validated_data.get("node_id") or "").strip()
 
         try:
-            run = (
-                Run.objects.select_related("graph_version__graph")
-                .get(id=run_id, owner=user)
-            )
+            run = Run.objects.select_related("graph_version__graph").get(id=run_id, owner=user)
         except Run.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",

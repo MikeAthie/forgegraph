@@ -8,7 +8,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from adapters.api.audit_logs.serializers import AuditLogSerializer
 from adapters.api.responses import error_response, paginated_response
 from infrastructure.orm.models import AuditLog
 
@@ -74,9 +73,8 @@ class AuditLogListView(APIView):
                 }
             )
 
-        serialized = AuditLogSerializer(data, many=True).data
         return paginated_response(
-            data=serialized,
+            data=data,
             page=(offset // limit) + 1,
             page_size=limit,
             total_count=total_count,

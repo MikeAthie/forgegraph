@@ -12,9 +12,7 @@ def add_personal_life_manager_template(apps, schema_editor):
     GraphTemplate = apps.get_model("orm", "GraphTemplate")
 
     # Shift existing templates down to make room at position 0
-    GraphTemplate.objects.filter(is_active=True).update(
-        display_order=F("display_order") + 1
-    )
+    GraphTemplate.objects.filter(is_active=True).update(display_order=F("display_order") + 1)
 
     template = {
         "name": "Personal Life Manager",

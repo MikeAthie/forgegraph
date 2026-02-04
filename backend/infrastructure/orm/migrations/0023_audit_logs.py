@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from django.db import migrations, models
 import django.db.models.deletion
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -15,7 +15,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="AuditLog",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
                 ("tenant_id", models.UUIDField(db_index=True)),
                 ("action", models.CharField(max_length=64)),
                 ("resource_type", models.CharField(max_length=64)),
@@ -46,8 +51,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="auditlog",
-            index=models.Index(
-                fields=["action", "created_at"], name="audit_logs_action_time_idx"
-            ),
+            index=models.Index(fields=["action", "created_at"], name="audit_logs_action_time_idx"),
         ),
     ]
