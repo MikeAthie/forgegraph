@@ -200,11 +200,11 @@ class MemoryConfiguration(models.Model):
         db_table = "memory_configurations"
         constraints = [
             models.CheckConstraint(
-                condition=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
+                check=~(models.Q(graph__isnull=True) & models.Q(user__isnull=True)),
                 name="memory_config_requires_scope",
             ),
             models.CheckConstraint(
-                condition=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
+                check=~(models.Q(graph__isnull=False) & models.Q(user__isnull=False)),
                 name="memory_config_single_scope",
             ),
         ]
@@ -574,6 +574,75 @@ class LLMBudget(models.Model):
 
     def __str__(self) -> str:
         return f"LLMBudget {self.tenant_id} ${self.monthly_limit_usd}"
+
+
+class LLMQuota(models.Model):
+    """Monthly LLM usage quotas per tenant."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    monthly_token_limit = models.PositiveIntegerField(null=True, blank=True)
+    monthly_cost_limit_usd = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "llm_quotas"
+
+    def __str__(self) -> str:
+        return f"LLMQuota {self.tenant_id}"
+
+
+class AuditLog(models.Model):
+    """Append-only audit log entries."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    action = models.CharField(max_length=64)
+    resource_type = models.CharField(max_length=64)
+    resource_id = models.CharField(max_length=128)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "audit_logs"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant_id", "created_at"], name="audit_logs_tenant_time_idx"),
+            models.Index(fields=["action", "created_at"], name="audit_logs_action_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"AuditLog {self.action} {self.resource_type} {self.resource_id}"
+
+
+class TenantPolicy(models.Model):
+    """Per-tenant guardrail policy for egress and LLM usage."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    http_allowlist = models.JSONField(default=list, blank=True)
+    http_denylist = models.JSONField(default=list, blank=True)
+    http_default_deny = models.BooleanField(default=False)
+    allowed_providers = models.JSONField(default=list, blank=True)
+    allowed_models = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tenant_policies"
+
+    def __str__(self) -> str:
+        return f"TenantPolicy {self.tenant_id}"
 
 
 class MemoryChunk(models.Model):

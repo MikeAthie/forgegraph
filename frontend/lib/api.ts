@@ -104,6 +104,7 @@ const API_PATHS = {
     invoke: "/api/runs/invoke",
     cancel: (runId: string) => `/api/runs/${runId}/cancel`,
     resume: (runId: string) => `/api/runs/${runId}/resume`,
+    replay: (runId: string) => `/api/runs/${runId}/replay`,
   },
   approvals: {
     list: "/api/approvals/",
@@ -121,6 +122,9 @@ const API_PATHS = {
   templates: {
     list: "/api/templates/",
     clone: (templateId: string) => `/api/templates/${templateId}/clone`,
+  },
+  auditLogs: {
+    list: "/api/audit-logs/",
   },
 } as const;
 
@@ -703,6 +707,10 @@ export interface InvokeRunInput {
   input_json?: Record<string, unknown>;
 }
 
+export interface ReplayRunInput {
+  node_id?: string;
+}
+
 export const runsApi = {
   list: async (): Promise<RunListItem[]> => {
     const response = await api.get<ApiSuccessResponse<RunListItem[]>>(API_PATHS.runs.list);
@@ -736,6 +744,14 @@ export const runsApi = {
     );
     return response.data.data;
   },
+
+  replay: async (runId: string, input?: ReplayRunInput): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(
+      API_PATHS.runs.replay(runId),
+      input ?? {},
+    );
+    return response.data.data;
+  },
 };
 
 export const approvalsApi = {
@@ -753,6 +769,22 @@ export const approvalsApi = {
   get: async (approvalId: string): Promise<ApprovalTask> => {
     const response = await api.get<ApiSuccessResponse<ApprovalTask>>(API_PATHS.approvals.detail(approvalId));
     return response.data.data;
+  },
+};
+
+export const auditLogsApi = {
+  list: async (params?: {
+    action?: string;
+    resource_type?: string;
+    actor_email?: string;
+    tenant_id?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiSuccessResponse<AuditLogEntry[]>> => {
+    const response = await api.get<ApiSuccessResponse<AuditLogEntry[]>>(API_PATHS.auditLogs.list, {
+      params,
+    });
+    return response.data;
   },
 };
 
@@ -810,6 +842,17 @@ export type MemoryAnalyticsCosts = {
     date: string;
     summarization_cost_usd: number;
   }>;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  tenant_id: string;
+  actor_email: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
 };
 
 export type MemoryAnalyticsPerformance = {

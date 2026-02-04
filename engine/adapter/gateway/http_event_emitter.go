@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -10,9 +11,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/forgegraph/engine/adapter/metrics"
 	"github.com/forgegraph/engine/application/port"
 )
 
@@ -32,6 +35,10 @@ type HTTPEventEmitter struct {
 	// Configuration
 	maxRetries int
 	retryDelay time.Duration
+
+	// Optional disk spool for undelivered events
+	spoolPath string
+	spoolMu   sync.Mutex
 }
 
 // HTTPEventEmitterConfig holds configuration for the event emitter
@@ -53,6 +60,9 @@ type HTTPEventEmitterConfig struct {
 
 	// SignatureSecret is the shared secret for S2S callback signing (optional)
 	SignatureSecret string
+
+	// SpoolPath enables optional disk persistence for undelivered events (JSONL)
+	SpoolPath string
 }
 
 // DefaultHTTPEventEmitterConfig returns sensible defaults
@@ -96,10 +106,18 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) *HTTPEventEmitter {
 		eventChan:   make(chan *port.ExecutionEvent, bufferSize),
 		maxRetries:  maxRetries,
 		retryDelay:  retryDelay,
+		spoolPath:   config.SpoolPath,
 	}
 
 	// Start background worker for async events
 	go emitter.worker()
+	if emitter.spoolPath != "" {
+		go func() {
+			if err := emitter.flushSpool(context.Background()); err != nil {
+				log.Printf("Warning: failed to flush event spool: %v", err)
+			}
+		}()
+	}
 
 	return emitter
 }
@@ -110,7 +128,7 @@ func (e *HTTPEventEmitter) Emit(ctx context.Context, event *port.ExecutionEvent)
 		return nil // No callback URL configured, skip silently
 	}
 
-	return e.sendWithRetry(ctx, event)
+	return e.sendWithRetry(ctx, event, true)
 }
 
 // EmitAsync queues an event for asynchronous delivery
@@ -131,7 +149,8 @@ func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
 		// Channel full, log and drop
 		e.closeMu.Unlock()
 		e.pending.Done()
-		log.Printf("Warning: Event channel full, dropping event: %s for run %s", event.Type, event.RunID)
+		metrics.RecordEventDrop("buffer_full", event.Type.String())
+		log.Printf("Warning: Event channel full, dropping event: %s for run %s (event_id=%s)", event.Type, event.RunID, event.EventID)
 	}
 }
 
@@ -158,7 +177,7 @@ func (e *HTTPEventEmitter) worker() {
 
 	for event := range e.eventChan {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := e.sendWithRetry(ctx, event); err != nil {
+		if err := e.sendWithRetry(ctx, event, true); err != nil {
 			log.Printf("Failed to send event %s for run %s: %v", event.Type, event.RunID, err)
 		}
 		cancel()
@@ -167,16 +186,20 @@ func (e *HTTPEventEmitter) worker() {
 }
 
 // sendWithRetry sends an event with retry logic
-func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.ExecutionEvent) error {
+func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.ExecutionEvent, spoolOnFailure bool) error {
 	var lastErr error
 
 	for attempt := 1; attempt <= e.maxRetries; attempt++ {
 		err := e.send(ctx, event)
 		if err == nil {
+			metrics.RecordEventDeliverySuccess(event.Type.String())
 			return nil
 		}
 
 		lastErr = err
+		if attempt > 1 {
+			metrics.RecordEventDeliveryRetry(event.Type.String())
+		}
 
 		// Don't retry on context cancellation
 		if ctx.Err() != nil {
@@ -193,6 +216,10 @@ func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.Execut
 		}
 	}
 
+	metrics.RecordEventDeliveryFailure(event.Type.String())
+	if spoolOnFailure {
+		e.appendToSpool(event)
+	}
 	return fmt.Errorf("failed after %d retries: %w", e.maxRetries, lastErr)
 }
 
@@ -234,6 +261,101 @@ func signPayload(secret string, timestamp string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(message)
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) {
+	if e.spoolPath == "" {
+		return
+	}
+
+	e.spoolMu.Lock()
+	defer e.spoolMu.Unlock()
+
+	file, err := os.OpenFile(e.spoolPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		log.Printf("Warning: failed to open event spool: %v", err)
+		return
+	}
+	defer file.Close()
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("Warning: failed to marshal event for spool: %v", err)
+		return
+	}
+
+	if _, err := file.Write(append(payload, '\n')); err != nil {
+		log.Printf("Warning: failed to write event to spool: %v", err)
+		return
+	}
+
+	metrics.RecordEventSpooled(event.Type.String())
+}
+
+func (e *HTTPEventEmitter) flushSpool(ctx context.Context) error {
+	if e.spoolPath == "" {
+		return nil
+	}
+
+	e.spoolMu.Lock()
+	defer e.spoolMu.Unlock()
+
+	file, err := os.Open(e.spoolPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var remaining []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		var event port.ExecutionEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			log.Printf("Warning: failed to parse spooled event: %v", err)
+			continue
+		}
+		if err := e.sendWithRetry(ctx, &event, false); err != nil {
+			remaining = append(remaining, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Warning: failed to read event spool: %v", err)
+		return err
+	}
+
+	if len(remaining) == 0 {
+		if err := os.Remove(e.spoolPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+
+	tmpPath := fmt.Sprintf("%s.tmp", e.spoolPath)
+	if err := os.WriteFile(tmpPath, []byte(fmt.Sprintf("%s\n", remaining[0])), 0o600); err != nil {
+		return err
+	}
+	if len(remaining) > 1 {
+		file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return err
+		}
+		for _, line := range remaining[1:] {
+			if _, err := file.Write(append([]byte(line), '\n')); err != nil {
+				file.Close()
+				return err
+			}
+		}
+		file.Close()
+	}
+	return os.Rename(tmpPath, e.spoolPath)
 }
 
 // Close shuts down the emitter and flushes pending events

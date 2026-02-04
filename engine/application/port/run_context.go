@@ -13,6 +13,7 @@ type RunContext struct {
 	CurrentSummary  *entity.Summary
 	TrackMessage    func(count int)
 	MemoryRetriever MemoryRetriever
+	Policy          *entity.ExecutionPolicy
 }
 
 type runContextKey struct{}
@@ -36,6 +37,15 @@ func RunContextFrom(ctx context.Context) *RunContext {
 		}
 	}
 	return nil
+}
+
+// PolicyFromContext extracts an execution policy from context.
+func PolicyFromContext(ctx context.Context) *entity.ExecutionPolicy {
+	rc := RunContextFrom(ctx)
+	if rc == nil {
+		return nil
+	}
+	return rc.Policy
 }
 
 type tenantIDKey struct{}

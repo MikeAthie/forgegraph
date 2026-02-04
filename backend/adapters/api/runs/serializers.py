@@ -34,6 +34,12 @@ class RunResumeSerializer(serializers.Serializer[Any]):
     input_json = serializers.JSONField(required=False, default=dict)
 
 
+class RunReplaySerializer(serializers.Serializer[Any]):
+    """Serializer for replaying a run from a checkpoint."""
+
+    node_id = serializers.CharField(required=False, allow_blank=True)
+
+
 class RunListSerializer(serializers.Serializer[Any]):
     """Serializer for run list output."""
 

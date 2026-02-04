@@ -203,6 +203,16 @@ export default function Header() {
                   <DropdownMenuItem
                     onSelect={(event) => {
                       event.preventDefault();
+                      void router.push("/admin/audit-logs");
+                    }}
+                    className="cursor-pointer"
+                  >
+                    Audit logs
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
                       if (isLoggingOut) return;
                       void handleLogout();
                     }}

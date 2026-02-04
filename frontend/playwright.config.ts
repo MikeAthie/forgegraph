@@ -74,7 +74,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `python manage.py migrate && python manage.py runserver 127.0.0.1:${backendPort} --noreload`,
+      command: `python manage.py migrate --noinput --verbosity 0 && python manage.py runserver 127.0.0.1:${backendPort} --noreload --verbosity 0`,
       url: `${backendUrl}/health`,
       reuseExistingServer: !process.env.CI,
       cwd: path.join(__dirname, "..", "backend"),

@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from adapters.api.credentials.serializers import APIKeyCreateSerializer, APIKeySerializer
 from adapters.api.responses import error_response, success_response
+from application.services.audit_log import record_audit_log
 from infrastructure.crypto.encryption import encrypt_api_key
 from infrastructure.orm.models import APIKey, User
 
@@ -56,6 +57,15 @@ class CredentialsListCreateView(APIView):
                 status=400,
             )
 
+        record_audit_log(
+            actor=user,
+            tenant_id=str(user.id),
+            action="credential.created",
+            resource_type="credential",
+            resource_id=str(key.id),
+            metadata={"provider": provider, "name": name},
+        )
+
         return success_response(APIKeySerializer(key).data)
 
 
@@ -72,6 +82,15 @@ class CredentialsDetailView(APIView):
                 message="Credential not found",
                 status=404,
             )
+
+        record_audit_log(
+            actor=user,
+            tenant_id=str(user.id),
+            action="credential.deleted",
+            resource_type="credential",
+            resource_id=str(key.id),
+            metadata={"provider": key.provider, "name": key.name},
+        )
 
         key.delete()
         return success_response({"deleted": True})
