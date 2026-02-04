@@ -51,7 +51,6 @@ services:
       DJANGO_SUPERUSER_PASSWORD: admin123456
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
-      ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000

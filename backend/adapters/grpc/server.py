@@ -8,7 +8,6 @@ import django
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
-from adapters.grpc.memory_service import MemoryService
 from infrastructure.grpc import engine_pb2_grpc as engine_pb2_grpc_module
 
 engine_pb2_grpc = cast(Any, engine_pb2_grpc_module)
@@ -17,6 +16,8 @@ engine_pb2_grpc = cast(Any, engine_pb2_grpc_module)
 def serve() -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
+
+    from adapters.grpc.memory_service import MemoryService
 
     host = os.getenv("MEMORY_GRPC_HOST", "0.0.0.0")
     port = os.getenv("MEMORY_GRPC_PORT", "50052")
