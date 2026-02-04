@@ -159,3 +159,22 @@ class RunEventSerializer(serializers.Serializer[Any]):
             )
 
         return attrs
+
+
+class EngineExecutionEventSerializer(serializers.Serializer[Any]):
+    """Serializer for execution events emitted by the engine."""
+
+    event_id = serializers.CharField(required=False, allow_blank=True)
+    version = serializers.IntegerField(required=False)
+    type = serializers.CharField()
+    run_id = serializers.UUIDField()
+    tenant_id = serializers.UUIDField()
+    node_id = serializers.CharField(required=False, allow_blank=True)
+    node_type = serializers.CharField(required=False, allow_blank=True)
+    node_name = serializers.CharField(required=False, allow_blank=True)
+    attempt = serializers.IntegerField(required=False, min_value=1)
+    input = serializers.JSONField(required=False)
+    output = serializers.JSONField(required=False)
+    error = serializers.CharField(required=False, allow_blank=True)
+    timestamp = serializers.IntegerField(required=False)
+    duration_ms = serializers.IntegerField(required=False)

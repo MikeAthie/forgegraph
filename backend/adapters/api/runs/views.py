@@ -8,7 +8,8 @@ import asyncio
 import copy
 import json as pyjson
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
+from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
@@ -16,7 +17,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Case, IntegerField, Prefetch, When
+from django.db.models import Case, IntegerField, Prefetch, Sum, When
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -30,6 +31,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from adapters.api.responses import error_response, success_response
 from adapters.api.runs.serializers import (
+    EngineExecutionEventSerializer,
     RunDetailWithNodeRunsSerializer,
     RunEventSerializer,
     RunInvokeSerializer,
@@ -42,16 +44,24 @@ from adapters.gateways.grpc_engine_client import (
     EngineExecutionError,
     GrpcEngineClient,
 )
-from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
+from adapters.ws.runs.broadcast import (
+    broadcast_node_run_updated,
+    broadcast_run_schema_validation,
+    broadcast_run_updated,
+)
+from application.services.llm_pricing import calculate_cost
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
     validate_json_schema,
 )
 from infrastructure.orm.models import (
+    APIKey,
     ApprovalTask,
     Graph,
     GraphVersion,
+    LLMBudget,
+    LLMUsage,
     MemoryConfiguration,
     MemorySession,
     NodeRun,
@@ -60,6 +70,7 @@ from infrastructure.orm.models import (
     RunEvent,
     User,
 )
+from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +87,38 @@ def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
 def get_tenant_id(request: Request) -> str:
     """Get tenant ID from the authenticated user."""
     user = cast(User, request.user)
+    return get_tenant_id_for_user(user)
+
+
+def get_tenant_id_for_user(user: User) -> str:
     if hasattr(user, "tenant_id") and user.tenant_id:
         return str(user.tenant_id)
     return str(user.id)
+
+
+def get_tenant_id_for_run(run: Run) -> str:
+    return get_tenant_id_for_user(run.owner)
+
+
+def check_llm_budget(user: User) -> Response | None:
+    tenant_id = get_tenant_id_for_user(user)
+    budget = LLMBudget.objects.filter(tenant_id=tenant_id).first()
+    if not budget:
+        return None
+
+    month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    total_cost = LLMUsage.objects.filter(
+        tenant_id=tenant_id, created_at__gte=month_start
+    ).aggregate(total=Sum("cost_usd")).get("total") or Decimal("0")
+
+    if total_cost >= budget.monthly_limit_usd:
+        return error_response(
+            code="BUDGET_EXCEEDED",
+            message="Monthly LLM budget exceeded. Increase your limit or wait for next month.",
+            status=status.HTTP_402_PAYMENT_REQUIRED,
+        )
+
+    return None
 
 
 def get_memory_config_for_graph(graph: Graph, user: User) -> MemoryConfiguration | None:
@@ -264,6 +304,79 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
     cleaned = strip_sentinel_edges(graph_json)
     expanded = expand_subgraphs(cleaned, owner)
     return apply_memory_namespace_prefix(expanded, owner.id)
+
+
+def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:
+    allowed_providers = set(getattr(settings, "ALLOWED_LLM_PROVIDERS", ["openai", "anthropic"]))
+    nodes = graph_json.get("nodes")
+    if not isinstance(nodes, list):
+        return []
+
+    errors: list[dict[str, Any]] = []
+    prompt_nodes: list[tuple[str, str, str]] = []
+    credential_ids: set[str] = set()
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") != "prompt":
+            continue
+
+        node_id = str(node.get("id") or "prompt")
+        config_raw = node.get("config")
+        config = config_raw if isinstance(config_raw, dict) else {}
+        provider = str(config.get("provider") or "").strip().lower()
+        credential_id = str(config.get("credential_id") or "").strip()
+
+        if provider and provider not in allowed_providers:
+            errors.append(
+                {
+                    "field": "provider",
+                    "message": f"Prompt node '{node_id}' uses unsupported provider '{provider}'.",
+                    "suggestion": f"Use one of: {', '.join(sorted(allowed_providers))}.",
+                }
+            )
+
+        if not credential_id:
+            errors.append(
+                {
+                    "field": "credential_id",
+                    "message": f"Prompt node '{node_id}' is missing a credential.",
+                    "suggestion": "Select a credential for each prompt node before running.",
+                }
+            )
+            continue
+
+        credential_ids.add(credential_id)
+        prompt_nodes.append((node_id, provider, credential_id))
+
+    if not credential_ids:
+        return errors
+
+    credentials = APIKey.objects.filter(id__in=credential_ids, user=user)
+    credential_map = {str(credential.id): credential for credential in credentials}
+
+    for node_id, provider, credential_id in prompt_nodes:
+        credential = credential_map.get(credential_id)
+        if credential is None:
+            errors.append(
+                {
+                    "field": "credential_id",
+                    "message": f"Credential '{credential_id}' for node '{node_id}' was not found.",
+                    "suggestion": "Select a credential you own for this node.",
+                }
+            )
+            continue
+        if provider and provider != credential.provider:
+            errors.append(
+                {
+                    "field": "provider",
+                    "message": f"Provider mismatch for node '{node_id}'.",
+                    "suggestion": f"Choose a {credential.provider} provider or update the credential.",
+                }
+            )
+
+    return errors
 
 
 class RunListView(APIView):
@@ -456,6 +569,10 @@ class RunStartView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        budget_response = check_llm_budget(user)
+        if budget_response is not None:
+            return budget_response
+
         input_schema, _, _, _ = extract_schema_metadata(graph_version.graph_json)
         if input_schema:
             try:
@@ -476,6 +593,25 @@ class RunStartView(APIView):
                     details=schema_errors,
                 )
 
+        # Prepare graph for engine (inline subgraphs, enforce memory namespace)
+        try:
+            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
+        except ValueError as exc:
+            return error_response(
+                code="INVALID_SUBGRAPH",
+                message=str(exc),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        credential_errors = validate_prompt_credentials(prepared_graph, user)
+        if credential_errors:
+            return error_response(
+                code="INVALID_CREDENTIALS",
+                message="Prompt node credentials are missing or invalid.",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=credential_errors,
+            )
+
         run = Run.objects.create(
             owner=user,
             graph_version=graph_version,
@@ -488,16 +624,6 @@ class RunStartView(APIView):
             error_message="",
         )
         broadcast_run_updated(run)
-
-        # Prepare graph for engine (inline subgraphs, enforce memory namespace)
-        try:
-            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
-        except ValueError as exc:
-            return error_response(
-                code="INVALID_SUBGRAPH",
-                message=str(exc),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         # Track memory session for cross-run buffers.
         upsert_memory_session(user, session_id)
@@ -601,6 +727,10 @@ class RunInvokeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        budget_response = check_llm_budget(user)
+        if budget_response is not None:
+            return budget_response
+
         active_run = (
             Run.objects.filter(
                 owner=user,
@@ -658,6 +788,15 @@ class RunInvokeView(APIView):
                 code="INVALID_SUBGRAPH",
                 message=str(exc),
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        credential_errors = validate_prompt_credentials(graph_json, user)
+        if credential_errors:
+            return error_response(
+                code="INVALID_CREDENTIALS",
+                message="Prompt node credentials are missing or invalid.",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=credential_errors,
             )
         checkpoint_graph_json = pyjson.dumps(graph_json)
 
@@ -962,6 +1101,274 @@ class RunResumeView(APIView):
         return success_response({"resumed": True, "run_id": str(run.id)})
 
 
+class EngineRunEventsView(APIView):
+    """Persist + broadcast engine execution events (S2S)."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        timestamp_header = request.headers.get("X-Forgegraph-Timestamp", "")
+        signature_header = request.headers.get("X-Forgegraph-Signature", "")
+        ok, reason = s2s.verify_request(
+            timestamp_ms=timestamp_header,
+            signature=signature_header,
+            body=request.body or b"",
+        )
+        if not ok:
+            return Response(
+                {"detail": "Unauthorized", "reason": reason}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        serializer = EngineExecutionEventSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        event = serializer.validated_data
+        run_id = event.get("run_id")
+        try:
+            run = Run.objects.get(id=run_id)
+        except Run.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Run with id '{run_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        tenant_id = str(event.get("tenant_id"))
+        expected_tenant_id = get_tenant_id_for_run(run)
+        if tenant_id != expected_tenant_id:
+            return error_response(
+                code="FORBIDDEN",
+                message="Tenant mismatch for run event",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        event_id = event.get("event_id")
+        if event_id and RunEvent.objects.filter(run=run, external_id=event_id).exists():
+            return success_response({"received": True, "duplicate": True})
+
+        event_type = event.get("type", "")
+        timestamp_ms = event.get("timestamp")
+        event_time = _datetime_from_timestamp_ms(timestamp_ms)
+
+        def _save_event(event_type_name: str, payload: dict[str, Any]) -> None:
+            RunEvent.objects.create(
+                run=run,
+                event_type=event_type_name,
+                payload=payload,
+                external_id=event_id,
+            )
+
+        if event_type == "run.schema_validation":
+            payload = event.get("output") or {}
+            _save_event("run.schema_validation", payload)
+            message = broadcast_run_schema_validation(run=run, payload=payload)
+            return success_response(message)
+
+        if event_type in {
+            "run_started",
+            "run_completed",
+            "run_failed",
+            "run_paused",
+            "run_resumed",
+            "run_canceled",
+        }:
+            run_payload: dict[str, Any] = {}
+            update_fields: list[str] = []
+
+            if event_type == "run_started":
+                run_payload["status"] = "running"
+                run.status = "running"
+                update_fields.append("status")
+                if event_time:
+                    run_payload["started_at"] = event_time
+                    run.started_at = event_time
+                    update_fields.append("started_at")
+
+            if event_type == "run_completed":
+                run_payload["status"] = "succeeded"
+                run.status = "succeeded"
+                update_fields.append("status")
+                if event_time:
+                    run_payload["ended_at"] = event_time
+                    run.ended_at = event_time
+                    update_fields.append("ended_at")
+                if "output" in event:
+                    run_payload["output_json"] = event.get("output")
+                    run.output_json = event.get("output")
+                    update_fields.append("output_json")
+
+            if event_type == "run_failed":
+                run_payload["status"] = "failed"
+                run.status = "failed"
+                update_fields.append("status")
+                if event_time:
+                    run_payload["ended_at"] = event_time
+                    run.ended_at = event_time
+                    update_fields.append("ended_at")
+                error_message = event.get("error") or ""
+                run_payload["error_message"] = error_message
+                run.error_message = error_message
+                update_fields.append("error_message")
+
+            if event_type == "run_canceled":
+                run_payload["status"] = "canceled"
+                run.status = "canceled"
+                update_fields.append("status")
+                if event_time:
+                    run_payload["ended_at"] = event_time
+                    run.ended_at = event_time
+                    update_fields.append("ended_at")
+
+            if event_type == "run_paused":
+                run_payload["status"] = "paused"
+                run.status = "paused"
+                update_fields.append("status")
+                node_id = event.get("node_id") or ""
+                if node_id:
+                    run_payload["paused_node_id"] = node_id
+                    run.paused_node_id = node_id
+                    update_fields.append("paused_node_id")
+                pause_payload = event.get("output") or {}
+                run_payload["pause_payload"] = pause_payload
+                if pause_payload:
+                    run_payload["pause_state_json"] = pause_payload
+                    run.pause_state_json = pause_payload
+                    update_fields.append("pause_state_json")
+
+            if event_type == "run_resumed":
+                run_payload["status"] = "running"
+                run.status = "running"
+                update_fields.append("status")
+                run_payload["paused_node_id"] = None
+                run.paused_node_id = None
+                update_fields.append("paused_node_id")
+                run_payload["pause_state_json"] = None
+                run.pause_state_json = None
+                update_fields.append("pause_state_json")
+
+            if update_fields:
+                run.save(update_fields=sorted(set(update_fields)))
+
+            _save_event("run.updated", run_payload)
+            message = broadcast_run_updated(run)
+            return success_response(message)
+
+        if event_type in {
+            "node_started",
+            "node_completed",
+            "node_failed",
+            "node_skipped",
+            "node_retrying",
+        }:
+            node_id = event.get("node_id") or ""
+            node_type = event.get("node_type") or ""
+            attempt = int(event.get("attempt") or 1)
+
+            node_payload: dict[str, Any] = {
+                "node_id": node_id,
+                "node_type": node_type,
+                "attempt": attempt,
+            }
+
+            if event_type == "node_started":
+                node_payload["status"] = "running"
+                if event_time:
+                    node_payload["started_at"] = event_time
+            elif event_type == "node_completed":
+                node_payload["status"] = "succeeded"
+                if event_time:
+                    node_payload["ended_at"] = event_time
+                node_payload["output_json"] = event.get("output")
+            elif event_type == "node_failed":
+                node_payload["status"] = "failed"
+                if event_time:
+                    node_payload["ended_at"] = event_time
+                error_message = event.get("error") or ""
+                node_payload["error_json"] = {"error": error_message}
+            elif event_type == "node_skipped":
+                node_payload["status"] = "skipped"
+                if event_time:
+                    node_payload["ended_at"] = event_time
+            elif event_type == "node_retrying":
+                node_payload["status"] = "running"
+
+            with transaction.atomic():
+                node_run, created = NodeRun.objects.get_or_create(
+                    run=run,
+                    node_id=node_id,
+                    attempt=attempt,
+                    defaults={
+                        "node_type": node_type,
+                        "status": node_payload["status"],
+                    },
+                )
+
+                node_update_fields: list[str] = []
+                if not created and node_run.node_type != node_type:
+                    node_run.node_type = node_type
+                    node_update_fields.append("node_type")
+
+                node_run.status = node_payload["status"]
+                node_update_fields.append("status")
+
+                if "started_at" in node_payload:
+                    node_run.started_at = node_payload["started_at"]
+                    node_update_fields.append("started_at")
+                if "ended_at" in node_payload:
+                    node_run.ended_at = node_payload["ended_at"]
+                    node_update_fields.append("ended_at")
+                if "output_json" in node_payload:
+                    node_run.output_json = node_payload["output_json"]
+                    node_update_fields.append("output_json")
+                if "error_json" in node_payload:
+                    node_run.error_json = node_payload["error_json"]
+                    node_update_fields.append("error_json")
+
+                node_run.save(update_fields=sorted(set(node_update_fields)))
+                _save_event("node_run.updated", node_payload)
+
+                if node_type == "prompt" and node_payload.get("output_json"):
+                    output_json = node_payload.get("output_json") or {}
+                    usage = output_json.get("usage") or {}
+                    prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                    completion_tokens = int(usage.get("completion_tokens") or 0)
+                    total_tokens = int(usage.get("total_tokens") or 0)
+                    model = str(output_json.get("model") or "")
+                    provider = str(output_json.get("provider") or "openai")
+                    if prompt_tokens or completion_tokens or total_tokens:
+                        tenant_id = get_tenant_id_for_run(run)
+                        cost = calculate_cost(provider, model, prompt_tokens, completion_tokens)
+                        LLMUsage.objects.create(
+                            tenant_id=tenant_id,
+                            run=run,
+                            node_id=node_id,
+                            provider=provider,
+                            model=model,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                            cost_usd=cost,
+                        )
+
+            message = broadcast_node_run_updated(run=run, node_run=node_run)
+            return success_response(message)
+
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="Unknown event type",
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
 class RunEventsView(APIView):
     """Persist + broadcast Run/NodeRun delta events."""
 
@@ -1148,7 +1555,8 @@ class RunEventsView(APIView):
             except Exception as exc:  # pragma: no cover - log and continue
                 logger.warning("Failed to persist schema validation event: %s", exc)
 
-            return success_response({"received": True})
+            message = broadcast_run_schema_validation(run=run, payload=payload)
+            return success_response(message)
 
         return error_response(
             code="VALIDATION_ERROR",
@@ -1181,6 +1589,15 @@ def _format_sse(message: dict[str, Any], event_name: str | None = None) -> str:
         lines.append(f"event: {event_name}")
     lines.append(f"data: {payload}")
     return "\n".join(lines) + "\n\n"
+
+
+def _datetime_from_timestamp_ms(timestamp_ms: int | None) -> datetime | None:
+    if not timestamp_ms:
+        return None
+    try:
+        return datetime.fromtimestamp(timestamp_ms / 1000, tz=dt_timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def _get_user_from_request(request: Request) -> User | None:

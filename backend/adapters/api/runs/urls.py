@@ -7,6 +7,7 @@ Clean Architecture: Interface Adapters layer.
 from django.urls import path
 
 from adapters.api.runs.views import (
+    EngineRunEventsView,
     RunCancelView,
     RunDetailView,
     RunEventsStreamView,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("<uuid:run_id>", RunDetailView.as_view(), name="run-detail"),
     path("<uuid:run_id>/cancel", RunCancelView.as_view(), name="run-cancel"),
     path("<uuid:run_id>/events", RunEventsView.as_view(), name="run-events"),
+    path("engine-events", EngineRunEventsView.as_view(), name="run-engine-events"),
     path("<uuid:run_id>/stream", RunEventsStreamView.as_view(), name="run-stream"),
     path("<uuid:run_id>/resume", RunResumeView.as_view(), name="run-resume"),
 ]

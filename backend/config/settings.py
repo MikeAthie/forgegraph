@@ -240,8 +240,15 @@ ENGINE_HOST = os.environ.get("ENGINE_HOST", "localhost")
 ENGINE_PORT = int(os.environ.get("ENGINE_PORT", "50051"))
 ENGINE_CALLBACK_URL = os.environ.get(
     "ENGINE_CALLBACK_URL",
-    "http://localhost:8000/api/runs/{run_id}/events/",
+    "http://localhost:8000/api/runs/engine-events",
 )
+ENGINE_CALLBACK_SECRET = os.environ.get("ENGINE_CALLBACK_SECRET", "")
+ENGINE_CALLBACK_MAX_SKEW_SECONDS = int(os.environ.get("ENGINE_CALLBACK_MAX_SKEW_SECONDS", "600"))
+ALLOWED_LLM_PROVIDERS = [
+    provider.strip().lower()
+    for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic").split(",")
+    if provider.strip()
+]
 
 # Encryption Configuration
 # Generate key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
