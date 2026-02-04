@@ -51,7 +51,10 @@ services:
       DJANGO_SUPERUSER_PASSWORD: admin123456
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
-      ENGINE_CALLBACK_URL: http://backend:8000/api/runs/{run_id}/events/
+      ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
+      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
+      ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
+      CONTROL_PLANE_URL: http://backend:8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +86,7 @@ services:
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
       MEMORY_GRPC_HOST: memory-grpc
       MEMORY_GRPC_PORT: 50052
     depends_on:

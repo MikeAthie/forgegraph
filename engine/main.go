@@ -52,6 +52,12 @@ type Config struct {
 	MetricsPort          string
 	MemoryGRPCHost       string
 	MemoryGRPCPort       string
+	CallbackSecret       string
+	CallbackURL          string
+	ControlPlaneURL      string
+	EventMaxRetries      int
+	EventRetryDelayMs    int
+	EventBufferSize      int
 }
 
 // LoadConfig loads configuration from environment variables
@@ -77,6 +83,12 @@ func LoadConfig() *Config {
 		MetricsPort:          getEnv("METRICS_PORT", "9090"),
 		MemoryGRPCHost:       getEnv("MEMORY_GRPC_HOST", ""),
 		MemoryGRPCPort:       getEnv("MEMORY_GRPC_PORT", ""),
+		CallbackSecret:       getEnv("ENGINE_CALLBACK_SECRET", ""),
+		CallbackURL:          getEnv("ENGINE_CALLBACK_URL", ""),
+		ControlPlaneURL:      getEnv("CONTROL_PLANE_URL", ""),
+		EventMaxRetries:      getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
+		EventRetryDelayMs:    getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
+		EventBufferSize:      getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
 	}
 	return cfg
 }
@@ -317,9 +329,18 @@ func main() {
 		}
 	}
 
-	// Initialize event emitter (no-op for now, callback URL comes per-request)
-	// The actual emitter will be created per-run with the callback URL
-	emitter := port.NewNoOpEventEmitter()
+	// Initialize event emitter
+	var emitter port.EventEmitter
+	if cfg.CallbackURL != "" {
+		emitterCfg := gateway.DefaultHTTPEventEmitterConfig(cfg.CallbackURL)
+		emitterCfg.SignatureSecret = cfg.CallbackSecret
+		emitterCfg.MaxRetries = cfg.EventMaxRetries
+		emitterCfg.RetryDelay = time.Duration(cfg.EventRetryDelayMs) * time.Millisecond
+		emitterCfg.BufferSize = cfg.EventBufferSize
+		emitter = gateway.NewHTTPEventEmitter(emitterCfg)
+	} else {
+		emitter = port.NewNoOpEventEmitter()
+	}
 
 	// Initialize node executors
 	registry := port.NewExecutorRegistry()
@@ -339,13 +360,18 @@ func main() {
 		executor.NewSubgraphExecutor(registry),
 	)
 
-	// Initialize LLM client for Prompt nodes
-	llmClient, err := gateway.NewOpenAIClient()
-	if err != nil {
-		log.Warn("openai_client_not_configured", "error", err.Error(), "note", "Prompt nodes will fail without OPENAI_API_KEY")
+	// Initialize LLM client for Prompt nodes (multi-provider)
+	var resolver gateway.CredentialResolver
+	if cfg.ControlPlaneURL != "" && cfg.CallbackSecret != "" {
+		resolver = gateway.NewBackendCredentialResolver(cfg.ControlPlaneURL, cfg.CallbackSecret)
+	}
+	fallbackKey := os.Getenv("OPENAI_API_KEY")
+	llmClient := gateway.NewMultiProviderClient(resolver, fallbackKey)
+	registry.Register(executor.NewPromptExecutor(llmClient))
+	if fallbackKey == "" && resolver == nil {
+		log.Warn("llm_client_not_configured", "note", "Prompt nodes require credentials or OPENAI_API_KEY")
 	} else {
-		registry.Register(executor.NewPromptExecutor(llmClient))
-		log.Info("openai_client_initialized", "note", "Prompt nodes enabled")
+		log.Info("llm_client_initialized", "note", "Prompt nodes enabled")
 	}
 
 	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate", "memory", "tool", "subgraph", "prompt"})

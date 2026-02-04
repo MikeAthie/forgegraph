@@ -3,6 +3,8 @@ package port
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // EventType defines the type of execution event
@@ -25,6 +27,8 @@ const (
 	EventTypeNodeSkipped   EventType = "node_skipped"
 	EventTypeNodeRetrying  EventType = "node_retrying"
 )
+
+const EventVersion = 1
 
 // String returns the string representation of the event type
 func (t EventType) String() string {
@@ -54,11 +58,18 @@ func (t EventType) IsNodeEvent() bool {
 // ExecutionEvent represents an event during workflow execution.
 // Events are sent to the control plane for real-time tracking.
 type ExecutionEvent struct {
+	// EventID is a unique identifier for this event (for idempotency)
+	EventID string `json:"event_id"`
+	// Version is the schema version for this event payload
+	Version int `json:"version"`
 	// Type is the event type
 	Type EventType `json:"type"`
 
 	// RunID is the run this event belongs to
 	RunID string `json:"run_id"`
+
+	// TenantID identifies the tenant for multi-tenant isolation
+	TenantID string `json:"tenant_id,omitempty"`
 
 	// NodeID is the node this event relates to (empty for run-level events)
 	NodeID string `json:"node_id,omitempty"`
@@ -91,6 +102,8 @@ type ExecutionEvent struct {
 // NewEvent creates a new execution event with the current timestamp
 func NewEvent(eventType EventType, runID string) *ExecutionEvent {
 	return &ExecutionEvent{
+		EventID:   uuid.NewString(),
+		Version:   EventVersion,
 		Type:      eventType,
 		RunID:     runID,
 		Timestamp: time.Now().UnixMilli(),
@@ -132,6 +145,12 @@ func (e *ExecutionEvent) WithError(err string) *ExecutionEvent {
 // WithDuration adds duration to the event
 func (e *ExecutionEvent) WithDuration(durationMs int64) *ExecutionEvent {
 	e.DurationMs = durationMs
+	return e
+}
+
+// WithTenantID adds tenant information to the event
+func (e *ExecutionEvent) WithTenantID(tenantID string) *ExecutionEvent {
+	e.TenantID = tenantID
 	return e
 }
 

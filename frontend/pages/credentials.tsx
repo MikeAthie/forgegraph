@@ -1,0 +1,307 @@
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Plus, RefreshCw } from "lucide-react";
+
+import DashboardLayout from "../components/DashboardLayout";
+import ProtectedRoute from "../components/ProtectedRoute";
+import {
+  credentialsApi,
+  getApiErrorMessage,
+  type Credential,
+  type CredentialCreateInput,
+} from "../lib/api";
+import { showError, showSuccess } from "../lib/toast";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmButton,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  FormField,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
+} from "@/components/ui";
+
+const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "google", label: "Google AI" },
+];
+
+const formatDateTime = (isoString: string) => {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) {
+    return isoString;
+  }
+  return date.toLocaleString();
+};
+
+const getProviderLabel = (provider: string) => {
+  return PROVIDERS.find((p) => p.value === provider)?.label ?? provider;
+};
+
+export default function CredentialsPage() {
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [formState, setFormState] = useState<CredentialCreateInput>({
+    provider: "openai",
+    name: "",
+    api_key: "",
+  });
+
+  const fetchCredentials = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const data = await credentialsApi.list();
+        setCredentials(data);
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, "Failed to load credentials."));
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+        setIsRefreshing(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void fetchCredentials();
+  }, [fetchCredentials]);
+
+  const resetForm = () => {
+    setFormState({
+      provider: "openai",
+      name: "",
+      api_key: "",
+    });
+  };
+
+  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const created = await credentialsApi.create(formState);
+      setCredentials((prev) => [created, ...prev]);
+      showSuccess("Credential saved.");
+      resetForm();
+      setIsDialogOpen(false);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, "Failed to save credential."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (credentialId: string) => {
+    try {
+      await credentialsApi.delete(credentialId);
+      setCredentials((prev) => prev.filter((item) => item.id !== credentialId));
+      showSuccess("Credential deleted.");
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, "Failed to delete credential."));
+    }
+  };
+
+  const hasCredentials = credentials.length > 0;
+
+  const providerSummary = useMemo(() => {
+    const counts = credentials.reduce<Record<string, number>>((acc, item) => {
+      acc[item.provider] = (acc[item.provider] ?? 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts).map(([provider, count]) => ({
+      provider,
+      count,
+    }));
+  }, [credentials]);
+
+  return (
+    <ProtectedRoute>
+      <DashboardLayout>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">Credentials</h1>
+              <p className="text-sm text-muted-foreground">
+                Securely store provider keys for multi-model execution. Keys are encrypted and never shown in full.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => void fetchCredentials({ silent: true })}>
+                {isRefreshing ? <Spinner className="mr-2 h-4 w-4" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Refresh
+              </Button>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <Button onClick={() => setIsDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add credential
+                </Button>
+                <DialogContent>
+                  <form onSubmit={handleCreate} className="space-y-4">
+                    <DialogHeader>
+                      <DialogTitle>Add provider credential</DialogTitle>
+                      <DialogDescription>
+                        Store a provider API key for use in prompt nodes. The key is encrypted at rest.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <FormField label="Provider" htmlFor="provider">
+                      <Select
+                        value={formState.provider}
+                        onValueChange={(value) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            provider: value as CredentialCreateInput["provider"],
+                          }))
+                        }
+                      >
+                        <SelectTrigger id="provider">
+                          <SelectValue placeholder="Select provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PROVIDERS.map((provider) => (
+                            <SelectItem key={provider.value} value={provider.value}>
+                              {provider.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+
+                    <FormField label="Name" htmlFor="name" description="Friendly name to identify this key.">
+                      <Input
+                        id="name"
+                        value={formState.name}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
+                        placeholder="Production OpenAI"
+                        required
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="API key"
+                      htmlFor="api_key"
+                      description="Stored securely. You will only see the last 4 characters later."
+                    >
+                      <Input
+                        id="api_key"
+                        type="password"
+                        value={formState.api_key}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, api_key: event.target.value }))}
+                        placeholder="sk-..."
+                        required
+                      />
+                    </FormField>
+
+                    <DialogFooter className="gap-2">
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                        Save credential
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+
+          {providerSummary.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {providerSummary.map((item) => (
+                <Badge key={item.provider} variant="outline">
+                  {getProviderLabel(item.provider)}: {item.count}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {loading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Spinner className="h-5 w-5" />
+              Loading credentials...
+            </div>
+          ) : !hasCredentials ? (
+            <EmptyState
+              title="No credentials yet"
+              description="Add a provider key to unlock multi-model prompt nodes."
+              action={
+                <Button onClick={() => setIsDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add credential
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {credentials.map((credential) => (
+                <Card key={credential.id}>
+                  <CardHeader className="flex flex-row items-start justify-between">
+                    <div>
+                      <CardTitle className="text-base">{credential.name}</CardTitle>
+                      <p className="text-sm text-muted-foreground">{getProviderLabel(credential.provider)}</p>
+                    </div>
+                    <ConfirmButton
+                      variant="destructive"
+                      size="sm"
+                      title="Delete credential?"
+                      description="This will remove the key and any runs using it will fail until replaced."
+                      onConfirm={() => handleDelete(credential.id)}
+                    >
+                      Delete
+                    </ConfirmButton>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-sm text-muted-foreground">Key hint</div>
+                    <div className="font-mono text-sm">{credential.key_hint}</div>
+                    <div className="text-xs text-muted-foreground">Created {formatDateTime(credential.created_at)}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}

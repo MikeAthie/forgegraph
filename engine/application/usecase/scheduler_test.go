@@ -31,6 +31,7 @@ type mockPauseState struct {
 	completedNodes []string
 	skippedNodes   []string
 	graphJSON      string
+	tenantID       string
 }
 
 type mockCheckpointState struct {
@@ -109,7 +110,7 @@ func (r *mockRepository) SetRunEnded(ctx context.Context, runID, status string, 
 	return nil
 }
 
-func (r *mockRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
+func (r *mockRepository) SavePauseState(ctx context.Context, runID, pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, tenantID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pauses[runID] = mockPauseState{
@@ -118,18 +119,19 @@ func (r *mockRepository) SavePauseState(ctx context.Context, runID, pausedNodeID
 		completedNodes: completedNodes,
 		skippedNodes:   skippedNodes,
 		graphJSON:      graphJSON,
+		tenantID:       tenantID,
 	}
 	return nil
 }
 
-func (r *mockRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
+func (r *mockRepository) LoadPauseState(ctx context.Context, runID string) (pausedNodeID string, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, tenantID string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	pause, ok := r.pauses[runID]
 	if !ok {
-		return "", nil, nil, nil, "", fmt.Errorf("pause state not found")
+		return "", nil, nil, nil, "", "", fmt.Errorf("pause state not found")
 	}
-	return pause.pausedNodeID, pause.stateSnapshot, pause.completedNodes, pause.skippedNodes, pause.graphJSON, nil
+	return pause.pausedNodeID, pause.stateSnapshot, pause.completedNodes, pause.skippedNodes, pause.graphJSON, pause.tenantID, nil
 }
 
 func (r *mockRepository) ClearPauseState(ctx context.Context, runID string) error {
@@ -1218,7 +1220,7 @@ func TestScheduler_PauseStopsScheduling(t *testing.T) {
 		t.Error("Expected run_paused event")
 	}
 
-	pausedNodeID, snapshot, completedNodes, skippedNodes, graphJSONLoaded, loadErr := repo.LoadPauseState(context.Background(), "run-paused")
+	pausedNodeID, snapshot, completedNodes, skippedNodes, graphJSONLoaded, _, loadErr := repo.LoadPauseState(context.Background(), "run-paused")
 	if loadErr != nil {
 		t.Fatalf("Expected pause state to be saved, got error: %v", loadErr)
 	}

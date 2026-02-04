@@ -69,6 +69,8 @@ export interface PromptNodeConfig extends BaseNodeConfig {
   template_id?: string;
   prompt_template?: string;
   system_prompt?: string;
+  provider?: string;
+  credential_id?: string;
   model?: string;
   temperature?: number;
   max_tokens?: number;

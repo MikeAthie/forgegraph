@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -209,6 +210,9 @@ export default function MemoryAnalyticsPage() {
                   disabled={loading}
                 >
                   {loading ? <Spinner size="xs" /> : "Refresh"}
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/analytics/llm">LLM Analytics</Link>
                 </Button>
                 <Button variant="outline" onClick={handleExport} disabled={!usage || !costs || !performance}>
                   Export JSON

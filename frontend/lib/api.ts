@@ -93,6 +93,10 @@ const API_PATHS = {
     clone: (promptId: string) => `/api/prompts/${promptId}/clone`,
     publish: (promptId: string) => `/api/prompts/${promptId}/publish`,
   },
+  credentials: {
+    listCreate: "/api/credentials/",
+    detail: (credentialId: string) => `/api/credentials/${credentialId}`,
+  },
   runs: {
     list: "/api/runs/",
     detail: (runId: string) => `/api/runs/${runId}`,
@@ -110,6 +114,13 @@ const API_PATHS = {
     memoryUsage: "/api/analytics/memory/usage",
     memoryCosts: "/api/analytics/memory/costs",
     memoryPerformance: "/api/analytics/memory/performance",
+    llmUsage: "/api/analytics/llm/usage",
+    llmCosts: "/api/analytics/llm/costs",
+    llmBudget: "/api/analytics/llm/budget",
+  },
+  templates: {
+    list: "/api/templates/",
+    clone: (templateId: string) => `/api/templates/${templateId}/clone`,
   },
 } as const;
 
@@ -484,6 +495,45 @@ export type PromptUpdateInput = {
 
 export type PromptOwnershipFilter = "all" | "mine" | "builtin";
 
+export type Credential = {
+  id: string;
+  provider: string;
+  name: string;
+  key_hint: string;
+  created_at: string;
+};
+
+export type CredentialCreateInput = {
+  provider: string;
+  name: string;
+  api_key: string;
+};
+
+export type GraphTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  estimated_minutes: number;
+  sample_input: Record<string, unknown>;
+};
+
+export type TemplateCloneInput = {
+  name?: string;
+  description?: string;
+  provider?: string;
+  model?: string;
+  credential_id?: string;
+};
+
+export type TemplateCloneResult = {
+  graph_id: string;
+  graph_version_id: string;
+  graph_name: string;
+  template_id: string;
+};
+
 export const promptsApi = {
   list: async (filters?: {
     category?: string;
@@ -524,6 +574,34 @@ export const promptsApi = {
     const response = await api.post<ApiSuccessResponse<PromptDetail>>(
       API_PATHS.prompts.publish(promptId),
       input ?? {},
+    );
+    return response.data.data;
+  },
+};
+
+export const credentialsApi = {
+  list: async (): Promise<Credential[]> => {
+    const response = await api.get<ApiSuccessResponse<Credential[]>>(API_PATHS.credentials.listCreate);
+    return response.data.data;
+  },
+  create: async (input: CredentialCreateInput): Promise<Credential> => {
+    const response = await api.post<ApiSuccessResponse<Credential>>(API_PATHS.credentials.listCreate, input);
+    return response.data.data;
+  },
+  delete: async (credentialId: string): Promise<void> => {
+    await api.delete(API_PATHS.credentials.detail(credentialId));
+  },
+};
+
+export const templatesApi = {
+  list: async (): Promise<GraphTemplate[]> => {
+    const response = await api.get<ApiSuccessResponse<GraphTemplate[]>>(API_PATHS.templates.list);
+    return response.data.data;
+  },
+  clone: async (templateId: string, input: TemplateCloneInput): Promise<TemplateCloneResult> => {
+    const response = await api.post<ApiSuccessResponse<TemplateCloneResult>>(
+      API_PATHS.templates.clone(templateId),
+      input,
     );
     return response.data.data;
   },
@@ -757,6 +835,63 @@ export type MemoryAnalyticsPerformance = {
   };
 };
 
+export type LLMAnalyticsUsage = {
+  period: string;
+  start_date: string;
+  end_date: string;
+  totals: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+  };
+  series: Array<{
+    date: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+  }>;
+  by_model: Array<{
+    provider: string;
+    model: string;
+    total_tokens: number;
+    cost_usd: number;
+    calls: number;
+  }>;
+  by_provider: Array<{
+    provider: string;
+    total_tokens: number;
+    cost_usd: number;
+    calls: number;
+  }>;
+};
+
+export type LLMAnalyticsCosts = {
+  period: string;
+  start_date: string;
+  end_date: string;
+  currency: string;
+  total_usd: number;
+  series: Array<{
+    date: string;
+    cost_usd: number;
+  }>;
+};
+
+export type LLMBudgetStatus = {
+  budget: {
+    monthly_limit_usd: number;
+    warning_threshold_pct: number;
+  } | null;
+  usage: {
+    month_cost_usd: number;
+  };
+  warning_threshold_usd: number | null;
+  warning: boolean;
+  over_budget: boolean;
+};
+
 export const analyticsApi = {
   getMemoryUsage: async (period: string): Promise<MemoryAnalyticsUsage> => {
     const response = await api.get<ApiSuccessResponse<MemoryAnalyticsUsage>>(API_PATHS.analytics.memoryUsage, {
@@ -775,6 +910,29 @@ export const analyticsApi = {
       API_PATHS.analytics.memoryPerformance,
       { params: { period } },
     );
+    return response.data.data;
+  },
+  getLLMUsage: async (period: string): Promise<LLMAnalyticsUsage> => {
+    const response = await api.get<ApiSuccessResponse<LLMAnalyticsUsage>>(API_PATHS.analytics.llmUsage, {
+      params: { period },
+    });
+    return response.data.data;
+  },
+  getLLMCosts: async (period: string): Promise<LLMAnalyticsCosts> => {
+    const response = await api.get<ApiSuccessResponse<LLMAnalyticsCosts>>(API_PATHS.analytics.llmCosts, {
+      params: { period },
+    });
+    return response.data.data;
+  },
+  getLLMBudget: async (): Promise<LLMBudgetStatus> => {
+    const response = await api.get<ApiSuccessResponse<LLMBudgetStatus>>(API_PATHS.analytics.llmBudget);
+    return response.data.data;
+  },
+  setLLMBudget: async (input: {
+    monthly_limit_usd: number;
+    warning_threshold_pct: number;
+  }): Promise<LLMBudgetStatus> => {
+    const response = await api.put<ApiSuccessResponse<LLMBudgetStatus>>(API_PATHS.analytics.llmBudget, input);
     return response.data.data;
   },
 };

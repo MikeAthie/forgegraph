@@ -3,6 +3,9 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,10 +20,12 @@ import (
 type HTTPEventEmitter struct {
 	client      *http.Client
 	callbackURL string
+	secret      string
 
 	// Async event handling
 	eventChan chan *port.ExecutionEvent
 	wg        sync.WaitGroup
+	pending   sync.WaitGroup
 	closed    bool
 	closeMu   sync.Mutex
 
@@ -45,6 +50,9 @@ type HTTPEventEmitterConfig struct {
 
 	// BufferSize is the size of the async event buffer (default: 100)
 	BufferSize int
+
+	// SignatureSecret is the shared secret for S2S callback signing (optional)
+	SignatureSecret string
 }
 
 // DefaultHTTPEventEmitterConfig returns sensible defaults
@@ -84,6 +92,7 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) *HTTPEventEmitter {
 	emitter := &HTTPEventEmitter{
 		client:      client,
 		callbackURL: config.CallbackURL,
+		secret:      config.SignatureSecret,
 		eventChan:   make(chan *port.ExecutionEvent, bufferSize),
 		maxRetries:  maxRetries,
 		retryDelay:  retryDelay,
@@ -112,30 +121,25 @@ func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
 		log.Printf("Warning: EmitAsync called after emitter closed, event dropped: %s", event.Type)
 		return
 	}
-	e.closeMu.Unlock()
+	e.pending.Add(1)
 
 	select {
 	case e.eventChan <- event:
+		e.closeMu.Unlock()
 		// Event queued
 	default:
 		// Channel full, log and drop
+		e.closeMu.Unlock()
+		e.pending.Done()
 		log.Printf("Warning: Event channel full, dropping event: %s for run %s", event.Type, event.RunID)
 	}
 }
 
 // Flush waits for all pending async events to be sent
 func (e *HTTPEventEmitter) Flush(ctx context.Context) error {
-	e.closeMu.Lock()
-	if !e.closed {
-		e.closed = true
-		close(e.eventChan)
-	}
-	e.closeMu.Unlock()
-
-	// Wait for worker to finish with timeout
 	done := make(chan struct{})
 	go func() {
-		e.wg.Wait()
+		e.pending.Wait()
 		close(done)
 	}()
 
@@ -158,6 +162,7 @@ func (e *HTTPEventEmitter) worker() {
 			log.Printf("Failed to send event %s for run %s: %v", event.Type, event.RunID, err)
 		}
 		cancel()
+		e.pending.Done()
 	}
 }
 
@@ -204,6 +209,12 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	if e.secret != "" {
+		timestamp := fmt.Sprintf("%d", event.Timestamp)
+		signature := signPayload(e.secret, timestamp, body)
+		req.Header.Set("X-Forgegraph-Timestamp", timestamp)
+		req.Header.Set("X-Forgegraph-Signature", signature)
+	}
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -218,9 +229,38 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 	return nil
 }
 
+func signPayload(secret string, timestamp string, body []byte) string {
+	message := append([]byte(timestamp+"."), body...)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(message)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 // Close shuts down the emitter and flushes pending events
 func (e *HTTPEventEmitter) Close(ctx context.Context) error {
-	return e.Flush(ctx)
+	e.closeMu.Lock()
+	if !e.closed {
+		e.closed = true
+		close(e.eventChan)
+	}
+	e.closeMu.Unlock()
+
+	if err := e.Flush(ctx); err != nil {
+		return err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // RecordingEventEmitter records all events for testing
