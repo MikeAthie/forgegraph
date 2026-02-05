@@ -475,13 +475,13 @@ func TestPromptExecutor_Execute_UsesPromptCache(t *testing.T) {
 		ID:   "prompt_cache_node",
 		Type: string(value.NodeTypePrompt),
 		Config: map[string]any{
-			"prompt_template":    "Hello cache",
-			"cache_enabled":      true,
-			"cache_ttl_seconds":  60,
-			"temperature":        0.2,
-			"max_tokens":         50,
-			"provider":           "openai",
-			"model":              "gpt-4",
+			"prompt_template":   "Hello cache",
+			"cache_enabled":     true,
+			"cache_ttl_seconds": 60,
+			"temperature":       0.2,
+			"max_tokens":        50,
+			"provider":          "openai",
+			"model":             "gpt-4",
 		},
 	}
 
