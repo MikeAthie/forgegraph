@@ -67,7 +67,7 @@ describe("PromptNodeForm", () => {
     };
   };
 
-  const renderWithConfig = (
+  const renderWithConfig = async (
     initialConfig: NodeFormProps["config"] = {},
     options: { errors?: NodeFormProps["errors"] } = {}
   ) => {
@@ -88,7 +88,11 @@ describe("PromptNodeForm", () => {
       );
     };
 
-    return render(<Wrapper />);
+    const result = render(<Wrapper />);
+    await waitFor(() => {
+      expect(screen.queryByText(/loading credentials/i)).not.toBeInTheDocument();
+    });
+    return result;
   };
 
   beforeEach(() => {
@@ -96,8 +100,8 @@ describe("PromptNodeForm", () => {
   });
 
   describe("Initial Render", () => {
-    it("should render with empty config", () => {
-      renderWithConfig();
+    it("should render with empty config", async () => {
+      await renderWithConfig();
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByLabelText(/system prompt/i)).toBeInTheDocument();
@@ -107,7 +111,7 @@ describe("PromptNodeForm", () => {
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
 
-    it("should render with populated config", () => {
+    it("should render with populated config", async () => {
       const config = {
         prompt_template: "Test prompt: {{input}}",
         system_prompt: "You are a helpful assistant",
@@ -117,7 +121,7 @@ describe("PromptNodeForm", () => {
         variables: { input: "test" },
       };
 
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       expect(screen.getByDisplayValue("Test prompt: {{input}}")).toBeInTheDocument();
       expect(screen.getByDisplayValue("You are a helpful assistant")).toBeInTheDocument();
@@ -125,25 +129,25 @@ describe("PromptNodeForm", () => {
       expect(screen.getByDisplayValue("2000")).toBeInTheDocument();
     });
 
-    it("should display temperature value correctly", () => {
+    it("should display temperature value correctly", async () => {
       const config = { temperature: 1.5 };
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       const slider = screen.getByLabelText(/temperature/i);
       expect(slider).toHaveValue("1.5");
       expect(screen.getByText("1.5")).toBeInTheDocument();
     });
 
-    it("should display default temperature of 0.7 when not set", () => {
-      renderWithConfig();
+    it("should display default temperature of 0.7 when not set", async () => {
+      await renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
       expect(slider).toHaveValue("0.7");
       expect(screen.getByText("0.7")).toBeInTheDocument();
     });
 
-    it("should render all model options", () => {
-      renderWithConfig();
+    it("should render all model options", async () => {
+      await renderWithConfig();
 
       const modelSelect = screen.getByLabelText(/model/i);
       expect(modelSelect).toBeInTheDocument();
@@ -159,7 +163,7 @@ describe("PromptNodeForm", () => {
   describe("Field Changes", () => {
     it("should call onChange when system prompt is modified", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const systemPrompt = screen.getByLabelText(/system prompt/i);
       await user.type(systemPrompt, "New system prompt");
@@ -173,7 +177,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when prompt template is modified", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const promptTemplate = screen.getByLabelText(/prompt template/i);
       await user.type(promptTemplate, "Test template");
@@ -187,7 +191,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when model is changed", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const modelSelect = screen.getByLabelText(/model/i);
       await user.selectOptions(modelSelect, "claude-3-opus");
@@ -202,7 +206,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should call onChange when temperature slider is adjusted", async () => {
-      renderWithConfig();
+      await renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
       fireEvent.change(slider, { target: { value: "1.2" } });
@@ -218,7 +222,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when max tokens is set", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.type(maxTokens, "4096");
@@ -233,7 +237,7 @@ describe("PromptNodeForm", () => {
     it("should handle clearing max tokens", async () => {
       const user = setupUser();
       const config = { max_tokens: 2000 };
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.clear(maxTokens);
@@ -249,7 +253,7 @@ describe("PromptNodeForm", () => {
 
     it("should call onChange when variables are updated", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const addButton = screen.getByTestId("add-variable");
       await user.click(addButton);
@@ -265,15 +269,15 @@ describe("PromptNodeForm", () => {
   });
 
   describe("Error Display", () => {
-    it("should display error for prompt_template field", () => {
+    it("should display error for prompt_template field", async () => {
       const errors = { prompt_template: "Prompt template is required" };
-      renderWithConfig({}, { errors });
+      await renderWithConfig({}, { errors });
 
       expect(screen.getByText("Prompt template is required")).toBeInTheDocument();
     });
 
-    it("should not display errors when errors object is empty", () => {
-      renderWithConfig({}, { errors: {} });
+    it("should not display errors when errors object is empty", async () => {
+      await renderWithConfig({}, { errors: {} });
 
       expect(screen.queryByText(/required/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/invalid/i)).not.toBeInTheDocument();
@@ -281,9 +285,9 @@ describe("PromptNodeForm", () => {
   });
 
   describe("Integration with Sub-components", () => {
-    it("should render AgentFields with correct props", () => {
+    it("should render AgentFields with correct props", async () => {
       const config = { role: "Test Role" };
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByTestId("agent-role")).toHaveValue("Test Role");
@@ -291,7 +295,7 @@ describe("PromptNodeForm", () => {
 
     it("should propagate AgentFields changes to parent config", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const roleInput = screen.getByTestId("agent-role");
       await user.type(roleInput, "New Role");
@@ -305,15 +309,15 @@ describe("PromptNodeForm", () => {
       });
     });
 
-    it("should render AdvancedSettings with correct props", () => {
-      renderWithConfig();
+    it("should render AdvancedSettings with correct props", async () => {
+      await renderWithConfig();
 
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
 
     it("should propagate AdvancedSettings changes to parent config", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const cacheCheckbox = screen.getByTestId("cache-enabled");
       await user.click(cacheCheckbox);
@@ -334,7 +338,7 @@ describe("PromptNodeForm", () => {
         model: "gpt-4",
         temperature: 0.8,
       };
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       const roleInput = screen.getByTestId("agent-role");
       await user.type(roleInput, "Test");
@@ -353,8 +357,8 @@ describe("PromptNodeForm", () => {
   });
 
   describe("Field Descriptions and Labels", () => {
-    it("should display helpful descriptions for each field", () => {
-      renderWithConfig();
+    it("should display helpful descriptions for each field", async () => {
+      await renderWithConfig();
 
       expect(
         screen.getByText(/instructions that define the assistant's behavior/i)
@@ -363,8 +367,8 @@ describe("PromptNodeForm", () => {
       expect(screen.getByText(/0 = deterministic, 2 = creative/i)).toBeInTheDocument();
     });
 
-    it("should mark prompt template as required", () => {
-      renderWithConfig();
+    it("should mark prompt template as required", async () => {
+      await renderWithConfig();
 
       // Check that the FormField with prompt template has required prop
       const promptLabel = screen.getByText(/prompt template/i, { selector: "label" });
@@ -373,8 +377,8 @@ describe("PromptNodeForm", () => {
   });
 
   describe("Temperature Slider", () => {
-    it("should have correct min, max, and step attributes", () => {
-      renderWithConfig();
+    it("should have correct min, max, and step attributes", async () => {
+      await renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
       expect(slider).toHaveAttribute("min", "0");
@@ -383,7 +387,7 @@ describe("PromptNodeForm", () => {
     });
 
     it("should update displayed value when slider moves", async () => {
-      renderWithConfig();
+      await renderWithConfig();
 
       const slider = screen.getByLabelText(/temperature/i);
       fireEvent.change(slider, { target: { value: "0.3" } });
@@ -399,26 +403,26 @@ describe("PromptNodeForm", () => {
   });
 
   describe("Variables Editor", () => {
-    it("should render KeyValueEditor for variables", () => {
-      renderWithConfig();
+    it("should render KeyValueEditor for variables", async () => {
+      await renderWithConfig();
 
       expect(screen.getByTestId("key-value-editor")).toBeInTheDocument();
     });
 
-    it("should display existing variables", () => {
+    it("should display existing variables", async () => {
       const config = {
         variables: { input: "test input", context: "test context" },
       };
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       const variablesDisplay = screen.getByTestId("variables-display");
       expect(variablesDisplay.textContent).toContain("input");
       expect(variablesDisplay.textContent).toContain("test input");
     });
 
-    it("should handle empty variables object", () => {
+    it("should handle empty variables object", async () => {
       const config = { variables: {} };
-      renderWithConfig(config);
+      await renderWithConfig(config);
 
       const variablesDisplay = screen.getByTestId("variables-display");
       expect(variablesDisplay.textContent).toBe("{}");
@@ -428,7 +432,7 @@ describe("PromptNodeForm", () => {
   describe("Max Tokens Input", () => {
     it("should accept numeric input", async () => {
       const user = setupUser();
-      renderWithConfig();
+      await renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       await user.type(maxTokens, "8000");
@@ -439,8 +443,8 @@ describe("PromptNodeForm", () => {
       });
     });
 
-    it("should have appropriate min and max constraints", () => {
-      renderWithConfig();
+    it("should have appropriate min and max constraints", async () => {
+      await renderWithConfig();
 
       const maxTokens = screen.getByLabelText(/max tokens/i);
       expect(maxTokens).toHaveAttribute("type", "number");

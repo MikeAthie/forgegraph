@@ -62,6 +62,10 @@ describe('AuthContext', () => {
       expect(result.current.login).toBeInstanceOf(Function);
       expect(result.current.logout).toBeInstanceOf(Function);
       expect(result.current.register).toBeInstanceOf(Function);
+
+      return waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
     });
   });
 
@@ -77,6 +81,10 @@ describe('AuthContext', () => {
       expect(result.current.loading).toBe(true);
       expect(result.current.user).toBeNull();
       expect(result.current.isAuthenticated).toBe(false);
+
+      return waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
     });
 
     it('should check authentication on mount', async () => {

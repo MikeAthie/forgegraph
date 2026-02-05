@@ -702,7 +702,7 @@ export default function OnboardingPage() {
                       <div>
                         <div className="text-xs font-medium text-foreground">Sample data mode</div>
                         <div className="text-[11px] text-muted-foreground">
-                          Use the template's sample input for a sandboxed run.
+                          Use the template&apos;s sample input for a sandboxed run.
                         </div>
                       </div>
                       <Switch checked={useSampleData} onCheckedChange={setUseSampleData} />

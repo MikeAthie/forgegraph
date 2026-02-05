@@ -235,10 +235,14 @@ class TestLegacyCleanup:
 def user(db):
     from django.contrib.auth import get_user_model
 
+    from application.services.tenancy import ensure_default_organization
+
     User = get_user_model()
-    return User.objects.create_user(
+    user = User.objects.create_user(
         email=f"test_{uuid4().hex[:8]}@example.com", password="testpass"
     )
+    ensure_default_organization(user)
+    return user
 
 
 @pytest.fixture

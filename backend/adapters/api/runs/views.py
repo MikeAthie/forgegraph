@@ -185,7 +185,7 @@ def check_entitlements(user: User) -> Response | None:
     month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     max_tokens = entitlements.get("max_monthly_tokens")
-    if max_tokens:
+    if max_tokens is not None:
         total_tokens = (
             LLMUsage.objects.filter(tenant_id=tenant_id, created_at__gte=month_start)
             .aggregate(total=Sum("total_tokens"))
@@ -200,7 +200,7 @@ def check_entitlements(user: User) -> Response | None:
             )
 
     max_cost = entitlements.get("max_monthly_cost_usd")
-    if max_cost:
+    if max_cost is not None:
         total_cost = LLMUsage.objects.filter(
             tenant_id=tenant_id, created_at__gte=month_start
         ).aggregate(total=Sum("cost_usd")).get("total") or Decimal("0")
@@ -212,7 +212,7 @@ def check_entitlements(user: User) -> Response | None:
             )
 
     max_runs = entitlements.get("max_runs_per_month")
-    if max_runs:
+    if max_runs is not None:
         run_count = Run.objects.filter(
             owner__default_organization_id=tenant_uuid, started_at__gte=month_start
         ).count()
