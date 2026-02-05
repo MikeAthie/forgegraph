@@ -17,9 +17,11 @@ type testMockLLMClient struct {
 	response *LLMResponse
 	err      error
 	received *LLMRequest
+	calls    int
 }
 
 func (m *testMockLLMClient) Complete(ctx context.Context, request *LLMRequest) (*LLMResponse, error) {
+	m.calls++
 	m.received = request
 	if m.err != nil {
 		return nil, m.err
@@ -450,5 +452,66 @@ func TestPromptExecutor_Execute_NoUsage(t *testing.T) {
 	output := result.Output.(map[string]any)
 	if _, hasUsage := output["usage"]; hasUsage {
 		t.Error("Expected no usage in output when response has no usage")
+	}
+}
+
+func TestPromptExecutor_Execute_UsesPromptCache(t *testing.T) {
+	oldCache := defaultPromptCache
+	defaultPromptCache = NewPromptCache(128)
+	defer func() {
+		defaultPromptCache = oldCache
+	}()
+
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{
+			Content: "cached response",
+			Model:   "gpt-4",
+		},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+	node := &entity.Node{
+		ID:   "prompt_cache_node",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template":   "Hello cache",
+			"cache_enabled":     true,
+			"cache_ttl_seconds": 60,
+			"temperature":       0.2,
+			"max_tokens":        50,
+			"provider":          "openai",
+			"model":             "gpt-4",
+		},
+	}
+
+	firstResult, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	if firstResult.Error != nil {
+		t.Fatalf("first result.Error = %v", firstResult.Error)
+	}
+
+	secondResult, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+	if secondResult.Error != nil {
+		t.Fatalf("second result.Error = %v", secondResult.Error)
+	}
+
+	if mockClient.calls != 1 {
+		t.Fatalf("Complete() calls = %d, want 1 (second call should hit cache)", mockClient.calls)
+	}
+
+	firstOutput := firstResult.Output.(map[string]any)
+	if _, ok := firstOutput["cached"]; ok {
+		t.Fatalf("expected first response to be uncached")
+	}
+
+	secondOutput := secondResult.Output.(map[string]any)
+	if cached, ok := secondOutput["cached"].(bool); !ok || !cached {
+		t.Fatalf("expected second response to be marked cached")
 	}
 }

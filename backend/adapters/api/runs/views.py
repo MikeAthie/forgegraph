@@ -5,10 +5,9 @@ Clean Architecture: Interface Adapters layer.
 """
 
 import asyncio
-import copy
 import json as pyjson
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
@@ -52,8 +51,16 @@ from adapters.ws.runs.broadcast import (
 )
 from application.services.audit_log import record_audit_log
 from application.services.llm_pricing import calculate_cost
+from application.services.metrics import record_run_completed, record_run_started
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
+from application.services.run_preparation import (
+    build_memory_config_json,
+    prepare_graph_for_engine,
+    upsert_memory_session,
+    validate_prompt_credentials,
+)
+from application.services.run_queue import enqueue_run
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
@@ -61,20 +68,15 @@ from application.services.schema_validation import (
 )
 from application.services.tenancy import get_tenant_id_for_user as resolve_tenant_id_for_user
 from infrastructure.orm.models import (
-    APIKey,
     ApprovalTask,
-    Graph,
     GraphVersion,
     LLMBudget,
     LLMQuota,
     LLMUsage,
-    MemoryConfiguration,
-    MemorySession,
     NodeRun,
     Run,
     RunCheckpoint,
     RunEvent,
-    TenantPolicy,
     TenantSubscription,
     User,
 )
@@ -110,6 +112,21 @@ def run_queryset_for_user(user: User) -> models.QuerySet[Run]:
     tenant_id = get_tenant_id_for_user(user)
     tenant_uuid = UUID(tenant_id)
     return Run.objects.filter(owner__default_organization_id=tenant_uuid)
+
+
+def _queue_payload(run: Run) -> dict[str, Any]:
+    entry = getattr(run, "queue_entry", None)
+    if not entry:
+        return {
+            "queue_status": None,
+            "queue_attempts": None,
+            "queue_available_at": None,
+        }
+    return {
+        "queue_status": entry.status,
+        "queue_attempts": entry.attempts,
+        "queue_available_at": entry.available_at,
+    }
 
 
 def check_llm_budget(user: User) -> Response | None:
@@ -252,315 +269,6 @@ def _apply_rate_limit(
     return response
 
 
-def get_memory_config_for_graph(graph: Graph, user: User) -> MemoryConfiguration | None:
-    if hasattr(graph, "memory_config") and graph.memory_config:
-        return graph.memory_config
-    default_config = MemoryConfiguration.objects.filter(user=user).first()
-    if default_config:
-        return default_config
-    return None
-
-
-def build_memory_config_json(graph: Graph, user: User, session_id: str | None = None) -> str:
-    config = get_memory_config_for_graph(graph, user)
-    if not config:
-        return ""
-
-    cross_session_enabled = session_id is not None
-
-    payload = {
-        "tier1": {
-            "enabled": config.buffer_enabled,
-            "buffer_size": config.buffer_size,
-            "auto_prepend": config.auto_prepend,
-        },
-        "tier2": {
-            "enabled": config.redis_enabled,
-            "namespace": "",
-            "summary_ttl_seconds": config.redis_summary_ttl,
-            "facts_ttl_seconds": config.redis_facts_ttl,
-        },
-        "tier3": {
-            "enabled": config.vector_enabled,
-            "top_k": config.vector_top_k,
-            "threshold": config.vector_threshold,
-            "recency_weight": config.vector_recency_weight,
-            "embedding_model": config.embedding_model,
-        },
-        "summarization": {
-            "enabled": config.summarization_enabled,
-            "trigger_threshold": config.summarization_threshold,
-            "keep_recent_count": config.summarization_keep_recent,
-            "model": config.summarization_model,
-        },
-        "cross_session": {
-            "enabled": cross_session_enabled,
-            "session_ttl_hours": 24,
-            "share_with_agent": False,
-        },
-    }
-    return pyjson.dumps(payload)
-
-
-def upsert_memory_session(user: User, session_id: str | None, ttl_hours: int = 24) -> None:
-    if not session_id:
-        return
-    expires_at = timezone.now() + timedelta(hours=ttl_hours)
-    MemorySession.objects.update_or_create(
-        session_id=session_id,
-        defaults={"owner": user, "expires_at": expires_at},
-    )
-
-
-START_NODE_ID = "START"
-END_NODE_ID = "END"
-
-
-def strip_sentinel_edges(graph_json: dict[str, Any]) -> dict[str, Any]:
-    """
-    Remove LangGraph-style START/END edges before sending a graph to the engine.
-
-    The current engine execution model derives start nodes from indegree==0 and
-    end nodes from sinks; START/END sentinel endpoints are editor/export-only.
-    """
-    edges = graph_json.get("edges")
-    if not isinstance(edges, list):
-        return graph_json
-
-    filtered_edges = [
-        edge
-        for edge in edges
-        if isinstance(edge, dict)
-        and edge.get("from") != START_NODE_ID
-        and edge.get("to") != END_NODE_ID
-    ]
-
-    if filtered_edges == edges:
-        return graph_json
-
-    cleaned = dict(graph_json)
-    cleaned["edges"] = filtered_edges
-    return cleaned
-
-
-def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
-    """Inline subgraph graph_json for subgraph nodes."""
-    if not isinstance(graph_json, dict):
-        return graph_json
-
-    tenant_id = get_tenant_id_for_user(owner)
-    tenant_uuid = UUID(tenant_id)
-    data = copy.deepcopy(graph_json)
-    nodes = data.get("nodes")
-    if not isinstance(nodes, list):
-        return data
-
-    for node in nodes:
-        if not isinstance(node, dict):
-            continue
-        if node.get("type") != "subgraph":
-            continue
-
-        config = node.get("config")
-        if not isinstance(config, dict):
-            config = {}
-
-        if isinstance(config.get("graph_json"), dict):
-            config["graph_json"] = expand_subgraphs(config["graph_json"], owner)
-            node["config"] = config
-            continue
-
-        graph_version_id = config.get("graph_version_id")
-        graph_id = config.get("graph_id")
-        graph_version = None
-        if graph_version_id:
-            graph_version = (
-                GraphVersion.objects.select_related("graph")
-                .filter(
-                    id=graph_version_id,
-                    graph__owner__default_organization_id=tenant_uuid,
-                )
-                .first()
-            )
-        elif graph_id:
-            graph_version = (
-                GraphVersion.objects.select_related("graph")
-                .filter(
-                    graph_id=graph_id,
-                    graph__owner__default_organization_id=tenant_uuid,
-                )
-                .order_by("-version")
-                .first()
-            )
-
-        if graph_version is None:
-            raise ValueError("Subgraph reference is invalid or not accessible.")
-
-        subgraph_json = strip_sentinel_edges(graph_version.graph_json)
-        config["graph_json"] = expand_subgraphs(subgraph_json, owner)
-        config["graph_id"] = str(graph_version.graph_id)
-        config["graph_version_id"] = str(graph_version.id)
-        config["graph_version"] = graph_version.version
-        node["config"] = config
-
-    return data
-
-
-def apply_memory_namespace_prefix(
-    graph_json: dict[str, Any], owner_id: UUID | str
-) -> dict[str, Any]:
-    """Ensure memory nodes are isolated per user via namespace_prefix."""
-    if not isinstance(graph_json, dict):
-        return graph_json
-
-    data = copy.deepcopy(graph_json)
-    nodes = data.get("nodes")
-    if not isinstance(nodes, list):
-        return data
-
-    prefix = f"user:{owner_id}"
-
-    for node in nodes:
-        if not isinstance(node, dict):
-            continue
-        node_type = node.get("type")
-        config = node.get("config")
-        if not isinstance(config, dict):
-            config = {}
-
-        if node_type == "memory":
-            config["namespace_prefix"] = prefix
-            node["config"] = config
-        elif node_type == "subgraph" and isinstance(config.get("graph_json"), dict):
-            config["graph_json"] = apply_memory_namespace_prefix(config["graph_json"], owner_id)
-            node["config"] = config
-
-    return data
-
-
-def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
-    """Prepare graph JSON for engine execution (strip sentinels, expand subgraphs, enforce memory isolation)."""
-    cleaned = strip_sentinel_edges(graph_json)
-    expanded = expand_subgraphs(cleaned, owner)
-    namespaced = apply_memory_namespace_prefix(expanded, owner.id)
-    policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(owner)).first()
-    if policy:
-        metadata_raw = namespaced.get("metadata")
-        metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
-        metadata["policy"] = {
-            "http": {
-                "allowlist": policy.http_allowlist,
-                "denylist": policy.http_denylist,
-                "default_deny": policy.http_default_deny,
-            },
-            "llm": {
-                "allowed_providers": policy.allowed_providers,
-                "allowed_models": policy.allowed_models,
-            },
-        }
-        namespaced["metadata"] = metadata
-    return namespaced
-
-
-def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:
-    allowed_providers = set(getattr(settings, "ALLOWED_LLM_PROVIDERS", ["openai", "anthropic"]))
-    policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(user)).first()
-    allowed_policy_providers = (
-        {str(value).lower() for value in policy.allowed_providers} if policy else set()
-    )
-    allowed_policy_models = {str(value) for value in policy.allowed_models} if policy else set()
-    nodes = graph_json.get("nodes")
-    if not isinstance(nodes, list):
-        return []
-
-    errors: list[dict[str, Any]] = []
-    prompt_nodes: list[tuple[str, str, str]] = []
-    credential_ids: set[str] = set()
-
-    for node in nodes:
-        if not isinstance(node, dict):
-            continue
-        if node.get("type") != "prompt":
-            continue
-
-        node_id = str(node.get("id") or "prompt")
-        config_raw = node.get("config")
-        config = config_raw if isinstance(config_raw, dict) else {}
-        provider = str(config.get("provider") or "").strip().lower()
-        credential_id = str(config.get("credential_id") or "").strip()
-
-        if provider and provider not in allowed_providers:
-            errors.append(
-                {
-                    "field": "provider",
-                    "message": f"Prompt node '{node_id}' uses unsupported provider '{provider}'.",
-                    "suggestion": f"Use one of: {', '.join(sorted(allowed_providers))}.",
-                }
-            )
-        if allowed_policy_providers and provider and provider not in allowed_policy_providers:
-            errors.append(
-                {
-                    "field": "provider",
-                    "message": f"Prompt node '{node_id}' uses a provider blocked by policy.",
-                    "suggestion": f"Use one of: {', '.join(sorted(allowed_policy_providers))}.",
-                }
-            )
-
-        model = str(config.get("model") or "").strip()
-        if allowed_policy_models and model and model not in allowed_policy_models:
-            errors.append(
-                {
-                    "field": "model",
-                    "message": f"Prompt node '{node_id}' uses a model blocked by policy.",
-                    "suggestion": f"Use one of: {', '.join(sorted(allowed_policy_models))}.",
-                }
-            )
-
-        if not credential_id:
-            errors.append(
-                {
-                    "field": "credential_id",
-                    "message": f"Prompt node '{node_id}' is missing a credential.",
-                    "suggestion": "Select a credential for each prompt node before running.",
-                }
-            )
-            continue
-
-        credential_ids.add(credential_id)
-        prompt_nodes.append((node_id, provider, credential_id))
-
-    if not credential_ids:
-        return errors
-
-    credentials = APIKey.objects.filter(
-        id__in=credential_ids,
-        organization=user.default_organization,
-    )
-    credential_map = {str(credential.id): credential for credential in credentials}
-
-    for node_id, provider, credential_id in prompt_nodes:
-        credential = credential_map.get(credential_id)
-        if credential is None:
-            errors.append(
-                {
-                    "field": "credential_id",
-                    "message": f"Credential '{credential_id}' for node '{node_id}' was not found.",
-                    "suggestion": "Select a credential available to your organization for this node.",
-                }
-            )
-            continue
-        if provider and provider != credential.provider:
-            errors.append(
-                {
-                    "field": "provider",
-                    "message": f"Provider mismatch for node '{node_id}'.",
-                    "suggestion": f"Choose a {credential.provider} provider or update the credential.",
-                }
-            )
-
-    return errors
-
-
 def _get_downstream_nodes(graph_json: dict[str, Any], start_node_id: str) -> set[str]:
     nodes_raw = graph_json.get("nodes")
     if not isinstance(nodes_raw, list):
@@ -622,7 +330,7 @@ class RunListView(APIView):
     def get(self, request: Request) -> Response:
         """List user's runs."""
         user = cast(User, request.user)
-        runs = run_queryset_for_user(user).select_related("graph_version__graph")
+        runs = run_queryset_for_user(user).select_related("graph_version__graph", "queue_entry")
 
         status_filter = request.query_params.get("status")
         if status_filter:
@@ -676,6 +384,7 @@ class RunListView(APIView):
                     "graph_version_id": graph_version.id,
                     "graph_version": graph_version.version,
                     "status": run.status,
+                    **_queue_payload(run),
                     "started_at": run.started_at,
                     "ended_at": run.ended_at,
                     "duration_ms": run.duration_ms,
@@ -707,7 +416,7 @@ class RunDetailView(APIView):
         try:
             run = (
                 run_queryset_for_user(user)
-                .select_related("graph_version__graph")
+                .select_related("graph_version__graph", "queue_entry")
                 .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
                 .get(id=run_id)
             )
@@ -739,6 +448,7 @@ class RunDetailView(APIView):
             "graph_version_id": graph_version.id,
             "graph_version": graph_version.version,
             "status": run.status,
+            **_queue_payload(run),
             "started_at": run.started_at,
             "ended_at": run.ended_at,
             "input_json": run.input_json,
@@ -897,6 +607,33 @@ class RunStartView(APIView):
         # Track memory session for cross-run buffers.
         upsert_memory_session(user, session_id)
 
+        if getattr(settings, "RUN_QUEUE_ENABLED", False):
+            queue_entry = enqueue_run(run, tenant_id=tenant_id)
+            run_data = {
+                "id": run.id,
+                "owner_id": run.owner_id,
+                "thread_id": run.thread_id,
+                "graph_id": graph_version.graph_id,
+                "graph_name": graph_version.graph.name,
+                "graph_version_id": graph_version.id,
+                "graph_version": graph_version.version,
+                "status": run.status,
+                "queue_status": queue_entry.status,
+                "queue_attempts": queue_entry.attempts,
+                "queue_available_at": queue_entry.available_at,
+                "started_at": run.started_at,
+                "ended_at": run.ended_at,
+                "input_json": run.input_json,
+                "output_json": run.output_json,
+                "error_message": run.error_message,
+                "duration_ms": run.duration_ms,
+                "node_runs": [],
+            }
+            serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+            return success_response(
+                serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
+            )
+
         # Send run to the engine
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
         memory_config_json = build_memory_config_json(
@@ -916,6 +653,7 @@ class RunStartView(APIView):
                 # Update status to running once engine accepts
                 run.status = "running"
                 run.save(update_fields=["status"])
+                record_run_started()
                 broadcast_run_updated(run)
 
         except EngineConnectionError as e:
@@ -924,6 +662,7 @@ class RunStartView(APIView):
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
             run.save(update_fields=["status", "ended_at", "error_message"])
+            record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
                 code="ENGINE_UNAVAILABLE",
@@ -937,6 +676,7 @@ class RunStartView(APIView):
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
             run.save(update_fields=["status", "ended_at", "error_message"])
+            record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
                 code="ENGINE_ERROR",
@@ -953,6 +693,7 @@ class RunStartView(APIView):
             "graph_version_id": graph_version.id,
             "graph_version": graph_version.version,
             "status": run.status,
+            **_queue_payload(run),
             "started_at": run.started_at,
             "ended_at": run.ended_at,
             "input_json": run.input_json,
@@ -1149,6 +890,33 @@ class RunInvokeView(APIView):
 
         upsert_memory_session(user, session_id)
 
+        if getattr(settings, "RUN_QUEUE_ENABLED", False):
+            queue_entry = enqueue_run(run, tenant_id=tenant_id)
+            run_data = {
+                "id": run.id,
+                "owner_id": run.owner_id,
+                "thread_id": run.thread_id,
+                "graph_id": graph_version.graph_id,
+                "graph_name": graph_version.graph.name,
+                "graph_version_id": graph_version.id,
+                "graph_version": graph_version.version,
+                "status": run.status,
+                "queue_status": queue_entry.status,
+                "queue_attempts": queue_entry.attempts,
+                "queue_available_at": queue_entry.available_at,
+                "started_at": run.started_at,
+                "ended_at": run.ended_at,
+                "input_json": run.input_json,
+                "output_json": run.output_json,
+                "error_message": run.error_message,
+                "duration_ms": run.duration_ms,
+                "node_runs": [],
+            }
+            serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+            return success_response(
+                serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
+            )
+
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
@@ -1166,6 +934,7 @@ class RunInvokeView(APIView):
                 )
                 run.status = "running"
                 run.save(update_fields=["status"])
+                record_run_started()
                 broadcast_run_updated(run)
 
         except EngineConnectionError as e:
@@ -1174,6 +943,7 @@ class RunInvokeView(APIView):
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
             run.save(update_fields=["status", "ended_at", "error_message"])
+            record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
                 code="ENGINE_UNAVAILABLE",
@@ -1187,6 +957,7 @@ class RunInvokeView(APIView):
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
             run.save(update_fields=["status", "ended_at", "error_message"])
+            record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
                 code="ENGINE_ERROR",
@@ -1203,6 +974,7 @@ class RunInvokeView(APIView):
             "graph_version_id": graph_version.id,
             "graph_version": graph_version.version,
             "status": run.status,
+            **_queue_payload(run),
             "started_at": run.started_at,
             "ended_at": run.ended_at,
             "input_json": run.input_json,
@@ -1377,6 +1149,33 @@ class RunReplayView(APIView):
         )
         upsert_memory_session(user, session_id)
 
+        if getattr(settings, "RUN_QUEUE_ENABLED", False):
+            queue_entry = enqueue_run(replay_run, tenant_id=get_tenant_id_for_user(user))
+            run_data = {
+                "id": replay_run.id,
+                "owner_id": replay_run.owner_id,
+                "thread_id": replay_run.thread_id,
+                "graph_id": graph_version.graph_id,
+                "graph_name": graph_version.graph.name,
+                "graph_version_id": graph_version.id,
+                "graph_version": graph_version.version,
+                "status": replay_run.status,
+                "queue_status": queue_entry.status,
+                "queue_attempts": queue_entry.attempts,
+                "queue_available_at": queue_entry.available_at,
+                "started_at": replay_run.started_at,
+                "ended_at": replay_run.ended_at,
+                "input_json": replay_run.input_json,
+                "output_json": replay_run.output_json,
+                "error_message": replay_run.error_message,
+                "duration_ms": replay_run.duration_ms,
+                "node_runs": [],
+            }
+            serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+            return success_response(
+                serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
+            )
+
         callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=replay_run.id)
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
@@ -1394,6 +1193,7 @@ class RunReplayView(APIView):
                 )
                 replay_run.status = "running"
                 replay_run.save(update_fields=["status"])
+                record_run_started()
                 broadcast_run_updated(replay_run)
 
         except EngineConnectionError as e:
@@ -1402,6 +1202,7 @@ class RunReplayView(APIView):
             replay_run.ended_at = timezone.now()
             replay_run.error_message = f"Engine connection failed: {e}"
             replay_run.save(update_fields=["status", "ended_at", "error_message"])
+            record_run_completed("failed", replay_run.duration_ms)
             broadcast_run_updated(replay_run)
             return error_response(
                 code="ENGINE_UNAVAILABLE",
@@ -1415,6 +1216,7 @@ class RunReplayView(APIView):
             replay_run.ended_at = timezone.now()
             replay_run.error_message = f"Engine rejected run: {e}"
             replay_run.save(update_fields=["status", "ended_at", "error_message"])
+            record_run_completed("failed", replay_run.duration_ms)
             broadcast_run_updated(replay_run)
             return error_response(
                 code="ENGINE_ERROR",
@@ -1431,6 +1233,7 @@ class RunReplayView(APIView):
             "graph_version_id": graph_version.id,
             "graph_version": graph_version.version,
             "status": replay_run.status,
+            **_queue_payload(replay_run),
             "started_at": replay_run.started_at,
             "ended_at": replay_run.ended_at,
             "input_json": replay_run.input_json,
@@ -1511,6 +1314,7 @@ class RunCancelView(APIView):
             run.error_message = "Canceled by user."
 
         run.save(update_fields=["status", "started_at", "ended_at", "error_message"])
+        record_run_completed("canceled", run.duration_ms)
         broadcast_run_updated(run)
 
         graph_version = run.graph_version
@@ -1741,6 +1545,7 @@ class EngineRunEventsView(APIView):
             "run_resumed",
             "run_canceled",
         }:
+            previous_status = run.status
             run_payload: dict[str, Any] = {}
             update_fields: list[str] = []
 
@@ -1817,6 +1622,19 @@ class EngineRunEventsView(APIView):
 
             if update_fields:
                 run.save(update_fields=sorted(set(update_fields)))
+
+            if event_type == "run_started" and previous_status != "running":
+                record_run_started()
+            if event_type in {
+                "run_completed",
+                "run_failed",
+                "run_canceled",
+            } and previous_status not in {
+                "succeeded",
+                "failed",
+                "canceled",
+            }:
+                record_run_completed(run.status, run.duration_ms)
 
             _save_event("run.updated", _serialize_event_payload(run_payload))
             message = broadcast_run_updated(run)

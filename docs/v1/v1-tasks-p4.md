@@ -31,9 +31,9 @@ Testing strategy:
 - Load test: latency stays stable as workers scale.
 
 Success criteria / Definition of Done:
-- [ ] Runs enter a queue and are executed by workers.
-- [ ] Per-tenant concurrency limits are enforced.
-- [ ] Queue backpressure is surfaced in UI.
+- [x] Runs enter a queue and are executed by workers.
+- [x] Per-tenant concurrency limits are enforced.
+- [x] Queue backpressure is surfaced in UI.
 
 Dependencies:
 - P0 event delivery and idempotency.
@@ -63,9 +63,9 @@ Testing strategy:
 - Integration: traces include full run graph spans.
 
 Success criteria / Definition of Done:
-- [ ] Dashboards show run success rate and latency percentiles.
-- [ ] Alerts trigger on SLO violations within 5 minutes.
-- [ ] On-call runbook references dashboards and logs.
+- [x] Dashboards show run success rate and latency percentiles.
+- [x] Alerts trigger on SLO violations within 5 minutes.
+- [x] On-call runbook references dashboards and logs.
 
 Dependencies:
 - P4-T01 queue-based execution.
@@ -95,9 +95,9 @@ Testing strategy:
 - Integration: simulate database failover and confirm graceful degradation.
 
 Success criteria / Definition of Done:
-- [ ] Backups run automatically with verification.
-- [ ] Restore drill completes within target RTO.
-- [ ] HA guidance is documented and validated in staging.
+- [x] Backups run automatically with verification.
+- [x] Restore drill completes within target RTO.
+- [x] HA guidance is documented and validated in staging.
 
 Dependencies:
 - P4-T02 observability.
@@ -127,9 +127,9 @@ Testing strategy:
 - Load test: UI rendering stays responsive for 10k token streams.
 
 Success criteria / Definition of Done:
-- [ ] Caching reduces compute cost for repeated runs.
-- [ ] Rate limits prevent noisy tenant impact.
-- [ ] Streaming UI stays responsive under high throughput.
+- [x] Caching reduces compute cost for repeated runs.
+- [x] Rate limits prevent noisy tenant impact.
+- [x] Streaming UI stays responsive under high throughput.
 
 Dependencies:
 - P0 streaming events.

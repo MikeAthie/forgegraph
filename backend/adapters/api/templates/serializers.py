@@ -25,6 +25,14 @@ class TemplateListSerializer(serializers.Serializer[Any]):
     rating_average = serializers.FloatField(read_only=True, allow_null=True)
     rating_count = serializers.IntegerField(read_only=True)
     usage_count = serializers.IntegerField(read_only=True)
+    run_success_rate = serializers.SerializerMethodField()
+
+    def get_run_success_rate(self, obj: Any) -> float | None:
+        run_total = int(getattr(obj, "run_total", 0) or 0)
+        if run_total <= 0:
+            return None
+        run_succeeded = int(getattr(obj, "run_succeeded", 0) or 0)
+        return float(run_succeeded) / float(run_total)
 
 
 class TemplateCloneSerializer(serializers.Serializer[Any]):

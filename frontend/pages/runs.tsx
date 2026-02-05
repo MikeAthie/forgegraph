@@ -47,6 +47,13 @@ const normalizeStatusLabel = (status: string) => {
   return status;
 };
 
+const getRunStatusLabel = (run: RunListItem) => {
+  if (String(run.status) === "pending" && run.queue_status) {
+    return "queued";
+  }
+  return normalizeStatusLabel(String(run.status));
+};
+
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
     case "succeeded":
@@ -354,8 +361,13 @@ export default function RunsPage() {
                               className={getStatusBadgeClass(String(run.status))}
                             >
                               <StatusIcon status={String(run.status)} />
-                              {normalizeStatusLabel(String(run.status))}
+                              {getRunStatusLabel(run)}
                             </Badge>
+                            {String(run.status) === "pending" && run.queue_status && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Queue: {run.queue_status}
+                              </p>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">
                             {run.started_at ? formatDateTime(run.started_at) : "—"}

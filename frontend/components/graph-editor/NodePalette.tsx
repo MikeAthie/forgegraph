@@ -1,11 +1,15 @@
 import { useMemo, useState, type RefObject } from "react";
 import { Link } from "lucide-react";
+
 import { PHASE2_NODE_TYPES, type NodeType } from "../../lib/graph-types";
+import type { MarketplacePackage } from "../../lib/api";
 import { Input } from "@/components/ui/input";
 
 interface NodePaletteProps {
   onAddNode: (nodeType: NodeType, connectToSelected?: boolean) => void;
   onAddNote: () => void;
+  onAddMarketplaceNode?: (pkg: MarketplacePackage, connectToSelected?: boolean) => void;
+  marketplaceNodes?: MarketplacePackage[];
   hasSelectedNode?: boolean;
   searchInputRef?: RefObject<HTMLInputElement | null>;
 }
@@ -54,6 +58,15 @@ type PaletteItem =
       description: string;
       enabled: true;
       category: string;
+    }
+  | {
+      kind: "marketplace";
+      type: `marketplace:${string}`;
+      label: string;
+      description: string;
+      enabled: boolean;
+      category: string;
+      package: MarketplacePackage;
     };
 
 const NODE_CATEGORIES: Record<string, string> = {
@@ -70,11 +83,13 @@ const NODE_CATEGORIES: Record<string, string> = {
   note: "Annotations",
 };
 
-const CATEGORY_ORDER = ["AI", "Logic", "Extensibility", "Memory", "I/O", "Annotations"];
+const CATEGORY_ORDER = ["AI", "Logic", "Extensibility", "Marketplace", "Memory", "I/O", "Annotations"];
 
 export function NodePalette({
   onAddNode,
   onAddNote,
+  onAddMarketplaceNode,
+  marketplaceNodes = [],
   hasSelectedNode = false,
   searchInputRef,
 }: NodePaletteProps) {
@@ -86,13 +101,23 @@ export function NodePalette({
       type: nodeType.type,
       label: nodeType.label,
       description: nodeType.description,
-      // Human Gate is implemented; keep it enabled even if a stale config marks it otherwise.
       enabled: nodeType.type === "human_gate" ? true : nodeType.enabled,
       category: NODE_CATEGORIES[nodeType.type] ?? "Other",
     }));
 
+    const marketplaceItems: PaletteItem[] = marketplaceNodes.map((pkg) => ({
+      kind: "marketplace",
+      type: `marketplace:${pkg.slug}`,
+      label: String(pkg.latest_release?.ui_schema?.label || pkg.name),
+      description: pkg.summary || "Installed from marketplace",
+      enabled: Boolean(pkg.installed_release),
+      category: "Marketplace",
+      package: pkg,
+    }));
+
     return [
       ...baseItems,
+      ...marketplaceItems,
       {
         kind: "note",
         type: "note",
@@ -102,7 +127,7 @@ export function NodePalette({
         category: NODE_CATEGORIES.note,
       },
     ];
-  }, []);
+  }, [marketplaceNodes]);
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -181,6 +206,10 @@ export function NodePalette({
                       onAddNote();
                       return;
                     }
+                    if (item.kind === "marketplace") {
+                      onAddMarketplaceNode?.(item.package, hasSelectedNode);
+                      return;
+                    }
                     onAddNode(item.type, hasSelectedNode);
                   }}
                   disabled={!item.enabled}
@@ -193,10 +222,14 @@ export function NodePalette({
                   <div
                     aria-hidden="true"
                     className={`w-8 h-8 rounded-md flex items-center justify-center text-white text-sm font-bold shadow-xs ${
-                      nodeTypeColors[item.type] ?? "bg-gray-500"
+                      item.kind === "marketplace"
+                        ? "bg-cyan-500"
+                        : nodeTypeColors[item.type] ?? "bg-gray-500"
                     }`}
                   >
-                    {nodeTypeIcons[item.type] ?? "?"}
+                    {item.kind === "marketplace"
+                      ? item.label.slice(0, 2).toUpperCase()
+                      : nodeTypeIcons[item.type] ?? "?"}
                   </div>
                   <div className="flex-1 text-left">
                     <div className="text-sm font-medium text-foreground flex items-center gap-1">

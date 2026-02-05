@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
-import stripe
 from django.conf import settings
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -15,6 +14,11 @@ from application.services.audit_log import record_audit_log
 from application.services.rbac import has_min_role
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import BillingPlan, TenantSubscription, User
+
+try:
+    import stripe
+except ModuleNotFoundError:  # pragma: no cover - depends on optional dependency
+    stripe = None  # type: ignore[assignment]
 
 
 def _ensure_admin(user: User) -> Response | None:
@@ -32,11 +36,19 @@ def _frontend_url() -> str:
 
 
 def _stripe_client() -> None:
+    if stripe is None:  # pragma: no cover - dependency guard
+        raise RuntimeError("Stripe SDK is not installed.")
     api_key = getattr(settings, "STRIPE_API_KEY", "")
     stripe.api_key = api_key
 
 
 def _ensure_stripe_configured() -> Response | None:
+    if stripe is None:
+        return error_response(
+            code="CONFIG_ERROR",
+            message="Stripe SDK is not installed.",
+            status=500,
+        )
     if not getattr(settings, "STRIPE_API_KEY", ""):
         return error_response(
             code="CONFIG_ERROR",

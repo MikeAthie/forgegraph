@@ -29,10 +29,10 @@ import { AgentWizard } from "./wizard";
 import { ValidationOverlay, ValidationStatusBar } from "./validation";
 
 import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
-import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson } from "../../lib/graph-types";
+import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson, isValidNodeType } from "../../lib/graph-types";
 import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
-import { getApiErrorMessage, runsApi, type NodeRunItem, type RunDetail } from "../../lib/api";
+import { getApiErrorMessage, marketplaceApi, runsApi, type MarketplacePackage, type NodeRunItem, type RunDetail } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { NodePalette } from "./NodePalette";
@@ -44,6 +44,7 @@ import { NodeConfigDialog } from "./NodeConfigDialog";
 import { MemoryConfigDialog } from "./dialogs/MemoryConfigDialog";
 import { getNodeTypeInfo } from "./forms/node-form-registry";
 import { TypedEdge } from "./TypedEdge";
+import { QuickToolBar } from "./QuickToolBar";
 import { useEdgeTypes } from "@/hooks/useEdgeTypes";
 
 const NOTE_NODE_TYPE = "note";
@@ -215,6 +216,7 @@ export function GraphEditor({
   const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
   const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
   const [memoryConfigOpen, setMemoryConfigOpen] = useState(false);
+  const [marketplaceNodes, setMarketplaceNodes] = useState<MarketplacePackage[]>([]);
 
   // Viewport state for preserving pan/zoom across saves
   const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
@@ -500,6 +502,24 @@ export function GraphEditor({
     setIsDirty(false);
   }, [initialGraphJson, resetHistory, setNodes, setEdges]);
 
+  useEffect(() => {
+    let active = true;
+    const loadMarketplaceNodes = async () => {
+      try {
+        const installed = await marketplaceApi.listInstalled();
+        if (!active) return;
+        setMarketplaceNodes(installed);
+      } catch {
+        if (!active) return;
+        setMarketplaceNodes([]);
+      }
+    };
+    void loadMarketplaceNodes();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const applyExecutionOverlay = useCallback(
     (run: RunDetail | null) => {
       setNodes((currentNodes) => {
@@ -708,6 +728,7 @@ export function GraphEditor({
         const hasTrigger = nds.some(
           (node) => node.type !== NOTE_NODE_TYPE && (node.data as any)?.isTrigger === true
         );
+        const nodeConfig = deepClone(options?.config ?? {});
         let position: { x: number; y: number };
 
         if (sourceNode) {
@@ -731,7 +752,7 @@ export function GraphEditor({
           data: {
             label: options?.label || `${typeInfo.label} Node`,
             nodeType: nodeType,
-            config: options?.config ?? {},
+            config: nodeConfig,
             ...(hasTrigger ? {} : { isTrigger: true }),
           },
         };
@@ -787,6 +808,40 @@ export function GraphEditor({
 
       // Fallback: add node directly without config dialog
       addExecutableNode(nodeType, { sourceNodeId, config: {} });
+    },
+    [addExecutableNode, nodes, selectedNodeId]
+  );
+
+  const handleAddMarketplaceNode = useCallback(
+    (pkg: MarketplacePackage, connectToSelected = false) => {
+      const release = pkg.installed_release ?? pkg.latest_release;
+      if (!release) {
+        return;
+      }
+      const executionType = String(release.execution_node_type);
+      if (!isValidNodeType(executionType)) {
+        showError("Unsupported package", "This marketplace package uses an unsupported node type.");
+        return;
+      }
+      const sourceNodeId =
+        connectToSelected && selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+          ? selectedNodeId
+          : null;
+
+      const label =
+        typeof release.ui_schema?.label === "string" && release.ui_schema.label
+          ? release.ui_schema.label
+          : pkg.name;
+      const config =
+        release.config_defaults && typeof release.config_defaults === "object"
+          ? release.config_defaults
+          : {};
+
+      addExecutableNode(executionType, {
+        sourceNodeId,
+        config,
+        label,
+      });
     },
     [addExecutableNode, nodes, selectedNodeId]
   );
@@ -1215,27 +1270,16 @@ export function GraphEditor({
 
   // Handler for wizard to add nodes from quick presets
   const handleWizardAddNode = useCallback((preset: import("@/lib/quick-node-presets").QuickNodePreset) => {
-    // For prompt nodes, the first one should be marked as trigger (start)
-    const executableNodes = nodes.filter((n) => n.type !== NOTE_NODE_TYPE);
-    const isFirstNode = executableNodes.length === 0;
-    const config = {
-      ...preset.defaultConfig,
-      ...(isFirstNode && preset.nodeType === NODE_TYPES.PROMPT ? {} : {}),
-    };
+    const sourceNodeId =
+      selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+        ? selectedNodeId
+        : null;
     addExecutableNode(preset.nodeType, {
-      sourceNodeId: selectedNodeId,
-      config,
+      sourceNodeId,
+      config: preset.defaultConfig,
+      label: preset.name,
     });
-    // If this is the first node, mark it as trigger
-    if (isFirstNode) {
-      setTimeout(() => {
-        const newNodes = nodes.filter((n) => n.type !== NOTE_NODE_TYPE);
-        if (newNodes.length === 1) {
-          handleUpdateNode(newNodes[0].id, { isTrigger: true });
-        }
-      }, 100);
-    }
-  }, [nodes, selectedNodeId, addExecutableNode, handleUpdateNode]);
+  }, [addExecutableNode, nodes, selectedNodeId]);
 
   return (
     <ValidationProvider>
@@ -1287,6 +1331,8 @@ export function GraphEditor({
         <NodePalette
           onAddNode={handleAddNode}
           onAddNote={handleAddNote}
+          onAddMarketplaceNode={handleAddMarketplaceNode}
+          marketplaceNodes={marketplaceNodes}
           hasSelectedNode={canQuickAddConnect}
           searchInputRef={paletteSearchRef}
         />
@@ -1330,6 +1376,14 @@ export function GraphEditor({
             pannable
             className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
           />
+          {/* Quick Tool Bar - top center */}
+          <Panel position="top-center">
+            <QuickToolBar
+              marketplaceNodes={marketplaceNodes}
+              onSelectPackage={(pkg) => handleAddMarketplaceNode(pkg, canQuickAddConnect)}
+              hasSelectedNode={canQuickAddConnect}
+            />
+          </Panel>
           <Panel position="top-right" className="flex items-center gap-2">
             <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
               <button
