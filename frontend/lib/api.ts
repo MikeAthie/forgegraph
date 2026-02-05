@@ -329,6 +329,19 @@ export const authApi = {
       isRefreshing = false;
     }
   },
+
+  getSsoAuthorizeUrl: async (email: string): Promise<string> => {
+    const response = await api.get<{ authorize_url: string }>(API_PATHS.auth.ssoLogin, {
+      params: { email },
+    });
+    return response.data.authorize_url;
+  },
+
+  exchangeSsoCode: async (code: string, state: string): Promise<AccessTokenResponse> => {
+    const response = await api.post<AccessTokenResponse>(API_PATHS.auth.ssoCallback, { code, state });
+    accessToken = response.data.access;
+    return response.data;
+  },
 };
 
 export interface GraphListItem {
@@ -641,18 +654,6 @@ export const promptsApi = {
     return response.data.data;
   },
 
-  getSsoAuthorizeUrl: async (email: string): Promise<string> => {
-    const response = await api.get<{ authorize_url: string }>(API_PATHS.auth.ssoLogin, {
-      params: { email },
-    });
-    return response.data.authorize_url;
-  },
-
-  exchangeSsoCode: async (code: string, state: string): Promise<AccessTokenResponse> => {
-    const response = await api.post<AccessTokenResponse>(API_PATHS.auth.ssoCallback, { code, state });
-    accessToken = response.data.access;
-    return response.data;
-  },
 };
 
 export interface BillingPlan {
