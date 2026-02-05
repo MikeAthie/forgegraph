@@ -36,7 +36,7 @@ class TestGetValidTenantIds:
     def test_includes_user_ids(self, user):
         gc = MemoryGCService(batch_size=10)
         valid_ids = gc.get_valid_tenant_ids()
-        assert user.id in valid_ids
+        assert user.default_organization_id in valid_ids
 
     @pytest.mark.django_db
     def test_includes_graph_ids(self, graph):
@@ -49,7 +49,7 @@ class TestGetValidTenantIds:
         gc = MemoryGCService(batch_size=10)
         valid_ids = gc.get_valid_tenant_ids()
         assert len(valid_ids) >= 2
-        assert user.id in valid_ids
+        assert user.default_organization_id in valid_ids
         assert graph.id in valid_ids
 
 
@@ -66,10 +66,10 @@ class TestFindOrphanedTenantIds:
     @pytest.mark.django_db
     def test_excludes_valid_user_ids(self, user, memory_chunk_factory):
         gc = MemoryGCService(batch_size=10)
-        memory_chunk_factory(tenant_id=user.id)
+        memory_chunk_factory(tenant_id=user.default_organization_id)
 
         orphans = gc.find_orphaned_tenant_ids()
-        assert user.id not in orphans
+        assert user.default_organization_id not in orphans
 
     @pytest.mark.django_db
     def test_excludes_valid_graph_ids(self, graph, memory_chunk_factory):
@@ -86,7 +86,7 @@ class TestCleanupOrphanedChunks:
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
-        memory_chunk_factory(tenant_id=user.id)
+        memory_chunk_factory(tenant_id=user.default_organization_id)
         orphan_id = uuid4()
         chunk = memory_chunk_factory(tenant_id=orphan_id)
 
@@ -101,7 +101,7 @@ class TestCleanupOrphanedChunks:
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
-        memory_chunk_factory(tenant_id=user.id)
+        memory_chunk_factory(tenant_id=user.default_organization_id)
         orphan_id = uuid4()
         chunk = memory_chunk_factory(tenant_id=orphan_id)
 
@@ -115,7 +115,7 @@ class TestCleanupOrphanedChunks:
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
-        chunk = memory_chunk_factory(tenant_id=user.id)
+        chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
 
         gc.cleanup_orphaned_chunks(dry_run=False)
 
@@ -174,13 +174,13 @@ class TestCleanupOldChunks:
         gc = MemoryGCService(batch_size=10, chunk_retention_days=90)
 
         # Create old chunk and manually set created_at
-        old_chunk = memory_chunk_factory(tenant_id=user.id)
+        old_chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
         MemoryChunk.objects.filter(id=old_chunk.id).update(
             created_at=datetime.now(UTC) - timedelta(days=100)
         )
 
         # Create new chunk
-        new_chunk = memory_chunk_factory(tenant_id=user.id)
+        new_chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
 
         result = gc.cleanup_old_chunks(max_age_days=90, dry_run=False)
 
@@ -214,7 +214,7 @@ class TestLegacyCleanup:
         gc = MemoryGCService(batch_size=10)
 
         # Create chunks for user and graph
-        user_chunk = memory_chunk_factory(tenant_id=user.id)
+        user_chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
         graph_chunk = memory_chunk_factory(tenant_id=graph.id)
 
         # Create orphan chunk

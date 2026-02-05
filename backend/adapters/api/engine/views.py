@@ -8,15 +8,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
+from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import decrypt_api_key
-from infrastructure.orm.models import APIKey, User
+from infrastructure.orm.models import APIKey
 from infrastructure.security import s2s
-
-
-def _tenant_id_for_user(user: User) -> str:
-    if hasattr(user, "tenant_id") and user.tenant_id:
-        return str(user.tenant_id)
-    return str(user.id)
 
 
 class EngineCredentialDetailView(APIView):
@@ -42,7 +37,7 @@ class EngineCredentialDetailView(APIView):
             )
 
         try:
-            key = APIKey.objects.select_related("user").get(id=credential_id)
+            key = APIKey.objects.select_related("user", "organization").get(id=credential_id)
         except APIKey.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -50,9 +45,14 @@ class EngineCredentialDetailView(APIView):
                 status=404,
             )
 
-        owner = key.user
-        owner_tenant_id = _tenant_id_for_user(owner)
-        if owner_tenant_id != tenant_id:
+        owner_tenant_id = get_tenant_id_for_user(key.user)
+        if key.organization_id and str(key.organization_id) != tenant_id:
+            return error_response(
+                code="FORBIDDEN",
+                message="Credential does not belong to tenant",
+                status=403,
+            )
+        if not key.organization_id and owner_tenant_id != tenant_id:
             return error_response(
                 code="FORBIDDEN",
                 message="Credential does not belong to tenant",

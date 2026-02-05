@@ -21,13 +21,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, paginated_response, success_response
+from application.services.rbac import has_min_role
+from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import LLMBudget, LLMQuota, LLMUsage, User
 
 
 def _tenant_id_for_user(user: User) -> str:
-    if hasattr(user, "tenant_id") and user.tenant_id:
-        return str(user.tenant_id)
-    return str(user.id)
+    return get_tenant_id_for_user(user)
 
 
 def _parse_period(request: Request, default_days: int = 30) -> int | Response:
@@ -276,6 +276,13 @@ class LLMUsageExportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response | HttpResponse:
+        user = cast(User, request.user)
+        if not (has_min_role(user, "admin") or getattr(user, "is_staff", False)):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to export usage for this organization.",
+                status=403,
+            )
         tenant_id = _resolve_tenant_id(request)
         if isinstance(tenant_id, Response):
             return tenant_id
@@ -456,6 +463,13 @@ class LLMQuotaView(APIView):
         return success_response(payload)
 
     def put(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to update quotas in this organization.",
+                status=403,
+            )
         tenant_id = _resolve_tenant_id(request)
         if isinstance(tenant_id, Response):
             return tenant_id

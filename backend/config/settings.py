@@ -236,6 +236,18 @@ AUTH_REFRESH_COOKIE_SECURE = os.environ.get(
     "AUTH_REFRESH_COOKIE_SECURE", "true" if not DEBUG else "false"
 ).lower() in {"1", "true", "yes"}
 
+# Frontend base URL for redirects (SSO, billing)
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# Adaptive rate limits
+RUN_START_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_START_RATE_LIMIT_PER_MIN", "60"))
+RUN_INVOKE_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_INVOKE_RATE_LIMIT_PER_MIN", "120"))
+RUN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RUN_RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+# Stripe billing configuration
+STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
 # Engine Configuration (Go gRPC service)
 ENGINE_HOST = os.environ.get("ENGINE_HOST", "localhost")
 ENGINE_PORT = int(os.environ.get("ENGINE_PORT", "50051"))

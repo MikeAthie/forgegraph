@@ -22,6 +22,7 @@ from adapters.api.prompts.serializers import (
     PromptUpdateSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.rbac import has_min_role
 from infrastructure.orm.models import PromptTemplate, User
 
 
@@ -87,6 +88,12 @@ class PromptListCreateView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to create prompts in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         prompt = PromptTemplate.objects.create(
             owner=user,
             title=serializer.validated_data["title"],
@@ -130,6 +137,12 @@ class PromptDetailView(APIView):
             # User can access if they own it or it's public
             if prompt.owner == user or prompt.visibility == "public":
                 return prompt
+            if (
+                prompt.owner
+                and user.default_organization_id
+                and prompt.owner.default_organization_id == user.default_organization_id
+            ):
+                return prompt
             return None
         except PromptTemplate.DoesNotExist:
             return None
@@ -166,8 +179,18 @@ class PromptDetailView(APIView):
 
     def patch(self, request: Request, prompt_id: UUID) -> Response:
         """Update prompt (owner only)."""
+        user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to update prompts in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id, owner=cast(User, request.user))
+            prompt = PromptTemplate.objects.get(
+                id=prompt_id,
+                owner__default_organization_id=user.default_organization_id,
+            )
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -220,8 +243,18 @@ class PromptDetailView(APIView):
 
     def delete(self, request: Request, prompt_id: UUID) -> Response:
         """Delete prompt (owner only, not built-in)."""
+        user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to delete prompts in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id, owner=cast(User, request.user))
+            prompt = PromptTemplate.objects.get(
+                id=prompt_id,
+                owner__default_organization_id=user.default_organization_id,
+            )
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -244,7 +277,14 @@ class PromptCloneView(APIView):
             original = PromptTemplate.objects.get(id=prompt_id)
             # Can clone if owner or public
             user = cast(User, request.user)
-            if original.owner != user and original.visibility != "public":
+            if (
+                original.owner != user
+                and original.visibility != "public"
+                and (
+                    not original.owner
+                    or original.owner.default_organization_id != user.default_organization_id
+                )
+            ):
                 return error_response(
                     code="NOT_FOUND",
                     message=f"Prompt with id '{prompt_id}' not found or you do not have access to it",
@@ -287,8 +327,18 @@ class PromptPublishView(APIView):
 
     def post(self, request: Request, prompt_id: UUID) -> Response:
         """Publish a prompt."""
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to publish prompts in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
-            prompt = PromptTemplate.objects.get(id=prompt_id, owner=cast(User, request.user))
+            prompt = PromptTemplate.objects.get(
+                id=prompt_id,
+                owner__default_organization_id=user.default_organization_id,
+            )
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",

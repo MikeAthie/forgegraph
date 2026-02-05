@@ -9,6 +9,8 @@ from rest_framework.views import APIView
 
 from adapters.api.policies.serializers import TenantPolicySerializer
 from adapters.api.responses import error_response, success_response
+from application.services.rbac import has_min_role
+from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import TenantPolicy, User
 
 
@@ -17,7 +19,7 @@ class TenantPolicyView(APIView):
 
     def get(self, request: Request) -> Response:
         user = cast(User, request.user)
-        policy = TenantPolicy.objects.filter(tenant_id=user.id).first()
+        policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(user)).first()
         if not policy:
             return success_response(
                 {
@@ -52,9 +54,15 @@ class TenantPolicyView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to update policies in this organization.",
+                status=403,
+            )
         data = serializer.validated_data
         policy, _ = TenantPolicy.objects.update_or_create(
-            tenant_id=user.id,
+            tenant_id=get_tenant_id_for_user(user),
             defaults={
                 "http_allowlist": data.get("http_allowlist", []),
                 "http_denylist": data.get("http_denylist", []),

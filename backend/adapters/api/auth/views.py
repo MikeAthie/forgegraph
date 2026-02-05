@@ -74,6 +74,7 @@ class RegisterView(APIView):
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
         )
+        user.refresh_from_db()
 
         return Response(
             UserSerializer(user).data,

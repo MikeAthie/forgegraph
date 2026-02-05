@@ -17,11 +17,13 @@ import {
   Input,
   Spinner,
 } from "@/components/ui";
+import { authApi, getApiErrorMessage } from "../lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSsoLoading, setIsSsoLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
   const { login, isAuthenticated, loading, error, clearError } = useAuth();
@@ -80,6 +82,28 @@ export default function LoginPage() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSsoLogin = async () => {
+    setFormError("");
+    if (!email.trim()) {
+      setFormError("Enter your work email to continue with SSO.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFormError("Please enter a valid email address.");
+      return;
+    }
+
+    setIsSsoLoading(true);
+    try {
+      const authorizeUrl = await authApi.getSsoAuthorizeUrl(email);
+      window.location.href = authorizeUrl;
+    } catch (err: unknown) {
+      setFormError(getApiErrorMessage(err, "SSO login failed. Please try again."));
+    } finally {
+      setIsSsoLoading(false);
     }
   };
 
@@ -179,6 +203,31 @@ export default function LoginPage() {
                   </>
                 ) : (
                   "Sign in"
+                )}
+              </Button>
+
+              <div className="flex items-center gap-3 py-2">
+                <div className="h-px flex-1 bg-border/60" />
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Or continue with SSO
+                </span>
+                <div className="h-px flex-1 bg-border/60" />
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 text-base font-medium"
+                onClick={handleSsoLogin}
+                disabled={isSsoLoading || isSubmitting}
+              >
+                {isSsoLoading ? (
+                  <>
+                    <Spinner size="xs" className="mr-2" />
+                    Redirecting...
+                  </>
+                ) : (
+                  "Continue with Auth0 SSO"
                 )}
               </Button>
             </form>

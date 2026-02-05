@@ -6,6 +6,8 @@ export interface User {
   email: string;
   created_at: string;
   is_active: boolean;
+  default_organization_id?: string | null;
+  organization_role?: "owner" | "admin" | "member" | "viewer" | null;
 }
 
 export interface AccessTokenResponse {
@@ -77,6 +79,9 @@ const API_PATHS = {
     logout: "/api/auth/logout",
     refresh: "/api/auth/refresh",
     me: "/api/auth/me",
+    ssoLogin: "/api/auth/sso/auth0/login",
+    ssoCallback: "/api/auth/sso/auth0/callback",
+    ssoProvider: "/api/auth/sso/provider",
   },
   graphs: {
     listCreate: "/api/graphs/",
@@ -122,9 +127,29 @@ const API_PATHS = {
   templates: {
     list: "/api/templates/",
     clone: (templateId: string) => `/api/templates/${templateId}/clone`,
+    versions: (templateId: string) => `/api/templates/${templateId}/versions`,
+    ratings: (templateId: string) => `/api/templates/${templateId}/ratings`,
+  },
+  onboarding: {
+    milestones: "/api/onboarding/milestones",
   },
   auditLogs: {
     list: "/api/audit-logs/",
+  },
+  orgs: {
+    me: "/api/orgs/me",
+    members: "/api/orgs/members",
+    memberDetail: (userId: string) => `/api/orgs/members/${userId}`,
+  },
+  scim: {
+    token: "/api/scim/token",
+    rotate: "/api/scim/token/rotate",
+  },
+  billing: {
+    plans: "/api/billing/plans",
+    subscription: "/api/billing/subscription",
+    checkout: "/api/billing/checkout",
+    portal: "/api/billing/portal",
   },
 } as const;
 
@@ -149,6 +174,10 @@ const authClient: AxiosInstance = axios.create({
 
 export const getAccessToken = (): string | null => {
   return accessToken;
+};
+
+export const setAccessToken = (token: string | null): void => {
+  accessToken = token;
 };
 
 export const clearTokens = (): void => {
@@ -318,6 +347,26 @@ export interface GraphVersionSummary {
   checksum: string;
   created_at: string;
 }
+
+export interface Organization {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationMember {
+  user_id: string;
+  email: string;
+  role: "owner" | "admin" | "member" | "viewer";
+  is_default: boolean;
+  joined_at: string;
+}
+
+export type OrganizationMeResponse = {
+  organization: Organization;
+  role: OrganizationMember["role"];
+};
 
 export interface GraphDetail {
   id: string;
@@ -515,12 +564,22 @@ export type CredentialCreateInput = {
 
 export type GraphTemplate = {
   id: string;
+  group_id: string;
   name: string;
   description: string;
   category: string;
   tags: string[];
   estimated_minutes: number;
   sample_input: Record<string, unknown>;
+  guide_steps: string[];
+  version: number;
+  changelog: string;
+  is_latest: boolean;
+  visibility: "public" | "organization" | "private" | string;
+  owner_organization_id: string | null;
+  rating_average: number | null;
+  rating_count: number;
+  usage_count: number;
 };
 
 export type TemplateCloneInput = {
@@ -581,6 +640,105 @@ export const promptsApi = {
     );
     return response.data.data;
   },
+
+  getSsoAuthorizeUrl: async (email: string): Promise<string> => {
+    const response = await api.get<{ authorize_url: string }>(API_PATHS.auth.ssoLogin, {
+      params: { email },
+    });
+    return response.data.authorize_url;
+  },
+
+  exchangeSsoCode: async (code: string, state: string): Promise<AccessTokenResponse> => {
+    const response = await api.post<AccessTokenResponse>(API_PATHS.auth.ssoCallback, { code, state });
+    accessToken = response.data.access;
+    return response.data;
+  },
+};
+
+export interface BillingPlan {
+  id: string;
+  name: string;
+  stripe_price_id: string;
+  stripe_product_id: string;
+  entitlements: Record<string, any>;
+}
+
+export interface BillingSubscription {
+  plan: {
+    id: string | null;
+    name: string | null;
+    entitlements: Record<string, any>;
+  } | null;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  stripe_customer_id: string;
+  stripe_subscription_id: string;
+}
+
+export const billingApi = {
+  listPlans: async (): Promise<BillingPlan[]> => {
+    const response = await api.get<ApiSuccessResponse<BillingPlan[]>>(API_PATHS.billing.plans);
+    return response.data.data;
+  },
+  getSubscription: async (): Promise<BillingSubscription | null> => {
+    const response = await api.get<ApiSuccessResponse<{ subscription: BillingSubscription | null }>>(
+      API_PATHS.billing.subscription,
+    );
+    return response.data.data.subscription;
+  },
+  createCheckout: async (planId: string): Promise<string> => {
+    const response = await api.post<ApiSuccessResponse<{ checkout_url: string }>>(
+      API_PATHS.billing.checkout,
+      { plan_id: planId },
+    );
+    return response.data.data.checkout_url;
+  },
+  createPortal: async (): Promise<string> => {
+    const response = await api.post<ApiSuccessResponse<{ portal_url: string }>>(
+      API_PATHS.billing.portal,
+      {},
+    );
+    return response.data.data.portal_url;
+  },
+};
+
+export interface SsoProviderConfig {
+  issuer_url: string;
+  client_id: string;
+  audience: string;
+  email_domains: string[];
+  default_role: "owner" | "admin" | "member" | "viewer";
+  enabled: boolean;
+}
+
+export const ssoApi = {
+  getProvider: async (): Promise<SsoProviderConfig> => {
+    const response = await api.get<SsoProviderConfig>(API_PATHS.auth.ssoProvider);
+    return response.data;
+  },
+  updateProvider: async (payload: Partial<SsoProviderConfig> & { client_secret?: string }) => {
+    const response = await api.put<SsoProviderConfig>(API_PATHS.auth.ssoProvider, payload);
+    return response.data;
+  },
+};
+
+export interface ScimTokenInfo {
+  token_last4: string | null;
+  created_at: string | null;
+  last_used_at: string | null;
+  rotated_at: string | null;
+}
+
+export const scimApi = {
+  getTokenInfo: async (): Promise<ScimTokenInfo> => {
+    const response = await api.get<ScimTokenInfo>(API_PATHS.scim.token);
+    return response.data;
+  },
+  rotateToken: async (): Promise<string> => {
+    const response = await api.post<{ token: string }>(API_PATHS.scim.rotate, {});
+    return response.data.token;
+  },
 };
 
 export const credentialsApi = {
@@ -602,12 +760,47 @@ export const templatesApi = {
     const response = await api.get<ApiSuccessResponse<GraphTemplate[]>>(API_PATHS.templates.list);
     return response.data.data;
   },
+  listVersions: async (templateId: string): Promise<GraphTemplate[]> => {
+    const response = await api.get<ApiSuccessResponse<GraphTemplate[]>>(
+      API_PATHS.templates.versions(templateId),
+    );
+    return response.data.data;
+  },
   clone: async (templateId: string, input: TemplateCloneInput): Promise<TemplateCloneResult> => {
     const response = await api.post<ApiSuccessResponse<TemplateCloneResult>>(
       API_PATHS.templates.clone(templateId),
       input,
     );
     return response.data.data;
+  },
+  rate: async (templateId: string, input: { rating: number; comment?: string }): Promise<void> => {
+    await api.post<ApiSuccessResponse<{ template_id: string; rating: number }>>(
+      API_PATHS.templates.ratings(templateId),
+      input,
+    );
+  },
+};
+
+export type OnboardingMilestone = {
+  key: string;
+  label: string;
+  description?: string | null;
+  completed: boolean;
+  completed_at: string | null;
+};
+
+export const onboardingApi = {
+  list: async (): Promise<OnboardingMilestone[]> => {
+    const response = await api.get<ApiSuccessResponse<OnboardingMilestone[]>>(
+      API_PATHS.onboarding.milestones,
+    );
+    return response.data.data;
+  },
+  complete: async (milestone: string, metadata?: Record<string, unknown>): Promise<void> => {
+    await api.post<ApiSuccessResponse<{ milestone: string }>>(
+      API_PATHS.onboarding.milestones,
+      { milestone, metadata: metadata ?? {} },
+    );
   },
 };
 
@@ -785,6 +978,41 @@ export const auditLogsApi = {
       params,
     });
     return response.data;
+  },
+};
+
+export const organizationsApi = {
+  me: async (): Promise<OrganizationMeResponse> => {
+    const response = await api.get<ApiSuccessResponse<OrganizationMeResponse>>(API_PATHS.orgs.me);
+    return response.data.data;
+  },
+
+  listMembers: async (): Promise<OrganizationMember[]> => {
+    const response = await api.get<ApiSuccessResponse<OrganizationMember[]>>(API_PATHS.orgs.members);
+    return response.data.data;
+  },
+
+  addMember: async (input: { email: string; role: OrganizationMember["role"] }): Promise<OrganizationMember> => {
+    const response = await api.post<ApiSuccessResponse<OrganizationMember>>(API_PATHS.orgs.members, input);
+    return response.data.data;
+  },
+
+  updateMember: async (
+    userId: string,
+    input: { role: OrganizationMember["role"] },
+  ): Promise<OrganizationMember> => {
+    const response = await api.patch<ApiSuccessResponse<OrganizationMember>>(
+      API_PATHS.orgs.memberDetail(userId),
+      input,
+    );
+    return response.data.data;
+  },
+
+  removeMember: async (userId: string): Promise<{ deleted: boolean }> => {
+    const response = await api.delete<ApiSuccessResponse<{ deleted: boolean }>>(
+      API_PATHS.orgs.memberDetail(userId),
+    );
+    return response.data.data;
   },
 };
 

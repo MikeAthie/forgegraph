@@ -305,7 +305,7 @@ class TestRunStart:
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
         call_payload = start_calls[0][1]
-        assert call_payload["tenant_id"] == str(user.id)
+        assert call_payload["tenant_id"] == str(user.default_organization_id)
 
         memory_config = json.loads(call_payload["memory_config_json"])
         assert memory_config["tier1"]["enabled"] is True
@@ -332,9 +332,9 @@ class TestRunStart:
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
         usage_run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
-        LLMQuota.objects.create(tenant_id=user.id, monthly_token_limit=100)
+        LLMQuota.objects.create(tenant_id=user.default_organization_id, monthly_token_limit=100)
         LLMUsage.objects.create(
-            tenant_id=user.id,
+            tenant_id=user.default_organization_id,
             run=usage_run,
             node_id="prompt-1",
             provider="openai",
@@ -354,6 +354,38 @@ class TestRunStart:
         assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
         assert response.data["error"]["code"] == "QUOTA_EXCEEDED"
         assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
+    @override_settings(
+        RUN_START_RATE_LIMIT_PER_MIN=1,
+        RUN_RATE_LIMIT_WINDOW_SECONDS=60,
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "rate-limit-start",
+            }
+        },
+    )
+    def test_start_run_rate_limited(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Rate Limit Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+
+        first = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "world"}},
+            format="json",
+        )
+        assert first.status_code == status.HTTP_201_CREATED
+
+        second = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "world"}},
+            format="json",
+        )
+        assert second.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert second.data["error"]["code"] == "RATE_LIMITED"
+        assert second.data["error"]["details"][0]["limit"] == 1
 
 
 class TestRunInvoke:
@@ -412,6 +444,55 @@ class TestRunInvoke:
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
         assert start_calls[0][1]["run_id"] == new_run.id
+
+    @override_settings(
+        RUN_INVOKE_RATE_LIMIT_PER_MIN=1,
+        RUN_RATE_LIMIT_WINDOW_SECONDS=60,
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "rate-limit-invoke",
+            }
+        },
+    )
+    def test_invoke_rate_limited(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="Invoke Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        thread_id = uuid4()
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            thread_id=thread_id,
+            started_at=timezone.now(),
+            input_json={"initial": "state"},
+        )
+        RunCheckpoint.objects.create(
+            run=run,
+            node_id="seed",
+            step_index=1,
+            state_json={"input.initial": "state"},
+            completed_nodes=["step"],
+            skipped_nodes=[],
+            graph_json=json.dumps(version.graph_json),
+        )
+
+        first = authenticated_client.post(
+            "/api/runs/invoke",
+            {"thread_id": str(thread_id), "input_json": {"query": "hi"}},
+            format="json",
+        )
+        assert first.status_code == status.HTTP_201_CREATED
+
+        second = authenticated_client.post(
+            "/api/runs/invoke",
+            {"thread_id": str(thread_id), "input_json": {"query": "again"}},
+            format="json",
+        )
+        assert second.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert second.data["error"]["code"] == "RATE_LIMITED"
 
 
 class TestRunCancel:
@@ -629,7 +710,7 @@ class TestEngineRunEvents:
             "event_id": event_id,
             "type": "run_started",
             "run_id": str(run.id),
-            "tenant_id": str(user.id),
+            "tenant_id": str(user.default_organization_id),
             "timestamp": timestamp_ms,
         }
         body = json.dumps(payload)

@@ -11,6 +11,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from application.services.tenancy import get_default_membership
+
 User = get_user_model()
 
 
@@ -56,6 +58,12 @@ class UserSerializer(serializers.Serializer[Any]):
     email = serializers.EmailField(read_only=True)
     created_at = serializers.DateTimeField(source="date_joined", read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+    default_organization_id = serializers.UUIDField(read_only=True)
+    organization_role = serializers.SerializerMethodField()
+
+    def get_organization_role(self, obj: Any) -> str | None:
+        membership = get_default_membership(obj)
+        return membership.role if membership else None
 
 
 class TokenSerializer(serializers.Serializer[Any]):

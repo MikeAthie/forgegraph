@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { Plus, Search, X } from "lucide-react";
+import { Plus, Search, Star, X } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
@@ -9,8 +9,10 @@ import {
   getApiErrorMessage,
   runsApi,
   templatesApi,
+  onboardingApi,
   type Credential,
   type GraphTemplate,
+  type OnboardingMilestone,
 } from "../lib/api";
 import { showError, showSuccess } from "../lib/toast";
 import {
@@ -28,7 +30,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
   Spinner,
+  Textarea,
 } from "@/components/ui";
 
 const PROVIDERS = ["openai", "anthropic"] as const;
@@ -53,6 +57,9 @@ export default function OnboardingPage() {
   const [provider, setProvider] = useState<string>("openai");
   const [model, setModel] = useState<string>("gpt-4");
   const [credentialId, setCredentialId] = useState<string>("");
+  const [milestones, setMilestones] = useState<OnboardingMilestone[]>([]);
+  const [useSampleData, setUseSampleData] = useState(true);
+  const [customInput, setCustomInput] = useState("{}");
 
   // Template search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,6 +70,8 @@ export default function OnboardingPage() {
   const [newCredentialName, setNewCredentialName] = useState("");
   const [newCredentialKey, setNewCredentialKey] = useState("");
   const [isCreatingCredential, setIsCreatingCredential] = useState(false);
+  const [ratingInFlight, setRatingInFlight] = useState(false);
+  const [ratedTemplateId, setRatedTemplateId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,16 +126,60 @@ export default function OnboardingPage() {
   const hasTemplate = Boolean(selectedTemplateId);
   const hasCredential = Boolean(credentialId);
 
+  const checklist = useMemo(() => {
+    if (milestones.length > 0) {
+      return milestones;
+    }
+    return [
+      { key: "select_template", label: "Template selected", completed: hasTemplate, completed_at: null },
+      { key: "attach_credential", label: "Credential attached", completed: hasCredential, completed_at: null },
+      { key: "run_template", label: "First run started", completed: false, completed_at: null },
+    ] satisfies OnboardingMilestone[];
+  }, [milestones, hasTemplate, hasCredential]);
+
+  const completeMilestone = useCallback(
+    async (milestone: string, metadata?: Record<string, unknown>) => {
+      try {
+        await onboardingApi.complete(milestone, metadata);
+      } catch (err) {
+        console.warn("Failed to update milestone", err);
+        return;
+      }
+
+      setMilestones((prev) => {
+        const now = new Date().toISOString();
+        const existing = prev.find((item) => item.key === milestone);
+        if (!existing) {
+          return [
+            ...prev,
+            { key: milestone, label: milestone, completed: true, completed_at: now },
+          ];
+        }
+        if (existing.completed) {
+          return prev;
+        }
+        return prev.map((item) =>
+          item.key === milestone
+            ? { ...item, completed: true, completed_at: item.completed_at ?? now }
+            : item,
+        );
+      });
+    },
+    [],
+  );
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [templatesData, credentialsData] = await Promise.all([
+      const [templatesData, credentialsData, milestonesData] = await Promise.all([
         templatesApi.list(),
         credentialsApi.list(),
+        onboardingApi.list(),
       ]);
       setTemplates(templatesData);
       setCredentials(credentialsData);
+      setMilestones(milestonesData);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Failed to load onboarding data."));
     } finally {
@@ -148,6 +201,19 @@ export default function OnboardingPage() {
     setCredentialId("");
     setShowCredentialForm(false);
   }, [provider]);
+
+  useEffect(() => {
+    if (credentialId) {
+      void completeMilestone("attach_credential", { provider });
+    }
+  }, [credentialId, provider, completeMilestone]);
+
+  useEffect(() => {
+    if (!useSampleData) {
+      const baseInput = selectedTemplate?.sample_input ?? {};
+      setCustomInput(JSON.stringify(baseInput, null, 2));
+    }
+  }, [selectedTemplate, useSampleData]);
 
   // Auto-show credential form if no credentials exist for selected provider
   useEffect(() => {
@@ -182,8 +248,38 @@ export default function OnboardingPage() {
     }
   };
 
+  const handleRateTemplate = async (rating: number) => {
+    if (!selectedTemplate || ratingInFlight) return;
+    setRatingInFlight(true);
+    try {
+      await templatesApi.rate(selectedTemplate.id, { rating });
+      setRatedTemplateId(selectedTemplate.id);
+      showSuccess("Thanks for the rating", "Template feedback saved.");
+    } catch (err: unknown) {
+      showError("Rating failed", getApiErrorMessage(err, "Unable to save rating."));
+    } finally {
+      setRatingInFlight(false);
+    }
+  };
+
   const handleRun = async () => {
     if (!selectedTemplate || !credentialId) return;
+
+    let inputPayload: Record<string, unknown> = selectedTemplate.sample_input || {};
+    if (!useSampleData) {
+      try {
+        const parsed = customInput.trim() ? JSON.parse(customInput) : {};
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          showError("Invalid JSON", "Custom input must be a JSON object.");
+          return;
+        }
+        inputPayload = parsed as Record<string, unknown>;
+      } catch (err) {
+        showError("Invalid JSON", "Custom input must be valid JSON.");
+        return;
+      }
+    }
+
     setIsRunning(true);
     try {
       const clone = await templatesApi.clone(selectedTemplate.id, {
@@ -194,8 +290,9 @@ export default function OnboardingPage() {
       });
       const run = await runsApi.start({
         graph_version_id: clone.graph_version_id,
-        input_json: selectedTemplate.sample_input || {},
+        input_json: inputPayload,
       });
+      void completeMilestone("run_template", { template_id: selectedTemplate.id });
       showSuccess("Run started", "Live execution is now streaming.");
       await router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
@@ -351,6 +448,7 @@ export default function OnboardingPage() {
                           onClick={() => {
                             setSelectedTemplateId(template.id);
                             setGraphName(template.name);
+                            void completeMilestone("select_template", { template_id: template.id });
                           }}
                           className={`w-full rounded-xl border px-3 py-3 text-left text-sm transition ${
                             selectedTemplateId === template.id
@@ -367,6 +465,16 @@ export default function OnboardingPage() {
                           <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                             {template.description}
                           </p>
+                          {(template.rating_count > 0 || template.usage_count > 0) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                              {template.rating_count > 0 && (
+                                <span>
+                                  ★ {template.rating_average?.toFixed(1) ?? "0.0"} ({template.rating_count})
+                                </span>
+                              )}
+                              {template.usage_count > 0 && <span>{template.usage_count} uses</span>}
+                            </div>
+                          )}
                           {template.tags && template.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {template.tags.slice(0, 3).map((tag) => (
@@ -383,6 +491,42 @@ export default function OnboardingPage() {
                       ))
                     )}
                   </div>
+
+                  {selectedTemplate?.guide_steps?.length ? (
+                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                      <div className="text-[11px] font-semibold text-foreground mb-1">Quick guide</div>
+                      <div className="space-y-1">
+                        {selectedTemplate.guide_steps.map((step, idx) => (
+                          <div key={`${selectedTemplate.id}-step-${idx}`} className="flex items-start gap-2">
+                            <span className="mt-0.5 text-[10px] text-muted-foreground">•</span>
+                            <span>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedTemplate ? (
+                    <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                      <span>
+                        Rate this template{" "}
+                        {ratedTemplateId === selectedTemplate.id ? "✓" : ""}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((rating) => (
+                          <button
+                            key={`${selectedTemplate.id}-rating-${rating}`}
+                            type="button"
+                            onClick={() => void handleRateTemplate(rating)}
+                            disabled={ratingInFlight}
+                            className="text-muted-foreground hover:text-foreground transition"
+                          >
+                            <Star className="h-3.5 w-3.5" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -552,6 +696,29 @@ export default function OnboardingPage() {
                       Select a template to continue
                     </div>
                   )}
+
+                  <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-3 text-sm space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-medium text-foreground">Sample data mode</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          Use the template's sample input for a sandboxed run.
+                        </div>
+                      </div>
+                      <Switch checked={useSampleData} onCheckedChange={setUseSampleData} />
+                    </div>
+                    {!useSampleData && (
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-muted-foreground">Custom input (JSON)</div>
+                        <Textarea
+                          value={customInput}
+                          onChange={(e) => setCustomInput(e.target.value)}
+                          rows={6}
+                          className="text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
                   <Button
                     onClick={handleRun}
                     disabled={!selectedTemplate || !credentialId || isRunning}
@@ -563,14 +730,15 @@ export default function OnboardingPage() {
 
                   {/* Completion checklist */}
                   <div className="text-xs text-muted-foreground space-y-1 pt-2">
-                    <div className={`flex items-center gap-2 ${hasTemplate ? "text-green-600 dark:text-green-400" : ""}`}>
-                      <span>{hasTemplate ? "✓" : "○"}</span>
-                      <span>Template selected</span>
-                    </div>
-                    <div className={`flex items-center gap-2 ${hasCredential ? "text-green-600 dark:text-green-400" : ""}`}>
-                      <span>{hasCredential ? "✓" : "○"}</span>
-                      <span>Credential attached</span>
-                    </div>
+                    {checklist.map((item) => (
+                      <div
+                        key={item.key}
+                        className={`flex items-center gap-2 ${item.completed ? "text-green-600 dark:text-green-400" : ""}`}
+                      >
+                        <span>{item.completed ? "✓" : "○"}</span>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>

@@ -275,12 +275,20 @@ export default function PromptsPage() {
     selectedPrompt && selectedPrompt.visibility === "public" && selectedPrompt.owner_id !== user?.id,
   );
 
+  const isOrgAdmin = user?.organization_role === "owner" || user?.organization_role === "admin";
+
   const canEditSelected = Boolean(
-    selectedPrompt && user?.id && selectedPrompt.owner_id && selectedPrompt.owner_id === user.id,
+    selectedPrompt &&
+      user?.id &&
+      selectedPrompt.owner_id &&
+      (selectedPrompt.owner_id === user.id || isOrgAdmin),
   );
 
   const canPublishSelected = Boolean(
-    selectedPrompt && canEditSelected && selectedPrompt.visibility !== "public",
+    selectedPrompt &&
+      canEditSelected &&
+      selectedPrompt.visibility !== "public" &&
+      isOrgAdmin,
   );
 
   const cloneSelected = async () => {

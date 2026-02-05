@@ -22,6 +22,10 @@ def create_celery_app() -> Celery:
                 "task": "adapters.worker.gc_worker.run_memory_gc",
                 "schedule": crontab(hour=3, minute=0),
             },
+            "data-retention-daily": {
+                "task": "adapters.worker.retention_worker.run_retention_cleanup",
+                "schedule": crontab(hour=4, minute=0),
+            },
         },
     )
     app.autodiscover_tasks(["adapters.worker"])

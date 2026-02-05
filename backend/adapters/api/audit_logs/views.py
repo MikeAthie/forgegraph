@@ -1,21 +1,24 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Q
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, paginated_response
-from infrastructure.orm.models import AuditLog
+from application.services.rbac import has_min_role
+from application.services.tenancy import get_tenant_id_for_user
+from infrastructure.orm.models import AuditLog, User
 
 
 class AuditLogListView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
+        user = cast(User, request.user)
         action = (request.query_params.get("action") or "").strip()
         resource_type = (request.query_params.get("resource_type") or "").strip()
         actor_email = (request.query_params.get("actor_email") or "").strip()
@@ -46,14 +49,23 @@ class AuditLogListView(APIView):
             )
 
         qs = AuditLog.objects.select_related("actor").all()
+        if not getattr(user, "is_staff", False):
+            if not has_min_role(user, "admin"):
+                return error_response(
+                    code="FORBIDDEN",
+                    message="You don't have permission to view audit logs in this organization.",
+                    status=403,
+                )
+            tenant_id = get_tenant_id_for_user(user)
+            qs = qs.filter(tenant_id=tenant_id)
+        elif tenant_id:
+            qs = qs.filter(tenant_id=tenant_id)
         if action:
             qs = qs.filter(action=action)
         if resource_type:
             qs = qs.filter(resource_type=resource_type)
         if actor_email:
             qs = qs.filter(Q(actor__email__icontains=actor_email))
-        if tenant_id:
-            qs = qs.filter(tenant_id=tenant_id)
 
         total_count = qs.count()
         page = qs.order_by("-created_at")[offset : offset + limit]

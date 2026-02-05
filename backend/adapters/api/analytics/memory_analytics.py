@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
+from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import (
     MemoryChunk,
     MemoryConfiguration,
@@ -31,9 +32,7 @@ from infrastructure.orm.models import (
 
 
 def _tenant_id_for_user(user: User) -> str:
-    if hasattr(user, "tenant_id") and user.tenant_id:
-        return str(user.tenant_id)
-    return str(user.id)
+    return get_tenant_id_for_user(user)
 
 
 def _parse_period(request: Request, default_days: int = 30) -> int | Response:

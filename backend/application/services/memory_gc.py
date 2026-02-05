@@ -11,7 +11,7 @@ from django.core.cache import cache
 from django.db import connection
 
 from adapters.repositories.memory_chunk_repository import MemoryChunkRepository
-from infrastructure.orm.models import Graph, MemoryChunk, MemoryEntry
+from infrastructure.orm.models import Graph, MemoryChunk, MemoryEntry, Organization
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -59,13 +59,15 @@ class MemoryGCService:
         - Graph.id (graph-scoped memory)
         """
         user_ids = set(User.objects.values_list("id", flat=True))
+        organization_ids = set(Organization.objects.values_list("id", flat=True))
         graph_ids = set(Graph.objects.values_list("id", flat=True))
 
-        valid_ids = user_ids | graph_ids
+        valid_ids = user_ids | organization_ids | graph_ids
         logger.info(
             "Found valid tenant IDs",
             extra={
                 "user_count": len(user_ids),
+                "organization_count": len(organization_ids),
                 "graph_count": len(graph_ids),
                 "total": len(valid_ids),
             },
