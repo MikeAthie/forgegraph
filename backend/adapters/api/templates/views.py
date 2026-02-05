@@ -26,6 +26,7 @@ from adapters.api.templates.serializers import (
     TemplateShareSerializer,
     TemplateVersionCreateSerializer,
 )
+from application.services.audit_log import record_audit_log
 from application.services.rbac import has_min_role
 from infrastructure.orm.models import (
     APIKey,
@@ -122,6 +123,12 @@ class TemplateListView(APIView):
                 rating_average=Avg("ratings__rating"),
                 rating_count=Count("ratings", distinct=True),
                 usage_count=Count("usage_events", distinct=True),
+                run_total=Count("usage_events__graph__versions__runs", distinct=True),
+                run_succeeded=Count(
+                    "usage_events__graph__versions__runs",
+                    filter=Q(usage_events__graph__versions__runs__status="succeeded"),
+                    distinct=True,
+                ),
             )
             .order_by("display_order", "name")
         )
@@ -255,6 +262,12 @@ class TemplateVersionsView(APIView):
                 rating_average=Avg("ratings__rating"),
                 rating_count=Count("ratings", distinct=True),
                 usage_count=Count("usage_events", distinct=True),
+                run_total=Count("usage_events__graph__versions__runs", distinct=True),
+                run_succeeded=Count(
+                    "usage_events__graph__versions__runs",
+                    filter=Q(usage_events__graph__versions__runs__status="succeeded"),
+                    distinct=True,
+                ),
             )
             .order_by("-version")
         )
@@ -353,6 +366,12 @@ class TemplateVersionsView(APIView):
                 rating_average=Avg("ratings__rating"),
                 rating_count=Count("ratings", distinct=True),
                 usage_count=Count("usage_events", distinct=True),
+                run_total=Count("usage_events__graph__versions__runs", distinct=True),
+                run_succeeded=Count(
+                    "usage_events__graph__versions__runs",
+                    filter=Q(usage_events__graph__versions__runs__status="succeeded"),
+                    distinct=True,
+                ),
             )
             .first()
         )
@@ -473,6 +492,18 @@ class TemplateShareView(APIView):
             defaults={"shared_by": user},
         )
 
+        record_audit_log(
+            actor=user,
+            tenant_id=str(org.id),
+            action="template.shared",
+            resource_type="graph_template",
+            resource_id=str(template.id),
+            metadata={
+                "shared_with_organization_id": str(target_org.id),
+                "template_group_id": str(template.group_id),
+            },
+        )
+
         return success_response(
             {
                 "template_id": str(template.id),
@@ -509,5 +540,16 @@ class TemplateShareView(APIView):
                 message="Share record not found.",
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        record_audit_log(
+            actor=user,
+            tenant_id=str(org.id),
+            action="template.unshared",
+            resource_type="graph_template",
+            resource_id=str(template_id),
+            metadata={
+                "unshared_organization_id": str(organization_id),
+            },
+        )
 
         return success_response({"deleted": True})

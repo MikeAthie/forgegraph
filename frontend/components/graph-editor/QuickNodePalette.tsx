@@ -19,6 +19,13 @@ import {
   Search,
   LogOut,
   Sparkles,
+  // Integration icons
+  Send,
+  BookOpen,
+  Hash,
+  MessageCircle,
+  Github,
+  Table,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -51,6 +58,14 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Database,
   Search,
   LogOut,
+  // Integration icons
+  Send,
+  BookOpen,
+  Hash,
+  MessageCircle,
+  Sparkles,
+  Github,
+  Table,
 };
 
 interface QuickNodePaletteProps {
@@ -98,7 +113,10 @@ export function QuickNodePalette({
       {showSearch && (
         <Input
           type="text"
-          placeholder="Search presets..."
+          name="preset-search"
+          autoComplete="off"
+          aria-label="Search quick node presets"
+          placeholder="Search presets…"
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
@@ -115,7 +133,7 @@ export function QuickNodePalette({
             type="button"
             onClick={() => setSelectedCategory(null)}
             className={cn(
-              "px-2 py-1 rounded-full text-xs font-medium transition-colors",
+              "touch-manipulation px-2 py-1 rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1",
               selectedCategory === null
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -129,7 +147,7 @@ export function QuickNodePalette({
               type="button"
               onClick={() => setSelectedCategory(key)}
               className={cn(
-                "px-2 py-1 rounded-full text-xs font-medium transition-colors",
+                "touch-manipulation px-2 py-1 rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1",
                 selectedCategory === key
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -166,7 +184,7 @@ export function QuickNodePalette({
           <button
             type="button"
             onClick={() => setSelectedCategory("ai")}
-            className="text-primary hover:underline"
+            className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 rounded"
           >
             Browse all categories
           </button>
@@ -190,7 +208,7 @@ function PresetCard({ preset, compact = false, onClick }: PresetCardProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-start gap-3 p-3 rounded-lg border border-border bg-background/60 hover:bg-accent/50 hover:border-primary/30 transition-all text-left group",
+        "group flex items-start gap-3 rounded-lg border border-border bg-background/60 p-3 text-left transition-colors transition-shadow hover:border-primary/30 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 touch-manipulation",
         compact && "p-2"
       )}
     >

@@ -175,6 +175,14 @@ const getStatusBadgeClass = (status: string) => {
   }
 };
 
+const getRunStatusLabel = (run: RunDetail | null) => {
+  if (!run) return "";
+  if (String(run.status) === "pending" && run.queue_status) {
+    return "queued";
+  }
+  return String(run.status);
+};
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getReconnectDelayMs = (attempt: number) => {
@@ -254,6 +262,9 @@ export default function RunDetailPage() {
   const [streamReconnectCount, setStreamReconnectCount] = useState(0);
   const [lastReconnectFrom, setLastReconnectFrom] = useState<string | null>(null);
   const lastStreamTimestampRef = useRef<string | null>(null);
+  const pendingRunDeltaRef = useRef<RunDeltaPayload | null>(null);
+  const pendingNodeRunsRef = useRef<Map<string, NodeRunItem>>(new Map());
+  const flushRafRef = useRef<number | null>(null);
 
   const runStatusRef = useRef<string | null>(null);
 
@@ -430,6 +441,51 @@ export default function RunDetailPage() {
     return formatJsonForDisplay(latestSucceededNodeRun.output_json);
   }, [latestSucceededNodeRun]);
 
+  const flushStreamUpdates = useCallback(() => {
+    if (flushRafRef.current !== null) {
+      return;
+    }
+    flushRafRef.current = window.requestAnimationFrame(() => {
+      flushRafRef.current = null;
+      const runDelta = pendingRunDeltaRef.current;
+      const nodeRunUpdates = pendingNodeRunsRef.current;
+      if (!runDelta && nodeRunUpdates.size === 0) return;
+
+      pendingRunDeltaRef.current = null;
+      pendingNodeRunsRef.current = new Map();
+
+      setRun((prev) => {
+        if (!prev) return prev;
+        let next = prev;
+        if (runDelta) {
+          next = { ...next, ...runDelta };
+        }
+        if (nodeRunUpdates.size > 0) {
+          const nodeRunList = [...next.node_runs];
+          for (const update of nodeRunUpdates.values()) {
+            const existingById = nodeRunList.findIndex((nodeRun) => nodeRun.id === update.id);
+            const existingByKey =
+              existingById === -1
+                ? nodeRunList.findIndex(
+                    (nodeRun) =>
+                      nodeRun.node_id === update.node_id && nodeRun.attempt === update.attempt,
+                  )
+                : existingById;
+
+            if (existingByKey === -1) {
+              nodeRunList.push(update);
+            } else {
+              nodeRunList[existingByKey] = update;
+            }
+          }
+          next = { ...next, node_runs: sortNodeRuns(nodeRunList) };
+        }
+        return next;
+      });
+      setLastUpdatedAt(new Date());
+    });
+  }, []);
+
   const handleStreamMessage = useCallback((message: RunsWsMessage | null) => {
     if (!message) return;
 
@@ -447,14 +503,8 @@ export default function RunDetailPage() {
         lastStreamTimestampRef.current = messageTimestamp;
       }
       const runDelta = (message as { run: RunDeltaPayload }).run;
-      setRun((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          ...runDelta,
-        };
-      });
-      setLastUpdatedAt(new Date());
+      pendingRunDeltaRef.current = runDelta;
+      flushStreamUpdates();
       return;
     }
 
@@ -468,31 +518,11 @@ export default function RunDetailPage() {
         lastStreamTimestampRef.current = messageTimestamp;
       }
       const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
-      setRun((prev) => {
-        if (!prev) return prev;
-
-        const existingById = prev.node_runs.findIndex((nodeRun) => nodeRun.id === updatedNodeRun.id);
-        const existingByKey =
-          existingById === -1
-            ? prev.node_runs.findIndex(
-                (nodeRun) =>
-                  nodeRun.node_id === updatedNodeRun.node_id && nodeRun.attempt === updatedNodeRun.attempt,
-              )
-            : existingById;
-
-        const nextNodeRuns =
-          existingByKey === -1
-            ? [...prev.node_runs, updatedNodeRun]
-            : prev.node_runs.map((nodeRun, index) => (index === existingByKey ? updatedNodeRun : nodeRun));
-
-        return {
-          ...prev,
-          node_runs: sortNodeRuns(nextNodeRuns),
-        };
-      });
-      setLastUpdatedAt(new Date());
+      const key = updatedNodeRun.id || `${updatedNodeRun.node_id}:${updatedNodeRun.attempt}`;
+      pendingNodeRunsRef.current.set(key, updatedNodeRun);
+      flushStreamUpdates();
     }
-  }, []);
+  }, [flushStreamUpdates]);
 
   useEffect(() => {
     if (!run || String(run.status) !== "paused") {
@@ -955,7 +985,7 @@ export default function RunDetailPage() {
                     </span>
                     <Badge variant="outline" className={getStatusBadgeClass(String(run.status))}>
                       <StatusIcon status={String(run.status)} />
-                      {hideRunStatusText ? null : String(run.status)}
+                      {hideRunStatusText ? null : getRunStatusLabel(run)}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
@@ -984,6 +1014,20 @@ export default function RunDetailPage() {
                       <p className="mt-1 text-sm font-mono">{run.id.slice(0, 8)}</p>
                     </div>
                   </div>
+                  {String(run.status) === "pending" && run.queue_status && (
+                    <div className="mt-4 rounded-lg border border-border/50 bg-muted/40 p-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase">Queue status</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                        <span className="capitalize">{run.queue_status}</span>
+                        {typeof run.queue_attempts === "number" && (
+                          <span>Attempts: {run.queue_attempts}</span>
+                        )}
+                        {run.queue_available_at && (
+                          <span>Next check: {formatDateTime(run.queue_available_at)}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {run.error_message && (String(run.status) === "failed" || String(run.status) === "canceled") && (
                     <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 p-3">

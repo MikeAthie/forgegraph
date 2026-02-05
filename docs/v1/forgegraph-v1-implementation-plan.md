@@ -34,16 +34,16 @@ See detailed tasks: `docs/v1/v1-tasks-p5.md`.
 
 ## V1 Readiness Checklist
 Product:
-- [ ] RBAC and org management enforce permissions for all APIs.
-- [ ] SSO (OIDC or SAML) supported with just-in-time provisioning.
-- [ ] Plans and entitlements block overuse with clear errors.
+- [x] RBAC and org management enforce permissions for all APIs.
+- [x] SSO (OIDC or SAML) supported with just-in-time provisioning.
+- [x] Plans and entitlements block overuse with clear errors.
 
 Reliability:
-- [ ] Runs are queued and can scale across workers.
-- [ ] Metrics, tracing, and alerts cover engine and API critical paths.
-- [ ] Backups and restore drills complete with documented RTO/RPO.
+- [x] Runs are queued and can scale across workers.
+- [x] Metrics, tracing, and alerts cover engine and API critical paths.
+- [x] Backups and restore drills complete with documented RTO/RPO.
 
 Platform:
-- [ ] SDK can ship a new node without editing core engine code.
-- [ ] Templates are versioned and can be shared across tenants.
-- [ ] Top 10 integrations are available with OAuth setup flows.
+- [x] SDK can ship a new node without editing core engine code.
+- [x] Templates are versioned and can be shared across tenants.
+- [x] Top 10 integrations are available with self-serve auth setup (OAuth and API-key) and quick-add graph tooling.

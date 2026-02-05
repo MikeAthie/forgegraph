@@ -31,9 +31,9 @@ Testing strategy:
 - Integration: install a node and execute within a graph.
 
 Success criteria / Definition of Done:
-- [ ] A new node can be added without core engine changes.
-- [ ] Registry supports versioning and review workflow.
-- [ ] Installed nodes appear in the palette and execute correctly.
+- [x] A new node can be added without core engine changes.
+- [x] Registry supports versioning and review workflow.
+- [x] Installed nodes appear in the palette and execute correctly.
 
 Dependencies:
 - P2 guardrails and policies.
@@ -63,9 +63,9 @@ Testing strategy:
 - E2E: user can browse, preview, and apply template.
 
 Success criteria / Definition of Done:
-- [ ] Templates are versioned and discoverable by tags.
-- [ ] Sharing is read-only by default and auditable.
-- [ ] Analytics capture template adoption and success rate.
+- [x] Templates are versioned and discoverable by tags.
+- [x] Sharing is read-only by default and auditable.
+- [x] Analytics capture template adoption and success rate.
 
 Dependencies:
 - P0 onboarding flow and templates.
@@ -85,6 +85,7 @@ Implementation steps:
 1. Add top integrations (Slack, Notion, HubSpot, Jira, Google Drive).
 2. Implement OAuth wizard flows with scoped permissions.
 3. Add credential health checks and reauth prompts.
+4. Add graph-editor quick tool UI powered by installed marketplace integrations.
 
 Recommended patterns / best practices:
 - Centralized OAuth provider config with tenant isolation.
@@ -95,9 +96,10 @@ Testing strategy:
 - E2E: node execution with refreshed credentials.
 
 Success criteria / Definition of Done:
-- [ ] At least 10 new integrations are usable end-to-end.
-- [ ] OAuth setup is self-serve and completes in under 2 minutes.
-- [ ] Credential errors are surfaced with remediation steps.
+- [x] At least 10 new integrations are usable end-to-end.
+- [x] OAuth setup is self-serve and completes in under 2 minutes.
+- [x] Credential errors are surfaced with remediation steps.
+- [x] Quick tool bar adds backend marketplace integrations directly to graphs.
 
 Dependencies:
 - P3 org and credential model.

@@ -101,6 +101,10 @@ const API_PATHS = {
   credentials: {
     listCreate: "/api/credentials/",
     detail: (credentialId: string) => `/api/credentials/${credentialId}`,
+    oauthProviders: "/api/credentials/oauth/providers",
+    oauthProviderConfig: (provider: string) => `/api/credentials/oauth/providers/${provider}`,
+    oauthStart: "/api/credentials/oauth/start",
+    oauthCallback: "/api/credentials/oauth/callback",
   },
   runs: {
     list: "/api/runs/",
@@ -129,6 +133,13 @@ const API_PATHS = {
     clone: (templateId: string) => `/api/templates/${templateId}/clone`,
     versions: (templateId: string) => `/api/templates/${templateId}/versions`,
     ratings: (templateId: string) => `/api/templates/${templateId}/ratings`,
+  },
+  marketplace: {
+    packages: "/api/marketplace/packages",
+    installed: "/api/marketplace/installed",
+    install: (slug: string) => `/api/marketplace/packages/${slug}/install`,
+    releases: "/api/marketplace/releases",
+    reviewRelease: (releaseId: string) => `/api/marketplace/releases/${releaseId}/review`,
   },
   onboarding: {
     milestones: "/api/onboarding/milestones",
@@ -566,6 +577,10 @@ export type Credential = {
   provider: string;
   name: string;
   key_hint: string;
+  token_expires_at: string | null;
+  health_status: "healthy" | "expiring_soon" | "expired" | string;
+  requires_reauth: boolean;
+  health_message: string | null;
   created_at: string;
 };
 
@@ -573,6 +588,42 @@ export type CredentialCreateInput = {
   provider: string;
   name: string;
   api_key: string;
+};
+
+export type OAuthIntegrationProvider =
+  | "gmail"
+  | "notion"
+  | "slack"
+  | "jira"
+  | "linear"
+  | "hubspot"
+  | "google_drive";
+
+export type CredentialOAuthProviderStatus = {
+  provider: OAuthIntegrationProvider;
+  configured: boolean;
+  missing_config_fields: string[];
+  has_provider_config: boolean;
+  enabled: boolean;
+  client_id: string;
+  authorize_url: string;
+  token_url: string;
+  redirect_uri: string | null;
+  scopes: string[];
+  authorize_extra_params: Record<string, unknown>;
+  token_extra_params: Record<string, unknown>;
+};
+
+export type CredentialOAuthProviderConfigInput = {
+  client_id: string;
+  client_secret?: string;
+  authorize_url?: string;
+  token_url?: string;
+  redirect_uri?: string;
+  scopes?: string[];
+  authorize_extra_params?: Record<string, unknown>;
+  token_extra_params?: Record<string, unknown>;
+  enabled?: boolean;
 };
 
 export type GraphTemplate = {
@@ -608,6 +659,42 @@ export type TemplateCloneResult = {
   graph_version_id: string;
   graph_name: string;
   template_id: string;
+};
+
+export type MarketplaceRelease = {
+  id: string;
+  version: string;
+  changelog: string;
+  status: "draft" | "pending_review" | "approved" | "rejected" | string;
+  execution_node_type: "http" | "prompt" | "tool" | "transform" | string;
+  ui_schema: Record<string, unknown>;
+  config_schema: Record<string, unknown>;
+  config_defaults: Record<string, unknown>;
+  created_at: string;
+};
+
+export type MarketplacePackage = {
+  id: string;
+  slug: string;
+  name: string;
+  summary: string;
+  category: string;
+  icon: string;
+  docs_url: string;
+  homepage_url: string;
+  latest_release: MarketplaceRelease | null;
+  installed_release?: MarketplaceRelease | null;
+  installed_at?: string | null;
+};
+
+export type MarketplaceReleaseSummary = {
+  id: string;
+  package_slug: string;
+  package_name: string;
+  version: string;
+  status: "draft" | "pending_review" | "approved" | "rejected" | string;
+  execution_node_type: "http" | "prompt" | "tool" | "transform" | string;
+  created_at: string;
 };
 
 export const promptsApi = {
@@ -754,6 +841,46 @@ export const credentialsApi = {
   delete: async (credentialId: string): Promise<void> => {
     await api.delete(API_PATHS.credentials.detail(credentialId));
   },
+  listOAuthProviders: async (): Promise<CredentialOAuthProviderStatus[]> => {
+    const response = await api.get<ApiSuccessResponse<CredentialOAuthProviderStatus[]>>(
+      API_PATHS.credentials.oauthProviders,
+    );
+    return response.data.data;
+  },
+  getOAuthProviderConfig: async (
+    provider: OAuthIntegrationProvider,
+  ): Promise<CredentialOAuthProviderStatus> => {
+    const response = await api.get<ApiSuccessResponse<CredentialOAuthProviderStatus>>(
+      API_PATHS.credentials.oauthProviderConfig(provider),
+    );
+    return response.data.data;
+  },
+  upsertOAuthProviderConfig: async (
+    provider: OAuthIntegrationProvider,
+    input: CredentialOAuthProviderConfigInput,
+  ): Promise<CredentialOAuthProviderStatus> => {
+    const response = await api.put<ApiSuccessResponse<CredentialOAuthProviderStatus>>(
+      API_PATHS.credentials.oauthProviderConfig(provider),
+      input,
+    );
+    return response.data.data;
+  },
+  startOAuth: async (
+    provider: OAuthIntegrationProvider,
+    name?: string,
+  ): Promise<{ provider: OAuthIntegrationProvider; authorize_url: string; redirect_uri: string }> => {
+    const response = await api.post<
+      ApiSuccessResponse<{ provider: OAuthIntegrationProvider; authorize_url: string; redirect_uri: string }>
+    >(API_PATHS.credentials.oauthStart, { provider, name });
+    return response.data.data;
+  },
+  completeOAuthCallback: async (input: {
+    code: string;
+    state: string;
+  }): Promise<Credential> => {
+    const response = await api.post<ApiSuccessResponse<Credential>>(API_PATHS.credentials.oauthCallback, input);
+    return response.data.data;
+  },
 };
 
 export const templatesApi = {
@@ -779,6 +906,54 @@ export const templatesApi = {
       API_PATHS.templates.ratings(templateId),
       input,
     );
+  },
+};
+
+export const marketplaceApi = {
+  listPackages: async (): Promise<MarketplacePackage[]> => {
+    const response = await api.get<ApiSuccessResponse<MarketplacePackage[]>>(API_PATHS.marketplace.packages);
+    return response.data.data;
+  },
+  listInstalled: async (): Promise<MarketplacePackage[]> => {
+    const response = await api.get<ApiSuccessResponse<MarketplacePackage[]>>(API_PATHS.marketplace.installed);
+    return response.data.data;
+  },
+  install: async (slug: string, input?: { version?: string }): Promise<MarketplacePackage> => {
+    const response = await api.post<ApiSuccessResponse<MarketplacePackage>>(
+      API_PATHS.marketplace.install(slug),
+      input ?? {},
+    );
+    return response.data.data;
+  },
+  listReleases: async (): Promise<MarketplaceReleaseSummary[]> => {
+    const response = await api.get<ApiSuccessResponse<MarketplaceReleaseSummary[]>>(
+      API_PATHS.marketplace.releases,
+    );
+    return response.data.data;
+  },
+  createRelease: async (input: {
+    package_slug: string;
+    package_name?: string;
+    package_summary?: string;
+    package_category?: string;
+    package_icon?: string;
+    version: string;
+    changelog?: string;
+    execution_node_type: "http" | "prompt" | "tool" | "transform";
+    ui_schema?: Record<string, unknown>;
+    config_schema?: Record<string, unknown>;
+    config_defaults?: Record<string, unknown>;
+  }): Promise<{ id: string; package_slug: string; version: string; status: string }> => {
+    const response = await api.post<
+      ApiSuccessResponse<{ id: string; package_slug: string; version: string; status: string }>
+    >(API_PATHS.marketplace.releases, input);
+    return response.data.data;
+  },
+  reviewRelease: async (releaseId: string, decision: "approved" | "rejected") => {
+    const response = await api.patch<
+      ApiSuccessResponse<{ id: string; status: string; reviewed_at: string | null }>
+    >(API_PATHS.marketplace.reviewRelease(releaseId), { decision });
+    return response.data.data;
   },
 };
 
@@ -824,6 +999,9 @@ export interface RunListItem {
   graph_version_id: string;
   graph_version: number;
   status: RunStatus;
+  queue_status?: string | null;
+  queue_attempts?: number | null;
+  queue_available_at?: string | null;
   started_at: string | null;
   ended_at: string | null;
   duration_ms: number | null;
@@ -852,6 +1030,9 @@ export interface RunDetail {
   graph_version_id: string;
   graph_version: number;
   status: RunStatus;
+  queue_status?: string | null;
+  queue_attempts?: number | null;
+  queue_available_at?: string | null;
   started_at: string | null;
   ended_at: string | null;
   input_json: Record<string, unknown>;
