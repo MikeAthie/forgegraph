@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 from adapters.api.credentials.serializers import APIKeyCreateSerializer, APIKeySerializer
 from adapters.api.responses import error_response, success_response
 from application.services.audit_log import record_audit_log
+from application.services.rbac import has_min_role
+from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import encrypt_api_key
 from infrastructure.orm.models import APIKey, User
 
@@ -21,7 +23,20 @@ class CredentialsListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         user = cast(User, request.user)
-        keys = APIKey.objects.filter(user=user).order_by("-created_at")
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to view credentials in this organization.",
+                status=403,
+            )
+        if not user.default_organization:
+            return error_response(
+                code="NOT_FOUND",
+                message="No default organization found for this user.",
+                status=404,
+            )
+        organization = user.default_organization
+        keys = APIKey.objects.filter(organization=organization).order_by("-created_at")
         data = [APIKeySerializer(key).data for key in keys]
         return success_response(data)
 
@@ -39,12 +54,26 @@ class CredentialsListCreateView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to create credentials in this organization.",
+                status=403,
+            )
+        if not user.default_organization:
+            return error_response(
+                code="NOT_FOUND",
+                message="No default organization found for this user.",
+                status=404,
+            )
+        organization = user.default_organization
         provider = serializer.validated_data["provider"]
         name = serializer.validated_data["name"]
         api_key = serializer.validated_data["api_key"]
 
         try:
             key = APIKey.objects.create(
+                organization=organization,
                 user=user,
                 provider=provider,
                 name=name,
@@ -59,7 +88,7 @@ class CredentialsListCreateView(APIView):
 
         record_audit_log(
             actor=user,
-            tenant_id=str(user.id),
+            tenant_id=get_tenant_id_for_user(user),
             action="credential.created",
             resource_type="credential",
             resource_id=str(key.id),
@@ -74,8 +103,21 @@ class CredentialsDetailView(APIView):
 
     def delete(self, request: Request, credential_id: UUID) -> Response:
         user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to delete credentials in this organization.",
+                status=403,
+            )
+        if not user.default_organization:
+            return error_response(
+                code="NOT_FOUND",
+                message="No default organization found for this user.",
+                status=404,
+            )
+        organization = user.default_organization
         try:
-            key = APIKey.objects.get(id=credential_id, user=user)
+            key = APIKey.objects.get(id=credential_id, organization=organization)
         except APIKey.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -85,7 +127,7 @@ class CredentialsDetailView(APIView):
 
         record_audit_log(
             actor=user,
-            tenant_id=str(user.id),
+            tenant_id=get_tenant_id_for_user(user),
             action="credential.deleted",
             resource_type="credential",
             resource_id=str(key.id),

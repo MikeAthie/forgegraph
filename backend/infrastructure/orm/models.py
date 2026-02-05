@@ -17,7 +17,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from pgvector.django import IvfflatIndex, VectorField
 
 if TYPE_CHECKING:
@@ -65,6 +68,13 @@ class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     username = None  # type: ignore[assignment]  # Remove username field
     email = models.EmailField("email address", unique=True)
+    default_organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_users",
+    )
 
     USERNAME_FIELD: str = "email"
     REQUIRED_FIELDS: ClassVar[list[str]] = []
@@ -80,8 +90,65 @@ class User(AbstractUser):
         return str(self.email)
 
 
+class Organization(models.Model):
+    """Organization model for multi-user tenants."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "organizations"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class OrganizationMembership(models.Model):
+    """OrganizationMembership links users to organizations with roles."""
+
+    ROLE_CHOICES = [
+        ("owner", "Owner"),
+        ("admin", "Admin"),
+        ("member", "Member"),
+        ("viewer", "Viewer"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="organization_memberships",
+    )
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, default="member")
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "organization_memberships"
+        unique_together = [["organization", "user"]]
+        indexes = [
+            models.Index(fields=["organization", "role"], name="org_membership_role_idx"),
+            models.Index(fields=["user", "organization"], name="org_membership_user_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization.name}: {self.user.email} ({self.role})"
+
+
 class GraphQuerySet(models.QuerySet["Graph"]):
     def for_user(self, user: User) -> GraphQuerySet:
+        tenant_id = getattr(user, "default_organization_id", None)
+        if tenant_id:
+            return self.filter(owner__default_organization_id=tenant_id)
         return self.filter(owner=user)
 
 
@@ -103,6 +170,11 @@ class PromptTemplateQuerySet(models.QuerySet["PromptTemplate"]):
         return self.filter(visibility="public")
 
     def for_user(self, user: User) -> PromptTemplateQuerySet:
+        tenant_id = getattr(user, "default_organization_id", None)
+        if tenant_id:
+            return self.filter(
+                models.Q(owner__default_organization_id=tenant_id) | models.Q(visibility="public")
+            )
         return self.filter(models.Q(owner=user) | models.Q(visibility="public"))
 
 
@@ -282,7 +354,14 @@ class GraphVersion(models.Model):
 class GraphTemplate(models.Model):
     """GraphTemplate model representing a reusable workflow template."""
 
+    VISIBILITY_CHOICES = [
+        ("public", "Public"),
+        ("organization", "Organization"),
+        ("private", "Private"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group_id = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     category = models.CharField(max_length=64, blank=True, default="")
@@ -290,6 +369,22 @@ class GraphTemplate(models.Model):
     estimated_minutes = models.PositiveIntegerField(default=3)
     graph_json = models.JSONField()
     sample_input = models.JSONField(default=dict, blank=True)
+    guide_steps = models.JSONField(default=list, blank=True)
+    version = models.PositiveIntegerField(default=1)
+    changelog = models.TextField(blank=True, default="")
+    is_latest = models.BooleanField(default=True)
+    visibility = models.CharField(
+        max_length=16,
+        choices=VISIBILITY_CHOICES,
+        default="public",
+    )
+    owner_organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="graph_templates",
+    )
     display_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -300,10 +395,151 @@ class GraphTemplate(models.Model):
         ordering = ["display_order", "name"]
         indexes = [
             models.Index(fields=["is_active", "display_order"], name="graph_templates_active_idx"),
+            models.Index(fields=["group_id", "version"], name="graph_templates_group_idx"),
+            models.Index(fields=["is_latest", "visibility"], name="graph_templates_latest_idx"),
         ]
 
     def __str__(self) -> str:
         return self.name
+
+
+class TemplateShare(models.Model):
+    """Share a template with another organization (read-only)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    template = models.ForeignKey(
+        GraphTemplate,
+        on_delete=models.CASCADE,
+        related_name="shares",
+    )
+    organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.CASCADE,
+        related_name="template_shares",
+    )
+    shared_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shared_templates",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "template_shares"
+        unique_together = [["template", "organization"]]
+        indexes = [
+            models.Index(fields=["organization"], name="template_shares_org_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template_id} -> {self.organization_id}"
+
+
+class TemplateUsage(models.Model):
+    """Track template usage (clones and runs)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    template = models.ForeignKey(
+        GraphTemplate,
+        on_delete=models.CASCADE,
+        related_name="usage_events",
+    )
+    organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.CASCADE,
+        related_name="template_usage_events",
+    )
+    user = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="template_usage_events",
+    )
+    graph = models.ForeignKey(
+        "Graph",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="template_usage_events",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "template_usage"
+        indexes = [
+            models.Index(fields=["template", "created_at"], name="template_usage_template_idx"),
+            models.Index(fields=["organization", "created_at"], name="template_usage_org_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"TemplateUsage({self.template_id})"
+
+
+class TemplateRating(models.Model):
+    """Track template ratings."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    template = models.ForeignKey(
+        GraphTemplate,
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
+    organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.CASCADE,
+        related_name="template_ratings",
+    )
+    user = models.ForeignKey(
+        "User",
+        on_delete=models.CASCADE,
+        related_name="template_ratings",
+    )
+    rating = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "template_ratings"
+        unique_together = [["template", "user"]]
+        indexes = [
+            models.Index(fields=["template", "rating"], name="template_ratings_template_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"TemplateRating({self.template_id}, {self.rating})"
+
+
+class OnboardingMilestone(models.Model):
+    """Track onboarding progress milestones."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    user = models.ForeignKey(
+        "User",
+        on_delete=models.CASCADE,
+        related_name="onboarding_milestones",
+    )
+    milestone = models.CharField(max_length=64)
+    metadata = models.JSONField(default=dict, blank=True)
+    completed_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "onboarding_milestones"
+        unique_together = [["user", "milestone"]]
+        indexes = [
+            models.Index(fields=["tenant_id", "milestone"], name="onboarding_milestone_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"OnboardingMilestone({self.user_id}, {self.milestone})"
 
 
 class PromptTemplate(models.Model):
@@ -653,6 +889,132 @@ class TenantPolicy(models.Model):
         return f"TenantPolicy {self.tenant_id}"
 
 
+class TenantRetentionPolicy(models.Model):
+    """Per-tenant data retention policy for runs, logs, and audit data."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    runs_retention_days = models.PositiveIntegerField(null=True, blank=True)
+    run_logs_retention_days = models.PositiveIntegerField(null=True, blank=True)
+    audit_logs_retention_days = models.PositiveIntegerField(null=True, blank=True)
+    usage_retention_days = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tenant_retention_policies"
+
+    def __str__(self) -> str:
+        return f"TenantRetentionPolicy {self.tenant_id}"
+
+
+class OIDCProvider(models.Model):
+    """OIDC provider configuration per tenant (Auth0)."""
+
+    PROVIDER_CHOICES = [
+        ("auth0", "Auth0"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES, default="auth0")
+    issuer_url = models.URLField()
+    client_id = models.CharField(max_length=255)
+    encrypted_client_secret = models.BinaryField()
+    audience = models.CharField(max_length=255, blank=True, default="")
+    email_domains = models.JSONField(default=list, blank=True)
+    default_role = models.CharField(max_length=16, choices=OrganizationMembership.ROLE_CHOICES)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "oidc_providers"
+
+    def __str__(self) -> str:
+        return f"OIDCProvider {self.provider} {self.tenant_id}"
+
+    @property
+    def client_secret(self) -> str:
+        from infrastructure.crypto.encryption import decrypt_api_key
+
+        return decrypt_api_key(bytes(self.encrypted_client_secret))
+
+
+class SCIMToken(models.Model):
+    """SCIM bearer token per tenant (stored as hash)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    token_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    rotated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "scim_tokens"
+
+    def __str__(self) -> str:
+        return f"SCIMToken {self.tenant_id}"
+
+
+class BillingPlan(models.Model):
+    """Billing plan with Stripe mapping and entitlements."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    stripe_product_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_price_id = models.CharField(max_length=255, blank=True, default="")
+    entitlements = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "billing_plans"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class TenantSubscription(models.Model):
+    """Stripe subscription state per tenant."""
+
+    STATUS_CHOICES = [
+        ("trialing", "Trialing"),
+        ("active", "Active"),
+        ("past_due", "Past Due"),
+        ("canceled", "Canceled"),
+        ("incomplete", "Incomplete"),
+        ("incomplete_expired", "Incomplete Expired"),
+        ("unpaid", "Unpaid"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(unique=True)
+    plan = models.ForeignKey(
+        BillingPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subscriptions",
+    )
+    stripe_customer_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_subscription_id = models.CharField(max_length=255, blank=True, default="")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="trialing")
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    cancel_at_period_end = models.BooleanField(default=False)
+    seat_count = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tenant_subscriptions"
+
+    def __str__(self) -> str:
+        return f"TenantSubscription {self.tenant_id} {self.status}"
+
+
 class MemoryChunk(models.Model):
     """MemoryChunk stores embedded long-term memory chunks."""
 
@@ -838,6 +1200,11 @@ class APIKey(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="api_keys",
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -851,13 +1218,17 @@ class APIKey(models.Model):
     class Meta:
         db_table = "api_keys"
         ordering = ["-created_at"]
-        unique_together = [["user", "provider", "name"]]
+        unique_together = [["organization", "provider", "name"]]
         indexes = [
-            models.Index(fields=["user", "provider"], name="api_keys_user_provider_idx"),
+            models.Index(
+                fields=["organization", "provider"],
+                name="api_keys_org_provider_idx",
+            ),
+            models.Index(fields=["user"], name="api_keys_user_idx"),
         ]
 
     def __str__(self) -> str:
-        return f"{self.provider} - {self.name} ({self.user.email})"
+        return f"{self.provider} - {self.name} ({self.organization.name})"
 
     @property
     def key_hint(self) -> str:
@@ -869,3 +1240,21 @@ class APIKey(models.Model):
             return f"****{decrypted[-4:]}" if len(decrypted) >= 4 else "****"
         except Exception:
             return "****"
+
+
+@receiver(post_save, sender=User)
+def ensure_default_organization(
+    sender: type[User], instance: User, created: bool, **kwargs: Any
+) -> None:
+    if not created or instance.default_organization_id:
+        return
+
+    org_name = instance.email.split("@")[0] or "Personal"
+    organization = Organization.objects.create(name=f"{org_name} Org")
+    OrganizationMembership.objects.create(
+        organization=organization,
+        user=instance,
+        role="owner",
+        is_default=True,
+    )
+    User.objects.filter(pk=instance.pk).update(default_organization=organization)

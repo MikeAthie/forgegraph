@@ -28,6 +28,7 @@ from adapters.api.auth.serializers import (
     RegisterSerializer,
     UserSerializer,
 )
+from application.services.tenancy import ensure_default_organization
 
 User = get_user_model()
 
@@ -74,6 +75,8 @@ class RegisterView(APIView):
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
         )
+        ensure_default_organization(user)
+        user.refresh_from_db()
 
         return Response(
             UserSerializer(user).data,

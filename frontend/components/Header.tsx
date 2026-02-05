@@ -34,6 +34,10 @@ export default function Header() {
     { href: "/approvals", label: "Approvals" },
   ] as const;
 
+  const canManageOrg =
+    user?.organization_role === "owner" || user?.organization_role === "admin";
+  const canViewAuditLogs = canManageOrg;
+
   const activeHref = (() => {
     if (router.pathname.startsWith("/onboarding")) return "/onboarding";
     if (router.pathname.startsWith("/graphs")) return "/graphs";
@@ -194,21 +198,57 @@ export default function Header() {
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium">Account</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {user?.email}
-                      </p>
+                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                      {user?.organization_role && (
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {user.organization_role} access
+                        </p>
+                      )}
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={(event) => {
                       event.preventDefault();
-                      void router.push("/admin/audit-logs");
+                      void router.push("/admin/organization");
                     }}
                     className="cursor-pointer"
                   >
-                    Audit logs
+                    Organization
                   </DropdownMenuItem>
+                  {canManageOrg && (
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        void router.push("/admin/sso");
+                      }}
+                      className="cursor-pointer"
+                    >
+                      SSO & SCIM
+                    </DropdownMenuItem>
+                  )}
+                  {canManageOrg && (
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        void router.push("/admin/billing");
+                      }}
+                      className="cursor-pointer"
+                    >
+                      Billing
+                    </DropdownMenuItem>
+                  )}
+                  {canViewAuditLogs && (
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        void router.push("/admin/audit-logs");
+                      }}
+                      className="cursor-pointer"
+                    >
+                      Audit logs
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={(event) => {

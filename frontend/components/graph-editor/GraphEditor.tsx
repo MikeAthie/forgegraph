@@ -1006,7 +1006,7 @@ export function GraphEditor({
     );
     await onSave(graphJson);
     setIsDirty(false);
-  }, [nodes, edges, graphName, graphDescription, graphId, onSave, currentViewport]);
+  }, [nodes, edges, graphName, graphDescription, graphId, onSave, currentViewport, setNodes]);
 
   const runDisabledReason =
     startingRun

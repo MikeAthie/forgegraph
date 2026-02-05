@@ -4,7 +4,7 @@ Auth API URLs.
 Clean Architecture: Interface Adapters layer.
 """
 
-from django.urls import path
+from django.urls import include, path
 
 from adapters.api.auth.views import LoginView, LogoutView, MeView, RegisterView, TokenRefreshView
 
@@ -14,4 +14,5 @@ urlpatterns = [
     path("logout", LogoutView.as_view(), name="auth-logout"),
     path("refresh", TokenRefreshView.as_view(), name="auth-refresh"),
     path("me", MeView.as_view(), name="auth-me"),
+    path("sso/", include("adapters.api.sso.urls")),
 ]

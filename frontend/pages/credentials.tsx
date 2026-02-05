@@ -3,6 +3,7 @@ import { Plus, RefreshCw } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { useAuth } from "../contexts/AuthContext";
 import {
   credentialsApi,
   getApiErrorMessage,
@@ -56,6 +57,7 @@ const getProviderLabel = (provider: string) => {
 };
 
 export default function CredentialsPage() {
+  const { user } = useAuth();
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -109,6 +111,10 @@ export default function CredentialsPage() {
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;
+    if (!canManageCredentials) {
+      showError("Only organization admins can add credentials.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -125,6 +131,10 @@ export default function CredentialsPage() {
   };
 
   const handleDelete = async (credentialId: string) => {
+    if (!canManageCredentials) {
+      showError("Only organization admins can delete credentials.");
+      return;
+    }
     try {
       await credentialsApi.delete(credentialId);
       setCredentials((prev) => prev.filter((item) => item.id !== credentialId));
@@ -135,6 +145,8 @@ export default function CredentialsPage() {
   };
 
   const hasCredentials = credentials.length > 0;
+  const canManageCredentials =
+    user?.organization_role === "owner" || user?.organization_role === "admin";
 
   const providerSummary = useMemo(() => {
     const counts = credentials.reduce<Record<string, number>>((acc, item) => {
@@ -164,7 +176,7 @@ export default function CredentialsPage() {
                 Refresh
               </Button>
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <Button onClick={() => setIsDialogOpen(true)}>
+                <Button onClick={() => setIsDialogOpen(true)} disabled={!canManageCredentials}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add credential
                 </Button>
@@ -255,6 +267,13 @@ export default function CredentialsPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+          {!canManageCredentials && (
+            <Alert>
+              <AlertDescription>
+                Only organization admins can create or delete credentials. You can still view existing keys.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -266,10 +285,12 @@ export default function CredentialsPage() {
               title="No credentials yet"
               description="Add a provider key to unlock multi-model prompt nodes."
               action={
-                <Button onClick={() => setIsDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add credential
-                </Button>
+                canManageCredentials ? (
+                  <Button onClick={() => setIsDialogOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add credential
+                  </Button>
+                ) : undefined
               }
             />
           ) : (
@@ -281,15 +302,19 @@ export default function CredentialsPage() {
                       <CardTitle className="text-base">{credential.name}</CardTitle>
                       <p className="text-sm text-muted-foreground">{getProviderLabel(credential.provider)}</p>
                     </div>
-                    <ConfirmButton
-                      variant="destructive"
-                      size="sm"
-                      title="Delete credential?"
-                      description="This will remove the key and any runs using it will fail until replaced."
-                      onConfirm={() => handleDelete(credential.id)}
-                    >
-                      Delete
-                    </ConfirmButton>
+                    {canManageCredentials ? (
+                      <ConfirmButton
+                        variant="destructive"
+                        size="sm"
+                        title="Delete credential?"
+                        description="This will remove the key and any runs using it will fail until replaced."
+                        onConfirm={() => handleDelete(credential.id)}
+                      >
+                        Delete
+                      </ConfirmButton>
+                    ) : (
+                      <Badge variant="outline">Read only</Badge>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="text-sm text-muted-foreground">Key hint</div>

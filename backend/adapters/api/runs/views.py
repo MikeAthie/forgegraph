@@ -16,7 +16,7 @@ from uuid import UUID
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Case, IntegerField, Prefetch, Sum, When
 from django.http import StreamingHttpResponse
 from django.utils import timezone
@@ -52,11 +52,14 @@ from adapters.ws.runs.broadcast import (
 )
 from application.services.audit_log import record_audit_log
 from application.services.llm_pricing import calculate_cost
+from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
+from application.services.rbac import has_min_role
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
     validate_json_schema,
 )
+from application.services.tenancy import get_tenant_id_for_user as resolve_tenant_id_for_user
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
@@ -72,6 +75,7 @@ from infrastructure.orm.models import (
     RunCheckpoint,
     RunEvent,
     TenantPolicy,
+    TenantSubscription,
     User,
 )
 from infrastructure.security import s2s
@@ -95,13 +99,17 @@ def get_tenant_id(request: Request) -> str:
 
 
 def get_tenant_id_for_user(user: User) -> str:
-    if hasattr(user, "tenant_id") and user.tenant_id:
-        return str(user.tenant_id)
-    return str(user.id)
+    return resolve_tenant_id_for_user(user)
 
 
 def get_tenant_id_for_run(run: Run) -> str:
     return get_tenant_id_for_user(run.owner)
+
+
+def run_queryset_for_user(user: User) -> models.QuerySet[Run]:
+    tenant_id = get_tenant_id_for_user(user)
+    tenant_uuid = UUID(tenant_id)
+    return Run.objects.filter(owner__default_organization_id=tenant_uuid)
 
 
 def check_llm_budget(user: User) -> Response | None:
@@ -154,6 +162,94 @@ def check_llm_quota(user: User) -> Response | None:
         )
 
     return None
+
+
+def check_entitlements(user: User) -> Response | None:
+    tenant_id = get_tenant_id_for_user(user)
+    tenant_uuid = UUID(tenant_id)
+    subscription = (
+        TenantSubscription.objects.select_related("plan").filter(tenant_id=tenant_id).first()
+    )
+
+    if not subscription or not subscription.plan:
+        return None
+
+    if subscription.status not in {"active", "trialing"}:
+        return error_response(
+            code="SUBSCRIPTION_INACTIVE",
+            message="Your subscription is not active. Update billing to continue.",
+            status=status.HTTP_402_PAYMENT_REQUIRED,
+        )
+
+    entitlements = subscription.plan.entitlements or {}
+    month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    max_tokens = entitlements.get("max_monthly_tokens")
+    if max_tokens is not None:
+        total_tokens = (
+            LLMUsage.objects.filter(tenant_id=tenant_id, created_at__gte=month_start)
+            .aggregate(total=Sum("total_tokens"))
+            .get("total")
+            or 0
+        )
+        if int(total_tokens) >= int(max_tokens):
+            return error_response(
+                code="ENTITLEMENT_LIMIT",
+                message="Monthly token entitlement exceeded for your plan.",
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
+    max_cost = entitlements.get("max_monthly_cost_usd")
+    if max_cost is not None:
+        total_cost = LLMUsage.objects.filter(
+            tenant_id=tenant_id, created_at__gte=month_start
+        ).aggregate(total=Sum("cost_usd")).get("total") or Decimal("0")
+        if total_cost >= Decimal(str(max_cost)):
+            return error_response(
+                code="ENTITLEMENT_LIMIT",
+                message="Monthly cost entitlement exceeded for your plan.",
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
+    max_runs = entitlements.get("max_runs_per_month")
+    if max_runs is not None:
+        run_count = Run.objects.filter(
+            owner__default_organization_id=tenant_uuid, started_at__gte=month_start
+        ).count()
+        if run_count >= int(max_runs):
+            return error_response(
+                code="ENTITLEMENT_LIMIT",
+                message="Monthly run entitlement exceeded for your plan.",
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
+    return None
+
+
+def _apply_rate_limit(
+    *, scope: str, tenant_id: str, limit: int, window_seconds: int
+) -> Response | None:
+    if limit <= 0:
+        return None
+    result = check_rate_limit(
+        scope=scope,
+        tenant_id=tenant_id,
+        limit=limit,
+        window_seconds=window_seconds,
+    )
+    if result.allowed:
+        return None
+    response = error_response(
+        code="RATE_LIMITED",
+        message="Rate limit exceeded. Try again shortly.",
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+        details=[rate_limit_response_payload(result)],
+    )
+    response["Retry-After"] = str(result.retry_after_seconds)
+    response["X-RateLimit-Limit"] = str(result.limit)
+    response["X-RateLimit-Remaining"] = str(result.remaining)
+    response["X-RateLimit-Reset"] = result.reset_at.isoformat()
+    return response
 
 
 def get_memory_config_for_graph(graph: Graph, user: User) -> MemoryConfiguration | None:
@@ -252,6 +348,8 @@ def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
     if not isinstance(graph_json, dict):
         return graph_json
 
+    tenant_id = get_tenant_id_for_user(owner)
+    tenant_uuid = UUID(tenant_id)
     data = copy.deepcopy(graph_json)
     nodes = data.get("nodes")
     if not isinstance(nodes, list):
@@ -278,13 +376,19 @@ def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
         if graph_version_id:
             graph_version = (
                 GraphVersion.objects.select_related("graph")
-                .filter(id=graph_version_id, graph__owner=owner)
+                .filter(
+                    id=graph_version_id,
+                    graph__owner__default_organization_id=tenant_uuid,
+                )
                 .first()
             )
         elif graph_id:
             graph_version = (
                 GraphVersion.objects.select_related("graph")
-                .filter(graph_id=graph_id, graph__owner=owner)
+                .filter(
+                    graph_id=graph_id,
+                    graph__owner__default_organization_id=tenant_uuid,
+                )
                 .order_by("-version")
                 .first()
             )
@@ -339,7 +443,7 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
     cleaned = strip_sentinel_edges(graph_json)
     expanded = expand_subgraphs(cleaned, owner)
     namespaced = apply_memory_namespace_prefix(expanded, owner.id)
-    policy = TenantPolicy.objects.filter(tenant_id=owner.id).first()
+    policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(owner)).first()
     if policy:
         metadata_raw = namespaced.get("metadata")
         metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
@@ -360,7 +464,7 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
 
 def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:
     allowed_providers = set(getattr(settings, "ALLOWED_LLM_PROVIDERS", ["openai", "anthropic"]))
-    policy = TenantPolicy.objects.filter(tenant_id=user.id).first()
+    policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(user)).first()
     allowed_policy_providers = (
         {str(value).lower() for value in policy.allowed_providers} if policy else set()
     )
@@ -428,7 +532,10 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
     if not credential_ids:
         return errors
 
-    credentials = APIKey.objects.filter(id__in=credential_ids, user=user)
+    credentials = APIKey.objects.filter(
+        id__in=credential_ids,
+        organization=user.default_organization,
+    )
     credential_map = {str(credential.id): credential for credential in credentials}
 
     for node_id, provider, credential_id in prompt_nodes:
@@ -438,7 +545,7 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
                 {
                     "field": "credential_id",
                     "message": f"Credential '{credential_id}' for node '{node_id}' was not found.",
-                    "suggestion": "Select a credential you own for this node.",
+                    "suggestion": "Select a credential available to your organization for this node.",
                 }
             )
             continue
@@ -515,7 +622,7 @@ class RunListView(APIView):
     def get(self, request: Request) -> Response:
         """List user's runs."""
         user = cast(User, request.user)
-        runs = Run.objects.filter(owner=user).select_related("graph_version__graph")
+        runs = run_queryset_for_user(user).select_related("graph_version__graph")
 
         status_filter = request.query_params.get("status")
         if status_filter:
@@ -599,9 +706,10 @@ class RunDetailView(APIView):
 
         try:
             run = (
-                Run.objects.select_related("graph_version__graph")
+                run_queryset_for_user(user)
+                .select_related("graph_version__graph")
                 .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
-                .get(id=run_id, owner=user)
+                .get(id=run_id)
             )
         except Run.DoesNotExist:
             return error_response(
@@ -681,6 +789,22 @@ class RunStartView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to start runs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        tenant_id = get_tenant_id_for_user(user)
+        rate_limit_response = _apply_rate_limit(
+            scope="run_start",
+            tenant_id=tenant_id,
+            limit=getattr(settings, "RUN_START_RATE_LIMIT_PER_MIN", 0),
+            window_seconds=getattr(settings, "RUN_RATE_LIMIT_WINDOW_SECONDS", 60),
+        )
+        if rate_limit_response is not None:
+            return rate_limit_response
+        tenant_uuid = UUID(tenant_id)
         graph_version_id = serializer.validated_data["graph_version_id"]
         input_json = serializer.validated_data.get("input_json") or {}
         thread_id = serializer.validated_data.get("thread_id")
@@ -688,7 +812,8 @@ class RunStartView(APIView):
 
         try:
             graph_version = GraphVersion.objects.select_related("graph").get(
-                id=graph_version_id, graph__owner=user
+                id=graph_version_id,
+                graph__owner__default_organization_id=tenant_uuid,
             )
         except GraphVersion.DoesNotExist:
             return error_response(
@@ -697,9 +822,9 @@ class RunStartView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        quota_response = check_llm_quota(user)
-        if quota_response is not None:
-            return quota_response
+        entitlement_response = check_entitlements(user)
+        if entitlement_response is not None:
+            return entitlement_response
 
         quota_response = check_llm_quota(user)
         if quota_response is not None:
@@ -860,6 +985,21 @@ class RunInvokeView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to invoke runs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        tenant_id = get_tenant_id_for_user(user)
+        rate_limit_response = _apply_rate_limit(
+            scope="run_invoke",
+            tenant_id=tenant_id,
+            limit=getattr(settings, "RUN_INVOKE_RATE_LIMIT_PER_MIN", 0),
+            window_seconds=getattr(settings, "RUN_RATE_LIMIT_WINDOW_SECONDS", 60),
+        )
+        if rate_limit_response is not None:
+            return rate_limit_response
         thread_id = serializer.validated_data["thread_id"]
         session_id = str(thread_id)
         input_json = serializer.validated_data.get("input_json") or {}
@@ -880,8 +1020,8 @@ class RunInvokeView(APIView):
             return budget_response
 
         active_run = (
-            Run.objects.filter(
-                owner=user,
+            run_queryset_for_user(user)
+            .filter(
                 thread_id=thread_id,
                 status__in=["pending", "running", "paused"],
             )
@@ -896,7 +1036,8 @@ class RunInvokeView(APIView):
             )
 
         latest_run = (
-            Run.objects.filter(owner=user, thread_id=thread_id)
+            run_queryset_for_user(user)
+            .filter(thread_id=thread_id)
             .select_related("graph_version__graph")
             .order_by(
                 Case(
@@ -1094,10 +1235,16 @@ class RunReplayView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to replay runs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         node_id = str(serializer.validated_data.get("node_id") or "").strip()
 
         try:
-            run = Run.objects.select_related("graph_version__graph").get(id=run_id, owner=user)
+            run = run_queryset_for_user(user).select_related("graph_version__graph").get(id=run_id)
         except Run.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -1123,8 +1270,8 @@ class RunReplayView(APIView):
 
         if run.thread_id:
             active_run = (
-                Run.objects.filter(
-                    owner=user,
+                run_queryset_for_user(user)
+                .filter(
                     thread_id=run.thread_id,
                     status__in=["pending", "running", "paused"],
                 )
@@ -1305,6 +1452,12 @@ class RunCancelView(APIView):
     def post(self, request: Request, run_id: UUID) -> Response:
         """Cancel a running run."""
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to cancel runs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         node_runs_queryset = NodeRun.objects.order_by(
             Case(
                 When(started_at__isnull=True, then=1),
@@ -1317,9 +1470,10 @@ class RunCancelView(APIView):
 
         try:
             run = (
-                Run.objects.select_related("graph_version__graph")
+                run_queryset_for_user(user)
+                .select_related("graph_version__graph")
                 .prefetch_related(Prefetch("node_runs", queryset=node_runs_queryset))
-                .get(id=run_id, owner=user)
+                .get(id=run_id)
             )
         except Run.DoesNotExist:
             return error_response(
@@ -1407,6 +1561,12 @@ class RunResumeView(APIView):
     def post(self, request: Request, run_id: UUID) -> Response:
         """Resume a paused run with human decision."""
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to resume runs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = RunResumeSerializer(data=request.data)
         if not serializer.is_valid():
             return error_response(
@@ -1421,7 +1581,7 @@ class RunResumeView(APIView):
 
         # Get the run
         try:
-            run = Run.objects.select_related("graph_version__graph").get(id=run_id, owner=user)
+            run = run_queryset_for_user(user).select_related("graph_version__graph").get(id=run_id)
         except Run.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -1789,7 +1949,7 @@ class RunEventsView(APIView):
 
         user = cast(User, request.user)
         try:
-            run = Run.objects.get(id=run_id, owner=user)
+            run = run_queryset_for_user(user).get(id=run_id)
         except Run.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -2056,7 +2216,7 @@ class RunEventsStreamView(APIView):
             return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
-            run = Run.objects.get(id=run_id, owner=user)
+            run = run_queryset_for_user(user).get(id=run_id)
         except Run.DoesNotExist:
             return Response({"detail": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
 

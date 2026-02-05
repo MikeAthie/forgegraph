@@ -10,6 +10,8 @@ import copy
 from typing import Any, cast
 from uuid import UUID
 
+from django.db import models
+from django.db.models import Avg, Count, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -17,13 +19,24 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
-from adapters.api.templates.serializers import TemplateCloneSerializer, TemplateListSerializer
+from adapters.api.templates.serializers import (
+    TemplateCloneSerializer,
+    TemplateListSerializer,
+    TemplateRatingSerializer,
+    TemplateShareSerializer,
+    TemplateVersionCreateSerializer,
+)
+from application.services.rbac import has_min_role
 from infrastructure.orm.models import (
     APIKey,
     Graph,
     GraphTemplate,
     GraphVersion,
     MemoryConfiguration,
+    Organization,
+    TemplateRating,
+    TemplateShare,
+    TemplateUsage,
     User,
 )
 
@@ -69,11 +82,49 @@ def _apply_prompt_overrides(
     return data
 
 
+def _template_queryset_for_user(user: User) -> models.QuerySet[GraphTemplate]:
+    org = user.default_organization
+    if org is None:
+        return GraphTemplate.objects.none()
+
+    shared_ids = TemplateShare.objects.filter(organization=org).values_list(
+        "template_id", flat=True
+    )
+    return GraphTemplate.objects.filter(is_active=True, is_latest=True).filter(
+        Q(visibility="public") | Q(owner_organization=org) | Q(id__in=shared_ids)
+    )
+
+
+def _get_template_for_user(template_id: UUID, user: User) -> GraphTemplate | None:
+    org = user.default_organization
+    if org is None:
+        return None
+
+    shared_ids = TemplateShare.objects.filter(organization=org).values_list(
+        "template_id", flat=True
+    )
+    return (
+        GraphTemplate.objects.filter(is_active=True)
+        .filter(Q(visibility="public") | Q(owner_organization=org) | Q(id__in=shared_ids))
+        .filter(id=template_id)
+        .first()
+    )
+
+
 class TemplateListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        templates = GraphTemplate.objects.filter(is_active=True).order_by("display_order", "name")
+        user = cast(User, request.user)
+        templates = (
+            _template_queryset_for_user(user)
+            .annotate(
+                rating_average=Avg("ratings__rating"),
+                rating_count=Count("ratings", distinct=True),
+                usage_count=Count("usage_events", distinct=True),
+            )
+            .order_by("display_order", "name")
+        )
         data = TemplateListSerializer(templates, many=True).data
         return success_response(data)
 
@@ -94,9 +145,8 @@ class TemplateCloneView(APIView):
                 ],
             )
 
-        try:
-            template = GraphTemplate.objects.get(id=template_id, is_active=True)
-        except GraphTemplate.DoesNotExist:
+        template = _get_template_for_user(template_id, cast(User, request.user))
+        if template is None:
             return error_response(
                 code="NOT_FOUND",
                 message=f"Template with id '{template_id}' not found",
@@ -104,13 +154,21 @@ class TemplateCloneView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to create graphs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         provider = (serializer.validated_data.get("provider") or "").strip().lower() or None
         model = (serializer.validated_data.get("model") or "").strip() or None
         credential_id = serializer.validated_data.get("credential_id")
 
         if credential_id:
-            credential_exists = APIKey.objects.filter(id=credential_id, user=user).exists()
+            credential_exists = APIKey.objects.filter(
+                id=credential_id, organization=user.default_organization
+            ).exists()
             if not credential_exists:
                 return error_response(
                     code="INVALID_CREDENTIAL",
@@ -159,6 +217,14 @@ class TemplateCloneView(APIView):
             graph_json=graph_json,
         )
 
+        if user.default_organization:
+            TemplateUsage.objects.create(
+                template=template,
+                organization=user.default_organization,
+                user=user,
+                graph=graph,
+            )
+
         return success_response(
             {
                 "graph_id": str(graph.id),
@@ -168,3 +234,280 @@ class TemplateCloneView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class TemplateVersionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, template_id: UUID) -> Response:
+        user = cast(User, request.user)
+        template = _get_template_for_user(template_id, user)
+        if template is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Template with id '{template_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        versions = (
+            GraphTemplate.objects.filter(group_id=template.group_id, is_active=True)
+            .annotate(
+                rating_average=Avg("ratings__rating"),
+                rating_count=Count("ratings", distinct=True),
+                usage_count=Count("usage_events", distinct=True),
+            )
+            .order_by("-version")
+        )
+        data = TemplateListSerializer(versions, many=True).data
+        return success_response(data)
+
+    def post(self, request: Request, template_id: UUID) -> Response:
+        serializer = TemplateVersionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to version templates in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        org = user.default_organization
+        if org is None:
+            return error_response(
+                code="FORBIDDEN",
+                message="No organization found for this user.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        template = GraphTemplate.objects.filter(
+            id=template_id,
+            owner_organization=org,
+            is_active=True,
+        ).first()
+        if template is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Template with id '{template_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        latest = (
+            GraphTemplate.objects.filter(group_id=template.group_id).order_by("-version").first()
+        )
+        next_version = (latest.version if latest else template.version) + 1
+
+        payload = serializer.validated_data
+        visibility = str(payload.get("visibility") or template.visibility)
+        if visibility not in {"public", "organization", "private"}:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="Invalid visibility value.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        GraphTemplate.objects.filter(group_id=template.group_id, is_latest=True).update(
+            is_latest=False
+        )
+
+        new_template = GraphTemplate.objects.create(
+            group_id=template.group_id,
+            name=payload["name"] if "name" in payload else template.name,
+            description=payload["description"]
+            if "description" in payload
+            else template.description,
+            category=payload["category"] if "category" in payload else template.category,
+            tags=payload["tags"] if "tags" in payload else template.tags,
+            estimated_minutes=payload["estimated_minutes"]
+            if "estimated_minutes" in payload
+            else template.estimated_minutes,
+            graph_json=payload["graph_json"] if "graph_json" in payload else template.graph_json,
+            sample_input=payload["sample_input"]
+            if "sample_input" in payload
+            else template.sample_input,
+            guide_steps=payload["guide_steps"]
+            if "guide_steps" in payload
+            else template.guide_steps,
+            version=next_version,
+            changelog=payload["changelog"] if "changelog" in payload else "",
+            is_latest=True,
+            visibility=visibility,
+            owner_organization=template.owner_organization,
+            display_order=template.display_order,
+            is_active=template.is_active,
+        )
+
+        annotated = (
+            GraphTemplate.objects.filter(id=new_template.id)
+            .annotate(
+                rating_average=Avg("ratings__rating"),
+                rating_count=Count("ratings", distinct=True),
+                usage_count=Count("usage_events", distinct=True),
+            )
+            .first()
+        )
+        data = (
+            TemplateListSerializer(annotated).data
+            if annotated
+            else TemplateListSerializer(new_template).data
+        )
+        return success_response(data, status=status.HTTP_201_CREATED)
+
+
+class TemplateRatingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, template_id: UUID) -> Response:
+        serializer = TemplateRatingSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        user = cast(User, request.user)
+        org = user.default_organization
+        if org is None:
+            return error_response(
+                code="FORBIDDEN",
+                message="No organization found for this user.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        template = _get_template_for_user(template_id, user)
+        if template is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Template with id '{template_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        rating = int(serializer.validated_data["rating"])
+        comment = serializer.validated_data.get("comment") or ""
+
+        TemplateRating.objects.update_or_create(
+            template=template,
+            user=user,
+            defaults={
+                "organization": org,
+                "rating": rating,
+                "comment": comment,
+            },
+        )
+
+        return success_response({"template_id": str(template.id), "rating": rating})
+
+
+class TemplateShareView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, template_id: UUID) -> Response:
+        serializer = TemplateShareSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to share templates in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        org = user.default_organization
+        if org is None:
+            return error_response(
+                code="FORBIDDEN",
+                message="No organization found for this user.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        template = GraphTemplate.objects.filter(
+            id=template_id,
+            owner_organization=org,
+            is_active=True,
+        ).first()
+        if template is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Template with id '{template_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        target_org_id = serializer.validated_data["organization_id"]
+        try:
+            target_org = Organization.objects.get(id=target_org_id)
+        except Organization.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Organization with id '{target_org_id}' not found",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        share, _ = TemplateShare.objects.get_or_create(
+            template=template,
+            organization=target_org,
+            defaults={"shared_by": user},
+        )
+
+        return success_response(
+            {
+                "template_id": str(template.id),
+                "organization_id": str(share.organization_id),
+            }
+        )
+
+    def delete(self, request: Request, template_id: UUID, organization_id: UUID) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to unshare templates in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        org = user.default_organization
+        if org is None:
+            return error_response(
+                code="FORBIDDEN",
+                message="No organization found for this user.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        deleted, _ = TemplateShare.objects.filter(
+            template_id=template_id,
+            organization_id=organization_id,
+            template__owner_organization=org,
+        ).delete()
+
+        if not deleted:
+            return error_response(
+                code="NOT_FOUND",
+                message="Share record not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return success_response({"deleted": True})

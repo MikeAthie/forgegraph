@@ -24,6 +24,7 @@ from adapters.api.graphs.serializers import (
     MemoryConfigurationSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.rbac import has_min_role
 from domain.services.graph_validator import GraphValidator
 from infrastructure.orm.models import Graph, GraphVersion, MemoryConfiguration, User
 
@@ -73,6 +74,12 @@ class GraphListCreateView(APIView):
             )
 
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to create graphs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         graph = Graph.objects.create(
             owner=user,
             name=serializer.validated_data["name"],
@@ -121,7 +128,7 @@ class GraphDetailView(APIView):
     def get_object(self, graph_id: UUID, user: User) -> Graph | None:
         """Get graph or raise 404."""
         try:
-            return cast(Graph, Graph.objects.get(id=graph_id, owner=user))
+            return cast(Graph, Graph.objects.for_user(user).get(id=graph_id))
         except Graph.DoesNotExist:
             return None
 
@@ -155,7 +162,14 @@ class GraphDetailView(APIView):
 
     def patch(self, request: Request, graph_id: UUID) -> Response:
         """Update graph metadata."""
-        graph = self.get_object(graph_id, cast(User, request.user))
+        user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to update graphs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        graph = self.get_object(graph_id, user)
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -199,7 +213,14 @@ class GraphDetailView(APIView):
 
     def delete(self, request: Request, graph_id: UUID) -> Response:
         """Delete graph and all versions."""
-        graph = self.get_object(graph_id, cast(User, request.user))
+        user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to delete graphs in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        graph = self.get_object(graph_id, user)
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -219,7 +240,7 @@ class GraphVersionListCreateView(APIView):
     def get_graph(self, graph_id: UUID, user: User) -> Graph | None:
         """Get graph or None."""
         try:
-            return cast(Graph, Graph.objects.get(id=graph_id, owner=user))
+            return cast(Graph, Graph.objects.for_user(user).get(id=graph_id))
         except Graph.DoesNotExist:
             return None
 
@@ -242,7 +263,14 @@ class GraphVersionListCreateView(APIView):
 
     def post(self, request: Request, graph_id: UUID) -> Response:
         """Create a new graph version."""
-        graph = self.get_graph(graph_id, cast(User, request.user))
+        user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to create graph versions in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        graph = self.get_graph(graph_id, user)
         if not graph:
             return error_response(
                 code="NOT_FOUND",
@@ -316,7 +344,7 @@ class GraphVersionDetailView(APIView):
             version = GraphVersion.objects.select_related("graph").get(
                 id=version_id,
                 graph_id=graph_id,
-                graph__owner=user,
+                graph__owner__default_organization_id=user.default_organization_id,
             )
         except GraphVersion.DoesNotExist:
             return error_response(
@@ -347,7 +375,7 @@ class GraphVersionLatestView(APIView):
     def get(self, request: Request, graph_id: UUID) -> Response:
         """Get latest graph version."""
         try:
-            graph = Graph.objects.get(id=graph_id, owner=cast(User, request.user))
+            graph = Graph.objects.for_user(cast(User, request.user)).get(id=graph_id)
         except Graph.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -384,7 +412,7 @@ class GraphMemoryConfigView(APIView):
 
     def get_object(self, graph_id: UUID, user: User) -> Graph | None:
         try:
-            return cast(Graph, Graph.objects.get(id=graph_id, owner=user))
+            return cast(Graph, Graph.objects.for_user(user).get(id=graph_id))
         except Graph.DoesNotExist:
             return None
 
@@ -427,6 +455,12 @@ class GraphMemoryConfigView(APIView):
 
     def patch(self, request: Request, graph_id: UUID) -> Response:
         user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to update memory configuration in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
         graph = self.get_object(graph_id, user)
         if not graph:
             return error_response(

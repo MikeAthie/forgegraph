@@ -8,6 +8,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from adapters.gateways.grpc_engine_client import MockEngineClient
+from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import User
 
 
@@ -20,10 +21,12 @@ def api_client():
 @pytest.fixture
 def user(db):
     """Create and return a test user."""
-    return User.objects.create_user(
+    user = User.objects.create_user(
         email="test@example.com",
         password="testpassword123",
     )
+    ensure_default_organization(user)
+    return user
 
 
 @pytest.fixture
