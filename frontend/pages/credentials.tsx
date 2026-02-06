@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/router";
 import { Plus, RefreshCw } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
@@ -47,6 +48,8 @@ const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] =
   { value: "anthropic", label: "Anthropic" },
   { value: "google", label: "Google AI" },
   { value: "gmail", label: "Gmail" },
+  { value: "google_calendar", label: "Google Calendar" },
+  { value: "google_tasks", label: "Google Tasks" },
   { value: "notion", label: "Notion" },
   { value: "slack", label: "Slack" },
   { value: "jira", label: "Jira" },
@@ -54,10 +57,13 @@ const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] =
   { value: "hubspot", label: "HubSpot" },
   { value: "google_drive", label: "Google Drive" },
   { value: "telegram", label: "Telegram" },
+  { value: "twilio", label: "Twilio" },
 ];
 
 const OAUTH_PROVIDERS: OAuthIntegrationProvider[] = [
   "gmail",
+  "google_calendar",
+  "google_tasks",
   "notion",
   "slack",
   "jira",
@@ -93,6 +99,7 @@ const isOAuthProvider = (provider: string): provider is OAuthIntegrationProvider
 };
 
 export default function CredentialsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const canManageCredentials =
     user?.organization_role === "owner" || user?.organization_role === "admin";
@@ -108,6 +115,7 @@ export default function CredentialsPage() {
   const [oauthConfigProvider, setOauthConfigProvider] = useState<OAuthIntegrationProvider | null>(null);
   const [oauthConfigOpen, setOauthConfigOpen] = useState(false);
   const [oauthConfigSaving, setOauthConfigSaving] = useState(false);
+  const [providerPrefillApplied, setProviderPrefillApplied] = useState(false);
   const [oauthConfigForm, setOauthConfigForm] = useState<OAuthProviderConfigForm>({
     client_id: "",
     client_secret: "",
@@ -156,6 +164,47 @@ export default function CredentialsPage() {
   useEffect(() => {
     void fetchCredentials();
   }, [fetchCredentials]);
+
+  useEffect(() => {
+    if (providerPrefillApplied || !router.isReady) return;
+
+    const providerQuery = router.query.provider;
+    const provider = Array.isArray(providerQuery) ? providerQuery[0] : providerQuery;
+    if (!provider) {
+      setProviderPrefillApplied(true);
+      return;
+    }
+
+    const normalizedProvider = provider.toLowerCase();
+    const providerOption = PROVIDERS.find((item) => item.value === normalizedProvider);
+    if (!providerOption) {
+      setProviderPrefillApplied(true);
+      return;
+    }
+
+    setProviderPrefillApplied(true);
+    if (isOAuthProvider(normalizedProvider)) {
+      setOauthConfigProvider(normalizedProvider);
+      setOauthConfigForm({
+        client_id: "",
+        client_secret: "",
+        authorize_url: "",
+        token_url: "",
+        redirect_uri: "",
+        scopes: "",
+        enabled: true,
+      });
+      setOauthConfigOpen(true);
+      return;
+    }
+
+    setFormState((prev) => ({
+      ...prev,
+      provider: providerOption.value,
+      name: prev.name || `${providerOption.label} Credential`,
+    }));
+    setIsDialogOpen(true);
+  }, [providerPrefillApplied, router.isReady, router.query.provider]);
 
   const resetForm = () => {
     setFormState({
@@ -389,13 +438,13 @@ export default function CredentialsPage() {
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>OAuth wizard integrations</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Connect Gmail, Notion, Slack, Jira, Linear, HubSpot, and Google Drive via OAuth.
-                Use API key credentials for Telegram.
+          <CardHeader>
+            <CardTitle>OAuth wizard integrations</CardTitle>
+            <p className="text-sm text-muted-foreground">
+                Connect Gmail, Google Calendar, Google Tasks, Notion, Slack, Jira, Linear, HubSpot,
+                and Google Drive via OAuth. Use API key credentials for Telegram and Twilio.
               </p>
-            </CardHeader>
+          </CardHeader>
             <CardContent className="space-y-3">
               {OAUTH_PROVIDERS.map((provider) => {
                 const status = oauthProvidersByName.get(provider);

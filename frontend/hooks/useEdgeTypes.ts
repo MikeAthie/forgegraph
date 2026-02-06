@@ -5,6 +5,7 @@ import type { Node, Edge } from "@xyflow/react";
 import { DataType } from "@/lib/data-types";
 import { NODE_TYPES, type NodeType } from "@/lib/graph-types";
 import { getPrimaryOutputType, getPrimaryInputType } from "@/lib/type-inference";
+import { buildEdgeRouteLanes } from "@/lib/graph-editor-interactions";
 import type { TypedEdgeData } from "@/components/graph-editor/TypedEdge";
 
 /**
@@ -38,10 +39,13 @@ export function useEdgeTypes(
       nodeInputTypes.set(node.id, getPrimaryInputType(graphNode));
     }
 
+    const routeLanes = buildEdgeRouteLanes(edges);
+
     // Enrich edges with type information
     return edges.map((edge) => {
       const sourceType = nodeOutputTypes.get(edge.source) ?? DataType.ANY;
       const targetType = nodeInputTypes.get(edge.target) ?? DataType.ANY;
+      const routeLane = routeLanes.get(edge.id) ?? 0;
 
       return {
         ...edge,
@@ -50,6 +54,7 @@ export function useEdgeTypes(
           ...edge.data,
           sourceType,
           targetType,
+          routeLane,
         } as TypedEdgeData,
       };
     });

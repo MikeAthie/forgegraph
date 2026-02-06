@@ -244,6 +244,9 @@ const isTerminalRunStatus = (status: string) => {
 };
 
 const getNodeAttemptKey = (nodeId: string, attempt: number) => `${nodeId}:${attempt}`;
+const isTerminalNodeStatus = (status: string) => {
+  return status === "succeeded" || status === "failed" || status === "skipped";
+};
 
 export default function RunDetailPage() {
   const router = useRouter();
@@ -276,6 +279,7 @@ export default function RunDetailPage() {
   const lastStreamTimestampRef = useRef<string | null>(null);
   const pendingRunDeltaRef = useRef<RunDeltaPayload | null>(null);
   const pendingNodeRunsRef = useRef<Map<string, NodeRunItem>>(new Map());
+  const pendingNodeStreamChunksRef = useRef<Map<string, string[]>>(new Map());
   const flushRafRef = useRef<number | null>(null);
 
   const runStatusRef = useRef<string | null>(null);
@@ -461,10 +465,12 @@ export default function RunDetailPage() {
       flushRafRef.current = null;
       const runDelta = pendingRunDeltaRef.current;
       const nodeRunUpdates = pendingNodeRunsRef.current;
-      if (!runDelta && nodeRunUpdates.size === 0) return;
+      const streamChunkUpdates = pendingNodeStreamChunksRef.current;
+      if (!runDelta && nodeRunUpdates.size === 0 && streamChunkUpdates.size === 0) return;
 
       pendingRunDeltaRef.current = null;
       pendingNodeRunsRef.current = new Map();
+      pendingNodeStreamChunksRef.current = new Map();
 
       setRun((prev) => {
         if (!prev) return prev;
@@ -493,6 +499,33 @@ export default function RunDetailPage() {
           next = { ...next, node_runs: sortNodeRuns(nodeRunList) };
         }
         return next;
+      });
+      setNodeStreamText((prev) => {
+        if (streamChunkUpdates.size === 0 && nodeRunUpdates.size === 0) {
+          return prev;
+        }
+
+        const next = { ...prev };
+        let changed = false;
+
+        for (const [streamKey, chunks] of streamChunkUpdates.entries()) {
+          if (chunks.length === 0) continue;
+          next[streamKey] = `${next[streamKey] ?? ""}${chunks.join("")}`;
+          changed = true;
+        }
+
+        for (const updatedNodeRun of nodeRunUpdates.values()) {
+          if (!isTerminalNodeStatus(String(updatedNodeRun.status))) {
+            continue;
+          }
+          const streamKey = getNodeAttemptKey(updatedNodeRun.node_id, updatedNodeRun.attempt);
+          if (streamKey in next) {
+            delete next[streamKey];
+            changed = true;
+          }
+        }
+
+        return changed ? next : prev;
       });
       setLastUpdatedAt(new Date());
     });
@@ -525,6 +558,25 @@ export default function RunDetailPage() {
       const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
       const key = updatedNodeRun.id || `${updatedNodeRun.node_id}:${updatedNodeRun.attempt}`;
       pendingNodeRunsRef.current.set(key, updatedNodeRun);
+      flushStreamUpdates();
+      return;
+    }
+
+    if (message.type === "node_stream.chunk") {
+      const rawPayload = ("node_stream" in message
+        ? (message as { node_stream: unknown }).node_stream
+        : (message as { payload?: unknown }).payload) as Record<string, unknown> | undefined;
+      if (!rawPayload) return;
+
+      const nodeId = String(rawPayload.node_id ?? "");
+      const attempt = Number(rawPayload.attempt ?? 1);
+      const chunk = String(rawPayload.chunk ?? "");
+      if (!nodeId || !chunk) return;
+
+      const streamKey = getNodeAttemptKey(nodeId, Number.isFinite(attempt) ? attempt : 1);
+      const pendingChunks = pendingNodeStreamChunksRef.current.get(streamKey) ?? [];
+      pendingChunks.push(chunk);
+      pendingNodeStreamChunksRef.current.set(streamKey, pendingChunks);
       flushStreamUpdates();
     }
   }, [flushStreamUpdates]);
@@ -570,8 +622,24 @@ export default function RunDetailPage() {
   useEffect(() => {
     if (!runId) return;
     setNodeStreamText({});
+    pendingRunDeltaRef.current = null;
+    pendingNodeRunsRef.current = new Map();
+    pendingNodeStreamChunksRef.current = new Map();
+    if (flushRafRef.current !== null) {
+      window.cancelAnimationFrame(flushRafRef.current);
+      flushRafRef.current = null;
+    }
     void fetchRun();
   }, [runId, fetchRun]);
+
+  useEffect(() => {
+    return () => {
+      if (flushRafRef.current !== null) {
+        window.cancelAnimationFrame(flushRafRef.current);
+        flushRafRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!run || run.node_runs.length === 0) return;

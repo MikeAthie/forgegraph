@@ -21,12 +21,25 @@ from infrastructure.orm.models import (
     GraphVersion,
     MemoryConfiguration,
     MemorySession,
+    PromptTemplate,
     TenantPolicy,
     User,
 )
 
 START_NODE_ID = "START"
 END_NODE_ID = "END"
+
+
+class RunPreparationError(ValueError):
+    """Base error for graph preparation failures before engine dispatch."""
+
+
+class SubgraphResolutionError(RunPreparationError):
+    """Raised when subgraph references cannot be resolved for the current user."""
+
+
+class PromptTemplateResolutionError(RunPreparationError):
+    """Raised when prompt templates cannot be resolved or validated."""
 
 
 def get_memory_config_for_graph(graph: Any, user: User) -> MemoryConfiguration | None:
@@ -168,7 +181,7 @@ def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
             )
 
         if graph_version is None:
-            raise ValueError("Subgraph reference is invalid or not accessible.")
+            raise SubgraphResolutionError("Subgraph reference is invalid or not accessible.")
 
         subgraph_json = strip_sentinel_edges(graph_version.graph_json)
         config["graph_json"] = expand_subgraphs(subgraph_json, owner)
@@ -212,14 +225,80 @@ def apply_memory_namespace_prefix(
     return data
 
 
+def resolve_prompt_templates(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
+    """
+    Resolve prompt node `prompt_id` references into concrete `prompt_template` strings.
+
+    Also enforces that each prompt node has either a non-empty prompt template or
+    a valid prompt_id reference before graph dispatch.
+    """
+    if not isinstance(graph_json, dict):
+        return graph_json
+
+    data = copy.deepcopy(graph_json)
+    _resolve_prompt_templates_in_place(data, owner)
+    return data
+
+
+def _resolve_prompt_templates_in_place(graph_json: dict[str, Any], owner: User) -> None:
+    nodes = graph_json.get("nodes")
+    if not isinstance(nodes, list):
+        return
+
+    prompt_nodes: list[tuple[str, dict[str, Any], str]] = []
+    prompt_ids: set[str] = set()
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+
+        node_type = node.get("type")
+        node_id = str(node.get("id") or "prompt")
+        config_raw = node.get("config")
+        config = config_raw if isinstance(config_raw, dict) else {}
+        node["config"] = config
+
+        if node_type == "prompt":
+            prompt_id = str(config.get("prompt_id") or "").strip()
+            prompt_template = config.get("prompt_template")
+
+            if prompt_id:
+                prompt_nodes.append((node_id, config, prompt_id))
+                prompt_ids.add(prompt_id)
+            elif not (isinstance(prompt_template, str) and prompt_template.strip()):
+                raise PromptTemplateResolutionError(
+                    f"Prompt node '{node_id}' must define either 'prompt_template' or 'prompt_id'."
+                )
+
+        elif node_type == "subgraph" and isinstance(config.get("graph_json"), dict):
+            _resolve_prompt_templates_in_place(config["graph_json"], owner)
+
+    if not prompt_ids:
+        return
+
+    templates = (
+        PromptTemplate.objects.for_user(owner).filter(id__in=prompt_ids).values("id", "content")
+    )
+    template_index = {str(item["id"]): str(item["content"]) for item in templates}
+
+    for node_id, config, prompt_id in prompt_nodes:
+        content = template_index.get(prompt_id)
+        if content is None:
+            raise PromptTemplateResolutionError(
+                f"Prompt node '{node_id}' references prompt_id '{prompt_id}' that is not accessible."
+            )
+        config["prompt_template"] = content
+
+
 def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
     """Prepare graph JSON for engine execution (strip sentinels, expand subgraphs, enforce memory isolation)."""
     cleaned = strip_sentinel_edges(graph_json)
     expanded = expand_subgraphs(cleaned, owner)
     namespaced = apply_memory_namespace_prefix(expanded, owner.id)
+    resolved = resolve_prompt_templates(namespaced, owner)
     policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(owner)).first()
     if policy:
-        metadata_raw = namespaced.get("metadata")
+        metadata_raw = resolved.get("metadata")
         metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
         metadata["policy"] = {
             "http": {
@@ -232,8 +311,8 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
                 "allowed_models": policy.allowed_models,
             },
         }
-        namespaced["metadata"] = metadata
-    return namespaced
+        resolved["metadata"] = metadata
+    return resolved
 
 
 def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:

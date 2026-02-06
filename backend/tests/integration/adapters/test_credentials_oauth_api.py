@@ -54,7 +54,17 @@ def test_oauth_provider_status_shows_supported_providers(authenticated_client):
     assert response.status_code == status.HTTP_200_OK
     data = response.json()["data"]
     providers = {item["provider"] for item in data}
-    assert providers == {"gmail", "notion", "slack", "jira", "linear", "hubspot", "google_drive"}
+    assert providers == {
+        "gmail",
+        "google_calendar",
+        "google_tasks",
+        "notion",
+        "slack",
+        "jira",
+        "linear",
+        "hubspot",
+        "google_drive",
+    }
     assert any(item["configured"] is False for item in data)
 
 
@@ -183,6 +193,32 @@ def test_oauth_start_for_hubspot_works_after_provider_config(authenticated_clien
     payload = response.json()["data"]
     assert payload["provider"] == "hubspot"
     assert "hubspot.com" in payload["authorize_url"]
+
+
+def test_oauth_start_for_google_calendar_works_after_provider_config(authenticated_client):
+    _configure_provider(authenticated_client, "google_calendar")
+    response = authenticated_client.post(
+        "/api/credentials/oauth/start",
+        {"provider": "google_calendar"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()["data"]
+    assert payload["provider"] == "google_calendar"
+    assert "accounts.google.com" in payload["authorize_url"]
+
+
+def test_oauth_start_for_google_tasks_works_after_provider_config(authenticated_client):
+    _configure_provider(authenticated_client, "google_tasks")
+    response = authenticated_client.post(
+        "/api/credentials/oauth/start",
+        {"provider": "google_tasks"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()["data"]
+    assert payload["provider"] == "google_tasks"
+    assert "accounts.google.com" in payload["authorize_url"]
 
 
 def test_credentials_list_marks_expired_oauth_token_for_reauth(authenticated_client, user):

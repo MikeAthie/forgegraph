@@ -3,6 +3,9 @@ package test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/forgegraph/engine/adapter/gateway"
 	"github.com/forgegraph/engine/adapter/repository"
 	"github.com/forgegraph/engine/adapter/store"
+	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/domain/entity"
@@ -352,5 +356,265 @@ func TestCancelRun(t *testing.T) {
 	}
 	if status != "succeeded" && status != "canceled" {
 		t.Errorf("Expected status 'succeeded' or 'canceled', got '%s'", status)
+	}
+}
+
+func TestToolNode_HTTPCallIntegration(t *testing.T) {
+	repo := repository.NewMemoryRunRepository()
+	emitter := gateway.NewRecordingEventEmitter()
+	memoryStore := store.NewInMemoryMemoryStore()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true,"provider":"tool-http"}`)
+	}))
+	defer server.Close()
+
+	toolRegistry := tool.NewRegistry()
+	toolRegistry.Register(tool.Definition{
+		Name:    "test.http.integration",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: "POST",
+		},
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(
+		executor.NewOutputExecutor(),
+		executor.NewToolExecutor(toolRegistry),
+	)
+
+	scheduler := usecase.NewScheduler(usecase.SchedulerConfig{
+		MaxWorkers:       2,
+		DefaultTimeoutMs: 5000,
+	}, registry, repo, emitter, memoryStore)
+
+	graph := map[string]any{
+		"nodes": []map[string]any{
+			{
+				"id":   "tool-1",
+				"type": "tool",
+				"name": "HTTP Tool",
+				"config": map[string]any{
+					"tool": "test.http.integration",
+					"input": map[string]any{
+						"query": "hello",
+					},
+				},
+			},
+			{
+				"id":   "output-1",
+				"type": "output",
+				"name": "Output",
+				"config": map[string]any{
+					"output_mapping": map[string]any{
+						"tool_output": "node.tool-1.output",
+					},
+				},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "tool-1", "to": "output-1"},
+		},
+	}
+
+	graphJSON, err := json.Marshal(graph)
+	if err != nil {
+		t.Fatalf("Failed to marshal graph: %v", err)
+	}
+
+	runID := "tool-http-run"
+	repo.AddRun(&entity.Run{ID: runID, Status: "pending", StartedAt: time.Now()})
+
+	if err := scheduler.StartRun(context.Background(), runID, string(graphJSON), "{}", "", "", "", ""); err != nil {
+		t.Fatalf("Failed to start run: %v", err)
+	}
+
+	status := waitForRunCompletion(t, scheduler, repo, runID, 10*time.Second)
+	if status != "succeeded" {
+		t.Fatalf("Expected status succeeded, got %s", status)
+	}
+
+	run, err := repo.GetRun(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("Failed to fetch run: %v", err)
+	}
+	output, ok := run.OutputJSON["tool_output"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected tool_output map, got %T", run.OutputJSON["tool_output"])
+	}
+	if output["status"] != float64(http.StatusOK) && output["status"] != http.StatusOK {
+		t.Fatalf("Expected status 200, got %v", output["status"])
+	}
+}
+
+func TestMemoryNode_PersistsAcrossRunsIntegration(t *testing.T) {
+	repo := repository.NewMemoryRunRepository()
+	emitter := gateway.NewRecordingEventEmitter()
+	memoryStore := store.NewInMemoryMemoryStore()
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(
+		executor.NewOutputExecutor(),
+		executor.NewMemoryExecutor(memoryStore),
+	)
+
+	scheduler := usecase.NewScheduler(usecase.SchedulerConfig{
+		MaxWorkers:       2,
+		DefaultTimeoutMs: 5000,
+	}, registry, repo, emitter, memoryStore)
+
+	setGraph := map[string]any{
+		"nodes": []map[string]any{
+			{
+				"id":   "mem-set",
+				"type": "memory",
+				"name": "Memory Set",
+				"config": map[string]any{
+					"action":    "set",
+					"namespace": "agent-demo",
+					"key":       "greeting",
+					"value":     "hello-world",
+				},
+			},
+			{
+				"id":   "output-1",
+				"type": "output",
+				"name": "Output",
+				"config": map[string]any{
+					"output_mapping": map[string]any{
+						"memory_set": "node.mem-set.output",
+					},
+				},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "mem-set", "to": "output-1"},
+		},
+	}
+	getGraph := map[string]any{
+		"nodes": []map[string]any{
+			{
+				"id":   "mem-get",
+				"type": "memory",
+				"name": "Memory Get",
+				"config": map[string]any{
+					"action":    "get",
+					"namespace": "agent-demo",
+					"key":       "greeting",
+				},
+			},
+			{
+				"id":   "output-1",
+				"type": "output",
+				"name": "Output",
+				"config": map[string]any{
+					"output_mapping": map[string]any{
+						"memory_get": "node.mem-get.output",
+					},
+				},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "mem-get", "to": "output-1"},
+		},
+	}
+	deleteGraph := map[string]any{
+		"nodes": []map[string]any{
+			{
+				"id":   "mem-delete",
+				"type": "memory",
+				"name": "Memory Delete",
+				"config": map[string]any{
+					"action":    "delete",
+					"namespace": "agent-demo",
+					"key":       "greeting",
+				},
+			},
+			{
+				"id":   "output-1",
+				"type": "output",
+				"name": "Output",
+				"config": map[string]any{
+					"output_mapping": map[string]any{
+						"memory_delete": "node.mem-delete.output",
+					},
+				},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "mem-delete", "to": "output-1"},
+		},
+	}
+
+	marshal := func(graph map[string]any) string {
+		graphJSON, err := json.Marshal(graph)
+		if err != nil {
+			t.Fatalf("Failed to marshal graph: %v", err)
+		}
+		return string(graphJSON)
+	}
+
+	runSet := "memory-set-run"
+	repo.AddRun(&entity.Run{ID: runSet, Status: "pending", StartedAt: time.Now()})
+	if err := scheduler.StartRun(context.Background(), runSet, marshal(setGraph), "{}", "", "", "", ""); err != nil {
+		t.Fatalf("Failed to start set run: %v", err)
+	}
+	if status := waitForRunCompletion(t, scheduler, repo, runSet, 10*time.Second); status != "succeeded" {
+		t.Fatalf("Expected set run status succeeded, got %s", status)
+	}
+
+	runGet := "memory-get-run"
+	repo.AddRun(&entity.Run{ID: runGet, Status: "pending", StartedAt: time.Now()})
+	if err := scheduler.StartRun(context.Background(), runGet, marshal(getGraph), "{}", "", "", "", ""); err != nil {
+		t.Fatalf("Failed to start get run: %v", err)
+	}
+	if status := waitForRunCompletion(t, scheduler, repo, runGet, 10*time.Second); status != "succeeded" {
+		t.Fatalf("Expected get run status succeeded, got %s", status)
+	}
+
+	getRun, err := repo.GetRun(context.Background(), runGet)
+	if err != nil {
+		t.Fatalf("Failed to fetch get run: %v", err)
+	}
+	getOutput, ok := getRun.OutputJSON["memory_get"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected memory_get output map, got %T", getRun.OutputJSON["memory_get"])
+	}
+	if getOutput["found"] != true || getOutput["value"] != "hello-world" {
+		t.Fatalf("Expected found=true and value=hello-world, got %#v", getOutput)
+	}
+
+	runDelete := "memory-delete-run"
+	repo.AddRun(&entity.Run{ID: runDelete, Status: "pending", StartedAt: time.Now()})
+	if err := scheduler.StartRun(context.Background(), runDelete, marshal(deleteGraph), "{}", "", "", "", ""); err != nil {
+		t.Fatalf("Failed to start delete run: %v", err)
+	}
+	if status := waitForRunCompletion(t, scheduler, repo, runDelete, 10*time.Second); status != "succeeded" {
+		t.Fatalf("Expected delete run status succeeded, got %s", status)
+	}
+
+	runGetAfterDelete := "memory-get-after-delete-run"
+	repo.AddRun(&entity.Run{ID: runGetAfterDelete, Status: "pending", StartedAt: time.Now()})
+	if err := scheduler.StartRun(context.Background(), runGetAfterDelete, marshal(getGraph), "{}", "", "", "", ""); err != nil {
+		t.Fatalf("Failed to start second get run: %v", err)
+	}
+	if status := waitForRunCompletion(t, scheduler, repo, runGetAfterDelete, 10*time.Second); status != "succeeded" {
+		t.Fatalf("Expected second get run status succeeded, got %s", status)
+	}
+
+	getAfterDeleteRun, err := repo.GetRun(context.Background(), runGetAfterDelete)
+	if err != nil {
+		t.Fatalf("Failed to fetch second get run: %v", err)
+	}
+	getAfterDeleteOutput, ok := getAfterDeleteRun.OutputJSON["memory_get"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected memory_get output map after delete, got %T", getAfterDeleteRun.OutputJSON["memory_get"])
+	}
+	if getAfterDeleteOutput["found"] != false {
+		t.Fatalf("Expected found=false after delete, got %#v", getAfterDeleteOutput)
 	}
 }

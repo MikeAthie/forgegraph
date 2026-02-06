@@ -24,6 +24,9 @@ export interface QuickNodePreset {
   nodeType: NodeType;
   defaultConfig: Record<string, unknown>;
   tags: string[];
+  requiredCredentialProvider?: string;
+  setupHint?: string;
+  validationBadge?: string;
 }
 
 /**
@@ -342,11 +345,12 @@ return {
   {
     id: "telegram-send",
     name: "Telegram",
-    description: "Send messages via Telegram Bot API",
+    description: "Send or reply to messages via Telegram Bot API",
     icon: "Send",
     category: "integrations",
     nodeType: NODE_TYPES.HTTP,
     defaultConfig: {
+      provider: "telegram",
       method: "POST",
       url: "https://api.telegram.org/bot{{credentials.telegram_token}}/sendMessage",
       headers: {
@@ -363,6 +367,187 @@ return {
       output_key: "telegram_response",
     },
     tags: ["telegram", "messaging", "bot", "chat"],
+    requiredCredentialProvider: "telegram",
+    setupHint: "Connect a Telegram bot token from @BotFather, then set chat_id + text payload fields.",
+    validationBadge: "Credential required",
+  },
+  {
+    id: "whatsapp-send",
+    name: "WhatsApp",
+    description: "Send WhatsApp replies via Twilio API",
+    icon: "MessageCircle",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "twilio",
+      method: "POST",
+      url: "https://api.twilio.com/2010-04-01/Accounts/{{input.account_sid}}/Messages.json",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "To={{input.to}}&From={{input.from}}&Body={{input.message}}",
+      output_key: "whatsapp_response",
+    },
+    tags: ["whatsapp", "twilio", "messaging", "chatbot"],
+    requiredCredentialProvider: "twilio",
+    setupHint: "Provide Twilio credential and Account SID, then map To/From/Body placeholders.",
+    validationBadge: "Credential required",
+  },
+  {
+    id: "gmail-get-unread",
+    name: "Gmail Unread",
+    description: "Fetch unread emails from Gmail inbox",
+    icon: "Mail",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "gmail",
+      method: "GET",
+      url: "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread&maxResults=5",
+      headers: {},
+      output_key: "gmail_unread_messages",
+    },
+    tags: ["gmail", "email", "inbox", "unread"],
+    requiredCredentialProvider: "gmail",
+    setupHint: "Use Gmail OAuth credential with readonly scope and adjust query/maxResults as needed.",
+    validationBadge: "OAuth required",
+  },
+  {
+    id: "gmail-send",
+    name: "Gmail Send",
+    description: "Send email using Gmail API",
+    icon: "Send",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "gmail",
+      method: "POST",
+      url: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        {
+          raw: "{{input.raw_message_base64url}}",
+        },
+        null,
+        2
+      ),
+      output_key: "gmail_send_response",
+    },
+    tags: ["gmail", "email", "send", "reply"],
+    requiredCredentialProvider: "gmail",
+    setupHint: "Use Gmail OAuth credential and provide RFC2822 message encoded as base64url raw payload.",
+    validationBadge: "OAuth required",
+  },
+  {
+    id: "calendar-list-events",
+    name: "Calendar Events",
+    description: "List Google Calendar events for a date range",
+    icon: "CalendarDays",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "google_calendar",
+      method: "GET",
+      url: "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin={{input.time_min}}&timeMax={{input.time_max}}",
+      headers: {},
+      output_key: "calendar_events",
+    },
+    tags: ["google", "calendar", "events", "schedule"],
+    requiredCredentialProvider: "google_calendar",
+    setupHint: "Set ISO8601 time_min/time_max input values and connect Google Calendar OAuth credential.",
+    validationBadge: "OAuth required",
+  },
+  {
+    id: "calendar-create-event",
+    name: "Calendar Create",
+    description: "Create a Google Calendar event",
+    icon: "CalendarPlus",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "google_calendar",
+      method: "POST",
+      url: "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: "{{input.event_json}}",
+      output_key: "calendar_event_created",
+    },
+    tags: ["google", "calendar", "create", "event"],
+    requiredCredentialProvider: "google_calendar",
+    setupHint: "Pass event_json with summary/start/end fields and a Google Calendar OAuth credential.",
+    validationBadge: "OAuth required",
+  },
+  {
+    id: "tasks-list",
+    name: "Tasks List",
+    description: "List tasks from Google Tasks",
+    icon: "ListTodo",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "google_tasks",
+      method: "GET",
+      url: "https://tasks.googleapis.com/tasks/v1/lists/{{input.task_list_id}}/tasks",
+      headers: {},
+      output_key: "tasks_list",
+    },
+    tags: ["google", "tasks", "todo", "list"],
+    requiredCredentialProvider: "google_tasks",
+    setupHint: "Provide task_list_id input and connect Google Tasks OAuth credential.",
+    validationBadge: "OAuth required",
+  },
+  {
+    id: "tasks-create",
+    name: "Tasks Create",
+    description: "Create a task in Google Tasks",
+    icon: "CheckSquare",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      provider: "google_tasks",
+      method: "POST",
+      url: "https://tasks.googleapis.com/tasks/v1/lists/{{input.task_list_id}}/tasks",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: "{{input.task_json}}",
+      output_key: "task_created",
+    },
+    tags: ["google", "tasks", "create", "todo"],
+    requiredCredentialProvider: "google_tasks",
+    setupHint: "Provide task_list_id + task_json and connect Google Tasks OAuth credential.",
+    validationBadge: "OAuth required",
+  },
+  {
+    id: "webhook-fallback",
+    name: "Webhook",
+    description: "Generic webhook/REST fallback node",
+    icon: "Webhook",
+    category: "integrations",
+    nodeType: NODE_TYPES.HTTP,
+    defaultConfig: {
+      method: "POST",
+      url: "{{input.webhook_url}}",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        {
+          event: "{{input.event}}",
+          payload: "{{input.payload}}",
+        },
+        null,
+        2
+      ),
+      output_key: "webhook_response",
+    },
+    tags: ["webhook", "http", "integration", "fallback"],
+    setupHint: "Use this fallback when no native connector exists and validate endpoint/auth with Run test.",
+    validationBadge: "Run test recommended",
   },
   {
     id: "notion-create",

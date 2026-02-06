@@ -32,9 +32,9 @@ Testing strategy:
 - Integration: branch -> loop -> merge workflow with expected outputs.
 
 Success criteria / Definition of Done:
-- [ ] User can build a Branch/Merge workflow that executes correctly.
-- [ ] Looping graph paths complete without deadlock or infinite execution.
-- [ ] Validation blocks unsafe cycles and allows approved loop patterns.
+- [x] User can build a Branch/Merge workflow that executes correctly.
+- [x] Looping graph paths complete without deadlock or infinite execution.
+- [x] Validation blocks unsafe cycles and allows approved loop patterns.
 
 Dependencies:
 - Existing branch/merge executors and graph validator.
@@ -65,9 +65,9 @@ Testing strategy:
 - E2E: pause at human gate, resume, and verify downstream continuity.
 
 Success criteria / Definition of Done:
-- [ ] Graphs can be paused and resumed mid-execution.
-- [ ] Replay from checkpoint produces deterministic downstream behavior.
-- [ ] Checkpoint restore includes state + execution progress.
+- [x] Graphs can be paused and resumed mid-execution.
+- [x] Replay from checkpoint produces deterministic downstream behavior.
+- [x] Checkpoint restore includes state + execution progress.
 
 Dependencies:
 - Run repository checkpoint storage.
@@ -98,9 +98,9 @@ Testing strategy:
 - Integration: streamed prompt run emits ordered chunks and final response.
 
 Success criteria / Definition of Done:
-- [ ] UI displays partial LLM responses incrementally.
-- [ ] Stream reconnect does not corrupt final displayed response.
-- [ ] Final node output remains consistent with streamed content.
+- [x] UI displays partial LLM responses incrementally.
+- [x] Stream reconnect does not corrupt final displayed response.
+- [x] Final node output remains consistent with streamed content.
 
 Dependencies:
 - Event ingest and broadcast pipeline.
@@ -131,9 +131,9 @@ Testing strategy:
 - Integration: run prompt node with configurable parameters across providers.
 
 Success criteria / Definition of Done:
-- [ ] User can configure model, temperature, max tokens, and template.
-- [ ] Prompt node returns valid output for at least one configured provider.
-- [ ] Invalid config is caught before run start.
+- [x] User can configure model, temperature, max tokens, and template.
+- [x] Prompt node returns valid output for at least one configured provider.
+- [x] Invalid config is caught before run start.
 
 Dependencies:
 - Credential resolution and provider adapters.
@@ -164,9 +164,9 @@ Testing strategy:
 - Integration: calculator or web-search-like tool call through tool node.
 
 Success criteria / Definition of Done:
-- [ ] Agent can call an external API via Tool node.
-- [ ] Tool node supports user-defined function execution path.
-- [ ] Tool failures are visible and recoverable via policy.
+- [x] Agent can call an external API via Tool node.
+- [x] Tool node supports user-defined function execution path.
+- [x] Tool failures are visible and recoverable via policy.
 
 Dependencies:
 - Credential and HTTP execution infrastructure.
@@ -197,9 +197,9 @@ Testing strategy:
 - Integration: SET in run A and GET in run B with same memory scope.
 
 Success criteria / Definition of Done:
-- [ ] Memory SET followed by GET returns stored value.
-- [ ] Memory persists across separate runs in intended scope.
-- [ ] DELETE removes entries predictably.
+- [x] Memory SET followed by GET returns stored value.
+- [x] Memory persists across separate runs in intended scope.
+- [x] DELETE removes entries predictably.
 
 Dependencies:
 - Memory storage adapters and retention jobs.

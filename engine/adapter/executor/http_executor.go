@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,22 +20,40 @@ import (
 
 // HTTPExecutor handles HTTP tool nodes that make external API calls.
 type HTTPExecutor struct {
-	client *http.Client
+	client   *http.Client
+	resolver CredentialResolver
+}
+
+// CredentialResolver resolves provider credentials from the control plane.
+type CredentialResolver interface {
+	Resolve(ctx context.Context, credentialID string, tenantID string) (string, string, error)
 }
 
 // NewHTTPExecutor creates a new HTTP executor with default client
 func NewHTTPExecutor() *HTTPExecutor {
-	return &HTTPExecutor{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
+	return NewHTTPExecutorWithClientAndResolver(nil, nil)
 }
 
 // NewHTTPExecutorWithClient creates a new HTTP executor with a custom client
 func NewHTTPExecutorWithClient(client *http.Client) *HTTPExecutor {
+	return NewHTTPExecutorWithClientAndResolver(client, nil)
+}
+
+// NewHTTPExecutorWithResolver creates a new HTTP executor with a credential resolver.
+func NewHTTPExecutorWithResolver(resolver CredentialResolver) *HTTPExecutor {
+	return NewHTTPExecutorWithClientAndResolver(nil, resolver)
+}
+
+// NewHTTPExecutorWithClientAndResolver creates a new HTTP executor with custom dependencies.
+func NewHTTPExecutorWithClientAndResolver(client *http.Client, resolver CredentialResolver) *HTTPExecutor {
+	if client == nil {
+		client = &http.Client{
+			Timeout: 30 * time.Second,
+		}
+	}
 	return &HTTPExecutor{
-		client: client,
+		client:   client,
+		resolver: resolver,
 	}
 }
 
@@ -58,6 +77,12 @@ func (e *HTTPExecutor) NodeType() string {
 //   - headers: map[string]string
 //   - body: any (parsed JSON or string)
 func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+	provider, apiKey, credentialErr := e.resolveCredentialContext(ctx, node)
+	if credentialErr != nil {
+		return port.NewErrorResult(credentialErr), nil
+	}
+	templateValues := credentialTemplateValues(provider, apiKey)
+
 	// Get URL (required)
 	urlStr, ok := node.Config["url"].(string)
 	if !ok || urlStr == "" {
@@ -65,7 +90,7 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	}
 
 	// Substitute variables in URL
-	urlStr = SubstituteTemplate(urlStr, state)
+	urlStr = SubstituteTemplateWithExtras(urlStr, state, templateValues)
 
 	if !isHTTPAllowed(port.PolicyFromContext(ctx), urlStr) {
 		return port.NewErrorResult(domain.NewValidationError("url", "egress blocked by policy")), nil
@@ -81,7 +106,7 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	// Build request body
 	var bodyReader io.Reader
 	if method == "POST" || method == "PUT" || method == "PATCH" {
-		body, err := e.buildRequestBody(node, state)
+		body, err := e.buildRequestBody(node, state, templateValues)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
@@ -100,11 +125,13 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	if headers, ok := node.Config["headers"].(map[string]any); ok {
 		for key, val := range headers {
 			if strVal, ok := val.(string); ok {
-				strVal = SubstituteTemplate(strVal, state)
+				strVal = SubstituteTemplateWithExtras(strVal, state, templateValues)
 				req.Header.Set(key, strVal)
 			}
 		}
 	}
+
+	e.injectCredentialAuthHeader(req, node, state, provider, apiKey, templateValues)
 
 	// Set Content-Type if not specified and we have a body
 	if bodyReader != nil && req.Header.Get("Content-Type") == "" {
@@ -161,10 +188,10 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 }
 
 // buildRequestBody creates the request body from config
-func (e *HTTPExecutor) buildRequestBody(node *entity.Node, state *entity.State) ([]byte, error) {
+func (e *HTTPExecutor) buildRequestBody(node *entity.Node, state *entity.State, templateValues map[string]string) ([]byte, error) {
 	// Check for body_template first (string template with substitution)
 	if bodyTemplate, ok := node.Config["body_template"].(string); ok {
-		substituted := SubstituteTemplate(bodyTemplate, state)
+		substituted := SubstituteTemplateWithExtras(bodyTemplate, state, templateValues)
 		return []byte(substituted), nil
 	}
 
@@ -172,10 +199,10 @@ func (e *HTTPExecutor) buildRequestBody(node *entity.Node, state *entity.State) 
 	if body, ok := node.Config["body"]; ok {
 		switch v := body.(type) {
 		case string:
-			return []byte(SubstituteTemplate(v, state)), nil
+			return []byte(SubstituteTemplateWithExtras(v, state, templateValues)), nil
 		case map[string]any:
 			// Substitute variables in map values
-			substitutedBody := e.substituteMapValues(v, state)
+			substitutedBody := e.substituteMapValues(v, state, templateValues)
 			return json.Marshal(substitutedBody)
 		default:
 			return json.Marshal(v)
@@ -186,19 +213,109 @@ func (e *HTTPExecutor) buildRequestBody(node *entity.Node, state *entity.State) 
 }
 
 // substituteMapValues recursively substitutes template values in a map
-func (e *HTTPExecutor) substituteMapValues(m map[string]any, state *entity.State) map[string]any {
+func (e *HTTPExecutor) substituteMapValues(m map[string]any, state *entity.State, templateValues map[string]string) map[string]any {
 	result := make(map[string]any)
 	for k, v := range m {
 		switch val := v.(type) {
 		case string:
-			result[k] = SubstituteTemplate(val, state)
+			result[k] = SubstituteTemplateWithExtras(val, state, templateValues)
 		case map[string]any:
-			result[k] = e.substituteMapValues(val, state)
+			result[k] = e.substituteMapValues(val, state, templateValues)
 		default:
 			result[k] = v
 		}
 	}
 	return result
+}
+
+func (e *HTTPExecutor) resolveCredentialContext(ctx context.Context, node *entity.Node) (string, string, error) {
+	provider, _ := node.Config["provider"].(string)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	credentialID, _ := node.Config["credential_id"].(string)
+	credentialID = strings.TrimSpace(credentialID)
+
+	if credentialID == "" {
+		return provider, "", nil
+	}
+	if e.resolver == nil {
+		return "", "", domain.NewValidationError("credential_id", "credential resolver not configured")
+	}
+
+	tenantID := strings.TrimSpace(port.TenantIDFrom(ctx))
+	if tenantID == "" {
+		return "", "", domain.NewValidationError("tenant_id", "tenant_id is required for credential resolution")
+	}
+
+	resolvedProvider, apiKey, err := e.resolver.Resolve(ctx, credentialID, tenantID)
+	if err != nil {
+		return "", "", domain.NewValidationError("credential_id", fmt.Sprintf("credential resolution failed: %v", err))
+	}
+	resolvedProvider = strings.ToLower(strings.TrimSpace(resolvedProvider))
+	if provider == "" {
+		provider = resolvedProvider
+	} else if resolvedProvider != "" && provider != resolvedProvider {
+		return "", "", domain.NewValidationError(
+			"credential_id",
+			fmt.Sprintf("credential provider mismatch: expected %s, got %s", provider, resolvedProvider),
+		)
+	}
+	return provider, apiKey, nil
+}
+
+func credentialTemplateValues(provider string, apiKey string) map[string]string {
+	values := map[string]string{}
+	if strings.TrimSpace(apiKey) == "" {
+		return values
+	}
+	values["credential.api_key"] = apiKey
+	values["credentials.api_key"] = apiKey
+	values["credential.token"] = apiKey
+	values["credentials.token"] = apiKey
+
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	if normalizedProvider != "" {
+		values[fmt.Sprintf("credentials.%s_api_key", normalizedProvider)] = apiKey
+		values[fmt.Sprintf("credentials.%s_token", normalizedProvider)] = apiKey
+	}
+	if normalizedProvider == "twilio" {
+		values["credentials.twilio_auth_token"] = apiKey
+	}
+	return values
+}
+
+func (e *HTTPExecutor) injectCredentialAuthHeader(
+	req *http.Request,
+	node *entity.Node,
+	state *entity.State,
+	provider string,
+	apiKey string,
+	templateValues map[string]string,
+) {
+	if req == nil || strings.TrimSpace(apiKey) == "" {
+		return
+	}
+	if strings.TrimSpace(req.Header.Get("Authorization")) != "" {
+		return
+	}
+
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	if normalizedProvider == "telegram" {
+		// Telegram Bot API tokens are usually included in URL path.
+		return
+	}
+
+	if normalizedProvider == "twilio" {
+		accountSID, _ := node.Config["account_sid"].(string)
+		accountSID = SubstituteTemplateWithExtras(accountSID, state, templateValues)
+		accountSID = strings.TrimSpace(accountSID)
+		if accountSID != "" {
+			basic := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", accountSID, apiKey)))
+			req.Header.Set("Authorization", "Basic "+basic)
+			return
+		}
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 }
 
 // extractHeaders converts http.Header to a simple map

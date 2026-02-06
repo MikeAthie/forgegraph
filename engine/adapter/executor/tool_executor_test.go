@@ -1,0 +1,328 @@
+package executor
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/forgegraph/engine/adapter/tool"
+	"github.com/forgegraph/engine/application/port"
+	"github.com/forgegraph/engine/domain"
+	"github.com/forgegraph/engine/domain/entity"
+	"github.com/forgegraph/engine/domain/value"
+)
+
+func TestToolExecutor_NodeType(t *testing.T) {
+	executor := NewToolExecutor(tool.NewRegistry())
+	if executor.NodeType() != string(value.NodeTypeTool) {
+		t.Fatalf("NodeType() = %s, want %s", executor.NodeType(), string(value.NodeTypeTool))
+	}
+}
+
+func TestToolExecutor_HTTPRetrySucceeds(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := atomic.AddInt32(&attempts, 1)
+		if current == 1 {
+			http.Error(w, "temporary", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.retry",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodPost,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool":             "test.http.retry",
+			"retry_attempts":   2,
+			"retry_backoff_ms": 1,
+			"input": map[string]any{
+				"query": "hello",
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("expected output map, got %T", result.Output)
+	}
+	if output["status"] != http.StatusOK {
+		t.Fatalf("status = %v, want %d", output["status"], http.StatusOK)
+	}
+	if output["attempts"] != 2 {
+		t.Fatalf("attempts = %v, want 2", output["attempts"])
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Fatalf("server attempts = %d, want 2", got)
+	}
+}
+
+func TestToolExecutor_HTTPRetryableErrorOnExhaustedRetries(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "temporary", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.fail",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodPost,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool":             "test.http.fail",
+			"retry_attempts":   2,
+			"retry_backoff_ms": 1,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected result.Error for exhausted retries")
+	}
+	if !domain.IsRetryable(result.Error) {
+		t.Fatalf("expected retryable error, got %T (%v)", result.Error, result.Error)
+	}
+}
+
+func TestToolExecutor_HTTPClientErrorNonRetryable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.4xx",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodPost,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.http.4xx",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected result.Error for 4xx response")
+	}
+	if domain.IsRetryable(result.Error) {
+		t.Fatalf("expected non-retryable error for 4xx, got %T (%v)", result.Error, result.Error)
+	}
+}
+
+func TestToolExecutor_ExecToolUserFunctionPath(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.exec.success",
+		Version: "1.0.0",
+		Kind:    "exec",
+		Exec: &tool.ExecToolConfig{
+			Command: os.Args[0],
+			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "success"},
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_exec_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.exec.success",
+			"input": map[string]any{
+				"value": 123,
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("expected output map, got %T", result.Output)
+	}
+	payload, ok := output["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result payload map, got %T", output["result"])
+	}
+	if payload["message"] != "ok" {
+		t.Fatalf("unexpected exec payload: %#v", payload)
+	}
+}
+
+func TestToolExecutor_ExecTimeoutRetryable(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.exec.timeout",
+		Version: "1.0.0",
+		Kind:    "exec",
+		Exec: &tool.ExecToolConfig{
+			Command: os.Args[0],
+			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "sleep"},
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_exec_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool":           "test.exec.timeout",
+			"timeout_ms":     25,
+			"retry_attempts": 1,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !domain.IsRetryable(result.Error) {
+		t.Fatalf("expected retryable timeout error, got %T (%v)", result.Error, result.Error)
+	}
+}
+
+func TestToolExecutorHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+
+	mode := ""
+	for i, arg := range os.Args {
+		if arg == "--" && i+1 < len(os.Args) {
+			mode = os.Args[i+1]
+			break
+		}
+	}
+	if mode == "" {
+		os.Exit(2)
+	}
+
+	switch mode {
+	case "success":
+		decoder := json.NewDecoder(os.Stdin)
+		var payload map[string]any
+		_ = decoder.Decode(&payload)
+		_, _ = fmt.Fprint(os.Stdout, `{"message":"ok"}`)
+		os.Exit(0)
+	case "sleep":
+		time.Sleep(150 * time.Millisecond)
+		_, _ = fmt.Fprint(os.Stdout, `{"message":"late"}`)
+		os.Exit(0)
+	default:
+		_, _ = fmt.Fprintf(os.Stderr, "unknown helper mode %s", mode)
+		os.Exit(1)
+	}
+}
+
+func TestToolExecutor_HTTPToolBlocksEgressByPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.policy",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL: server.URL,
+		},
+	})
+
+	ctx := context.Background()
+	ctx = port.WithRunContext(ctx, &port.RunContext{
+		Policy: &entity.ExecutionPolicy{
+			HTTPAllowlist:   []string{"example.com"},
+			HTTPDefaultDeny: true,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_policy",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.http.policy",
+		},
+	}
+
+	result, err := executor.Execute(ctx, node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected policy validation error")
+	}
+	if !strings.Contains(result.Error.Error(), "egress blocked") {
+		t.Fatalf("unexpected error message: %v", result.Error)
+	}
+}

@@ -15,6 +15,7 @@ export interface TypedEdgeData {
   condition?: string;
   sourceType?: DataType;
   targetType?: DataType;
+  routeLane?: number;
   label?: string;
   [key: string]: unknown;
 }
@@ -40,6 +41,7 @@ function TypedEdgeComponent({
   const edgeData = data as TypedEdgeData | undefined;
   const sourceType = edgeData?.sourceType ?? DataType.ANY;
   const targetType = edgeData?.targetType ?? DataType.ANY;
+  const routeLane = Number(edgeData?.routeLane ?? 0);
 
   // Check type compatibility
   const compatibility = useMemo(
@@ -50,15 +52,23 @@ function TypedEdgeComponent({
   const isTypeMismatch = !compatibility.compatible;
   const sourceTypeInfo = getDataTypeInfo(sourceType);
 
+  const laneShift = routeLane * 12;
+  const mostlyVertical = Math.abs(sourceY - targetY) > Math.abs(sourceX - targetX);
+  const adjustedSourceX = mostlyVertical ? sourceX + laneShift : sourceX;
+  const adjustedTargetX = mostlyVertical ? targetX + laneShift : targetX;
+  const adjustedSourceY = mostlyVertical ? sourceY : sourceY + laneShift;
+  const adjustedTargetY = mostlyVertical ? targetY : targetY + laneShift;
+
   // Calculate edge path
   const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
+    sourceX: adjustedSourceX,
+    sourceY: adjustedSourceY,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: adjustedTargetX,
+    targetY: adjustedTargetY,
     targetPosition,
     borderRadius: 8,
+    offset: 24 + Math.abs(routeLane) * 8,
   });
 
   // Determine edge color based on type and compatibility

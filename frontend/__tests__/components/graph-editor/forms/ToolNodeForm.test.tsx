@@ -11,6 +11,32 @@ import { useState } from "react";
 import { ToolNodeForm } from "@/components/graph-editor/forms/ToolNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
+const mockListCredentials = jest.fn();
+const credentialFixtures = [
+  {
+    id: "cred-openai",
+    provider: "openai",
+    name: "OpenAI Primary",
+    key_hint: "sk-...1234",
+    token_expires_at: null,
+    health_status: "healthy",
+    requires_reauth: false,
+    health_message: null,
+    created_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "cred-gmail-expired",
+    provider: "gmail",
+    name: "Gmail OAuth",
+    key_hint: "oauth...1234",
+    token_expires_at: null,
+    health_status: "expired",
+    requires_reauth: true,
+    health_message: "OAuth token expired",
+    created_at: "2026-01-01T00:00:00Z",
+  },
+];
+
 // Mock validation utilities
 jest.mock("@/lib/form-validation", () => ({
   validateJson: jest.fn((value: string) => {
@@ -24,6 +50,13 @@ jest.mock("@/lib/form-validation", () => ({
     }
     return null;
   }),
+}));
+
+jest.mock("@/lib/api", () => ({
+  credentialsApi: {
+    list: (...args: unknown[]) => mockListCredentials(...args),
+  },
+  getApiErrorMessage: jest.fn((_err: unknown, fallback: string) => fallback),
 }));
 
 // Mock child components
@@ -91,6 +124,7 @@ describe("ToolNodeForm", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockListCredentials.mockImplementation(() => new Promise(() => {}));
   });
 
   describe("Initial Render", () => {
@@ -99,6 +133,8 @@ describe("ToolNodeForm", () => {
 
       expect(screen.getByText(/tool configuration/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^tool$/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/credential provider/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^credential$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/output key/i)).toBeInTheDocument();
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
@@ -507,6 +543,47 @@ describe("ToolNodeForm", () => {
           })
         );
       });
+    });
+  });
+
+  describe("Credential Assignment", () => {
+    it("shows provider-specific credentials", async () => {
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({ provider: "openai" });
+
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /openai primary/i })).toBeInTheDocument();
+      });
+      expect(screen.queryByRole("option", { name: /gmail oauth/i })).not.toBeInTheDocument();
+    });
+
+    it("clears selected credential when provider changes", async () => {
+      const user = setupUser();
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({ provider: "openai", credential_id: "cred-openai" });
+
+      const providerSelect = screen.getByLabelText(/credential provider/i);
+      await user.selectOptions(providerSelect, "gmail");
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalled();
+      });
+      const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
+      expect(lastCall.provider).toBe("gmail");
+      expect("credential_id" in lastCall).toBe(false);
+    });
+
+    it("shows reauth guidance for unhealthy selected credential", async () => {
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({
+        provider: "gmail",
+        credential_id: "cred-gmail-expired",
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(/selected credential is expired/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/reconnect this credential in credentials/i)).toBeInTheDocument();
     });
   });
 });

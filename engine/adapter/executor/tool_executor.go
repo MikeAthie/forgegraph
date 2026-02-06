@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
@@ -106,13 +108,13 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 
 	switch strings.ToLower(def.Kind) {
 	case "http":
-		result, err := e.executeHTTPTool(ctx, def, payload, node)
+		result, err := e.executeHTTPTool(ctx, def, payload, node, toolConfig)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
 		return port.NewSuccessResult(result), nil
 	case "exec":
-		result, err := e.executeExecTool(ctx, def, payload)
+		result, err := e.executeExecTool(ctx, def, payload, node, toolConfig)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
@@ -122,7 +124,13 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	}
 }
 
-func (e *ToolExecutor) executeHTTPTool(ctx context.Context, def *tool.Definition, payload map[string]any, node *entity.Node) (map[string]any, error) {
+func (e *ToolExecutor) executeHTTPTool(
+	ctx context.Context,
+	def *tool.Definition,
+	payload map[string]any,
+	node *entity.Node,
+	toolConfig map[string]any,
+) (map[string]any, error) {
 	if def.HTTP == nil {
 		return nil, fmt.Errorf("tool missing http configuration")
 	}
@@ -130,6 +138,9 @@ func (e *ToolExecutor) executeHTTPTool(ctx context.Context, def *tool.Definition
 	urlStr := os.ExpandEnv(def.HTTP.URL)
 	if urlStr == "" {
 		return nil, fmt.Errorf("tool URL not configured")
+	}
+	if !isHTTPAllowed(port.PolicyFromContext(ctx), urlStr) {
+		return nil, domain.NewValidationError("url", "tool egress blocked by policy")
 	}
 
 	method := def.HTTP.Method
@@ -142,12 +153,6 @@ func (e *ToolExecutor) executeHTTPTool(ctx context.Context, def *tool.Definition
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, urlStr, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
 	headers := map[string]string{}
 	for k, v := range def.HTTP.Headers {
 		headers[k] = v
@@ -158,39 +163,106 @@ func (e *ToolExecutor) executeHTTPTool(ctx context.Context, def *tool.Definition
 		}
 	}
 	for k, v := range headers {
-		req.Header.Set(k, v)
+		headers[k] = v
 	}
 
-	resp, err := e.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	timeoutMs := resolveToolTimeoutMs(node, toolConfig, def.HTTP.TimeoutMs)
+	retryAttempts := resolveToolRetryAttempts(node, toolConfig)
+	retryBackoffMs := resolveToolRetryBackoffMs(node, toolConfig)
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	var lastErr error
+	for attempt := 1; attempt <= retryAttempts; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 
-	var parsed any
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "application/json") {
-		if err := json.Unmarshal(body, &parsed); err != nil {
+		req, err := http.NewRequestWithContext(attemptCtx, method, urlStr, bytes.NewReader(bodyBytes))
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+
+		resp, err := e.httpClient.Do(req)
+		if err != nil {
+			cancel()
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			lastErr = domain.NewRetryableError(err, "tool http request failed")
+			if attempt < retryAttempts {
+				if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+					return nil, backoffErr
+				}
+				continue
+			}
+			return nil, lastErr
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		cancel()
+		if err != nil {
+			lastErr = domain.NewRetryableError(err, "failed to read tool response")
+			if attempt < retryAttempts {
+				if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+					return nil, backoffErr
+				}
+				continue
+			}
+			return nil, lastErr
+		}
+
+		var parsed any
+		contentType := resp.Header.Get("Content-Type")
+		if strings.Contains(contentType, "application/json") {
+			if err := json.Unmarshal(body, &parsed); err != nil {
+				parsed = string(body)
+			}
+		} else {
 			parsed = string(body)
 		}
-	} else {
-		parsed = string(body)
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			lastErr = domain.NewRetryableError(
+				fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body))),
+				"tool upstream unavailable",
+			)
+			if attempt < retryAttempts {
+				if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+					return nil, backoffErr
+				}
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode >= 400 {
+			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+
+		return map[string]any{
+			"tool":     def.Name,
+			"version":  def.Version,
+			"status":   resp.StatusCode,
+			"result":   parsed,
+			"attempts": attempt,
+		}, nil
 	}
 
-	return map[string]any{
-		"tool":    def.Name,
-		"version": def.Version,
-		"status":  resp.StatusCode,
-		"result":  parsed,
-	}, nil
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("tool request failed")
 }
 
-func (e *ToolExecutor) executeExecTool(ctx context.Context, def *tool.Definition, payload map[string]any) (map[string]any, error) {
+func (e *ToolExecutor) executeExecTool(
+	ctx context.Context,
+	def *tool.Definition,
+	payload map[string]any,
+	node *entity.Node,
+	toolConfig map[string]any,
+) (map[string]any, error) {
 	if def.Exec == nil {
 		return nil, fmt.Errorf("tool missing exec configuration")
 	}
@@ -204,54 +276,80 @@ func (e *ToolExecutor) executeExecTool(ctx context.Context, def *tool.Definition
 		args = append(args, os.ExpandEnv(arg))
 	}
 
-	cmd := exec.CommandContext(ctx, command, args...)
-	if def.Exec.WorkDir != "" {
-		cmd.Dir = os.ExpandEnv(def.Exec.WorkDir)
-	}
-
-	if len(def.Exec.EnvWhitelist) > 0 {
-		env := make([]string, 0, len(def.Exec.EnvWhitelist))
-		for _, key := range def.Exec.EnvWhitelist {
-			if val, ok := os.LookupEnv(key); ok {
-				env = append(env, fmt.Sprintf("%s=%s", key, val))
-			}
-		}
-		cmd.Env = env
-	}
-
 	inputBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stdin = bytes.NewReader(inputBytes)
+	timeoutMs := resolveToolTimeoutMs(node, toolConfig, def.Exec.TimeoutMs)
+	retryAttempts := resolveToolRetryAttempts(node, toolConfig)
+	retryBackoffMs := resolveToolRetryBackoffMs(node, toolConfig)
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("tool exec failed: %w: %s", err, strings.TrimSpace(stderr.String()))
-	}
-
-	rawOutput := stdout.Bytes()
-	var parsed any
-	if len(rawOutput) > 0 {
-		if err := json.Unmarshal(rawOutput, &parsed); err != nil {
-			parsed = strings.TrimSpace(stdout.String())
+	var lastErr error
+	for attempt := 1; attempt <= retryAttempts; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+		cmd := exec.CommandContext(attemptCtx, command, args...)
+		if def.Exec.WorkDir != "" {
+			cmd.Dir = os.ExpandEnv(def.Exec.WorkDir)
 		}
+		if len(def.Exec.EnvWhitelist) > 0 {
+			env := make([]string, 0, len(def.Exec.EnvWhitelist))
+			for _, key := range def.Exec.EnvWhitelist {
+				if val, ok := os.LookupEnv(key); ok {
+					env = append(env, fmt.Sprintf("%s=%s", key, val))
+				}
+			}
+			cmd.Env = env
+		}
+
+		cmd.Stdin = bytes.NewReader(inputBytes)
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
+		cancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
+				lastErr = domain.NewRetryableError(err, "tool exec timed out")
+				if attempt < retryAttempts {
+					if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+						return nil, backoffErr
+					}
+					continue
+				}
+				return nil, lastErr
+			}
+			return nil, fmt.Errorf("tool exec failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+		}
+
+		rawOutput := stdout.Bytes()
+		var parsed any
+		if len(rawOutput) > 0 {
+			if err := json.Unmarshal(rawOutput, &parsed); err != nil {
+				parsed = strings.TrimSpace(stdout.String())
+			}
+		}
+
+		result := map[string]any{
+			"tool":     def.Name,
+			"version":  def.Version,
+			"result":   parsed,
+			"attempts": attempt,
+		}
+		if stderr.Len() > 0 {
+			result["stderr"] = strings.TrimSpace(stderr.String())
+		}
+		return result, nil
 	}
 
-	result := map[string]any{
-		"tool":    def.Name,
-		"version": def.Version,
-		"result":  parsed,
+	if lastErr != nil {
+		return nil, lastErr
 	}
-	if stderr.Len() > 0 {
-		result["stderr"] = strings.TrimSpace(stderr.String())
-	}
-
-	return result, nil
+	return nil, fmt.Errorf("tool exec failed")
 }
 
 func resolveToolInput(node *entity.Node, state *entity.State) (any, error) {
@@ -324,4 +422,75 @@ func parseIndex(val string) int {
 		return -1
 	}
 	return parsed
+}
+
+func resolveToolTimeoutMs(node *entity.Node, toolConfig map[string]any, defaultFromDefinition int) int {
+	timeoutMs := node.GetConfigInt("timeout_ms")
+	if timeoutMs <= 0 {
+		timeoutMs = readInt(toolConfig, "timeout_ms")
+	}
+	if timeoutMs <= 0 {
+		timeoutMs = defaultFromDefinition
+	}
+	if timeoutMs <= 0 {
+		return 30000
+	}
+	return timeoutMs
+}
+
+func resolveToolRetryAttempts(node *entity.Node, toolConfig map[string]any) int {
+	retryAttempts := node.GetConfigInt("retry_attempts")
+	if retryAttempts <= 0 {
+		retryAttempts = readInt(toolConfig, "retry_attempts")
+	}
+	if retryAttempts <= 0 {
+		return 1
+	}
+	return retryAttempts
+}
+
+func resolveToolRetryBackoffMs(node *entity.Node, toolConfig map[string]any) int {
+	backoffMs := node.GetConfigInt("retry_backoff_ms")
+	if backoffMs <= 0 {
+		backoffMs = readInt(toolConfig, "retry_backoff_ms")
+	}
+	if backoffMs <= 0 {
+		return 100
+	}
+	return backoffMs
+}
+
+func readInt(config map[string]any, key string) int {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return 0
+	}
+	switch typed := raw.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func sleepWithContext(ctx context.Context, backoffMs int) error {
+	if backoffMs <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(time.Duration(backoffMs) * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

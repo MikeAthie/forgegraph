@@ -46,6 +46,7 @@ export interface NodeConfigDialogProps {
   onClose: () => void;
   nodeType: NodeType | null;
   initialConfig?: NodeConfig;
+  initialLabel?: string;
   onSave: (config: NodeConfig, label: string) => void;
   FormComponent?: React.ComponentType<NodeFormProps>;
 }
@@ -71,6 +72,7 @@ export function NodeConfigDialog({
   onClose,
   nodeType,
   initialConfig,
+  initialLabel,
   onSave,
   FormComponent,
 }: NodeConfigDialogProps) {
@@ -87,11 +89,11 @@ export function NodeConfigDialog({
     if (isOpen && nodeType) {
       setConfig(resolvedInitialConfig);
       setErrors({});
-      setLabel(NODE_TYPE_INFO[nodeType]?.label || nodeType);
+      setLabel(initialLabel?.trim() || NODE_TYPE_INFO[nodeType]?.label || nodeType);
       setIsDirty(false);
       setShowCloseConfirm(false);
     }
-  }, [isOpen, nodeType, resolvedInitialConfig]);
+  }, [initialLabel, isOpen, nodeType, resolvedInitialConfig]);
 
   const handleConfigChange = useCallback((newConfig: NodeConfig) => {
     setConfig(newConfig);
@@ -177,6 +179,7 @@ export function NodeConfigDialog({
             <input
               id="node-label"
               type="text"
+              autoComplete="off"
               value={label}
               onChange={(e) => {
                 setLabel(e.target.value);

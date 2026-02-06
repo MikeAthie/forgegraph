@@ -32,9 +32,9 @@ Testing strategy:
 - Integration: OAuth connect/callback and reauth path.
 
 Success criteria / Definition of Done:
-- [ ] Connecting an API requires filling a form, not code.
-- [ ] Credentials persist and can be assigned to nodes.
-- [ ] OAuth failures surface actionable recovery messages.
+- [x] Connecting an API requires filling a form, not code.
+- [x] Credentials persist and can be assigned to nodes.
+- [x] OAuth failures surface actionable recovery messages.
 
 Dependencies:
 - Existing credential storage + encryption.
@@ -65,9 +65,9 @@ Testing strategy:
 - E2E: receive user message and send response.
 
 Success criteria / Definition of Done:
-- [ ] User can build Telegram chat agent end-to-end.
-- [ ] Voice messages can be transcribed and processed.
-- [ ] Quick setup path configures required fields in minutes.
+- [x] User can build Telegram chat agent end-to-end.
+- [x] Voice messages can be transcribed and processed.
+- [x] Quick setup path configures required fields in minutes.
 
 Dependencies:
 - P2-T01 credential UX.
@@ -98,9 +98,9 @@ Testing strategy:
 - E2E: user message -> agent response round trip.
 
 Success criteria / Definition of Done:
-- [ ] User can build WhatsApp chatbot workflow end-to-end.
-- [ ] Twilio credential setup is fully UI-driven.
-- [ ] Voice message path works with transcription enabled.
+- [x] User can build WhatsApp chatbot workflow end-to-end.
+- [x] Twilio credential setup is fully UI-driven.
+- [x] Voice message path works with transcription enabled.
 
 Dependencies:
 - P2-T01 credential UX.
@@ -131,9 +131,9 @@ Testing strategy:
 - E2E: summarize unread email and send generated reply.
 
 Success criteria / Definition of Done:
-- [ ] Agent can read inbox and send replies with OAuth credential.
-- [ ] Expired Gmail credentials trigger reauth UX.
-- [ ] Gmail nodes are available in palette and wizard presets.
+- [x] Agent can read inbox and send replies with OAuth credential.
+- [x] Expired Gmail credentials trigger reauth UX.
+- [x] Gmail nodes are available in palette and wizard presets.
 
 Dependencies:
 - OAuth provider configuration support.
@@ -164,9 +164,9 @@ Testing strategy:
 - E2E: run workflow that reads events and schedules a task.
 
 Success criteria / Definition of Done:
-- [ ] Agent reads events and schedules tasks successfully.
-- [ ] OAuth flow works for both Calendar and Tasks nodes.
-- [ ] Node forms validate date/time inputs and required fields.
+- [x] Agent reads events and schedules tasks successfully.
+- [x] OAuth flow works for both Calendar and Tasks nodes.
+- [x] Node forms validate date/time inputs and required fields.
 
 Dependencies:
 - P2-T01 OAuth credential UX.
@@ -197,9 +197,9 @@ Testing strategy:
 - E2E: webhook trigger initiates graph and completes run.
 
 Success criteria / Definition of Done:
-- [ ] Any REST API can be integrated with HTTP/Webhook nodes.
-- [ ] "Run test" validates node config before full run.
-- [ ] HTTP errors are surfaced with response context.
+- [x] Any REST API can be integrated with HTTP/Webhook nodes.
+- [x] "Run test" validates node config before full run.
+- [x] HTTP errors are surfaced with response context.
 
 Dependencies:
 - Tool/HTTP executor reliability from P0.
@@ -230,9 +230,9 @@ Testing strategy:
 - Unit: shortcut preset generation and required field checks.
 
 Success criteria / Definition of Done:
-- [ ] User can configure common integrations via one-click shortcuts.
-- [ ] Shortcut-created nodes pass validation with expected defaults.
-- [ ] Setup hints are visible for each shortcut path.
+- [x] User can configure common integrations via one-click shortcuts.
+- [x] Shortcut-created nodes pass validation with expected defaults.
+- [x] Setup hints are visible for each shortcut path.
 
 Dependencies:
 - P2-T01 credentials and provider nodes.

@@ -1142,6 +1142,8 @@ class IntegrationOAuthProviderConfig(models.Model):
 
     PROVIDER_CHOICES = [
         ("gmail", "Gmail"),
+        ("google_calendar", "Google Calendar"),
+        ("google_tasks", "Google Tasks"),
         ("notion", "Notion"),
         ("slack", "Slack"),
         ("jira", "Jira"),
@@ -1440,6 +1442,8 @@ class APIKey(models.Model):
         ("anthropic", "Anthropic"),
         ("google", "Google AI"),
         ("gmail", "Gmail"),
+        ("google_calendar", "Google Calendar"),
+        ("google_tasks", "Google Tasks"),
         ("notion", "Notion"),
         ("slack", "Slack"),
         ("jira", "Jira"),
@@ -1447,6 +1451,7 @@ class APIKey(models.Model):
         ("hubspot", "HubSpot"),
         ("google_drive", "Google Drive"),
         ("telegram", "Telegram"),
+        ("twilio", "Twilio"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

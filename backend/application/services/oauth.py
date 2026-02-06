@@ -12,6 +12,8 @@ from infrastructure.orm.models import IntegrationOAuthProviderConfig
 
 SUPPORTED_OAUTH_PROVIDERS = (
     "gmail",
+    "google_calendar",
+    "google_tasks",
     "notion",
     "slack",
     "jira",
@@ -27,6 +29,32 @@ PROVIDER_DEFAULTS: dict[str, dict[str, Any]] = {
         "scopes": [
             "https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/gmail.readonly",
+        ],
+        "authorize_extra_params": {
+            "access_type": "offline",
+            "prompt": "consent",
+        },
+        "token_extra_params": {},
+    },
+    "google_calendar": {
+        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": [
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.readonly",
+        ],
+        "authorize_extra_params": {
+            "access_type": "offline",
+            "prompt": "consent",
+        },
+        "token_extra_params": {},
+    },
+    "google_tasks": {
+        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": [
+            "https://www.googleapis.com/auth/tasks",
+            "https://www.googleapis.com/auth/tasks.readonly",
         ],
         "authorize_extra_params": {
             "access_type": "offline",

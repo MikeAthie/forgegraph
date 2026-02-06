@@ -33,9 +33,11 @@ type testStreamingLLMClient struct {
 	response *LLMResponse
 	received *LLMRequest
 	chunks   []string
+	calls    int
 }
 
 func (m *testStreamingLLMClient) Complete(ctx context.Context, request *LLMRequest) (*LLMResponse, error) {
+	m.calls++
 	m.received = request
 	return m.response, nil
 }
@@ -45,6 +47,7 @@ func (m *testStreamingLLMClient) StreamComplete(
 	request *LLMRequest,
 	onChunk func(string),
 ) (*LLMResponse, error) {
+	m.calls++
 	m.received = request
 	for _, chunk := range m.chunks {
 		if onChunk != nil {
@@ -477,6 +480,43 @@ func TestPromptExecutor_Execute_NoUsage(t *testing.T) {
 	output := result.Output.(map[string]any)
 	if _, hasUsage := output["usage"]; hasUsage {
 		t.Error("Expected no usage in output when response has no usage")
+	}
+}
+
+func TestPromptExecutor_Execute_StreamsChunksToContextEmitter(t *testing.T) {
+	streamClient := &testStreamingLLMClient{
+		response: &LLMResponse{
+			Content: "Hello world",
+			Model:   "gpt-4",
+		},
+		chunks: []string{"Hello", " ", "world"},
+	}
+
+	executor := NewPromptExecutor(streamClient)
+	state := entity.NewState()
+	node := &entity.Node{
+		ID:   "prompt_1",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Say hello",
+			"stream":          true,
+		},
+	}
+
+	var streamed strings.Builder
+	ctx := port.WithStreamChunkEmitter(context.Background(), func(chunk string) {
+		streamed.WriteString(chunk)
+	})
+
+	result, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if streamed.String() != "Hello world" {
+		t.Fatalf("streamed chunks = %q, want %q", streamed.String(), "Hello world")
 	}
 }
 

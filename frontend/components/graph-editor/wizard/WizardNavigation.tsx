@@ -6,7 +6,7 @@ import { useWizard } from "@/contexts/WizardContext";
 import { cn } from "@/lib/utils";
 
 export interface WizardNavigationProps {
-  onComplete?: () => void;
+  onComplete?: (options?: { runTest?: boolean }) => void;
   className?: string;
 }
 
@@ -26,10 +26,15 @@ export function WizardNavigation({ onComplete, className }: WizardNavigationProp
   const handleNext = () => {
     markStepComplete();
     if (isLastStep) {
-      onComplete?.();
+      onComplete?.({ runTest: false });
     } else {
       nextStep();
     }
+  };
+
+  const handleCreateAndRunTest = () => {
+    markStepComplete();
+    onComplete?.({ runTest: true });
   };
 
   const handleSkip = () => {
@@ -81,14 +86,23 @@ export function WizardNavigation({ onComplete, className }: WizardNavigationProp
           </Button>
         )}
 
+        {isLastStep && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCreateAndRunTest}
+            disabled={!state.canProceed}
+          >
+            Create &amp; Run Test
+          </Button>
+        )}
+
         <Button
           size="sm"
           onClick={handleNext}
           disabled={!state.canProceed}
         >
-          {isLastStep ? (
-            "Finish"
-          ) : (
+          {isLastStep ? "Finish Setup" : (
             <>
               Next
               <ChevronRightIcon className="w-4 h-4 ml-1" />

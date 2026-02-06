@@ -7,9 +7,23 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/value"
 )
+
+type mockCredentialResolver struct {
+	provider string
+	apiKey   string
+	err      error
+}
+
+func (m *mockCredentialResolver) Resolve(ctx context.Context, credentialID string, tenantID string) (string, string, error) {
+	if m.err != nil {
+		return "", "", m.err
+	}
+	return m.provider, m.apiKey, nil
+}
 
 func TestHTTPExecutor_NodeType(t *testing.T) {
 	executor := NewHTTPExecutor()
@@ -376,5 +390,83 @@ func TestHTTPExecutor_Execute_DefaultMethod(t *testing.T) {
 
 	if receivedMethod != "GET" {
 		t.Errorf("Method = %v, want 'GET'", receivedMethod)
+	}
+}
+
+func TestHTTPExecutor_Execute_ResolvesCredentialTemplateForTelegram(t *testing.T) {
+	var receivedPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	executor := NewHTTPExecutorWithClientAndResolver(
+		server.Client(),
+		&mockCredentialResolver{provider: "telegram", apiKey: "bot-token-123"},
+	)
+	state := entity.NewState()
+
+	node := &entity.Node{
+		ID:   "http_telegram_send",
+		Type: string(value.NodeTypeHTTP),
+		Config: map[string]any{
+			"provider":      "telegram",
+			"credential_id": "cred-telegram",
+			"method":        "POST",
+			"url":           server.URL + "/bot{{credentials.telegram_token}}/sendMessage",
+			"body":          `{"text":"hello"}`,
+		},
+	}
+
+	ctx := port.WithTenantID(context.Background(), "tenant-1")
+	result, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	if receivedPath != "/botbot-token-123/sendMessage" {
+		t.Errorf("Received path = %v, want '/botbot-token-123/sendMessage'", receivedPath)
+	}
+}
+
+func TestHTTPExecutor_Execute_InferBearerAuthFromCredential(t *testing.T) {
+	var receivedAuth string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	executor := NewHTTPExecutorWithClientAndResolver(
+		server.Client(),
+		&mockCredentialResolver{provider: "gmail", apiKey: "gmail-token-123"},
+	)
+	state := entity.NewState()
+	node := &entity.Node{
+		ID:   "http_gmail",
+		Type: string(value.NodeTypeHTTP),
+		Config: map[string]any{
+			"provider":      "gmail",
+			"credential_id": "cred-gmail",
+			"url":           server.URL,
+		},
+	}
+
+	ctx := port.WithTenantID(context.Background(), "tenant-1")
+	result, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if receivedAuth != "Bearer gmail-token-123" {
+		t.Errorf("Authorization = %v, want Bearer gmail-token-123", receivedAuth)
 	}
 }

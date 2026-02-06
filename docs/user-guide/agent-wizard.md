@@ -49,7 +49,7 @@ The wizard ensures your graph has all required components and follows best pract
 ### From the Graph Editor
 
 1. Create a new graph or open an existing empty graph
-2. Click the **Wizard** button in the toolbar (or press `Ctrl+Shift+W`)
+2. Click the **Wizard** button in the toolbar (or press `Ctrl+W` / `Ctrl+Shift+W`)
 3. The wizard panel appears overlaying the canvas
 
 ### From an Empty Graph
@@ -184,8 +184,12 @@ Quick Node presets are pre-configured templates for common patterns.
 - **RAG Query** - Retrieval-augmented generation setup
 
 ### Integration Presets
-- **REST API Call** - HTTP GET with JSON parsing
-- **Webhook Handler** - Process incoming webhook data
+- **Telegram Send** - Bot API send/reply action with token credential hints
+- **WhatsApp Send (Twilio)** - Twilio message action with Account SID/Auth Token setup
+- **Gmail Unread / Gmail Send** - OAuth-backed inbox fetch and send flows
+- **Calendar Events / Calendar Create** - Google Calendar list/create event shortcuts
+- **Tasks List / Tasks Create** - Google Tasks list/create shortcuts
+- **Webhook Fallback** - Generic REST fallback for unlisted providers
 
 ### Logic Presets
 - **Conditional Router** - Branch based on conditions
@@ -193,9 +197,11 @@ Quick Node presets are pre-configured templates for common patterns.
 
 **Using Presets:**
 1. Click on a preset in the palette
-2. Review the pre-filled configuration
-3. Customize as needed
-4. Add to your workflow
+2. Review the pre-filled configuration and setup hint badge
+3. For integration presets, the node configuration dialog opens with provider/credential fields preselected
+4. Use **Run test** in HTTP node config to validate credentials + endpoint before saving
+5. Customize as needed
+6. Add to your workflow
 
 ---
 
@@ -203,7 +209,7 @@ Quick Node presets are pre-configured templates for common patterns.
 
 | Action | Shortcut |
 |--------|----------|
-| Open/Close Wizard | `Ctrl+Shift+W` |
+| Open/Close Wizard | `Ctrl+W` / `Ctrl+Shift+W` |
 | Save Graph | `Ctrl+S` |
 | Undo | `Ctrl+Z` |
 | Redo | `Ctrl+Y` |

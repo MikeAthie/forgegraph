@@ -52,25 +52,25 @@ See detailed tasks: `docs/v2/v2-tasks-p3.md`.
 
 ## V2 Readiness Checklist
 Core Runtime:
-- [ ] Branch/Merge workflows execute correctly including looped paths.
-- [ ] Run checkpoints support replay and pause/resume for interrupted runs.
-- [ ] Prompt responses stream incrementally in run details UI.
+- [x] Branch/Merge workflows execute correctly including looped paths.
+- [x] Run checkpoints support replay and pause/resume for interrupted runs.
+- [x] Prompt responses stream incrementally in run details UI.
 
 Agent Nodes:
-- [ ] Prompt node supports provider/model, prompt templates, temperature, and max tokens.
-- [ ] Tool nodes can call external APIs and user-defined functions.
-- [ ] Memory GET/SET persists and is retrievable across separate runs.
+- [x] Prompt node supports provider/model, prompt templates, temperature, and max tokens.
+- [x] Tool nodes can call external APIs and user-defined functions.
+- [x] Memory GET/SET persists and is retrievable across separate runs.
 
 Editor + Wizard:
-- [ ] Canvas interactions are smooth for drag, connect, pan, and zoom.
-- [ ] Wizard can produce a working agent without direct JSON edits.
-- [ ] Searchable palette can find all supported node types quickly.
+- [x] Canvas interactions are smooth for drag, connect, pan, and zoom.
+- [x] Wizard can produce a working agent without direct JSON edits.
+- [x] Searchable palette can find all supported node types quickly.
 
 Integrations:
-- [ ] Telegram and WhatsApp can receive and send messages end-to-end.
-- [ ] Gmail can list unread emails and send replies via OAuth.
-- [ ] Google Calendar/Tasks can read and create events/tasks via OAuth.
-- [ ] HTTP/Webhook nodes can integrate unlisted services.
+- [x] Telegram and WhatsApp can receive and send messages end-to-end.
+- [x] Gmail can list unread emails and send replies via OAuth.
+- [x] Google Calendar/Tasks can read and create events/tasks via OAuth.
+- [x] HTTP/Webhook nodes can integrate unlisted services.
 
 Stability + Governance:
 - [ ] onError flow behavior supports retry/skip/fallback.

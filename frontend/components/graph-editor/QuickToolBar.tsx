@@ -60,12 +60,14 @@ interface QuickToolBarProps {
 
 const FEATURED_TOOL_COUNT = 6;
 const FEATURED_PACKAGE_ORDER = [
+  "whatsapp-send-message",
+  "gmail-list-unread",
+  "google-calendar-list-events",
+  "google-tasks-list",
   "slack-alerts",
   "notion-page-upsert",
   "gmail-send-email",
-  "jira-issue-create",
-  "linear-issue-create",
-  "hubspot-contact-upsert",
+  "telegram-send-message",
 ];
 
 const ICON_BY_KEY: Record<string, keyof typeof INTEGRATION_ICONS> = {
@@ -77,6 +79,10 @@ const ICON_BY_KEY: Record<string, keyof typeof INTEGRATION_ICONS> = {
   hubspot: "Briefcase",
   "google-drive": "Folder",
   telegram: "Send",
+  whatsapp: "MessageCircle",
+  twilio: "MessageCircle",
+  calendar: "BookOpen",
+  tasks: "Table",
   github: "Github",
   salesforce: "Database",
 };

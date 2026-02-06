@@ -18,6 +18,8 @@ from adapters.gateways.grpc_engine_client import (
 from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.run_preparation import (
+    PromptTemplateResolutionError,
+    SubgraphResolutionError,
     build_memory_config_json,
     prepare_graph_for_engine,
     validate_prompt_credentials,
@@ -100,7 +102,10 @@ class Command(BaseCommand):
 
         try:
             prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
-        except ValueError as exc:
+        except PromptTemplateResolutionError as exc:
+            self._fail_run(entry, run, f"Invalid prompt configuration: {exc}")
+            return
+        except (SubgraphResolutionError, ValueError) as exc:
             self._fail_run(entry, run, f"Invalid subgraph: {exc}")
             return
 

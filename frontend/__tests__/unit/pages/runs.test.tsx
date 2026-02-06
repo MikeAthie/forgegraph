@@ -72,7 +72,7 @@ describe("Runs List Page", () => {
       render(<RunsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText("Failed to load runs.")).toBeInTheDocument();
+        expect(screen.getByText("API Error")).toBeInTheDocument();
       });
     });
   });

@@ -607,8 +607,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "celery", specifier = ">=5.3.6" },
-    { name = "channels", specifier = ">=4.0.0" },
-    { name = "channels-redis", specifier = ">=4.2.0" },
+    { name = "channels", specifier = ">=4.2.2" },
+    { name = "channels-redis", specifier = ">=4.3.0" },
     { name = "daphne", specifier = ">=4.1.0" },
     { name = "django", specifier = ">=5.0.1" },
     { name = "django-cors-headers", specifier = ">=4.3.1" },

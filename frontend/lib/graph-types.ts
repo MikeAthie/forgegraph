@@ -84,6 +84,8 @@ export interface HttpNodeConfig extends BaseNodeConfig {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   url: string;
   headers?: Record<string, string>;
+  provider?: string;
+  credential_id?: string;
   body?: string;
   output_key?: string;
 }
@@ -130,6 +132,8 @@ export interface MemoryNodeConfig extends BaseNodeConfig {
 export interface ToolNodeConfig extends BaseNodeConfig {
   tool?: string;
   version?: string;
+  provider?: string;
+  credential_id?: string;
   input?: unknown;
   input_path?: string;
   input_template?: string;

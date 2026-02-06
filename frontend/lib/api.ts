@@ -132,6 +132,9 @@ const API_PATHS = {
     oauthStart: "/api/credentials/oauth/start",
     oauthCallback: "/api/credentials/oauth/callback",
   },
+  integrations: {
+    httpTest: "/api/integrations/http/test",
+  },
   runs: {
     list: "/api/runs/",
     detail: (runId: string) => `/api/runs/${runId}`,
@@ -618,6 +621,8 @@ export type CredentialCreateInput = {
 
 export type OAuthIntegrationProvider =
   | "gmail"
+  | "google_calendar"
+  | "google_tasks"
   | "notion"
   | "slack"
   | "jira"
@@ -652,6 +657,24 @@ export type CredentialOAuthProviderConfigInput = {
   enabled?: boolean;
 };
 
+export type HttpNodeTestInput = {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+  provider?: string;
+  credential_id?: string;
+  account_sid?: string;
+  timeout_seconds?: number;
+};
+
+export type HttpNodeTestResult = {
+  status_code: number;
+  ok: boolean;
+  headers: Record<string, string>;
+  body: unknown;
+};
+
 export type GraphTemplate = {
   id: string;
   group_id: string;
@@ -670,6 +693,7 @@ export type GraphTemplate = {
   rating_average: number | null;
   rating_count: number;
   usage_count: number;
+  run_success_rate?: number | null;
 };
 
 export type TemplateCloneInput = {
@@ -905,6 +929,16 @@ export const credentialsApi = {
     state: string;
   }): Promise<Credential> => {
     const response = await api.post<ApiSuccessResponse<Credential>>(API_PATHS.credentials.oauthCallback, input);
+    return response.data.data;
+  },
+};
+
+export const integrationsApi = {
+  runHttpNodeTest: async (input: HttpNodeTestInput): Promise<HttpNodeTestResult> => {
+    const response = await api.post<ApiSuccessResponse<HttpNodeTestResult>>(
+      API_PATHS.integrations.httpTest,
+      input,
+    );
     return response.data.data;
   },
 };
