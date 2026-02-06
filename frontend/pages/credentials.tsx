@@ -146,82 +146,8 @@ export default function CredentialsPage() {
   };
 
   const hasCredentials = credentials.length > 0;
-<<<<<<< Updated upstream
   const canManageCredentials =
     user?.organization_role === "owner" || user?.organization_role === "admin";
-=======
-
-  const handleStartOAuth = useCallback(
-    async (provider: OAuthIntegrationProvider) => {
-      if (!canManageCredentials) {
-        showError("Only organization admins can connect OAuth credentials.");
-        return;
-      }
-      setOauthStartingProvider(provider);
-      try {
-        const response = await credentialsApi.startOAuth(provider);
-        window.location.href = response.authorize_url;
-      } catch (err: unknown) {
-        showError("OAuth failed", getApiErrorMessage(err, ERROR_FALLBACKS.credential.oauth));
-      } finally {
-        setOauthStartingProvider(null);
-      }
-    },
-    [canManageCredentials],
-  );
-
-  const oauthProvidersByName = useMemo(() => {
-    const map = new Map<OAuthIntegrationProvider, CredentialOAuthProviderStatus>();
-    for (const provider of oauthProviders) {
-      map.set(provider.provider, provider);
-    }
-    return map;
-  }, [oauthProviders]);
-
-  const openOAuthConfig = useCallback(
-    (provider: OAuthIntegrationProvider) => {
-      const status = oauthProvidersByName.get(provider);
-      setOauthConfigProvider(provider);
-      setOauthConfigForm({
-        client_id: status?.client_id ?? "",
-        client_secret: "",
-        authorize_url: status?.authorize_url ?? "",
-        token_url: status?.token_url ?? "",
-        redirect_uri: status?.redirect_uri ?? "",
-        scopes: (status?.scopes ?? []).join(" "),
-        enabled: status?.enabled ?? true,
-      });
-      setOauthConfigOpen(true);
-    },
-    [oauthProvidersByName],
-  );
-
-  const handleSaveOAuthConfig = useCallback(async () => {
-    if (!oauthConfigProvider) return;
-    setOauthConfigSaving(true);
-    try {
-      await credentialsApi.upsertOAuthProviderConfig(oauthConfigProvider, {
-        client_id: oauthConfigForm.client_id.trim(),
-        client_secret: oauthConfigForm.client_secret.trim() || undefined,
-        authorize_url: oauthConfigForm.authorize_url.trim(),
-        token_url: oauthConfigForm.token_url.trim(),
-        redirect_uri: oauthConfigForm.redirect_uri.trim(),
-        scopes: oauthConfigForm.scopes
-          .split(/\s+/)
-          .map((item) => item.trim())
-          .filter(Boolean),
-        enabled: oauthConfigForm.enabled,
-      });
-      showSuccess(`${getProviderLabel(oauthConfigProvider)} OAuth config saved.`);
-      setOauthConfigOpen(false);
-      await fetchCredentials({ silent: true });
-    } catch (err: unknown) {
-      showError("Config failed", getApiErrorMessage(err, ERROR_FALLBACKS.credential.oauth));
-    } finally {
-      setOauthConfigSaving(false);
-    }
-  }, [fetchCredentials, oauthConfigForm, oauthConfigProvider]);
->>>>>>> Stashed changes
 
   const providerSummary = useMemo(() => {
     const counts = credentials.reduce<Record<string, number>>((acc, item) => {
