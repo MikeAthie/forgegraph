@@ -42,7 +42,7 @@ describe("NodePalette", () => {
       const enabledNodeTypes = PHASE2_NODE_TYPES.filter((nt) => nt.enabled);
 
       enabledNodeTypes.forEach((nodeType) => {
-        const button = screen.getByRole("button", { name: new RegExp(nodeType.label, "i") });
+        const button = screen.getByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") });
         expect(button).not.toBeDisabled();
         expect(button).toHaveClass("cursor-pointer");
       });
@@ -54,7 +54,7 @@ describe("NodePalette", () => {
       const disabledNodeTypes = PHASE2_NODE_TYPES.filter((nt) => !nt.enabled);
 
       disabledNodeTypes.forEach((nodeType) => {
-        const buttons = screen.getAllByRole("button", { name: new RegExp(nodeType.label, "i") });
+        const buttons = screen.getAllByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") });
         // Should find at least one button with this name
         expect(buttons.length).toBeGreaterThan(0);
         // All matching buttons should be disabled
@@ -76,12 +76,15 @@ describe("NodePalette", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       expect(screen.getByText("Keyboard Shortcuts")).toBeInTheDocument();
+      expect(screen.getByText("Open wizard")).toBeInTheDocument();
       expect(screen.getByText("Save")).toBeInTheDocument();
       expect(screen.getByText("Select all")).toBeInTheDocument();
       expect(screen.getByText("Delete node")).toBeInTheDocument();
+      expect(screen.getByText("Ctrl+W")).toBeInTheDocument();
       expect(screen.getByText("Ctrl+S")).toBeInTheDocument();
       expect(screen.getByText("Ctrl+A")).toBeInTheDocument();
       expect(screen.getByText("Delete")).toBeInTheDocument();
+      expect(screen.getByText("Esc")).toBeInTheDocument();
     });
   });
 
@@ -216,6 +219,27 @@ describe("NodePalette", () => {
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(3);
     });
+
+    it("should support keyboard-first quick add from search", async () => {
+      const user = userEvent.setup();
+      render(<NodePalette onAddNode={mockOnAddNode} />);
+
+      const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
+      await user.type(searchInput, "http");
+      await user.keyboard("{Enter}");
+
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.HTTP, false);
+    });
+
+    it("should track recently used nodes after selection", async () => {
+      const user = userEvent.setup();
+      render(<NodePalette onAddNode={mockOnAddNode} />);
+
+      await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+
+      expect(screen.getByText("Recently used")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^recent prompt$/i })).toBeInTheDocument();
+    });
   });
 
   describe("Visual Indicators", () => {
@@ -260,7 +284,7 @@ describe("NodePalette", () => {
 
       disabledNodeTypes.forEach((nodeType) => {
         // Use more specific pattern to match the node type icon + label
-        const buttons = screen.getAllByRole("button", { name: new RegExp(`${nodeType.label}`, "i") });
+        const buttons = screen.getAllByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") });
         // At least one button with this label should be disabled
         const hasDisabledButton = buttons.some((btn) => btn.hasAttribute("disabled"));
         expect(hasDisabledButton).toBe(true);
@@ -287,6 +311,24 @@ describe("NodePalette", () => {
       expect(screen.getByText("Make an HTTP request to an external API")).toBeInTheDocument();
       expect(screen.getByText("Transform data with an expression")).toBeInTheDocument();
       expect(screen.getByText("Define the final output of the workflow")).toBeInTheDocument();
+    });
+
+    it("should show badges in search results", async () => {
+      const user = userEvent.setup();
+      render(<NodePalette onAddNode={mockOnAddNode} />);
+
+      const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
+      await user.type(searchInput, "prompt");
+
+      expect(screen.getAllByText("Credential").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("LLM").length).toBeGreaterThan(0);
+    });
+
+    it("should display recommended quick picks", () => {
+      render(<NodePalette onAddNode={mockOnAddNode} />);
+
+      expect(screen.getByText("Recommended")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^recommended prompt$/i })).toBeInTheDocument();
     });
   });
 });

@@ -8,7 +8,7 @@ One-page reference for the ForgeGraph Agent Creation Wizard.
 
 | Action | Windows/Linux | Mac |
 |--------|---------------|-----|
-| Open Wizard | `Ctrl+Shift+W` | `Cmd+Shift+W` |
+| Open Wizard | `Ctrl+W` / `Ctrl+Shift+W` | `Cmd+W` / `Cmd+Shift+W` |
 | Save | `Ctrl+S` | `Cmd+S` |
 | Undo | `Ctrl+Z` | `Cmd+Z` |
 | Redo | `Ctrl+Y` | `Cmd+Shift+Z` |
@@ -85,8 +85,15 @@ memory.user_preferences       # Stored memory value
 - **RAG Query** - Retrieval-augmented generation
 
 ### Integration
-- **REST API Call** - HTTP GET with JSON
-- **Webhook Handler** - Process incoming data
+- **Telegram Send** - Bot send/reply shortcut
+- **WhatsApp Send (Twilio)** - Twilio message shortcut
+- **Gmail Unread / Gmail Send** - OAuth email shortcuts
+- **Calendar / Tasks** - Google scheduling shortcuts
+- **Webhook Fallback** - Generic HTTP fallback
+
+Preset behavior:
+- Integration presets open config with credential provider preselected.
+- Use HTTP node **Run test** before saving to verify auth + endpoint.
 
 ### Logic
 - **Conditional Router** - Branch on conditions

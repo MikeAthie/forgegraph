@@ -229,10 +229,22 @@ function PresetCard({ preset, compact = false, onClick }: PresetCardProps) {
         >
           {preset.name}
         </p>
-        {!compact && (
-          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-            {preset.description}
+        {preset.validationBadge && (
+          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+            {preset.validationBadge}
           </p>
+        )}
+        {!compact && (
+          <>
+            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+              {preset.description}
+            </p>
+            {preset.setupHint && (
+              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1">
+                {preset.setupHint}
+              </p>
+            )}
+          </>
         )}
       </div>
     </button>

@@ -13,6 +13,7 @@ import {
   type PromptOwnershipFilter,
 } from "../lib/api";
 import { showSuccess, showError } from "../lib/toast";
+import { ERROR_FALLBACKS } from "../lib/error-messages";
 import {
   Alert,
   AlertDescription,
@@ -400,7 +401,7 @@ export default function PromptsPage() {
       setSelectedPrompt(null);
       showSuccess("Prompt deleted", `"${prompt.title}" has been removed.`);
     } catch (err: unknown) {
-      showError("Delete failed", getApiErrorMessage(err, "Could not delete prompt."));
+      showError("Delete failed", getApiErrorMessage(err, ERROR_FALLBACKS.prompt.delete));
     }
   };
 

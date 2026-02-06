@@ -351,10 +351,17 @@ func main() {
 	if err := toolRegistry.LoadManifests(cfg.ToolManifestDir); err != nil {
 		log.Warn("tool_manifest_load_failed", "error", err.Error())
 	}
+
+	// Shared credential resolver for executors that support credential_id.
+	var resolver gateway.CredentialResolver
+	if cfg.ControlPlaneURL != "" && cfg.CallbackSecret != "" {
+		resolver = gateway.NewBackendCredentialResolver(cfg.ControlPlaneURL, cfg.CallbackSecret)
+	}
+
 	registry.RegisterAll(
 		executor.NewOutputExecutor(),
 		executor.NewTransformExecutor(),
-		executor.NewHTTPExecutor(),
+		executor.NewHTTPExecutorWithResolver(resolver),
 		executor.NewBranchExecutor(),
 		executor.NewMergeExecutor(),
 		executor.NewHumanGateExecutor(),
@@ -364,10 +371,6 @@ func main() {
 	)
 
 	// Initialize LLM client for Prompt nodes (multi-provider)
-	var resolver gateway.CredentialResolver
-	if cfg.ControlPlaneURL != "" && cfg.CallbackSecret != "" {
-		resolver = gateway.NewBackendCredentialResolver(cfg.ControlPlaneURL, cfg.CallbackSecret)
-	}
 	fallbackKey := os.Getenv("OPENAI_API_KEY")
 	llmClient := gateway.NewMultiProviderClient(resolver, fallbackKey)
 	registry.Register(executor.NewPromptExecutor(llmClient))

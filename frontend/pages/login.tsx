@@ -164,9 +164,9 @@ export default function LoginPage() {
               <FormField label="Email address" required htmlFor="email">
                 <Input
                   id="email"
-                  name="email"
+                  name="username"
                   type="email"
-                  autoComplete="email"
+                  autoComplete="username"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

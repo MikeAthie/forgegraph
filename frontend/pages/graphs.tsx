@@ -7,6 +7,7 @@ import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getApiErrorMessage, graphsApi, type GraphListItem, type GraphVersionSummary } from "../lib/api";
 import { showSuccess, showError } from "../lib/toast";
+import { ERROR_FALLBACKS } from "../lib/error-messages";
 import {
   Alert,
   AlertDescription,
@@ -185,7 +186,7 @@ export default function GraphsPage() {
       setGraphs((prev) => prev.filter((g) => g.id !== graph.id));
       showSuccess("Graph deleted", `"${graph.name}" has been removed.`);
     } catch (err: unknown) {
-      showError("Delete failed", getApiErrorMessage(err, "Could not delete graph."));
+      showError("Delete failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.delete));
     }
   };
 

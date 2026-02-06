@@ -268,6 +268,27 @@ class TestGraphValidatorCycleDetection:
 
         assert not any(e["type"] == "cycle_detected" for e in errors)
 
+    def test_cycle_allowed_when_metadata_enabled(self):
+        """Cycle validation can be bypassed when allow_cycles is enabled."""
+        graph_json = {
+            "nodes": [
+                {"id": "node1", "type": "prompt", "name": "Prompt 1"},
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+                {"id": "e2", "from": "node2", "to": "node1"},
+            ],
+            "metadata": {
+                "allow_cycles": True,
+            },
+        }
+
+        errors = self.validator.validate(graph_json)
+
+        assert not any(e["type"] == "cycle_detected" for e in errors)
+
 
 class TestGraphValidatorDisconnectedNodes:
     """Tests for disconnected node detection."""
@@ -447,7 +468,10 @@ class TestGraphValidatorStrictMode:
                     "id": "node1",
                     "type": "prompt",
                     "name": "Prompt",
-                    "config": {"temperature": 3.0},  # Invalid: max is 2
+                    "config": {
+                        "prompt_template": "Hello",
+                        "temperature": 3.0,
+                    },  # Invalid: max is 2
                 },
                 {"id": "node2", "type": "output", "name": "Output"},
             ],
@@ -462,6 +486,30 @@ class TestGraphValidatorStrictMode:
         config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
         assert len(config_errors) == 1
         assert config_errors[0]["field"] == "temperature"
+
+    def test_strict_mode_requires_prompt_template_or_prompt_id(self):
+        """Strict mode should reject prompt nodes without prompt content."""
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "node1",
+                    "type": "prompt",
+                    "name": "Prompt",
+                    "config": {},
+                },
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        errors = self.validator.validate(graph_json, strict=True)
+
+        config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
+        assert len(config_errors) == 1
+        assert config_errors[0]["field"] == "prompt_template"
 
     def test_strict_mode_validates_enum_values(self):
         """Strict mode should validate enum field values."""

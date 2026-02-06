@@ -5,9 +5,14 @@ let primaryUser: TestUser;
 let secondaryUser: TestUser;
 
 const createPromptTitle = (prefix: string) => `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 async function openPromptDetail(page: Page, title: string) {
-  const card = page.locator('[data-slot="card"]').filter({ hasText: title });
+  const exactTitle = new RegExp(`^${escapeRegExp(title)}$`, "i");
+  const card = page
+    .locator('[data-slot="card"]')
+    .filter({ has: page.locator('[data-slot="card-title"]', { hasText: exactTitle }) })
+    .first();
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: /^view$/i }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -123,11 +128,18 @@ test.describe("Prompts", () => {
     await expect(cloneDialog.getByRole("button", { name: /^clone$/i })).toBeVisible();
     await cloneDialog.getByRole("button", { name: /^clone$/i }).click();
 
+    await expect(cloneDialog.locator('[data-slot="dialog-title"]')).toContainText("(Copy)");
     await expect(cloneDialog.getByRole("button", { name: /^edit$/i })).toBeVisible();
     const clonedTitle = (await cloneDialog.locator('[data-slot="dialog-title"]').innerText()).trim();
     await cloneDialog.locator('[data-slot="dialog-footer"]').getByRole("button", { name: /^close$/i }).click();
+    await expect(cloneDialog).toBeHidden();
 
     await page.getByRole("button", { name: /^my prompts$/i }).click();
-    await expect(page.locator('[data-slot="card"]').filter({ hasText: clonedTitle })).toBeVisible();
+    const exactClonedTitle = new RegExp(`^${escapeRegExp(clonedTitle)}$`, "i");
+    await expect(
+      page
+        .locator('[data-slot="card"]')
+        .filter({ has: page.locator('[data-slot="card-title"]', { hasText: exactClonedTitle }) }),
+    ).toHaveCount(1);
   });
 });

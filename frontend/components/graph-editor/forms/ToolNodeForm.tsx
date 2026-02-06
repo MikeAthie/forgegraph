@@ -1,24 +1,30 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
 import { KeyValueEditor } from "@/components/ui/key-value-editor";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { AgentFields, type AgentConfig } from "./AgentFields";
 import { AdvancedSettings, type AdvancedConfig } from "./AdvancedSettings";
 import { validateJson } from "@/lib/form-validation";
+import { credentialsApi, getApiErrorMessage, type Credential } from "@/lib/api";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
 /**
  * Tool node specific configuration
  */
 interface ToolConfig extends AgentConfig, AdvancedConfig {
+  [key: string]: unknown;
   tool_name?: string;
   tool_description?: string;
   parameters?: Record<string, string>;
   input_schema?: string;
+  provider?: string;
+  credential_id?: string;
   output_key?: string;
 }
 
@@ -30,9 +36,41 @@ const BUILT_IN_TOOLS = [
   { value: "calculator", label: "Calculator" },
   { value: "database_query", label: "Database Query" },
 ] as const;
+const PROVIDERS = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "google", label: "Google AI" },
+  { value: "gmail", label: "Gmail" },
+  { value: "google_calendar", label: "Google Calendar" },
+  { value: "google_tasks", label: "Google Tasks" },
+  { value: "notion", label: "Notion" },
+  { value: "slack", label: "Slack" },
+  { value: "jira", label: "Jira" },
+  { value: "linear", label: "Linear" },
+  { value: "hubspot", label: "HubSpot" },
+  { value: "google_drive", label: "Google Drive" },
+  { value: "telegram", label: "Telegram" },
+  { value: "twilio", label: "Twilio" },
+];
 
 export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const toolConfig = config as ToolConfig;
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialsError, setCredentialsError] = useState<string | null>(null);
+  const configuredCredential = useMemo(
+    () => credentials.find((item) => item.id === toolConfig.credential_id),
+    [credentials, toolConfig.credential_id]
+  );
+  const provider = toolConfig.provider || configuredCredential?.provider || "openai";
+  const filteredCredentials = useMemo(
+    () => credentials.filter((item) => item.provider === provider),
+    [credentials, provider]
+  );
+  const selectedCredential = useMemo(
+    () => filteredCredentials.find((item) => item.id === toolConfig.credential_id),
+    [filteredCredentials, toolConfig.credential_id]
+  );
 
   const handleChange = useCallback(
     <K extends keyof ToolConfig>(field: K, value: ToolConfig[K]) => {
@@ -54,6 +92,44 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     },
     [config, onChange]
   );
+
+  const handleProviderChange = useCallback(
+    (nextProvider: string) => {
+      const nextConfig: ToolConfig = { ...toolConfig, provider: nextProvider };
+      if (toolConfig.credential_id && provider !== nextProvider) {
+        delete nextConfig.credential_id;
+      }
+      onChange(nextConfig);
+    },
+    [onChange, provider, toolConfig]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCredentials = async () => {
+      setCredentialsLoading(true);
+      setCredentialsError(null);
+      try {
+        const data = await credentialsApi.list();
+        if (!cancelled) {
+          setCredentials(data);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setCredentialsError(getApiErrorMessage(err, "Failed to load credentials."));
+        }
+      } finally {
+        if (!cancelled) {
+          setCredentialsLoading(false);
+        }
+      }
+    };
+
+    void fetchCredentials();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Validate input schema on change
   useEffect(() => {
@@ -134,6 +210,85 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
             valuePlaceholder="Value or state path"
           />
         </FormField>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Credential Provider" htmlFor="provider">
+            <select
+              id="provider"
+              value={provider}
+              onChange={(e) => handleProviderChange(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+            >
+              {PROVIDERS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField
+            label="Credential"
+            htmlFor="credential-id"
+            description="Optional stored secret for this tool call."
+          >
+            <select
+              id="credential-id"
+              value={toolConfig.credential_id || ""}
+              onChange={(e) => handleChange("credential_id", e.target.value || undefined)}
+              className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+            >
+              <option value="">Use manual/env auth</option>
+              {filteredCredentials.map((cred) => (
+                <option key={cred.id} value={cred.id}>
+                  {cred.name} ({cred.key_hint})
+                </option>
+              ))}
+            </select>
+            {credentialsLoading && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <Spinner className="h-3 w-3" />
+                Loading credentials...
+              </div>
+            )}
+            {!credentialsLoading && credentialsError && (
+              <div className="mt-2 text-xs text-destructive">{credentialsError}</div>
+            )}
+            {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                No credentials found for this provider. Add one in the Credentials page.
+                {" "}
+                <Link
+                  href={`/credentials?provider=${encodeURIComponent(provider)}`}
+                  className="underline underline-offset-2"
+                >
+                  Open credentials
+                </Link>
+              </div>
+            )}
+          </FormField>
+        </div>
+
+        {selectedCredential && selectedCredential.health_status !== "healthy" && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <p className="font-medium">
+              {selectedCredential.health_status === "expired"
+                ? "Selected credential is expired."
+                : "Selected credential is expiring soon."}
+            </p>
+            {selectedCredential.health_message && (
+              <p className="mt-1">{selectedCredential.health_message}</p>
+            )}
+            {selectedCredential.requires_reauth && (
+              <Link
+                href={`/credentials?provider=${encodeURIComponent(provider)}`}
+                className="mt-1 inline-block underline underline-offset-2"
+              >
+                Reconnect this credential in Credentials
+              </Link>
+            )}
+          </div>
+        )}
 
         {isCustomTool && (
           <FormField

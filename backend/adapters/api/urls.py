@@ -10,6 +10,7 @@ urlpatterns = [
     path("auth/", include("adapters.api.auth.urls")),
     path("engine/", include("adapters.api.engine.urls")),
     path("credentials/", include("adapters.api.credentials.urls")),
+    path("integrations/", include("adapters.api.integrations.urls")),
     path("orgs/", include("adapters.api.organizations.urls")),
     path("graphs/", include("adapters.api.graphs.urls")),
     path("health/", include("adapters.api.health.urls")),

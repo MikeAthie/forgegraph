@@ -2,6 +2,8 @@
 package service
 
 import (
+	"strings"
+
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/value"
@@ -38,6 +40,7 @@ func (v *GraphValidator) Validate(graph *entity.Graph) error {
 	// Build adjacency and indegree maps
 	nodeSet := make(map[string]bool)
 	indegree := make(map[string]int)
+	allowCycles := metadataAllowCycles(graph.Metadata)
 
 	for _, node := range graph.Nodes {
 		nodeSet[node.ID] = true
@@ -54,6 +57,19 @@ func (v *GraphValidator) Validate(graph *entity.Graph) error {
 		indegree[edge.To]++
 	}
 
+	if allowCycles {
+		backEdges := v.detectBackEdgeIndexes(graph)
+		for i, edge := range graph.Edges {
+			if !backEdges[i] {
+				continue
+			}
+			indegree[edge.To]--
+			if indegree[edge.To] < 0 {
+				indegree[edge.To] = 0
+			}
+		}
+	}
+
 	// Check for output node
 	hasOutputNode := false
 	for _, node := range graph.Nodes {
@@ -67,8 +83,10 @@ func (v *GraphValidator) Validate(graph *entity.Graph) error {
 	}
 
 	// Check for cycles using Kahn's algorithm
-	if err := v.detectCycle(graph, indegree); err != nil {
-		return err
+	if !allowCycles {
+		if err := v.detectCycle(graph, indegree); err != nil {
+			return err
+		}
 	}
 
 	// Check for start nodes (indegree 0)
@@ -180,6 +198,64 @@ func (v *GraphValidator) detectCycle(graph *entity.Graph, indegree map[string]in
 		return domain.ErrCycleDetected
 	}
 	return nil
+}
+
+func metadataAllowCycles(metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+
+	raw, exists := metadata["allow_cycles"]
+	if !exists {
+		return false
+	}
+
+	switch value := raw.(type) {
+	case bool:
+		return value
+	case string:
+		normalized := strings.TrimSpace(strings.ToLower(value))
+		return normalized == "true" || normalized == "1"
+	default:
+		return false
+	}
+}
+
+func (v *GraphValidator) detectBackEdgeIndexes(graph *entity.Graph) map[int]bool {
+	backEdgeIndexes := make(map[int]bool)
+	if graph == nil {
+		return backEdgeIndexes
+	}
+
+	adjacency := make(map[string][]int)
+	for i, edge := range graph.Edges {
+		adjacency[edge.From] = append(adjacency[edge.From], i)
+	}
+
+	color := make(map[string]int, len(graph.Nodes))
+	var dfs func(nodeID string)
+	dfs = func(nodeID string) {
+		color[nodeID] = 1 // gray
+		for _, edgeIndex := range adjacency[nodeID] {
+			edge := graph.Edges[edgeIndex]
+			nextID := edge.To
+			switch color[nextID] {
+			case 0:
+				dfs(nextID)
+			case 1:
+				backEdgeIndexes[edgeIndex] = true
+			}
+		}
+		color[nodeID] = 2 // black
+	}
+
+	for _, node := range graph.Nodes {
+		if color[node.ID] == 0 {
+			dfs(node.ID)
+		}
+	}
+
+	return backEdgeIndexes
 }
 
 // ValidateNode validates a single node's configuration

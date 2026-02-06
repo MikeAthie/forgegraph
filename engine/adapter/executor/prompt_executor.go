@@ -23,6 +23,12 @@ type LLMClient interface {
 	Complete(ctx context.Context, request *LLMRequest) (*LLMResponse, error)
 }
 
+// LLMStreamingClient optionally supports incremental token/chunk streaming.
+type LLMStreamingClient interface {
+	// StreamComplete sends a prompt and invokes onChunk as text is generated.
+	StreamComplete(ctx context.Context, request *LLMRequest, onChunk func(string)) (*LLMResponse, error)
+}
+
 // LLMRequest represents a completion request to an LLM
 type LLMRequest struct {
 	// Prompt is the text prompt to send
@@ -261,6 +267,11 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 
 	cacheEnabled := getConfigBool(node.Config["cache_enabled"])
 	cacheTTLSeconds := getConfigInt(node.Config["cache_ttl_seconds"])
+	streamChunks := true
+	if rawStream, ok := node.Config["stream"]; ok {
+		streamChunks = getConfigBool(rawStream)
+	}
+	streamEmitter := port.StreamChunkEmitterFrom(ctx)
 	var (
 		response *LLMResponse
 		cached   bool
@@ -274,13 +285,27 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	if response == nil {
-		// Call LLM
-		llmResponse, err := e.client.Complete(ctx, request)
+		// Call LLM (streaming when enabled and supported by provider client).
+		var err error
+		if streamChunks {
+			if streamer, ok := e.client.(LLMStreamingClient); ok {
+				response, err = streamer.StreamComplete(ctx, request, streamEmitter)
+			} else {
+				response, err = e.client.Complete(ctx, request)
+				if err == nil && streamEmitter != nil && response != nil && strings.TrimSpace(response.Content) != "" {
+					streamEmitter(response.Content)
+				}
+			}
+		} else {
+			response, err = e.client.Complete(ctx, request)
+		}
 		if err != nil {
 			// Network/API errors are typically retryable
 			return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: %w", err), "LLM API error")), nil
 		}
-		response = llmResponse
+		if response == nil {
+			return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: empty response"), "LLM API error")), nil
+		}
 		if cacheEnabled && cacheTTLSeconds > 0 {
 			cacheKey := buildPromptCacheKey(request)
 			defaultPromptCache.Set(cacheKey, response, time.Duration(cacheTTLSeconds)*time.Second, time.Now())

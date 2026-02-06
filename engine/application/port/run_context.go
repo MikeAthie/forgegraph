@@ -16,6 +16,9 @@ type RunContext struct {
 	Policy          *entity.ExecutionPolicy
 }
 
+// StreamChunkEmitter receives incremental LLM response chunks.
+type StreamChunkEmitter func(chunk string)
+
 type runContextKey struct{}
 
 // WithRunContext attaches a RunContext to the context.
@@ -50,6 +53,8 @@ func PolicyFromContext(ctx context.Context) *entity.ExecutionPolicy {
 
 type tenantIDKey struct{}
 
+type streamChunkEmitterKey struct{}
+
 // WithTenantID attaches a tenant ID to the context.
 func WithTenantID(ctx context.Context, tenantID string) context.Context {
 	if tenantID == "" {
@@ -69,4 +74,25 @@ func TenantIDFrom(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// WithStreamChunkEmitter attaches a callback for incremental LLM output chunks.
+func WithStreamChunkEmitter(ctx context.Context, emitter StreamChunkEmitter) context.Context {
+	if emitter == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, streamChunkEmitterKey{}, emitter)
+}
+
+// StreamChunkEmitterFrom extracts the stream chunk callback from context.
+func StreamChunkEmitterFrom(ctx context.Context) StreamChunkEmitter {
+	if ctx == nil {
+		return nil
+	}
+	if value := ctx.Value(streamChunkEmitterKey{}); value != nil {
+		if emitter, ok := value.(StreamChunkEmitter); ok {
+			return emitter
+		}
+	}
+	return nil
 }

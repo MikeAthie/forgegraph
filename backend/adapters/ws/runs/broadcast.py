@@ -63,3 +63,15 @@ def broadcast_run_schema_validation(*, run: Run, payload: dict[str, Any]) -> dic
     }
     _send_to_run_group(run_id=str(run.id), message=message)
     return message
+
+
+def broadcast_node_stream_chunk(*, run: Run, payload: dict[str, Any]) -> dict[str, Any]:
+    message = {
+        "event_id": str(uuid.uuid4()),
+        "timestamp": timezone.now().isoformat(),
+        "type": "node_stream.chunk",
+        "run_id": str(run.id),
+        "node_stream": payload,
+    }
+    _send_to_run_group(run_id=str(run.id), message=message)
+    return message

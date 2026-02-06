@@ -11,8 +11,8 @@ dependencies = [
     "djangorestframework-simplejwt>=5.3.1",
     "django-cors-headers>=4.3.1",
     # WebSockets (Phase 4.6)
-    "channels>=4.0.0",
-    "channels-redis>=4.2.0",
+    "channels>=4.2.2",
+    "channels-redis>=4.3.0",
     "daphne>=4.1.0",
     # API docs
     "drf-spectacular>=0.27.1",

@@ -988,6 +988,274 @@ func TestScheduler_DynamicNextNodesFromOutput(t *testing.T) {
 	}
 }
 
+func TestScheduler_CycleExecutionWithDynamicRouting(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "loopStart", Type: "transform", Name: "Loop Start", Config: map[string]any{}},
+		{ID: "router", Type: "transform", Name: "Router", Config: map[string]any{}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "loopStart", To: "router"},
+		{From: "router", To: "loopStart"},
+		{From: "router", To: "output"},
+	}
+	graphData, err := json.Marshal(entity.Graph{
+		Nodes: nodes,
+		Edges: edges,
+		Metadata: map[string]any{
+			"allow_cycles":       true,
+			"default_max_visits": 10,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to marshal loop graph: %v", err)
+	}
+	graphJSON := string(graphData)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		switch node.ID {
+		case "loopStart":
+			counter := 0
+			if raw, exists := state.GetVar("counter"); exists {
+				switch value := raw.(type) {
+				case int:
+					counter = value
+				case float64:
+					counter = int(value)
+				}
+			}
+			counter++
+			state.SetVar("counter", counter)
+			return port.NewSuccessResult(map[string]any{"counter": counter}), nil
+		case "router":
+			counter := 0
+			if raw, exists := state.GetVar("counter"); exists {
+				switch value := raw.(type) {
+				case int:
+					counter = value
+				case float64:
+					counter = int(value)
+				}
+			}
+			if counter < 3 {
+				return &port.NodeExecutionResult{
+					Output: map[string]any{
+						"next_nodes": []string{"loopStart"},
+					},
+				}, nil
+			}
+			return &port.NodeExecutionResult{
+				Output: map[string]any{
+					"next_nodes": []string{"output"},
+				},
+			}, nil
+		default:
+			return port.NewSuccessResult(map[string]any{"ok": true}), nil
+		}
+	})
+
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		counter, _ := state.GetVar("counter")
+		return port.NewSuccessResult(map[string]any{"counter": counter}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
+
+	if err := scheduler.StartRun(context.Background(), "run-loop-routing", graphJSON, "{}", "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-loop-routing", 5*time.Second)
+
+	if repo.getRunStatus("run-loop-routing") != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus("run-loop-routing"))
+	}
+	if transformExec.getNodeExecuteCount("loopStart") != 3 {
+		t.Errorf("Expected loopStart to execute 3 times, got %d", transformExec.getNodeExecuteCount("loopStart"))
+	}
+	if transformExec.getNodeExecuteCount("router") != 3 {
+		t.Errorf("Expected router to execute 3 times, got %d", transformExec.getNodeExecuteCount("router"))
+	}
+	if outputExec.getNodeExecuteCount("output") != 1 {
+		t.Errorf("Expected output to execute once, got %d", outputExec.getNodeExecuteCount("output"))
+	}
+
+	events := emitter.getEvents()
+	var completedEvents int
+	for _, ev := range events {
+		if ev.Type != port.EventTypeNodeCompleted {
+			continue
+		}
+		completedEvents++
+		loopPayload, ok := ev.Output["loop"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected loop diagnostics on node_completed event for node %s", ev.NodeID)
+		}
+		iterationValue, exists := loopPayload["iteration_index"]
+		if !exists {
+			t.Fatalf("expected iteration_index in loop diagnostics for node %s", ev.NodeID)
+		}
+		iteration := 0
+		switch typed := iterationValue.(type) {
+		case int:
+			iteration = typed
+		case int64:
+			iteration = int(typed)
+		case float64:
+			iteration = int(typed)
+		default:
+			t.Fatalf("unexpected iteration_index type for node %s: %T", ev.NodeID, iterationValue)
+		}
+		if iteration <= 0 {
+			t.Fatalf("expected positive iteration index for node %s, got %#v", ev.NodeID, iterationValue)
+		}
+		if _, ok := loopPayload["exit_reason"].(string); !ok {
+			t.Fatalf("expected exit_reason in loop diagnostics for node %s", ev.NodeID)
+		}
+	}
+	if completedEvents == 0 {
+		t.Fatal("expected node_completed events with loop diagnostics")
+	}
+}
+
+func TestScheduler_ResumeFromLoopCheckpoint_RestoresIterationState(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "loopStart", Type: "transform", Name: "Loop Start", Config: map[string]any{}},
+		{ID: "router", Type: "transform", Name: "Router", Config: map[string]any{}},
+		{ID: "output", Type: "output", Name: "Output", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "loopStart", To: "router"},
+		{From: "router", To: "loopStart"},
+		{From: "router", To: "output"},
+	}
+	graphData, err := json.Marshal(entity.Graph{
+		Nodes: nodes,
+		Edges: edges,
+		Metadata: map[string]any{
+			"allow_cycles":       true,
+			"default_max_visits": 10,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to marshal loop graph: %v", err)
+	}
+	graphJSON := string(graphData)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		switch node.ID {
+		case "loopStart":
+			counter := 0
+			if raw, exists := state.GetVar("counter"); exists {
+				switch value := raw.(type) {
+				case int:
+					counter = value
+				case float64:
+					counter = int(value)
+				}
+			}
+			counter++
+			state.SetVar("counter", counter)
+			return port.NewSuccessResult(map[string]any{"counter": counter}), nil
+		case "router":
+			counter := 0
+			if raw, exists := state.GetVar("counter"); exists {
+				switch value := raw.(type) {
+				case int:
+					counter = value
+				case float64:
+					counter = int(value)
+				}
+			}
+			if counter < 3 {
+				return &port.NodeExecutionResult{
+					Output: map[string]any{
+						"next_nodes": []string{"loopStart"},
+					},
+				}, nil
+			}
+			return &port.NodeExecutionResult{
+				Output: map[string]any{
+					"next_nodes": []string{"output"},
+				},
+			}, nil
+		default:
+			return port.NewSuccessResult(map[string]any{"ok": true}), nil
+		}
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		counter, _ := state.GetVar("counter")
+		return port.NewSuccessResult(map[string]any{"counter": counter}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	runID := "run-loop-checkpoint-resume"
+	checkpointPayload := map[string]any{
+		"checkpoint_version": checkpointPayloadV2,
+		"state": map[string]any{
+			"vars.counter": 2,
+		},
+		"completed": []string{"loopStart", "router"},
+		"skipped":   []string{},
+		"pending": map[string]any{
+			"loopStart": 0,
+			"router":    1,
+			"output":    1,
+		},
+		"visit_counts": map[string]any{
+			"loopStart": 2,
+			"router":    2,
+		},
+	}
+	_ = repo.SaveCheckpoint(
+		context.Background(),
+		runID,
+		"router",
+		3,
+		checkpointPayload,
+		[]string{"loopStart", "router"},
+		[]string{},
+		graphJSON,
+	)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
+
+	if err := scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, runID, 5*time.Second)
+
+	if repo.getRunStatus(runID) != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus(runID))
+	}
+	if transformExec.getNodeExecuteCount("loopStart") != 1 {
+		t.Errorf("Expected loopStart to execute once after resume, got %d", transformExec.getNodeExecuteCount("loopStart"))
+	}
+	if transformExec.getNodeExecuteCount("router") != 1 {
+		t.Errorf("Expected router to execute once after resume, got %d", transformExec.getNodeExecuteCount("router"))
+	}
+	if outputExec.getNodeExecuteCount("output") != 1 {
+		t.Errorf("Expected output to execute once after resume, got %d", outputExec.getNodeExecuteCount("output"))
+	}
+	if !emitter.hasEventType(port.EventTypeRunResumed) {
+		t.Error("Expected run_resumed event on checkpoint resume")
+	}
+}
+
 func TestScheduler_ResumeFromCheckpoint(t *testing.T) {
 	nodes := []entity.Node{
 		{ID: "step1", Type: "transform", Name: "Step 1", Config: map[string]any{}},
@@ -1121,7 +1389,7 @@ func TestCheckpoint_MessageBufferRoundTrip(t *testing.T) {
 		t.Fatalf("failed to load checkpoint: %v", err)
 	}
 
-	stateSnapshot, bufferSnapshot, memoryConfig, _, completed, skipped :=
+	stateSnapshot, bufferSnapshot, memoryConfig, _, completed, skipped, pendingSnapshot, visitCounts, payloadVersion :=
 		parseCheckpointPayload(snapshot, completedNodes, skippedNodes)
 
 	if len(stateSnapshot) != 0 {
@@ -1133,11 +1401,48 @@ func TestCheckpoint_MessageBufferRoundTrip(t *testing.T) {
 	if len(bufferSnapshot) != 15 {
 		t.Fatalf("expected 15 messages restored, got %d", len(bufferSnapshot))
 	}
+	if payloadVersion != checkpointPayloadV2 {
+		t.Fatalf("expected checkpoint payload version %d, got %d", checkpointPayloadV2, payloadVersion)
+	}
+	if pendingSnapshot == nil {
+		t.Fatalf("expected pending snapshot to be restored")
+	}
+	if visitCounts == nil {
+		t.Fatalf("expected visit counts snapshot to be restored")
+	}
 	if completed != nil || skipped != nil {
 		// initial run had none; parser should return slices, but it may be empty
 	}
 	if bufferSnapshot[0].Content != "message 0" || bufferSnapshot[14].Content != "message 14" {
 		t.Fatalf("unexpected message order after restore")
+	}
+}
+
+func TestCheckpoint_ParseLegacyPayloadCompatibility(t *testing.T) {
+	legacySnapshot := map[string]any{
+		"vars.counter": 7,
+	}
+
+	stateSnapshot, bufferSnapshot, memoryConfig, summary, completed, skipped, pendingSnapshot, visitCounts, payloadVersion :=
+		parseCheckpointPayload(legacySnapshot, []string{"a"}, []string{"b"})
+
+	if payloadVersion != 1 {
+		t.Fatalf("expected legacy payload version 1, got %d", payloadVersion)
+	}
+	if value, ok := stateSnapshot["vars.counter"]; !ok || value != 7 {
+		t.Fatalf("expected legacy state value vars.counter=7, got %#v", stateSnapshot["vars.counter"])
+	}
+	if bufferSnapshot != nil || memoryConfig != nil || summary != nil {
+		t.Fatalf("expected optional payload fields to be nil for legacy snapshot")
+	}
+	if pendingSnapshot != nil || visitCounts != nil {
+		t.Fatalf("expected no pending/visit state in legacy snapshot")
+	}
+	if len(completed) != 1 || completed[0] != "a" {
+		t.Fatalf("expected completed fallback to be preserved")
+	}
+	if len(skipped) != 1 || skipped[0] != "b" {
+		t.Fatalf("expected skipped fallback to be preserved")
 	}
 }
 

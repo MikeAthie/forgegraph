@@ -190,10 +190,21 @@ func (e *TransformExecutor) evaluateTemplate(node *entity.Node, state *entity.St
 
 // SubstituteTemplate is a utility function for template substitution (used by other executors)
 func SubstituteTemplate(template string, state *entity.State) string {
+	return SubstituteTemplateWithExtras(template, state, nil)
+}
+
+// SubstituteTemplateWithExtras substitutes template placeholders with state values and optional extras.
+func SubstituteTemplateWithExtras(template string, state *entity.State, extras map[string]string) string {
 	re := regexp.MustCompile(`\{\{([^}]+)\}\}`)
 	return re.ReplaceAllStringFunc(template, func(match string) string {
 		key := strings.TrimPrefix(strings.TrimSuffix(match, "}}"), "{{")
 		key = strings.TrimSpace(key)
+
+		if extras != nil {
+			if val, exists := extras[key]; exists {
+				return val
+			}
+		}
 
 		if val, exists := state.Get(key); exists {
 			return fmt.Sprintf("%v", val)

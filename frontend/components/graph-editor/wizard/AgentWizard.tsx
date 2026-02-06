@@ -8,30 +8,87 @@ import { WizardProgress } from "./WizardProgress";
 import { WizardNavigation } from "./WizardNavigation";
 import { WizardStep } from "./WizardStep";
 import { QuickNodePalette } from "../QuickNodePalette";
-import { CheckCircle, AlertCircle, Sparkles, Zap, Brain, FileOutput } from "lucide-react";
+import {
+  CheckCircle,
+  AlertCircle,
+  Sparkles,
+  Zap,
+  Brain,
+  FileOutput,
+  Bot,
+  ArrowRight,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { QuickNodePreset } from "@/lib/quick-node-presets";
+import {
+  AGENT_WIZARD_PRESETS,
+  type AgentWizardPreset,
+} from "@/lib/agent-wizard-presets";
+import { ValidationErrorCode, type ValidationError } from "@/lib/graph-validator";
 
 interface StepProps {
   onAddNode?: (preset: QuickNodePreset) => void;
+  onApplyPreset?: (preset: AgentWizardPreset) => void;
 }
 
 // Step 1: Start Node
-function StartNodeStep({ onAddNode }: StepProps) {
-  const { setCanProceed, setStepData } = useWizard();
+function StartNodeStep({ onAddNode, onApplyPreset }: StepProps) {
+  const { setCanProceed, setStepData, state } = useWizard();
   const { hasStartNode } = useValidation();
+  const selectedPresetId = (state.stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
 
   useEffect(() => {
-    setCanProceed(hasStartNode);
-    setStepData("start", { hasStartNode });
-  }, [hasStartNode, setCanProceed, setStepData]);
+    setCanProceed(hasStartNode || Boolean(selectedPresetId));
+    setStepData("start", { hasStartNode, selectedPresetId });
+  }, [hasStartNode, selectedPresetId, setCanProceed, setStepData]);
+
+  const handleApplyPreset = (preset: AgentWizardPreset) => {
+    onApplyPreset?.(preset);
+    setStepData("start", { hasStartNode, selectedPresetId: preset.id });
+  };
 
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
         Every agent workflow needs a starting point. The start node defines where your agent begins processing.
       </p>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Starter presets</p>
+        <div className="space-y-2">
+          {AGENT_WIZARD_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => handleApplyPreset(preset)}
+              className={cn(
+                "w-full rounded-lg border p-3 text-left transition-colors",
+                selectedPresetId === preset.id
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:bg-muted/50",
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium flex items-center gap-1.5">
+                    <Bot className="h-4 w-4 text-primary" />
+                    {preset.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{preset.description}</p>
+                  <p className="text-[11px] text-muted-foreground">Outcome: {preset.expectedOutcome}</p>
+                  {preset.credentialHints[0] && (
+                    <p className="text-[11px] text-primary/80">
+                      Credential: {preset.credentialHints[0]}
+                    </p>
+                  )}
+                </div>
+                <span className="text-xs text-primary font-medium">Use</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className={cn(
         "p-4 border rounded-lg flex items-center gap-3",
@@ -74,46 +131,46 @@ function StartNodeStep({ onAddNode }: StepProps) {
 }
 
 // Step 2: Agent Role
-function AgentRoleStep() {
+function PromptStep() {
   const { setCanProceed, state, setStepData } = useWizard();
-  const [agentName, setAgentName] = useState(
-    (state.stepData.role as { agentName?: string })?.agentName || ""
+  const [promptGoal, setPromptGoal] = useState(
+    (state.stepData.role as { promptGoal?: string })?.promptGoal || ""
   );
-  const [objective, setObjective] = useState(
-    (state.stepData.role as { objective?: string })?.objective || ""
+  const [promptContext, setPromptContext] = useState(
+    (state.stepData.role as { promptContext?: string })?.promptContext || ""
   );
 
   useEffect(() => {
-    const isValid = agentName.trim().length > 0;
+    const isValid = promptGoal.trim().length > 0;
     setCanProceed(isValid);
-    setStepData("role", { agentName, objective });
-  }, [agentName, objective, setCanProceed, setStepData]);
+    setStepData("role", { promptGoal, promptContext });
+  }, [promptGoal, promptContext, setCanProceed, setStepData]);
 
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Define your agent&apos;s persona. This helps guide the behavior of AI prompts in your workflow.
+        Define the core prompt intent. This guides how your LLM node should respond.
       </p>
 
       <div className="space-y-4">
         <div>
-          <label htmlFor="agent-name" className="text-sm font-medium">Agent Name <span className="text-destructive">*</span></label>
+          <label htmlFor="prompt-goal" className="text-sm font-medium">Prompt Goal <span className="text-destructive">*</span></label>
           <Input
-            id="agent-name"
+            id="prompt-goal"
             type="text"
-            placeholder="e.g., Customer Support Agent"
-            value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
+            placeholder="e.g., Answer support questions with concise steps"
+            value={promptGoal}
+            onChange={(e) => setPromptGoal(e.target.value)}
             className="mt-1"
           />
         </div>
         <div>
-          <label htmlFor="objective" className="text-sm font-medium">Primary Objective</label>
+          <label htmlFor="prompt-context" className="text-sm font-medium">Prompt Context</label>
           <Textarea
-            id="objective"
-            placeholder="e.g., Help customers resolve issues and answer questions about our products"
-            value={objective}
-            onChange={(e) => setObjective(e.target.value)}
+            id="prompt-context"
+            placeholder="e.g., Tone, domain constraints, and output format requirements"
+            value={promptContext}
+            onChange={(e) => setPromptContext(e.target.value)}
             rows={3}
             className="mt-1 resize-none"
           />
@@ -121,11 +178,11 @@ function AgentRoleStep() {
       </div>
 
       <div className="p-3 bg-muted/50 rounded-md text-xs space-y-1.5">
-        <p className="font-medium">Role examples:</p>
+        <p className="font-medium">Prompt examples:</p>
         <ul className="list-disc list-inside text-muted-foreground">
-          <li>Technical Support Engineer at Acme Corp</li>
-          <li>Sales Assistant for E-commerce Platform</li>
-          <li>Content Writer specialized in Blog Posts</li>
+          <li>Summarize unread emails and suggest replies</li>
+          <li>Draft a Telegram response with clear action items</li>
+          <li>Answer with JSON fields: summary, action_items, priority</li>
         </ul>
       </div>
     </div>
@@ -304,15 +361,42 @@ function OutputStep({ onAddNode }: StepProps) {
 }
 
 // Step 6: Review
+function getPreflightTargetStepId(error: ValidationError): string | null {
+  switch (error.code) {
+    case ValidationErrorCode.NO_START_NODE:
+      return "start";
+    case ValidationErrorCode.NO_OUTPUT_NODE:
+      return "output";
+    case ValidationErrorCode.EMPTY_GRAPH:
+      return "start";
+    case ValidationErrorCode.CYCLE_DETECTED:
+    case ValidationErrorCode.SELF_CONNECTION:
+    case ValidationErrorCode.DUPLICATE_EDGE:
+      return "tools";
+    default:
+      return null;
+  }
+}
+
 function ReviewStep() {
-  const { setCanProceed, state } = useWizard();
+  const { setCanProceed, state, steps, goToStep } = useWizard();
   const { isValid, errors, warnings, hasStartNode, hasOutputNode } = useValidation();
 
   useEffect(() => {
     setCanProceed(isValid);
   }, [isValid, setCanProceed]);
 
-  const roleData = state.stepData.role as { agentName?: string; objective?: string } | undefined;
+  const roleData = state.stepData.role as { promptGoal?: string; promptContext?: string } | undefined;
+
+  const jumpToStepForError = (error: ValidationError) => {
+    const stepId = getPreflightTargetStepId(error);
+    if (!stepId) return;
+
+    const stepIndex = steps.findIndex((step) => step.id === stepId);
+    if (stepIndex >= 0) {
+      goToStep(stepIndex);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -334,8 +418,8 @@ function ReviewStep() {
           )}
         </div>
         <div className="flex justify-between items-center text-sm">
-          <span className="text-muted-foreground">Agent Name</span>
-          <span>{roleData?.agentName || "Not set"}</span>
+          <span className="text-muted-foreground">Prompt Goal</span>
+          <span>{roleData?.promptGoal || "Not set"}</span>
         </div>
         <div className="flex justify-between items-center text-sm">
           <span className="text-muted-foreground">Output Node</span>
@@ -356,10 +440,30 @@ function ReviewStep() {
           <p className="text-sm font-medium text-destructive mb-2">
             Please fix the following issues:
           </p>
-          <ul className="text-xs text-destructive/80 list-disc list-inside space-y-1">
-            {errors.map((error, i) => (
-              <li key={i}>{error.message}</li>
-            ))}
+          <ul className="text-xs text-destructive/80 space-y-2">
+            {errors.map((error, i) => {
+              const stepId = getPreflightTargetStepId(error);
+              const stepLabel = stepId ? steps.find((step) => step.id === stepId)?.title : null;
+
+              return (
+                <li key={i} className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
+                  <p>{error.message}</p>
+                  {error.suggestion && (
+                    <p className="mt-1 text-[11px] text-destructive/70">{error.suggestion}</p>
+                  )}
+                  {stepId && stepLabel && (
+                    <button
+                      type="button"
+                      onClick={() => jumpToStepForError(error)}
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline"
+                    >
+                      Fix in {stepLabel}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -396,7 +500,7 @@ function ReviewStep() {
 
 const STEP_COMPONENTS: Record<string, React.ComponentType<StepProps>> = {
   start: StartNodeStep,
-  role: AgentRoleStep,
+  role: PromptStep,
   tools: ToolsStep,
   memory: MemoryStep,
   output: OutputStep,
@@ -404,17 +508,18 @@ const STEP_COMPONENTS: Record<string, React.ComponentType<StepProps>> = {
 };
 
 export interface AgentWizardProps {
-  onComplete?: () => void;
+  onComplete?: (options?: { runTest?: boolean }) => void;
   onExit?: () => void;
   onAddNode?: (preset: QuickNodePreset) => void;
+  onApplyPreset?: (preset: AgentWizardPreset) => void;
   className?: string;
 }
 
-export function AgentWizard({ onComplete, onExit, onAddNode, className }: AgentWizardProps) {
+export function AgentWizard({ onComplete, onExit, onAddNode, onApplyPreset, className }: AgentWizardProps) {
   const { state, currentStepConfig, exitWizard } = useWizard();
 
-  const handleComplete = useCallback(() => {
-    onComplete?.();
+  const handleComplete = useCallback((options?: { runTest?: boolean }) => {
+    onComplete?.(options);
     exitWizard();
   }, [onComplete, exitWizard]);
 
@@ -445,6 +550,9 @@ export function AgentWizard({ onComplete, onExit, onAddNode, className }: AgentW
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Agent Wizard"
       className={cn(
         "fixed inset-0 z-50 flex items-center justify-center",
         className
@@ -468,7 +576,7 @@ export function AgentWizard({ onComplete, onExit, onAddNode, className }: AgentW
               title={currentStepConfig.title}
               description={currentStepConfig.description}
             >
-              <StepComponent onAddNode={onAddNode} />
+              <StepComponent onAddNode={onAddNode} onApplyPreset={onApplyPreset} />
             </WizardStep>
           )}
         </div>

@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import type { GraphJson, GraphVersion, CreateGraphVersionInput } from "./graph-types";
+import { sanitizeErrorMessage } from "./error-messages";
 
 export interface User {
   id: string;
@@ -48,24 +49,49 @@ export type ApiErrorResponse = {
   meta: ApiMeta;
 };
 
-export const getApiErrorMessage = (err: unknown, fallback: string) => {
-  const data = (err as AxiosError)?.response?.data as any;
+/**
+ * Extract and sanitize an error message from an API error.
+ *
+ * This function extracts the error message from various response formats
+ * and sanitizes it to provide user-friendly messages instead of technical details.
+ *
+ * @param err - The error object (typically an AxiosError)
+ * @param fallback - Fallback message if no error message can be extracted
+ * @returns A user-friendly error message
+ */
+export const getApiErrorMessage = (err: unknown, fallback: string): string => {
+  const axiosError = err as AxiosError;
+  const data = axiosError?.response?.data as any;
+
+  // If no response data, check for network errors
   if (!data) {
+    if (axiosError?.message) {
+      return sanitizeErrorMessage(axiosError.message, fallback);
+    }
     return fallback;
   }
 
+  // Extract raw message from various response formats
+  let rawMessage: string | undefined;
+
   if (typeof data === "string") {
-    return data;
-  }
-
-  if (data.error) {
+    rawMessage = data;
+  } else if (data.error) {
     if (typeof data.error === "string") {
-      return data.error;
+      rawMessage = data.error;
+    } else {
+      rawMessage = data.error.message || data.error.detail;
     }
-    return data.error.message || data.error.detail || fallback;
+  } else {
+    rawMessage = data.detail || data.message;
   }
 
-  return data.detail || data.message || fallback;
+  // Sanitize and return the message
+  if (rawMessage) {
+    return sanitizeErrorMessage(rawMessage, fallback);
+  }
+
+  return fallback;
 };
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(
@@ -105,6 +131,9 @@ const API_PATHS = {
     oauthProviderConfig: (provider: string) => `/api/credentials/oauth/providers/${provider}`,
     oauthStart: "/api/credentials/oauth/start",
     oauthCallback: "/api/credentials/oauth/callback",
+  },
+  integrations: {
+    httpTest: "/api/integrations/http/test",
   },
   runs: {
     list: "/api/runs/",
@@ -592,6 +621,8 @@ export type CredentialCreateInput = {
 
 export type OAuthIntegrationProvider =
   | "gmail"
+  | "google_calendar"
+  | "google_tasks"
   | "notion"
   | "slack"
   | "jira"
@@ -626,6 +657,24 @@ export type CredentialOAuthProviderConfigInput = {
   enabled?: boolean;
 };
 
+export type HttpNodeTestInput = {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+  provider?: string;
+  credential_id?: string;
+  account_sid?: string;
+  timeout_seconds?: number;
+};
+
+export type HttpNodeTestResult = {
+  status_code: number;
+  ok: boolean;
+  headers: Record<string, string>;
+  body: unknown;
+};
+
 export type GraphTemplate = {
   id: string;
   group_id: string;
@@ -644,6 +693,7 @@ export type GraphTemplate = {
   rating_average: number | null;
   rating_count: number;
   usage_count: number;
+  run_success_rate?: number | null;
 };
 
 export type TemplateCloneInput = {
@@ -879,6 +929,16 @@ export const credentialsApi = {
     state: string;
   }): Promise<Credential> => {
     const response = await api.post<ApiSuccessResponse<Credential>>(API_PATHS.credentials.oauthCallback, input);
+    return response.data.data;
+  },
+};
+
+export const integrationsApi = {
+  runHttpNodeTest: async (input: HttpNodeTestInput): Promise<HttpNodeTestResult> => {
+    const response = await api.post<ApiSuccessResponse<HttpNodeTestResult>>(
+      API_PATHS.integrations.httpTest,
+      input,
+    );
     return response.data.data;
   },
 };

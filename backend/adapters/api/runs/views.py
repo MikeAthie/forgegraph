@@ -46,6 +46,7 @@ from adapters.gateways.grpc_engine_client import (
 )
 from adapters.ws.runs.broadcast import (
     broadcast_node_run_updated,
+    broadcast_node_stream_chunk,
     broadcast_run_schema_validation,
     broadcast_run_updated,
 )
@@ -55,6 +56,8 @@ from application.services.metrics import record_run_completed, record_run_starte
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
 from application.services.run_preparation import (
+    PromptTemplateResolutionError,
+    SubgraphResolutionError,
     build_memory_config_json,
     prepare_graph_for_engine,
     upsert_memory_session,
@@ -127,6 +130,26 @@ def _queue_payload(run: Run) -> dict[str, Any]:
         "queue_attempts": entry.attempts,
         "queue_available_at": entry.available_at,
     }
+
+
+def _run_preparation_error_response(exc: Exception) -> Response:
+    if isinstance(exc, PromptTemplateResolutionError):
+        return error_response(
+            code="INVALID_PROMPT_CONFIG",
+            message=str(exc),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if isinstance(exc, SubgraphResolutionError):
+        return error_response(
+            code="INVALID_SUBGRAPH",
+            message=str(exc),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return error_response(
+        code="INVALID_SUBGRAPH",
+        message=str(exc),
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 def check_llm_budget(user: User) -> Response | None:
@@ -567,12 +590,8 @@ class RunStartView(APIView):
         # Prepare graph for engine (inline subgraphs, enforce memory namespace)
         try:
             prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
-        except ValueError as exc:
-            return error_response(
-                code="INVALID_SUBGRAPH",
-                message=str(exc),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
+            return _run_preparation_error_response(exc)
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:
@@ -813,12 +832,8 @@ class RunInvokeView(APIView):
         graph_version = latest_run.graph_version
         try:
             graph_json = prepare_graph_for_engine(graph_version.graph_json, user)
-        except ValueError as exc:
-            return error_response(
-                code="INVALID_SUBGRAPH",
-                message=str(exc),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
+            return _run_preparation_error_response(exc)
 
         credential_errors = validate_prompt_credentials(graph_json, user)
         if credential_errors:
@@ -1064,12 +1079,8 @@ class RunReplayView(APIView):
         graph_version = run.graph_version
         try:
             prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
-        except ValueError as exc:
-            return error_response(
-                code="INVALID_SUBGRAPH",
-                message=str(exc),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
+            return _run_preparation_error_response(exc)
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:
@@ -1537,6 +1548,21 @@ class EngineRunEventsView(APIView):
             message = broadcast_run_schema_validation(run=run, payload=payload)
             return success_response(message)
 
+        if event_type == "node_stream_chunk":
+            output = event.get("output")
+            payload = output if isinstance(output, dict) else {}
+            chunk = str(payload.get("chunk") or "")
+            stream_payload = {
+                "node_id": str(event.get("node_id") or ""),
+                "node_type": str(event.get("node_type") or ""),
+                "attempt": int(event.get("attempt") or 1),
+                "chunk": chunk,
+                "chunk_index": int(payload.get("chunk_index") or 0),
+            }
+            _save_event("node_stream.chunk", stream_payload)
+            message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
+            return success_response(message)
+
         if event_type in {
             "run_started",
             "run_completed",
@@ -1955,6 +1981,8 @@ def _build_stream_message(*, run: Run, event: RunEvent) -> dict[str, Any]:
         message["run"] = payload
     elif event.event_type == "node_run.updated":
         message["node_run"] = payload
+    elif event.event_type == "node_stream.chunk":
+        message["node_stream"] = payload
     else:
         message["payload"] = payload
     return message

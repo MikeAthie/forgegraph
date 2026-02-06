@@ -63,8 +63,8 @@ export const DEFAULT_WIZARD_STEPS: WizardStepConfig[] = [
   },
   {
     id: "role",
-    title: "Define Agent Role",
-    description: "Set the persona and objective for your agent",
+    title: "Configure Prompt",
+    description: "Define the core task and response style for your agent",
     isRequired: true,
     canSkip: false,
   },
@@ -91,8 +91,8 @@ export const DEFAULT_WIZARD_STEPS: WizardStepConfig[] = [
   },
   {
     id: "review",
-    title: "Review & Save",
-    description: "Review your agent configuration and save",
+    title: "Preflight Check",
+    description: "Validate your setup and finish the wizard",
     isRequired: true,
     canSkip: false,
   },

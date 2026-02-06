@@ -123,3 +123,20 @@ func (c *AnthropicClient) Complete(ctx context.Context, request *executor.LLMReq
 		Usage:   usage,
 	}, nil
 }
+
+// StreamComplete provides a compatibility streaming path for Anthropic.
+// For now this adapter falls back to non-streaming completion and emits a single chunk.
+func (c *AnthropicClient) StreamComplete(
+	ctx context.Context,
+	request *executor.LLMRequest,
+	onChunk func(string),
+) (*executor.LLMResponse, error) {
+	response, err := c.Complete(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if onChunk != nil && response != nil && response.Content != "" {
+		onChunk(response.Content)
+	}
+	return response, nil
+}

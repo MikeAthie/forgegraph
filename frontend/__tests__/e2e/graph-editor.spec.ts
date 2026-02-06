@@ -190,6 +190,38 @@ test.describe("Graph Editor", () => {
     await expect(page.getByRole("button", { name: /^human gate/i })).toBeEnabled();
   });
 
+  test("adds a node by keyboard-only palette search", async ({ page }) => {
+    const graphName = createGraphName("Keyboard Palette");
+
+    await page.getByRole("button", { name: /^new graph$/i }).click();
+    await page.locator("#create-graph-name").fill(graphName);
+    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+
+    await expectGraphEditorOpen(page);
+
+    const searchInput = page.getByRole("textbox", { name: /search nodes/i });
+
+    // Keyboard-only focus path: tab until palette search is focused.
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      if (await searchInput.evaluate((element) => element === document.activeElement)) {
+        break;
+      }
+      await page.keyboard.press("Tab");
+    }
+
+    await expect(searchInput).toBeFocused();
+
+    await page.keyboard.type("memory");
+    await page.keyboard.press("Enter");
+
+    const memoryDialog = page.getByRole("dialog", { name: /configure memory node/i });
+    await expect(memoryDialog).toBeVisible();
+    await memoryDialog.getByRole("button", { name: /^add node$/i }).click();
+    await expect(memoryDialog).toBeHidden();
+
+    await expect(page.locator(".react-flow__node").filter({ hasText: "Memory" }).first()).toBeVisible();
+  });
+
   test("adds a node from palette", async ({ page }) => {
     const graphName = createGraphName("Add Node Test");
 
@@ -205,6 +237,40 @@ test.describe("Graph Editor", () => {
 
     // Node should appear in the canvas
     await expect(page.getByText("Prompt Node")).toBeVisible();
+  });
+
+  test("completes agent wizard with a preset-only flow", async ({ page }) => {
+    const graphName = createGraphName("Wizard Preset Flow");
+
+    await page.getByRole("button", { name: /^new graph$/i }).click();
+    await page.locator("#create-graph-name").fill(graphName);
+    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+
+    await expectGraphEditorOpen(page);
+
+    await page.getByRole("button", { name: /agent wizard/i }).click();
+
+    const wizard = page.getByRole("dialog", { name: /agent wizard/i });
+    await expect(wizard).toBeVisible();
+
+    await wizard.getByRole("button", { name: /email responder/i }).click();
+    await wizard.getByRole("button", { name: /^next$/i }).click();
+
+    await wizard.getByLabel(/prompt goal/i).fill("Draft concise customer email replies.");
+    await wizard.getByRole("button", { name: /^next$/i }).click();
+
+    await wizard.getByRole("button", { name: /^skip$/i }).click();
+    await wizard.getByRole("button", { name: /^skip$/i }).click();
+
+    await expect(wizard.getByText(/output node configured/i)).toBeVisible();
+    await wizard.getByRole("button", { name: /^next$/i }).click();
+
+    await expect(wizard.getByText(/your agent is ready/i)).toBeVisible();
+    await wizard.getByRole("button", { name: /finish setup/i }).click();
+
+    await expect(wizard).toBeHidden();
+    await expect(page.locator(".react-flow__node").filter({ hasText: "Draft Reply" }).first()).toBeVisible();
+    await expect(page.locator(".react-flow__node").filter({ hasText: "Final Output" }).first()).toBeVisible();
   });
 
   test("adds multiple nodes of different types", async ({ page }) => {
@@ -606,6 +672,36 @@ test.describe("Graph Editor", () => {
     await expect(page.getByText("Ctrl+S", { exact: true })).toBeVisible();
     await expect(page.getByText("Delete node")).toBeVisible();
     await expect(page.getByText("Delete", { exact: true })).toBeVisible();
+  });
+
+  test("supports keyboard-first save flow and exposes accessible editor landmarks", async ({ page }) => {
+    const graphName = createGraphName("Keyboard Accessibility");
+
+    await page.getByRole("button", { name: /^new graph$/i }).click();
+    await page.locator("#create-graph-name").fill(graphName);
+    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+
+    await expectGraphEditorOpen(page);
+
+    await expect(page.getByRole("complementary", { name: /node palette panel/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: /canvas panel/i })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: /inspector panel/i })).toBeVisible();
+
+    await addPromptNodeViaWizard(page);
+    await addNodeViaConfigDialog(page, {
+      buttonLabel: /^output$/i,
+      dialogLabel: /configure output node/i,
+      nodeLabel: "Output",
+    });
+
+    await page.keyboard.press("ControlOrMeta+s");
+
+    const versionSelect = page.getByRole("combobox", { name: /^version$/i });
+    await expect(versionSelect).toBeEnabled({ timeout: 30_000 });
+
+    const searchInput = page.getByRole("textbox", { name: /search nodes/i });
+    await page.keyboard.press("ControlOrMeta+Shift+f");
+    await expect(searchInput).toBeFocused();
   });
 
   test("handles empty graph (no nodes)", async ({ page }) => {

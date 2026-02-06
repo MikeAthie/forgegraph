@@ -33,9 +33,15 @@ class TestNodeSchemaRegistry:
 class TestPromptNodeSchema:
     """Tests for prompt node config validation."""
 
-    def test_empty_config_valid(self):
-        """Prompt node has no required fields."""
+    def test_empty_config_invalid(self):
+        """Prompt node must have prompt_template or prompt_id."""
         errors = validate_node_config("prompt", {})
+        assert len(errors) == 1
+        assert errors[0]["field"] == "prompt_template"
+
+    def test_prompt_id_only_valid(self):
+        """Prompt node can reference a template by prompt_id."""
+        errors = validate_node_config("prompt", {"prompt_id": "abc-123"})
         assert len(errors) == 0
 
     def test_valid_full_config(self):
@@ -52,28 +58,39 @@ class TestPromptNodeSchema:
         errors = validate_node_config("prompt", config)
         assert len(errors) == 0
 
+    def test_prompt_template_or_prompt_id_required_when_blank(self):
+        """Blank prompt_template and prompt_id should fail."""
+        config = {"prompt_template": "   ", "prompt_id": " "}
+        errors = validate_node_config("prompt", config)
+        assert len(errors) == 1
+        assert errors[0]["field"] == "prompt_template"
+
     def test_temperature_below_min(self):
         """Temperature below 0 should fail."""
-        config = {"temperature": -0.5}
+        config = {"prompt_template": "Hello", "temperature": -0.5}
         errors = validate_node_config("prompt", config)
         assert len(errors) == 1
         assert errors[0]["field"] == "temperature"
 
     def test_temperature_above_max(self):
         """Temperature above 2 should fail."""
-        config = {"temperature": 2.5}
+        config = {"prompt_template": "Hello", "temperature": 2.5}
         errors = validate_node_config("prompt", config)
         assert len(errors) == 1
         assert errors[0]["field"] == "temperature"
 
     def test_temperature_at_boundaries(self):
         """Temperature at 0 and 2 should be valid."""
-        assert len(validate_node_config("prompt", {"temperature": 0})) == 0
-        assert len(validate_node_config("prompt", {"temperature": 2})) == 0
+        assert (
+            len(validate_node_config("prompt", {"prompt_template": "Hello", "temperature": 0})) == 0
+        )
+        assert (
+            len(validate_node_config("prompt", {"prompt_template": "Hello", "temperature": 2})) == 0
+        )
 
     def test_invalid_type_for_temperature(self):
         """Non-number temperature should fail."""
-        config = {"temperature": "warm"}
+        config = {"prompt_template": "Hello", "temperature": "warm"}
         errors = validate_node_config("prompt", config)
         assert len(errors) == 1
         assert errors[0]["field"] == "temperature"
@@ -114,6 +131,16 @@ class TestHttpNodeSchema:
         errors = validate_node_config("http", config)
         assert len(errors) == 1
         assert errors[0]["field"] == "method"
+
+    def test_optional_credential_fields_valid(self):
+        """Provider and credential_id are optional for HTTP nodes."""
+        config = {
+            "url": "https://example.com",
+            "provider": "telegram",
+            "credential_id": "cred_123",
+        }
+        errors = validate_node_config("http", config)
+        assert len(errors) == 0
 
 
 class TestTransformNodeSchema:
@@ -187,6 +214,16 @@ class TestToolNodeSchema:
     def test_valid_tool_config(self):
         """Valid tool config should pass."""
         config = {"tool": "web_search", "version": "1.0"}
+        errors = validate_node_config("tool", config)
+        assert len(errors) == 0
+
+    def test_optional_credential_fields_valid(self):
+        """Provider and credential_id are optional for tool nodes."""
+        config = {
+            "tool": "web_search",
+            "provider": "gmail",
+            "credential_id": "cred_123",
+        }
         errors = validate_node_config("tool", config)
         assert len(errors) == 0
 
@@ -285,7 +322,7 @@ class TestTypeValidation:
 
     def test_string_type_check(self):
         """Non-string where string expected should fail."""
-        config = {"prompt_template": 123}
+        config = {"prompt_template": 123, "prompt_id": "prompt-1"}
         errors = validate_node_config("prompt", config)
         assert len(errors) == 1
         assert "string" in errors[0]["message"]

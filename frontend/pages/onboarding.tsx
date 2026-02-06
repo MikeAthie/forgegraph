@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { Plus, Search, Star, X } from "lucide-react";
+import { CircleHelp, ExternalLink, Plus, Search, Star, X } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
@@ -14,10 +14,23 @@ import {
   type GraphTemplate,
   type OnboardingMilestone,
 } from "../lib/api";
+import {
+  buildTemplatePreview,
+  buildTemplateQuickStarts,
+} from "../lib/template-quick-starts";
+import {
+  ONBOARDING_DOC_LINKS,
+  buildCredentialRemediation,
+  buildRunRemediation,
+  getOnboardingProgress,
+  type OnboardingRemediation,
+} from "../lib/onboarding-guide";
+import { ERROR_FALLBACKS } from "../lib/error-messages";
 import { showError, showSuccess } from "../lib/toast";
 import {
   Alert,
   AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Card,
@@ -46,7 +59,24 @@ const API_KEY_PLACEHOLDERS: Record<string, string> = {
   openai: "sk-proj-xxxxxxxxxxxxxxxxxxxx",
   anthropic: "sk-ant-api03-xxxxxxxxxxxxxxxxxxxx",
   google: "AIzaSyxxxxxxxxxxxxxxxxxxxx",
+  gmail: "OAuth credential",
+  telegram: "Bot token from @BotFather",
+  twilio: "Twilio SID / Auth Token",
 };
+
+function HelpTip({ text, testId }: { text: string; testId?: string }) {
+  return (
+    <button
+      type="button"
+      title={text}
+      aria-label={`Help: ${text}`}
+      data-testid={testId}
+      className="inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+    >
+      <CircleHelp className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -76,6 +106,8 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [credentialRemediation, setCredentialRemediation] = useState<OnboardingRemediation | null>(null);
+  const [runRemediation, setRunRemediation] = useState<OnboardingRemediation | null>(null);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
@@ -88,6 +120,17 @@ export default function OnboardingPage() {
   );
 
   const availableModels = useMemo(() => MODEL_OPTIONS[provider] ?? [], [provider]);
+  const quickStarts = useMemo(() => buildTemplateQuickStarts(templates), [templates]);
+
+  const selectedQuickStart = useMemo(() => {
+    if (!selectedTemplate) return null;
+    return quickStarts.find((quickStart) => quickStart.template.id === selectedTemplate.id) ?? null;
+  }, [quickStarts, selectedTemplate]);
+
+  const selectedTemplatePreview = useMemo(() => {
+    if (!selectedTemplate) return null;
+    return buildTemplatePreview(selectedTemplate, credentials, selectedQuickStart?.title);
+  }, [credentials, selectedQuickStart?.title, selectedTemplate]);
 
   // Extract unique categories from templates
   const categories = useMemo(() => {
@@ -136,6 +179,7 @@ export default function OnboardingPage() {
       { key: "run_template", label: "First run started", completed: false, completed_at: null },
     ] satisfies OnboardingMilestone[];
   }, [milestones, hasTemplate, hasCredential]);
+  const checklistProgress = useMemo(() => getOnboardingProgress(checklist), [checklist]);
 
   const completeMilestone = useCallback(
     async (milestone: string, metadata?: Record<string, unknown>) => {
@@ -200,7 +244,12 @@ export default function OnboardingPage() {
   useEffect(() => {
     setCredentialId("");
     setShowCredentialForm(false);
+    setCredentialRemediation(null);
   }, [provider]);
+
+  useEffect(() => {
+    setRunRemediation(null);
+  }, [selectedTemplateId, credentialId, useSampleData]);
 
   useEffect(() => {
     if (credentialId) {
@@ -230,6 +279,7 @@ export default function OnboardingPage() {
 
     setIsCreatingCredential(true);
     try {
+      setCredentialRemediation(null);
       const created = await credentialsApi.create({
         name: newCredentialName.trim(),
         provider,
@@ -242,7 +292,14 @@ export default function OnboardingPage() {
       setShowCredentialForm(false);
       showSuccess("Credential saved", `${created.name} is ready to use.`);
     } catch (err: unknown) {
-      showError("Credential failed", getApiErrorMessage(err, "Unable to save credential."));
+      const message = getApiErrorMessage(err, ERROR_FALLBACKS.credential.create);
+      setCredentialRemediation(
+        buildCredentialRemediation({
+          message,
+          provider,
+        }),
+      );
+      showError("Credential failed", message);
     } finally {
       setIsCreatingCredential(false);
     }
@@ -263,7 +320,7 @@ export default function OnboardingPage() {
   };
 
   const handleRun = async () => {
-    if (!selectedTemplate || !credentialId) return;
+    if (!selectedTemplate) return;
 
     let inputPayload: Record<string, unknown> = selectedTemplate.sample_input || {};
     if (!useSampleData) {
@@ -282,11 +339,12 @@ export default function OnboardingPage() {
 
     setIsRunning(true);
     try {
+      setRunRemediation(null);
       const clone = await templatesApi.clone(selectedTemplate.id, {
         name: graphName.trim() || undefined,
         provider,
         model,
-        credential_id: credentialId,
+        credential_id: credentialId || undefined,
       });
       const run = await runsApi.start({
         graph_version_id: clone.graph_version_id,
@@ -296,7 +354,16 @@ export default function OnboardingPage() {
       showSuccess("Run started", "Live execution is now streaming.");
       await router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
-      showError("Run failed", getApiErrorMessage(err, "Unable to start demo run."));
+      const message = getApiErrorMessage(err, ERROR_FALLBACKS.run.start);
+      setRunRemediation(
+        buildRunRemediation({
+          message,
+          hasTemplate: Boolean(selectedTemplate),
+          hasCredential: Boolean(credentialId),
+          useSampleData,
+        }),
+      );
+      showError("Run failed", message);
     } finally {
       setIsRunning(false);
     }
@@ -306,6 +373,28 @@ export default function OnboardingPage() {
     setSearchQuery("");
     setSelectedCategory(null);
   };
+
+  const handleSelectTemplate = useCallback(
+    (template: GraphTemplate, options?: { graphName?: string; provider?: string; model?: string }) => {
+      setSelectedTemplateId(template.id);
+      setGraphName(options?.graphName ?? template.name);
+
+      if (options?.provider && PROVIDERS.includes(options.provider as (typeof PROVIDERS)[number])) {
+        setProvider(options.provider);
+        const providerModels = MODEL_OPTIONS[options.provider];
+        if (providerModels?.length) {
+          if (options.model && providerModels.includes(options.model)) {
+            setModel(options.model);
+          } else {
+            setModel(providerModels[0]);
+          }
+        }
+      }
+
+      void completeMilestone("select_template", { template_id: template.id });
+    },
+    [completeMilestone],
+  );
 
   return (
     <ProtectedRoute>
@@ -329,6 +418,20 @@ export default function OnboardingPage() {
               <p className="text-sm text-muted-foreground">
                 Get to a live, streaming run in under three minutes.
               </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                <span className="rounded-full border border-border/60 bg-background/60 px-2 py-0.5">
+                  Tip: quick starts prefill provider + model
+                </span>
+                <a
+                  href={ONBOARDING_DOC_LINKS.templates}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Learn onboarding basics
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
             </div>
           </div>
 
@@ -357,9 +460,72 @@ export default function OnboardingPage() {
                         </Badge>
                       )}
                     </CardTitle>
+                    <a
+                      href={ONBOARDING_DOC_LINKS.templates}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Learn more
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {quickStarts.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Quick starts
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          1-click select
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2">
+                        {quickStarts.map((quickStart) => (
+                          <button
+                            key={quickStart.id}
+                            type="button"
+                            data-testid={`quick-start-card-${quickStart.id}`}
+                            onClick={() =>
+                              handleSelectTemplate(quickStart.template, {
+                                graphName: quickStart.title,
+                                provider: quickStart.recommendedProvider,
+                                model: quickStart.recommendedModel,
+                              })
+                            }
+                            className={`rounded-xl border px-3 py-2 text-left transition ${
+                              selectedTemplateId === quickStart.template.id
+                                ? "border-primary/70 bg-primary/10"
+                                : "border-border/50 hover:border-primary/40"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold text-foreground">{quickStart.title}</span>
+                              <Badge variant="secondary" className="text-[10px]">
+                                v{quickStart.template.version}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2">
+                              {quickStart.description}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {quickStart.requiredProviders.slice(0, 3).map((requiredProvider) => (
+                                <span
+                                  key={`${quickStart.id}-${requiredProvider}`}
+                                  className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                                >
+                                  {requiredProvider}
+                                </span>
+                              ))}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Search Bar */}
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -445,11 +611,7 @@ export default function OnboardingPage() {
                         <button
                           type="button"
                           key={template.id}
-                          onClick={() => {
-                            setSelectedTemplateId(template.id);
-                            setGraphName(template.name);
-                            void completeMilestone("select_template", { template_id: template.id });
-                          }}
+                          onClick={() => handleSelectTemplate(template)}
                           className={`w-full rounded-xl border px-3 py-3 text-left text-sm transition ${
                             selectedTemplateId === template.id
                               ? "border-primary/70 bg-primary/10"
@@ -458,9 +620,14 @@ export default function OnboardingPage() {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-semibold">{template.name}</span>
-                            <Badge variant="secondary" className="shrink-0">
-                              {template.estimated_minutes} min
-                            </Badge>
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className="shrink-0 text-[10px]">
+                                v{template.version}
+                              </Badge>
+                              <Badge variant="secondary" className="shrink-0">
+                                {template.estimated_minutes} min
+                              </Badge>
+                            </div>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                             {template.description}
@@ -473,6 +640,9 @@ export default function OnboardingPage() {
                                 </span>
                               )}
                               {template.usage_count > 0 && <span>{template.usage_count} uses</span>}
+                              {typeof template.run_success_rate === "number" && (
+                                <span>{Math.round(template.run_success_rate * 100)}% success</span>
+                              )}
                             </div>
                           )}
                           {template.tags && template.tags.length > 0 && (
@@ -533,18 +703,58 @@ export default function OnboardingPage() {
               {/* Credentials Card */}
               <Card className={`border-border/50 bg-card/60 ${hasCredential ? "border-green-500/30" : ""}`}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    2. Attach credentials
-                    {hasCredential && (
-                      <Badge variant="outline" className="border-green-500/50 text-green-600 dark:text-green-400 text-xs">
-                        ✓
-                      </Badge>
-                    )}
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      2. Attach credentials
+                      {hasCredential && (
+                        <Badge variant="outline" className="border-green-500/50 text-green-600 dark:text-green-400 text-xs">
+                          ✓
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <a
+                      href={ONBOARDING_DOC_LINKS.credentials}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Learn more
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {credentialRemediation && (
+                    <Alert variant="destructive" data-testid="credential-remediation-alert">
+                      <AlertTitle>{credentialRemediation.title}</AlertTitle>
+                      <AlertDescription>
+                        <p className="mt-1">{credentialRemediation.summary}</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                          {credentialRemediation.steps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                        <a
+                          href={credentialRemediation.docsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          View troubleshooting guide
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   <div>
-                    <label className="text-xs text-muted-foreground">Provider</label>
+                    <div className="mb-1 flex items-center gap-1">
+                      <label className="text-xs text-muted-foreground">Provider</label>
+                      <HelpTip
+                        testId="provider-help-tip"
+                        text="Choose the API provider that will run prompt nodes in this template."
+                      />
+                    </div>
                     <Select value={provider} onValueChange={setProvider}>
                       <SelectTrigger>
                         <SelectValue placeholder="Provider" />
@@ -559,7 +769,13 @@ export default function OnboardingPage() {
                     </Select>
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">Model</label>
+                    <div className="mb-1 flex items-center gap-1">
+                      <label className="text-xs text-muted-foreground">Model</label>
+                      <HelpTip
+                        testId="model-help-tip"
+                        text="Pick a model that balances quality and cost for your first test run."
+                      />
+                    </div>
                     <Select value={model} onValueChange={setModel}>
                       <SelectTrigger>
                         <SelectValue placeholder="Model" />
@@ -577,7 +793,13 @@ export default function OnboardingPage() {
                   {/* Credential Selection */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-muted-foreground">API Credential</label>
+                      <div className="flex items-center gap-1">
+                        <label className="text-xs text-muted-foreground">API Credential</label>
+                        <HelpTip
+                          testId="credential-help-tip"
+                          text="Credentials are stored once and can be reused across templates and runs."
+                        />
+                      </div>
                       {filteredCredentials.length > 0 && !showCredentialForm && (
                         <button
                           type="button"
@@ -614,7 +836,18 @@ export default function OnboardingPage() {
                   {showCredentialForm && (
                     <div className="rounded-xl border border-border/50 bg-muted/20 p-3 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-foreground">Add {provider} API key</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-foreground">Add {provider} API key</span>
+                          <a
+                            href={ONBOARDING_DOC_LINKS.credentials}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                          >
+                            Docs
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
                         {filteredCredentials.length > 0 && (
                           <button
                             type="button"
@@ -626,6 +859,10 @@ export default function OnboardingPage() {
                         )}
                       </div>
                       <div>
+                        <div className="mb-1 flex items-center gap-1">
+                          <span className="text-[11px] text-muted-foreground">Credential label</span>
+                          <HelpTip text="Use a descriptive label like Team OpenAI Prod to identify this key later." />
+                        </div>
                         <Input
                           value={newCredentialName}
                           onChange={(e) => setNewCredentialName(e.target.value)}
@@ -639,6 +876,10 @@ export default function OnboardingPage() {
                         <p className="text-[10px] text-muted-foreground mt-1">A label to identify this key</p>
                       </div>
                       <div>
+                        <div className="mb-1 flex items-center gap-1">
+                          <span className="text-[11px] text-muted-foreground">Secret key</span>
+                          <HelpTip text="Paste the exact key value from your provider console. Keys are never shown in full after save." />
+                        </div>
                         <Input
                           value={newCredentialKey}
                           onChange={(e) => setNewCredentialKey(e.target.value)}
@@ -675,11 +916,51 @@ export default function OnboardingPage() {
               {/* Launch Card */}
               <Card className={`border-border/50 bg-card/60 ${hasTemplate && hasCredential ? "border-primary/30" : ""}`}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">3. Launch the run</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">3. Launch the run</CardTitle>
+                    <a
+                      href={ONBOARDING_DOC_LINKS.troubleshooting}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Learn more
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {runRemediation && (
+                    <Alert variant="destructive" data-testid="run-remediation-alert">
+                      <AlertTitle>{runRemediation.title}</AlertTitle>
+                      <AlertDescription>
+                        <p className="mt-1">{runRemediation.summary}</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                          {runRemediation.steps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                        <a
+                          href={runRemediation.docsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          View remediation guide
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   <div>
-                    <label className="text-xs text-muted-foreground">Graph name</label>
+                    <div className="mb-1 flex items-center gap-1">
+                      <label className="text-xs text-muted-foreground">Graph name</label>
+                      <HelpTip
+                        testId="graph-name-help-tip"
+                        text="This name is used for the cloned graph created from the selected template."
+                      />
+                    </div>
                     <Input
                       value={graphName}
                       onChange={(e) => setGraphName(e.target.value)}
@@ -687,9 +968,95 @@ export default function OnboardingPage() {
                     />
                   </div>
                   {selectedTemplate ? (
-                    <div className="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-                      <div className="font-semibold">{selectedTemplate.name}</div>
-                      <div className="text-xs text-muted-foreground">{selectedTemplate.description}</div>
+                    <div
+                      data-testid="template-preview-panel"
+                      className="rounded-xl border border-border/50 bg-muted/30 px-3 py-3 text-sm space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold">{selectedQuickStart?.title ?? selectedTemplate.name}</div>
+                          <div className="text-xs text-muted-foreground">{selectedTemplate.description}</div>
+                        </div>
+                        {selectedTemplatePreview ? (
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline">{selectedTemplatePreview.versionLabel}</Badge>
+                            {selectedTemplate.is_latest && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                latest
+                              </Badge>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {selectedTemplatePreview && (
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Template metadata
+                            </div>
+                            {selectedTemplatePreview.versionNote ? (
+                              <p className="mt-1 text-muted-foreground">{selectedTemplatePreview.versionNote}</p>
+                            ) : (
+                              <p className="mt-1 text-muted-foreground">No changelog provided for this version.</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Expected output
+                            </div>
+                            <p className="mt-1 text-muted-foreground">{selectedTemplatePreview.expectedOutput}</p>
+                          </div>
+
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Required credentials
+                            </div>
+                            <div className="mt-1 grid gap-1">
+                              {selectedTemplatePreview.requiredCredentials.map((requiredCredential) => (
+                                <div
+                                  key={`${selectedTemplate.id}-${requiredCredential.provider}`}
+                                  className="flex items-center justify-between rounded-md border border-border/50 bg-background/60 px-2 py-1"
+                                >
+                                  <span className="font-medium text-foreground">
+                                    {requiredCredential.label}
+                                  </span>
+                                  <span
+                                    className={
+                                      requiredCredential.connected
+                                        ? "text-green-600 dark:text-green-400"
+                                        : "text-amber-600 dark:text-amber-400"
+                                    }
+                                  >
+                                    {requiredCredential.connected
+                                      ? "Connected"
+                                      : `Missing (${requiredCredential.placeholder})`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {selectedTemplatePreview.placeholderVariables.length > 0 && (
+                            <div>
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Boilerplate placeholders
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {selectedTemplatePreview.placeholderVariables.map((placeholder) => (
+                                  <span
+                                    key={`${selectedTemplate.id}-${placeholder}`}
+                                    className="rounded-full border border-border/70 bg-background/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                                  >
+                                    {placeholder}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 px-3 py-4 text-sm text-muted-foreground text-center">
@@ -700,7 +1067,13 @@ export default function OnboardingPage() {
                   <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-3 text-sm space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-xs font-medium text-foreground">Sample data mode</div>
+                        <div className="flex items-center gap-1">
+                          <div className="text-xs font-medium text-foreground">Sample data mode</div>
+                          <HelpTip
+                            testId="sample-data-help-tip"
+                            text="Enable for a safe first run with template-provided input. Disable to supply custom JSON."
+                          />
+                        </div>
                         <div className="text-[11px] text-muted-foreground">
                           Use the template&apos;s sample input for a sandboxed run.
                         </div>
@@ -709,7 +1082,13 @@ export default function OnboardingPage() {
                     </div>
                     {!useSampleData && (
                       <div className="space-y-1">
-                        <div className="text-[11px] text-muted-foreground">Custom input (JSON)</div>
+                        <div className="flex items-center gap-1">
+                          <div className="text-[11px] text-muted-foreground">Custom input (JSON)</div>
+                          <HelpTip
+                            testId="custom-input-help-tip"
+                            text={"Input must be a valid JSON object. Example: {\"message\":\"hello\"}"}
+                          />
+                        </div>
                         <Textarea
                           value={customInput}
                           onChange={(e) => setCustomInput(e.target.value)}
@@ -721,7 +1100,7 @@ export default function OnboardingPage() {
                   </div>
                   <Button
                     onClick={handleRun}
-                    disabled={!selectedTemplate || !credentialId || isRunning}
+                    disabled={!selectedTemplate || isRunning}
                     className="w-full"
                   >
                     {isRunning ? <Spinner size="xs" className="mr-2" /> : null}
@@ -729,7 +1108,24 @@ export default function OnboardingPage() {
                   </Button>
 
                   {/* Completion checklist */}
-                  <div className="text-xs text-muted-foreground space-y-1 pt-2">
+                  <div className="space-y-2 pt-2 text-xs text-muted-foreground">
+                    <div
+                      data-testid="onboarding-checklist-progress"
+                      className="rounded-lg border border-border/50 bg-muted/30 px-2.5 py-2"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span>Checklist progress</span>
+                        <span data-testid="onboarding-checklist-progress-label">
+                          {checklistProgress.completed}/{checklistProgress.total} ({checklistProgress.percentage}%)
+                        </span>
+                      </div>
+                      <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-[width]"
+                          style={{ width: `${checklistProgress.percentage}%` }}
+                        />
+                      </div>
+                    </div>
                     {checklist.map((item) => (
                       <div
                         key={item.key}

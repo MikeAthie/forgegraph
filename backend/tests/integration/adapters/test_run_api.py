@@ -17,6 +17,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from infrastructure.orm.models import (
+    APIKey,
     ApprovalTask,
     Graph,
     GraphVersion,
@@ -24,6 +25,7 @@ from infrastructure.orm.models import (
     LLMUsage,
     MemoryConfiguration,
     NodeRun,
+    PromptTemplate,
     Run,
     RunCheckpoint,
     RunEvent,
@@ -33,6 +35,18 @@ from infrastructure.orm.models import (
 from infrastructure.security import s2s
 
 pytestmark = pytest.mark.django_db
+
+
+def _create_openai_credential(user: User) -> APIKey:
+    organization = user.default_organization
+    assert organization is not None
+    return APIKey.objects.create(
+        organization=organization,
+        user=user,
+        provider="openai",
+        name=f"OpenAI {uuid4()}",
+        encrypted_key=b"test-key",
+    )
 
 
 class TestRunList:
@@ -325,6 +339,126 @@ class TestRunStart:
         assert memory_config["summarization"]["keep_recent_count"] == 12
         assert memory_config["summarization"]["model"] == "gpt-4"
 
+    def test_start_run_resolves_prompt_id_to_template(
+        self, authenticated_client, user, mock_engine_client
+    ):
+        credential = _create_openai_credential(user)
+        prompt = PromptTemplate.objects.create(
+            owner=user,
+            title="Support Prompt",
+            category="other",
+            content="You are a helpful support agent.",
+            visibility="private",
+        )
+        graph = Graph.objects.create(owner=user, name="Prompt Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [
+                    {
+                        "id": "prompt1",
+                        "type": "prompt",
+                        "name": "Prompt",
+                        "config": {
+                            "prompt_id": str(prompt.id),
+                            "credential_id": str(credential.id),
+                        },
+                    },
+                    {"id": "out", "type": "output", "name": "Output", "config": {}},
+                ],
+                "edges": [{"id": "e1", "from": "prompt1", "to": "out"}],
+            },
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"q": "hi"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        sent_graph = start_calls[0][1]["graph_json"]
+        prompt_node = next(node for node in sent_graph["nodes"] if node["id"] == "prompt1")
+        assert prompt_node["config"]["prompt_template"] == "You are a helpful support agent."
+
+    def test_start_run_rejects_inaccessible_prompt_id(
+        self, authenticated_client, user, mock_engine_client
+    ):
+        credential = _create_openai_credential(user)
+        other_user = User.objects.create_user(email="other@example.com", password="password123")
+        prompt = PromptTemplate.objects.create(
+            owner=other_user,
+            title="Private Prompt",
+            category="other",
+            content="Restricted prompt.",
+            visibility="private",
+        )
+        graph = Graph.objects.create(owner=user, name="Prompt Access Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [
+                    {
+                        "id": "prompt1",
+                        "type": "prompt",
+                        "name": "Prompt",
+                        "config": {
+                            "prompt_id": str(prompt.id),
+                            "credential_id": str(credential.id),
+                        },
+                    }
+                ],
+                "edges": [],
+            },
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_PROMPT_CONFIG"
+        assert "not accessible" in response.data["error"]["message"]
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
+    def test_start_run_rejects_prompt_without_template_or_prompt_id(
+        self, authenticated_client, user, mock_engine_client
+    ):
+        credential = _create_openai_credential(user)
+        graph = Graph.objects.create(owner=user, name="Prompt Validation Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [
+                    {
+                        "id": "prompt1",
+                        "type": "prompt",
+                        "name": "Prompt",
+                        "config": {"credential_id": str(credential.id)},
+                    }
+                ],
+                "edges": [],
+            },
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_PROMPT_CONFIG"
+        assert "prompt_template" in response.data["error"]["message"]
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
     def test_start_run_blocked_when_quota_exceeded(
         self, authenticated_client, user, mock_engine_client
     ):
@@ -472,6 +606,135 @@ class TestRunInvoke:
         assert len(start_calls) == 1
         assert start_calls[0][1]["run_id"] == new_run.id
 
+    def test_invoke_resolves_prompt_id_into_checkpoint_and_engine_payload(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        credential = _create_openai_credential(user)
+        prompt = PromptTemplate.objects.create(
+            owner=user,
+            title="Thread Prompt",
+            category="other",
+            content="Threaded prompt template.",
+            visibility="private",
+        )
+        graph = Graph.objects.create(owner=user, name="Invoke Prompt Graph")
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "prompt1",
+                    "type": "prompt",
+                    "name": "Prompt",
+                    "config": {
+                        "prompt_id": str(prompt.id),
+                        "credential_id": str(credential.id),
+                    },
+                },
+                {"id": "out", "type": "output", "name": "Output", "config": {}},
+            ],
+            "edges": [{"id": "e1", "from": "prompt1", "to": "out"}],
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        thread_id = uuid4()
+        previous_run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            thread_id=thread_id,
+            started_at=timezone.now(),
+            input_json={"initial": "state"},
+        )
+        RunCheckpoint.objects.create(
+            run=previous_run,
+            node_id="out",
+            step_index=2,
+            state_json={"input.initial": "state"},
+            completed_nodes=["prompt1", "out"],
+            skipped_nodes=[],
+            graph_json=json.dumps(graph_json),
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/invoke",
+            {"thread_id": str(thread_id), "input_json": {"query": "hello"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        invoked_run = Run.objects.get(id=response.data["data"]["id"])
+        checkpoint_graph_json = invoked_run.checkpoint.graph_json
+        checkpoint_graph = (
+            json.loads(checkpoint_graph_json)
+            if isinstance(checkpoint_graph_json, str)
+            else checkpoint_graph_json
+        )
+        prompt_node = next(node for node in checkpoint_graph["nodes"] if node["id"] == "prompt1")
+        assert prompt_node["config"]["prompt_template"] == "Threaded prompt template."
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        payload_graph = start_calls[0][1]["graph_json"]
+        payload_prompt = next(node for node in payload_graph["nodes"] if node["id"] == "prompt1")
+        assert payload_prompt["config"]["prompt_template"] == "Threaded prompt template."
+
+    def test_invoke_rejects_invalid_prompt_template_reference(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        credential = _create_openai_credential(user)
+        other_user = User.objects.create_user(
+            email="other-invoke@example.com", password="password123"
+        )
+        prompt = PromptTemplate.objects.create(
+            owner=other_user,
+            title="Hidden Prompt",
+            category="other",
+            content="Do not access",
+            visibility="private",
+        )
+        graph = Graph.objects.create(owner=user, name="Invoke Invalid Prompt Graph")
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "prompt1",
+                    "type": "prompt",
+                    "name": "Prompt",
+                    "config": {
+                        "prompt_id": str(prompt.id),
+                        "credential_id": str(credential.id),
+                    },
+                }
+            ],
+            "edges": [],
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        thread_id = uuid4()
+        previous_run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            thread_id=thread_id,
+            started_at=timezone.now(),
+            input_json={"initial": "state"},
+        )
+        RunCheckpoint.objects.create(
+            run=previous_run,
+            node_id="seed",
+            step_index=1,
+            state_json={"input.initial": "state"},
+            completed_nodes=[],
+            skipped_nodes=[],
+            graph_json=json.dumps(graph_json),
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/invoke",
+            {"thread_id": str(thread_id), "input_json": {"query": "hello"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_PROMPT_CONFIG"
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
     @override_settings(
         RUN_INVOKE_RATE_LIMIT_PER_MIN=1,
         RUN_RATE_LIMIT_WINDOW_SECONDS=60,
@@ -520,6 +783,363 @@ class TestRunInvoke:
         )
         assert second.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         assert second.data["error"]["code"] == "RATE_LIMITED"
+
+
+class TestRunReplay:
+    """Tests for POST /api/runs/{run_id}/replay."""
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_replay_from_node_prunes_checkpoint_scope(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Replay Graph")
+        graph_json = {
+            "nodes": [
+                {"id": "start", "type": "transform", "name": "Start"},
+                {"id": "branch", "type": "transform", "name": "Branch"},
+                {"id": "left", "type": "transform", "name": "Left"},
+                {"id": "right", "type": "transform", "name": "Right"},
+                {"id": "output", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "e1", "from": "start", "to": "branch"},
+                {"id": "e2", "from": "branch", "to": "left"},
+                {"id": "e3", "from": "branch", "to": "right"},
+                {"id": "e4", "from": "left", "to": "output"},
+                {"id": "e5", "from": "right", "to": "output"},
+            ],
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        source_run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            started_at=timezone.now() - timedelta(minutes=2),
+            ended_at=timezone.now() - timedelta(minutes=1),
+            input_json={"query": "hello"},
+            output_json={"result": "from-source"},
+        )
+        RunCheckpoint.objects.create(
+            run=source_run,
+            node_id="output",
+            step_index=8,
+            state_json={
+                "input.query": "hello",
+                "vars.shared": "keep",
+                "node.start.output": {"ok": True},
+                "node.branch.output": {"route": "left"},
+                "node.left.output": {"value": "left"},
+                "node.right.output": {"value": "right"},
+                "node.output.output": {"result": "from-source"},
+            },
+            completed_nodes=["start", "branch", "left", "right", "output"],
+            skipped_nodes=["right"],
+            graph_json=graph_json,
+        )
+
+        response = authenticated_client.post(
+            f"/api/runs/{source_run.id}/replay",
+            {"node_id": "branch"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        replay_run = Run.objects.get(id=response.data["data"]["id"])
+        replay_checkpoint = replay_run.checkpoint
+
+        assert replay_run.status == "running"
+        assert replay_run.input_json == source_run.input_json
+
+        # Downstream replay from "branch" should remove node.* state for branch descendants.
+        assert replay_checkpoint.state_json["input.query"] == "hello"
+        assert replay_checkpoint.state_json["vars.shared"] == "keep"
+        assert replay_checkpoint.state_json["node.start.output"] == {"ok": True}
+        assert "node.branch.output" not in replay_checkpoint.state_json
+        assert "node.left.output" not in replay_checkpoint.state_json
+        assert "node.right.output" not in replay_checkpoint.state_json
+        assert "node.output.output" not in replay_checkpoint.state_json
+
+        # Completed/skipped should exclude the replay scope.
+        assert replay_checkpoint.completed_nodes == ["start"]
+        assert replay_checkpoint.skipped_nodes == []
+
+        replay_event = RunEvent.objects.get(run=replay_run, event_type="run.replay")
+        assert replay_event.payload["source_run_id"] == str(source_run.id)
+        assert replay_event.payload["from_node_id"] == "branch"
+        assert replay_event.payload["checkpoint_step"] == 8
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        assert start_calls[0][1]["run_id"] == replay_run.id
+        assert start_calls[0][1]["input_json"] == {"query": "hello"}
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_replay_resolves_prompt_id_into_checkpoint_and_engine_payload(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        credential = _create_openai_credential(user)
+        prompt = PromptTemplate.objects.create(
+            owner=user,
+            title="Replay Prompt",
+            category="other",
+            content="Replay prompt template.",
+            visibility="private",
+        )
+        graph = Graph.objects.create(owner=user, name="Replay Prompt Graph")
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "prompt1",
+                    "type": "prompt",
+                    "name": "Prompt",
+                    "config": {
+                        "prompt_id": str(prompt.id),
+                        "credential_id": str(credential.id),
+                    },
+                },
+                {"id": "out", "type": "output", "name": "Output", "config": {}},
+            ],
+            "edges": [{"id": "e1", "from": "prompt1", "to": "out"}],
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        source_run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            started_at=timezone.now() - timedelta(minutes=2),
+            ended_at=timezone.now() - timedelta(minutes=1),
+            input_json={"query": "resume"},
+            output_json={"result": "ok"},
+        )
+        RunCheckpoint.objects.create(
+            run=source_run,
+            node_id="out",
+            step_index=3,
+            state_json={"input.query": "resume", "node.out.output": {"result": "ok"}},
+            completed_nodes=["prompt1", "out"],
+            skipped_nodes=[],
+            graph_json=json.dumps(graph_json),
+        )
+
+        response = authenticated_client.post(
+            f"/api/runs/{source_run.id}/replay",
+            {},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        replay_run = Run.objects.get(id=response.data["data"]["id"])
+        replay_checkpoint_graph_json = replay_run.checkpoint.graph_json
+        replay_checkpoint_graph = (
+            json.loads(replay_checkpoint_graph_json)
+            if isinstance(replay_checkpoint_graph_json, str)
+            else replay_checkpoint_graph_json
+        )
+        checkpoint_prompt = next(
+            node for node in replay_checkpoint_graph["nodes"] if node["id"] == "prompt1"
+        )
+        assert checkpoint_prompt["config"]["prompt_template"] == "Replay prompt template."
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        payload_prompt = next(
+            node for node in start_calls[0][1]["graph_json"]["nodes"] if node["id"] == "prompt1"
+        )
+        assert payload_prompt["config"]["prompt_template"] == "Replay prompt template."
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_replay_rejects_invalid_prompt_template_reference(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        credential = _create_openai_credential(user)
+        other_user = User.objects.create_user(
+            email="other-replay@example.com", password="password123"
+        )
+        prompt = PromptTemplate.objects.create(
+            owner=other_user,
+            title="Replay Hidden Prompt",
+            category="other",
+            content="No access",
+            visibility="private",
+        )
+        graph = Graph.objects.create(owner=user, name="Replay Invalid Prompt Graph")
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "prompt1",
+                    "type": "prompt",
+                    "name": "Prompt",
+                    "config": {
+                        "prompt_id": str(prompt.id),
+                        "credential_id": str(credential.id),
+                    },
+                },
+                {"id": "out", "type": "output", "name": "Output", "config": {}},
+            ],
+            "edges": [{"id": "e1", "from": "prompt1", "to": "out"}],
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        source_run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            started_at=timezone.now() - timedelta(minutes=2),
+            ended_at=timezone.now() - timedelta(minutes=1),
+            input_json={"query": "resume"},
+            output_json={"result": "ok"},
+        )
+        RunCheckpoint.objects.create(
+            run=source_run,
+            node_id="out",
+            step_index=3,
+            state_json={"input.query": "resume", "node.out.output": {"result": "ok"}},
+            completed_nodes=["prompt1", "out"],
+            skipped_nodes=[],
+            graph_json=json.dumps(graph_json),
+        )
+
+        response = authenticated_client.post(
+            f"/api/runs/{source_run.id}/replay",
+            {},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "INVALID_PROMPT_CONFIG"
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_replay_engine_event_ordering_and_output_equivalence(
+        self, authenticated_client, api_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Replay Graph Events")
+        graph_json = {
+            "nodes": [
+                {"id": "start", "type": "transform", "name": "Start"},
+                {"id": "output", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "e1", "from": "start", "to": "output"},
+            ],
+        }
+        version = GraphVersion.objects.create(graph=graph, version=1, graph_json=graph_json)
+        source_output = {"answer": 42, "meta": {"model": "mock"}}
+        source_run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            started_at=timezone.now() - timedelta(minutes=3),
+            ended_at=timezone.now() - timedelta(minutes=2),
+            input_json={"query": "life"},
+            output_json=source_output,
+        )
+        RunCheckpoint.objects.create(
+            run=source_run,
+            node_id="output",
+            step_index=3,
+            state_json={"input.query": "life", "node.start.output": {"progress": "done"}},
+            completed_nodes=["start", "output"],
+            skipped_nodes=[],
+            graph_json=graph_json,
+        )
+
+        replay_response = authenticated_client.post(
+            f"/api/runs/{source_run.id}/replay",
+            {},
+            format="json",
+        )
+        assert replay_response.status_code == status.HTTP_201_CREATED
+        replay_run = Run.objects.get(id=replay_response.data["data"]["id"])
+
+        def post_engine_event(event_payload: dict[str, Any]) -> None:
+            timestamp_ms = int(time.time() * 1000)
+            body = json.dumps(event_payload)
+            signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+            headers = {
+                "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
+                "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
+            }
+            response = api_client.post(
+                "/api/runs/engine-events",
+                data=body,
+                content_type="application/json",
+                **headers,
+            )
+            assert response.status_code == status.HTTP_200_OK
+
+        tenant_id = str(user.default_organization_id)
+        post_engine_event(
+            {
+                "event_id": f"evt-replay-{replay_run.id}-run-started",
+                "type": "run_started",
+                "run_id": str(replay_run.id),
+                "tenant_id": tenant_id,
+            }
+        )
+        time.sleep(0.01)
+        post_engine_event(
+            {
+                "event_id": f"evt-replay-{replay_run.id}-node-started",
+                "type": "node_started",
+                "run_id": str(replay_run.id),
+                "tenant_id": tenant_id,
+                "node_id": "output",
+                "node_type": "output",
+                "attempt": 1,
+            }
+        )
+        time.sleep(0.01)
+        post_engine_event(
+            {
+                "event_id": f"evt-replay-{replay_run.id}-node-completed",
+                "type": "node_completed",
+                "run_id": str(replay_run.id),
+                "tenant_id": tenant_id,
+                "node_id": "output",
+                "node_type": "output",
+                "attempt": 1,
+                "output": {"output": source_output},
+            }
+        )
+        time.sleep(0.01)
+        post_engine_event(
+            {
+                "event_id": f"evt-replay-{replay_run.id}-run-completed",
+                "type": "run_completed",
+                "run_id": str(replay_run.id),
+                "tenant_id": tenant_id,
+                "output": source_output,
+            }
+        )
+
+        replay_run.refresh_from_db()
+        assert replay_run.status == "succeeded"
+        assert replay_run.output_json == source_output
+
+        # Replay output should be equivalent to source output under same completion payload.
+        source_run.refresh_from_db()
+        assert replay_run.output_json == source_run.output_json
+
+        ordered_events = list(RunEvent.objects.filter(run=replay_run).order_by("created_at", "id"))
+        ordered_types = [event.event_type for event in ordered_events]
+        assert ordered_types == [
+            "run.replay",
+            "run.updated",
+            "node_run.updated",
+            "node_run.updated",
+            "run.updated",
+        ]
+
+        node_statuses = [
+            event.payload.get("status")
+            for event in ordered_events
+            if event.event_type == "node_run.updated"
+        ]
+        assert node_statuses == ["running", "succeeded"]
+
+        node_run = NodeRun.objects.get(run=replay_run, node_id="output", attempt=1)
+        assert node_run.status == "succeeded"
+        assert node_run.output_json == {"output": source_output}
 
 
 class TestRunCancel:
@@ -773,6 +1393,50 @@ class TestEngineRunEvents:
         run.refresh_from_db()
         assert run.status == "running"
         assert run.started_at == started_at
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_node_stream_chunk_broadcasts(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        timestamp_ms = int(time.time() * 1000)
+        payload = {
+            "event_id": "evt-stream-1",
+            "type": "node_stream_chunk",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "prompt_1",
+            "node_type": "prompt",
+            "attempt": 1,
+            "timestamp": timestamp_ms,
+            "output": {
+                "chunk": "Hello",
+                "chunk_index": 1,
+            },
+        }
+        body = json.dumps(payload)
+        signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+        headers = {
+            "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
+            "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
+        }
+
+        response = api_client.post(
+            "/api/runs/engine-events",
+            data=body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["type"] == "node_stream.chunk"
+        assert response.data["data"]["node_stream"]["chunk"] == "Hello"
+        assert RunEvent.objects.filter(
+            run=run, event_type="node_stream.chunk", payload__chunk="Hello"
+        ).exists()
 
     def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Schema Graph")

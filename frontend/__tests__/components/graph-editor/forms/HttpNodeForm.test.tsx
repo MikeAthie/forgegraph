@@ -11,6 +11,33 @@ import { useState } from "react";
 import { HttpNodeForm } from "@/components/graph-editor/forms/HttpNodeForm";
 import type { NodeFormProps } from "@/components/graph-editor/NodeConfigDialog";
 
+const mockListCredentials = jest.fn();
+const mockRunHttpNodeTest = jest.fn();
+const credentialFixtures = [
+  {
+    id: "cred-openai",
+    provider: "openai",
+    name: "OpenAI Primary",
+    key_hint: "sk-...1234",
+    token_expires_at: null,
+    health_status: "healthy",
+    requires_reauth: false,
+    health_message: null,
+    created_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "cred-telegram-expired",
+    provider: "telegram",
+    name: "Telegram Bot",
+    key_hint: "bot...1234",
+    token_expires_at: null,
+    health_status: "expired",
+    requires_reauth: true,
+    health_message: "Token expired",
+    created_at: "2026-01-01T00:00:00Z",
+  },
+];
+
 // Mock validation utilities
 jest.mock("@/lib/form-validation", () => ({
   validateUrl: jest.fn((value: string) => {
@@ -30,6 +57,16 @@ jest.mock("@/lib/form-validation", () => ({
     }
     return null;
   }),
+}));
+
+jest.mock("@/lib/api", () => ({
+  credentialsApi: {
+    list: (...args: unknown[]) => mockListCredentials(...args),
+  },
+  integrationsApi: {
+    runHttpNodeTest: (...args: unknown[]) => mockRunHttpNodeTest(...args),
+  },
+  getApiErrorMessage: jest.fn((_err: unknown, fallback: string) => fallback),
 }));
 
 // Mock child components
@@ -114,6 +151,13 @@ describe("HttpNodeForm", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockListCredentials.mockImplementation(() => new Promise(() => {}));
+    mockRunHttpNodeTest.mockResolvedValue({
+      status_code: 200,
+      ok: true,
+      headers: { "content-type": "application/json" },
+      body: { ok: true },
+    });
   });
 
   describe("Initial Render", () => {
@@ -122,6 +166,8 @@ describe("HttpNodeForm", () => {
 
       expect(screen.getByLabelText(/method/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/url/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/credential provider/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^credential$/i)).toBeInTheDocument();
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByTestId("advanced-settings")).toBeInTheDocument();
     });
@@ -523,6 +569,123 @@ describe("HttpNodeForm", () => {
 
       const outputKey = screen.getByPlaceholderText("response");
       expect(outputKey).toBeInTheDocument();
+    });
+  });
+
+  describe("Credential Assignment", () => {
+    it("shows provider-specific credentials", async () => {
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({ provider: "openai" });
+
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /openai primary/i })).toBeInTheDocument();
+      });
+      expect(screen.queryByRole("option", { name: /telegram bot/i })).not.toBeInTheDocument();
+    });
+
+    it("clears selected credential when provider changes", async () => {
+      const user = setupUser();
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({ provider: "openai", credential_id: "cred-openai" });
+
+      const providerSelect = screen.getByLabelText(/credential provider/i);
+      await user.selectOptions(providerSelect, "telegram");
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalled();
+      });
+      const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
+      expect(lastCall.provider).toBe("telegram");
+      expect("credential_id" in lastCall).toBe(false);
+    });
+
+    it("shows reauth guidance when selected credential is unhealthy", async () => {
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({
+        provider: "telegram",
+        credential_id: "cred-telegram-expired",
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(/selected credential is expired/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/reconnect this credential in credentials/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("Run Test", () => {
+    it("calls HTTP run-test API with current config", async () => {
+      const user = setupUser();
+      mockListCredentials.mockResolvedValueOnce(credentialFixtures);
+      renderWithConfig({
+        provider: "gmail",
+        credential_id: "cred-openai",
+        method: "POST",
+        url: "https://api.example.com/endpoint",
+        headers: { "Content-Type": "application/json" },
+        body: "{\"hello\":\"world\"}",
+      });
+
+      await user.click(screen.getByRole("button", { name: /run test/i }));
+
+      await waitFor(() => {
+        expect(mockRunHttpNodeTest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            method: "POST",
+            provider: "gmail",
+            url: "https://api.example.com/endpoint",
+          }),
+        );
+      });
+    });
+
+    it("should not require JSON body when content-type is form-urlencoded", async () => {
+      const config = {
+        method: "POST" as const,
+        body: "To=%2B15550001111&Body=hello",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      };
+      renderWithConfig(config);
+
+      await waitFor(() => {
+        const calls = mockSetErrors.mock.calls;
+        if (calls.length > 0) {
+          const lastCall = calls[calls.length - 1][0];
+          expect(lastCall.body).toBeUndefined();
+        }
+      });
+    });
+
+    it("surfaces test results in the form", async () => {
+      const user = setupUser();
+      mockRunHttpNodeTest.mockResolvedValueOnce({
+        status_code: 201,
+        ok: true,
+        headers: { "content-type": "application/json" },
+        body: { sid: "SM123" },
+      });
+      renderWithConfig({
+        method: "POST",
+        url: "https://api.example.com/test",
+        body: "{\"hello\":\"world\"}",
+      });
+
+      await user.click(screen.getByRole("button", { name: /run test/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/test result: 201 \(ok\)/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/"sid": "SM123"/)).toBeInTheDocument();
+    });
+
+    it("does not call test API when URL is missing", async () => {
+      const user = setupUser();
+      renderWithConfig({ method: "GET", url: "" });
+
+      await user.click(screen.getByRole("button", { name: /run test/i }));
+
+      expect(mockRunHttpNodeTest).not.toHaveBeenCalled();
+      expect(screen.getByText(/url is required before running a test/i)).toBeInTheDocument();
     });
   });
 });

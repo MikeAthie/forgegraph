@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -32,9 +32,17 @@ import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson, isValidNodeType } from "../../lib/graph-types";
 import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
-import { getApiErrorMessage, marketplaceApi, runsApi, type MarketplacePackage, type NodeRunItem, type RunDetail } from "../../lib/api";
+import { getApiErrorMessage, graphsApi, marketplaceApi, runsApi, type MarketplacePackage, type NodeRunItem, type RunDetail } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
+import { ERROR_FALLBACKS } from "../../lib/error-messages";
+import {
+  GRAPH_EDITOR_SNAP_GRID,
+  getConnectionFeedback,
+  snapPositionToGrid,
+  validateGraphConnection,
+} from "../../lib/graph-editor-interactions";
+import type { AgentWizardPreset } from "../../lib/agent-wizard-presets";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
@@ -137,16 +145,25 @@ const formatDuration = (durationMs: number | null | undefined) => {
 };
 
 // Wizard button component - uses wizard context
-function WizardButton() {
+interface WizardButtonProps {
+  buttonRef?: RefObject<HTMLButtonElement | null>;
+  onBeforeStart?: () => void;
+}
+
+function WizardButton({ buttonRef, onBeforeStart }: WizardButtonProps) {
   const { startWizard, state } = useWizard();
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label="Agent Wizard"
-      onClick={() => startWizard(false)}
+      onClick={() => {
+        onBeforeStart?.();
+        startWizard(false);
+      }}
       disabled={state.isActive}
-      title="Open Agent Wizard (Ctrl+Shift+W)"
+      title="Open Agent Wizard (Ctrl+W / Ctrl+Shift+W)"
       className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
     >
       <Wand2 aria-hidden="true" className="h-4 w-4" />
@@ -215,6 +232,7 @@ export function GraphEditor({
   const [configDialogNodeType, setConfigDialogNodeType] = useState<NodeType | null>(null);
   const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
   const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
+  const [configDialogInitialLabel, setConfigDialogInitialLabel] = useState<string | null>(null);
   const [memoryConfigOpen, setMemoryConfigOpen] = useState(false);
   const [marketplaceNodes, setMarketplaceNodes] = useState<MarketplacePackage[]>([]);
 
@@ -224,6 +242,12 @@ export function GraphEditor({
   );
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
+  const wizardButtonRef = useRef<HTMLButtonElement>(null);
+  const memoryButtonRef = useRef<HTMLButtonElement>(null);
+  const palettePanelRef = useRef<HTMLDivElement>(null);
+  const canvasPanelRef = useRef<HTMLDivElement>(null);
+  const inspectorPanelRef = useRef<HTMLDivElement>(null);
+  const focusRestoreRef = useRef<HTMLElement | null>(null);
 
   const clipboardRef = useRef<ClipboardSnapshot | null>(null);
   const pasteOffsetRef = useRef(0);
@@ -235,6 +259,18 @@ export function GraphEditor({
   const editHistoryArmedRef = useRef(false);
   const editHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragHistoryPushedRef = useRef(false);
+
+  const captureFocusableTarget = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const active = document.activeElement;
+    focusRestoreRef.current = active instanceof HTMLElement ? active : null;
+  }, []);
+
+  const restoreFocusableTarget = useCallback(() => {
+    const target = focusRestoreRef.current;
+    focusRestoreRef.current = null;
+    target?.focus();
+  }, []);
 
   const takeSnapshot = useCallback((): EditorSnapshot => {
     return { nodes: deepClone(nodes), edges: deepClone(edges) };
@@ -647,16 +683,10 @@ export function GraphEditor({
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      // Prevent self-connections
-      if (connection.source === connection.target) {
-        return;
-      }
-
-      // Prevent duplicate edges
-      const exists = edges.some(
-        (e) => e.source === connection.source && e.target === connection.target
-      );
-      if (exists) {
+      const validation = validateGraphConnection(connection, edges);
+      if (!validation.valid) {
+        const feedback = getConnectionFeedback(validation.reason);
+        showInfo(feedback.title, feedback.description);
         return;
       }
 
@@ -692,10 +722,42 @@ export function GraphEditor({
     setSelectedNodeId(null);
   }, []);
 
-  const onNodeDragStop = useCallback<OnNodeDrag>((_, __, ___) => {
+  const onNodeDragStop = useCallback<OnNodeDrag>((_, node, draggingNodes) => {
     dragHistoryPushedRef.current = false;
+
+    const movedNodes = (draggingNodes && draggingNodes.length > 0 ? draggingNodes : [node]).filter(
+      (draggedNode): draggedNode is Node => Boolean(draggedNode),
+    );
+
+    const snappedPositions = new Map<string, { x: number; y: number }>();
+    for (const movedNode of movedNodes) {
+      snappedPositions.set(movedNode.id, snapPositionToGrid(movedNode.position, GRAPH_EDITOR_SNAP_GRID));
+    }
+
+    setNodes((currentNodes) => {
+      let hasChanges = false;
+      const nextNodes = currentNodes.map((currentNode) => {
+        const snapped = snappedPositions.get(currentNode.id);
+        if (!snapped) {
+          return currentNode;
+        }
+
+        if (currentNode.position.x === snapped.x && currentNode.position.y === snapped.y) {
+          return currentNode;
+        }
+
+        hasChanges = true;
+        return {
+          ...currentNode,
+          position: snapped,
+        };
+      });
+
+      return hasChanges ? nextNodes : currentNodes;
+    });
+
     setIsDirty(true);
-  }, []);
+  }, [setNodes]);
 
   const onNodeDragStart = useCallback<OnNodeDrag>(() => {
     if (dragHistoryPushedRef.current) return;
@@ -791,6 +853,7 @@ export function GraphEditor({
 
       // For prompt nodes, use the special wizard
       if (nodeType === NODE_TYPES.PROMPT) {
+        captureFocusableTarget();
         setPromptWizardSourceNodeId(sourceNodeId);
         setPromptWizardOpen(true);
         return;
@@ -799,9 +862,11 @@ export function GraphEditor({
       // For other nodes, open the config dialog
       const formInfo = getNodeTypeInfo(nodeType);
       if (formInfo) {
+        captureFocusableTarget();
         setConfigDialogNodeType(nodeType);
         setConfigDialogSourceNodeId(sourceNodeId);
         setConfigDialogInitialConfig({});
+        setConfigDialogInitialLabel(null);
         setConfigDialogOpen(true);
         return;
       }
@@ -809,7 +874,7 @@ export function GraphEditor({
       // Fallback: add node directly without config dialog
       addExecutableNode(nodeType, { sourceNodeId, config: {} });
     },
-    [addExecutableNode, nodes, selectedNodeId]
+    [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId]
   );
 
   const handleAddMarketplaceNode = useCallback(
@@ -837,13 +902,25 @@ export function GraphEditor({
           ? release.config_defaults
           : {};
 
-      addExecutableNode(executionType, {
-        sourceNodeId,
-        config,
-        label,
-      });
+      captureFocusableTarget();
+      setConfigDialogNodeType(executionType);
+      setConfigDialogSourceNodeId(sourceNodeId);
+      setConfigDialogInitialConfig(deepClone(config));
+      setConfigDialogInitialLabel(label);
+      setConfigDialogOpen(true);
+
+      const provider =
+        config && typeof config === "object" && "provider" in config
+          ? String((config as Record<string, unknown>).provider || "").trim()
+          : "";
+      if (provider) {
+        showInfo(
+          "Credential setup",
+          `Configure ${provider} credentials in this dialog before adding the node.`,
+        );
+      }
     },
-    [addExecutableNode, nodes, selectedNodeId]
+    [captureFocusableTarget, nodes, selectedNodeId]
   );
 
   const handleConfigDialogComplete = useCallback(
@@ -858,9 +935,22 @@ export function GraphEditor({
       setConfigDialogNodeType(null);
       setConfigDialogSourceNodeId(null);
       setConfigDialogInitialConfig({});
+      setConfigDialogInitialLabel(null);
     },
     [addExecutableNode, configDialogNodeType, configDialogSourceNodeId]
   );
+
+  const handleOpenMemoryConfig = useCallback(() => {
+    captureFocusableTarget();
+    setMemoryConfigOpen(true);
+  }, [captureFocusableTarget]);
+
+  const handleMemoryConfigOpenChange = useCallback((open: boolean) => {
+    setMemoryConfigOpen(open);
+    if (!open) {
+      restoreFocusableTarget();
+    }
+  }, [restoreFocusableTarget]);
 
   const handleAddNote = useCallback(() => {
     pushHistory();
@@ -993,14 +1083,14 @@ export function GraphEditor({
     // Validation: Cannot save empty graph
     if (executableNodes.length === 0) {
       showError("Cannot save empty graph", "Add at least one node to the graph");
-      return;
+      return false;
     }
 
     // Validation: Must have at least one output node
     const hasOutputNode = executableNodes.some((node) => node.type === NODE_TYPES.OUTPUT);
     if (!hasOutputNode) {
       showError("Graph needs an output node", "Add an Output node to define the graph's result");
-      return;
+      return false;
     }
     if (executableNodes.length > 0) {
       const hasTrigger = executableNodes.some((node) => (node.data as any)?.isTrigger === true);
@@ -1061,6 +1151,7 @@ export function GraphEditor({
     );
     await onSave(graphJson);
     setIsDirty(false);
+    return true;
   }, [nodes, edges, graphName, graphDescription, graphId, onSave, currentViewport, setNodes]);
 
   const runDisabledReason =
@@ -1089,7 +1180,7 @@ export function GraphEditor({
       showSuccess("Run created");
       void router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
-      showError(getApiErrorMessage(err, "Failed to start run"));
+      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
     } finally {
       setStartingRun(false);
     }
@@ -1109,7 +1200,7 @@ export function GraphEditor({
       setOverlayRun(updated);
       showSuccess("Run canceled");
     } catch (err: unknown) {
-      showError(getApiErrorMessage(err, "Failed to cancel run"));
+      showError("Cancel failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.cancel));
     } finally {
       setOverlayCanceling(false);
     }
@@ -1138,8 +1229,18 @@ export function GraphEditor({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+
+      // Cmd/Ctrl + W (and Cmd/Ctrl + Shift + W) to open Agent Wizard.
+      if ((e.metaKey || e.ctrlKey) && key === "w") {
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          wizardButtonRef.current?.click();
+        }
+      }
+
       // Cmd/Ctrl + S to save
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+      if ((e.metaKey || e.ctrlKey) && key === "s") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           if (!saving) {
@@ -1149,7 +1250,7 @@ export function GraphEditor({
       }
 
       // Cmd/Ctrl + A to select all nodes
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+      if ((e.metaKey || e.ctrlKey) && key === "a") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
@@ -1157,7 +1258,7 @@ export function GraphEditor({
       }
 
       // Cmd/Ctrl + Z (undo) and Cmd/Ctrl + Shift + Z (redo)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+      if ((e.metaKey || e.ctrlKey) && key === "z") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           if (e.shiftKey) {
@@ -1169,7 +1270,7 @@ export function GraphEditor({
       }
 
       // Cmd/Ctrl + Y to redo (Windows convention)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+      if ((e.metaKey || e.ctrlKey) && key === "y") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           handleRedo();
@@ -1177,16 +1278,17 @@ export function GraphEditor({
       }
 
       // Cmd/Ctrl + Shift + F to focus node search
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "f") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
+          palettePanelRef.current?.focus();
           paletteSearchRef.current?.focus();
           paletteSearchRef.current?.select();
         }
       }
 
       // Cmd/Ctrl + C to copy selected nodes
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+      if ((e.metaKey || e.ctrlKey) && key === "c") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           handleCopy();
@@ -1194,7 +1296,7 @@ export function GraphEditor({
       }
 
       // Cmd/Ctrl + V to paste copied nodes
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+      if ((e.metaKey || e.ctrlKey) && key === "v") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           handlePaste();
@@ -1202,7 +1304,7 @@ export function GraphEditor({
       }
 
       // Cmd/Ctrl + D to duplicate selection
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+      if ((e.metaKey || e.ctrlKey) && key === "d") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           handleDuplicateSelection();
@@ -1220,7 +1322,17 @@ export function GraphEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSave, saving, setNodes, handleUndo, handleRedo, handleCopy, handlePaste, handleDuplicateSelection, handleDeleteSelection]);
+  }, [
+    handleSave,
+    saving,
+    setNodes,
+    handleUndo,
+    handleRedo,
+    handleCopy,
+    handlePaste,
+    handleDuplicateSelection,
+    handleDeleteSelection,
+  ]);
 
   const overlaySelectedNodeRuns: NodeRunItem[] =
     overlayRun && selectedNodeId
@@ -1274,12 +1386,146 @@ export function GraphEditor({
       selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
         ? selectedNodeId
         : null;
+
+    if (preset.category === "integrations") {
+      captureFocusableTarget();
+      setConfigDialogNodeType(preset.nodeType);
+      setConfigDialogSourceNodeId(sourceNodeId);
+      setConfigDialogInitialConfig(deepClone(preset.defaultConfig));
+      setConfigDialogInitialLabel(preset.name);
+      setConfigDialogOpen(true);
+      showInfo(
+        "Shortcut ready",
+        "Confirm credential assignment in the node dialog, then add the shortcut node.",
+      );
+      return;
+    }
+
     addExecutableNode(preset.nodeType, {
       sourceNodeId,
       config: preset.defaultConfig,
       label: preset.name,
     });
-  }, [addExecutableNode, nodes, selectedNodeId]);
+  }, [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId]);
+
+  const handleWizardApplyPreset = useCallback((preset: AgentWizardPreset) => {
+    if (preset.nodes.length === 0) {
+      return;
+    }
+
+    pushHistory();
+
+    const selectedSourceNode =
+      selectedNodeId && nodes.some((node) => node.id === selectedNodeId && node.type !== NOTE_NODE_TYPE)
+        ? nodes.find((node) => node.id === selectedNodeId) ?? null
+        : null;
+
+    const maxX = nodes.reduce((max, node) => Math.max(max, node.position.x), 0);
+    const baseX = selectedSourceNode ? selectedSourceNode.position.x + 260 : maxX + 140;
+    const baseY = selectedSourceNode ? selectedSourceNode.position.y : 120;
+
+    const hasTriggerNode = nodes.some(
+      (node) => node.type !== NOTE_NODE_TYPE && (node.data as Record<string, unknown>)?.isTrigger === true,
+    );
+
+    const newNodes: Node[] = preset.nodes.map((template, index) => {
+      const nodeData: Record<string, unknown> = {
+        label: template.label,
+        config: deepClone(template.config),
+      };
+
+      if (!hasTriggerNode && index === 0) {
+        nodeData.isTrigger = true;
+      }
+      if (template.nodeType === NODE_TYPES.OUTPUT) {
+        nodeData.isEnd = true;
+      }
+
+      return {
+        id: generateId(),
+        type: template.nodeType,
+        position: {
+          x: baseX,
+          y: baseY + index * 170,
+        },
+        data: nodeData,
+        selected: false,
+      } satisfies Node;
+    });
+
+    const newEdges: Edge[] = [];
+    const appendEdge = (source: string, target: string) => {
+      const exists =
+        edges.some((edge) => edge.source === source && edge.target === target) ||
+        newEdges.some((edge) => edge.source === source && edge.target === target);
+      if (exists) {
+        return;
+      }
+      newEdges.push({
+        id: generateId(),
+        source,
+        target,
+      } as Edge);
+    };
+
+    if (selectedSourceNode && newNodes[0]) {
+      appendEdge(selectedSourceNode.id, newNodes[0].id);
+    }
+
+    for (let index = 0; index < newNodes.length - 1; index += 1) {
+      appendEdge(newNodes[index].id, newNodes[index + 1].id);
+    }
+
+    setNodes((currentNodes) => [...currentNodes.map((node) => ({ ...node, selected: false })), ...newNodes]);
+    setEdges((currentEdges) => [...currentEdges.map((edge) => ({ ...edge, selected: false })), ...newEdges]);
+    setSelectedNodeId(newNodes[newNodes.length - 1]?.id ?? null);
+    setSelectedEdgeId(null);
+    setIsDirty(true);
+
+    showSuccess("Preset applied", `${preset.name} added ${newNodes.length} nodes.`);
+  }, [edges, nodes, pushHistory, selectedNodeId, setEdges, setNodes]);
+
+  const handleWizardComplete = useCallback(async (options?: { runTest?: boolean }) => {
+    if (!options?.runTest) {
+      showSuccess("Agent wizard completed", "Your agent workflow is ready");
+      return;
+    }
+
+    if (saving || loadingVersion) {
+      showError("Cannot run test now", "Please wait for current save/version operations to finish.");
+      return;
+    }
+
+    showInfo("Starting test run", "Saving workflow and launching a test run...");
+
+    let versionId = currentVersionId;
+
+    try {
+      if (isDirty || !versionId) {
+        const saveOk = await handleSave();
+        if (!saveOk) {
+          return;
+        }
+
+        const latestVersion = await graphsApi.getLatestVersion(graphId);
+        versionId = latestVersion?.id ?? versionId;
+      }
+
+      if (!versionId) {
+        showError("Run failed", "Save the graph to create a version first.");
+        return;
+      }
+
+      setStartingRun(true);
+      const run = await runsApi.start({ graph_version_id: versionId, input_json: { mode: "wizard_test" } });
+      showSuccess("Test run started");
+      void router.push(`/runs/${run.id}`);
+    } catch (err: unknown) {
+      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
+    } finally {
+      setStartingRun(false);
+    }
+  }, [currentVersionId, graphId, handleSave, isDirty, loadingVersion, router, saving]);
 
   return (
     <ValidationProvider>
@@ -1288,46 +1534,59 @@ export function GraphEditor({
       <div className="flex h-full flex-col">
         <div className="flex flex-1 overflow-hidden">
         <AgentWizard
-          onComplete={() => {
-            showSuccess("Agent wizard completed", "Your agent workflow is ready");
+          onComplete={(options) => {
+            void handleWizardComplete(options);
+            restoreFocusableTarget();
           }}
+          onExit={restoreFocusableTarget}
           onAddNode={handleWizardAddNode}
+          onApplyPreset={handleWizardApplyPreset}
         />
         <PromptNodeWizardDialog
           open={promptWizardOpen}
           onOpenChange={(nextOpen) => {
             setPromptWizardOpen(nextOpen);
-          if (!nextOpen) {
+            if (!nextOpen) {
+              setPromptWizardSourceNodeId(null);
+              restoreFocusableTarget();
+            }
+          }}
+          onComplete={(config) => {
+            addExecutableNode(NODE_TYPES.PROMPT, {
+              sourceNodeId: promptWizardSourceNodeId,
+              config,
+            });
             setPromptWizardSourceNodeId(null);
-          }
-        }}
-        onComplete={(config) => {
-          addExecutableNode(NODE_TYPES.PROMPT, {
-            sourceNodeId: promptWizardSourceNodeId,
-            config,
-          });
-          setPromptWizardSourceNodeId(null);
-        }}
-      />
-      <NodeConfigDialog
-        isOpen={configDialogOpen}
-        onClose={() => {
-          setConfigDialogOpen(false);
-          setConfigDialogNodeType(null);
-          setConfigDialogSourceNodeId(null);
-          setConfigDialogInitialConfig({});
-        }}
-        nodeType={configDialogNodeType}
-        initialConfig={configDialogInitialConfig}
-        onSave={handleConfigDialogComplete}
-      />
-      <MemoryConfigDialog
-        graphId={graphId ?? null}
-        open={memoryConfigOpen}
-        onOpenChange={setMemoryConfigOpen}
-      />
+          }}
+        />
+        <NodeConfigDialog
+          isOpen={configDialogOpen}
+          onClose={() => {
+            setConfigDialogOpen(false);
+            setConfigDialogNodeType(null);
+            setConfigDialogSourceNodeId(null);
+            setConfigDialogInitialConfig({});
+            setConfigDialogInitialLabel(null);
+            restoreFocusableTarget();
+          }}
+          nodeType={configDialogNodeType}
+          initialConfig={configDialogInitialConfig}
+          initialLabel={configDialogInitialLabel ?? undefined}
+          onSave={handleConfigDialogComplete}
+        />
+        <MemoryConfigDialog
+          graphId={graphId ?? null}
+          open={memoryConfigOpen}
+          onOpenChange={handleMemoryConfigOpenChange}
+        />
       {/* Left Panel - Node Palette */}
-      <div className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
+      <div
+        ref={palettePanelRef}
+        role="complementary"
+        aria-label="Node palette panel"
+        tabIndex={-1}
+        className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+      >
         <NodePalette
           onAddNode={handleAddNode}
           onAddNote={handleAddNote}
@@ -1339,9 +1598,17 @@ export function GraphEditor({
       </div>
 
       {/* Center - Canvas */}
-      <div className="flex-1 relative overflow-hidden">
+      <div
+        ref={canvasPanelRef}
+        role="region"
+        aria-label="Canvas panel"
+        data-testid="graph-canvas-panel"
+        tabIndex={-1}
+        className="flex-1 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+      >
         <ReactFlow
           className="bg-background"
+          aria-label="Graph canvas"
           nodes={nodes}
           edges={typedEdges}
           onNodesChange={onNodesChange}
@@ -1356,9 +1623,11 @@ export function GraphEditor({
           onMoveEnd={(_, viewport) => setCurrentViewport(viewport)}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          fitView
+          defaultViewport={currentViewport}
+          fitView={!currentViewport}
+          onlyRenderVisibleElements
           snapToGrid
-          snapGrid={[15, 15]}
+          snapGrid={GRAPH_EDITOR_SNAP_GRID}
           selectionOnDrag
           selectionMode={SelectionMode.Partial}
           selectNodesOnDrag={false}
@@ -1443,11 +1712,12 @@ export function GraphEditor({
             </div>
             {!isEditingMetadata && (
               <>
-                <WizardButton />
+                <WizardButton buttonRef={wizardButtonRef} onBeforeStart={captureFocusableTarget} />
                 <button
+                  ref={memoryButtonRef}
                   type="button"
                   aria-label="Memory settings"
-                  onClick={() => setMemoryConfigOpen(true)}
+                  onClick={handleOpenMemoryConfig}
                   className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
                 >
                   <Brain aria-hidden="true" className="h-4 w-4" />
@@ -1484,7 +1754,13 @@ export function GraphEditor({
       </div>
 
       {/* Right Panel - Inspector */}
-      <div className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto">
+      <div
+        ref={inspectorPanelRef}
+        role="complementary"
+        aria-label="Inspector panel"
+        tabIndex={-1}
+        className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+      >
         {overlayRunId && (
           <div className="border-b border-border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">

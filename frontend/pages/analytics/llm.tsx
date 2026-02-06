@@ -11,6 +11,7 @@ import {
   type LLMAnalyticsUsage,
 } from "../../lib/api";
 import { showError, showSuccess } from "../../lib/toast";
+import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import {
   Alert,
   AlertDescription,
@@ -158,7 +159,7 @@ export default function LLMAnalyticsPage() {
       setBudget(updated);
       showSuccess("Budget updated");
     } catch (err: unknown) {
-      showError("Budget update failed", getApiErrorMessage(err, "Failed to update budget."));
+      showError("Budget update failed", getApiErrorMessage(err, ERROR_FALLBACKS.analytics.update));
     } finally {
       setIsSavingBudget(false);
     }

@@ -275,6 +275,29 @@ ALLOWED_LLM_PROVIDERS = [
     for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic").split(",")
     if provider.strip()
 ]
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# Telegram Integration
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+TELEGRAM_WEBHOOK_REQUEST_TIMEOUT_SECONDS = int(
+    os.environ.get("TELEGRAM_WEBHOOK_REQUEST_TIMEOUT_SECONDS", "15")
+)
+TELEGRAM_VOICE_TRANSCRIPTION_MODEL = os.environ.get(
+    "TELEGRAM_VOICE_TRANSCRIPTION_MODEL",
+    "whisper-1",
+)
+
+# WhatsApp (Twilio) Integration
+WHATSAPP_WEBHOOK_REQUEST_TIMEOUT_SECONDS = int(
+    os.environ.get("WHATSAPP_WEBHOOK_REQUEST_TIMEOUT_SECONDS", "15")
+)
+WHATSAPP_VOICE_TRANSCRIPTION_MODEL = os.environ.get(
+    "WHATSAPP_VOICE_TRANSCRIPTION_MODEL",
+    "whisper-1",
+)
+
+# Generic Webhook Integration
+GENERIC_WEBHOOK_SECRET = os.environ.get("GENERIC_WEBHOOK_SECRET", "")
 
 # Encryption Configuration
 # Generate key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

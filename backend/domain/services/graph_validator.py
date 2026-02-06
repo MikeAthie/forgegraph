@@ -64,6 +64,7 @@ class GraphValidator:
 
         nodes = graph_json.get("nodes", [])
         edges = graph_json.get("edges", [])
+        allow_cycles = self._is_cycles_allowed(graph_json)
 
         # Validate nodes
         node_ids: set[str] = set()
@@ -89,7 +90,7 @@ class GraphValidator:
             warnings.extend(disconnected)
 
         # Check for cycles (DAG validation)
-        if not errors:
+        if not errors and not allow_cycles:
             cycle_error = self._check_for_cycles(nodes, edges)
             if cycle_error:
                 errors.append(cycle_error)
@@ -365,3 +366,17 @@ class GraphValidator:
                 )
 
         return errors
+
+    def _is_cycles_allowed(self, graph_json: dict[str, Any]) -> bool:
+        """Check if cycle validation is explicitly disabled for this graph."""
+        metadata = graph_json.get("metadata")
+        if not isinstance(metadata, dict):
+            return False
+
+        value = metadata.get("allow_cycles")
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            return normalized in {"true", "1", "yes"}
+        return False

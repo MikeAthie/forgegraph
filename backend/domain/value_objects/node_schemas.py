@@ -38,6 +38,8 @@ HTTP_NODE_SCHEMA = {
         "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
     },
     "headers": {"type": "object", "required": False},
+    "provider": {"type": "string", "required": False},
+    "credential_id": {"type": "string", "required": False},
     "body": {"type": "string", "required": False},
     "output_key": {"type": "string", "required": False},
 }
@@ -82,6 +84,8 @@ MEMORY_NODE_SCHEMA = {
 TOOL_NODE_SCHEMA = {
     "tool": {"type": "string", "required": True, "min_length": 1},
     "version": {"type": "string", "required": False},
+    "provider": {"type": "string", "required": False},
+    "credential_id": {"type": "string", "required": False},
     "input": {"type": "any", "required": False},
     "input_path": {"type": "string", "required": False},
     "config": {"type": "object", "required": False},
@@ -194,6 +198,20 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
                     "field": field_name,
                     "message": f"'{field_name}' must be one of: {', '.join(field_schema['enum'])}",
                     "suggestion": f"Use one of the allowed values: {', '.join(field_schema['enum'])}",
+                }
+            )
+
+    if node_type == NodeType.PROMPT.value:
+        prompt_template = config.get("prompt_template")
+        prompt_id = config.get("prompt_id")
+        has_prompt_template = isinstance(prompt_template, str) and bool(prompt_template.strip())
+        has_prompt_id = isinstance(prompt_id, str) and bool(prompt_id.strip())
+        if not has_prompt_template and not has_prompt_id:
+            errors.append(
+                {
+                    "field": "prompt_template",
+                    "message": "Prompt node requires either 'prompt_template' or 'prompt_id'",
+                    "suggestion": "Set a prompt template directly or reference a prompt by id",
                 }
             )
 
