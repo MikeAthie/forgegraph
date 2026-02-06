@@ -46,6 +46,7 @@ from adapters.gateways.grpc_engine_client import (
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import (
+    broadcast_node_stream_chunk,
     broadcast_node_run_updated,
     broadcast_run_schema_validation,
     broadcast_run_updated,
@@ -1733,6 +1734,21 @@ class EngineRunEventsView(APIView):
             message = broadcast_run_schema_validation(run=run, payload=payload)
             return success_response(message)
 
+        if event_type == "node_stream_chunk":
+            output = event.get("output")
+            payload = output if isinstance(output, dict) else {}
+            chunk = str(payload.get("chunk") or "")
+            node_payload = {
+                "node_id": str(event.get("node_id") or ""),
+                "node_type": str(event.get("node_type") or ""),
+                "attempt": int(event.get("attempt") or 1),
+                "chunk": chunk,
+                "chunk_index": int(payload.get("chunk_index") or 0),
+            }
+            _save_event("node_stream.chunk", node_payload)
+            message = broadcast_node_stream_chunk(run=run, payload=node_payload)
+            return success_response(message)
+
         if event_type in {
             "run_started",
             "run_completed",
@@ -2137,6 +2153,8 @@ def _build_stream_message(*, run: Run, event: RunEvent) -> dict[str, Any]:
         message["run"] = payload
     elif event.event_type == "node_run.updated":
         message["node_run"] = payload
+    elif event.event_type == "node_stream.chunk":
+        message["node_stream"] = payload
     else:
         message["payload"] = payload
     return message

@@ -268,6 +268,27 @@ class TestGraphValidatorCycleDetection:
 
         assert not any(e["type"] == "cycle_detected" for e in errors)
 
+    def test_cycle_allowed_when_metadata_enabled(self):
+        """Cycle validation can be bypassed when allow_cycles is enabled."""
+        graph_json = {
+            "nodes": [
+                {"id": "node1", "type": "prompt", "name": "Prompt 1"},
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+                {"id": "e2", "from": "node2", "to": "node1"},
+            ],
+            "metadata": {
+                "allow_cycles": True,
+            },
+        }
+
+        errors = self.validator.validate(graph_json)
+
+        assert not any(e["type"] == "cycle_detected" for e in errors)
+
 
 class TestGraphValidatorDisconnectedNodes:
     """Tests for disconnected node detection."""

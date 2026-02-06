@@ -35,6 +35,7 @@ const (
 const (
 	sessionNamespacePrefix = "session"
 	sessionBufferKeyPrefix = "buffer"
+	checkpointPayloadV2    = 2
 )
 
 // SchedulerConfig holds scheduler configuration
@@ -122,6 +123,9 @@ type runContext struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	plan                 *service.ExecutionPlan
+	allowCycles          bool
+	defaultMaxVisits     int
+	backEdges            map[*entity.Edge]bool
 	state                *entity.State
 	callbackURL          string
 	graphJSON            string // Original graph JSON for pause/resume
@@ -138,11 +142,12 @@ type runContext struct {
 	summaryInFlight      bool
 
 	// Synchronization
-	pendingMu sync.Mutex
-	pending   map[string]int  // nodeID -> remaining dependencies
-	completed map[string]bool // nodeID -> completed successfully
-	skipped   map[string]bool // nodeID -> skipped (branch not taken)
-	running   map[string]bool // nodeID -> currently running
+	pendingMu   sync.Mutex
+	pending     map[string]int  // nodeID -> remaining dependencies
+	completed   map[string]bool // nodeID -> completed successfully
+	skipped     map[string]bool // nodeID -> skipped (branch not taken)
+	running     map[string]bool // nodeID -> currently running
+	visitCounts map[string]int  // nodeID -> number of successful executions started
 
 	// Worker coordination
 	workChan chan string
@@ -227,15 +232,18 @@ func (rc *runContext) clearSummaryInFlight() {
 // StartRun begins executing a workflow
 func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string, memoryConfigJSON string, tenantID string, sessionID string) error {
 	type checkpointData struct {
-		nodeID         string
-		stepIndex      int
-		stateSnapshot  map[string]any
-		completedNodes []string
-		skippedNodes   []string
-		graphJSON      string
-		messageBuffer  []entity.Message
-		memoryConfig   *entity.MemoryConfig
-		currentSummary *entity.Summary
+		nodeID          string
+		stepIndex       int
+		stateSnapshot   map[string]any
+		pendingSnapshot map[string]int
+		visitCounts     map[string]int
+		payloadVersion  int
+		completedNodes  []string
+		skippedNodes    []string
+		graphJSON       string
+		messageBuffer   []entity.Message
+		memoryConfig    *entity.MemoryConfig
+		currentSummary  *entity.Summary
 	}
 
 	var checkpoint *checkpointData
@@ -245,17 +253,21 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 			if checkpointGraphJSON != "" {
 				graphJSON = checkpointGraphJSON
 			}
-			stateSnapshot, bufferSnapshot, memoryConfig, summary, completed, skipped := parseCheckpointPayload(snapshot, completedNodes, skippedNodes)
+			stateSnapshot, bufferSnapshot, memoryConfig, summary, completed, skipped, pendingSnapshot, visitCounts, payloadVersion :=
+				parseCheckpointPayload(snapshot, completedNodes, skippedNodes)
 			checkpoint = &checkpointData{
-				nodeID:         nodeID,
-				stepIndex:      stepIndex,
-				stateSnapshot:  stateSnapshot,
-				completedNodes: completed,
-				skippedNodes:   skipped,
-				graphJSON:      checkpointGraphJSON,
-				messageBuffer:  bufferSnapshot,
-				memoryConfig:   memoryConfig,
-				currentSummary: summary,
+				nodeID:          nodeID,
+				stepIndex:       stepIndex,
+				stateSnapshot:   stateSnapshot,
+				pendingSnapshot: pendingSnapshot,
+				visitCounts:     visitCounts,
+				payloadVersion:  payloadVersion,
+				completedNodes:  completed,
+				skippedNodes:    skipped,
+				graphJSON:       checkpointGraphJSON,
+				messageBuffer:   bufferSnapshot,
+				memoryConfig:    memoryConfig,
+				currentSummary:  summary,
 			}
 		} else if !errors.Is(err, domain.ErrCheckpointNotFound) && !errors.Is(err, domain.ErrRunNotFound) {
 			return fmt.Errorf("failed to load checkpoint: %w", err)
@@ -292,6 +304,8 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	// Build execution plan
 	planner := service.NewExecutionPlanner()
 	plan := planner.Plan(&graph)
+	allowCycles, defaultMaxVisits := extractLoopMetadata(graph.Metadata)
+	backEdges := s.detectBackEdges(plan, allowCycles)
 
 	// Initialize state
 	var state *entity.State
@@ -346,17 +360,20 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	// Create run context
 	runCtx, cancel := context.WithCancel(ctx)
 	rc := &runContext{
-		runID:         runID,
-		ctx:           runCtx,
-		cancel:        cancel,
-		plan:          plan,
-		state:         state,
-		callbackURL:   callbackURL,
-		graphJSON:     graphJSON,
-		tenantID:      tenantID,
-		sessionID:     sessionID,
-		messageBuffer: messageBuffer,
-		memoryConfig:  parsedMemoryConfig,
+		runID:            runID,
+		ctx:              runCtx,
+		cancel:           cancel,
+		plan:             plan,
+		allowCycles:      allowCycles,
+		defaultMaxVisits: defaultMaxVisits,
+		backEdges:        backEdges,
+		state:            state,
+		callbackURL:      callbackURL,
+		graphJSON:        graphJSON,
+		tenantID:         tenantID,
+		sessionID:        sessionID,
+		messageBuffer:    messageBuffer,
+		memoryConfig:     parsedMemoryConfig,
 		currentSummary: func() *entity.Summary {
 			if checkpoint != nil {
 				return checkpoint.currentSummary
@@ -365,10 +382,11 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		}(),
 		stateSchema: stateSchema,
 		schemaMode:  schemaMode,
-		pending:     plan.CloneIndegree(),
+		pending:     s.initializePending(plan, backEdges),
 		completed:   make(map[string]bool),
 		skipped:     make(map[string]bool),
 		running:     make(map[string]bool),
+		visitCounts: make(map[string]int),
 		workChan:    make(chan string, len(plan.NodeMap)),
 	}
 	rc.memoryCtx = &port.RunContext{
@@ -390,7 +408,28 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		for _, skippedID := range checkpoint.skippedNodes {
 			rc.skipped[skippedID] = true
 		}
-		s.applyCheckpointToPending(rc)
+		if len(checkpoint.visitCounts) > 0 {
+			for nodeID, count := range checkpoint.visitCounts {
+				if _, exists := rc.plan.NodeMap[nodeID]; !exists {
+					continue
+				}
+				if count > 0 {
+					rc.visitCounts[nodeID] = count
+				}
+			}
+		}
+		for completedID := range rc.completed {
+			if rc.visitCounts[completedID] < 1 {
+				rc.visitCounts[completedID] = 1
+			}
+		}
+		if len(checkpoint.pendingSnapshot) > 0 {
+			rc.pending = s.restorePendingSnapshot(plan, checkpoint.pendingSnapshot, backEdges)
+		} else {
+			s.applyCheckpointToPending(rc)
+		}
+		rc.initialNodes = s.computeReadyNodes(rc)
+	} else {
 		rc.initialNodes = s.computeReadyNodes(rc)
 	}
 
@@ -487,12 +526,34 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		return
 	}
 
+	maxVisits := s.maxVisitsForNode(rc, node)
+
 	// Mark as running
 	rc.pendingMu.Lock()
-	if rc.completed[nodeID] || rc.skipped[nodeID] {
+	if rc.skipped[nodeID] {
 		rc.pendingMu.Unlock()
 		return
 	}
+	if rc.running[nodeID] {
+		rc.pendingMu.Unlock()
+		return
+	}
+	if rc.completed[nodeID] && rc.visitCounts[nodeID] >= maxVisits {
+		rc.pendingMu.Unlock()
+		return
+	}
+	if rc.visitCounts[nodeID] >= maxVisits {
+		rc.pendingMu.Unlock()
+		s.setError(
+			rc,
+			domain.NewValidationError(
+				"max_visits",
+				fmt.Sprintf("node %s exceeded max_visits=%d", nodeID, maxVisits),
+			),
+		)
+		return
+	}
+	rc.visitCounts[nodeID]++
 	rc.running[nodeID] = true
 	rc.pendingMu.Unlock()
 
@@ -658,6 +719,26 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 
 		// Create timeout context
 		execCtx, cancel := context.WithTimeout(rc.ctx, time.Duration(timeout)*time.Millisecond)
+		if node.Type == string(value.NodeTypePrompt) {
+			var chunkIndex int64
+			execCtx = port.WithStreamChunkEmitter(execCtx, func(chunk string) {
+				if strings.TrimSpace(chunk) == "" {
+					return
+				}
+				index := atomic.AddInt64(&chunkIndex, 1)
+				s.emitter.EmitAsync(
+					rc.newEvent(port.EventTypeNodeStreamChunk).
+						WithNode(node.ID, node.Type, node.Name).
+						WithAttempt(attempt).
+						WithOutput(
+							map[string]any{
+								"chunk":       chunk,
+								"chunk_index": index,
+							},
+						),
+				)
+			})
+		}
 
 		result, err := executor.Execute(execCtx, node, rc.state)
 		cancel()
@@ -708,9 +789,13 @@ func (s *Scheduler) calculateBackoff(policy *entity.RetryPolicy, attempt int) in
 	return policy.BackoffMs
 }
 
-// enqueueNextNodes determines which nodes to run next
-func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *port.NodeExecutionResult) {
+// enqueueNextNodes determines which nodes to run next.
+// Returns the selected next nodes and a routing exit reason for diagnostics.
+func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *port.NodeExecutionResult) ([]string, string) {
 	edges := rc.plan.GetOutgoingEdges(node.ID)
+	if len(edges) == 0 {
+		return nil, "terminal"
+	}
 
 	// For branch nodes, only enqueue specified next nodes
 	if result.HasNextNodes() {
@@ -731,18 +816,20 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 
 		if len(invalid) > 0 {
 			s.setError(rc, domain.NewValidationError("next_nodes", fmt.Sprintf("invalid next_nodes: %v", invalid)))
-			return
+			return nil, "routing_error"
 		}
 
-		nextSet := make(map[string]bool)
-		for _, n := range validNext {
-			nextSet[n] = true
-		}
+		if !rc.allowCycles {
+			nextSet := make(map[string]bool)
+			for _, n := range validNext {
+				nextSet[n] = true
+			}
 
-		// Mark non-taken branches as skipped
-		for _, edge := range edges {
-			if !nextSet[edge.To] {
-				s.markSkipped(rc, edge.To)
+			// Mark non-taken branches as skipped
+			for _, edge := range edges {
+				if !nextSet[edge.To] {
+					s.markSkipped(rc, edge.To)
+				}
 			}
 		}
 
@@ -750,7 +837,7 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 		for _, nextID := range validNext {
 			s.decrementAndEnqueue(rc, nextID)
 		}
-		return
+		return validNext, "next_nodes"
 	}
 
 	// Edge-level conditional routing for any node (when no explicit next_nodes set)
@@ -758,23 +845,31 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 		nextIDs, skippedIDs, usedConditions, err := s.evaluateEdgeConditions(rc, edges)
 		if err != nil {
 			s.setError(rc, domain.NewValidationError("edge_condition", err.Error()))
-			return
+			return nil, "condition_error"
 		}
 		if usedConditions {
-			for _, skippedID := range skippedIDs {
-				s.markSkipped(rc, skippedID)
+			if !rc.allowCycles {
+				for _, skippedID := range skippedIDs {
+					s.markSkipped(rc, skippedID)
+				}
 			}
 			for _, nextID := range nextIDs {
 				s.decrementAndEnqueue(rc, nextID)
 			}
-			return
+			if len(nextIDs) == 0 {
+				return nil, "condition_no_match"
+			}
+			return nextIDs, "condition_routing"
 		}
 	}
 
 	// For all other nodes, enqueue all children
+	nextIDs := make([]string, 0, len(edges))
 	for _, edge := range edges {
+		nextIDs = append(nextIDs, edge.To)
 		s.decrementAndEnqueue(rc, edge.To)
 	}
+	return nextIDs, "fan_out"
 }
 
 func extractNextNodesFromOutput(output any) ([]string, bool, error) {
@@ -858,18 +953,6 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 	// Update node run as completed
 	nodeRun.Status = string(value.NodeRunStatusSucceeded)
 	nodeRun.SetEnded(time.Now())
-	if result.Output != nil {
-		nodeRun.OutputJSON = map[string]any{"output": result.Output}
-	}
-	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
-
-	// Emit node completed
-	s.emitter.EmitAsync(
-		rc.newEvent(port.EventTypeNodeCompleted).
-			WithNode(nodeID, node.Type, node.Name).
-			WithOutput(nodeRun.OutputJSON).
-			WithDuration(durationMs),
-	)
 
 	// Mark completed
 	rc.pendingMu.Lock()
@@ -877,7 +960,29 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 	rc.pendingMu.Unlock()
 
 	// Determine next nodes and enqueue them
-	s.enqueueNextNodes(rc, node, result)
+	nextNodes, exitReason := s.enqueueNextNodes(rc, node, result)
+
+	loopDiagnostics := s.buildLoopDiagnostics(rc, nodeID, exitReason, nextNodes)
+	nodeOutput := map[string]any{}
+	if result.Output != nil {
+		nodeOutput["output"] = result.Output
+	}
+	if len(loopDiagnostics) > 0 {
+		nodeOutput["loop"] = loopDiagnostics
+	}
+	if len(nodeOutput) > 0 {
+		nodeRun.OutputJSON = nodeOutput
+	}
+	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+
+	// Emit node completed
+	completedEvent := rc.newEvent(port.EventTypeNodeCompleted).
+		WithNode(nodeID, node.Type, node.Name).
+		WithDuration(durationMs)
+	if len(nodeRun.OutputJSON) > 0 {
+		completedEvent = completedEvent.WithOutput(nodeRun.OutputJSON)
+	}
+	s.emitter.EmitAsync(completedEvent)
 
 	// Trigger summarization if configured
 	s.maybeTriggerSummarization(rc, node)
@@ -982,12 +1087,23 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 	for id := range rc.skipped {
 		skippedNodes = append(skippedNodes, id)
 	}
+	pendingSnapshot := make(map[string]int, len(rc.pending))
+	for id, count := range rc.pending {
+		pendingSnapshot[id] = count
+	}
+	visitCounts := make(map[string]int, len(rc.visitCounts))
+	for id, count := range rc.visitCounts {
+		visitCounts[id] = count
+	}
 	rc.pendingMu.Unlock()
 
 	checkpointPayload := map[string]any{
-		"state":     rc.state.Snapshot(),
-		"completed": completedNodes,
-		"skipped":   skippedNodes,
+		"checkpoint_version": checkpointPayloadV2,
+		"state":              rc.state.Snapshot(),
+		"completed":          completedNodes,
+		"skipped":            skippedNodes,
+		"pending":            pendingSnapshot,
+		"visit_counts":       visitCounts,
 	}
 	if rc.messageBuffer != nil {
 		bufferSnapshot := rc.messageBuffer.Snapshot()
@@ -1043,7 +1159,14 @@ func (s *Scheduler) decrementPendingForCheckpoint(rc *runContext, nodeID string)
 func (s *Scheduler) computeReadyNodes(rc *runContext) []string {
 	ready := make([]string, 0, len(rc.plan.NodeMap))
 	for nodeID := range rc.plan.NodeMap {
-		if rc.completed[nodeID] || rc.skipped[nodeID] {
+		if rc.skipped[nodeID] {
+			continue
+		}
+		maxVisits := s.maxVisitsForNode(rc, rc.plan.GetNode(nodeID))
+		if rc.completed[nodeID] && (!rc.allowCycles || rc.visitCounts[nodeID] >= maxVisits) {
+			continue
+		}
+		if rc.visitCounts[nodeID] >= maxVisits {
 			continue
 		}
 		if rc.pending[nodeID] <= 0 {
@@ -1051,6 +1174,124 @@ func (s *Scheduler) computeReadyNodes(rc *runContext) []string {
 		}
 	}
 	return ready
+}
+
+func (s *Scheduler) initializePending(plan *service.ExecutionPlan, backEdges map[*entity.Edge]bool) map[string]int {
+	pending := plan.CloneIndegree()
+	if len(backEdges) == 0 {
+		return pending
+	}
+
+	for _, edges := range plan.EdgeMap {
+		for _, edge := range edges {
+			if !backEdges[edge] {
+				continue
+			}
+			pending[edge.To]--
+			if pending[edge.To] < 0 {
+				pending[edge.To] = 0
+			}
+		}
+	}
+	return pending
+}
+
+func (s *Scheduler) restorePendingSnapshot(plan *service.ExecutionPlan, snapshot map[string]int, backEdges map[*entity.Edge]bool) map[string]int {
+	pending := s.initializePending(plan, backEdges)
+	if len(snapshot) == 0 {
+		return pending
+	}
+
+	for nodeID := range pending {
+		value, ok := snapshot[nodeID]
+		if !ok {
+			continue
+		}
+		if value < 0 {
+			pending[nodeID] = 0
+			continue
+		}
+		pending[nodeID] = value
+	}
+
+	return pending
+}
+
+func (s *Scheduler) detectBackEdges(plan *service.ExecutionPlan, allowCycles bool) map[*entity.Edge]bool {
+	if !allowCycles {
+		return nil
+	}
+
+	backEdges := make(map[*entity.Edge]bool)
+	color := make(map[string]int, len(plan.NodeMap))
+
+	var dfs func(nodeID string)
+	dfs = func(nodeID string) {
+		color[nodeID] = 1 // gray
+		for _, edge := range plan.GetOutgoingEdges(nodeID) {
+			nextID := edge.To
+			switch color[nextID] {
+			case 0:
+				dfs(nextID)
+			case 1:
+				backEdges[edge] = true
+			}
+		}
+		color[nodeID] = 2 // black
+	}
+
+	for _, node := range plan.Graph.Nodes {
+		if color[node.ID] == 0 {
+			dfs(node.ID)
+		}
+	}
+	for nodeID := range plan.NodeMap {
+		if color[nodeID] == 0 {
+			dfs(nodeID)
+		}
+	}
+
+	return backEdges
+}
+
+func (s *Scheduler) maxVisitsForNode(rc *runContext, node *entity.Node) int {
+	if node != nil && node.Config != nil {
+		if maxVisits := coerceInt(node.Config["max_visits"]); maxVisits > 0 {
+			return maxVisits
+		}
+	}
+	if rc != nil && rc.allowCycles {
+		if rc.defaultMaxVisits > 0 {
+			return rc.defaultMaxVisits
+		}
+		return 25
+	}
+	return 1
+}
+
+func (s *Scheduler) buildLoopDiagnostics(rc *runContext, nodeID, exitReason string, nextNodes []string) map[string]any {
+	if rc == nil || nodeID == "" {
+		return nil
+	}
+
+	rc.pendingMu.Lock()
+	iteration := rc.visitCounts[nodeID]
+	rc.pendingMu.Unlock()
+
+	if !rc.allowCycles && iteration <= 1 {
+		return nil
+	}
+
+	diagnostics := map[string]any{
+		"iteration_index": iteration,
+	}
+	if exitReason != "" {
+		diagnostics["exit_reason"] = exitReason
+	}
+	if len(nextNodes) > 0 {
+		diagnostics["next_nodes"] = nextNodes
+	}
+	return diagnostics
 }
 
 func (s *Scheduler) getCacheConfig(node *entity.Node) (enabled bool, ttlSeconds int) {
@@ -1300,14 +1541,16 @@ func parseMemoryConfig(memoryConfigJSON string) *entity.MemoryConfig {
 	return cfg
 }
 
-func parseCheckpointPayload(stateSnapshot map[string]any, completedNodes []string, skippedNodes []string) (map[string]any, []entity.Message, *entity.MemoryConfig, *entity.Summary, []string, []string) {
+func parseCheckpointPayload(stateSnapshot map[string]any, completedNodes []string, skippedNodes []string) (map[string]any, []entity.Message, *entity.MemoryConfig, *entity.Summary, []string, []string, map[string]int, map[string]int, int) {
 	if stateSnapshot == nil {
-		return map[string]any{}, nil, nil, nil, completedNodes, skippedNodes
+		return map[string]any{}, nil, nil, nil, completedNodes, skippedNodes, nil, nil, 0
 	}
 
+	payloadVersion := coerceInt(stateSnapshot["checkpoint_version"])
 	rawState, hasState := stateSnapshot["state"].(map[string]any)
 	if !hasState {
-		return stateSnapshot, nil, nil, nil, completedNodes, skippedNodes
+		// Legacy payload format where the raw map is the state snapshot.
+		return stateSnapshot, nil, nil, nil, completedNodes, skippedNodes, nil, nil, 1
 	}
 
 	parsedCompleted := completedNodes
@@ -1335,7 +1578,21 @@ func parseCheckpointPayload(stateSnapshot map[string]any, completedNodes []strin
 		summary = decodeSummary(rawSummary)
 	}
 
-	return rawState, bufferSnapshot, memoryConfig, summary, parsedCompleted, parsedSkipped
+	var pendingSnapshot map[string]int
+	if rawPending, ok := stateSnapshot["pending"]; ok {
+		pendingSnapshot = decodeStringIntMap(rawPending)
+	}
+
+	var visitCounts map[string]int
+	if rawVisitCounts, ok := stateSnapshot["visit_counts"]; ok {
+		visitCounts = decodeStringIntMap(rawVisitCounts)
+	}
+
+	if payloadVersion <= 0 {
+		payloadVersion = 1
+	}
+
+	return rawState, bufferSnapshot, memoryConfig, summary, parsedCompleted, parsedSkipped, pendingSnapshot, visitCounts, payloadVersion
 }
 
 func toStringSlice(raw []any) []string {
@@ -1415,6 +1672,27 @@ func decodeSummary(raw any) *entity.Summary {
 	return &summary
 }
 
+func decodeStringIntMap(raw any) map[string]int {
+	bytes, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+
+	decoded := make(map[string]any)
+	if err := json.Unmarshal(bytes, &decoded); err != nil {
+		return nil
+	}
+
+	out := make(map[string]int, len(decoded))
+	for key, value := range decoded {
+		if key == "" {
+			continue
+		}
+		out[key] = coerceInt(value)
+	}
+	return out
+}
+
 func (s *Scheduler) shouldUseSessionMemory(cfg *entity.MemoryConfig) bool {
 	if cfg == nil {
 		return false
@@ -1465,10 +1743,28 @@ func sessionBufferKey(sessionID string) string {
 // decrementAndEnqueue reduces pending count and enqueues if ready
 func (s *Scheduler) decrementAndEnqueue(rc *runContext, nodeID string) {
 	rc.pendingMu.Lock()
-	defer rc.pendingMu.Unlock()
+
+	node := rc.plan.GetNode(nodeID)
+	maxVisits := s.maxVisitsForNode(rc, node)
 
 	// Skip if already completed, skipped, or running
-	if rc.completed[nodeID] || rc.skipped[nodeID] || rc.running[nodeID] {
+	if rc.skipped[nodeID] || rc.running[nodeID] {
+		rc.pendingMu.Unlock()
+		return
+	}
+	if rc.completed[nodeID] && rc.visitCounts[nodeID] >= maxVisits {
+		rc.pendingMu.Unlock()
+		return
+	}
+	if rc.visitCounts[nodeID] >= maxVisits {
+		rc.pendingMu.Unlock()
+		s.setError(
+			rc,
+			domain.NewValidationError(
+				"max_visits",
+				fmt.Sprintf("node %s exceeded max_visits=%d", nodeID, maxVisits),
+			),
+		)
 		return
 	}
 
@@ -1487,6 +1783,7 @@ func (s *Scheduler) decrementAndEnqueue(rc *runContext, nodeID string) {
 			}
 		}()
 	}
+	rc.pendingMu.Unlock()
 }
 
 // markSkipped marks a node and its descendants as skipped
@@ -1514,10 +1811,12 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 		s.repository.CreateNodeRun(rc.ctx, nodeRun)
 
 		// Emit skipped event
-		s.emitter.EmitAsync(
-			rc.newEvent(port.EventTypeNodeSkipped).
-				WithNode(nodeID, node.Type, node.Name),
-		)
+		skippedEvent := rc.newEvent(port.EventTypeNodeSkipped).
+			WithNode(nodeID, node.Type, node.Name)
+		if diagnostics := s.buildLoopDiagnostics(rc, nodeID, "skipped", nil); len(diagnostics) > 0 {
+			skippedEvent = skippedEvent.WithOutput(map[string]any{"loop": diagnostics})
+		}
+		s.emitter.EmitAsync(skippedEvent)
 	}
 
 	// Recursively skip children that have only this as parent
@@ -1754,6 +2053,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	// Build execution plan
 	planner := service.NewExecutionPlanner()
 	plan := planner.Plan(&graph)
+	allowCycles, defaultMaxVisits := extractLoopMetadata(graph.Metadata)
+	backEdges := s.detectBackEdges(plan, allowCycles)
 
 	// Restore state from snapshot
 	state := entity.NewStateFromSnapshot(stateSnapshot)
@@ -1785,22 +2086,26 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		resumeBuffer = entity.NewMessageBuffer(resumeMemoryConfig.Tier1.BufferSize)
 	}
 	rc := &runContext{
-		runID:         runID,
-		ctx:           runCtx,
-		cancel:        cancel,
-		plan:          plan,
-		state:         state,
-		graphJSON:     graphJSON,
-		tenantID:      tenantID,
-		messageBuffer: resumeBuffer,
-		memoryConfig:  resumeMemoryConfig,
-		stateSchema:   stateSchema,
-		schemaMode:    schemaMode,
-		pending:       plan.CloneIndegree(),
-		completed:     make(map[string]bool),
-		skipped:       make(map[string]bool),
-		running:       make(map[string]bool),
-		workChan:      make(chan string, len(plan.NodeMap)),
+		runID:            runID,
+		ctx:              runCtx,
+		cancel:           cancel,
+		plan:             plan,
+		allowCycles:      allowCycles,
+		defaultMaxVisits: defaultMaxVisits,
+		backEdges:        backEdges,
+		state:            state,
+		graphJSON:        graphJSON,
+		tenantID:         tenantID,
+		messageBuffer:    resumeBuffer,
+		memoryConfig:     resumeMemoryConfig,
+		stateSchema:      stateSchema,
+		schemaMode:       schemaMode,
+		pending:          s.initializePending(plan, backEdges),
+		completed:        make(map[string]bool),
+		skipped:          make(map[string]bool),
+		running:          make(map[string]bool),
+		visitCounts:      make(map[string]int),
+		workChan:         make(chan string, len(plan.NodeMap)),
 	}
 	rc.memoryCtx = &port.RunContext{
 		MemoryBuffer:   rc.messageBuffer,
@@ -1822,6 +2127,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	// Mark previously completed nodes
 	for _, completedID := range completedNodes {
 		rc.completed[completedID] = true
+		if rc.visitCounts[completedID] < 1 {
+			rc.visitCounts[completedID] = 1
+		}
 	}
 	// Mark skipped nodes from paused state
 	for _, skippedID := range skippedNodes {
@@ -1829,6 +2137,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	}
 	// Also mark the human gate node as completed
 	rc.completed[nodeID] = true
+	if rc.visitCounts[nodeID] < 1 {
+		rc.visitCounts[nodeID] = 1
+	}
 
 	// Rebuild pending counts based on completed/skipped nodes
 	s.applyCheckpointToPending(rc)
@@ -2031,4 +2342,24 @@ func extractStateSchemaMetadata(metadata map[string]any) (map[string]any, string
 		return rawSchema, mode
 	}
 	return nil, mode
+}
+
+func extractLoopMetadata(metadata map[string]any) (bool, int) {
+	if metadata == nil {
+		return false, 1
+	}
+
+	allowCycles, ok := coerceBool(metadata["allow_cycles"])
+	if !ok || !allowCycles {
+		return false, 1
+	}
+
+	defaultMaxVisits := 25
+	if value := coerceInt(metadata["default_max_visits"]); value > 0 {
+		defaultMaxVisits = value
+	} else if value := coerceInt(metadata["max_node_visits"]); value > 0 {
+		defaultMaxVisits = value
+	}
+
+	return true, defaultMaxVisits
 }

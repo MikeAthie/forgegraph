@@ -21,11 +21,12 @@ const (
 	EventTypeRunSchemaValidation EventType = "run.schema_validation"
 
 	// Node-level events
-	EventTypeNodeStarted   EventType = "node_started"
-	EventTypeNodeCompleted EventType = "node_completed"
-	EventTypeNodeFailed    EventType = "node_failed"
-	EventTypeNodeSkipped   EventType = "node_skipped"
-	EventTypeNodeRetrying  EventType = "node_retrying"
+	EventTypeNodeStarted     EventType = "node_started"
+	EventTypeNodeCompleted   EventType = "node_completed"
+	EventTypeNodeFailed      EventType = "node_failed"
+	EventTypeNodeSkipped     EventType = "node_skipped"
+	EventTypeNodeRetrying    EventType = "node_retrying"
+	EventTypeNodeStreamChunk EventType = "node_stream_chunk"
 )
 
 const EventVersion = 1
@@ -49,7 +50,7 @@ func (t EventType) IsRunEvent() bool {
 func (t EventType) IsNodeEvent() bool {
 	switch t {
 	case EventTypeNodeStarted, EventTypeNodeCompleted, EventTypeNodeFailed,
-		EventTypeNodeSkipped, EventTypeNodeRetrying:
+		EventTypeNodeSkipped, EventTypeNodeRetrying, EventTypeNodeStreamChunk:
 		return true
 	}
 	return false

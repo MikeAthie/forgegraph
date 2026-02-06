@@ -197,10 +197,19 @@ type RunDeltaPayload = {
   error_message: string;
 };
 
+type NodeStreamPayload = {
+  node_id: string;
+  node_type: string;
+  attempt: number;
+  chunk: string;
+  chunk_index?: number;
+};
+
 type RunsWsMessage =
   | { type: "connected"; run_id: string }
   | { type: "run.updated"; run_id: string; run: RunDeltaPayload }
   | { type: "node_run.updated"; run_id: string; node_run: NodeRunItem }
+  | { type: "node_stream.chunk"; run_id: string; node_stream: NodeStreamPayload }
   | { type: string; [key: string]: unknown };
 
 const sortNodeRuns = (nodeRuns: NodeRunItem[]) => {
@@ -225,6 +234,8 @@ const sortNodeRuns = (nodeRuns: NodeRunItem[]) => {
 const isTerminalRunStatus = (status: string) => {
   return status === "succeeded" || status === "failed" || status === "canceled";
 };
+
+const getNodeAttemptKey = (nodeId: string, attempt: number) => `${nodeId}:${attempt}`;
 
 export default function RunDetailPage() {
   const router = useRouter();
@@ -253,6 +264,7 @@ export default function RunDetailPage() {
   const [lastStreamTimestamp, setLastStreamTimestamp] = useState<string | null>(null);
   const [streamReconnectCount, setStreamReconnectCount] = useState(0);
   const [lastReconnectFrom, setLastReconnectFrom] = useState<string | null>(null);
+  const [nodeStreamText, setNodeStreamText] = useState<Record<string, string>>({});
   const lastStreamTimestampRef = useRef<string | null>(null);
 
   const runStatusRef = useRef<string | null>(null);
@@ -433,19 +445,20 @@ export default function RunDetailPage() {
   const handleStreamMessage = useCallback((message: RunsWsMessage | null) => {
     if (!message) return;
 
+    const messageTimestamp =
+      typeof (message as unknown as { timestamp?: string }).timestamp === "string"
+        ? (message as unknown as { timestamp: string }).timestamp
+        : null;
+    if (messageTimestamp) {
+      setLastStreamTimestamp(messageTimestamp);
+      lastStreamTimestampRef.current = messageTimestamp;
+    }
+
     if (message.type === "connected") {
       return;
     }
 
     if (message.type === "run.updated" && "run" in message) {
-      const messageTimestamp =
-        typeof (message as unknown as { timestamp?: string }).timestamp === "string"
-          ? (message as unknown as { timestamp: string }).timestamp
-          : null;
-      if (messageTimestamp) {
-        setLastStreamTimestamp(messageTimestamp);
-        lastStreamTimestampRef.current = messageTimestamp;
-      }
       const runDelta = (message as { run: RunDeltaPayload }).run;
       setRun((prev) => {
         if (!prev) return prev;
@@ -459,15 +472,20 @@ export default function RunDetailPage() {
     }
 
     if (message.type === "node_run.updated" && "node_run" in message) {
-      const messageTimestamp =
-        typeof (message as unknown as { timestamp?: string }).timestamp === "string"
-          ? (message as unknown as { timestamp: string }).timestamp
-          : null;
-      if (messageTimestamp) {
-        setLastStreamTimestamp(messageTimestamp);
-        lastStreamTimestampRef.current = messageTimestamp;
-      }
       const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
+      const nodeStreamKey = getNodeAttemptKey(updatedNodeRun.node_id, updatedNodeRun.attempt);
+      if (
+        String(updatedNodeRun.status) === "succeeded" ||
+        String(updatedNodeRun.status) === "failed" ||
+        String(updatedNodeRun.status) === "skipped"
+      ) {
+        setNodeStreamText((prev) => {
+          if (!(nodeStreamKey in prev)) return prev;
+          const next = { ...prev };
+          delete next[nodeStreamKey];
+          return next;
+        });
+      }
       setRun((prev) => {
         if (!prev) return prev;
 
@@ -490,6 +508,26 @@ export default function RunDetailPage() {
           node_runs: sortNodeRuns(nextNodeRuns),
         };
       });
+      setLastUpdatedAt(new Date());
+      return;
+    }
+
+    if (message.type === "node_stream.chunk") {
+      const rawPayload = ("node_stream" in message
+        ? (message as { node_stream: unknown }).node_stream
+        : (message as { payload?: unknown }).payload) as Record<string, unknown> | undefined;
+      if (!rawPayload) return;
+
+      const nodeId = String(rawPayload.node_id ?? "");
+      const attempt = Number(rawPayload.attempt ?? 1);
+      const chunk = String(rawPayload.chunk ?? "");
+      if (!nodeId || !chunk) return;
+
+      const streamKey = getNodeAttemptKey(nodeId, Number.isFinite(attempt) ? attempt : 1);
+      setNodeStreamText((prev) => ({
+        ...prev,
+        [streamKey]: `${prev[streamKey] ?? ""}${chunk}`,
+      }));
       setLastUpdatedAt(new Date());
     }
   }, []);
@@ -534,6 +572,7 @@ export default function RunDetailPage() {
 
   useEffect(() => {
     if (!runId) return;
+    setNodeStreamText({});
     void fetchRun();
   }, [runId, fetchRun]);
 
@@ -761,6 +800,7 @@ export default function RunDetailPage() {
 
       source.addEventListener("run.updated", handleSseEvent);
       source.addEventListener("node_run.updated", handleSseEvent);
+      source.addEventListener("node_stream.chunk", handleSseEvent);
       source.addEventListener("connected", () => setSseConnected(true));
       source.onmessage = handleSseEvent;
     };
@@ -802,6 +842,13 @@ export default function RunDetailPage() {
     if (!selectedNodeRunId) return null;
     return run.node_runs.find((nodeRun) => nodeRun.id === selectedNodeRunId) ?? null;
   }, [run, selectedNodeRunId]);
+
+  const selectedNodeStreamText = useMemo(() => {
+    if (!selectedNodeRun) return "";
+    return (
+      nodeStreamText[getNodeAttemptKey(selectedNodeRun.node_id, selectedNodeRun.attempt)] ?? ""
+    );
+  }, [selectedNodeRun, nodeStreamText]);
 
   const displayedRunDurationMs = useMemo(() => {
     if (!run) return null;
@@ -1236,9 +1283,20 @@ export default function RunDetailPage() {
 
                         <details open>
                           <summary className="cursor-pointer text-sm font-medium">Response</summary>
-                          <pre className="mt-2 p-4 bg-muted rounded-lg border border-border/50 overflow-auto max-h-[45vh] text-sm font-mono whitespace-pre-wrap">
-                            {formatJsonForDisplay(selectedNodeRun.output_json)}
-                          </pre>
+                          {selectedNodeRun.node_type === "prompt" &&
+                          !selectedNodeRun.output_json &&
+                          selectedNodeStreamText ? (
+                            <pre className="mt-2 p-4 bg-muted rounded-lg border border-border/50 overflow-auto max-h-[45vh] text-sm font-mono whitespace-pre-wrap">
+                              {selectedNodeStreamText}
+                              {String(selectedNodeRun.status) === "running" && (
+                                <span className="inline-block animate-pulse">▍</span>
+                              )}
+                            </pre>
+                          ) : (
+                            <pre className="mt-2 p-4 bg-muted rounded-lg border border-border/50 overflow-auto max-h-[45vh] text-sm font-mono whitespace-pre-wrap">
+                              {formatJsonForDisplay(selectedNodeRun.output_json)}
+                            </pre>
+                          )}
                         </details>
 
                         <details open={String(selectedNodeRun.status) === "failed"}>

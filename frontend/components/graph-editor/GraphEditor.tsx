@@ -35,6 +35,7 @@ import { getLayoutedElements } from "../../lib/graph-layout";
 import { getApiErrorMessage, runsApi, type NodeRunItem, type RunDetail } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
+import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
@@ -1034,7 +1035,7 @@ export function GraphEditor({
       showSuccess("Run created");
       void router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
-      showError(getApiErrorMessage(err, "Failed to start run"));
+      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
     } finally {
       setStartingRun(false);
     }
@@ -1054,7 +1055,7 @@ export function GraphEditor({
       setOverlayRun(updated);
       showSuccess("Run canceled");
     } catch (err: unknown) {
-      showError(getApiErrorMessage(err, "Failed to cancel run"));
+      showError("Cancel failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.cancel));
     } finally {
       setOverlayCanceling(false);
     }

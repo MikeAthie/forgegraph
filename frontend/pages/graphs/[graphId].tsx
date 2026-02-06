@@ -11,6 +11,7 @@ import {
   graphsApi,
   type GraphDetail,
 } from "../../lib/api";
+import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import type { GraphJson, GraphVersion } from "../../lib/graph-types";
 
 // Dynamic import for the GraphEditor to avoid SSR issues with React Flow
@@ -101,7 +102,7 @@ export default function GraphDetailPage() {
         const updatedGraph = await graphsApi.get(graphId);
         setGraph(updatedGraph);
       } catch (err: unknown) {
-        showError(getApiErrorMessage(err, "Failed to save graph"));
+        showError("Save failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
         throw err;
       } finally {
         setSaving(false);
@@ -119,7 +120,7 @@ export default function GraphDetailPage() {
         const version = await graphsApi.getVersion(graphId, versionId);
         setActiveVersion(version);
       } catch (err: unknown) {
-        showError(getApiErrorMessage(err, "Failed to load graph version"));
+        showError("Load failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.load));
         throw err;
       } finally {
         setLoadingVersion(false);
@@ -139,7 +140,7 @@ export default function GraphDetailPage() {
         );
         showSuccess("Graph info updated");
       } catch (err: unknown) {
-        showError(getApiErrorMessage(err, "Failed to update graph info"));
+        showError("Update failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
         throw err;
       }
     },

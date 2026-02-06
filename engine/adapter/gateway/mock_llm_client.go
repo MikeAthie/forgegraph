@@ -113,6 +113,22 @@ func (m *MockLLMClient) Complete(ctx context.Context, request *executor.LLMReque
 	}, nil
 }
 
+// StreamComplete emits the full mock response as one chunk.
+func (m *MockLLMClient) StreamComplete(
+	ctx context.Context,
+	request *executor.LLMRequest,
+	onChunk func(string),
+) (*executor.LLMResponse, error) {
+	response, err := m.Complete(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if onChunk != nil && response != nil && response.Content != "" {
+		onChunk(response.Content)
+	}
+	return response, nil
+}
+
 // Reset clears call counts and request history
 func (m *MockLLMClient) Reset() {
 	m.CallCount = 0
@@ -154,6 +170,22 @@ func (e *EchoLLMClient) Complete(ctx context.Context, request *executor.LLMReque
 	}, nil
 }
 
+// StreamComplete emits the echoed response as one chunk.
+func (e *EchoLLMClient) StreamComplete(
+	ctx context.Context,
+	request *executor.LLMRequest,
+	onChunk func(string),
+) (*executor.LLMResponse, error) {
+	response, err := e.Complete(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if onChunk != nil && response != nil && response.Content != "" {
+		onChunk(response.Content)
+	}
+	return response, nil
+}
+
 // FailingLLMClient always returns an error (useful for retry testing)
 type FailingLLMClient struct {
 	FailCount    int // Number of times to fail before succeeding
@@ -192,6 +224,22 @@ func (f *FailingLLMClient) Complete(ctx context.Context, request *executor.LLMRe
 		Model:        request.Model,
 		FinishReason: "stop",
 	}, nil
+}
+
+// StreamComplete mirrors Complete and emits the returned content as one chunk.
+func (f *FailingLLMClient) StreamComplete(
+	ctx context.Context,
+	request *executor.LLMRequest,
+	onChunk func(string),
+) (*executor.LLMResponse, error) {
+	response, err := f.Complete(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if onChunk != nil && response != nil && response.Content != "" {
+		onChunk(response.Content)
+	}
+	return response, nil
 }
 
 // Reset resets the failure counter

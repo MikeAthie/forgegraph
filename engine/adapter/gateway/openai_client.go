@@ -2,6 +2,7 @@
 package gateway
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/forgegraph/engine/adapter/executor"
@@ -23,10 +25,16 @@ type OpenAIClient struct {
 
 // OpenAI API request/response structures
 type openAIRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openAIMessage `json:"messages"`
-	Temperature float64         `json:"temperature,omitempty"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
+	Model         string               `json:"model"`
+	Messages      []openAIMessage      `json:"messages"`
+	Temperature   float64              `json:"temperature,omitempty"`
+	MaxTokens     int                  `json:"max_tokens,omitempty"`
+	Stream        bool                 `json:"stream,omitempty"`
+	StreamOptions *openAIStreamOptions `json:"stream_options,omitempty"`
+}
+
+type openAIStreamOptions struct {
+	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
 type openAIMessage struct {
@@ -49,6 +57,24 @@ type openAIResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
+	Error *openAIError `json:"error,omitempty"`
+}
+
+type openAIStreamResponse struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index int `json:"index"`
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 	Error *openAIError `json:"error,omitempty"`
 }
 
@@ -209,6 +235,156 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			TotalTokens:      apiResp.Usage.TotalTokens,
 		},
 		FinishReason: choice.FinishReason,
+	}, nil
+}
+
+// StreamComplete sends a streaming completion request and emits incremental chunks.
+func (c *OpenAIClient) StreamComplete(
+	ctx context.Context,
+	request *executor.LLMRequest,
+	onChunk func(string),
+) (*executor.LLMResponse, error) {
+	messages := make([]openAIMessage, 0, 2)
+	if request.SystemPrompt != "" {
+		messages = append(messages, openAIMessage{
+			Role:    "system",
+			Content: request.SystemPrompt,
+		})
+	}
+	if len(request.Messages) > 0 {
+		for _, msg := range request.Messages {
+			messages = append(messages, openAIMessage{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+	} else {
+		messages = append(messages, openAIMessage{
+			Role:    "user",
+			Content: request.Prompt,
+		})
+	}
+
+	model := request.Model
+	if model == "" {
+		model = "gpt-4"
+	}
+
+	apiReq := openAIRequest{
+		Model:         model,
+		Messages:      messages,
+		Temperature:   request.Temperature,
+		MaxTokens:     request.MaxTokens,
+		Stream:        true,
+		StreamOptions: &openAIStreamOptions{IncludeUsage: true},
+	}
+
+	reqBody, err := json.Marshal(apiReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseURL+"/chat/completions",
+		bytes.NewReader(reqBody),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		errMsg := fmt.Sprintf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			return nil, &retryableError{msg: errMsg}
+		}
+		return nil, fmt.Errorf(errMsg)
+	}
+
+	var content strings.Builder
+	responseModel := ""
+	finishReason := ""
+	var usage *executor.LLMUsage
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "[DONE]" {
+			break
+		}
+
+		var chunk openAIStreamResponse
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			return nil, fmt.Errorf("failed to parse stream chunk: %w", err)
+		}
+		if chunk.Error != nil {
+			return nil, fmt.Errorf(
+				"OpenAI API error: %s (type: %s, code: %s)",
+				chunk.Error.Message,
+				chunk.Error.Type,
+				chunk.Error.Code,
+			)
+		}
+
+		if responseModel == "" && chunk.Model != "" {
+			responseModel = chunk.Model
+		}
+
+		if len(chunk.Choices) > 0 {
+			delta := chunk.Choices[0].Delta.Content
+			if delta != "" {
+				content.WriteString(delta)
+				if onChunk != nil {
+					onChunk(delta)
+				}
+			}
+			if chunk.Choices[0].FinishReason != "" {
+				finishReason = chunk.Choices[0].FinishReason
+			}
+		}
+
+		if chunk.Usage != nil {
+			usage = &executor.LLMUsage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed reading stream: %w", err)
+	}
+
+	if responseModel == "" {
+		responseModel = model
+	}
+
+	return &executor.LLMResponse{
+		Content:      content.String(),
+		Model:        responseModel,
+		Usage:        usage,
+		FinishReason: finishReason,
 	}, nil
 }
 

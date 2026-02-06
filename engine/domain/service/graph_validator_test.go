@@ -112,6 +112,29 @@ func TestGraphValidator_DetectsCycle(t *testing.T) {
 	}
 }
 
+func TestGraphValidator_AllowsCycleWhenEnabledInMetadata(t *testing.T) {
+	graph := &entity.Graph{
+		Nodes: []entity.Node{
+			{ID: "a", Type: "transform", Name: "A"},
+			{ID: "b", Type: "output", Name: "B"},
+		},
+		Edges: []entity.Edge{
+			{ID: "e1", From: "a", To: "b"},
+			{ID: "e2", From: "b", To: "a"}, // Cycle
+		},
+		Metadata: map[string]any{
+			"allow_cycles": true,
+		},
+	}
+
+	validator := NewGraphValidator()
+	err := validator.Validate(graph)
+
+	if err != nil {
+		t.Errorf("Expected cycle to be allowed, got: %v", err)
+	}
+}
+
 func TestGraphValidator_DuplicateNodeID(t *testing.T) {
 	graph := &entity.Graph{
 		Nodes: []entity.Node{

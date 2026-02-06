@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import type { GraphJson, GraphVersion, CreateGraphVersionInput } from "./graph-types";
+import { sanitizeErrorMessage } from "./error-messages";
 
 export interface User {
   id: string;
@@ -48,24 +49,49 @@ export type ApiErrorResponse = {
   meta: ApiMeta;
 };
 
-export const getApiErrorMessage = (err: unknown, fallback: string) => {
-  const data = (err as AxiosError)?.response?.data as any;
+/**
+ * Extract and sanitize an error message from an API error.
+ *
+ * This function extracts the error message from various response formats
+ * and sanitizes it to provide user-friendly messages instead of technical details.
+ *
+ * @param err - The error object (typically an AxiosError)
+ * @param fallback - Fallback message if no error message can be extracted
+ * @returns A user-friendly error message
+ */
+export const getApiErrorMessage = (err: unknown, fallback: string): string => {
+  const axiosError = err as AxiosError;
+  const data = axiosError?.response?.data as any;
+
+  // If no response data, check for network errors
   if (!data) {
+    if (axiosError?.message) {
+      return sanitizeErrorMessage(axiosError.message, fallback);
+    }
     return fallback;
   }
 
+  // Extract raw message from various response formats
+  let rawMessage: string | undefined;
+
   if (typeof data === "string") {
-    return data;
-  }
-
-  if (data.error) {
+    rawMessage = data;
+  } else if (data.error) {
     if (typeof data.error === "string") {
-      return data.error;
+      rawMessage = data.error;
+    } else {
+      rawMessage = data.error.message || data.error.detail;
     }
-    return data.error.message || data.error.detail || fallback;
+  } else {
+    rawMessage = data.detail || data.message;
   }
 
-  return data.detail || data.message || fallback;
+  // Sanitize and return the message
+  if (rawMessage) {
+    return sanitizeErrorMessage(rawMessage, fallback);
+  }
+
+  return fallback;
 };
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(

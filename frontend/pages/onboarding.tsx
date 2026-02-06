@@ -14,6 +14,7 @@ import {
   type GraphTemplate,
   type OnboardingMilestone,
 } from "../lib/api";
+import { ERROR_FALLBACKS } from "../lib/error-messages";
 import { showError, showSuccess } from "../lib/toast";
 import {
   Alert,
@@ -242,7 +243,7 @@ export default function OnboardingPage() {
       setShowCredentialForm(false);
       showSuccess("Credential saved", `${created.name} is ready to use.`);
     } catch (err: unknown) {
-      showError("Credential failed", getApiErrorMessage(err, "Unable to save credential."));
+      showError("Credential failed", getApiErrorMessage(err, ERROR_FALLBACKS.credential.create));
     } finally {
       setIsCreatingCredential(false);
     }
@@ -296,7 +297,7 @@ export default function OnboardingPage() {
       showSuccess("Run started", "Live execution is now streaming.");
       await router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
-      showError("Run failed", getApiErrorMessage(err, "Unable to start demo run."));
+      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
     } finally {
       setIsRunning(false);
     }
