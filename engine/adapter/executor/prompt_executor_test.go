@@ -17,9 +17,11 @@ type testMockLLMClient struct {
 	response *LLMResponse
 	err      error
 	received *LLMRequest
+	calls    int
 }
 
 func (m *testMockLLMClient) Complete(ctx context.Context, request *LLMRequest) (*LLMResponse, error) {
+	m.calls++
 	m.received = request
 	if m.err != nil {
 		return nil, m.err
@@ -478,39 +480,63 @@ func TestPromptExecutor_Execute_NoUsage(t *testing.T) {
 	}
 }
 
-func TestPromptExecutor_Execute_StreamsChunksToContextEmitter(t *testing.T) {
-	streamClient := &testStreamingLLMClient{
+func TestPromptExecutor_Execute_UsesPromptCache(t *testing.T) {
+	oldCache := defaultPromptCache
+	defaultPromptCache = NewPromptCache(128)
+	defer func() {
+		defaultPromptCache = oldCache
+	}()
+
+	mockClient := &testMockLLMClient{
 		response: &LLMResponse{
-			Content: "Hello world",
+			Content: "cached response",
 			Model:   "gpt-4",
 		},
-		chunks: []string{"Hello", " ", "world"},
 	}
 
-	executor := NewPromptExecutor(streamClient)
+	executor := NewPromptExecutor(mockClient)
 	state := entity.NewState()
 	node := &entity.Node{
-		ID:   "prompt_1",
+		ID:   "prompt_cache_node",
 		Type: string(value.NodeTypePrompt),
 		Config: map[string]any{
-			"prompt_template": "Say hello",
-			"stream":          true,
+			"prompt_template":   "Hello cache",
+			"cache_enabled":     true,
+			"cache_ttl_seconds": 60,
+			"temperature":       0.2,
+			"max_tokens":        50,
+			"provider":          "openai",
+			"model":             "gpt-4",
 		},
 	}
 
-	var streamed strings.Builder
-	ctx := port.WithStreamChunkEmitter(context.Background(), func(chunk string) {
-		streamed.WriteString(chunk)
-	})
-
-	result, err := executor.Execute(ctx, node, state)
+	firstResult, err := executor.Execute(context.Background(), node, state)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("first Execute() error = %v", err)
 	}
-	if result.Error != nil {
-		t.Fatalf("result.Error = %v", result.Error)
+	if firstResult.Error != nil {
+		t.Fatalf("first result.Error = %v", firstResult.Error)
 	}
-	if streamed.String() != "Hello world" {
-		t.Fatalf("streamed chunks = %q, want %q", streamed.String(), "Hello world")
+
+	secondResult, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+	if secondResult.Error != nil {
+		t.Fatalf("second result.Error = %v", secondResult.Error)
+	}
+
+	if mockClient.calls != 1 {
+		t.Fatalf("Complete() calls = %d, want 1 (second call should hit cache)", mockClient.calls)
+	}
+
+	firstOutput := firstResult.Output.(map[string]any)
+	if _, ok := firstOutput["cached"]; ok {
+		t.Fatalf("expected first response to be uncached")
+	}
+
+	secondOutput := secondResult.Output.(map[string]any)
+	if cached, ok := secondOutput["cached"].(bool); !ok || !cached {
+		t.Fatalf("expected second response to be marked cached")
 	}
 }

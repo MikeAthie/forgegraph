@@ -32,9 +32,9 @@ Testing strategy:
 - Integration: role-based access to run, credential, and billing endpoints.
 
 Success criteria / Definition of Done:
-- [ ] A tenant can have multiple users with distinct roles.
-- [ ] Permission checks block unauthorized API access.
-- [ ] UI respects permissions and hides restricted actions.
+- [x] A tenant can have multiple users with distinct roles.
+- [x] Permission checks block unauthorized API access.
+- [x] UI respects permissions and hides restricted actions.
 
 Dependencies:
 - P2 tenant_id propagation and audit logs.
@@ -65,9 +65,9 @@ Testing strategy:
 - Integration: SCIM deactivation disables access within 1 minute.
 
 Success criteria / Definition of Done:
-- [ ] Tenant admins can configure OIDC provider settings.
-- [ ] Users can log in via SSO and receive correct roles.
-- [ ] SCIM updates propagate to local user records reliably.
+- [x] Tenant admins can configure OIDC provider settings.
+- [x] Users can log in via SSO and receive correct roles.
+- [x] SCIM updates propagate to local user records reliably.
 
 Dependencies:
 - P3-T01 org and role model.
@@ -98,9 +98,9 @@ Testing strategy:
 - Integration: billing webhook updates plan state.
 
 Success criteria / Definition of Done:
-- [ ] Tenant can subscribe, change plan, and see current status.
-- [ ] Over-limit usage is blocked with clear error messaging.
-- [ ] Usage and invoices are visible in the admin UI.
+- [x] Tenant can subscribe, change plan, and see current status.
+- [x] Over-limit usage is blocked with clear error messaging.
+- [x] Usage and invoices are visible in the admin UI.
 
 Dependencies:
 - P2 usage ledger and quotas.
@@ -130,9 +130,9 @@ Testing strategy:
 - Integration: cleanup job removes data older than policy.
 
 Success criteria / Definition of Done:
-- [ ] Tenant can set retention windows per data type.
-- [ ] Old data is purged on schedule with audit trails.
-- [ ] Exports cover runs, logs, and usage data.
+- [x] Tenant can set retention windows per data type.
+- [x] Old data is purged on schedule with audit trails.
+- [x] Exports cover runs, logs, and usage data.
 
 Dependencies:
 - P2 audit logs.

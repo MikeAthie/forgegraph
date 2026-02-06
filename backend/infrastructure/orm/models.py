@@ -21,6 +21,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 from pgvector.django import IvfflatIndex, VectorField
 
 if TYPE_CHECKING:
@@ -515,6 +516,161 @@ class TemplateRating(models.Model):
         return f"TemplateRating({self.template_id}, {self.rating})"
 
 
+class NodeRegistryPackage(models.Model):
+    """Published integration package metadata for the node marketplace."""
+
+    CATEGORY_CHOICES = [
+        ("communication", "Communication"),
+        ("productivity", "Productivity"),
+        ("crm", "CRM"),
+        ("storage", "Storage"),
+        ("developer", "Developer"),
+        ("other", "Other"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug = models.SlugField(max_length=100, unique=True)
+    name = models.CharField(max_length=120)
+    summary = models.TextField(blank=True, default="")
+    category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default="other")
+    icon = models.CharField(max_length=32, blank=True, default="")
+    docs_url = models.URLField(blank=True, default="")
+    homepage_url = models.URLField(blank=True, default="")
+    owner_organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="published_node_packages",
+    )
+    created_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="published_node_packages",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "node_registry_packages"
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["is_active", "category"], name="node_pkg_active_category_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"NodeRegistryPackage({self.slug})"
+
+
+class NodeRegistryRelease(models.Model):
+    """Versioned node package release with SDK schema + review status."""
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_review", "Pending Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    EXECUTION_TYPE_CHOICES = [
+        ("http", "HTTP"),
+        ("prompt", "Prompt"),
+        ("tool", "Tool"),
+        ("transform", "Transform"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    package = models.ForeignKey(
+        NodeRegistryPackage,
+        on_delete=models.CASCADE,
+        related_name="releases",
+    )
+    version = models.CharField(max_length=32)
+    changelog = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="draft")
+    execution_node_type = models.CharField(
+        max_length=32,
+        choices=EXECUTION_TYPE_CHOICES,
+    )
+    ui_schema = models.JSONField(default=dict, blank=True)
+    config_schema = models.JSONField(default=dict, blank=True)
+    config_defaults = models.JSONField(default=dict, blank=True)
+    reviewed_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_node_releases",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="node_releases",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "node_registry_releases"
+        ordering = ["-created_at"]
+        unique_together = [["package", "version"]]
+        indexes = [
+            models.Index(fields=["status", "created_at"], name="node_rel_status_time_idx"),
+            models.Index(fields=["package", "status"], name="node_rel_package_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"NodeRegistryRelease({self.package.slug}@{self.version})"
+
+
+class NodePackageInstallation(models.Model):
+    """Installed package release for an organization."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.CASCADE,
+        related_name="installed_node_packages",
+    )
+    package = models.ForeignKey(
+        NodeRegistryPackage,
+        on_delete=models.CASCADE,
+        related_name="installations",
+    )
+    release = models.ForeignKey(
+        NodeRegistryRelease,
+        on_delete=models.PROTECT,
+        related_name="installations",
+    )
+    installed_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="installed_node_packages",
+    )
+    is_active = models.BooleanField(default=True)
+    install_metadata = models.JSONField(default=dict, blank=True)
+    installed_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "node_package_installations"
+        unique_together = [["organization", "package"]]
+        indexes = [
+            models.Index(fields=["organization", "is_active"], name="node_install_org_active_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"NodePackageInstallation({self.organization_id}, {self.package.slug})"
+
+
 class OnboardingMilestone(models.Model):
     """Track onboarding progress milestones."""
 
@@ -681,6 +837,46 @@ class Run(models.Model):
             delta = self.ended_at - self.started_at
             return int(delta.total_seconds() * 1000)
         return None
+
+
+class RunQueueEntry(models.Model):
+    """Queue entry for run execution."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.OneToOneField(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="queue_entry",
+    )
+    tenant_id = models.UUIDField()
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    priority = models.PositiveSmallIntegerField(default=0)
+    attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=5)
+    available_at = models.DateTimeField(default=timezone.now)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.CharField(max_length=64, blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "run_queue"
+        indexes = [
+            models.Index(fields=["status", "available_at"], name="run_queue_status_idx"),
+            models.Index(fields=["tenant_id", "status"], name="run_queue_tenant_idx"),
+            models.Index(fields=["locked_at"], name="run_queue_locked_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"RunQueueEntry {self.run_id} - {self.status}"
 
 
 class RunEvent(models.Model):
@@ -933,6 +1129,52 @@ class OIDCProvider(models.Model):
 
     def __str__(self) -> str:
         return f"OIDCProvider {self.provider} {self.tenant_id}"
+
+    @property
+    def client_secret(self) -> str:
+        from infrastructure.crypto.encryption import decrypt_api_key
+
+        return decrypt_api_key(bytes(self.encrypted_client_secret))
+
+
+class IntegrationOAuthProviderConfig(models.Model):
+    """Tenant-scoped OAuth app configuration for third-party integrations."""
+
+    PROVIDER_CHOICES = [
+        ("gmail", "Gmail"),
+        ("notion", "Notion"),
+        ("slack", "Slack"),
+        ("jira", "Jira"),
+        ("linear", "Linear"),
+        ("hubspot", "HubSpot"),
+        ("google_drive", "Google Drive"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField()
+    provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES)
+    client_id = models.CharField(max_length=255)
+    encrypted_client_secret = models.BinaryField()
+    authorize_url = models.URLField()
+    token_url = models.URLField()
+    redirect_uri = models.URLField(blank=True, default="")
+    scopes = models.JSONField(default=list, blank=True)
+    authorize_extra_params = models.JSONField(default=dict, blank=True)
+    token_extra_params = models.JSONField(default=dict, blank=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "integration_oauth_provider_configs"
+        unique_together = [["tenant_id", "provider"]]
+        indexes = [
+            models.Index(fields=["tenant_id", "provider"], name="int_oauth_tenant_provider_idx"),
+            models.Index(fields=["tenant_id", "enabled"], name="int_oauth_tenant_enabled_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"IntegrationOAuthProviderConfig {self.tenant_id} {self.provider}"
 
     @property
     def client_secret(self) -> str:
@@ -1197,6 +1439,14 @@ class APIKey(models.Model):
         ("openai", "OpenAI"),
         ("anthropic", "Anthropic"),
         ("google", "Google AI"),
+        ("gmail", "Gmail"),
+        ("notion", "Notion"),
+        ("slack", "Slack"),
+        ("jira", "Jira"),
+        ("linear", "Linear"),
+        ("hubspot", "HubSpot"),
+        ("google_drive", "Google Drive"),
+        ("telegram", "Telegram"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1213,6 +1463,13 @@ class APIKey(models.Model):
     provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES)
     name = models.CharField(max_length=100, help_text="User-friendly name for this key")
     encrypted_key = models.BinaryField(help_text="Fernet-encrypted API key")
+    encrypted_refresh_token = models.BinaryField(
+        null=True,
+        blank=True,
+        help_text="Fernet-encrypted OAuth refresh token",
+    )
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    token_metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -220,6 +220,17 @@ export default function Header() {
                     <DropdownMenuItem
                       onSelect={(event) => {
                         event.preventDefault();
+                        void router.push("/admin/marketplace");
+                      }}
+                      className="cursor-pointer"
+                    >
+                      Marketplace
+                    </DropdownMenuItem>
+                  )}
+                  {canManageOrg && (
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
                         void router.push("/admin/sso");
                       }}
                       className="cursor-pointer"

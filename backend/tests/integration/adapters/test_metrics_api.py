@@ -1,0 +1,62 @@
+from django.utils import timezone
+from rest_framework import status
+
+from application.services.metrics import record_run_completed, record_run_started
+from infrastructure.orm.models import (
+    Graph,
+    GraphVersion,
+    OrganizationMembership,
+    Run,
+    RunQueueEntry,
+)
+
+
+def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user):
+    graph = Graph.objects.create(owner=user, name="Metrics Graph")
+    version = GraphVersion.objects.create(
+        graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+    )
+    pending_run = Run.objects.create(owner=user, graph_version=version, status="pending")
+    processing_run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+    RunQueueEntry.objects.create(
+        run=pending_run,
+        tenant_id=user.default_organization_id,
+        status="pending",
+        available_at=timezone.now(),
+    )
+    RunQueueEntry.objects.create(
+        run=processing_run,
+        tenant_id=user.default_organization_id,
+        status="processing",
+        available_at=timezone.now(),
+        attempts=1,
+    )
+
+    record_run_started()
+    record_run_completed("succeeded", 1200)
+    record_run_completed("failed", 3000)
+
+    response = authenticated_client.get("/api/metrics/summary")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.data["data"]
+    assert payload["runs"]["started_total"] >= 1
+    assert payload["runs"]["completed_total"] >= 2
+    assert payload["runs"]["failed_total"] >= 1
+    assert payload["queue"]["pending"] >= 1
+    assert payload["queue"]["processing"] >= 1
+    assert "generated_at" in payload
+
+
+def test_metrics_summary_requires_admin_role(api_client, user):
+    membership = OrganizationMembership.objects.get(
+        organization=user.default_organization,
+        user=user,
+    )
+    membership.role = "viewer"
+    membership.save(update_fields=["role"])
+
+    api_client.force_authenticate(user=user)
+    response = api_client.get("/api/metrics/summary")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.data["error"]["code"] == "FORBIDDEN"

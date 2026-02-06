@@ -27,6 +27,7 @@ from infrastructure.orm.models import (
     Run,
     RunCheckpoint,
     RunEvent,
+    RunQueueEntry,
     User,
 )
 from infrastructure.security import s2s
@@ -386,6 +387,32 @@ class TestRunStart:
         assert second.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         assert second.data["error"]["code"] == "RATE_LIMITED"
         assert second.data["error"]["details"][0]["limit"] == 1
+
+    @override_settings(RUN_QUEUE_ENABLED=True)
+    def test_start_run_queues_when_enabled(self, authenticated_client, mock_engine_client, user):
+        graph = Graph.objects.create(owner=user, name="Queued Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "queue"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["meta"]["queued"] is True
+        run_data = response.data["data"]
+        assert run_data["status"] == "pending"
+        assert run_data["queue_status"] == "pending"
+        assert run_data["queue_attempts"] == 0
+        assert run_data["queue_available_at"] is not None
+
+        run = Run.objects.get(id=run_data["id"])
+        entry = RunQueueEntry.objects.get(run=run)
+        assert entry.status == "pending"
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
 
 
 class TestRunInvoke:

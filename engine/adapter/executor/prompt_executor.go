@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -93,6 +94,8 @@ type LLMUsage struct {
 type PromptExecutor struct {
 	client LLMClient
 }
+
+var defaultPromptCache = NewPromptCache(512)
 
 // NewPromptExecutor creates a new prompt executor with the given LLM client
 func NewPromptExecutor(client LLMClient) *PromptExecutor {
@@ -262,29 +265,32 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		TenantID:     port.TenantIDFrom(ctx),
 	}
 
-	// Call LLM (streaming when supported).
-	streamChunks := true
-	if raw, ok := node.Config["stream"].(bool); ok {
-		streamChunks = raw
-	}
-	streamEmitter := port.StreamChunkEmitterFrom(ctx)
-	var response *LLMResponse
-	var err error
-	if streamChunks {
-		if streamer, ok := e.client.(LLMStreamingClient); ok {
-			response, err = streamer.StreamComplete(ctx, request, streamEmitter)
-		} else {
-			response, err = e.client.Complete(ctx, request)
-			if err == nil && streamEmitter != nil && strings.TrimSpace(response.Content) != "" {
-				streamEmitter(response.Content)
-			}
+	cacheEnabled := getConfigBool(node.Config["cache_enabled"])
+	cacheTTLSeconds := getConfigInt(node.Config["cache_ttl_seconds"])
+	var (
+		response *LLMResponse
+		cached   bool
+	)
+	if cacheEnabled && cacheTTLSeconds > 0 {
+		cacheKey := buildPromptCacheKey(request)
+		if cachedResponse, ok := defaultPromptCache.Get(cacheKey, time.Now()); ok {
+			response = cachedResponse
+			cached = true
 		}
-	} else {
-		response, err = e.client.Complete(ctx, request)
 	}
-	if err != nil {
-		// Network/API errors are typically retryable
-		return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: %w", err), "LLM API error")), nil
+
+	if response == nil {
+		// Call LLM
+		llmResponse, err := e.client.Complete(ctx, request)
+		if err != nil {
+			// Network/API errors are typically retryable
+			return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: %w", err), "LLM API error")), nil
+		}
+		response = llmResponse
+		if cacheEnabled && cacheTTLSeconds > 0 {
+			cacheKey := buildPromptCacheKey(request)
+			defaultPromptCache.Set(cacheKey, response, time.Duration(cacheTTLSeconds)*time.Second, time.Now())
+		}
 	}
 
 	// Capture messages in buffer
@@ -310,6 +316,9 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		"response": response.Content,
 		"model":    response.Model,
 		"provider": provider,
+	}
+	if cached {
+		output["cached"] = true
 	}
 
 	if response.Usage != nil {
@@ -370,6 +379,58 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	return port.NewSuccessResult(output), nil
+}
+
+func getConfigBool(value any) bool {
+	if value == nil {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.ToLower(v) == "true"
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	default:
+		return false
+	}
+}
+
+func getConfigInt(value any) int {
+	if value == nil {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	case string:
+		var parsed int
+		if _, err := fmt.Sscanf(v, "%d", &parsed); err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func buildPromptCacheKey(request *LLMRequest) string {
+	payload := map[string]any{
+		"tenant_id":   request.TenantID,
+		"provider":    request.Provider,
+		"model":       request.Model,
+		"prompt":      request.Prompt,
+		"system":      request.SystemPrompt,
+		"messages":    request.Messages,
+		"temperature": request.Temperature,
+		"max_tokens":  request.MaxTokens,
+	}
+	raw, _ := json.Marshal(payload)
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("%x", sum[:])
 }
 
 func buildPromptWithMemory(

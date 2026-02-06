@@ -244,6 +244,19 @@ RUN_START_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_START_RATE_LIMIT_PER_MIN"
 RUN_INVOKE_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_INVOKE_RATE_LIMIT_PER_MIN", "120"))
 RUN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RUN_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
+# Run queue configuration
+RUN_QUEUE_ENABLED = os.environ.get("RUN_QUEUE_ENABLED", "false").lower() in {"1", "true", "yes"}
+RUN_QUEUE_MAX_CONCURRENCY_PER_TENANT = int(
+    os.environ.get("RUN_QUEUE_MAX_CONCURRENCY_PER_TENANT", "5")
+)
+RUN_QUEUE_WORKER_LOCK_SECONDS = int(os.environ.get("RUN_QUEUE_WORKER_LOCK_SECONDS", "300"))
+RUN_QUEUE_RETRY_DELAY_SECONDS = int(os.environ.get("RUN_QUEUE_RETRY_DELAY_SECONDS", "30"))
+
+# SLO thresholds (defaults)
+SLO_RUN_SUCCESS_RATE = float(os.environ.get("SLO_RUN_SUCCESS_RATE", "0.99"))
+SLO_RUN_P95_LATENCY_MS = int(os.environ.get("SLO_RUN_P95_LATENCY_MS", "60000"))
+SLO_QUEUE_MAX_DEPTH = int(os.environ.get("SLO_QUEUE_MAX_DEPTH", "500"))
+
 # Stripe billing configuration
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
