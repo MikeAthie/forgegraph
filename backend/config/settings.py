@@ -243,6 +243,8 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 RUN_START_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_START_RATE_LIMIT_PER_MIN", "60"))
 RUN_INVOKE_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_INVOKE_RATE_LIMIT_PER_MIN", "120"))
 RUN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RUN_RATE_LIMIT_WINDOW_SECONDS", "60"))
+RUN_MAX_ACTIVE_PER_TENANT = int(os.environ.get("RUN_MAX_ACTIVE_PER_TENANT", "25"))
+RUN_INPUT_MAX_BYTES = int(os.environ.get("RUN_INPUT_MAX_BYTES", str(256 * 1024)))
 
 # Run queue configuration
 RUN_QUEUE_ENABLED = os.environ.get("RUN_QUEUE_ENABLED", "false").lower() in {"1", "true", "yes"}

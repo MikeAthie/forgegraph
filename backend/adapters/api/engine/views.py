@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
+from application.services.credential_state import is_credential_revoked
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import decrypt_api_key
 from infrastructure.orm.models import APIKey
@@ -57,6 +58,12 @@ class EngineCredentialDetailView(APIView):
                 code="FORBIDDEN",
                 message="Credential does not belong to tenant",
                 status=403,
+            )
+        if is_credential_revoked(key.token_metadata):
+            return error_response(
+                code="CREDENTIAL_REVOKED",
+                message="Credential has been revoked. Rotate or reconnect it before use.",
+                status=410,
             )
 
         try:

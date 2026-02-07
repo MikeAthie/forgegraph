@@ -16,7 +16,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
-from django.db.models import Case, IntegerField, Prefetch, Sum, When
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -55,6 +55,7 @@ from application.services.llm_pricing import calculate_cost
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
+from application.services.redaction import redact_payload
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     SubgraphResolutionError,
@@ -345,6 +346,75 @@ def _prune_state_for_nodes(state_json: dict[str, Any], node_ids: set[str]) -> di
     return pruned
 
 
+def _run_audit_metadata(
+    *,
+    graph_version: GraphVersion,
+    thread_id: UUID | None,
+    trigger: str,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "graph_id": str(graph_version.graph_id),
+        "graph_name": graph_version.graph.name,
+        "graph_version_id": str(graph_version.id),
+        "graph_version": graph_version.version,
+        "trigger": trigger,
+    }
+    if thread_id is not None:
+        metadata["thread_id"] = str(thread_id)
+    if extra:
+        metadata.update(extra)
+    return metadata
+
+
+def _tenant_active_run_count(tenant_uuid: UUID) -> int:
+    return Run.objects.filter(
+        owner__default_organization_id=tenant_uuid,
+        status__in=["pending", "running", "paused"],
+    ).count()
+
+
+def _active_run_guardrail_response(*, tenant_uuid: UUID) -> Response | None:
+    max_active = int(getattr(settings, "RUN_MAX_ACTIVE_PER_TENANT", 0))
+    if max_active <= 0:
+        return None
+    active_runs = _tenant_active_run_count(tenant_uuid)
+    if active_runs < max_active:
+        return None
+    return error_response(
+        code="RATE_LIMITED",
+        message="Too many active runs for this tenant. Wait for current runs to finish.",
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+        details=[
+            {
+                "field": "active_runs",
+                "issue": f"limit={max_active}, current={active_runs}",
+            }
+        ],
+    )
+
+
+def _input_size_guardrail_response(input_json: dict[str, Any]) -> Response | None:
+    max_bytes = int(getattr(settings, "RUN_INPUT_MAX_BYTES", 0))
+    if max_bytes <= 0:
+        return None
+    serialized = pyjson.dumps(input_json, ensure_ascii=False, separators=(",", ":"))
+    payload_bytes = len(serialized.encode("utf-8"))
+    if payload_bytes <= max_bytes:
+        return None
+    return error_response(
+        code="VALIDATION_ERROR",
+        message="input_json is too large for a single run.",
+        status=status.HTTP_400_BAD_REQUEST,
+        details=[
+            {
+                "field": "input_json",
+                "issue": f"max_bytes={max_bytes}, actual_bytes={payload_bytes}",
+            }
+        ],
+    )
+
+
 class RunListView(APIView):
     """List runs (stub)."""
 
@@ -354,10 +424,67 @@ class RunListView(APIView):
         """List user's runs."""
         user = cast(User, request.user)
         runs = run_queryset_for_user(user).select_related("graph_version__graph", "queue_entry")
+        runs = runs.annotate(
+            failed_node_count=Count(
+                "node_runs", filter=Q(node_runs__status="failed"), distinct=True
+            )
+        )
 
         status_filter = request.query_params.get("status")
         if status_filter:
             runs = runs.filter(status=status_filter)
+
+        graph_version_filter = (request.query_params.get("graph_version_id") or "").strip()
+        if graph_version_filter:
+            try:
+                graph_version_uuid = UUID(graph_version_filter)
+            except ValueError:
+                return error_response(
+                    code="VALIDATION_ERROR",
+                    message="graph_version_id must be a valid UUID",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            runs = runs.filter(graph_version_id=graph_version_uuid)
+
+        graph_id_filter = (request.query_params.get("graph_id") or "").strip()
+        if graph_id_filter:
+            try:
+                graph_uuid = UUID(graph_id_filter)
+            except ValueError:
+                return error_response(
+                    code="VALIDATION_ERROR",
+                    message="graph_id must be a valid UUID",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            runs = runs.filter(graph_version__graph_id=graph_uuid)
+
+        started_after = request.query_params.get("started_after")
+        if started_after:
+            parsed = parse_datetime(started_after)
+            if parsed is None:
+                return error_response(
+                    code="VALIDATION_ERROR",
+                    message="started_after must be an ISO datetime.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            runs = runs.filter(started_at__gte=parsed)
+
+        started_before = request.query_params.get("started_before")
+        if started_before:
+            parsed = parse_datetime(started_before)
+            if parsed is None:
+                return error_response(
+                    code="VALIDATION_ERROR",
+                    message="started_before must be an ISO datetime.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            runs = runs.filter(started_at__lte=parsed)
+
+        has_failed_nodes_raw = (request.query_params.get("has_failed_nodes") or "").strip().lower()
+        if has_failed_nodes_raw in {"1", "true", "yes"}:
+            runs = runs.filter(failed_node_count__gt=0)
+        elif has_failed_nodes_raw in {"0", "false", "no"}:
+            runs = runs.filter(failed_node_count=0)
 
         runs = runs.order_by(
             Case(
@@ -407,6 +534,7 @@ class RunListView(APIView):
                     "graph_version_id": graph_version.id,
                     "graph_version": graph_version.version,
                     "status": run.status,
+                    "has_failed_nodes": bool(getattr(run, "failed_node_count", 0)),
                     **_queue_payload(run),
                     "started_at": run.started_at,
                     "ended_at": run.ended_at,
@@ -461,10 +589,24 @@ class RunDetailView(APIView):
             ).first()
             if waiting_node_run and waiting_node_run.output_json:
                 pause_payload = waiting_node_run.output_json.get("pause_payload")
+        node_runs = list(run.node_runs.all())
+        node_outcomes = {
+            "pending": 0,
+            "running": 0,
+            "waiting": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
+        for node_run in node_runs:
+            status_key = str(node_run.status)
+            if status_key in node_outcomes:
+                node_outcomes[status_key] += 1
 
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "owner_email": run.owner.email,
             "thread_id": run.thread_id,
             "graph_id": graph.id,
             "graph_name": graph.name,
@@ -474,12 +616,13 @@ class RunDetailView(APIView):
             **_queue_payload(run),
             "started_at": run.started_at,
             "ended_at": run.ended_at,
-            "input_json": run.input_json,
-            "output_json": run.output_json,
-            "error_message": run.error_message,
+            "input_json": redact_payload(run.input_json),
+            "output_json": redact_payload(run.output_json),
+            "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
             "paused_node_id": run.paused_node_id,
-            "pause_payload": pause_payload,
+            "pause_payload": redact_payload(pause_payload),
+            "node_outcomes": node_outcomes,
             "node_runs": [
                 {
                     "id": node_run.id,
@@ -490,11 +633,11 @@ class RunDetailView(APIView):
                     "started_at": node_run.started_at,
                     "ended_at": node_run.ended_at,
                     "duration_ms": node_run.duration_ms,
-                    "input_json": node_run.input_json,
-                    "output_json": node_run.output_json,
-                    "error_json": node_run.error_json,
+                    "input_json": redact_payload(node_run.input_json),
+                    "output_json": redact_payload(node_run.output_json),
+                    "error_json": redact_payload(node_run.error_json),
                 }
-                for node_run in run.node_runs.all()
+                for node_run in node_runs
             ],
         }
 
@@ -542,6 +685,12 @@ class RunStartView(APIView):
         input_json = serializer.validated_data.get("input_json") or {}
         thread_id = serializer.validated_data.get("thread_id")
         session_id = str(thread_id) if thread_id else None
+        input_size_response = _input_size_guardrail_response(input_json)
+        if input_size_response is not None:
+            return input_size_response
+        active_guardrail_response = _active_run_guardrail_response(tenant_uuid=tenant_uuid)
+        if active_guardrail_response is not None:
+            return active_guardrail_response
 
         try:
             graph_version = GraphVersion.objects.select_related("graph").get(
@@ -620,7 +769,11 @@ class RunStartView(APIView):
             action="run.started",
             resource_type="run",
             resource_id=str(run.id),
-            metadata={"graph_id": str(graph_version.graph_id)},
+            metadata=_run_audit_metadata(
+                graph_version=graph_version,
+                thread_id=thread_id,
+                trigger="start",
+            ),
         )
 
         # Track memory session for cross-run buffers.
@@ -631,6 +784,7 @@ class RunStartView(APIView):
             run_data = {
                 "id": run.id,
                 "owner_id": run.owner_id,
+                "owner_email": run.owner.email,
                 "thread_id": run.thread_id,
                 "graph_id": graph_version.graph_id,
                 "graph_name": graph_version.graph.name,
@@ -642,9 +796,9 @@ class RunStartView(APIView):
                 "queue_available_at": queue_entry.available_at,
                 "started_at": run.started_at,
                 "ended_at": run.ended_at,
-                "input_json": run.input_json,
-                "output_json": run.output_json,
-                "error_message": run.error_message,
+                "input_json": redact_payload(run.input_json),
+                "output_json": redact_payload(run.output_json),
+                "error_message": redact_payload(run.error_message),
                 "duration_ms": run.duration_ms,
                 "node_runs": [],
             }
@@ -706,6 +860,7 @@ class RunStartView(APIView):
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "owner_email": run.owner.email,
             "thread_id": run.thread_id,
             "graph_id": graph_version.graph_id,
             "graph_name": graph_version.graph.name,
@@ -715,9 +870,9 @@ class RunStartView(APIView):
             **_queue_payload(run),
             "started_at": run.started_at,
             "ended_at": run.ended_at,
-            "input_json": run.input_json,
-            "output_json": run.output_json,
-            "error_message": run.error_message,
+            "input_json": redact_payload(run.input_json),
+            "output_json": redact_payload(run.output_json),
+            "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
             "node_runs": [],
         }
@@ -752,6 +907,7 @@ class RunInvokeView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         tenant_id = get_tenant_id_for_user(user)
+        tenant_uuid = UUID(tenant_id)
         rate_limit_response = _apply_rate_limit(
             scope="run_invoke",
             tenant_id=tenant_id,
@@ -763,6 +919,9 @@ class RunInvokeView(APIView):
         thread_id = serializer.validated_data["thread_id"]
         session_id = str(thread_id)
         input_json = serializer.validated_data.get("input_json") or {}
+        input_size_response = _input_size_guardrail_response(input_json)
+        if input_size_response is not None:
+            return input_size_response
 
         if input_json and not isinstance(input_json, dict):
             return error_response(
@@ -828,6 +987,10 @@ class RunInvokeView(APIView):
                 message="No persisted state found for this thread.",
                 status=status.HTTP_409_CONFLICT,
             )
+
+        active_guardrail_response = _active_run_guardrail_response(tenant_uuid=tenant_uuid)
+        if active_guardrail_response is not None:
+            return active_guardrail_response
 
         graph_version = latest_run.graph_version
         try:
@@ -900,7 +1063,12 @@ class RunInvokeView(APIView):
             action="run.started",
             resource_type="run",
             resource_id=str(run.id),
-            metadata={"graph_id": str(graph_version.graph_id)},
+            metadata=_run_audit_metadata(
+                graph_version=graph_version,
+                thread_id=thread_id,
+                trigger="invoke",
+                extra={"source_run_id": str(latest_run.id)},
+            ),
         )
 
         upsert_memory_session(user, session_id)
@@ -910,6 +1078,7 @@ class RunInvokeView(APIView):
             run_data = {
                 "id": run.id,
                 "owner_id": run.owner_id,
+                "owner_email": run.owner.email,
                 "thread_id": run.thread_id,
                 "graph_id": graph_version.graph_id,
                 "graph_name": graph_version.graph.name,
@@ -921,9 +1090,9 @@ class RunInvokeView(APIView):
                 "queue_available_at": queue_entry.available_at,
                 "started_at": run.started_at,
                 "ended_at": run.ended_at,
-                "input_json": run.input_json,
-                "output_json": run.output_json,
-                "error_message": run.error_message,
+                "input_json": redact_payload(run.input_json),
+                "output_json": redact_payload(run.output_json),
+                "error_message": redact_payload(run.error_message),
                 "duration_ms": run.duration_ms,
                 "node_runs": [],
             }
@@ -983,6 +1152,7 @@ class RunInvokeView(APIView):
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "owner_email": run.owner.email,
             "thread_id": run.thread_id,
             "graph_id": graph_version.graph_id,
             "graph_name": graph_version.graph.name,
@@ -992,9 +1162,9 @@ class RunInvokeView(APIView):
             **_queue_payload(run),
             "started_at": run.started_at,
             "ended_at": run.ended_at,
-            "input_json": run.input_json,
-            "output_json": run.output_json,
-            "error_message": run.error_message,
+            "input_json": redact_payload(run.input_json),
+            "output_json": redact_payload(run.output_json),
+            "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
             "node_runs": [],
         }
@@ -1028,6 +1198,7 @@ class RunReplayView(APIView):
                 message="You don't have permission to replay runs in this organization.",
                 status=status.HTTP_403_FORBIDDEN,
             )
+        tenant_uuid = UUID(get_tenant_id_for_user(user))
         node_id = str(serializer.validated_data.get("node_id") or "").strip()
 
         try:
@@ -1075,6 +1246,9 @@ class RunReplayView(APIView):
         budget_response = check_llm_budget(user)
         if budget_response is not None:
             return budget_response
+        active_guardrail_response = _active_run_guardrail_response(tenant_uuid=tenant_uuid)
+        if active_guardrail_response is not None:
+            return active_guardrail_response
 
         graph_version = run.graph_version
         try:
@@ -1156,7 +1330,15 @@ class RunReplayView(APIView):
             action="run.replayed",
             resource_type="run",
             resource_id=str(replay_run.id),
-            metadata={"source_run_id": str(run.id), "from_node_id": node_id or None},
+            metadata=_run_audit_metadata(
+                graph_version=graph_version,
+                thread_id=replay_run.thread_id,
+                trigger="replay",
+                extra={
+                    "source_run_id": str(run.id),
+                    "from_node_id": node_id or None,
+                },
+            ),
         )
         upsert_memory_session(user, session_id)
 
@@ -1165,6 +1347,7 @@ class RunReplayView(APIView):
             run_data = {
                 "id": replay_run.id,
                 "owner_id": replay_run.owner_id,
+                "owner_email": replay_run.owner.email,
                 "thread_id": replay_run.thread_id,
                 "graph_id": graph_version.graph_id,
                 "graph_name": graph_version.graph.name,
@@ -1176,9 +1359,9 @@ class RunReplayView(APIView):
                 "queue_available_at": queue_entry.available_at,
                 "started_at": replay_run.started_at,
                 "ended_at": replay_run.ended_at,
-                "input_json": replay_run.input_json,
-                "output_json": replay_run.output_json,
-                "error_message": replay_run.error_message,
+                "input_json": redact_payload(replay_run.input_json),
+                "output_json": redact_payload(replay_run.output_json),
+                "error_message": redact_payload(replay_run.error_message),
                 "duration_ms": replay_run.duration_ms,
                 "node_runs": [],
             }
@@ -1238,6 +1421,7 @@ class RunReplayView(APIView):
         run_data = {
             "id": replay_run.id,
             "owner_id": replay_run.owner_id,
+            "owner_email": replay_run.owner.email,
             "thread_id": replay_run.thread_id,
             "graph_id": graph_version.graph_id,
             "graph_name": graph_version.graph.name,
@@ -1247,9 +1431,9 @@ class RunReplayView(APIView):
             **_queue_payload(replay_run),
             "started_at": replay_run.started_at,
             "ended_at": replay_run.ended_at,
-            "input_json": replay_run.input_json,
-            "output_json": replay_run.output_json,
-            "error_message": replay_run.error_message,
+            "input_json": redact_payload(replay_run.input_json),
+            "output_json": redact_payload(replay_run.output_json),
+            "error_message": redact_payload(replay_run.error_message),
             "duration_ms": replay_run.duration_ms,
             "node_runs": [],
         }
@@ -1334,6 +1518,7 @@ class RunCancelView(APIView):
         run_data = {
             "id": run.id,
             "owner_id": run.owner_id,
+            "owner_email": run.owner.email,
             "thread_id": run.thread_id,
             "graph_id": graph.id,
             "graph_name": graph.name,
@@ -1342,9 +1527,9 @@ class RunCancelView(APIView):
             "status": run.status,
             "started_at": run.started_at,
             "ended_at": run.ended_at,
-            "input_json": run.input_json,
-            "output_json": run.output_json,
-            "error_message": run.error_message,
+            "input_json": redact_payload(run.input_json),
+            "output_json": redact_payload(run.output_json),
+            "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
             "node_runs": [
                 {
@@ -1356,9 +1541,9 @@ class RunCancelView(APIView):
                     "started_at": node_run.started_at,
                     "ended_at": node_run.ended_at,
                     "duration_ms": node_run.duration_ms,
-                    "input_json": node_run.input_json,
-                    "output_json": node_run.output_json,
-                    "error_json": node_run.error_json,
+                    "input_json": redact_payload(node_run.input_json),
+                    "output_json": redact_payload(node_run.output_json),
+                    "error_json": redact_payload(node_run.error_json),
                 }
                 for node_run in run.node_runs.all()
             ],
@@ -1543,7 +1728,7 @@ class EngineRunEventsView(APIView):
                 )
 
         if event_type == "run.schema_validation":
-            payload = event.get("output") or {}
+            payload = redact_payload(event.get("output") or {})
             _save_event("run.schema_validation", payload)
             message = broadcast_run_schema_validation(run=run, payload=payload)
             return success_response(message)
@@ -1551,7 +1736,7 @@ class EngineRunEventsView(APIView):
         if event_type == "node_stream_chunk":
             output = event.get("output")
             payload = output if isinstance(output, dict) else {}
-            chunk = str(payload.get("chunk") or "")
+            chunk = str(redact_payload(payload.get("chunk") or ""))
             stream_payload = {
                 "node_id": str(event.get("node_id") or ""),
                 "node_type": str(event.get("node_type") or ""),
@@ -1593,8 +1778,9 @@ class EngineRunEventsView(APIView):
                     run.ended_at = event_time
                     update_fields.append("ended_at")
                 if "output" in event:
-                    run_payload["output_json"] = event.get("output")
-                    run.output_json = event.get("output")
+                    redacted_output = redact_payload(event.get("output"))
+                    run_payload["output_json"] = redacted_output
+                    run.output_json = redacted_output
                     update_fields.append("output_json")
 
             if event_type == "run_failed":
@@ -1605,7 +1791,7 @@ class EngineRunEventsView(APIView):
                     run_payload["ended_at"] = event_time
                     run.ended_at = event_time
                     update_fields.append("ended_at")
-                error_message = event.get("error") or ""
+                error_message = redact_payload(event.get("error") or "")
                 run_payload["error_message"] = error_message
                 run.error_message = error_message
                 update_fields.append("error_message")
@@ -1628,7 +1814,7 @@ class EngineRunEventsView(APIView):
                     run_payload["paused_node_id"] = node_id
                     run.paused_node_id = node_id
                     update_fields.append("paused_node_id")
-                pause_payload = event.get("output") or {}
+                pause_payload = redact_payload(event.get("output") or {})
                 run_payload["pause_payload"] = pause_payload
                 if pause_payload:
                     run_payload["pause_state_json"] = pause_payload
@@ -1662,7 +1848,7 @@ class EngineRunEventsView(APIView):
             }:
                 record_run_completed(run.status, run.duration_ms)
 
-            _save_event("run.updated", _serialize_event_payload(run_payload))
+            _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
             message = broadcast_run_updated(run)
             return success_response(message)
 
@@ -1691,13 +1877,23 @@ class EngineRunEventsView(APIView):
                 node_payload["status"] = "succeeded"
                 if event_time:
                     node_payload["ended_at"] = event_time
-                node_payload["output_json"] = event.get("output")
+                node_payload["output_json"] = redact_payload(event.get("output"))
             elif event_type == "node_failed":
                 node_payload["status"] = "failed"
                 if event_time:
                     node_payload["ended_at"] = event_time
-                error_message = event.get("error") or ""
-                node_payload["error_json"] = {"error": error_message}
+                error_message = redact_payload(event.get("error") or "")
+                error_json: dict[str, Any] = {}
+                output_payload = redact_payload(event.get("output") or {})
+                if isinstance(output_payload, dict):
+                    structured_error = output_payload.get("error")
+                    if isinstance(structured_error, dict):
+                        error_json = dict(structured_error)
+                if not error_json:
+                    error_json = {"error": error_message}
+                elif error_message:
+                    error_json.setdefault("error", error_message)
+                node_payload["error_json"] = error_json
             elif event_type == "node_skipped":
                 node_payload["status"] = "skipped"
                 if event_time:
@@ -1738,7 +1934,9 @@ class EngineRunEventsView(APIView):
                     node_update_fields.append("error_json")
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
-                _save_event("node_run.updated", _serialize_event_payload(node_payload))
+                _save_event(
+                    "node_run.updated", _serialize_event_payload(redact_payload(node_payload))
+                )
 
                 if node_type == "prompt" and node_payload.get("output_json"):
                     output_json = node_payload.get("output_json") or {}
@@ -1810,7 +2008,11 @@ class RunEventsView(APIView):
             for field in ["status", "started_at", "ended_at", "output_json", "error_message"]:
                 if field not in payload:
                     continue
-                setattr(run, field, payload[field])
+                value = payload[field]
+                if field in {"output_json", "error_message"}:
+                    value = redact_payload(value)
+                setattr(run, field, value)
+                payload[field] = value
                 update_fields.append(field)
 
             # Handle pause_state fields for human gate
@@ -1818,7 +2020,8 @@ class RunEventsView(APIView):
                 run.paused_node_id = payload["paused_node_id"]
                 update_fields.append("paused_node_id")
             if "pause_state_json" in payload:
-                run.pause_state_json = payload["pause_state_json"]
+                run.pause_state_json = redact_payload(payload["pause_state_json"])
+                payload["pause_state_json"] = run.pause_state_json
                 update_fields.append("pause_state_json")
 
             if update_fields:
@@ -1869,7 +2072,7 @@ class RunEventsView(APIView):
                     RunEvent.objects.create(
                         run=run,
                         event_type="run.schema_validation",
-                        payload={"errors": schema_errors, "mode": schema_mode},
+                        payload=redact_payload({"errors": schema_errors, "mode": schema_mode}),
                     )
                 except Exception as exc:  # pragma: no cover - log and continue
                     logger.warning("Failed to persist schema validation event: %s", exc)
@@ -1887,7 +2090,7 @@ class RunEventsView(APIView):
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=payload,
+                    payload=redact_payload(payload),
                 )
             except Exception as exc:  # pragma: no cover - log and continue
                 logger.warning("Failed to persist run event: %s", exc)
@@ -1928,13 +2131,16 @@ class RunEventsView(APIView):
                     node_run.ended_at = payload["ended_at"]
                     node_update_fields.append("ended_at")
                 if "input_json" in payload:
-                    node_run.input_json = payload["input_json"]
+                    node_run.input_json = redact_payload(payload["input_json"])
+                    payload["input_json"] = node_run.input_json
                     node_update_fields.append("input_json")
                 if "output_json" in payload:
-                    node_run.output_json = payload["output_json"]
+                    node_run.output_json = redact_payload(payload["output_json"])
+                    payload["output_json"] = node_run.output_json
                     node_update_fields.append("output_json")
                 if "error_json" in payload:
-                    node_run.error_json = payload["error_json"]
+                    node_run.error_json = redact_payload(payload["error_json"])
+                    payload["error_json"] = node_run.error_json
                     node_update_fields.append("error_json")
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
@@ -1942,14 +2148,14 @@ class RunEventsView(APIView):
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=payload,
+                    payload=redact_payload(payload),
                 )
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)
 
         if event_type == "run.schema_validation":
-            payload = serializer.validated_data.get("payload") or {}
+            payload = redact_payload(serializer.validated_data.get("payload") or {})
             try:
                 RunEvent.objects.create(
                     run=run,

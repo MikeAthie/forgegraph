@@ -18,9 +18,16 @@ from adapters.api.credentials.serializers import (
     CredentialOAuthCallbackSerializer,
     CredentialOAuthProviderConfigSerializer,
     CredentialOAuthStartSerializer,
+    CredentialRevokeSerializer,
+    CredentialRotateSerializer,
 )
 from adapters.api.responses import error_response, success_response
 from application.services.audit_log import record_audit_log
+from application.services.credential_state import (
+    build_revoked_metadata,
+    build_rotated_metadata,
+    is_credential_revoked,
+)
 from application.services.oauth import (
     PROVIDER_DEFAULTS,
     build_oauth_authorize_url,
@@ -153,6 +160,158 @@ class CredentialsDetailView(APIView):
 
         key.delete()
         return success_response({"deleted": True})
+
+
+class CredentialRotateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, credential_id: UUID) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to rotate credentials in this organization.",
+                status=403,
+            )
+        if not user.default_organization:
+            return error_response(
+                code="NOT_FOUND",
+                message="No default organization found for this user.",
+                status=404,
+            )
+
+        serializer = CredentialRotateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=400,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        try:
+            key = APIKey.objects.get(id=credential_id, organization=user.default_organization)
+        except APIKey.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message="Credential not found",
+                status=404,
+            )
+
+        validated = serializer.validated_data
+        was_revoked = is_credential_revoked(key.token_metadata)
+        key.encrypted_key = encrypt_api_key(validated["api_key"])
+        update_fields = ["encrypted_key"]
+
+        if "refresh_token" in validated:
+            refresh_token = str(validated.get("refresh_token") or "").strip()
+            key.encrypted_refresh_token = encrypt_api_key(refresh_token) if refresh_token else None
+            update_fields.append("encrypted_refresh_token")
+
+        expires_in = validated.get("expires_in")
+        if expires_in is not None:
+            key.token_expires_at = timezone.now() + timedelta(seconds=int(expires_in))
+            update_fields.append("token_expires_at")
+
+        key.token_metadata = build_rotated_metadata(key.token_metadata)
+        update_fields.append("token_metadata")
+        key.save(update_fields=sorted(set(update_fields)))
+
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_user(user),
+            action="credential.rotated",
+            resource_type="credential",
+            resource_id=str(key.id),
+            metadata={
+                "provider": key.provider,
+                "name": key.name,
+                "was_revoked": was_revoked,
+            },
+        )
+
+        return success_response(APIKeySerializer(key).data)
+
+
+class CredentialRevokeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, credential_id: UUID) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to revoke credentials in this organization.",
+                status=403,
+            )
+        if not user.default_organization:
+            return error_response(
+                code="NOT_FOUND",
+                message="No default organization found for this user.",
+                status=404,
+            )
+
+        serializer = CredentialRevokeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=400,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        try:
+            key = APIKey.objects.get(id=credential_id, organization=user.default_organization)
+        except APIKey.DoesNotExist:
+            return error_response(
+                code="NOT_FOUND",
+                message="Credential not found",
+                status=404,
+            )
+
+        reason = str(serializer.validated_data.get("reason") or "").strip()
+        key.encrypted_key = encrypt_api_key(f"revoked:{key.id}:{secrets.token_urlsafe(16)}")
+        key.encrypted_refresh_token = None
+        key.token_expires_at = timezone.now()
+        key.token_metadata = build_revoked_metadata(key.token_metadata, reason=reason)
+        key.save(
+            update_fields=[
+                "encrypted_key",
+                "encrypted_refresh_token",
+                "token_expires_at",
+                "token_metadata",
+            ]
+        )
+
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_user(user),
+            action="credential.revoked",
+            resource_type="credential",
+            resource_id=str(key.id),
+            metadata={
+                "provider": key.provider,
+                "name": key.name,
+                "reason": reason,
+            },
+        )
+
+        revoked_at = ""
+        if isinstance(key.token_metadata, dict):
+            revoked_at = str(key.token_metadata.get("revoked_at") or "")
+        return success_response(
+            {
+                "revoked": True,
+                "credential_id": str(key.id),
+                "revoked_at": revoked_at,
+            }
+        )
 
 
 def _ensure_credential_admin(user: User) -> Response | None:

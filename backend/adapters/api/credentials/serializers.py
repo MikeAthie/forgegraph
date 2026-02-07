@@ -6,6 +6,7 @@ from typing import Any
 from django.utils import timezone
 from rest_framework import serializers
 
+from application.services.credential_state import is_credential_revoked, normalize_token_metadata
 from application.services.oauth import SUPPORTED_OAUTH_PROVIDERS
 from infrastructure.orm.models import APIKey
 
@@ -18,12 +19,21 @@ class APIKeySerializer(serializers.Serializer[Any]):
     name = serializers.CharField(read_only=True)
     key_hint = serializers.CharField(read_only=True)
     token_expires_at = serializers.DateTimeField(read_only=True)
+    revoked = serializers.SerializerMethodField()
+    revoked_at = serializers.SerializerMethodField()
     health_status = serializers.SerializerMethodField()
     requires_reauth = serializers.SerializerMethodField()
     health_message = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
 
     def _health_payload(self, obj: APIKey) -> dict[str, Any]:
+        metadata = normalize_token_metadata(obj.token_metadata)
+        if is_credential_revoked(metadata):
+            return {
+                "health_status": "revoked",
+                "requires_reauth": True,
+                "health_message": "Credential was revoked. Rotate or reconnect this credential.",
+            }
         if obj.provider not in OAUTH_PROVIDER_SET:
             return {"health_status": "healthy", "requires_reauth": False, "health_message": None}
 
@@ -64,6 +74,14 @@ class APIKeySerializer(serializers.Serializer[Any]):
     def get_health_message(self, obj: APIKey) -> str | None:
         value = self._health_payload(obj)["health_message"]
         return None if value is None else str(value)
+
+    def get_revoked(self, obj: APIKey) -> bool:
+        return is_credential_revoked(obj.token_metadata)
+
+    def get_revoked_at(self, obj: APIKey) -> str | None:
+        metadata = normalize_token_metadata(obj.token_metadata)
+        value = metadata.get("revoked_at")
+        return str(value) if isinstance(value, str) and value else None
 
 
 class APIKeyCreateSerializer(serializers.Serializer[Any]):
@@ -111,3 +129,18 @@ class CredentialOAuthProviderConfigSerializer(serializers.Serializer[Any]):
         if not isinstance(value, dict):
             raise serializers.ValidationError("token_extra_params must be an object.")
         return value
+
+
+class CredentialRotateSerializer(serializers.Serializer[Any]):
+    api_key = serializers.CharField(trim_whitespace=True)
+    refresh_token = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True)
+    expires_in = serializers.IntegerField(required=False, min_value=1)
+
+    def validate_api_key(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("api_key cannot be empty")
+        return value
+
+
+class CredentialRevokeSerializer(serializers.Serializer[Any]):
+    reason = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True)

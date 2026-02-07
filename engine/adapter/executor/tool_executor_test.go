@@ -165,6 +165,100 @@ func TestToolExecutor_HTTPClientErrorNonRetryable(t *testing.T) {
 	}
 }
 
+func TestToolExecutor_HTTPRateLimitUsesRetryAfterDetails(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := atomic.AddInt32(&attempts, 1)
+		if current == 1 {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.rate-limit",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodPost,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_rate_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool":             "test.http.rate-limit",
+			"retry_attempts":   2,
+			"retry_backoff_ms": 1,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Fatalf("server attempts = %d, want 2", got)
+	}
+}
+
+func TestToolExecutor_HTTPQuotaExhaustedNonRetryable(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.Header().Set("Retry-After", "30")
+		http.Error(w, "insufficient_quota", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.quota",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodPost,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_quota_1",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool":             "test.http.quota",
+			"retry_attempts":   3,
+			"retry_backoff_ms": 1,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected non-retryable quota error")
+	}
+	if domain.IsRetryable(result.Error) {
+		t.Fatalf("expected non-retryable error for quota exhaustion, got %T (%v)", result.Error, result.Error)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("server attempts = %d, want 1", got)
+	}
+}
+
 func TestToolExecutor_ExecToolUserFunctionPath(t *testing.T) {
 	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
 

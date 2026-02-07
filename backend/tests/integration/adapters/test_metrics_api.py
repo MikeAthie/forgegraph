@@ -43,8 +43,14 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["runs"]["started_total"] >= 1
     assert payload["runs"]["completed_total"] >= 2
     assert payload["runs"]["failed_total"] >= 1
+    assert "failure_rate" in payload["runs"]
+    assert "active_total" in payload["runs"]
     assert payload["queue"]["pending"] >= 1
     assert payload["queue"]["processing"] >= 1
+    assert payload["queue"]["total_depth"] >= 2
+    assert "oldest_pending_age_seconds" in payload["queue"]
+    assert "by_tenant" in payload["queue"]
+    assert "guardrails" in payload
     assert "generated_at" in payload
 
 

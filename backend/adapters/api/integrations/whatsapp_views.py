@@ -26,6 +26,7 @@ from adapters.api.runs.serializers import RunDetailWithNodeRunsSerializer
 from adapters.gateways.grpc_engine_client import EngineConnectionError, EngineExecutionError
 from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.audit_log import record_audit_log
+from application.services.credential_state import is_credential_revoked
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
@@ -83,6 +84,8 @@ def _resolve_twilio_auth_token(owner: User, whatsapp_config: dict[str, Any]) -> 
     except (ValidationError, ValueError):
         return ""
     if credential is None:
+        return ""
+    if is_credential_revoked(credential.token_metadata):
         return ""
 
     try:

@@ -15,6 +15,7 @@ from uuid import UUID
 from django.conf import settings
 from django.utils import timezone
 
+from application.services.credential_state import is_credential_revoked
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import (
     APIKey,
@@ -388,7 +389,7 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
     credentials = APIKey.objects.filter(
         id__in=credential_ids,
         organization=user.default_organization,
-    ).values("id", "provider")
+    ).values("id", "provider", "token_metadata")
     credential_index = {str(item["id"]): item for item in credentials}
 
     for node_id, provider, credential_id in prompt_nodes:
@@ -409,6 +410,14 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
                     "field": "credential_id",
                     "message": f"Prompt node '{node_id}' credential does not match provider '{provider}'.",
                     "suggestion": "Pick a credential with the same provider as the prompt node.",
+                }
+            )
+        if is_credential_revoked(stored.get("token_metadata")):
+            errors.append(
+                {
+                    "field": "credential_id",
+                    "message": f"Prompt node '{node_id}' uses a revoked credential.",
+                    "suggestion": "Rotate or reconnect the credential before running this prompt.",
                 }
             )
 

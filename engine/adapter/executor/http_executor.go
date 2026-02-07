@@ -103,6 +103,25 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	}
 	method = strings.ToUpper(method)
 
+	throttleMs := resolveTenantProviderThrottleMs(ctx, provider, node.Config)
+	if throttleMs > 0 {
+		if err := throttleTenantProvider(ctx, port.TenantIDFrom(ctx), provider, throttleMs); err != nil {
+			return port.NewErrorResult(
+				domain.NewRetryableErrorWithDetails(
+					err,
+					"tenant provider throttle interrupted",
+					"tenant_throttle",
+					0,
+					map[string]any{
+						"provider":         provider,
+						"throttle_ms":      throttleMs,
+						"tenant_throttled": true,
+					},
+				),
+			), nil
+		}
+	}
+
 	// Build request body
 	var bodyReader io.Reader
 	if method == "POST" || method == "PUT" || method == "PATCH" {
@@ -142,14 +161,34 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	resp, err := e.client.Do(req)
 	if err != nil {
 		// Network errors are retryable
-		return port.NewErrorResult(domain.NewRetryableError(err, "network error")), nil
+		return port.NewErrorResult(
+			domain.NewRetryableErrorWithDetails(
+				err,
+				"network error",
+				"network_error",
+				0,
+				map[string]any{
+					"provider": provider,
+				},
+			),
+		), nil
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return port.NewErrorResult(domain.NewRetryableError(err, "failed to read response")), nil
+		return port.NewErrorResult(
+			domain.NewRetryableErrorWithDetails(
+				err,
+				"failed to read response",
+				"read_error",
+				0,
+				map[string]any{
+					"provider": provider,
+				},
+			),
+		), nil
 	}
 
 	// Build output
@@ -167,12 +206,46 @@ func (e *HTTPExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	}
 
 	// Check for error status codes
+	bodyText := strings.TrimSpace(string(respBody))
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
+		if isQuotaExhaustedRateLimit(bodyText) {
+			return port.NewErrorResult(
+				fmt.Errorf(
+					"rate limit quota exhausted (HTTP 429). Increase provider quota/billing and retry: %s",
+					bodyText,
+				),
+			), nil
+		}
+
+		return port.NewErrorResult(
+			domain.NewRetryableErrorWithDetails(
+				fmt.Errorf("HTTP %d: %s", resp.StatusCode, bodyText),
+				"rate limited",
+				"rate_limited",
+				retryAfterMs,
+				map[string]any{
+					"status_code":     resp.StatusCode,
+					"retry_after_ms":  retryAfterMs,
+					"rate_limit_type": "throttled",
+					"provider":        provider,
+				},
+			),
+		), nil
+	}
+
 	if resp.StatusCode >= 500 {
 		// 5xx errors are retryable
 		return port.NewErrorResult(
-			domain.NewRetryableError(
+			domain.NewRetryableErrorWithDetails(
 				fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody)),
 				"server error",
+				"transient_http_5xx",
+				0,
+				map[string]any{
+					"status_code": resp.StatusCode,
+					"provider":    provider,
+				},
 			),
 		), nil
 	}

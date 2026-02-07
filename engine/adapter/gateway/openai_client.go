@@ -10,10 +10,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/forgegraph/engine/adapter/executor"
+	"github.com/forgegraph/engine/domain"
 )
 
 // OpenAIClient implements LLMClient using the OpenAI Chat Completions API.
@@ -178,14 +180,26 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 	// Execute request
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, domain.NewRetryableErrorWithDetails(
+			err,
+			"request failed",
+			"network_error",
+			0,
+			map[string]any{"provider": "openai"},
+		)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, domain.NewRetryableErrorWithDetails(
+			err,
+			"failed to read response",
+			"read_error",
+			0,
+			map[string]any{"provider": "openai"},
+		)
 	}
 
 	// Parse response
@@ -200,8 +214,35 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			apiResp.Error.Message, apiResp.Error.Type, apiResp.Error.Code)
 
 		// Rate limit and server errors are retryable
-		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			return nil, &retryableError{msg: errMsg}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if isOpenAIQuotaExhausted(apiResp.Error.Code, apiResp.Error.Message) {
+				return nil, fmt.Errorf("%s. Increase OpenAI quota/billing and retry", errMsg)
+			}
+			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf(errMsg),
+				"rate limited",
+				"rate_limited",
+				retryAfterMs,
+				map[string]any{
+					"provider":        "openai",
+					"status_code":     resp.StatusCode,
+					"retry_after_ms":  retryAfterMs,
+					"rate_limit_type": "throttled",
+				},
+			)
+		}
+		if resp.StatusCode >= 500 {
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf(errMsg),
+				"upstream server error",
+				"transient_http_5xx",
+				0,
+				map[string]any{
+					"provider":    "openai",
+					"status_code": resp.StatusCode,
+				},
+			)
 		}
 
 		return nil, fmt.Errorf(errMsg)
@@ -212,8 +253,35 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 		errMsg := fmt.Sprintf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 
 		// Rate limit and server errors are retryable
-		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			return nil, &retryableError{msg: errMsg}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if isOpenAIQuotaExhausted("", string(body)) {
+				return nil, fmt.Errorf("%s. Increase OpenAI quota/billing and retry", errMsg)
+			}
+			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf(errMsg),
+				"rate limited",
+				"rate_limited",
+				retryAfterMs,
+				map[string]any{
+					"provider":        "openai",
+					"status_code":     resp.StatusCode,
+					"retry_after_ms":  retryAfterMs,
+					"rate_limit_type": "throttled",
+				},
+			)
+		}
+		if resp.StatusCode >= 500 {
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf(errMsg),
+				"upstream server error",
+				"transient_http_5xx",
+				0,
+				map[string]any{
+					"provider":    "openai",
+					"status_code": resp.StatusCode,
+				},
+			)
 		}
 
 		return nil, fmt.Errorf(errMsg)
@@ -298,15 +366,48 @@ func (c *OpenAIClient) StreamComplete(
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, domain.NewRetryableErrorWithDetails(
+			err,
+			"request failed",
+			"network_error",
+			0,
+			map[string]any{"provider": "openai"},
+		)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
-		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			return nil, &retryableError{msg: errMsg}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if isOpenAIQuotaExhausted("", string(body)) {
+				return nil, fmt.Errorf("%s. Increase OpenAI quota/billing and retry", errMsg)
+			}
+			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf(errMsg),
+				"rate limited",
+				"rate_limited",
+				retryAfterMs,
+				map[string]any{
+					"provider":        "openai",
+					"status_code":     resp.StatusCode,
+					"retry_after_ms":  retryAfterMs,
+					"rate_limit_type": "throttled",
+				},
+			)
+		}
+		if resp.StatusCode >= 500 {
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf(errMsg),
+				"upstream server error",
+				"transient_http_5xx",
+				0,
+				map[string]any{
+					"provider":    "openai",
+					"status_code": resp.StatusCode,
+				},
+			)
 		}
 		return nil, fmt.Errorf(errMsg)
 	}
@@ -388,16 +489,45 @@ func (c *OpenAIClient) StreamComplete(
 	}, nil
 }
 
-// retryableError indicates an error that can be retried
-type retryableError struct {
-	msg string
+func parseRetryAfterMs(headerValue string, now time.Time) int {
+	trimmed := strings.TrimSpace(headerValue)
+	if trimmed == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(trimmed); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return seconds * 1000
+	}
+	retryAt, err := http.ParseTime(trimmed)
+	if err != nil {
+		return 0
+	}
+	delayMs := int(retryAt.Sub(now).Milliseconds())
+	if delayMs < 0 {
+		return 0
+	}
+	return delayMs
 }
 
-func (e *retryableError) Error() string {
-	return e.msg
-}
-
-// IsRetryable returns true for retryable errors
-func (e *retryableError) IsRetryable() bool {
-	return true
+func isOpenAIQuotaExhausted(code, message string) bool {
+	normalizedCode := strings.ToLower(strings.TrimSpace(code))
+	normalizedMessage := strings.ToLower(strings.TrimSpace(message))
+	if normalizedCode == "insufficient_quota" {
+		return true
+	}
+	signatures := []string{
+		"insufficient_quota",
+		"quota exceeded",
+		"quota exhausted",
+		"billing",
+		"payment required",
+	}
+	for _, signature := range signatures {
+		if strings.Contains(normalizedMessage, signature) {
+			return true
+		}
+	}
+	return false
 }
