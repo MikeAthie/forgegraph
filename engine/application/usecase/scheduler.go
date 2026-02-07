@@ -38,6 +38,24 @@ const (
 	checkpointPayloadV2    = 2
 )
 
+const (
+	onErrorStrategyFail     = "fail"
+	onErrorStrategyRetry    = "retry"
+	onErrorStrategySkip     = "skip"
+	onErrorStrategyFallback = "fallback"
+)
+
+type onErrorPolicy struct {
+	Strategy           string
+	NextNodes          []string
+	MaxAttempts        int
+	HasMaxAttempts     bool
+	BackoffMs          int
+	HasBackoffMs       bool
+	BackoffStrategy    string
+	HasBackoffStrategy bool
+}
+
 // SchedulerConfig holds scheduler configuration
 type SchedulerConfig struct {
 	MaxWorkers             int // Maximum concurrent node executions
@@ -629,18 +647,9 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			return
 		}
 
-		// Node failed
-		nodeRun.Status = string(value.NodeRunStatusFailed)
-		nodeRun.SetEnded(time.Now())
-		nodeRun.ErrorJSON = map[string]any{"error": err.Error()}
-		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
-
-		s.emitter.EmitAsync(
-			rc.newEvent(port.EventTypeNodeFailed).
-				WithNode(nodeID, node.Type, node.Name).
-				WithError(err.Error()).
-				WithDuration(duration),
-		)
+		if s.handleNodeFailure(rc, node, nodeRun, err, duration) {
+			return
+		}
 		s.setError(rc, domain.NewNodeError(nodeID, node.Type, err))
 		return
 	}
@@ -703,10 +712,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 
 // executeWithRetries handles retry logic
 func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, executor port.NodeExecutor, nodeRun *entity.NodeRun) (*port.NodeExecutionResult, error) {
-	policy := node.RetryPolicy
-	if policy == nil {
-		policy = entity.DefaultRetryPolicy()
-	}
+	policy := s.resolveRetryPolicy(node)
 
 	timeout := node.TimeoutMs
 	if timeout == 0 {
@@ -770,6 +776,9 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 
 			// Calculate backoff
 			backoff := s.calculateBackoff(policy, attempt)
+			if retryAfterMs := domain.RetryAfterMsFromError(err); retryAfterMs > backoff {
+				backoff = retryAfterMs
+			}
 			select {
 			case <-rc.ctx.Done():
 				return nil, rc.ctx.Err()
@@ -779,6 +788,62 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 	}
 
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+func (s *Scheduler) handleNodeFailure(rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, err error, durationMs int64) bool {
+	onError := parseOnErrorPolicy(node)
+	retryPolicy := s.resolveRetryPolicy(node)
+
+	nextNodes, skippedNodes, continueRun, routeErr := s.resolveOnErrorRouting(rc, node, onError)
+	if routeErr != nil {
+		continueRun = false
+	}
+
+	errorPayload := s.buildNodeErrorPayload(err, nodeRun.Attempt, retryPolicy, onError, nextNodes, routeErr)
+
+	nodeRun.Status = string(value.NodeRunStatusFailed)
+	nodeRun.SetEnded(time.Now())
+	nodeRun.ErrorJSON = errorPayload
+	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+
+	failedEvent := rc.newEvent(port.EventTypeNodeFailed).
+		WithNode(node.ID, node.Type, node.Name).
+		WithAttempt(nodeRun.Attempt).
+		WithError(err.Error()).
+		WithDuration(durationMs).
+		WithOutput(map[string]any{"error": errorPayload})
+	s.emitter.EmitAsync(failedEvent)
+
+	if !continueRun {
+		return false
+	}
+
+	rc.pendingMu.Lock()
+	rc.completed[node.ID] = true
+	rc.pendingMu.Unlock()
+
+	stateError := map[string]any{
+		"status":          "failed",
+		"on_error_action": onError.Strategy,
+		"error":           errorPayload,
+	}
+	if len(nextNodes) > 0 {
+		stateError["next_nodes"] = append([]string(nil), nextNodes...)
+	}
+	rc.state.SetNodeOutput(node.ID, stateError)
+
+	if !rc.allowCycles {
+		for _, skippedNodeID := range skippedNodes {
+			s.markSkipped(rc, skippedNodeID)
+		}
+	}
+
+	for _, nextNodeID := range nextNodes {
+		s.decrementAndEnqueue(rc, nextNodeID)
+	}
+
+	s.saveCheckpoint(rc, node.ID)
+	return true
 }
 
 // calculateBackoff computes the backoff duration
@@ -978,6 +1043,7 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 	// Emit node completed
 	completedEvent := rc.newEvent(port.EventTypeNodeCompleted).
 		WithNode(nodeID, node.Type, node.Name).
+		WithAttempt(nodeRun.Attempt).
 		WithDuration(durationMs)
 	if len(nodeRun.OutputJSON) > 0 {
 		completedEvent = completedEvent.WithOutput(nodeRun.OutputJSON)
@@ -2342,6 +2408,315 @@ func extractStateSchemaMetadata(metadata map[string]any) (map[string]any, string
 		return rawSchema, mode
 	}
 	return nil, mode
+}
+
+func (s *Scheduler) resolveRetryPolicy(node *entity.Node) *entity.RetryPolicy {
+	base := entity.DefaultRetryPolicy()
+	if node != nil && node.RetryPolicy != nil {
+		base = &entity.RetryPolicy{
+			MaxAttempts:     node.RetryPolicy.MaxAttempts,
+			BackoffMs:       node.RetryPolicy.BackoffMs,
+			BackoffStrategy: node.RetryPolicy.BackoffStrategy,
+		}
+	}
+
+	onError := parseOnErrorPolicy(node)
+	if onError.Strategy == onErrorStrategyRetry {
+		if onError.HasMaxAttempts && onError.MaxAttempts > 0 {
+			base.MaxAttempts = onError.MaxAttempts
+		}
+		if onError.HasBackoffMs && onError.BackoffMs >= 0 {
+			base.BackoffMs = onError.BackoffMs
+		}
+		if onError.HasBackoffStrategy {
+			base.BackoffStrategy = onError.BackoffStrategy
+		}
+	}
+
+	if base.MaxAttempts < 1 {
+		base.MaxAttempts = 1
+	}
+	if base.BackoffMs < 0 {
+		base.BackoffMs = 0
+	}
+	if base.BackoffStrategy != "fixed" && base.BackoffStrategy != "exponential" {
+		base.BackoffStrategy = "exponential"
+	}
+	return base
+}
+
+func parseOnErrorPolicy(node *entity.Node) onErrorPolicy {
+	policy := onErrorPolicy{Strategy: onErrorStrategyFail}
+	if node == nil || node.Config == nil {
+		return policy
+	}
+
+	rawPolicy, ok := node.Config["on_error"]
+	if !ok {
+		rawPolicy = node.Config["onError"]
+	}
+	config, ok := rawPolicy.(map[string]any)
+	if !ok || config == nil {
+		return policy
+	}
+
+	if strategy, ok := firstStringValue(config, "strategy", "action", "mode"); ok {
+		switch strings.ToLower(strings.TrimSpace(strategy)) {
+		case onErrorStrategyRetry:
+			policy.Strategy = onErrorStrategyRetry
+		case onErrorStrategySkip:
+			policy.Strategy = onErrorStrategySkip
+		case onErrorStrategyFallback:
+			policy.Strategy = onErrorStrategyFallback
+		default:
+			policy.Strategy = onErrorStrategyFail
+		}
+	}
+
+	if maxAttempts, ok := firstIntValue(config, "max_attempts", "max_retries"); ok {
+		policy.MaxAttempts = maxAttempts
+		policy.HasMaxAttempts = true
+	}
+	if backoffMs, ok := firstIntValue(config, "backoff_ms", "retry_backoff_ms"); ok {
+		policy.BackoffMs = backoffMs
+		policy.HasBackoffMs = true
+	}
+	if backoffStrategy, ok := firstStringValue(
+		config,
+		"backoff_strategy",
+		"retry_backoff_strategy",
+	); ok {
+		switch strings.ToLower(strings.TrimSpace(backoffStrategy)) {
+		case "fixed", "exponential":
+			policy.BackoffStrategy = strings.ToLower(strings.TrimSpace(backoffStrategy))
+			policy.HasBackoffStrategy = true
+		}
+	}
+
+	nextNodes := make([]string, 0)
+	if values, ok := firstStringSliceValue(
+		config,
+		"next_nodes",
+		"fallback_nodes",
+		"nextNodes",
+		"fallbackNodes",
+	); ok {
+		nextNodes = append(nextNodes, values...)
+	} else if single, ok := firstStringValue(
+		config,
+		"next_node",
+		"fallback_node",
+		"nextNode",
+		"fallbackNode",
+	); ok && strings.TrimSpace(single) != "" {
+		nextNodes = append(nextNodes, strings.TrimSpace(single))
+	}
+	if len(nextNodes) > 0 {
+		policy.NextNodes = nextNodes
+	}
+
+	return policy
+}
+
+func (s *Scheduler) resolveOnErrorRouting(
+	rc *runContext,
+	node *entity.Node,
+	onError onErrorPolicy,
+) ([]string, []string, bool, error) {
+	if node == nil {
+		return nil, nil, false, fmt.Errorf("node is required")
+	}
+
+	if onError.Strategy != onErrorStrategySkip && onError.Strategy != onErrorStrategyFallback {
+		return nil, nil, false, nil
+	}
+
+	edges := rc.plan.GetOutgoingEdges(node.ID)
+	if len(edges) == 0 {
+		if onError.Strategy == onErrorStrategyFallback && len(onError.NextNodes) > 0 {
+			return nil, nil, false, fmt.Errorf("on_error fallback targets require outgoing edges")
+		}
+		return nil, nil, true, nil
+	}
+
+	allowed := make(map[string]bool, len(edges))
+	defaultNext := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		allowed[edge.To] = true
+		defaultNext = append(defaultNext, edge.To)
+	}
+
+	nextNodes := make([]string, 0, len(defaultNext))
+	if len(onError.NextNodes) > 0 {
+		nextNodes = append(nextNodes, onError.NextNodes...)
+	} else if onError.Strategy == onErrorStrategySkip {
+		nextNodes = append(nextNodes, defaultNext...)
+	} else {
+		return nil, nil, false, fmt.Errorf("on_error fallback requires next_nodes configuration")
+	}
+
+	validNext := make([]string, 0, len(nextNodes))
+	seen := make(map[string]bool, len(nextNodes))
+	for _, candidate := range nextNodes {
+		target := strings.TrimSpace(candidate)
+		if target == "" {
+			continue
+		}
+		if !allowed[target] {
+			return nil, nil, false, fmt.Errorf("on_error target %s is not an outgoing edge from node %s", target, node.ID)
+		}
+		if seen[target] {
+			continue
+		}
+		validNext = append(validNext, target)
+		seen[target] = true
+	}
+
+	if onError.Strategy == onErrorStrategyFallback && len(validNext) == 0 {
+		return nil, nil, false, fmt.Errorf("on_error fallback resolved no valid next nodes")
+	}
+
+	skipped := make([]string, 0)
+	if !rc.allowCycles && len(validNext) > 0 {
+		selected := make(map[string]bool, len(validNext))
+		for _, next := range validNext {
+			selected[next] = true
+		}
+		for _, edge := range edges {
+			if !selected[edge.To] {
+				skipped = append(skipped, edge.To)
+			}
+		}
+	}
+
+	return validNext, skipped, true, nil
+}
+
+func (s *Scheduler) buildNodeErrorPayload(
+	err error,
+	attempt int,
+	retryPolicy *entity.RetryPolicy,
+	onError onErrorPolicy,
+	nextNodes []string,
+	routeErr error,
+) map[string]any {
+	payload := map[string]any{
+		"message":         err.Error(),
+		"type":            classifyNodeError(err),
+		"retryable":       domain.IsRetryable(err),
+		"attempt":         attempt,
+		"failed_at":       time.Now().UTC().Format(time.RFC3339Nano),
+		"on_error_action": onError.Strategy,
+	}
+
+	if retryPolicy != nil {
+		payload["max_attempts"] = retryPolicy.MaxAttempts
+		payload["backoff_ms"] = retryPolicy.BackoffMs
+		payload["backoff_strategy"] = retryPolicy.BackoffStrategy
+	}
+	if retryCode := domain.RetryCodeFromError(err); retryCode != "" {
+		payload["retry_code"] = retryCode
+	}
+	if retryAfterMs := domain.RetryAfterMsFromError(err); retryAfterMs > 0 {
+		payload["retry_after_ms"] = retryAfterMs
+	}
+	if retryDetails := domain.RetryDetailsFromError(err); len(retryDetails) > 0 {
+		payload["retry_details"] = retryDetails
+	}
+	if len(nextNodes) > 0 {
+		payload["next_nodes"] = append([]string(nil), nextNodes...)
+	}
+	if routeErr != nil {
+		payload["on_error_routing_error"] = routeErr.Error()
+	}
+	return payload
+}
+
+func classifyNodeError(err error) string {
+	switch {
+	case err == nil:
+		return "unknown"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	}
+
+	var validationErr *domain.ValidationError
+	if errors.As(err, &validationErr) {
+		return "validation_error"
+	}
+	var nodeErr *domain.NodeError
+	if errors.As(err, &nodeErr) {
+		return "node_error"
+	}
+	if domain.IsRetryable(err) {
+		if retryCode := domain.RetryCodeFromError(err); retryCode == "rate_limited" {
+			return "rate_limit"
+		}
+		return "retryable_error"
+	}
+	return "runtime_error"
+}
+
+func firstStringValue(config map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		raw, ok := config[key]
+		if !ok {
+			continue
+		}
+		if value, ok := raw.(string); ok {
+			value = strings.TrimSpace(value)
+			if value != "" {
+				return value, true
+			}
+		}
+	}
+	return "", false
+}
+
+func firstIntValue(config map[string]any, keys ...string) (int, bool) {
+	for _, key := range keys {
+		raw, ok := config[key]
+		if !ok {
+			continue
+		}
+		return coerceInt(raw), true
+	}
+	return 0, false
+}
+
+func firstStringSliceValue(config map[string]any, keys ...string) ([]string, bool) {
+	for _, key := range keys {
+		raw, ok := config[key]
+		if !ok {
+			continue
+		}
+
+		switch typed := raw.(type) {
+		case []string:
+			values := make([]string, 0, len(typed))
+			for _, value := range typed {
+				value = strings.TrimSpace(value)
+				if value != "" {
+					values = append(values, value)
+				}
+			}
+			return values, true
+		case []any:
+			values := make([]string, 0, len(typed))
+			for _, item := range typed {
+				str, ok := item.(string)
+				if !ok {
+					continue
+				}
+				str = strings.TrimSpace(str)
+				if str != "" {
+					values = append(values, str)
+				}
+			}
+			return values, true
+		}
+	}
+	return nil, false
 }
 
 func extractLoopMetadata(metadata map[string]any) (bool, int) {

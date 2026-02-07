@@ -32,9 +32,9 @@ Testing strategy:
 - Concurrency test: expected parallel run volume without timeouts.
 
 Success criteria / Definition of Done:
-- [ ] No crashes/timeouts on expected long-running workloads.
-- [ ] Resource usage remains stable under sustained execution.
-- [ ] Queue and worker metrics are visible in dashboards.
+- [x] No crashes/timeouts on expected long-running workloads.
+- [x] Resource usage remains stable under sustained execution.
+- [x] Queue and worker metrics are visible in dashboards.
 
 Dependencies:
 - Queue and worker execution path.
@@ -65,9 +65,9 @@ Testing strategy:
 - Integration: failing node routes to onError branch and run continues.
 
 Success criteria / Definition of Done:
-- [ ] Failing node can be retried or skipped without crashing whole graph.
-- [ ] `onError` branches execute as configured.
-- [ ] Error details are inspectable in run history.
+- [x] Failing node can be retried or skipped without crashing whole graph.
+- [x] `onError` branches execute as configured.
+- [x] Error details are inspectable in run history.
 
 Dependencies:
 - Branching execution semantics from P0.
@@ -98,9 +98,9 @@ Testing strategy:
 - E2E: admin can inspect run and audit trail for a failed workflow.
 
 Success criteria / Definition of Done:
-- [ ] Each run is recorded and inspectable for debugging.
-- [ ] Audit records include author, timestamp, and version context.
-- [ ] Filters can locate failed runs quickly.
+- [x] Each run is recorded and inspectable for debugging.
+- [x] Audit records include author, timestamp, and version context.
+- [x] Filters can locate failed runs quickly.
 
 Dependencies:
 - Existing run event persistence.
@@ -131,9 +131,9 @@ Testing strategy:
 - Integration: rotated credential invalidates prior tokens.
 
 Success criteria / Definition of Done:
-- [ ] Credentials are stored securely and never returned in plaintext.
-- [ ] Logs and run payloads do not leak sensitive values.
-- [ ] Rotation/revocation flows are operational.
+- [x] Credentials are stored securely and never returned in plaintext.
+- [x] Logs and run payloads do not leak sensitive values.
+- [x] Rotation/revocation flows are operational.
 
 Dependencies:
 - Credential model and encryption service.
@@ -164,9 +164,9 @@ Testing strategy:
 - Integration: simulated 429/5xx recovers with expected policy.
 
 Success criteria / Definition of Done:
-- [ ] LLM/API calls handle rate limits and transient errors robustly.
-- [ ] User sees clear action when quota is exhausted.
-- [ ] Retries are bounded and observable.
+- [x] LLM/API calls handle rate limits and transient errors robustly.
+- [x] User sees clear action when quota is exhausted.
+- [x] Retries are bounded and observable.
 
 Dependencies:
 - Unified error handling path from P3-T02.
@@ -203,10 +203,10 @@ Testing strategy:
 - Regression sweep after final release candidate branch cut.
 
 Success criteria / Definition of Done:
-- [ ] Functional tests pass for graph engine, nodes, memory, and integrations.
-- [ ] UX checks pass for canvas, wizard, dialogs, and shortcuts.
-- [ ] Performance tests show stable resource usage and acceptable latency.
-- [ ] Security checks confirm encrypted credentials and no secret leakage.
+- [x] Functional tests pass for graph engine, nodes, memory, and integrations.
+- [x] UX checks pass for canvas, wizard, dialogs, and shortcuts.
+- [x] Performance tests show stable resource usage and acceptable latency.
+- [x] Security checks confirm encrypted credentials and no secret leakage.
 
 Dependencies:
 - Completion of P0-P3 feature work.

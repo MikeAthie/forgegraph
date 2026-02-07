@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/forgegraph/engine/application/port"
+	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/value"
 )
@@ -410,6 +411,46 @@ func TestPromptExecutor_Execute_ClientError(t *testing.T) {
 	}
 	if result.Error == nil {
 		t.Error("Expected result.Error for client error")
+	}
+}
+
+func TestPromptExecutor_Execute_PreservesRetryableDiagnostics(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		err: domain.NewRetryableErrorWithDetails(
+			errors.New("rate limited"),
+			"LLM API error",
+			"rate_limited",
+			1500,
+			map[string]any{"provider": "openai"},
+		),
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+
+	node := &entity.Node{
+		ID:   "prompt_1",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Hello",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() should not return error, got %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("Expected result.Error for retryable client error")
+	}
+	if !domain.IsRetryable(result.Error) {
+		t.Fatalf("Expected retryable error, got %T (%v)", result.Error, result.Error)
+	}
+	if got := domain.RetryAfterMsFromError(result.Error); got != 1500 {
+		t.Fatalf("RetryAfterMs = %d, want 1500", got)
+	}
+	if code := domain.RetryCodeFromError(result.Error); code != "rate_limited" {
+		t.Fatalf("RetryCode = %s, want rate_limited", code)
 	}
 }
 

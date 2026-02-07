@@ -169,9 +169,31 @@ func (e *ToolExecutor) executeHTTPTool(
 	timeoutMs := resolveToolTimeoutMs(node, toolConfig, def.HTTP.TimeoutMs)
 	retryAttempts := resolveToolRetryAttempts(node, toolConfig)
 	retryBackoffMs := resolveToolRetryBackoffMs(node, toolConfig)
+	provider := strings.TrimSpace(strings.ToLower(node.GetConfigString("provider")))
+	if provider == "" {
+		provider = strings.TrimSpace(strings.ToLower(def.Name))
+	}
+	throttleMs := resolveTenantProviderThrottleMs(ctx, provider, node.Config)
 
 	var lastErr error
 	for attempt := 1; attempt <= retryAttempts; attempt++ {
+		if throttleMs > 0 {
+			if throttleErr := throttleTenantProvider(ctx, port.TenantIDFrom(ctx), provider, throttleMs); throttleErr != nil {
+				return nil, domain.NewRetryableErrorWithDetails(
+					throttleErr,
+					"tenant provider throttle interrupted",
+					"tenant_throttle",
+					0,
+					map[string]any{
+						"provider":         provider,
+						"throttle_ms":      throttleMs,
+						"tenant_throttled": true,
+						"tool":             def.Name,
+					},
+				)
+			}
+		}
+
 		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 
 		req, err := http.NewRequestWithContext(attemptCtx, method, urlStr, bytes.NewReader(bodyBytes))
@@ -190,9 +212,18 @@ func (e *ToolExecutor) executeHTTPTool(
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			lastErr = domain.NewRetryableError(err, "tool http request failed")
+			lastErr = domain.NewRetryableErrorWithDetails(
+				err,
+				"tool http request failed",
+				"network_error",
+				0,
+				map[string]any{
+					"tool": def.Name,
+				},
+			)
 			if attempt < retryAttempts {
-				if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+				delayMs := computeProviderRetryDelayMs(retryBackoffMs, attempt, 0)
+				if backoffErr := sleepWithContext(ctx, delayMs); backoffErr != nil {
 					return nil, backoffErr
 				}
 				continue
@@ -204,9 +235,18 @@ func (e *ToolExecutor) executeHTTPTool(
 		resp.Body.Close()
 		cancel()
 		if err != nil {
-			lastErr = domain.NewRetryableError(err, "failed to read tool response")
+			lastErr = domain.NewRetryableErrorWithDetails(
+				err,
+				"failed to read tool response",
+				"read_error",
+				0,
+				map[string]any{
+					"tool": def.Name,
+				},
+			)
 			if attempt < retryAttempts {
-				if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+				delayMs := computeProviderRetryDelayMs(retryBackoffMs, attempt, 0)
+				if backoffErr := sleepWithContext(ctx, delayMs); backoffErr != nil {
 					return nil, backoffErr
 				}
 				continue
@@ -225,12 +265,37 @@ func (e *ToolExecutor) executeHTTPTool(
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			lastErr = domain.NewRetryableError(
-				fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body))),
+			bodyText := strings.TrimSpace(string(body))
+			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
+			if resp.StatusCode == http.StatusTooManyRequests && isQuotaExhaustedRateLimit(bodyText) {
+				return nil, fmt.Errorf(
+					"rate limit quota exhausted (HTTP 429) for tool %s. Increase provider quota/billing and retry: %s",
+					def.Name,
+					bodyText,
+				)
+			}
+
+			details := map[string]any{
+				"status_code":    resp.StatusCode,
+				"retry_after_ms": retryAfterMs,
+				"tool":           def.Name,
+			}
+			code := "transient_http_5xx"
+			if resp.StatusCode == http.StatusTooManyRequests {
+				code = "rate_limited"
+				details["rate_limit_type"] = "throttled"
+			}
+
+			lastErr = domain.NewRetryableErrorWithDetails(
+				fmt.Errorf("HTTP %d: %s", resp.StatusCode, bodyText),
 				"tool upstream unavailable",
+				code,
+				retryAfterMs,
+				details,
 			)
 			if attempt < retryAttempts {
-				if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
+				delayMs := computeProviderRetryDelayMs(retryBackoffMs, attempt, retryAfterMs)
+				if backoffErr := sleepWithContext(ctx, delayMs); backoffErr != nil {
 					return nil, backoffErr
 				}
 				continue

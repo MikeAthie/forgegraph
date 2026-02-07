@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from adapters.api.responses import error_response, paginated_response, success_response
 from application.services.audit_log import record_audit_log
 from application.services.rbac import has_min_role
+from application.services.redaction import redact_payload
 from application.services.retention import DataRetentionService
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import (
@@ -361,9 +362,9 @@ class RetentionExportView(APIView):
                     "thread_id": str(run.thread_id) if run.thread_id else None,
                     "started_at": run.started_at.isoformat() if run.started_at else None,
                     "ended_at": run.ended_at.isoformat() if run.ended_at else None,
-                    "input_json": run.input_json,
-                    "output_json": run.output_json,
-                    "error_message": run.error_message,
+                    "input_json": redact_payload(run.input_json),
+                    "output_json": redact_payload(run.output_json),
+                    "error_message": redact_payload(run.error_message),
                 }
                 for run in run_page
             ]
@@ -391,7 +392,7 @@ class RetentionExportView(APIView):
                     "id": str(event.id),
                     "run_id": str(event.run_id),
                     "event_type": event.event_type,
-                    "payload": event.payload,
+                    "payload": redact_payload(event.payload),
                     "created_at": event.created_at.isoformat(),
                 }
                 for event in event_page
@@ -426,9 +427,9 @@ class RetentionExportView(APIView):
                     "attempt": node_run.attempt,
                     "started_at": node_run.started_at.isoformat() if node_run.started_at else None,
                     "ended_at": node_run.ended_at.isoformat() if node_run.ended_at else None,
-                    "input_json": node_run.input_json,
-                    "output_json": node_run.output_json,
-                    "error_json": node_run.error_json,
+                    "input_json": redact_payload(node_run.input_json),
+                    "output_json": redact_payload(node_run.output_json),
+                    "error_json": redact_payload(node_run.error_json),
                 }
                 for node_run in node_run_page
             ]
@@ -456,7 +457,7 @@ class RetentionExportView(APIView):
                     "action": log.action,
                     "resource_type": log.resource_type,
                     "resource_id": log.resource_id,
-                    "metadata": log.metadata,
+                    "metadata": redact_payload(log.metadata),
                     "created_at": log.created_at.isoformat(),
                 }
                 for log in audit_page

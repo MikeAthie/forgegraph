@@ -50,6 +50,7 @@ class RunListSerializer(serializers.Serializer[Any]):
     graph_version_id = serializers.UUIDField(read_only=True)
     graph_version = serializers.IntegerField(read_only=True)
     status = serializers.CharField(read_only=True)
+    has_failed_nodes = serializers.BooleanField(read_only=True)
     queue_status = serializers.CharField(read_only=True, allow_null=True)
     queue_attempts = serializers.IntegerField(read_only=True, allow_null=True)
     queue_available_at = serializers.DateTimeField(read_only=True, allow_null=True)
@@ -63,6 +64,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
 
     id = serializers.UUIDField(read_only=True)
     owner_id = serializers.UUIDField(read_only=True)
+    owner_email = serializers.EmailField(read_only=True)
     thread_id = serializers.UUIDField(read_only=True, allow_null=True)
     graph_id = serializers.UUIDField(read_only=True)
     graph_name = serializers.CharField(read_only=True)
@@ -81,6 +83,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     # Human Gate pause fields
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
+    node_outcomes = serializers.JSONField(read_only=True, allow_null=True)
 
 
 class NodeRunSerializer(serializers.Serializer[Any]):

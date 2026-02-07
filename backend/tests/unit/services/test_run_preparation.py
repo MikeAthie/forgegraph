@@ -8,8 +8,10 @@ from application.services.run_preparation import (
     PromptTemplateResolutionError,
     prepare_graph_for_engine,
     resolve_prompt_templates,
+    validate_prompt_credentials,
 )
-from infrastructure.orm.models import PromptTemplate, User
+from application.services.tenancy import ensure_default_organization
+from infrastructure.orm.models import APIKey, PromptTemplate, User
 
 pytestmark = pytest.mark.django_db
 
@@ -115,3 +117,35 @@ def test_prepare_graph_for_engine_resolves_nested_subgraph_prompt_ids() -> None:
     prepared = prepare_graph_for_engine(graph_json, owner)
     nested_config = prepared["nodes"][0]["config"]["graph_json"]["nodes"][0]["config"]
     assert nested_config["prompt_template"] == "Nested template"
+
+
+def test_validate_prompt_credentials_rejects_revoked_credential() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    ensure_default_organization(owner)
+    assert owner.default_organization is not None
+    credential = APIKey.objects.create(
+        organization=owner.default_organization,
+        user=owner,
+        provider="openai",
+        name="revoked-openai",
+        encrypted_key=b"opaque",
+        token_metadata={"revoked": True},
+    )
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "prompt-1",
+                "type": "prompt",
+                "name": "Prompt",
+                "config": {
+                    "provider": "openai",
+                    "credential_id": str(credential.id),
+                    "prompt_template": "Hello",
+                },
+            }
+        ],
+        "edges": [],
+    }
+
+    errors = validate_prompt_credentials(graph_json, owner)
+    assert any("revoked credential" in str(error.get("message", "")).lower() for error in errors)

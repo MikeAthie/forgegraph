@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/forgegraph/engine/adapter/executor"
+	"github.com/forgegraph/engine/domain"
 )
 
 type AnthropicClient struct {
@@ -90,12 +93,53 @@ func (c *AnthropicClient) Complete(ctx context.Context, request *executor.LLMReq
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, domain.NewRetryableErrorWithDetails(
+			err,
+			"request failed",
+			"network_error",
+			0,
+			map[string]any{"provider": "anthropic"},
+		)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("anthropic error: status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		bodyText := strings.TrimSpace(string(body))
+		if resp.StatusCode == http.StatusTooManyRequests {
+			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
+			if isOpenAIQuotaExhausted("", bodyText) {
+				return nil, fmt.Errorf(
+					"anthropic quota exhausted (HTTP 429). Increase provider quota/billing and retry: %s",
+					bodyText,
+				)
+			}
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf("anthropic error: status %d: %s", resp.StatusCode, bodyText),
+				"rate limited",
+				"rate_limited",
+				retryAfterMs,
+				map[string]any{
+					"provider":        "anthropic",
+					"status_code":     resp.StatusCode,
+					"retry_after_ms":  retryAfterMs,
+					"rate_limit_type": "throttled",
+				},
+			)
+		}
+		if resp.StatusCode >= 500 {
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf("anthropic error: status %d: %s", resp.StatusCode, bodyText),
+				"upstream server error",
+				"transient_http_5xx",
+				0,
+				map[string]any{
+					"provider":    "anthropic",
+					"status_code": resp.StatusCode,
+				},
+			)
+		}
+		return nil, fmt.Errorf("anthropic error: status %d: %s", resp.StatusCode, bodyText)
 	}
 
 	var parsed anthropicResponse

@@ -864,6 +864,357 @@ func TestScheduler_NonRetryableError(t *testing.T) {
 	}
 }
 
+func TestScheduler_OnErrorSkipContinuesRun(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "fail", Type: "transform", Name: "Fail Node", Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "fail",
+			"output_key":      "result",
+			"on_error": map[string]any{
+				"strategy": "skip",
+			},
+		}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "fail", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return nil, fmt.Errorf("non-retryable failure")
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	scheduler := NewScheduler(
+		SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000},
+		registry,
+		repo,
+		emitter,
+		store.NewInMemoryMemoryStore(),
+	)
+
+	if err := scheduler.StartRun(context.Background(), "run-onerror-skip", graphJSON, "{}", "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-onerror-skip", 5*time.Second)
+
+	if repo.getRunStatus("run-onerror-skip") != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus("run-onerror-skip"))
+	}
+	if outputExec.getNodeExecuteCount("output1") != 1 {
+		t.Fatalf("Expected output node to execute once, got %d", outputExec.getNodeExecuteCount("output1"))
+	}
+
+	nodeRun, ok := repo.nodeRuns["run-onerror-skip-fail"]
+	if !ok {
+		t.Fatalf("Expected failed node run to be persisted")
+	}
+	if nodeRun.Status != string(value.NodeRunStatusFailed) {
+		t.Fatalf("Expected failed node status, got %s", nodeRun.Status)
+	}
+	if nodeRun.ErrorJSON["on_error_action"] != "skip" {
+		t.Fatalf("Expected on_error_action=skip, got %v", nodeRun.ErrorJSON["on_error_action"])
+	}
+	if !emitter.hasEventType(port.EventTypeNodeFailed) {
+		t.Fatal("Expected node_failed event")
+	}
+}
+
+func TestScheduler_OnErrorFallbackRoutesToConfiguredNodes(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "fail", Type: "transform", Name: "Fail Node", Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "fail",
+			"output_key":      "result",
+			"on_error": map[string]any{
+				"strategy":   "fallback",
+				"next_nodes": []string{"fallback"},
+			},
+		}},
+		{ID: "primary", Type: "transform", Name: "Primary", Config: map[string]any{}},
+		{ID: "fallback", Type: "transform", Name: "Fallback", Config: map[string]any{}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "fail", To: "primary"},
+		{From: "fail", To: "fallback"},
+		{From: "primary", To: "output1"},
+		{From: "fallback", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		if node.ID == "fail" {
+			return nil, fmt.Errorf("force fallback")
+		}
+		return port.NewSuccessResult(map[string]any{"node_id": node.ID}), nil
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	scheduler := NewScheduler(
+		SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000},
+		registry,
+		repo,
+		emitter,
+		store.NewInMemoryMemoryStore(),
+	)
+
+	if err := scheduler.StartRun(context.Background(), "run-onerror-fallback", graphJSON, "{}", "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-onerror-fallback", 5*time.Second)
+
+	if repo.getRunStatus("run-onerror-fallback") != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus("run-onerror-fallback"))
+	}
+	if transformExec.getNodeExecuteCount("primary") != 0 {
+		t.Fatalf("Expected primary path to be skipped, got %d executions", transformExec.getNodeExecuteCount("primary"))
+	}
+	if transformExec.getNodeExecuteCount("fallback") != 1 {
+		t.Fatalf("Expected fallback path to execute once, got %d", transformExec.getNodeExecuteCount("fallback"))
+	}
+	if outputExec.getNodeExecuteCount("output1") != 1 {
+		t.Fatalf("Expected output node to execute once, got %d", outputExec.getNodeExecuteCount("output1"))
+	}
+}
+
+func TestScheduler_OnErrorFallbackInvalidTargetFailsRun(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "fail", Type: "transform", Name: "Fail Node", Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "fail",
+			"output_key":      "result",
+			"on_error": map[string]any{
+				"strategy":   "fallback",
+				"next_nodes": []string{"missing"},
+			},
+		}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "fail", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return nil, fmt.Errorf("force fallback failure")
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	scheduler := NewScheduler(
+		SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000},
+		registry,
+		repo,
+		emitter,
+		store.NewInMemoryMemoryStore(),
+	)
+
+	if err := scheduler.StartRun(context.Background(), "run-onerror-invalid-fallback", graphJSON, "{}", "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-onerror-invalid-fallback", 5*time.Second)
+
+	if repo.getRunStatus("run-onerror-invalid-fallback") != string(value.RunStatusFailed) {
+		t.Fatalf("Expected run status failed, got %s", repo.getRunStatus("run-onerror-invalid-fallback"))
+	}
+	nodeRun, ok := repo.nodeRuns["run-onerror-invalid-fallback-fail"]
+	if !ok {
+		t.Fatalf("Expected failed node run to be persisted")
+	}
+	if _, exists := nodeRun.ErrorJSON["on_error_routing_error"]; !exists {
+		t.Fatalf("Expected on_error_routing_error in error payload, got %v", nodeRun.ErrorJSON)
+	}
+}
+
+func TestScheduler_OnErrorRetryOverridesRetryPolicy(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "retry", Type: "transform", Name: "Retry Node", Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "retry",
+			"output_key":      "result",
+			"on_error": map[string]any{
+				"strategy":         "retry",
+				"max_attempts":     2,
+				"backoff_ms":       1,
+				"backoff_strategy": "fixed",
+			},
+		}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "retry", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+	attemptCount := 0
+	var attemptMu sync.Mutex
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		attemptMu.Lock()
+		attemptCount++
+		attemptMu.Unlock()
+		return nil, domain.NewRetryableError(fmt.Errorf("retry me"), "transient")
+	})
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	scheduler := NewScheduler(
+		SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000},
+		registry,
+		repo,
+		emitter,
+		store.NewInMemoryMemoryStore(),
+	)
+
+	if err := scheduler.StartRun(context.Background(), "run-onerror-retry-policy", graphJSON, "{}", "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-onerror-retry-policy", 5*time.Second)
+
+	attemptMu.Lock()
+	if attemptCount != 2 {
+		t.Fatalf("Expected 2 attempts from on_error retry override, got %d", attemptCount)
+	}
+	attemptMu.Unlock()
+
+	if repo.getRunStatus("run-onerror-retry-policy") != string(value.RunStatusFailed) {
+		t.Fatalf("Expected run status failed, got %s", repo.getRunStatus("run-onerror-retry-policy"))
+	}
+
+	nodeRun, ok := repo.nodeRuns["run-onerror-retry-policy-retry"]
+	if !ok {
+		t.Fatalf("Expected failed node run to be persisted")
+	}
+	if nodeRun.Attempt != 2 {
+		t.Fatalf("Expected final node attempt 2, got %d", nodeRun.Attempt)
+	}
+	if nodeRun.ErrorJSON["max_attempts"] != 2 {
+		t.Fatalf("Expected max_attempts=2 in error payload, got %v", nodeRun.ErrorJSON["max_attempts"])
+	}
+
+	events := emitter.getEvents()
+	finalAttempt := 0
+	for _, ev := range events {
+		if ev.Type == port.EventTypeNodeFailed {
+			finalAttempt = ev.Attempt
+		}
+	}
+	if finalAttempt != 2 {
+		t.Fatalf("Expected node_failed event attempt=2, got %d", finalAttempt)
+	}
+}
+
+func TestScheduler_RetryAfterDelayRespected(t *testing.T) {
+	nodes := []entity.Node{
+		{ID: "retry", Type: "transform", Name: "Retry Node", Config: map[string]any{
+			"expression_type": "static",
+			"expression":      "retry",
+			"output_key":      "result",
+		}, RetryPolicy: &entity.RetryPolicy{
+			MaxAttempts:     2,
+			BackoffMs:       1,
+			BackoffStrategy: "fixed",
+		}},
+		{ID: "output1", Type: "output", Name: "Output 1", Config: map[string]any{}},
+	}
+	edges := []entity.Edge{
+		{From: "retry", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+
+	attemptCount := 0
+	var firstAttemptAt time.Time
+	var secondAttemptAt time.Time
+	var attemptMu sync.Mutex
+
+	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		attemptMu.Lock()
+		defer attemptMu.Unlock()
+		attemptCount++
+		if attemptCount == 1 {
+			firstAttemptAt = time.Now()
+			return nil, domain.NewRetryableErrorWithDetails(
+				fmt.Errorf("rate limited"),
+				"rate limited",
+				"rate_limited",
+				40,
+				map[string]any{
+					"retry_after_ms": 40,
+				},
+			)
+		}
+		secondAttemptAt = time.Now()
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	outputExec := newMockExecutor("output", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(transformExec, outputExec)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
+
+	err := scheduler.StartRun(context.Background(), "run-retry-after", graphJSON, "{}", "", "", "", "")
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-retry-after", 5*time.Second)
+
+	if repo.getRunStatus("run-retry-after") != string(value.RunStatusSucceeded) {
+		t.Fatalf("Expected run status succeeded, got %s", repo.getRunStatus("run-retry-after"))
+	}
+
+	if firstAttemptAt.IsZero() || secondAttemptAt.IsZero() {
+		t.Fatalf("Expected two attempts to run")
+	}
+	delayMs := secondAttemptAt.Sub(firstAttemptAt).Milliseconds()
+	if delayMs < 30 {
+		t.Fatalf("Expected retry delay to respect retry_after (>=30ms), got %dms", delayMs)
+	}
+}
+
 func TestScheduler_BranchSkipDoesNotBlockMerge(t *testing.T) {
 	nodes := []entity.Node{
 		{ID: "branch", Type: "branch", Name: "Branch", Config: map[string]any{}},

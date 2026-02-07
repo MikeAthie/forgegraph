@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
+from application.services.credential_state import is_credential_revoked
 from infrastructure.crypto.encryption import decrypt_api_key
 from infrastructure.orm.models import APIKey, User
 
@@ -51,6 +52,8 @@ def _resolve_credential(
         credential = None
     if credential is None:
         raise ValueError("Credential not found or inaccessible.")
+    if is_credential_revoked(credential.token_metadata):
+        raise ValueError("Credential has been revoked. Rotate or reconnect it before testing.")
 
     resolved_provider = str(credential.provider).strip().lower()
     normalized_provider = provider.strip().lower() if provider else ""

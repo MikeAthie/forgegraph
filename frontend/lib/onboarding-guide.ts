@@ -15,9 +15,9 @@ export interface OnboardingRemediation {
 
 export const ONBOARDING_DOC_LINKS = {
   templates:
-    "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/wizard-quick-reference.md",
+    "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/template-library.md",
   credentials:
-    "https://github.com/GreyCrossX/forgegraph/blob/main/docs/contributing.md",
+    "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/v2-launch-quickstart.md#3-credentials-and-provider-setup",
   troubleshooting:
     "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/agent-wizard.md",
 } as const;

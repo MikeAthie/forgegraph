@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/forgegraph/engine/application/port"
+	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/value"
 )
@@ -468,5 +469,72 @@ func TestHTTPExecutor_Execute_InferBearerAuthFromCredential(t *testing.T) {
 	}
 	if receivedAuth != "Bearer gmail-token-123" {
 		t.Errorf("Authorization = %v, want Bearer gmail-token-123", receivedAuth)
+	}
+}
+
+func TestHTTPExecutor_Execute_429RetryableRespectsRetryAfter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limit exceeded"}`))
+	}))
+	defer server.Close()
+
+	executor := NewHTTPExecutorWithClient(server.Client())
+	state := entity.NewState()
+
+	node := &entity.Node{
+		ID:   "http_1",
+		Type: string(value.NodeTypeHTTP),
+		Config: map[string]any{
+			"url": server.URL,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("Expected retryable error for 429 response")
+	}
+	if !domain.IsRetryable(result.Error) {
+		t.Fatalf("Expected retryable error, got %T (%v)", result.Error, result.Error)
+	}
+	if retryAfterMs := domain.RetryAfterMsFromError(result.Error); retryAfterMs != 2000 {
+		t.Fatalf("RetryAfterMs = %d, want 2000", retryAfterMs)
+	}
+	if retryCode := domain.RetryCodeFromError(result.Error); retryCode != "rate_limited" {
+		t.Fatalf("RetryCode = %s, want rate_limited", retryCode)
+	}
+}
+
+func TestHTTPExecutor_Execute_429QuotaExhaustedIsNonRetryable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"insufficient_quota"}`))
+	}))
+	defer server.Close()
+
+	executor := NewHTTPExecutorWithClient(server.Client())
+	state := entity.NewState()
+
+	node := &entity.Node{
+		ID:   "http_1",
+		Type: string(value.NodeTypeHTTP),
+		Config: map[string]any{
+			"url": server.URL,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("Expected error for quota exhausted response")
+	}
+	if domain.IsRetryable(result.Error) {
+		t.Fatalf("Expected non-retryable error for quota exhausted, got %T (%v)", result.Error, result.Error)
 	}
 }

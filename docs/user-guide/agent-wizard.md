@@ -281,5 +281,7 @@ Quick Node presets are pre-configured templates for common patterns.
 ## Next Steps
 
 - Read the [Quick Reference Card](./wizard-quick-reference.md) for a one-page summary
+- Use the [V2 Launch Quickstart](./v2-launch-quickstart.md) for end-to-end setup and launch checks
+- Browse the [Template Library Guide](./template-library.md) for starter flow selection and clone strategy
 - Explore the [Developer Documentation](../developer/wizard-architecture.md) to extend the wizard
 - Check out example graphs in the graph library

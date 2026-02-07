@@ -51,15 +51,39 @@ var (
 
 // RetryableError wraps an error that can be retried
 type RetryableError struct {
-	Err     error
-	Message string
+	Err          error
+	Message      string
+	Code         string
+	RetryAfterMs int
+	Details      map[string]any
 }
 
 // NewRetryableError creates a new retryable error
 func NewRetryableError(err error, message string) *RetryableError {
+	return NewRetryableErrorWithDetails(err, message, "", 0, nil)
+}
+
+// NewRetryableErrorWithDetails creates a new retryable error with structured metadata.
+func NewRetryableErrorWithDetails(
+	err error,
+	message string,
+	code string,
+	retryAfterMs int,
+	details map[string]any,
+) *RetryableError {
+	if retryAfterMs < 0 {
+		retryAfterMs = 0
+	}
+	copiedDetails := make(map[string]any, len(details))
+	for key, value := range details {
+		copiedDetails[key] = value
+	}
 	return &RetryableError{
-		Err:     err,
-		Message: message,
+		Err:          err,
+		Message:      message,
+		Code:         code,
+		RetryAfterMs: retryAfterMs,
+		Details:      copiedDetails,
 	}
 }
 
@@ -78,6 +102,37 @@ func (e *RetryableError) Unwrap() error {
 func IsRetryable(err error) bool {
 	var retryable *RetryableError
 	return errors.As(err, &retryable)
+}
+
+// RetryAfterMsFromError returns the suggested retry-after delay in milliseconds (if any).
+func RetryAfterMsFromError(err error) int {
+	var retryable *RetryableError
+	if errors.As(err, &retryable) && retryable.RetryAfterMs > 0 {
+		return retryable.RetryAfterMs
+	}
+	return 0
+}
+
+// RetryCodeFromError returns the retry classification code (if any).
+func RetryCodeFromError(err error) string {
+	var retryable *RetryableError
+	if errors.As(err, &retryable) {
+		return retryable.Code
+	}
+	return ""
+}
+
+// RetryDetailsFromError returns structured retry diagnostics (if any).
+func RetryDetailsFromError(err error) map[string]any {
+	var retryable *RetryableError
+	if !errors.As(err, &retryable) || len(retryable.Details) == 0 {
+		return nil
+	}
+	details := make(map[string]any, len(retryable.Details))
+	for key, value := range retryable.Details {
+		details[key] = value
+	}
+	return details
 }
 
 // NodeError wraps an error that occurred during node execution

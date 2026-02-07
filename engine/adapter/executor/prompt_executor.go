@@ -285,6 +285,25 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	if response == nil {
+		throttleMs := resolveTenantProviderThrottleMs(ctx, provider, node.Config)
+		if throttleMs > 0 {
+			if err := throttleTenantProvider(ctx, request.TenantID, provider, throttleMs); err != nil {
+				return port.NewErrorResult(
+					domain.NewRetryableErrorWithDetails(
+						err,
+						"tenant provider throttle interrupted",
+						"tenant_throttle",
+						0,
+						map[string]any{
+							"provider":         provider,
+							"throttle_ms":      throttleMs,
+							"tenant_throttled": true,
+						},
+					),
+				), nil
+			}
+		}
+
 		// Call LLM (streaming when enabled and supported by provider client).
 		var err error
 		if streamChunks {
@@ -300,8 +319,10 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 			response, err = e.client.Complete(ctx, request)
 		}
 		if err != nil {
-			// Network/API errors are typically retryable
-			return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: %w", err), "LLM API error")), nil
+			if domain.IsRetryable(err) {
+				return port.NewErrorResult(err), nil
+			}
+			return port.NewErrorResult(fmt.Errorf("LLM call failed: %w", err)), nil
 		}
 		if response == nil {
 			return port.NewErrorResult(domain.NewRetryableError(fmt.Errorf("LLM call failed: empty response"), "LLM API error")), nil

@@ -150,3 +150,152 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+
+
+  launch_qa_backend:
+    name: launch-qa-backend
+    needs: backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: forgegraph
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      SECRET_KEY: "ci-not-a-secret"
+      DEBUG: "False"
+      DJANGO_SETTINGS_MODULE: config.settings
+      ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: uv sync --dev
+
+      - name: Launch QA - Backend Functional/Security
+        working-directory: backend
+        run: >
+          uv run pytest
+          tests/integration/adapters/test_run_api.py
+          tests/integration/adapters/test_run_history_security_api.py
+          tests/integration/adapters/test_credentials_security_api.py
+          tests/integration/adapters/test_audit_logs_api.py
+          tests/integration/adapters/test_metrics_api.py
+          tests/unit/services/test_redaction.py
+          -q
+
+
+  launch_qa_engine:
+    name: launch-qa-engine
+    needs: engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Launch QA - Engine Reliability
+        working-directory: engine
+        run: |
+          go test ./application/usecase -run "Scheduler|OnError|RetryAfter|NonRetryable" -count=1
+          go test ./adapter/executor -run "HTTPExecutor|ToolExecutor|PromptExecutor" -count=1
+
+
+  launch_qa_frontend:
+    name: launch-qa-frontend
+    needs: frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Launch QA - Frontend UX
+        working-directory: frontend
+        run: >
+          npm test -- --runInBand
+          __tests__/components/graph-editor/GraphEditor.test.tsx
+          __tests__/components/graph-editor/wizard/AgentWizard.test.tsx
+          __tests__/components/graph-editor/NodeConfigDialog.test.tsx
+
+
+  launch_qa_report:
+    name: launch-qa-report
+    needs: [launch_qa_backend, launch_qa_engine, launch_qa_frontend]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build launch report
+        run: |
+          cat > launch-qa-report.md <<EOF
+          # Launch QA Gate Report
+
+          | Suite | Result |
+          | --- | --- |
+          | Backend Functional + Security | ${{ needs.launch_qa_backend.result }} |
+          | Engine Reliability | ${{ needs.launch_qa_engine.result }} |
+          | Frontend UX | ${{ needs.launch_qa_frontend.result }} |
+
+          Overall gate: ${{ (needs.launch_qa_backend.result == 'success' && needs.launch_qa_engine.result == 'success' && needs.launch_qa_frontend.result == 'success') && 'PASS' || 'FAIL' }}
+          EOF
+
+      - name: Upload launch QA report
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-qa-report
+          path: launch-qa-report.md

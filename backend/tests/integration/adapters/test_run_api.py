@@ -1438,6 +1438,60 @@ class TestEngineRunEvents:
             run=run, event_type="node_stream.chunk", payload__chunk="Hello"
         ).exists()
 
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_node_failed_persists_structured_error_payload(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        timestamp_ms = int(time.time() * 1000)
+        payload = {
+            "event_id": "evt-node-failed-structured",
+            "type": "node_failed",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "http_1",
+            "node_type": "http",
+            "attempt": 2,
+            "error": "max retries exceeded: transient upstream failure",
+            "timestamp": timestamp_ms,
+            "output": {
+                "error": {
+                    "message": "transient upstream failure",
+                    "type": "retryable_error",
+                    "attempt": 2,
+                    "max_attempts": 2,
+                    "retryable": True,
+                    "on_error_action": "skip",
+                }
+            },
+        }
+        body = json.dumps(payload)
+        signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+        headers = {
+            "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
+            "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
+        }
+
+        response = api_client.post(
+            "/api/runs/engine-events",
+            data=body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        node_run = NodeRun.objects.get(run=run, node_id="http_1", attempt=2)
+        assert node_run.status == "failed"
+        assert node_run.error_json is not None
+        assert node_run.error_json["type"] == "retryable_error"
+        assert node_run.error_json["on_error_action"] == "skip"
+        assert node_run.error_json["attempt"] == 2
+        assert node_run.error_json["error"] == payload["error"]
+
     def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Schema Graph")
         graph_json = {
