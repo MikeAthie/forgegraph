@@ -73,11 +73,11 @@ Integrations:
 - [x] HTTP/Webhook nodes can integrate unlisted services.
 
 Stability + Governance:
-- [ ] onError flow behavior supports retry/skip/fallback.
-- [ ] Run logs/history include author, timestamp, and version context.
-- [ ] Credentials are encrypted and sensitive values are redacted from logs.
-- [ ] LLM/API rate limits are handled with bounded retries and clear errors.
+- [x] onError flow behavior supports retry/skip/fallback.
+- [x] Run logs/history include author, timestamp, and version context.
+- [x] Credentials are encrypted and sensitive values are redacted from logs.
+- [x] LLM/API rate limits are handled with bounded retries and clear errors.
 
 Launch Quality:
-- [ ] Functional, integration, UX, performance, and security QA gates pass.
-- [ ] Quickstart docs and template library are updated for launch.
+- [x] Functional, integration, UX, performance, and security QA gates pass.
+- [x] Quickstart docs and template library are updated for launch.

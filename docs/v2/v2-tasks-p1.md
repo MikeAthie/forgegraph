@@ -32,9 +32,9 @@ Testing strategy:
 - Manual stress test: 100-node graph interaction.
 
 Success criteria / Definition of Done:
-- [ ] User can draw and connect a workflow without interaction errors.
-- [ ] Edge routing remains readable after moving nodes.
-- [ ] Canvas remains responsive on expected graph sizes.
+- [x] User can draw and connect a workflow without interaction errors.
+- [x] Edge routing remains readable after moving nodes.
+- [x] Canvas remains responsive on expected graph sizes.
 
 Dependencies:
 - Existing GraphEditor canvas foundation.
@@ -65,9 +65,9 @@ Testing strategy:
 - Unit: wizard state transitions and validation rules.
 
 Success criteria / Definition of Done:
-- [ ] Non-technical user can build a working agent via wizard alone.
-- [ ] Presets prefill common node configs and credential hints.
-- [ ] Wizard blocks invalid graphs with clear remediation.
+- [x] Non-technical user can build a working agent via wizard alone.
+- [x] Presets prefill common node configs and credential hints.
+- [x] Wizard blocks invalid graphs with clear remediation.
 
 Dependencies:
 - Template and node form metadata.
@@ -98,9 +98,9 @@ Testing strategy:
 - E2E: add node by name via keyboard only.
 
 Success criteria / Definition of Done:
-- [ ] User can find any supported node by name quickly.
-- [ ] Palette includes descriptions for all node types.
-- [ ] Keyboard navigation is complete and reliable.
+- [x] User can find any supported node by name quickly.
+- [x] Palette includes descriptions for all node types.
+- [x] Keyboard navigation is complete and reliable.
 
 Dependencies:
 - Node type registry metadata.
@@ -131,9 +131,9 @@ Testing strategy:
 - Integration: template clone preserves valid graph structure.
 
 Success criteria / Definition of Done:
-- [ ] Users can start from a template with most fields pre-filled.
-- [ ] Template run succeeds after credentials are connected.
-- [ ] Template metadata clearly communicates setup effort.
+- [x] Users can start from a template with most fields pre-filled.
+- [x] Template run succeeds after credentials are connected.
+- [x] Template metadata clearly communicates setup effort.
 
 Dependencies:
 - Credential UX and integration node readiness.
@@ -164,9 +164,9 @@ Testing strategy:
 - UX review: tooltip clarity and placement.
 
 Success criteria / Definition of Done:
-- [ ] New users understand core features without reading full docs first.
-- [ ] Help links exist on all high-friction node forms.
-- [ ] First-run checklist completion is trackable.
+- [x] New users understand core features without reading full docs first.
+- [x] Help links exist on all high-friction node forms.
+- [x] First-run checklist completion is trackable.
 
 Dependencies:
 - Updated user guide sections.
@@ -197,9 +197,9 @@ Testing strategy:
 - Automated accessibility checks on graph pages.
 
 Success criteria / Definition of Done:
-- [ ] Documented shortcuts work reliably.
-- [ ] Keyboard-only workflow is usable end-to-end.
-- [ ] Critical graph editor views pass accessibility checks.
+- [x] Documented shortcuts work reliably.
+- [x] Keyboard-only workflow is usable end-to-end.
+- [x] Critical graph editor views pass accessibility checks.
 
 Dependencies:
 - Stable UI component primitives.
