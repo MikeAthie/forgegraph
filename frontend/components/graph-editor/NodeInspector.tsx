@@ -1,18 +1,57 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { Edge, Node } from "@xyflow/react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleDot } from "lucide-react";
 import { NODE_TYPES, type RetryPolicy } from "../../lib/graph-types";
 import { getApiErrorMessage, promptsApi } from "../../lib/api";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KeyValueEditor } from "@/components/ui/key-value-editor";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { getNodeVisual } from "./nodes/nodeShapes";
+
+/** Reusable collapsible section with chevron toggle */
+function CollapsibleSection({
+  title,
+  defaultOpen = true,
+  badge,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  badge?: string;
+  children: ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="pt-3 border-t border-border">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 w-full text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {isOpen ? (
+          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+        )}
+        <span className="uppercase tracking-wider">{title}</span>
+        {badge && !isOpen && (
+          <span className="ml-auto text-primary text-xs">{badge}</span>
+        )}
+      </button>
+      {isOpen && <div className="mt-3 space-y-3">{children}</div>}
+    </div>
+  );
+}
 
 interface NodeInspectorProps {
   selectedNode: Node | null | undefined;
   selectedEdge: Edge | null | undefined;
   nodes: Node[];
+  edges?: Edge[];
   graphName: string;
   graphDescription: string;
   onUpdateNode: (nodeId: string, updates: Partial<Node["data"]>) => void;
@@ -28,6 +67,7 @@ export function NodeInspector({
   selectedNode,
   selectedEdge,
   nodes,
+  edges = [],
   graphName,
   graphDescription,
   onUpdateNode,
@@ -317,56 +357,61 @@ export function NodeInspector({
   const nodeType = selectedNode.type as string;
   const nodeData = selectedNode.data;
   const isNote = nodeType === "note";
+  const isTrigger = (nodeData as any)?.isTrigger === true;
+  const isEnd = (nodeData as any)?.isEnd === true;
+  const visual = getNodeVisual(nodeType, isTrigger, isEnd);
+  const NodeIcon = visual.icon;
 
   return (
     <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Node Config</h3>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onDuplicateNode(selectedNode.id)}
-          >
-            Duplicate
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => onDeleteNode(selectedNode.id)}
-          >
-            Delete
-          </Button>
+      {/* Node header with colored icon */}
+      <div className="flex items-start gap-3 mb-4">
+        <div
+          className={cn(
+            "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0",
+            visual.bgClass,
+          )}
+        >
+          <NodeIcon className="w-5 h-5" />
         </div>
-      </div>
-
-      <div className="space-y-4">
-        {/* Node Type Badge */}
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-            Type
-          </label>
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
-            {nodeType.replace("_", " ")}
-          </span>
-        </div>
-
-        {/* Node Name */}
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Name
-          </label>
+        <div className="flex-1 min-w-0">
           <Input
             value={(nodeData.label as string) ?? ""}
             onChange={(e) =>
               onUpdateNode(selectedNode.id, { label: e.target.value })
             }
-            className="text-sm"
+            className="text-sm font-semibold h-8"
+            aria-label="Node name"
           />
+          <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary capitalize">
+            {nodeType.replace("_", " ")}
+          </span>
         </div>
+      </div>
 
+      {/* Action buttons */}
+      <div className="flex gap-2 mb-4">
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1"
+          onClick={() => onDuplicateNode(selectedNode.id)}
+        >
+          Duplicate
+        </Button>
+        <Button
+          size="sm"
+          variant="destructive"
+          className="flex-1"
+          onClick={() => onDeleteNode(selectedNode.id)}
+        >
+          Delete
+        </Button>
+      </div>
+
+      <div className="space-y-0">
         {/* Node ID (read-only) */}
-        <div>
+        <div className="pb-3">
           <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
             ID
           </label>
@@ -403,10 +448,7 @@ export function NodeInspector({
         )}
 
         {!isNote && (
-          <div className="space-y-3 pt-3 border-t border-border">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Graph Structure
-            </h4>
+          <CollapsibleSection title="Graph Structure" defaultOpen={false} badge={isTrigger || isEnd ? "configured" : undefined}>
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-muted-foreground">
                 Trigger (START)
@@ -414,21 +456,21 @@ export function NodeInspector({
               <button
                 type="button"
                 role="switch"
-                aria-checked={(nodeData as any)?.isTrigger === true}
+                aria-checked={isTrigger}
                 onClick={() =>
                   onUpdateNode(selectedNode.id, {
-                    isTrigger: !((nodeData as any)?.isTrigger === true),
+                    isTrigger: !isTrigger,
                   })
                 }
                 className={`
                   relative inline-flex h-5 w-9 items-center rounded-full transition-colors
-                  ${(nodeData as any)?.isTrigger === true ? "bg-primary" : "bg-muted"}
+                  ${isTrigger ? "bg-primary" : "bg-muted"}
                 `}
               >
                 <span
                   className={`
                     inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
-                    ${(nodeData as any)?.isTrigger === true ? "translate-x-4.5" : "translate-x-0.5"}
+                    ${isTrigger ? "translate-x-4.5" : "translate-x-0.5"}
                   `}
                 />
               </button>
@@ -441,21 +483,21 @@ export function NodeInspector({
               <button
                 type="button"
                 role="switch"
-                aria-checked={(nodeData as any)?.isEnd === true}
+                aria-checked={isEnd}
                 onClick={() =>
                   onUpdateNode(selectedNode.id, {
-                    isEnd: !((nodeData as any)?.isEnd === true),
+                    isEnd: !isEnd,
                   })
                 }
                 className={`
                   relative inline-flex h-5 w-9 items-center rounded-full transition-colors
-                  ${(nodeData as any)?.isEnd === true ? "bg-primary" : "bg-muted"}
+                  ${isEnd ? "bg-primary" : "bg-muted"}
                 `}
               >
                 <span
                   className={`
                     inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
-                    ${(nodeData as any)?.isEnd === true ? "translate-x-4.5" : "translate-x-0.5"}
+                    ${isEnd ? "translate-x-4.5" : "translate-x-0.5"}
                   `}
                 />
               </button>
@@ -464,7 +506,7 @@ export function NodeInspector({
             <p className="text-xs text-muted-foreground">
               Triggers create an entry edge from START → this node. End nodes create an exit edge from this node → END.
             </p>
-          </div>
+          </CollapsibleSection>
         )}
 
         {/* Node-specific config editors */}
@@ -507,6 +549,9 @@ export function NodeInspector({
           <BranchNodeConfig
             config={(nodeData.config as Record<string, unknown>) ?? {}}
             onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+            edges={edges}
+            nodeId={selectedNode.id}
+            nodes={nodes}
           />
         )}
 
@@ -568,8 +613,7 @@ function NoteNodeConfig({
   onChange: (text: string) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Note</h4>
+    <CollapsibleSection title="Note">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Text
@@ -582,7 +626,7 @@ function NoteNodeConfig({
           className="text-sm"
         />
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -621,8 +665,7 @@ function PromptNodeConfig({
   };
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt Configuration</h4>
+    <CollapsibleSection title="Prompt Configuration">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Prompt Template ID (optional)
@@ -745,7 +788,7 @@ function PromptNodeConfig({
           Map variable names to state paths for template substitution.
         </p>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -773,8 +816,7 @@ function HttpNodeConfig({
   };
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">HTTP Configuration</h4>
+    <CollapsibleSection title="HTTP Configuration">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Method
@@ -850,7 +892,7 @@ function HttpNodeConfig({
           Key to store the response in state
         </p>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -863,8 +905,7 @@ function TransformNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transform Configuration</h4>
+    <CollapsibleSection title="Transform Configuration">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Expression
@@ -891,7 +932,7 @@ function TransformNodeConfig({
           className="text-sm"
         />
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -911,8 +952,7 @@ function OutputNodeConfig({
   }
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Output Configuration</h4>
+    <CollapsibleSection title="Output Configuration">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Output Mapping
@@ -927,7 +967,7 @@ function OutputNodeConfig({
           Map state values to output keys
         </p>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -947,8 +987,6 @@ function AdvancedNodeConfig({
   onChangeTimeout: (timeout: number | undefined) => void;
   onChangeRetryPolicy: (policy: RetryPolicy | undefined) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   const cacheConfig = (config.cache as Record<string, unknown>) ?? {};
   const cacheEnabled = cacheConfig.enabled === true;
   const cacheTtlSeconds =
@@ -958,25 +996,7 @@ function AdvancedNodeConfig({
   const hasAdvancedConfig = cacheEnabled || timeoutMs !== undefined || retryPolicy !== undefined;
 
   return (
-    <div className="pt-3 border-t border-border">
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 w-full text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {isExpanded ? (
-          <ChevronDown className="w-4 h-4" />
-        ) : (
-          <ChevronRight className="w-4 h-4" />
-        )}
-        <span className="uppercase tracking-wider">Advanced</span>
-        {hasAdvancedConfig && !isExpanded && (
-          <span className="ml-auto text-primary text-xs">configured</span>
-        )}
-      </button>
-
-      {isExpanded && (
-        <div className="mt-3 space-y-3">
+    <CollapsibleSection title="Advanced" defaultOpen={false} badge={hasAdvancedConfig ? "configured" : undefined}>
           {/* Cache */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-2">
@@ -1194,9 +1214,7 @@ function AdvancedNodeConfig({
               Exponential uses backoff * 2^(attempt-2)
             </p>
           </div>
-        </div>
-      )}
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -1204,36 +1222,107 @@ function AdvancedNodeConfig({
 function BranchNodeConfig({
   config,
   onChange,
+  edges,
+  nodeId,
+  nodes,
 }: {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  edges?: Edge[];
+  nodeId?: string;
+  nodes?: Node[];
 }) {
+  const conditionType = (config.condition_type as string) ?? "expression";
+
+  // Find outgoing edges from this branch node
+  const outgoingEdges = (edges ?? []).filter((e) => e.source === nodeId);
+  const trueEdge = outgoingEdges.find((e) => {
+    const label = typeof e.label === "string" ? e.label.toLowerCase() : "";
+    return label === "true";
+  });
+  const falseEdge = outgoingEdges.find((e) => {
+    const label = typeof e.label === "string" ? e.label.toLowerCase() : "";
+    return label === "false";
+  });
+
+  const getTargetLabel = (edge: Edge | undefined) => {
+    if (!edge) return "Not connected";
+    const target = (nodes ?? []).find((n) => n.id === edge.target);
+    return (target?.data?.label as string) ?? edge.target;
+  };
+
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Branch Configuration</h4>
-      <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Condition Expression
-        </label>
-        <Textarea
-          value={(config.condition as string) ?? ""}
-          onChange={(e) => onChange({ ...config, condition: e.target.value })}
-          placeholder="vars.score > 80"
-          rows={2}
-          className="text-sm font-mono"
-        />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Expression that evaluates to true/false to determine which path to take
-        </p>
-      </div>
-      <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">Example expressions:</p>
-        <code className="block font-mono text-foreground">vars.score &gt; 80</code>
-        <code className="block font-mono text-foreground">node.http_1.output.status == 200</code>
-        <code className="block font-mono text-foreground">vars.approved == true</code>
-        <code className="block font-mono text-foreground">input.mode != &quot;test&quot;</code>
-      </div>
-    </div>
+    <>
+      <CollapsibleSection title="Condition">
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Condition Type
+          </label>
+          <select
+            value={conditionType}
+            onChange={(e) => onChange({ ...config, condition_type: e.target.value })}
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
+          >
+            <option value="expression">Expression</option>
+            <option value="number">Number comparison</option>
+            <option value="boolean">Boolean check</option>
+            <option value="string">String match</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Condition Expression
+          </label>
+          <Textarea
+            value={(config.condition as string) ?? ""}
+            onChange={(e) => onChange({ ...config, condition: e.target.value })}
+            placeholder={
+              conditionType === "number" ? "vars.score > 80" :
+              conditionType === "boolean" ? "vars.approved" :
+              conditionType === "string" ? 'vars.status == "done"' :
+              "vars.score > 80"
+            }
+            rows={2}
+            className="text-sm font-mono"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Expression that evaluates to true/false to determine which path to take
+          </p>
+        </div>
+        <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">Example expressions:</p>
+          <code className="block font-mono text-foreground">vars.score &gt; 80</code>
+          <code className="block font-mono text-foreground">node.http_1.output.status == 200</code>
+          <code className="block font-mono text-foreground">vars.approved == true</code>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Branch Paths">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+            <CircleDot className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-emerald-400">True</p>
+              <p className="text-[11px] text-muted-foreground truncate">{getTargetLabel(trueEdge)}</p>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2">
+            <CircleDot className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-rose-400">False</p>
+              <p className="text-[11px] text-muted-foreground truncate">{getTargetLabel(falseEdge)}</p>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          </div>
+        </div>
+        {outgoingEdges.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Connect edges labeled &quot;true&quot; / &quot;false&quot; to define branch paths.
+          </p>
+        )}
+      </CollapsibleSection>
+    </>
   );
 }
 
@@ -1246,8 +1335,7 @@ function MergeNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Merge Configuration</h4>
+    <CollapsibleSection title="Merge Configuration">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Merge Strategy
@@ -1274,7 +1362,7 @@ function MergeNodeConfig({
           <p>Later branches overwrite earlier values for same keys</p>
         </div>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -1297,8 +1385,7 @@ function MemoryNodeConfig({
         : JSON.stringify(config.value, null, 2);
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Memory Configuration</h4>
+    <CollapsibleSection title="Memory Configuration">
 
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -1443,7 +1530,7 @@ function MemoryNodeConfig({
           </div>
         </>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -1471,8 +1558,7 @@ function ToolNodeConfig({
         : JSON.stringify(config.input, null, 2);
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tool Configuration</h4>
+    <CollapsibleSection title="Tool Configuration">
 
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -1575,7 +1661,7 @@ function ToolNodeConfig({
           placeholder='{"top_k": 5}'
         />
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -1597,8 +1683,7 @@ function SubgraphNodeConfig({
       : "";
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subgraph Configuration</h4>
+    <CollapsibleSection title="Subgraph Configuration">
 
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -1701,7 +1786,7 @@ function SubgraphNodeConfig({
           className="text-sm"
         />
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -1736,8 +1821,7 @@ function HumanGateNodeConfig({
   };
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Human Gate Configuration</h4>
+    <CollapsibleSection title="Human Gate Configuration">
 
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -1828,6 +1912,6 @@ function HumanGateNodeConfig({
           <p>Run terminates with feedback message stored as error</p>
         </div>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }

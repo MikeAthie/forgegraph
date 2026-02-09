@@ -17,11 +17,17 @@ describe("NodePalette", () => {
   });
 
   describe("Rendering", () => {
-    it("should render palette header and description", () => {
+    it("should render palette header", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      expect(screen.getByText("Add Nodes")).toBeInTheDocument();
-      expect(screen.getByText("Click to add a node to the canvas")).toBeInTheDocument();
+      expect(screen.getByText("Nodes")).toBeInTheDocument();
+    });
+
+    it("should render search input with correct placeholder", () => {
+      render(<NodePalette onAddNode={mockOnAddNode} />);
+
+      const searchInput = screen.getByPlaceholderText("Search tools...");
+      expect(searchInput).toBeInTheDocument();
     });
 
     it("should render all node types from PHASE2_NODE_TYPES", () => {
@@ -32,7 +38,6 @@ describe("NodePalette", () => {
           screen.getAllByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") })
             .length
         ).toBeGreaterThan(0);
-        expect(screen.getByText(nodeType.description)).toBeInTheDocument();
       });
     });
 
@@ -64,27 +69,12 @@ describe("NodePalette", () => {
         });
       });
 
-      // Should show "Coming soon" label for disabled nodes
+      // Should show "Soon" label for disabled nodes
       if (disabledNodeTypes.length > 0) {
-        expect(screen.getAllByText("(Coming soon)").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Soon").length).toBeGreaterThan(0);
       } else {
-        expect(screen.queryByText("(Coming soon)")).not.toBeInTheDocument();
+        expect(screen.queryByText("Soon")).not.toBeInTheDocument();
       }
-    });
-
-    it("should display keyboard shortcuts section", () => {
-      render(<NodePalette onAddNode={mockOnAddNode} />);
-
-      expect(screen.getByText("Keyboard Shortcuts")).toBeInTheDocument();
-      expect(screen.getByText("Open wizard")).toBeInTheDocument();
-      expect(screen.getByText("Save")).toBeInTheDocument();
-      expect(screen.getByText("Select all")).toBeInTheDocument();
-      expect(screen.getByText("Delete node")).toBeInTheDocument();
-      expect(screen.getByText("Ctrl+W")).toBeInTheDocument();
-      expect(screen.getByText("Ctrl+S")).toBeInTheDocument();
-      expect(screen.getByText("Ctrl+A")).toBeInTheDocument();
-      expect(screen.getByText("Delete")).toBeInTheDocument();
-      expect(screen.getByText("Esc")).toBeInTheDocument();
     });
   });
 
@@ -253,15 +243,21 @@ describe("NodePalette", () => {
       expect(iconBadges.length).toBeGreaterThan(0);
     });
 
-    it("should display correct icon letters for node types", () => {
-      render(<NodePalette onAddNode={mockOnAddNode} />);
+    it("should display Lucide icons for node types", () => {
+      const { container } = render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      // Check for specific icon letters (M for Prompt, H for HTTP, etc.)
-      // Some letters appear multiple times (M for both Prompt and Merge)
-      expect(screen.getAllByText("M").length).toBeGreaterThan(0); // Prompt and Merge
-      expect(screen.getAllByText("H").length).toBeGreaterThan(0); // HTTP
-      expect(screen.getAllByText("T").length).toBeGreaterThan(0); // Transform
-      expect(screen.getAllByText("O").length).toBeGreaterThan(0); // Output
+      // Each node type renders an icon inside a colored icon container
+      // The icons are rendered as SVG elements from Lucide
+      const iconContainers = container.querySelectorAll(
+        ".bg-violet-500, .bg-amber-500, .bg-blue-500, .bg-indigo-500, .bg-orange-500, .bg-emerald-500, .bg-teal-500, .bg-cyan-500, .bg-fuchsia-500"
+      );
+      expect(iconContainers.length).toBeGreaterThan(0);
+
+      // Each icon container should have an SVG child (Lucide icon)
+      iconContainers.forEach((container) => {
+        const svg = container.querySelector("svg");
+        expect(svg).toBeTruthy();
+      });
     });
   });
 
@@ -289,46 +285,6 @@ describe("NodePalette", () => {
         const hasDisabledButton = buttons.some((btn) => btn.hasAttribute("disabled"));
         expect(hasDisabledButton).toBe(true);
       });
-    });
-  });
-
-  describe("Content Display", () => {
-    it("should truncate long descriptions with line-clamp", () => {
-      render(<NodePalette onAddNode={mockOnAddNode} />);
-
-      // Find elements with description text
-      const descriptions = screen.getAllByText(/Call an LLM|Make an HTTP|Transform data|Define the final|Conditional routing|Join parallel|Pause for/);
-
-      descriptions.forEach((desc) => {
-        expect(desc).toHaveClass("line-clamp-1");
-      });
-    });
-
-    it("should display node descriptions in correct format", () => {
-      render(<NodePalette onAddNode={mockOnAddNode} />);
-
-      expect(screen.getByText("Call an LLM with a prompt template")).toBeInTheDocument();
-      expect(screen.getByText("Make an HTTP request to an external API")).toBeInTheDocument();
-      expect(screen.getByText("Transform data with an expression")).toBeInTheDocument();
-      expect(screen.getByText("Define the final output of the workflow")).toBeInTheDocument();
-    });
-
-    it("should show badges in search results", async () => {
-      const user = userEvent.setup();
-      render(<NodePalette onAddNode={mockOnAddNode} />);
-
-      const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
-      await user.type(searchInput, "prompt");
-
-      expect(screen.getAllByText("Credential").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("LLM").length).toBeGreaterThan(0);
-    });
-
-    it("should display recommended quick picks", () => {
-      render(<NodePalette onAddNode={mockOnAddNode} />);
-
-      expect(screen.getByText("Recommended")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /^recommended prompt$/i })).toBeInTheDocument();
     });
   });
 });

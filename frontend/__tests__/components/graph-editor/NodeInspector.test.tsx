@@ -195,10 +195,13 @@ describe("NodeInspector", () => {
       },
     };
 
-    it("should display 'Node Config' header when node is selected", () => {
+    it("should display node name input and type badge when node is selected", () => {
       render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
 
-      expect(screen.getByText("Node Config")).toBeInTheDocument();
+      // The redesigned header shows a name input and a type badge instead of "Node Config"
+      expect(screen.getByRole("textbox", { name: /node name/i })).toBeInTheDocument();
+      expect(screen.getByDisplayValue("My Prompt Node")).toBeInTheDocument();
+      expect(screen.getByText("prompt")).toBeInTheDocument();
     });
 
     it("should display Delete button", () => {

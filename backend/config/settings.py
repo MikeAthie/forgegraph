@@ -9,13 +9,36 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from django.core.exceptions import ImproperlyConfigured
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-key-change-in-production")
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+
+def _get_bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_csv_env(name: str, default: str) -> list[str]:
+    raw = os.environ.get(name, default)
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-key-change-in-production"
+    else:
+        raise ImproperlyConfigured("SECRET_KEY must be configured when DEBUG is False.")
+
+_default_allowed_hosts = "localhost,127.0.0.1" if DEBUG else ""
+ALLOWED_HOSTS = _get_csv_env("ALLOWED_HOSTS", _default_allowed_hosts)
+if not ALLOWED_HOSTS and not DEBUG:
+    raise ImproperlyConfigured("ALLOWED_HOSTS must be configured when DEBUG is False.")
 
 # Application definition
 INSTALLED_APPS = [
@@ -159,12 +182,36 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOW_ALL_ORIGINS = DEBUG and _get_bool_env("CORS_ALLOW_ALL_ORIGINS", False)
+CORS_ALLOWED_ORIGINS = _get_csv_env(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
+)
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = _get_csv_env(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
+)
+
+# Web security defaults
+SESSION_COOKIE_SECURE = _get_bool_env("SESSION_COOKIE_SECURE", not DEBUG)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax")
+CSRF_COOKIE_SECURE = _get_bool_env("CSRF_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_HTTPONLY = _get_bool_env("CSRF_COOKIE_HTTPONLY", False)
+CSRF_COOKIE_SAMESITE = os.environ.get("CSRF_COOKIE_SAMESITE", "Lax")
+SECURE_CONTENT_TYPE_NOSNIFF = _get_bool_env("SECURE_CONTENT_TYPE_NOSNIFF", not DEBUG)
+SECURE_REFERRER_POLICY = os.environ.get(
+    "SECURE_REFERRER_POLICY", "strict-origin-when-cross-origin"
+)
+X_FRAME_OPTIONS = os.environ.get("X_FRAME_OPTIONS", "DENY")
+SECURE_SSL_REDIRECT = _get_bool_env("SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _get_bool_env("SECURE_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
+SECURE_HSTS_PRELOAD = _get_bool_env("SECURE_HSTS_PRELOAD", False)
+USE_X_FORWARDED_HOST = _get_bool_env("USE_X_FORWARDED_HOST", not DEBUG)
+if _get_bool_env("USE_SECURE_PROXY_SSL_HEADER", not DEBUG):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
@@ -304,3 +351,6 @@ GENERIC_WEBHOOK_SECRET = os.environ.get("GENERIC_WEBHOOK_SECRET", "")
 # Encryption Configuration
 # Generate key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")
+ENCRYPTION_KEY_PREVIOUS = _get_csv_env("ENCRYPTION_KEY_PREVIOUS", "")
+if not ENCRYPTION_KEY and not DEBUG:
+    raise ImproperlyConfigured("ENCRYPTION_KEY must be configured when DEBUG is False.")
