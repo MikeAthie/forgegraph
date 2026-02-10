@@ -201,9 +201,7 @@ CSRF_COOKIE_SECURE = _get_bool_env("CSRF_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_HTTPONLY = _get_bool_env("CSRF_COOKIE_HTTPONLY", False)
 CSRF_COOKIE_SAMESITE = os.environ.get("CSRF_COOKIE_SAMESITE", "Lax")
 SECURE_CONTENT_TYPE_NOSNIFF = _get_bool_env("SECURE_CONTENT_TYPE_NOSNIFF", not DEBUG)
-SECURE_REFERRER_POLICY = os.environ.get(
-    "SECURE_REFERRER_POLICY", "strict-origin-when-cross-origin"
-)
+SECURE_REFERRER_POLICY = os.environ.get("SECURE_REFERRER_POLICY", "strict-origin-when-cross-origin")
 X_FRAME_OPTIONS = os.environ.get("X_FRAME_OPTIONS", "DENY")
 SECURE_SSL_REDIRECT = _get_bool_env("SECURE_SSL_REDIRECT", not DEBUG)
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
