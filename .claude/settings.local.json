@@ -43,7 +43,14 @@
       "Bash(git -C /c/Users/mathi/projects/forgegraph log --oneline -20)",
       "Bash(npx playwright test:*)",
       "Bash(pushd:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx jest:*)",
+      "Bash(DEBUG=true uv run:*)",
+      "Bash(DEBUG=False SECRET_KEY=ci-not-a-secret DJANGO_SETTINGS_MODULE=config.settings uv run mypy:*)",
+      "Bash(DEBUG=False SECRET_KEY=ci-not-a-secret ALLOWED_HOSTS=localhost DJANGO_SETTINGS_MODULE=config.settings DB_HOST=localhost DB_PORT=5432 DB_NAME=forgegraph DB_USER=postgres DB_PASSWORD=postgres REDIS_HOST=localhost REDIS_PORT=6379 uv run mypy:*)",
+      "Bash(DEBUG=False SECRET_KEY=ci-not-a-secret ALLOWED_HOSTS=localhost DJANGO_SETTINGS_MODULE=config.settings DB_HOST=localhost DB_PORT=5432 DB_NAME=forgegraph DB_USER=postgres DB_PASSWORD=postgres REDIS_HOST=localhost REDIS_PORT=6379 ENCRYPTION_KEY=\"31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=\" uv run mypy:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ]
   }
 }

@@ -26,7 +26,8 @@ function toGraphNode(node: Node) {
  */
 export function useEdgeTypes(
   nodes: Node[],
-  edges: Edge[]
+  edges: Edge[],
+  onInsertNode?: (edgeId: string, position: { x: number; y: number }) => void,
 ): Edge<TypedEdgeData>[] {
   return useMemo(() => {
     // Build a map of node IDs to their output types
@@ -55,10 +56,11 @@ export function useEdgeTypes(
           sourceType,
           targetType,
           routeLane,
+          onInsertNode,
         } as TypedEdgeData,
       };
     });
-  }, [nodes, edges]);
+  }, [nodes, edges, onInsertNode]);
 }
 
 /**

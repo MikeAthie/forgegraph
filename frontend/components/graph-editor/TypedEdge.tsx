@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   EdgeProps,
   getSmoothStepPath,
@@ -9,7 +9,7 @@ import {
 } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 import { DataType, getDataTypeInfo, areTypesCompatible } from "@/lib/data-types";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 
 export interface TypedEdgeData {
   condition?: string;
@@ -17,12 +17,13 @@ export interface TypedEdgeData {
   targetType?: DataType;
   routeLane?: number;
   label?: string;
+  onInsertNode?: (edgeId: string, position: { x: number; y: number }) => void;
   [key: string]: unknown;
 }
 
 /**
- * Custom edge component that displays data type information
- * and highlights type mismatches
+ * Custom edge component that displays data type information,
+ * highlights type mismatches, and shows a "+" button to insert nodes.
  */
 function TypedEdgeComponent({
   id,
@@ -38,6 +39,7 @@ function TypedEdgeComponent({
   selected,
   label,
 }: EdgeProps) {
+  const [isHovered, setIsHovered] = useState(false);
   const edgeData = data as TypedEdgeData | undefined;
   const sourceType = edgeData?.sourceType ?? DataType.ANY;
   const targetType = edgeData?.targetType ?? DataType.ANY;
@@ -50,7 +52,6 @@ function TypedEdgeComponent({
   );
 
   const isTypeMismatch = !compatibility.compatible;
-  const sourceTypeInfo = getDataTypeInfo(sourceType);
 
   const laneShift = routeLane * 12;
   const mostlyVertical = Math.abs(sourceY - targetY) > Math.abs(sourceX - targetX);
@@ -109,8 +110,28 @@ function TypedEdgeComponent({
     ? `Type Mismatch: ${compatibility.reason}${compatibility.suggestion ? `. ${compatibility.suggestion}` : ""}`
     : undefined;
 
+  // Determine if this is a branch label (true/false)
+  const isTrueLabel = typeof displayLabel === "string" && displayLabel.toLowerCase() === "true";
+  const isFalseLabel = typeof displayLabel === "string" && displayLabel.toLowerCase() === "false";
+  const isBranchLabel = isTrueLabel || isFalseLabel;
+
+  const handleInsertClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    edgeData?.onInsertNode?.(id, { x: labelX, y: labelY });
+  };
+
   return (
     <>
+      {/* Invisible wider path for easier hover detection */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={20}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+
       <BaseEdge
         id={id}
         path={edgePath}
@@ -126,6 +147,8 @@ function TypedEdgeComponent({
             pointerEvents: "all",
           }}
           className="nodrag nopan"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
         >
           {/* Type mismatch warning */}
           {isTypeMismatch && (
@@ -142,8 +165,22 @@ function TypedEdgeComponent({
             </div>
           )}
 
-          {/* Edge label (condition or custom) */}
-          {displayLabel && !isTypeMismatch && (
+          {/* Branch labels as colored pills */}
+          {isBranchLabel && !isTypeMismatch && (
+            <div
+              className={cn(
+                "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border shadow-sm",
+                isTrueLabel
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                  : "bg-rose-500/20 text-rose-400 border-rose-500/40",
+              )}
+            >
+              {displayLabel}
+            </div>
+          )}
+
+          {/* Regular edge label */}
+          {displayLabel && !isBranchLabel && !isTypeMismatch && (
             <div
               className={cn(
                 "px-2 py-0.5 rounded text-xs font-medium",
@@ -155,6 +192,24 @@ function TypedEdgeComponent({
             >
               {displayLabel}
             </div>
+          )}
+
+          {/* "+" insert button on hover */}
+          {!displayLabel && !isTypeMismatch && (isHovered || selected) && edgeData?.onInsertNode && (
+            <button
+              type="button"
+              onClick={handleInsertClick}
+              className={cn(
+                "w-6 h-6 rounded-full flex items-center justify-center",
+                "bg-primary text-white shadow-lg",
+                "hover:bg-primary/90 hover:scale-110",
+                "transition-all duration-150",
+              )}
+              aria-label="Insert node"
+              title="Insert node here"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
       </EdgeLabelRenderer>

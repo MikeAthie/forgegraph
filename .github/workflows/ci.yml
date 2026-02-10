@@ -54,6 +54,9 @@ jobs:
       SECRET_KEY: "ci-not-a-secret"
       DEBUG: "False"
       DJANGO_SETTINGS_MODULE: config.settings
+      ALLOWED_HOSTS: "localhost"
+      ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
+      SECURE_SSL_REDIRECT: "false"
 
     steps:
       - uses: actions/checkout@v5
@@ -193,7 +196,9 @@ jobs:
       SECRET_KEY: "ci-not-a-secret"
       DEBUG: "False"
       DJANGO_SETTINGS_MODULE: config.settings
+      ALLOWED_HOSTS: "localhost"
       ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
+      SECURE_SSL_REDIRECT: "false"
 
     steps:
       - uses: actions/checkout@v5
