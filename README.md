@@ -179,11 +179,40 @@ The Backend exposes a REST API with the following main endpoints:
 | `/api/graphs` | GET, POST | List and create graphs |
 | `/api/graphs/{id}` | GET, PUT, DELETE | Graph operations |
 | `/api/graphs/{id}/versions` | POST | Save new graph version |
+| `/api/graphs/external-workflows` | POST | Create/update workflows from external systems with idempotency |
 | `/api/runs` | POST | Start graph execution |
 | `/api/runs/{id}` | GET | Get run status |
 | `/api/runs/{id}/events` | GET | Stream run events |
 | `/api/approvals` | GET, POST | Human gate approvals |
 | `/api/auth/login` | POST | JWT authentication |
+
+External workflow import example (QA-friendly, repeatable):
+
+```bash
+curl -X POST "http://localhost:8000/api/graphs/external-workflows" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: qa-workflow-001:v3" \
+  -d '{
+    "name": "QA Lead Capture",
+    "description": "Imported from QA seed script",
+    "external_source": "qa",
+    "external_ref": "qa-workflow-001",
+    "graph_json": {
+      "nodes": [
+        {"id": "prompt1", "type": "prompt", "name": "Prompt", "config": {}},
+        {"id": "output1", "type": "output", "name": "Done", "config": {}}
+      ],
+      "edges": [
+        {"id": "e1", "from": "START", "to": "prompt1"},
+        {"id": "e2", "from": "prompt1", "to": "output1"}
+      ]
+    }
+  }'
+```
+
+- `external_ref`: stable key from your external system. Reusing it updates the same graph.
+- `Idempotency-Key` (or body `idempotency_key`): safely retries without duplicate versions.
 
 Full API documentation available at `http://localhost:8000/api/docs/` when running.
 
@@ -202,6 +231,34 @@ Full API documentation available at `http://localhost:8000/api/docs/` when runni
 | `REDIS_PORT` | `6379` | Redis port |
 | `ENGINE_HOST` | `localhost` | gRPC engine host |
 | `ENGINE_PORT` | `50051` | gRPC engine port |
+| `TOOL_MANIFEST_DIR` | — | Engine path to JSON tool manifests (for `tool` nodes like Gmail/Calendar/Tasks) |
+| `ENCRYPTION_KEY` | — | Fernet key used to encrypt stored credentials/tokens |
+| `GOOGLE_OAUTH_CLIENT_ID` | — | Service-level Google OAuth client id (shared Gmail/Calendar/Tasks/Drive) |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | — | Service-level Google OAuth client secret |
+| `GOOGLE_OAUTH_REDIRECT_URI` | `http://localhost:3000/oauth/callback` | OAuth redirect URI for Google providers |
+
+### OAuth Setup (Service-Level)
+
+OAuth app credentials are configured once at service level via environment variables.  
+Users only need to click **Connect account** on the Credentials page.
+
+1. Set OAuth env vars in `.env` (see `.env.example`).
+2. Restart backend: `docker compose up -d --force-recreate backend`.
+3. In Google Cloud OAuth client, set redirect URI to `http://localhost:3000/oauth/callback`.
+4. From ForgeGraph Credentials page, connect Gmail/Calendar/Tasks accounts as needed.
+
+### Tool Manifests (Service-Level)
+
+Tool nodes are resolved from engine manifest files (JSON).
+
+1. Define tool manifests under `engine/tool-manifests/`.
+2. Set `TOOL_MANIFEST_DIR` for engine (Docker compose uses `/app/tool-manifests`).
+3. Restart engine: `docker compose up -d --build engine`.
+
+Included by default:
+- `gmail_reader`
+- `google_calendar`
+- `google_tasks`
 
 ## Contributing
 

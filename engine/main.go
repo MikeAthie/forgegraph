@@ -366,7 +366,7 @@ func main() {
 		executor.NewMergeExecutor(),
 		executor.NewHumanGateExecutor(),
 		executor.NewMemoryExecutor(memoryStore),
-		executor.NewToolExecutor(toolRegistry),
+		executor.NewToolExecutorWithResolver(toolRegistry, resolver),
 		executor.NewSubgraphExecutor(registry),
 	)
 

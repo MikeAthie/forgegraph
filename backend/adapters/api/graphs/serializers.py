@@ -11,6 +11,25 @@ from rest_framework import serializers
 from infrastructure.orm.models import MemoryConfiguration
 
 
+def _validate_graph_json_payload(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise serializers.ValidationError("graph_json must be an object")
+
+    if "nodes" not in value:
+        raise serializers.ValidationError("graph_json must contain 'nodes'")
+
+    if "edges" not in value:
+        raise serializers.ValidationError("graph_json must contain 'edges'")
+
+    if not isinstance(value.get("nodes"), list):
+        raise serializers.ValidationError("'nodes' must be an array")
+
+    if not isinstance(value.get("edges"), list):
+        raise serializers.ValidationError("'edges' must be an array")
+
+    return value
+
+
 class GraphCreateSerializer(serializers.Serializer[Any]):
     """Serializer for creating a graph."""
 
@@ -65,22 +84,62 @@ class GraphVersionCreateSerializer(serializers.Serializer[Any]):
 
     def validate_graph_json(self, value: Any) -> dict[str, Any]:
         """Validate the graph JSON structure."""
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("graph_json must be an object")
+        return _validate_graph_json_payload(value)
 
-        if "nodes" not in value:
-            raise serializers.ValidationError("graph_json must contain 'nodes'")
 
-        if "edges" not in value:
-            raise serializers.ValidationError("graph_json must contain 'edges'")
+class ExternalWorkflowCreateSerializer(serializers.Serializer[Any]):
+    """Serializer for creating a graph and initial version in one request."""
 
-        if not isinstance(value.get("nodes"), list):
-            raise serializers.ValidationError("'nodes' must be an array")
+    name = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, default="", allow_blank=True)
+    graph_json = serializers.JSONField()
+    external_source = serializers.CharField(required=False, default="external", max_length=64)
+    external_ref = serializers.CharField(required=False, max_length=255)
+    idempotency_key = serializers.CharField(required=False, max_length=255)
+    strict = serializers.BooleanField(required=False, default=False)
+    require_entry_exit = serializers.BooleanField(required=False, default=False)
 
-        if not isinstance(value.get("edges"), list):
-            raise serializers.ValidationError("'edges' must be an array")
+    def validate_graph_json(self, value: Any) -> dict[str, Any]:
+        return _validate_graph_json_payload(value)
 
-        return value
+    def validate_external_source(self, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise serializers.ValidationError("external_source cannot be empty")
+        return normalized
+
+    def validate_external_ref(self, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError("external_ref cannot be blank")
+        return normalized
+
+    def validate_idempotency_key(self, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError("idempotency_key cannot be blank")
+        return normalized
+
+
+class ExternalWorkflowCreateResponseSerializer(serializers.Serializer[Any]):
+    """Serializer for external workflow create response payload."""
+
+    graph_id = serializers.UUIDField(read_only=True)
+    graph_version_id = serializers.UUIDField(read_only=True)
+    graph_name = serializers.CharField(read_only=True)
+    graph_description = serializers.CharField(read_only=True)
+    graph_version = serializers.IntegerField(read_only=True)
+    checksum = serializers.CharField(read_only=True)
+    external_source = serializers.CharField(read_only=True)
+    external_ref = serializers.CharField(read_only=True, allow_blank=True)
+    idempotency_key = serializers.CharField(read_only=True, allow_blank=True)
+    created_graph = serializers.BooleanField(read_only=True)
+    created_version = serializers.BooleanField(read_only=True)
+    idempotent_replay = serializers.BooleanField(read_only=True)
+    warnings = serializers.ListField(
+        child=serializers.DictField(child=serializers.JSONField()),
+        read_only=True,
+    )
 
 
 class GraphVersionDetailSerializer(serializers.Serializer[Any]):

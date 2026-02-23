@@ -196,12 +196,27 @@ class Graph(models.Model):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
+    external_source = models.CharField(max_length=64, blank=True, default="")
+    external_ref = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "graphs"
         ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "external_source", "external_ref"],
+                condition=models.Q(external_ref__gt=""),
+                name="graphs_owner_source_external_ref_unique",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["owner", "external_source", "external_ref"],
+                name="graphs_external_ref_idx",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.owner.email})"
@@ -334,12 +349,26 @@ class GraphVersion(models.Model):
     version = models.PositiveIntegerField()
     graph_json = models.JSONField()
     checksum = models.CharField(max_length=64, blank=True)
+    external_idempotency_key = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "graph_versions"
         ordering = ["-version"]
         unique_together = [["graph", "version"]]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["graph", "external_idempotency_key"],
+                condition=models.Q(external_idempotency_key__gt=""),
+                name="graph_versions_idempotency_unique",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["graph", "external_idempotency_key"],
+                name="graph_versions_idempotency_idx",
+            )
+        ]
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Compute checksum before saving."""

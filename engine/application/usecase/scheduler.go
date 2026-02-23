@@ -375,8 +375,9 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		}
 	}
 
-	// Create run context
-	runCtx, cancel := context.WithCancel(ctx)
+	// Create a detached run context.
+	// Do not derive from request-scoped gRPC context, which is canceled as soon as StartRun returns.
+	runCtx, cancel := context.WithCancel(context.Background())
 	rc := &runContext{
 		runID:            runID,
 		ctx:              runCtx,
@@ -2144,8 +2145,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		s.repository.UpdateNodeRun(ctx, nodeRun)
 	}
 
-	// Create run context for resumed execution
-	runCtx, cancel := context.WithCancel(ctx)
+	// Create a detached run context for resumed execution.
+	// Resume RPC context is request-scoped and must not control background workers.
+	runCtx, cancel := context.WithCancel(context.Background())
 	resumeMemoryConfig := defaultMemoryConfig()
 	var resumeBuffer *entity.MessageBuffer
 	if resumeMemoryConfig.Tier1.Enabled {

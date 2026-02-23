@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from infrastructure.crypto.encryption import EncryptionService, decrypt_api_key, encrypt_api_key
-from infrastructure.orm.models import APIKey, IntegrationOAuthProviderConfig
+from infrastructure.orm.models import APIKey
 
 pytestmark = pytest.mark.django_db
 
@@ -35,18 +35,17 @@ def _configure_encryption_key(settings):
     EncryptionService._instance = None
 
 
-def _configure_provider(authenticated_client, provider: str) -> None:
-    response = authenticated_client.put(
-        f"/api/credentials/oauth/providers/{provider}",
-        {
-            "client_id": f"{provider}-client-id",
-            "client_secret": f"{provider}-client-secret",
-            "redirect_uri": "http://localhost:3000/oauth/callback",
-            "enabled": True,
-        },
-        format="json",
-    )
-    assert response.status_code == status.HTTP_200_OK
+def _configure_provider_env(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
+    tokenized = provider.upper()
+    monkeypatch.setenv(f"OAUTH_{tokenized}_CLIENT_ID", f"{provider}-client-id")
+    monkeypatch.setenv(f"OAUTH_{tokenized}_CLIENT_SECRET", f"{provider}-client-secret")
+    monkeypatch.setenv(f"OAUTH_{tokenized}_REDIRECT_URI", "http://localhost:3000/oauth/callback")
+
+
+def _configure_google_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "google-shared-client-id")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "google-shared-client-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:3000/oauth/callback")
 
 
 def test_oauth_provider_status_shows_supported_providers(authenticated_client):
@@ -71,7 +70,7 @@ def test_oauth_provider_status_shows_supported_providers(authenticated_client):
 def test_oauth_start_returns_config_error_when_provider_not_configured(authenticated_client):
     response = authenticated_client.post(
         "/api/credentials/oauth/start",
-        {"provider": "gmail"},
+        {"provider": "notion"},
         format="json",
     )
     assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
@@ -80,16 +79,21 @@ def test_oauth_start_returns_config_error_when_provider_not_configured(authentic
     assert "Missing configuration fields" in payload["error"]["message"]
 
 
-def test_oauth_provider_config_put_creates_record(authenticated_client, user):
-    _configure_provider(authenticated_client, "gmail")
-    assert IntegrationOAuthProviderConfig.objects.filter(
-        tenant_id=user.default_organization_id,
-        provider="gmail",
-    ).exists()
+def test_oauth_provider_config_put_is_read_only(authenticated_client):
+    response = authenticated_client.put(
+        "/api/credentials/oauth/providers/gmail",
+        {
+            "client_id": "gmail-client-id",
+            "client_secret": "gmail-client-secret",
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["error"]["code"] == "CONFIG_READ_ONLY"
 
 
-def test_oauth_start_and_callback_create_credential(authenticated_client, user):
-    _configure_provider(authenticated_client, "notion")
+def test_oauth_start_and_callback_create_credential(authenticated_client, user, monkeypatch):
+    _configure_provider_env(monkeypatch, "notion")
 
     start_response = authenticated_client.post(
         "/api/credentials/oauth/start",
@@ -121,6 +125,7 @@ def test_oauth_start_and_callback_create_credential(authenticated_client, user):
     callback_payload = callback_response.json()["data"]
     assert callback_payload["provider"] == "notion"
     assert callback_payload["name"] == "Notion Production"
+    assert callback_payload["is_oauth_connection"] is True
     assert APIKey.objects.filter(
         organization=user.default_organization,
         provider="notion",
@@ -136,8 +141,8 @@ def test_oauth_start_and_callback_create_credential(authenticated_client, user):
     assert decrypt_api_key(bytes(key.encrypted_refresh_token)) == "notion-refresh-token"
 
 
-def test_oauth_callback_fails_when_token_response_missing_access_token(authenticated_client):
-    _configure_provider(authenticated_client, "gmail")
+def test_oauth_callback_fails_when_token_response_missing_access_token(authenticated_client, monkeypatch):
+    _configure_google_env(monkeypatch)
 
     start_response = authenticated_client.post(
         "/api/credentials/oauth/start",
@@ -169,8 +174,8 @@ def test_oauth_start_rejects_unsupported_provider(authenticated_client):
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_oauth_start_for_slack_works_after_provider_config(authenticated_client):
-    _configure_provider(authenticated_client, "slack")
+def test_oauth_start_for_slack_works_after_provider_config(authenticated_client, monkeypatch):
+    _configure_provider_env(monkeypatch, "slack")
     response = authenticated_client.post(
         "/api/credentials/oauth/start",
         {"provider": "slack"},
@@ -182,8 +187,8 @@ def test_oauth_start_for_slack_works_after_provider_config(authenticated_client)
     assert "slack.com" in payload["authorize_url"]
 
 
-def test_oauth_start_for_hubspot_works_after_provider_config(authenticated_client):
-    _configure_provider(authenticated_client, "hubspot")
+def test_oauth_start_for_hubspot_works_after_provider_config(authenticated_client, monkeypatch):
+    _configure_provider_env(monkeypatch, "hubspot")
     response = authenticated_client.post(
         "/api/credentials/oauth/start",
         {"provider": "hubspot"},
@@ -195,8 +200,8 @@ def test_oauth_start_for_hubspot_works_after_provider_config(authenticated_clien
     assert "hubspot.com" in payload["authorize_url"]
 
 
-def test_oauth_start_for_google_calendar_works_after_provider_config(authenticated_client):
-    _configure_provider(authenticated_client, "google_calendar")
+def test_oauth_start_for_google_calendar_works_after_provider_config(authenticated_client, monkeypatch):
+    _configure_google_env(monkeypatch)
     response = authenticated_client.post(
         "/api/credentials/oauth/start",
         {"provider": "google_calendar"},
@@ -208,8 +213,8 @@ def test_oauth_start_for_google_calendar_works_after_provider_config(authenticat
     assert "accounts.google.com" in payload["authorize_url"]
 
 
-def test_oauth_start_for_google_tasks_works_after_provider_config(authenticated_client):
-    _configure_provider(authenticated_client, "google_tasks")
+def test_oauth_start_for_google_tasks_works_after_provider_config(authenticated_client, monkeypatch):
+    _configure_google_env(monkeypatch)
     response = authenticated_client.post(
         "/api/credentials/oauth/start",
         {"provider": "google_tasks"},
@@ -237,3 +242,21 @@ def test_credentials_list_marks_expired_oauth_token_for_reauth(authenticated_cli
     assert item["health_status"] == "expired"
     assert item["requires_reauth"] is True
     assert "Reconnect" in item["health_message"]
+    assert item["is_oauth_connection"] is True
+
+
+def test_credentials_list_does_not_mark_manual_oauth_provider_api_key_as_oauth(
+    authenticated_client, user
+):
+    APIKey.objects.create(
+        organization=user.default_organization,
+        user=user,
+        provider="gmail",
+        name="Gmail API key",
+        encrypted_key=encrypt_api_key("api-key-value"),
+    )
+
+    response = authenticated_client.get("/api/credentials/")
+    assert response.status_code == status.HTTP_200_OK
+    item = next(entry for entry in response.json()["data"] if entry["name"] == "Gmail API key")
+    assert item["is_oauth_connection"] is False

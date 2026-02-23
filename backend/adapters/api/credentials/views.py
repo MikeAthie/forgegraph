@@ -16,7 +16,6 @@ from adapters.api.credentials.serializers import (
     APIKeyCreateSerializer,
     APIKeySerializer,
     CredentialOAuthCallbackSerializer,
-    CredentialOAuthProviderConfigSerializer,
     CredentialOAuthStartSerializer,
     CredentialRevokeSerializer,
     CredentialRotateSerializer,
@@ -29,7 +28,6 @@ from application.services.credential_state import (
     is_credential_revoked,
 )
 from application.services.oauth import (
-    PROVIDER_DEFAULTS,
     build_oauth_authorize_url,
     exchange_code_for_tokens,
     get_oauth_provider_config,
@@ -39,7 +37,7 @@ from application.services.oidc import sign_state, verify_state
 from application.services.rbac import has_min_role
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import encrypt_api_key
-from infrastructure.orm.models import APIKey, IntegrationOAuthProviderConfig, User
+from infrastructure.orm.models import APIKey, User
 
 
 class CredentialsListCreateView(APIView):
@@ -379,13 +377,14 @@ class CredentialOAuthProviderConfigView(APIView):
         if denied:
             return denied
 
+        provider_name = provider.strip().lower()
         tenant_id = get_tenant_id_for_user(user)
         for item in get_oauth_provider_status(tenant_id):
-            if item["provider"] == provider:
+            if item["provider"] == provider_name:
                 return success_response(item)
         return error_response(
             code="NOT_FOUND",
-            message=f"OAuth provider '{provider}' is not supported.",
+            message=f"OAuth provider '{provider_name}' is not supported.",
             status=404,
         )
 
@@ -395,97 +394,23 @@ class CredentialOAuthProviderConfigView(APIView):
         if denied:
             return denied
 
-        if provider not in PROVIDER_DEFAULTS:
+        provider_name = provider.strip().lower()
+        statuses = {
+            item["provider"]: item for item in get_oauth_provider_status(get_tenant_id_for_user(user))
+        }
+        if provider_name not in statuses:
             return error_response(
                 code="NOT_FOUND",
-                message=f"OAuth provider '{provider}' is not supported.",
+                message=f"OAuth provider '{provider_name}' is not supported.",
                 status=404,
             )
-
-        serializer = CredentialOAuthProviderConfigSerializer(data=request.data)
-        if not serializer.is_valid():
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="The request contains invalid fields",
-                status=400,
-                details=[
-                    {"field": field, "issue": ", ".join(errors)}
-                    for field, errors in serializer.errors.items()
-                ],
-            )
-
-        tenant_id = get_tenant_id_for_user(user)
-        data = serializer.validated_data
-        existing = IntegrationOAuthProviderConfig.objects.filter(
-            tenant_id=tenant_id,
-            provider=provider,
-        ).first()
-        if existing is None and not data.get("client_secret"):
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="client_secret is required when creating OAuth provider config.",
-                status=400,
-            )
-
-        defaults = PROVIDER_DEFAULTS[provider]
-        scopes = (
-            [str(item).strip() for item in data["scopes"] if str(item).strip()]
-            if "scopes" in data
-            else (existing.scopes if existing else [str(item) for item in defaults["scopes"]])
-        )
-
-        update_defaults: dict[str, object] = {
-            "client_id": data.get("client_id", existing.client_id if existing else ""),
-            "authorize_url": data.get(
-                "authorize_url",
-                existing.authorize_url if existing else str(defaults["authorize_url"]),
-            ),
-            "token_url": data.get(
-                "token_url",
-                existing.token_url if existing else str(defaults["token_url"]),
-            ),
-            "redirect_uri": data.get(
-                "redirect_uri",
-                existing.redirect_uri if existing else "",
-            ),
-            "scopes": scopes,
-            "authorize_extra_params": data.get(
-                "authorize_extra_params",
-                existing.authorize_extra_params if existing else defaults["authorize_extra_params"],
-            ),
-            "token_extra_params": data.get(
-                "token_extra_params",
-                existing.token_extra_params if existing else defaults["token_extra_params"],
-            ),
-            "enabled": data.get("enabled", existing.enabled if existing else True),
-        }
-        if data.get("client_secret"):
-            update_defaults["encrypted_client_secret"] = encrypt_api_key(str(data["client_secret"]))
-        elif existing:
-            update_defaults["encrypted_client_secret"] = existing.encrypted_client_secret
-
-        IntegrationOAuthProviderConfig.objects.update_or_create(
-            tenant_id=tenant_id,
-            provider=provider,
-            defaults=update_defaults,
-        )
-
-        record_audit_log(
-            actor=user,
-            tenant_id=tenant_id,
-            action="credential.oauth_provider_updated",
-            resource_type="oauth_provider_config",
-            resource_id=provider,
-            metadata={"provider": provider},
-        )
-
-        for item in get_oauth_provider_status(tenant_id):
-            if item["provider"] == provider:
-                return success_response(item)
         return error_response(
-            code="INTERNAL_ERROR",
-            message="Failed to load saved OAuth provider configuration.",
-            status=500,
+            code="CONFIG_READ_ONLY",
+            message=(
+                "OAuth provider configuration is managed at the service level via environment variables. "
+                "Update backend env settings and restart the service."
+            ),
+            status=409,
         )
 
 

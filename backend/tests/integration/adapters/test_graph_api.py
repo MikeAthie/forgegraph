@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 from rest_framework import status
 
-from infrastructure.orm.models import Graph, GraphVersion
+from infrastructure.orm.models import (
+    Graph,
+    GraphVersion,
+    MemoryConfiguration,
+    OrganizationMembership,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -369,6 +374,277 @@ class TestGraphVersionLatest:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data["error"]["code"] == "NOT_FOUND"
+
+
+class TestExternalWorkflowCreate:
+    """Tests for POST /api/graphs/external-workflows"""
+
+    def test_external_workflow_requires_authentication(self, api_client):
+        payload = {
+            "name": "External Workflow",
+            "graph_json": {"nodes": [], "edges": []},
+        }
+        response = api_client.post("/api/graphs/external-workflows", payload, format="json")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_external_workflow_creates_graph_and_version(self, authenticated_client, user):
+        payload = {
+            "name": "QA Workflow",
+            "description": "Created externally",
+            "external_source": "qa",
+            "external_ref": "qa-workflow-001",
+            "graph_json": {
+                "nodes": [
+                    {"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "prompt1"},
+                    {"id": "e2", "from": "prompt1", "to": "output1"},
+                ],
+            },
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload,
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["data"]["graph_name"] == "QA Workflow"
+        assert response.data["data"]["graph_description"] == "Created externally"
+        assert response.data["data"]["graph_version"] == 1
+        assert response.data["data"]["external_source"] == "qa"
+        assert response.data["data"]["external_ref"] == "qa-workflow-001"
+        assert response.data["data"]["created_graph"] is True
+        assert response.data["data"]["created_version"] is True
+        assert response.data["data"]["idempotent_replay"] is False
+        assert isinstance(response.data["data"]["warnings"], list)
+
+        graph = Graph.objects.get(id=response.data["data"]["graph_id"])
+        version = GraphVersion.objects.get(id=response.data["data"]["graph_version_id"])
+
+        assert graph.owner_id == user.id
+        assert graph.external_source == "qa"
+        assert graph.external_ref == "qa-workflow-001"
+        assert version.graph_id == graph.id
+        assert version.version == 1
+        assert version.graph_json == payload["graph_json"]
+        assert MemoryConfiguration.objects.filter(graph=graph).exists()
+
+    def test_external_ref_reuses_graph_and_creates_new_version(self, authenticated_client):
+        payload_v1 = {
+            "name": "QA Workflow",
+            "external_source": "qa",
+            "external_ref": "qa-workflow-002",
+            "graph_json": {
+                "nodes": [
+                    {"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "prompt1"},
+                    {"id": "e2", "from": "prompt1", "to": "output1"},
+                ],
+            },
+        }
+        first = authenticated_client.post("/api/graphs/external-workflows", payload_v1, format="json")
+        assert first.status_code == status.HTTP_201_CREATED
+        graph_id = first.data["data"]["graph_id"]
+
+        payload_v2 = {
+            **payload_v1,
+            "graph_json": {
+                "nodes": [
+                    {"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}},
+                    {"id": "transform1", "type": "transform", "name": "T", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "prompt1"},
+                    {"id": "e2", "from": "prompt1", "to": "transform1"},
+                    {"id": "e3", "from": "transform1", "to": "output1"},
+                ],
+            },
+        }
+        second = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload_v2,
+            format="json",
+        )
+
+        assert second.status_code == status.HTTP_201_CREATED
+        assert second.data["data"]["graph_id"] == graph_id
+        assert second.data["data"]["graph_version"] == 2
+        assert second.data["data"]["created_graph"] is False
+        assert second.data["data"]["created_version"] is True
+
+    def test_external_ref_same_graph_json_reuses_latest_version(self, authenticated_client):
+        payload = {
+            "name": "Stable Workflow",
+            "external_source": "qa",
+            "external_ref": "qa-workflow-003",
+            "graph_json": {
+                "nodes": [
+                    {"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "prompt1"},
+                    {"id": "e2", "from": "prompt1", "to": "output1"},
+                ],
+            },
+        }
+        first = authenticated_client.post("/api/graphs/external-workflows", payload, format="json")
+        second = authenticated_client.post("/api/graphs/external-workflows", payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["data"]["graph_id"] == first.data["data"]["graph_id"]
+        assert second.data["data"]["graph_version_id"] == first.data["data"]["graph_version_id"]
+        assert second.data["data"]["created_graph"] is False
+        assert second.data["data"]["created_version"] is False
+        assert second.data["data"]["idempotent_replay"] is False
+
+    def test_external_workflow_idempotency_key_replays_result(self, authenticated_client):
+        payload = {
+            "name": "Idempotent Workflow",
+            "external_source": "qa",
+            "external_ref": "qa-workflow-004",
+            "idempotency_key": "qa-workflow-004:v1",
+            "graph_json": {
+                "nodes": [
+                    {"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "prompt1"},
+                    {"id": "e2", "from": "prompt1", "to": "output1"},
+                ],
+            },
+        }
+        first = authenticated_client.post("/api/graphs/external-workflows", payload, format="json")
+
+        payload_changed = {
+            **payload,
+            "name": "Changed Name That Should Be Ignored",
+            "graph_json": {
+                "nodes": [
+                    {"id": "different", "type": "prompt", "name": "Different", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "different"},
+                    {"id": "e2", "from": "different", "to": "output1"},
+                ],
+            },
+        }
+        second = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload_changed,
+            format="json",
+        )
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["data"]["graph_id"] == first.data["data"]["graph_id"]
+        assert second.data["data"]["graph_version_id"] == first.data["data"]["graph_version_id"]
+        assert second.data["data"]["idempotent_replay"] is True
+        assert second.data["data"]["created_graph"] is False
+        assert second.data["data"]["created_version"] is False
+        assert GraphVersion.objects.filter(graph_id=first.data["data"]["graph_id"]).count() == 1
+
+    def test_external_workflow_accepts_idempotency_header(self, authenticated_client):
+        payload = {
+            "name": "Header Idempotency Workflow",
+            "external_source": "qa",
+            "external_ref": "qa-workflow-005",
+            "graph_json": {
+                "nodes": [
+                    {"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}},
+                    {"id": "output1", "type": "output", "name": "Done", "config": {}},
+                ],
+                "edges": [
+                    {"id": "e1", "from": "START", "to": "prompt1"},
+                    {"id": "e2", "from": "prompt1", "to": "output1"},
+                ],
+            },
+        }
+        headers = {"HTTP_IDEMPOTENCY_KEY": "qa-workflow-005:v1"}
+
+        first = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload,
+            format="json",
+            **headers,
+        )
+        second = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload,
+            format="json",
+            **headers,
+        )
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["data"]["idempotency_key"] == "qa-workflow-005:v1"
+        assert second.data["data"]["idempotent_replay"] is True
+
+    def test_external_workflow_requires_member_role(self, authenticated_client, user):
+        OrganizationMembership.objects.filter(
+            organization_id=user.default_organization_id,
+            user=user,
+        ).update(role="viewer")
+        payload = {
+            "name": "Forbidden Workflow",
+            "graph_json": {"nodes": [], "edges": []},
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload,
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.data["error"]["code"] == "FORBIDDEN"
+
+    def test_external_workflow_validates_graph_json_shape(self, authenticated_client):
+        payload = {
+            "name": "Invalid Workflow",
+            "graph_json": {"nodes": []},
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload,
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_external_workflow_can_require_entry_exit(self, authenticated_client):
+        payload = {
+            "name": "Strict Workflow",
+            "require_entry_exit": True,
+            "graph_json": {
+                "nodes": [{"id": "prompt1", "type": "prompt", "name": "Prompt 1", "config": {}}],
+                "edges": [{"id": "e1", "from": "START", "to": "prompt1"}],
+            },
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/external-workflows",
+            payload,
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "GRAPH_VALIDATION_ERROR"
+        error_types = [item["type"] for item in response.data["error"]["details"]]
+        assert "no_output_node" in error_types
 
 
 class TestGraphAPIResponseFormat:

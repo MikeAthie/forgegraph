@@ -1,0 +1,60 @@
+{
+  "tools": [
+    {
+      "name": "gmail_reader",
+      "version": "1.0.0",
+      "description": "Fetch unread Gmail messages",
+      "kind": "http",
+      "default_config": {
+        "provider": "gmail",
+        "max_results": 10,
+        "query": "is:unread"
+      },
+      "http": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={{config.max_results}}&q={{config.query}}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "timeout_ms": 30000
+      }
+    },
+    {
+      "name": "google_calendar",
+      "version": "1.0.0",
+      "description": "List Google Calendar events",
+      "kind": "http",
+      "default_config": {
+        "provider": "google_calendar",
+        "max_results": 10
+      },
+      "http": {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults={{config.max_results}}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "timeout_ms": 30000
+      }
+    },
+    {
+      "name": "google_tasks",
+      "version": "1.0.0",
+      "description": "List tasks from Google Tasks default list",
+      "kind": "http",
+      "default_config": {
+        "provider": "google_tasks",
+        "max_results": 20,
+        "include_completed": false
+      },
+      "http": {
+        "url": "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?maxResults={{config.max_results}}&showCompleted={{config.include_completed}}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "timeout_ms": 30000
+      }
+    }
+  ]
+}

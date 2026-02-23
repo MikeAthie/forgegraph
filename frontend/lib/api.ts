@@ -128,7 +128,6 @@ const API_PATHS = {
     listCreate: "/api/credentials/",
     detail: (credentialId: string) => `/api/credentials/${credentialId}`,
     oauthProviders: "/api/credentials/oauth/providers",
-    oauthProviderConfig: (provider: string) => `/api/credentials/oauth/providers/${provider}`,
     oauthStart: "/api/credentials/oauth/start",
     oauthCallback: "/api/credentials/oauth/callback",
   },
@@ -606,6 +605,7 @@ export type Credential = {
   provider: string;
   name: string;
   key_hint: string;
+  is_oauth_connection: boolean;
   token_expires_at: string | null;
   health_status: "healthy" | "expiring_soon" | "expired" | string;
   requires_reauth: boolean;
@@ -635,6 +635,7 @@ export type CredentialOAuthProviderStatus = {
   configured: boolean;
   missing_config_fields: string[];
   has_provider_config: boolean;
+  configuration_mode?: "environment" | string;
   enabled: boolean;
   client_id: string;
   authorize_url: string;
@@ -643,18 +644,6 @@ export type CredentialOAuthProviderStatus = {
   scopes: string[];
   authorize_extra_params: Record<string, unknown>;
   token_extra_params: Record<string, unknown>;
-};
-
-export type CredentialOAuthProviderConfigInput = {
-  client_id: string;
-  client_secret?: string;
-  authorize_url?: string;
-  token_url?: string;
-  redirect_uri?: string;
-  scopes?: string[];
-  authorize_extra_params?: Record<string, unknown>;
-  token_extra_params?: Record<string, unknown>;
-  enabled?: boolean;
 };
 
 export type HttpNodeTestInput = {
@@ -894,24 +883,6 @@ export const credentialsApi = {
   listOAuthProviders: async (): Promise<CredentialOAuthProviderStatus[]> => {
     const response = await api.get<ApiSuccessResponse<CredentialOAuthProviderStatus[]>>(
       API_PATHS.credentials.oauthProviders,
-    );
-    return response.data.data;
-  },
-  getOAuthProviderConfig: async (
-    provider: OAuthIntegrationProvider,
-  ): Promise<CredentialOAuthProviderStatus> => {
-    const response = await api.get<ApiSuccessResponse<CredentialOAuthProviderStatus>>(
-      API_PATHS.credentials.oauthProviderConfig(provider),
-    );
-    return response.data.data;
-  },
-  upsertOAuthProviderConfig: async (
-    provider: OAuthIntegrationProvider,
-    input: CredentialOAuthProviderConfigInput,
-  ): Promise<CredentialOAuthProviderStatus> => {
-    const response = await api.put<ApiSuccessResponse<CredentialOAuthProviderStatus>>(
-      API_PATHS.credentials.oauthProviderConfig(provider),
-      input,
     );
     return response.data.data;
   },

@@ -1,0 +1,216 @@
+{
+    "id":  "4538b103-cca1-4ed3-a5e4-6d02d8aff6f6",
+    "owner_id":  "bc069dc6-ec5c-4b48-9d95-3bf610583ab7",
+    "owner_email":  "test@example.com",
+    "thread_id":  null,
+    "graph_id":  "baafc58b-9704-49b2-8ea7-00700994343b",
+    "graph_name":  "QA Verify APIs - Personal Life Manager",
+    "graph_version_id":  "1f571c2c-c2eb-4ff9-8ab5-6009f49a2b34",
+    "graph_version":  1,
+    "status":  "failed",
+    "queue_status":  null,
+    "queue_attempts":  null,
+    "queue_available_at":  null,
+    "started_at":  "2026-02-18T00:53:42.178420Z",
+    "ended_at":  "2026-02-18T00:53:42.592142Z",
+    "input_json":  {
+                       "message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                       "timezone":  "America/New_York",
+                       "user_name":  "Alex"
+                   },
+    "output_json":  null,
+    "error_message":  "node tasks_tool (tool): HTTP 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Google Tasks API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n    \"errors\": [\n      {\n        \"message\": \"Google Tasks API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n        \"domain\": \"usageLimits\",\n        \"reason\": \"accessNotConfigured\",\n        \"extendedHelp\": \"https://console.developers.google.com\"\n      }\n    ],\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"SERVICE_DISABLED\",\n        \"domain\": \"googleapis.com\",\n        \"metadata\": {\n          \"consumer\": \"projects/702951723813\",\n          \"serviceTitle\": \"Google Tasks API\",\n          \"service\": \"tasks.googleapis.com\",\n          \"activationUrl\": \"https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813\",\n          \"containerInfo\": \"702951723813\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.LocalizedMessage\",\n        \"locale\": \"en-US\",\n        \"message\": \"Google Tasks API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\"\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Google developers console API activation\",\n            \"url\": \"https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+    "duration_ms":  413,
+    "paused_node_id":  null,
+    "pause_payload":  null,
+    "node_outcomes":  {
+                          "pending":  0,
+                          "running":  1,
+                          "waiting":  0,
+                          "succeeded":  2,
+                          "failed":  1,
+                          "skipped":  0
+                      },
+    "node_runs":  [
+                      {
+                          "id":  "82e85b28-ddd2-44cb-be0a-62453ddecc99",
+                          "node_id":  "intent_classifier",
+                          "node_type":  "prompt",
+                          "status":  "succeeded",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:53:42.199259Z",
+                          "ended_at":  "2026-02-18T00:53:42.312017Z",
+                          "duration_ms":  112,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex"
+                                         },
+                          "output_json":  {
+                                              "output":  {
+                                                             "model":  "gpt-4-0613",
+                                                             "usage":  {
+                                                                           "total_tokens":  164,
+                                                                           "prompt_tokens":  138,
+                                                                           "completion_tokens":  26
+                                                                       },
+                                                             "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                             "provider":  "openai",
+                                                             "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                             "finish_reason":  "stop"
+                                                         }
+                                          },
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "5aaf516c-8a1c-47e2-88b3-2b2da99d0101",
+                          "node_id":  "email_tool",
+                          "node_type":  "tool",
+                          "status":  "succeeded",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:53:42.312096Z",
+                          "ended_at":  "2026-02-18T00:53:42.514179Z",
+                          "duration_ms":  202,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  {
+                                              "output":  {
+                                                             "tool":  "gmail_reader",
+                                                             "result":  {
+                                                                            "messages":  [
+                                                                                             {
+                                                                                                 "id":  "19c6e27a228e2784",
+                                                                                                 "threadId":  "19c6e27a228e2784"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6dfceed182bbd",
+                                                                                                 "threadId":  "19c6dfceed182bbd"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6de7c4cd4e16d",
+                                                                                                 "threadId":  "19c6de7c4cd4e16d"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6daa06da59be7",
+                                                                                                 "threadId":  "19c6daa06da59be7"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6d9dd2da54786",
+                                                                                                 "threadId":  "19c6d9dd2da54786"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6d7b87f23b05f",
+                                                                                                 "threadId":  "19c6d7b87f23b05f"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6d73af12d3b48",
+                                                                                                 "threadId":  "19c6d73af12d3b48"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6d30f7f00c273",
+                                                                                                 "threadId":  "19c6d30f7f00c273"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6d2b1602e4198",
+                                                                                                 "threadId":  "19c6d2b1602e4198"
+                                                                                             },
+                                                                                             {
+                                                                                                 "id":  "19c6d08b036725b9",
+                                                                                                 "threadId":  "19c6d08b036725b9"
+                                                                                             }
+                                                                                         ],
+                                                                            "nextPageToken":  "02077605955697178058",
+                                                                            "resultSizeEstimate":  201
+                                                                        },
+                                                             "status":  200,
+                                                             "version":  "1.0.0",
+                                                             "attempts":  1
+                                                         }
+                                          },
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "581de720-cdf5-40e1-a201-390f1bf2bf2b",
+                          "node_id":  "calendar_tool",
+                          "node_type":  "tool",
+                          "status":  "running",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:53:42.312133Z",
+                          "ended_at":  null,
+                          "duration_ms":  null,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "43924a05-62ef-4893-bbf9-2ad919206959",
+                          "node_id":  "tasks_tool",
+                          "node_type":  "tool",
+                          "status":  "failed",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:53:42.312176Z",
+                          "ended_at":  "2026-02-18T00:53:42.590367Z",
+                          "duration_ms":  278,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  {
+                                             "type":  "runtime_error",
+                                             "attempt":  1,
+                                             "message":  "HTTP 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Google Tasks API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n    \"errors\": [\n      {\n        \"message\": \"Google Tasks API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n        \"domain\": \"usageLimits\",\n        \"reason\": \"accessNotConfigured\",\n        \"extendedHelp\": \"https://console.developers.google.com\"\n      }\n    ],\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"SERVICE_DISABLED\",\n        \"domain\": \"googleapis.com\",\n        \"metadata\": {\n          \"consumer\": \"projects/702951723813\",\n          \"serviceTitle\": \"Google Tasks API\",\n          \"service\": \"tasks.googleapis.com\",\n          \"activationUrl\": \"https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813\",\n          \"containerInfo\": \"702951723813\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.LocalizedMessage\",\n        \"locale\": \"en-US\",\n        \"message\": \"Google Tasks API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\"\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Google developers console API activation\",\n            \"url\": \"https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=702951723813\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+                                             "failed_at":  "2026-02-18T00:53:42.590340795Z",
+                                             "retryable":  false,
+                                             "backoff_ms":  1000,
+                                             "max_attempts":  3,
+                                             "on_error_action":  "fail",
+                                             "backoff_strategy":  "exponential"
+                                         }
+                      }
+                  ]
+}

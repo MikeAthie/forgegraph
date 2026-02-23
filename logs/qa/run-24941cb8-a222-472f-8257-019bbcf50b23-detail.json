@@ -1,0 +1,163 @@
+{
+    "id":  "24941cb8-a222-472f-8257-019bbcf50b23",
+    "owner_id":  "bc069dc6-ec5c-4b48-9d95-3bf610583ab7",
+    "owner_email":  "test@example.com",
+    "thread_id":  null,
+    "graph_id":  "c91529e3-17b0-4c1e-a988-6cb5e5862d21",
+    "graph_name":  "QA Final Verify - Personal Life Manager",
+    "graph_version_id":  "9afb36b7-9854-4826-aafc-c15ac712cb28",
+    "graph_version":  1,
+    "status":  "failed",
+    "queue_status":  null,
+    "queue_attempts":  null,
+    "queue_available_at":  null,
+    "started_at":  "2026-02-18T02:16:16.870747Z",
+    "ended_at":  "2026-02-18T02:16:18.578284Z",
+    "input_json":  {
+                       "message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                       "timezone":  "America/New_York",
+                       "user_name":  "Alex"
+                   },
+    "output_json":  null,
+    "error_message":  "node email_tool (tool): HTTP 401: {\n  \"error\": {\n    \"code\": 401,\n    \"message\": \"Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.\",\n    \"errors\": [\n      {\n        \"message\": \"Invalid Credentials\",\n        \"domain\": \"global\",\n        \"reason\": \"authError\",\n        \"location\": \"Authorization\",\n        \"locationType\": \"header\"\n      }\n    ],\n    \"status\": \"UNAUTHENTICATED\"\n  }\n}",
+    "duration_ms":  1707,
+    "paused_node_id":  null,
+    "pause_payload":  null,
+    "node_outcomes":  {
+                          "pending":  0,
+                          "running":  2,
+                          "waiting":  0,
+                          "succeeded":  1,
+                          "failed":  1,
+                          "skipped":  0
+                      },
+    "node_runs":  [
+                      {
+                          "id":  "adda41d2-d2c9-401a-9929-3879fe43b567",
+                          "node_id":  "intent_classifier",
+                          "node_type":  "prompt",
+                          "status":  "succeeded",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T02:16:16.883227Z",
+                          "ended_at":  "2026-02-18T02:16:18.445733Z",
+                          "duration_ms":  1562,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex"
+                                         },
+                          "output_json":  {
+                                              "output":  {
+                                                             "model":  "gpt-4-0613",
+                                                             "usage":  {
+                                                                           "total_tokens":  164,
+                                                                           "prompt_tokens":  138,
+                                                                           "completion_tokens":  26
+                                                                       },
+                                                             "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                             "provider":  "openai",
+                                                             "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                             "finish_reason":  "stop"
+                                                         }
+                                          },
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "dacca4a5-5fe1-4778-bcab-174751a153d5",
+                          "node_id":  "email_tool",
+                          "node_type":  "tool",
+                          "status":  "failed",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T02:16:18.445818Z",
+                          "ended_at":  "2026-02-18T02:16:18.576786Z",
+                          "duration_ms":  130,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  {
+                                             "type":  "runtime_error",
+                                             "attempt":  1,
+                                             "message":  "HTTP 401: {\n  \"error\": {\n    \"code\": 401,\n    \"message\": \"Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.\",\n    \"errors\": [\n      {\n        \"message\": \"Invalid Credentials\",\n        \"domain\": \"global\",\n        \"reason\": \"authError\",\n        \"location\": \"Authorization\",\n        \"locationType\": \"header\"\n      }\n    ],\n    \"status\": \"UNAUTHENTICATED\"\n  }\n}",
+                                             "failed_at":  "2026-02-18T02:16:18.576782465Z",
+                                             "retryable":  false,
+                                             "backoff_ms":  1000,
+                                             "max_attempts":  3,
+                                             "on_error_action":  "fail",
+                                             "backoff_strategy":  "exponential"
+                                         }
+                      },
+                      {
+                          "id":  "8dc128b0-0b44-42e8-b920-40e69429dc86",
+                          "node_id":  "calendar_tool",
+                          "node_type":  "tool",
+                          "status":  "running",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T02:16:18.445851Z",
+                          "ended_at":  null,
+                          "duration_ms":  null,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "df54d017-635d-44a7-9511-122958f0274e",
+                          "node_id":  "tasks_tool",
+                          "node_type":  "tool",
+                          "status":  "running",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T02:16:18.445885Z",
+                          "ended_at":  null,
+                          "duration_ms":  null,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  null
+                      }
+                  ]
+}
