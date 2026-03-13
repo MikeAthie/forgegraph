@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import inspect
 import uuid
 
 import django.db.models.deletion
 import django.utils.timezone
 from django.db import migrations, models
+
+
+def _make_check_constraint(expr: models.Q, *, name: str) -> models.CheckConstraint:
+    params = inspect.signature(models.CheckConstraint).parameters
+    if "condition" in params:
+        return models.CheckConstraint(condition=expr, name=name)
+    return models.CheckConstraint(check=expr, name=name)
 
 
 class Migration(migrations.Migration):
@@ -78,24 +86,24 @@ class Migration(migrations.Migration):
                     ),
                 ],
                 "constraints": [
-                    models.CheckConstraint(
-                        check=~(
+                    _make_check_constraint(
+                        ~(
                             models.Q(graph_id__isnull=True)
                             & models.Q(run_id__isnull=True)
                             & models.Q(session_id__isnull=True)
                         ),
                         name="mem_obs_requires_scope",
                     ),
-                    models.CheckConstraint(
-                        check=~(models.Q(scope="graph") & models.Q(graph_id__isnull=True)),
+                    _make_check_constraint(
+                        ~(models.Q(scope="graph") & models.Q(graph_id__isnull=True)),
                         name="mem_obs_graph_scope_req",
                     ),
-                    models.CheckConstraint(
-                        check=~(models.Q(scope="run") & models.Q(run_id__isnull=True)),
+                    _make_check_constraint(
+                        ~(models.Q(scope="run") & models.Q(run_id__isnull=True)),
                         name="mem_obs_run_scope_req",
                     ),
-                    models.CheckConstraint(
-                        check=~(models.Q(scope="session") & models.Q(session_id__isnull=True)),
+                    _make_check_constraint(
+                        ~(models.Q(scope="session") & models.Q(session_id__isnull=True)),
                         name="mem_obs_session_scope_req",
                     ),
                 ],
