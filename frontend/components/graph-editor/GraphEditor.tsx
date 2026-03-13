@@ -12,6 +12,7 @@ import {
   useEdgesState,
   addEdge,
   SelectionMode,
+  MarkerType,
   type OnNodeDrag,
   type Connection,
   type Node,
@@ -21,7 +22,7 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Brain, Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
+import { Brain, Play, Plus, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
 
 import { WizardProvider, useWizard } from "@/contexts/WizardContext";
 import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
@@ -261,8 +262,21 @@ export function GraphEditor({
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
 
+  // Handle inserting a node on an edge (splitting the edge)
+  const handleInsertNodeOnEdge = useCallback(
+    (edgeId: string, position: { x: number; y: number }) => {
+      const edge = edges.find((e) => e.id === edgeId);
+      if (!edge) return;
+
+      // Focus the palette search to let the user pick a node type
+      // The position is stored so the next added node can be placed there
+      paletteSearchRef.current?.focus();
+    },
+    [edges]
+  );
+
   // Enrich edges with type information for visual display
-  const typedEdges = useEdgeTypes(nodes, edges);
+  const typedEdges = useEdgeTypes(nodes, edges, handleInsertNodeOnEdge);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -1602,6 +1616,12 @@ export function GraphEditor({
     <WizardProvider>
       <ValidationTrigger nodes={nodes} edges={edges} />
       <div className="flex h-full flex-col">
+        {/* Integration Quick Tool Bar - full width above panels */}
+        <QuickToolBar
+          marketplaceNodes={marketplaceNodes}
+          onSelectPackage={(pkg) => handleAddMarketplaceNode(pkg, canQuickAddConnect)}
+          hasSelectedNode={canQuickAddConnect}
+        />
         <div className="flex flex-1 overflow-hidden">
         <AgentWizard
           onComplete={(payload) => {
@@ -1708,9 +1728,14 @@ export function GraphEditor({
           defaultEdgeOptions={{
             type: "typed",
             style: { strokeWidth: 2 },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 14,
+              height: 14,
+            },
           }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Background variant={BackgroundVariant.Dots} gap={24} size={0.8} color="rgba(255,255,255,0.06)" />
           <Controls />
           <MiniMap
             nodeStrokeWidth={3}
@@ -1718,14 +1743,6 @@ export function GraphEditor({
             pannable
             className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
           />
-          {/* Quick Tool Bar - top center */}
-          <Panel position="top-center">
-            <QuickToolBar
-              marketplaceNodes={marketplaceNodes}
-              onSelectPackage={(pkg) => handleAddMarketplaceNode(pkg, canQuickAddConnect)}
-              hasSelectedNode={canQuickAddConnect}
-            />
-          </Panel>
           <Panel position="top-right" className="flex items-center gap-2">
             <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
               <button
@@ -1817,6 +1834,16 @@ export function GraphEditor({
                 </button>
               </>
             )}
+          </Panel>
+          <Panel position="bottom-center">
+            <button
+              type="button"
+              onClick={() => paletteSearchRef.current?.focus()}
+              className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Add Node
+            </button>
           </Panel>
         </ReactFlow>
         {/* Validation Overlay - shows missing start/output indicators */}
@@ -1954,6 +1981,7 @@ export function GraphEditor({
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
           nodes={nodes}
+          edges={edges}
           graphName={graphName}
           graphDescription={graphDescription}
           onUpdateNode={handleUpdateNode}

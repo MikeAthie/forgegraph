@@ -94,9 +94,11 @@ describe("QuickToolBar", () => {
       />,
     );
 
-    expect(screen.getByText("Quick Tools")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add slack alerts integration node/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add notion page upsert integration node/i })).toBeInTheDocument();
+    // Tiles render package names as labels below icons
+    expect(screen.getByText("Slack Alerts")).toBeInTheDocument();
+    expect(screen.getByText("Notion Page Upsert")).toBeInTheDocument();
+    // "More" button opens the browse dialog
+    expect(screen.getByRole("button", { name: /browse integration tools/i })).toBeInTheDocument();
   });
 
   it("calls onSelectPackage when a featured tool is clicked", async () => {
@@ -111,7 +113,8 @@ describe("QuickToolBar", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /add slack alerts integration node/i }));
+    // Tile buttons use the package name as their title and visible label
+    await user.click(screen.getByRole("button", { name: /slack alerts/i }));
 
     expect(onSelectPackage).toHaveBeenCalledTimes(1);
     expect(onSelectPackage).toHaveBeenCalledWith(

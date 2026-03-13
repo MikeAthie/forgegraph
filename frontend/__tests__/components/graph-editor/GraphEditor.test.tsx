@@ -84,6 +84,7 @@ jest.mock("@xyflow/react", () => {
     addEdge: (edge: any, edges: any[]) => [...edges, edge],
     SelectionMode: { Partial: "partial" },
     BackgroundVariant: { Dots: "dots" },
+    MarkerType: { ArrowClosed: "arrowclosed" },
   };
 });
 
@@ -145,7 +146,9 @@ async function addPromptNodeViaWizard(
   user: ReturnType<typeof userEvent.setup>,
   task = "Write a short response."
 ) {
-  await actClick(user, screen.getByRole("button", { name: /^prompt$/i }));
+  // Scope to the node palette panel to avoid matching QuickToolBar buttons
+  const palette = screen.getByRole("complementary", { name: /node palette panel/i });
+  await actClick(user, within(palette).getByRole("button", { name: /^prompt$/i }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
@@ -161,7 +164,9 @@ async function addNodeViaConfigDialog(
   user: ReturnType<typeof userEvent.setup>,
   label: RegExp
 ) {
-  await actClick(user, screen.getByRole("button", { name: label }));
+  // Scope to the node palette panel to avoid matching QuickToolBar buttons
+  const palette = screen.getByRole("complementary", { name: /node palette panel/i });
+  await actClick(user, within(palette).getByRole("button", { name: label }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
