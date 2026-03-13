@@ -5,15 +5,16 @@ Clean Architecture: This belongs to the Frameworks & Drivers layer.
 """
 
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+load_dotenv(BASE_DIR.parent / ".env")
 
 
 def _get_bool_env(name: str, default: bool) -> bool:
@@ -28,16 +29,21 @@ def _get_csv_env(name: str, default: str) -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+DEBUG = _get_bool_env("DEBUG", False)
+TESTING = _get_bool_env("TESTING", False) or any("pytest" in arg.lower() for arg in sys.argv)
+IS_DEV_LIKE = DEBUG or TESTING
+
+
 SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
 if not SECRET_KEY:
-    if DEBUG:
+    if IS_DEV_LIKE:
         SECRET_KEY = "django-insecure-dev-key-change-in-production"
     else:
         raise ImproperlyConfigured("SECRET_KEY must be configured when DEBUG is False.")
 
-_default_allowed_hosts = "localhost,127.0.0.1" if DEBUG else ""
+_default_allowed_hosts = "localhost,127.0.0.1,testserver" if IS_DEV_LIKE else ""
 ALLOWED_HOSTS = _get_csv_env("ALLOWED_HOSTS", _default_allowed_hosts)
-if not ALLOWED_HOSTS and not DEBUG:
+if not ALLOWED_HOSTS and not IS_DEV_LIKE:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be configured when DEBUG is False.")
 
 FORGEGRAPH_RUNTIME_MODE = os.environ.get("FORGEGRAPH_RUNTIME_MODE", "cloud").strip().lower()
@@ -186,37 +192,39 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = DEBUG and _get_bool_env("CORS_ALLOW_ALL_ORIGINS", False)
+CORS_ALLOW_ALL_ORIGINS = IS_DEV_LIKE and _get_bool_env("CORS_ALLOW_ALL_ORIGINS", False)
 CORS_ALLOWED_ORIGINS = _get_csv_env(
     "CORS_ALLOWED_ORIGINS",
     "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
-    if DEBUG
+    if IS_DEV_LIKE
     else "",
 )
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = _get_csv_env(
     "CSRF_TRUSTED_ORIGINS",
     "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
-    if DEBUG
+    if IS_DEV_LIKE
     else "",
 )
 
 # Web security defaults
-SESSION_COOKIE_SECURE = _get_bool_env("SESSION_COOKIE_SECURE", not DEBUG)
+SESSION_COOKIE_SECURE = _get_bool_env("SESSION_COOKIE_SECURE", not IS_DEV_LIKE)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax")
-CSRF_COOKIE_SECURE = _get_bool_env("CSRF_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SECURE = _get_bool_env("CSRF_COOKIE_SECURE", not IS_DEV_LIKE)
 CSRF_COOKIE_HTTPONLY = _get_bool_env("CSRF_COOKIE_HTTPONLY", False)
 CSRF_COOKIE_SAMESITE = os.environ.get("CSRF_COOKIE_SAMESITE", "Lax")
-SECURE_CONTENT_TYPE_NOSNIFF = _get_bool_env("SECURE_CONTENT_TYPE_NOSNIFF", not DEBUG)
+SECURE_CONTENT_TYPE_NOSNIFF = _get_bool_env("SECURE_CONTENT_TYPE_NOSNIFF", not IS_DEV_LIKE)
 SECURE_REFERRER_POLICY = os.environ.get("SECURE_REFERRER_POLICY", "strict-origin-when-cross-origin")
 X_FRAME_OPTIONS = os.environ.get("X_FRAME_OPTIONS", "DENY")
-SECURE_SSL_REDIRECT = _get_bool_env("SECURE_SSL_REDIRECT", not DEBUG)
-SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = _get_bool_env("SECURE_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
+SECURE_SSL_REDIRECT = _get_bool_env("SECURE_SSL_REDIRECT", not IS_DEV_LIKE)
+SECURE_HSTS_SECONDS = int(
+    os.environ.get("SECURE_HSTS_SECONDS", "31536000" if not IS_DEV_LIKE else "0")
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _get_bool_env("SECURE_HSTS_INCLUDE_SUBDOMAINS", not IS_DEV_LIKE)
 SECURE_HSTS_PRELOAD = _get_bool_env("SECURE_HSTS_PRELOAD", False)
-USE_X_FORWARDED_HOST = _get_bool_env("USE_X_FORWARDED_HOST", not DEBUG)
-if _get_bool_env("USE_SECURE_PROXY_SSL_HEADER", not DEBUG):
+USE_X_FORWARDED_HOST = _get_bool_env("USE_X_FORWARDED_HOST", not IS_DEV_LIKE)
+if _get_bool_env("USE_SECURE_PROXY_SSL_HEADER", not IS_DEV_LIKE):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # REST Framework Configuration
@@ -254,8 +262,8 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-# Add browsable API in debug mode
-if DEBUG:
+# Add browsable API in debug/test mode
+if IS_DEV_LIKE:
     _renderer_classes: list[str] = REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"]  # type: ignore[assignment]
     _renderer_classes.append("rest_framework.renderers.BrowsableAPIRenderer")
     _parser_classes: list[str] = REST_FRAMEWORK["DEFAULT_PARSER_CLASSES"]  # type: ignore[assignment]
@@ -286,7 +294,7 @@ AUTH_REFRESH_COOKIE_PATH = os.environ.get("AUTH_REFRESH_COOKIE_PATH", "/api/auth
 AUTH_REFRESH_COOKIE_DOMAIN = os.environ.get("AUTH_REFRESH_COOKIE_DOMAIN") or None
 AUTH_REFRESH_COOKIE_SAMESITE = os.environ.get("AUTH_REFRESH_COOKIE_SAMESITE", "Lax").title()
 AUTH_REFRESH_COOKIE_SECURE = os.environ.get(
-    "AUTH_REFRESH_COOKIE_SECURE", "true" if not DEBUG else "false"
+    "AUTH_REFRESH_COOKIE_SECURE", "true" if not IS_DEV_LIKE else "false"
 ).lower() in {"1", "true", "yes"}
 
 # Frontend base URL for redirects (SSO, billing)
@@ -358,5 +366,7 @@ GENERIC_WEBHOOK_SECRET = os.environ.get("GENERIC_WEBHOOK_SECRET", "")
 # Generate key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")
 ENCRYPTION_KEY_PREVIOUS = _get_csv_env("ENCRYPTION_KEY_PREVIOUS", "")
-if not ENCRYPTION_KEY and not DEBUG:
+if not ENCRYPTION_KEY and TESTING:
+    ENCRYPTION_KEY = "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
+if not ENCRYPTION_KEY and not IS_DEV_LIKE:
     raise ImproperlyConfigured("ENCRYPTION_KEY must be configured when DEBUG is False.")
