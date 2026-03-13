@@ -292,6 +292,31 @@ class MemoryServiceStub(object):
                 request_serializer=engine__pb2.RetrieveMemoryRequest.SerializeToString,
                 response_deserializer=engine__pb2.RetrieveMemoryResponse.FromString,
                 _registered_method=True)
+        self.SaveObservation = channel.unary_unary(
+                '/engine.MemoryService/SaveObservation',
+                request_serializer=engine__pb2.SaveObservationRequest.SerializeToString,
+                response_deserializer=engine__pb2.SaveObservationResponse.FromString,
+                _registered_method=True)
+        self.SearchObservations = channel.unary_unary(
+                '/engine.MemoryService/SearchObservations',
+                request_serializer=engine__pb2.SearchObservationsRequest.SerializeToString,
+                response_deserializer=engine__pb2.SearchObservationsResponse.FromString,
+                _registered_method=True)
+        self.GetObservation = channel.unary_unary(
+                '/engine.MemoryService/GetObservation',
+                request_serializer=engine__pb2.GetObservationRequest.SerializeToString,
+                response_deserializer=engine__pb2.GetObservationResponse.FromString,
+                _registered_method=True)
+        self.GetContext = channel.unary_unary(
+                '/engine.MemoryService/GetContext',
+                request_serializer=engine__pb2.GetContextRequest.SerializeToString,
+                response_deserializer=engine__pb2.GetContextResponse.FromString,
+                _registered_method=True)
+        self.GetTimeline = channel.unary_unary(
+                '/engine.MemoryService/GetTimeline',
+                request_serializer=engine__pb2.GetTimelineRequest.SerializeToString,
+                response_deserializer=engine__pb2.GetTimelineResponse.FromString,
+                _registered_method=True)
 
 
 class MemoryServiceServicer(object):
@@ -305,6 +330,41 @@ class MemoryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SaveObservation(self, request, context):
+        """SaveObservation creates or updates a curated memory observation.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SearchObservations(self, request, context):
+        """SearchObservations returns curated observations matching the query and scope.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetObservation(self, request, context):
+        """GetObservation returns a single curated observation by ID.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetContext(self, request, context):
+        """GetContext returns context-ready curated observations and retrieval strategy metadata.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTimeline(self, request, context):
+        """GetTimeline returns recent curated observations ordered by recency.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MemoryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -312,6 +372,31 @@ def add_MemoryServiceServicer_to_server(servicer, server):
                     servicer.RetrieveMemory,
                     request_deserializer=engine__pb2.RetrieveMemoryRequest.FromString,
                     response_serializer=engine__pb2.RetrieveMemoryResponse.SerializeToString,
+            ),
+            'SaveObservation': grpc.unary_unary_rpc_method_handler(
+                    servicer.SaveObservation,
+                    request_deserializer=engine__pb2.SaveObservationRequest.FromString,
+                    response_serializer=engine__pb2.SaveObservationResponse.SerializeToString,
+            ),
+            'SearchObservations': grpc.unary_unary_rpc_method_handler(
+                    servicer.SearchObservations,
+                    request_deserializer=engine__pb2.SearchObservationsRequest.FromString,
+                    response_serializer=engine__pb2.SearchObservationsResponse.SerializeToString,
+            ),
+            'GetObservation': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetObservation,
+                    request_deserializer=engine__pb2.GetObservationRequest.FromString,
+                    response_serializer=engine__pb2.GetObservationResponse.SerializeToString,
+            ),
+            'GetContext': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetContext,
+                    request_deserializer=engine__pb2.GetContextRequest.FromString,
+                    response_serializer=engine__pb2.GetContextResponse.SerializeToString,
+            ),
+            'GetTimeline': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTimeline,
+                    request_deserializer=engine__pb2.GetTimelineRequest.FromString,
+                    response_serializer=engine__pb2.GetTimelineResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -342,6 +427,141 @@ class MemoryService(object):
             '/engine.MemoryService/RetrieveMemory',
             engine__pb2.RetrieveMemoryRequest.SerializeToString,
             engine__pb2.RetrieveMemoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SaveObservation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/engine.MemoryService/SaveObservation',
+            engine__pb2.SaveObservationRequest.SerializeToString,
+            engine__pb2.SaveObservationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SearchObservations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/engine.MemoryService/SearchObservations',
+            engine__pb2.SearchObservationsRequest.SerializeToString,
+            engine__pb2.SearchObservationsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetObservation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/engine.MemoryService/GetObservation',
+            engine__pb2.GetObservationRequest.SerializeToString,
+            engine__pb2.GetObservationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetContext(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/engine.MemoryService/GetContext',
+            engine__pb2.GetContextRequest.SerializeToString,
+            engine__pb2.GetContextResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTimeline(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/engine.MemoryService/GetTimeline',
+            engine__pb2.GetTimelineRequest.SerializeToString,
+            engine__pb2.GetTimelineResponse.FromString,
             options,
             channel_credentials,
             insecure,

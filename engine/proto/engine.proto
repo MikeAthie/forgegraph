@@ -26,6 +26,21 @@ service EngineService {
 service MemoryService {
   // RetrieveMemory returns relevant memory chunks for a query.
   rpc RetrieveMemory(RetrieveMemoryRequest) returns (RetrieveMemoryResponse);
+
+  // SaveObservation creates or updates a curated memory observation.
+  rpc SaveObservation(SaveObservationRequest) returns (SaveObservationResponse);
+
+  // SearchObservations returns curated observations matching the query and scope.
+  rpc SearchObservations(SearchObservationsRequest) returns (SearchObservationsResponse);
+
+  // GetObservation returns a single curated observation by ID.
+  rpc GetObservation(GetObservationRequest) returns (GetObservationResponse);
+
+  // GetContext returns context-ready curated observations and retrieval strategy metadata.
+  rpc GetContext(GetContextRequest) returns (GetContextResponse);
+
+  // GetTimeline returns recent curated observations ordered by recency.
+  rpc GetTimeline(GetTimelineRequest) returns (GetTimelineResponse);
 }
 
 // =============================================================================
@@ -168,5 +183,117 @@ message MemoryChunk {
 
 message RetrieveMemoryResponse {
   repeated MemoryChunk chunks = 1;
+  string error = 2;
+}
+
+// =============================================================================
+// Curated Memory Observations
+// =============================================================================
+
+message Observation {
+  string id = 1;
+  string tenant_id = 2;
+  string graph_id = 3;
+  string run_id = 4;
+  string session_id = 5;
+  string agent_id = 6;
+  string memory_chunk_id = 7;
+  string type = 8;
+  string title = 9;
+  string content = 10;
+  string scope = 11;
+  string topic_key = 12;
+  string tool_name = 13;
+  int32 revision_count = 14;
+  int32 duplicate_count = 15;
+  string last_seen_at = 16;
+  string created_at = 17;
+  string updated_at = 18;
+  string deleted_at = 19;
+  bool is_deleted = 20;
+}
+
+message SaveObservationRequest {
+  string tenant_id = 1;
+  string observation_id = 2;
+  string graph_id = 3;
+  string run_id = 4;
+  string session_id = 5;
+  string agent_id = 6;
+  string type = 7;
+  string title = 8;
+  string content = 9;
+  string scope = 10;
+  string topic_key = 11;
+  string tool_name = 12;
+  optional bool dedupe = 13;
+  optional bool update_topic = 14;
+}
+
+message SaveObservationResponse {
+  Observation observation = 1;
+  string error = 2;
+}
+
+message SearchObservationsRequest {
+  string tenant_id = 1;
+  string query = 2;
+  string graph_id = 3;
+  string run_id = 4;
+  string session_id = 5;
+  string agent_id = 6;
+  string scope = 7;
+  string type = 8;
+  string topic_key = 9;
+  int32 limit = 10;
+  bool include_deleted = 11;
+}
+
+message SearchObservationsResponse {
+  repeated Observation observations = 1;
+  string error = 2;
+}
+
+message GetObservationRequest {
+  string tenant_id = 1;
+  string observation_id = 2;
+  bool include_deleted = 3;
+}
+
+message GetObservationResponse {
+  Observation observation = 1;
+  string error = 2;
+}
+
+message GetContextRequest {
+  string tenant_id = 1;
+  string graph_id = 2;
+  string run_id = 3;
+  string session_id = 4;
+  string agent_id = 5;
+  string query = 6;
+  int32 limit = 7;
+}
+
+message GetContextResponse {
+  repeated Observation observations = 1;
+  bool degraded = 2;
+  repeated string strategies = 3;
+  string error = 4;
+}
+
+message GetTimelineRequest {
+  string tenant_id = 1;
+  string graph_id = 2;
+  string run_id = 3;
+  string session_id = 4;
+  string agent_id = 5;
+  string scope = 6;
+  int32 limit = 7;
+  bool include_deleted = 8;
+}
+
+message GetTimelineResponse {
+  repeated Observation observations = 1;
   string error = 2;
 }

@@ -264,6 +264,124 @@ class TestMemoryNodeSchema:
         assert errors[0]["field"] == "ttl_seconds"
 
 
+class TestObservationSaveNodeSchema:
+    """Tests for curated memory save node validation."""
+
+    def test_requires_type_scope_and_content_source(self):
+        errors = validate_node_config("observation_save", {})
+        fields = {error["field"] for error in errors}
+        assert {"type", "scope", "content"} <= fields
+
+    def test_valid_static_save_config(self):
+        errors = validate_node_config(
+            "observation_save",
+            {
+                "type": "fact",
+                "scope": "session",
+                "content": "Customer prefers SMS updates.",
+                "title": "Messaging preference",
+                "dedupe": True,
+            },
+        )
+        assert len(errors) == 0
+
+    def test_rejects_multiple_content_sources(self):
+        errors = validate_node_config(
+            "observation_save",
+            {
+                "type": "fact",
+                "scope": "run",
+                "content": "A",
+                "content_path": "vars.note",
+            },
+        )
+        assert len(errors) == 1
+        assert errors[0]["field"] == "content"
+
+    def test_update_topic_requires_topic_key_source(self):
+        errors = validate_node_config(
+            "observation_save",
+            {
+                "type": "fact",
+                "scope": "graph",
+                "content": "A",
+                "update_topic": True,
+            },
+        )
+        assert len(errors) == 1
+        assert errors[0]["field"] == "topic_key"
+
+
+class TestObservationSearchNodeSchema:
+    """Tests for curated memory search node validation."""
+
+    def test_requires_scope_and_query_source(self):
+        errors = validate_node_config("observation_search", {})
+        fields = {error["field"] for error in errors}
+        assert {"scope", "query"} <= fields
+
+    def test_valid_query_template_config(self):
+        errors = validate_node_config(
+            "observation_search",
+            {
+                "scope": "session",
+                "query_template": "Find notes about {{input.customer_name}}",
+                "limit": 5,
+            },
+        )
+        assert len(errors) == 0
+
+    def test_rejects_multiple_query_sources(self):
+        errors = validate_node_config(
+            "observation_search",
+            {
+                "scope": "run",
+                "query": "renewal",
+                "query_path": "vars.query",
+            },
+        )
+        assert len(errors) == 1
+        assert errors[0]["field"] == "query"
+
+
+class TestObservationContextNodeSchema:
+    """Tests for curated memory context node validation."""
+
+    def test_requires_query_source(self):
+        errors = validate_node_config("observation_context", {})
+        assert len(errors) == 1
+        assert errors[0]["field"] == "query"
+
+    def test_valid_context_config(self):
+        errors = validate_node_config(
+            "observation_context",
+            {
+                "query_path": "vars.current_goal",
+                "limit": 3,
+            },
+        )
+        assert len(errors) == 0
+
+
+class TestObservationTimelineNodeSchema:
+    """Tests for curated memory timeline node validation."""
+
+    def test_requires_scope(self):
+        errors = validate_node_config("observation_timeline", {})
+        assert len(errors) == 1
+        assert errors[0]["field"] == "scope"
+
+    def test_valid_timeline_config(self):
+        errors = validate_node_config(
+            "observation_timeline",
+            {
+                "scope": "graph",
+                "limit": 25,
+            },
+        )
+        assert len(errors) == 0
+
+
 class TestToolNodeSchema:
     """Tests for tool node config validation."""
 

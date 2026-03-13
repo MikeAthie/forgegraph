@@ -438,6 +438,10 @@ func main() {
 		executor.NewMergeExecutor(),
 		executor.NewHumanGateExecutor(),
 		executor.NewMemoryExecutor(memoryStore),
+		executor.NewObservationSaveExecutor(nil),
+		executor.NewObservationSearchExecutor(nil),
+		executor.NewObservationContextExecutor(nil),
+		executor.NewObservationTimelineExecutor(nil),
 		executor.NewToolExecutorWithResolverAndRuntimeMode(toolRegistry, resolver, cfg.RuntimeMode),
 		executor.NewSubgraphExecutor(registry),
 	)
@@ -452,8 +456,6 @@ func main() {
 	} else {
 		log.Info("llm_client_initialized", "note", "Prompt and agent nodes enabled")
 	}
-
-	log.Info("executors_registered", "types", []string{"agent", "output", "transform", "http", "branch", "merge", "human_gate", "memory", "tool", "subgraph", "prompt"})
 
 	// Initialize scheduler
 	schedulerConfig := usecase.SchedulerConfig{
@@ -473,9 +475,38 @@ func main() {
 			log.Warn("memory_retriever_init_failed", "error", err.Error())
 		} else {
 			scheduler.SetMemoryRetriever(retriever)
+			scheduler.SetObservationClient(retriever)
+			registry.RegisterAll(
+				executor.NewObservationSaveExecutor(retriever),
+				executor.NewObservationSearchExecutor(retriever),
+				executor.NewObservationContextExecutor(retriever),
+				executor.NewObservationTimelineExecutor(retriever),
+			)
 			log.Info("memory_retriever_initialized", "host", cfg.MemoryGRPCHost, "port", cfg.MemoryGRPCPort)
 		}
 	}
+
+	log.Info(
+		"executors_registered",
+		"types",
+		[]string{
+			"agent",
+			"output",
+			"transform",
+			"http",
+			"branch",
+			"merge",
+			"human_gate",
+			"memory",
+			"observation_save",
+			"observation_search",
+			"observation_context",
+			"observation_timeline",
+			"tool",
+			"subgraph",
+			"prompt",
+		},
+	)
 
 	if llmClient != nil {
 		var summaryStore port.SummaryStore

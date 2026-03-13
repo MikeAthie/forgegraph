@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import cast
+from typing import Protocol, cast
 from uuid import UUID
 
+from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.text import slugify
 
+from adapters.embedding.openai_embedder import OpenAIEmbedder
+from application.services.embedding_service import CachedEmbeddingService
+from application.services.memory_observation_indexing import (
+    CeleryObservationIndexDispatcher,
+    ObservationIndexDispatcher,
+)
 from application.services.redaction import redact_payload, redact_text
+from application.services.vector_search_service import MemorySearchResult, VectorSearchService
 from infrastructure.orm.models import MemoryObservation
 
 MAX_OBSERVATION_CONTENT_LENGTH = 8_000
@@ -23,8 +32,48 @@ class ObservationContext:
     strategies: list[str]
 
 
+class ObservationVectorSearchService(Protocol):
+    async def search(
+        self,
+        *,
+        tenant_id: UUID | str,
+        query: str,
+        graph_id: UUID | str | None = None,
+        agent_id: UUID | str | None = None,
+        run_id: UUID | str | None = None,
+        session_id: UUID | str | None = None,
+        top_k: int = 5,
+        threshold: float = 0.7,
+        recency_weight: float = 0.2,
+        model: str | None = None,
+    ) -> list[MemorySearchResult]: ...
+
+
 class MemoryObservationService:
     """Service layer for curated memory observation lifecycle and queries."""
+
+    def __init__(
+        self,
+        *,
+        index_dispatcher: ObservationIndexDispatcher | None = None,
+        vector_search_service: ObservationVectorSearchService | None = None,
+    ) -> None:
+        self._index_dispatcher = index_dispatcher or CeleryObservationIndexDispatcher()
+        self._vector_search_service: ObservationVectorSearchService | None
+        if vector_search_service is not None:
+            self._vector_search_service = vector_search_service
+        elif getattr(settings, "FF_CURATED_MEMORY_VECTOR_INDEXING", True):
+            self._vector_search_service = VectorSearchService(
+                CachedEmbeddingService(
+                    OpenAIEmbedder(
+                        model=getattr(
+                            settings, "CURATED_MEMORY_EMBEDDING_MODEL", "text-embedding-ada-002"
+                        )
+                    )
+                )
+            )
+        else:
+            self._vector_search_service = None
 
     def create_observation(
         self,
@@ -105,9 +154,10 @@ class MemoryObservationService:
                             }
                         )
                     )
+                    self._schedule_index_upsert(topic_match.id)
                     return topic_match
 
-            return cast(
+            observation = cast(
                 MemoryObservation,
                 MemoryObservation.objects.create(
                     tenant_id=tenant_uuid,
@@ -124,6 +174,8 @@ class MemoryObservationService:
                     last_seen_at=now,
                 ),
             )
+            self._schedule_index_upsert(observation.id)
+            return observation
 
     def update_observation(
         self,
@@ -160,6 +212,7 @@ class MemoryObservationService:
                 }
             )
         )
+        self._schedule_index_upsert(observation.id)
         return observation
 
     def delete_observation(
@@ -171,6 +224,7 @@ class MemoryObservationService:
         observation = self.get_observation(tenant_id=tenant_id, observation_id=observation_id)
         observation.deleted_at = timezone.now()
         observation.save(update_fields=["deleted_at", "updated_at"])
+        self._schedule_index_delete(observation.id)
         return observation
 
     def get_observation(
@@ -215,11 +269,14 @@ class MemoryObservationService:
         )
         if query.strip():
             safe_query = redact_text(query.strip())[:MAX_SEARCH_QUERY_LENGTH]
-            queryset = queryset.filter(
-                Q(title__icontains=safe_query)
-                | Q(content__icontains=safe_query)
-                | Q(topic_key__icontains=self._normalize_topic_key(safe_query))
-            )
+            search_filter = Q()
+            for term in self._expand_query_terms(safe_query):
+                search_filter |= (
+                    Q(title__icontains=term)
+                    | Q(content__icontains=term)
+                    | Q(topic_key__icontains=self._normalize_topic_key(term))
+                )
+            queryset = queryset.filter(search_filter)
         return list(queryset.order_by("-last_seen_at", "-created_at")[:limit])
 
     def get_timeline(
@@ -264,10 +321,41 @@ class MemoryObservationService:
             agent_id=agent_id,
             limit=limit,
         )
+        strategies = ["fts"]
+        degraded = True
+
+        if (
+            query.strip()
+            and self._vector_search_service is not None
+            and self._has_indexed_observations(
+                tenant_id=tenant_id,
+                graph_id=graph_id,
+                run_id=run_id,
+                session_id=session_id,
+                agent_id=agent_id,
+            )
+        ):
+            try:
+                vector_observations = self._search_vector_observations(
+                    tenant_id=tenant_id,
+                    query=query,
+                    graph_id=graph_id,
+                    run_id=run_id,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    limit=limit,
+                )
+                if vector_observations:
+                    strategies.append("vector")
+                observations = self._merge_results(vector_observations, observations, limit=limit)
+                degraded = False
+            except Exception:
+                degraded = True
+
         return ObservationContext(
-            observations=observations,
-            degraded=True,
-            strategies=["fts", "timeline"],
+            observations=observations[:limit],
+            degraded=degraded,
+            strategies=[*strategies, "timeline"],
         )
 
     def _base_queryset(
@@ -489,6 +577,130 @@ class MemoryObservationService:
         if value is None:
             return ""
         return slugify(redact_text(value).strip()).replace("-", "_")[:128]
+
+    def _schedule_index_upsert(self, observation_id: UUID) -> None:
+        transaction.on_commit(
+            lambda: self._index_dispatcher.enqueue_upsert(observation_id=observation_id)
+        )
+
+    def _schedule_index_delete(self, observation_id: UUID) -> None:
+        transaction.on_commit(
+            lambda: self._index_dispatcher.enqueue_delete(observation_id=observation_id)
+        )
+
+    def _expand_query_terms(self, query: str) -> list[str]:
+        terms = [query, *query.split()]
+        expanded: list[str] = []
+        seen: set[str] = set()
+
+        for raw_term in terms:
+            term = raw_term.strip().lower()
+            if not term:
+                continue
+
+            variants = {term}
+            if term.endswith("ies") and len(term) > 4:
+                variants.add(f"{term[:-3]}y")
+            elif term.endswith("y") and len(term) > 3:
+                variants.add(f"{term[:-1]}ies")
+            elif term.endswith("s") and len(term) > 3:
+                variants.add(term[:-1])
+            else:
+                variants.add(f"{term}s")
+
+            for variant in variants:
+                if variant not in seen:
+                    seen.add(variant)
+                    expanded.append(variant)
+
+        return expanded
+
+    def _has_indexed_observations(
+        self,
+        *,
+        tenant_id: UUID | str,
+        graph_id: UUID | str | None = None,
+        run_id: UUID | str | None = None,
+        session_id: UUID | str | None = None,
+        agent_id: UUID | str | None = None,
+    ) -> bool:
+        queryset = self._apply_filters(
+            self._base_queryset(tenant_id=tenant_id, include_deleted=False),
+            graph_id=graph_id,
+            run_id=run_id,
+            session_id=session_id,
+            agent_id=agent_id,
+        )
+        return queryset.filter(memory_chunk__isnull=False).exists()
+
+    def _search_vector_observations(
+        self,
+        *,
+        tenant_id: UUID | str,
+        query: str,
+        graph_id: UUID | str | None = None,
+        run_id: UUID | str | None = None,
+        session_id: UUID | str | None = None,
+        agent_id: UUID | str | None = None,
+        limit: int,
+    ) -> list[MemoryObservation]:
+        if self._vector_search_service is None:
+            return []
+
+        results = async_to_sync(self._vector_search_service.search)(
+            tenant_id=tenant_id,
+            query=query,
+            graph_id=graph_id,
+            run_id=run_id,
+            session_id=session_id,
+            agent_id=agent_id,
+            top_k=limit,
+            model=getattr(settings, "CURATED_MEMORY_EMBEDDING_MODEL", "text-embedding-ada-002"),
+        )
+        observation_ids = [
+            self._as_uuid(result.metadata.get("observation_id"))
+            for result in results
+            if result.metadata.get("observation_id")
+        ]
+        ordered_ids = [
+            observation_id for observation_id in observation_ids if observation_id is not None
+        ]
+        if not ordered_ids:
+            return []
+
+        observations = {
+            observation.id: observation
+            for observation in self._apply_filters(
+                self._base_queryset(tenant_id=tenant_id, include_deleted=False),
+                graph_id=graph_id,
+                run_id=run_id,
+                session_id=session_id,
+                agent_id=agent_id,
+            ).filter(id__in=ordered_ids)
+        }
+        return [
+            observations[observation_id]
+            for observation_id in ordered_ids
+            if observation_id in observations
+        ]
+
+    def _merge_results(
+        self,
+        primary: list[MemoryObservation],
+        secondary: list[MemoryObservation],
+        *,
+        limit: int,
+    ) -> list[MemoryObservation]:
+        merged: list[MemoryObservation] = []
+        seen: set[UUID] = set()
+        for observation in [*primary, *secondary]:
+            if observation.id in seen:
+                continue
+            seen.add(observation.id)
+            merged.append(observation)
+            if len(merged) >= limit:
+                break
+        return merged
 
     def _as_uuid(self, value: UUID | str | None) -> UUID | None:
         if value is None or value == "":

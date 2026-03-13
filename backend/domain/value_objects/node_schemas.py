@@ -100,6 +100,69 @@ MEMORY_NODE_SCHEMA = {
     "ttl_seconds": {"type": "integer", "min": 0, "required": False},
 }
 
+OBSERVATION_SAVE_NODE_SCHEMA = {
+    "observation_id": {"type": "string", "required": False, "min_length": 1},
+    "type": {"type": "string", "required": True, "min_length": 1},
+    "scope": {
+        "type": "string",
+        "required": True,
+        "enum": ["graph", "run", "session"],
+    },
+    "title": {"type": "string", "required": False},
+    "title_path": {"type": "string", "required": False, "min_length": 1},
+    "title_template": {"type": "string", "required": False},
+    "content": {"type": "string", "required": False},
+    "content_path": {"type": "string", "required": False, "min_length": 1},
+    "content_template": {"type": "string", "required": False},
+    "topic_key": {"type": "string", "required": False},
+    "topic_key_path": {"type": "string", "required": False, "min_length": 1},
+    "tool_name": {"type": "string", "required": False},
+    "tool_name_path": {"type": "string", "required": False, "min_length": 1},
+    "agent_id": {"type": "string", "required": False},
+    "agent_id_path": {"type": "string", "required": False, "min_length": 1},
+    "dedupe": {"type": "boolean", "required": False},
+    "update_topic": {"type": "boolean", "required": False},
+}
+
+OBSERVATION_SEARCH_NODE_SCHEMA = {
+    "scope": {
+        "type": "string",
+        "required": True,
+        "enum": ["graph", "run", "session"],
+    },
+    "query": {"type": "string", "required": False},
+    "query_path": {"type": "string", "required": False, "min_length": 1},
+    "query_template": {"type": "string", "required": False},
+    "type": {"type": "string", "required": False},
+    "topic_key": {"type": "string", "required": False},
+    "topic_key_path": {"type": "string", "required": False, "min_length": 1},
+    "agent_id": {"type": "string", "required": False},
+    "agent_id_path": {"type": "string", "required": False, "min_length": 1},
+    "limit": {"type": "integer", "required": False, "min": 1},
+    "include_deleted": {"type": "boolean", "required": False},
+}
+
+OBSERVATION_CONTEXT_NODE_SCHEMA = {
+    "query": {"type": "string", "required": False},
+    "query_path": {"type": "string", "required": False, "min_length": 1},
+    "query_template": {"type": "string", "required": False},
+    "agent_id": {"type": "string", "required": False},
+    "agent_id_path": {"type": "string", "required": False, "min_length": 1},
+    "limit": {"type": "integer", "required": False, "min": 1},
+}
+
+OBSERVATION_TIMELINE_NODE_SCHEMA = {
+    "scope": {
+        "type": "string",
+        "required": True,
+        "enum": ["graph", "run", "session"],
+    },
+    "agent_id": {"type": "string", "required": False},
+    "agent_id_path": {"type": "string", "required": False, "min_length": 1},
+    "limit": {"type": "integer", "required": False, "min": 1},
+    "include_deleted": {"type": "boolean", "required": False},
+}
+
 TOOL_NODE_SCHEMA = {
     "tool": {"type": "string", "required": True, "min_length": 1},
     "version": {"type": "string", "required": False},
@@ -132,6 +195,10 @@ NODE_SCHEMAS: dict[str, dict[str, Any]] = {
     NodeType.MERGE.value: MERGE_NODE_SCHEMA,
     NodeType.HUMAN_GATE.value: HUMAN_GATE_NODE_SCHEMA,
     NodeType.MEMORY.value: MEMORY_NODE_SCHEMA,
+    NodeType.OBSERVATION_SAVE.value: OBSERVATION_SAVE_NODE_SCHEMA,
+    NodeType.OBSERVATION_SEARCH.value: OBSERVATION_SEARCH_NODE_SCHEMA,
+    NodeType.OBSERVATION_CONTEXT.value: OBSERVATION_CONTEXT_NODE_SCHEMA,
+    NodeType.OBSERVATION_TIMELINE.value: OBSERVATION_TIMELINE_NODE_SCHEMA,
     NodeType.TOOL.value: TOOL_NODE_SCHEMA,
     NodeType.SUBGRAPH.value: SUBGRAPH_NODE_SCHEMA,
     NodeType.OUTPUT.value: OUTPUT_NODE_SCHEMA,
@@ -307,6 +374,94 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
                 }
             )
 
+    if node_type == NodeType.OBSERVATION_SAVE.value:
+        _validate_exactly_one_source(
+            errors,
+            config,
+            field="content",
+            source_fields=["content", "content_path", "content_template"],
+            suggestion="Set exactly one of 'content', 'content_path', or 'content_template'",
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="title",
+            source_fields=["title", "title_path", "title_template"],
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="topic_key",
+            source_fields=["topic_key", "topic_key_path"],
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="tool_name",
+            source_fields=["tool_name", "tool_name_path"],
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="agent_id",
+            source_fields=["agent_id", "agent_id_path"],
+        )
+
+        if config.get("update_topic") is True and not _has_any_value(
+            config, ["topic_key", "topic_key_path"]
+        ):
+            errors.append(
+                {
+                    "field": "topic_key",
+                    "message": "'update_topic' requires 'topic_key' or 'topic_key_path'",
+                    "suggestion": "Set a topic key source before enabling 'update_topic'",
+                }
+            )
+
+    if node_type == NodeType.OBSERVATION_SEARCH.value:
+        _validate_exactly_one_source(
+            errors,
+            config,
+            field="query",
+            source_fields=["query", "query_path", "query_template"],
+            suggestion="Set exactly one of 'query', 'query_path', or 'query_template'",
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="topic_key",
+            source_fields=["topic_key", "topic_key_path"],
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="agent_id",
+            source_fields=["agent_id", "agent_id_path"],
+        )
+
+    if node_type == NodeType.OBSERVATION_CONTEXT.value:
+        _validate_exactly_one_source(
+            errors,
+            config,
+            field="query",
+            source_fields=["query", "query_path", "query_template"],
+            suggestion="Set exactly one of 'query', 'query_path', or 'query_template'",
+        )
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="agent_id",
+            source_fields=["agent_id", "agent_id_path"],
+        )
+
+    if node_type == NodeType.OBSERVATION_TIMELINE.value:
+        _validate_at_most_one_source(
+            errors,
+            config,
+            field="agent_id",
+            source_fields=["agent_id", "agent_id_path"],
+        )
+
     return errors
 
 
@@ -335,3 +490,67 @@ def _validate_type(field_name: str, value: Any, schema: dict[str, Any]) -> dict[
         }
 
     return None
+
+
+def _has_any_value(config: dict[str, Any], source_fields: list[str]) -> bool:
+    return any(_has_value(config.get(field_name)) for field_name in source_fields)
+
+
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
+def _validate_exactly_one_source(
+    errors: list[dict[str, Any]],
+    config: dict[str, Any],
+    *,
+    field: str,
+    source_fields: list[str],
+    suggestion: str,
+) -> None:
+    populated_fields = [
+        field_name for field_name in source_fields if _has_value(config.get(field_name))
+    ]
+    if len(populated_fields) == 1:
+        return
+    if not populated_fields:
+        errors.append(
+            {
+                "field": field,
+                "message": f"'{field}' requires one configured source",
+                "suggestion": suggestion,
+            }
+        )
+        return
+    errors.append(
+        {
+            "field": field,
+            "message": f"Only one of {', '.join(source_fields)} may be set",
+            "suggestion": suggestion,
+        }
+    )
+
+
+def _validate_at_most_one_source(
+    errors: list[dict[str, Any]],
+    config: dict[str, Any],
+    *,
+    field: str,
+    source_fields: list[str],
+) -> None:
+    populated_fields = [
+        field_name for field_name in source_fields if _has_value(config.get(field_name))
+    ]
+    if len(populated_fields) <= 1:
+        return
+    errors.append(
+        {
+            "field": field,
+            "message": f"Only one of {', '.join(source_fields)} may be set",
+            "suggestion": f"Choose a single source for '{field}'",
+        }
+    )

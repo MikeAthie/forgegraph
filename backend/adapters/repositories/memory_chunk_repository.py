@@ -21,12 +21,15 @@ class MemoryChunkRepository:
         *,
         tenant_id: str,
         embedding: list[float],
+        graph_id: str | None = None,
         agent_id: str | None = None,
         run_id: str | None = None,
         session_id: str | None = None,
         top_k: int = 5,
     ) -> QuerySet[MemoryChunk]:
         qs = MemoryChunk.objects.filter(tenant_id=tenant_id)
+        if graph_id:
+            qs = qs.filter(metadata__graph_id=graph_id)
         if agent_id:
             qs = qs.filter(agent_id=agent_id)
         if run_id:
