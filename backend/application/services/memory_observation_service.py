@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 from uuid import UUID
 
 from django.db import transaction
@@ -56,7 +57,7 @@ class MemoryObservationService:
             session_id=session_id,
             agent_id=agent_id,
         )
-        tenant_uuid = self._as_uuid(tenant_id)
+        tenant_uuid = self._require_uuid(tenant_id, "tenant_id")
         now = timezone.now()
 
         with transaction.atomic():
@@ -106,19 +107,22 @@ class MemoryObservationService:
                     )
                     return topic_match
 
-            return MemoryObservation.objects.create(
-                tenant_id=tenant_uuid,
-                graph_id=scope_ids["graph_id"],
-                run_id=scope_ids["run_id"],
-                session_id=scope_ids["session_id"],
-                agent_id=scope_ids["agent_id"],
-                type=normalized["type"],
-                title=normalized["title"],
-                content=normalized["content"],
-                scope=normalized["scope"],
-                topic_key=normalized["topic_key"],
-                tool_name=normalized["tool_name"],
-                last_seen_at=now,
+            return cast(
+                MemoryObservation,
+                MemoryObservation.objects.create(
+                    tenant_id=tenant_uuid,
+                    graph_id=scope_ids["graph_id"],
+                    run_id=scope_ids["run_id"],
+                    session_id=scope_ids["session_id"],
+                    agent_id=scope_ids["agent_id"],
+                    type=normalized["type"],
+                    title=normalized["title"],
+                    content=normalized["content"],
+                    scope=normalized["scope"],
+                    topic_key=normalized["topic_key"],
+                    tool_name=normalized["tool_name"],
+                    last_seen_at=now,
+                ),
             )
 
     def update_observation(
@@ -177,7 +181,9 @@ class MemoryObservationService:
         include_deleted: bool = False,
     ) -> MemoryObservation:
         queryset = self._base_queryset(tenant_id=tenant_id, include_deleted=include_deleted)
-        observation = queryset.filter(id=self._as_uuid(observation_id)).first()
+        observation = queryset.filter(
+            id=self._require_uuid(observation_id, "observation_id")
+        ).first()
         if observation is None:
             raise LookupError("Observation not found")
         return observation
@@ -273,10 +279,13 @@ class MemoryObservationService:
         tenant_uuid = self._as_uuid(tenant_id)
         if tenant_uuid is None:
             raise ValueError("tenant_id is required")
-        queryset = MemoryObservation.objects.for_tenant(tenant_uuid)
-        if not include_deleted:
-            queryset = queryset.active()
-        return queryset
+        if include_deleted:
+            return cast(
+                QuerySet[MemoryObservation], MemoryObservation.objects.for_tenant(tenant_uuid)
+            )
+        return cast(
+            QuerySet[MemoryObservation], MemoryObservation.objects.for_tenant(tenant_uuid).active()
+        )
 
     def _apply_filters(
         self,
@@ -321,7 +330,8 @@ class MemoryObservationService:
         topic_key: str,
         tool_name: str,
     ) -> MemoryObservation | None:
-        return (
+        return cast(
+            MemoryObservation | None,
             MemoryObservation.objects.active()
             .filter(
                 tenant_id=tenant_id,
@@ -337,7 +347,7 @@ class MemoryObservationService:
                 tool_name=tool_name,
             )
             .order_by("-last_seen_at")
-            .first()
+            .first(),
         )
 
     def _find_latest_topic_match(
@@ -351,7 +361,8 @@ class MemoryObservationService:
         scope: str,
         topic_key: str,
     ) -> MemoryObservation | None:
-        return (
+        return cast(
+            MemoryObservation | None,
             MemoryObservation.objects.active()
             .filter(
                 tenant_id=tenant_id,
@@ -363,7 +374,7 @@ class MemoryObservationService:
                 topic_key=topic_key,
             )
             .order_by("-last_seen_at")
-            .first()
+            .first(),
         )
 
     def _apply_updates(
@@ -485,3 +496,9 @@ class MemoryObservationService:
         if isinstance(value, UUID):
             return value
         return UUID(str(redact_payload(value)))
+
+    def _require_uuid(self, value: UUID | str | None, field_name: str) -> UUID:
+        normalized = self._as_uuid(value)
+        if normalized is None:
+            raise ValueError(f"{field_name} is required")
+        return normalized
