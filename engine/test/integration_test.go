@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,6 +61,65 @@ type integrationToolInvoker struct {
 func (m *integrationToolInvoker) Execute(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
 	m.calls++
 	return port.NewSuccessResult(m.output), nil
+}
+
+type integrationObservationMemoryClient struct {
+	observations []port.Observation
+	saveRequests []port.ObservationSaveRequest
+}
+
+func (m *integrationObservationMemoryClient) SaveObservation(ctx context.Context, request port.ObservationSaveRequest) (port.Observation, error) {
+	observation := port.Observation{
+		ID:         fmt.Sprintf("obs-%d", len(m.observations)+1),
+		TenantID:   request.TenantID,
+		GraphID:    request.GraphID,
+		RunID:      request.RunID,
+		SessionID:  request.SessionID,
+		AgentID:    request.AgentID,
+		Type:       request.Type,
+		Title:      request.Title,
+		Content:    request.Content,
+		Scope:      request.Scope,
+		TopicKey:   request.TopicKey,
+		ToolName:   request.ToolName,
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
+		LastSeenAt: time.Now().UTC(),
+	}
+	m.saveRequests = append(m.saveRequests, request)
+	m.observations = append(m.observations, observation)
+	return observation, nil
+}
+
+func (m *integrationObservationMemoryClient) SearchObservations(ctx context.Context, request port.ObservationSearchRequest) ([]port.Observation, error) {
+	results := make([]port.Observation, 0)
+	for _, observation := range m.observations {
+		if request.Scope != "" && observation.Scope != request.Scope {
+			continue
+		}
+		if request.GraphID != "" && observation.GraphID != request.GraphID {
+			continue
+		}
+		if request.RunID != "" && observation.RunID != request.RunID {
+			continue
+		}
+		if request.SessionID != "" && observation.SessionID != request.SessionID {
+			continue
+		}
+		if request.Query != "" && !strings.Contains(strings.ToLower(observation.Content), strings.ToLower(request.Query)) {
+			continue
+		}
+		results = append(results, observation)
+	}
+	return results, nil
+}
+
+func (m *integrationObservationMemoryClient) GetContext(ctx context.Context, request port.ObservationContextRequest) (port.ObservationContextResponse, error) {
+	return port.ObservationContextResponse{Observations: m.observations}, nil
+}
+
+func (m *integrationObservationMemoryClient) GetTimeline(ctx context.Context, request port.ObservationTimelineRequest) ([]port.Observation, error) {
+	return append([]port.Observation(nil), m.observations...), nil
 }
 
 // waitForRunCompletion polls for run completion with a timeout
@@ -445,6 +505,120 @@ func TestAgentWorkflowApprovalResume(t *testing.T) {
 	}
 	if !sawResumed {
 		t.Fatal("Expected run_resumed event to be emitted")
+	}
+}
+
+func TestObservationSaveThenSearchWorkflow(t *testing.T) {
+	repo := repository.NewMemoryRunRepository()
+	emitter := gateway.NewRecordingEventEmitter()
+	memoryStore := store.NewInMemoryMemoryStore()
+	observationClient := &integrationObservationMemoryClient{}
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(
+		executor.NewOutputExecutor(),
+		executor.NewObservationSaveExecutor(observationClient),
+		executor.NewObservationSearchExecutor(observationClient),
+	)
+
+	scheduler := usecase.NewScheduler(usecase.SchedulerConfig{
+		MaxWorkers:       2,
+		DefaultTimeoutMs: 5000,
+	}, registry, repo, emitter, memoryStore)
+
+	graph := map[string]any{
+		"graph_id": "graph-obs-integration",
+		"nodes": []map[string]any{
+			{
+				"id":   "save_1",
+				"type": "observation_save",
+				"name": "Save Observation",
+				"config": map[string]any{
+					"type":    "fact",
+					"scope":   "session",
+					"content": "Renewal closes on Friday",
+				},
+			},
+			{
+				"id":   "search_1",
+				"type": "observation_search",
+				"name": "Search Observation",
+				"config": map[string]any{
+					"scope": "session",
+					"query": "renewal",
+				},
+			},
+			{
+				"id":   "output_1",
+				"type": "output",
+				"name": "Output",
+				"config": map[string]any{
+					"output_mapping": map[string]any{
+						"search_results": "node.search_1.output",
+					},
+				},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "save_1", "to": "search_1"},
+			{"id": "e2", "from": "search_1", "to": "output_1"},
+		},
+	}
+
+	graphJSON, err := json.Marshal(graph)
+	if err != nil {
+		t.Fatalf("Failed to marshal graph: %v", err)
+	}
+
+	runID := "observation-workflow-run"
+	repo.AddRun(&entity.Run{
+		ID:        runID,
+		Status:    "pending",
+		StartedAt: time.Now(),
+	})
+
+	if err := scheduler.StartRun(
+		context.Background(),
+		runID,
+		string(graphJSON),
+		"{}",
+		"",
+		"",
+		"tenant-obs",
+		"session-obs",
+	); err != nil {
+		t.Fatalf("Failed to start run: %v", err)
+	}
+
+	status := waitForRunCompletion(t, scheduler, repo, runID, 10*time.Second)
+	if status != "succeeded" {
+		t.Fatalf("Expected status succeeded, got %s", status)
+	}
+
+	if len(observationClient.saveRequests) != 1 {
+		t.Fatalf("expected 1 saved observation, got %d", len(observationClient.saveRequests))
+	}
+	if observationClient.saveRequests[0].GraphID != "graph-obs-integration" {
+		t.Fatalf("graph_id = %q, want graph-obs-integration", observationClient.saveRequests[0].GraphID)
+	}
+
+	run, err := repo.GetRun(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("Failed to fetch run: %v", err)
+	}
+	searchOutput, ok := run.OutputJSON["search_results"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected search_results map, got %T", run.OutputJSON["search_results"])
+	}
+	if searchOutput["count"] != 1 {
+		t.Fatalf("Expected count=1, got %v", searchOutput["count"])
+	}
+	items, ok := searchOutput["observations"].([]map[string]any)
+	if !ok {
+		t.Fatalf("Expected observations slice, got %T", searchOutput["observations"])
+	}
+	if len(items) != 1 || items[0]["content"] != "Renewal closes on Friday" {
+		t.Fatalf("Unexpected observations payload: %#v", items)
 	}
 }
 

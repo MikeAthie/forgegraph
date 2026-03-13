@@ -267,7 +267,12 @@ var EngineService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	MemoryService_RetrieveMemory_FullMethodName = "/engine.MemoryService/RetrieveMemory"
+	MemoryService_RetrieveMemory_FullMethodName     = "/engine.MemoryService/RetrieveMemory"
+	MemoryService_SaveObservation_FullMethodName    = "/engine.MemoryService/SaveObservation"
+	MemoryService_SearchObservations_FullMethodName = "/engine.MemoryService/SearchObservations"
+	MemoryService_GetObservation_FullMethodName     = "/engine.MemoryService/GetObservation"
+	MemoryService_GetContext_FullMethodName         = "/engine.MemoryService/GetContext"
+	MemoryService_GetTimeline_FullMethodName        = "/engine.MemoryService/GetTimeline"
 )
 
 // MemoryServiceClient is the client API for MemoryService service.
@@ -276,6 +281,16 @@ const (
 type MemoryServiceClient interface {
 	// RetrieveMemory returns relevant memory chunks for a query.
 	RetrieveMemory(ctx context.Context, in *RetrieveMemoryRequest, opts ...grpc.CallOption) (*RetrieveMemoryResponse, error)
+	// SaveObservation creates or updates a curated memory observation.
+	SaveObservation(ctx context.Context, in *SaveObservationRequest, opts ...grpc.CallOption) (*SaveObservationResponse, error)
+	// SearchObservations returns curated observations matching the query and scope.
+	SearchObservations(ctx context.Context, in *SearchObservationsRequest, opts ...grpc.CallOption) (*SearchObservationsResponse, error)
+	// GetObservation returns a single curated observation by ID.
+	GetObservation(ctx context.Context, in *GetObservationRequest, opts ...grpc.CallOption) (*GetObservationResponse, error)
+	// GetContext returns context-ready curated observations and retrieval strategy metadata.
+	GetContext(ctx context.Context, in *GetContextRequest, opts ...grpc.CallOption) (*GetContextResponse, error)
+	// GetTimeline returns recent curated observations ordered by recency.
+	GetTimeline(ctx context.Context, in *GetTimelineRequest, opts ...grpc.CallOption) (*GetTimelineResponse, error)
 }
 
 type memoryServiceClient struct {
@@ -295,12 +310,67 @@ func (c *memoryServiceClient) RetrieveMemory(ctx context.Context, in *RetrieveMe
 	return out, nil
 }
 
+func (c *memoryServiceClient) SaveObservation(ctx context.Context, in *SaveObservationRequest, opts ...grpc.CallOption) (*SaveObservationResponse, error) {
+	out := new(SaveObservationResponse)
+	err := c.cc.Invoke(ctx, MemoryService_SaveObservation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryServiceClient) SearchObservations(ctx context.Context, in *SearchObservationsRequest, opts ...grpc.CallOption) (*SearchObservationsResponse, error) {
+	out := new(SearchObservationsResponse)
+	err := c.cc.Invoke(ctx, MemoryService_SearchObservations_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryServiceClient) GetObservation(ctx context.Context, in *GetObservationRequest, opts ...grpc.CallOption) (*GetObservationResponse, error) {
+	out := new(GetObservationResponse)
+	err := c.cc.Invoke(ctx, MemoryService_GetObservation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryServiceClient) GetContext(ctx context.Context, in *GetContextRequest, opts ...grpc.CallOption) (*GetContextResponse, error) {
+	out := new(GetContextResponse)
+	err := c.cc.Invoke(ctx, MemoryService_GetContext_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryServiceClient) GetTimeline(ctx context.Context, in *GetTimelineRequest, opts ...grpc.CallOption) (*GetTimelineResponse, error) {
+	out := new(GetTimelineResponse)
+	err := c.cc.Invoke(ctx, MemoryService_GetTimeline_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MemoryServiceServer is the server API for MemoryService service.
 // All implementations must embed UnimplementedMemoryServiceServer
 // for forward compatibility
 type MemoryServiceServer interface {
 	// RetrieveMemory returns relevant memory chunks for a query.
 	RetrieveMemory(context.Context, *RetrieveMemoryRequest) (*RetrieveMemoryResponse, error)
+	// SaveObservation creates or updates a curated memory observation.
+	SaveObservation(context.Context, *SaveObservationRequest) (*SaveObservationResponse, error)
+	// SearchObservations returns curated observations matching the query and scope.
+	SearchObservations(context.Context, *SearchObservationsRequest) (*SearchObservationsResponse, error)
+	// GetObservation returns a single curated observation by ID.
+	GetObservation(context.Context, *GetObservationRequest) (*GetObservationResponse, error)
+	// GetContext returns context-ready curated observations and retrieval strategy metadata.
+	GetContext(context.Context, *GetContextRequest) (*GetContextResponse, error)
+	// GetTimeline returns recent curated observations ordered by recency.
+	GetTimeline(context.Context, *GetTimelineRequest) (*GetTimelineResponse, error)
 	mustEmbedUnimplementedMemoryServiceServer()
 }
 
@@ -310,6 +380,21 @@ type UnimplementedMemoryServiceServer struct {
 
 func (UnimplementedMemoryServiceServer) RetrieveMemory(context.Context, *RetrieveMemoryRequest) (*RetrieveMemoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetrieveMemory not implemented")
+}
+func (UnimplementedMemoryServiceServer) SaveObservation(context.Context, *SaveObservationRequest) (*SaveObservationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SaveObservation not implemented")
+}
+func (UnimplementedMemoryServiceServer) SearchObservations(context.Context, *SearchObservationsRequest) (*SearchObservationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchObservations not implemented")
+}
+func (UnimplementedMemoryServiceServer) GetObservation(context.Context, *GetObservationRequest) (*GetObservationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObservation not implemented")
+}
+func (UnimplementedMemoryServiceServer) GetContext(context.Context, *GetContextRequest) (*GetContextResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetContext not implemented")
+}
+func (UnimplementedMemoryServiceServer) GetTimeline(context.Context, *GetTimelineRequest) (*GetTimelineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTimeline not implemented")
 }
 func (UnimplementedMemoryServiceServer) mustEmbedUnimplementedMemoryServiceServer() {}
 
@@ -342,6 +427,96 @@ func _MemoryService_RetrieveMemory_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MemoryService_SaveObservation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveObservationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryServiceServer).SaveObservation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryService_SaveObservation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryServiceServer).SaveObservation(ctx, req.(*SaveObservationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryService_SearchObservations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchObservationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryServiceServer).SearchObservations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryService_SearchObservations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryServiceServer).SearchObservations(ctx, req.(*SearchObservationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryService_GetObservation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetObservationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryServiceServer).GetObservation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryService_GetObservation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryServiceServer).GetObservation(ctx, req.(*GetObservationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryService_GetContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryServiceServer).GetContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryService_GetContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryServiceServer).GetContext(ctx, req.(*GetContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryService_GetTimeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTimelineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryServiceServer).GetTimeline(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryService_GetTimeline_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryServiceServer).GetTimeline(ctx, req.(*GetTimelineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MemoryService_ServiceDesc is the grpc.ServiceDesc for MemoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -352,6 +527,26 @@ var MemoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RetrieveMemory",
 			Handler:    _MemoryService_RetrieveMemory_Handler,
+		},
+		{
+			MethodName: "SaveObservation",
+			Handler:    _MemoryService_SaveObservation_Handler,
+		},
+		{
+			MethodName: "SearchObservations",
+			Handler:    _MemoryService_SearchObservations_Handler,
+		},
+		{
+			MethodName: "GetObservation",
+			Handler:    _MemoryService_GetObservation_Handler,
+		},
+		{
+			MethodName: "GetContext",
+			Handler:    _MemoryService_GetContext_Handler,
+		},
+		{
+			MethodName: "GetTimeline",
+			Handler:    _MemoryService_GetTimeline_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

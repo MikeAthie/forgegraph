@@ -80,14 +80,15 @@ func DefaultSchedulerConfig() SchedulerConfig {
 
 // Scheduler orchestrates workflow execution
 type Scheduler struct {
-	config          SchedulerConfig
-	registry        port.ExecutorRegistry
-	repository      port.RunRepository
-	emitter         port.EventEmitter
-	conditions      *service.ConditionEvaluator
-	summarizer      *SummarizationWorker
-	memoryRetriever port.MemoryRetriever
-	memoryStore     port.MemoryStore
+	config            SchedulerConfig
+	registry          port.ExecutorRegistry
+	repository        port.RunRepository
+	emitter           port.EventEmitter
+	conditions        *service.ConditionEvaluator
+	summarizer        *SummarizationWorker
+	memoryRetriever   port.MemoryRetriever
+	observationClient port.ObservationMemoryClient
+	memoryStore       port.MemoryStore
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -133,6 +134,11 @@ func (s *Scheduler) SetSummarizationWorker(worker *SummarizationWorker) {
 // SetMemoryRetriever attaches the memory retriever used for Tier 3 lookups.
 func (s *Scheduler) SetMemoryRetriever(retriever port.MemoryRetriever) {
 	s.memoryRetriever = retriever
+}
+
+// SetObservationClient attaches the curated-memory client used by observation nodes.
+func (s *Scheduler) SetObservationClient(client port.ObservationMemoryClient) {
+	s.observationClient = client
 }
 
 // runContext holds runtime state for a single run
@@ -297,6 +303,7 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	if err := json.Unmarshal([]byte(graphJSON), &graph); err != nil {
 		return fmt.Errorf("invalid graph JSON: %w", err)
 	}
+	hydrateGraphIdentifiers(graphJSON, &graph)
 
 	// Parse input JSON when starting fresh
 	var input map[string]any
@@ -409,12 +416,17 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		workChan:    make(chan string, len(plan.NodeMap)),
 	}
 	rc.memoryCtx = &port.RunContext{
-		MemoryBuffer:    rc.messageBuffer,
-		MemoryConfig:    rc.memoryConfig,
-		CurrentSummary:  rc.currentSummary,
-		TrackMessage:    rc.trackMessages,
-		MemoryRetriever: s.memoryRetriever,
-		Policy:          entity.PolicyFromMetadata(graph.Metadata),
+		TenantID:          rc.tenantID,
+		GraphID:           graph.ID,
+		RunID:             rc.runID,
+		SessionID:         rc.sessionID,
+		MemoryBuffer:      rc.messageBuffer,
+		MemoryConfig:      rc.memoryConfig,
+		CurrentSummary:    rc.currentSummary,
+		TrackMessage:      rc.trackMessages,
+		MemoryRetriever:   s.memoryRetriever,
+		ObservationClient: s.observationClient,
+		Policy:            entity.PolicyFromMetadata(graph.Metadata),
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
@@ -2112,6 +2124,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	if err := json.Unmarshal([]byte(graphJSON), &graph); err != nil {
 		return fmt.Errorf("invalid stored graph JSON: %w", err)
 	}
+	hydrateGraphIdentifiers(graphJSON, &graph)
 
 	stateSchemaRaw, schemaMode := extractStateSchemaMetadata(graph.Metadata)
 	stateSchema, err := service.CompileSchema(stateSchemaRaw)
@@ -2188,10 +2201,16 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		workChan:         make(chan string, len(plan.NodeMap)),
 	}
 	rc.memoryCtx = &port.RunContext{
-		MemoryBuffer:   rc.messageBuffer,
-		MemoryConfig:   rc.memoryConfig,
-		CurrentSummary: rc.currentSummary,
-		TrackMessage:   rc.trackMessages,
+		TenantID:          rc.tenantID,
+		GraphID:           graph.ID,
+		RunID:             rc.runID,
+		SessionID:         rc.sessionID,
+		MemoryBuffer:      rc.messageBuffer,
+		MemoryConfig:      rc.memoryConfig,
+		CurrentSummary:    rc.currentSummary,
+		TrackMessage:      rc.trackMessages,
+		MemoryRetriever:   s.memoryRetriever,
+		ObservationClient: s.observationClient,
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	if rc.tenantID != "" {
@@ -2428,6 +2447,30 @@ func extractStateSchemaMetadata(metadata map[string]any) (map[string]any, string
 		return rawSchema, mode
 	}
 	return nil, mode
+}
+
+func hydrateGraphIdentifiers(graphJSON string, graph *entity.Graph) {
+	if graph == nil || graphJSON == "" {
+		return
+	}
+
+	var raw struct {
+		GraphID   string `json:"graph_id"`
+		ID        string `json:"id"`
+		VersionID string `json:"version_id"`
+	}
+	if err := json.Unmarshal([]byte(graphJSON), &raw); err != nil {
+		return
+	}
+	if graph.ID == "" {
+		graph.ID = strings.TrimSpace(raw.GraphID)
+	}
+	if graph.ID == "" {
+		graph.ID = strings.TrimSpace(raw.ID)
+	}
+	if graph.VersionID == "" {
+		graph.VersionID = strings.TrimSpace(raw.VersionID)
+	}
 }
 
 func (s *Scheduler) resolveRetryPolicy(node *entity.Node) *entity.RetryPolicy {

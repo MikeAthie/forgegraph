@@ -10,6 +10,9 @@ from adapters.worker.celery_app import celery_app
 from application.services.chunking_service import Message, TurnBasedChunking
 from application.services.embedding_pipeline import EmbeddingPipeline
 from application.services.embedding_service import CachedEmbeddingService
+from application.services.memory_observation_indexing import (
+    MemoryObservationIndexingService,
+)
 
 F = TypeVar("F", bound=Callable[..., Any])
 celery_task = cast(Callable[..., Callable[[F], F]], celery_app.task)
@@ -60,3 +63,28 @@ def process_embeddings(self: Any, payload: dict[str, Any]) -> int:
         )
     )
     return len(created) if hasattr(created, "__len__") else 0
+
+
+@celery_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+def index_memory_observation(self: Any, payload: dict[str, Any]) -> str | None:
+    observation_id = payload["observation_id"]
+    embedding_model = payload.get("embedding_model")
+
+    embedder = CachedEmbeddingService(
+        OpenAIEmbedder(
+            model=embedding_model or "text-embedding-ada-002",
+        )
+    )
+    service = MemoryObservationIndexingService(embedder)
+    chunk = service.upsert_observation(
+        observation_id=observation_id,
+        embedding_model=embedding_model,
+    )
+    return str(chunk.id) if chunk is not None else None
+
+
+@celery_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+def delete_memory_observation_index(self: Any, payload: dict[str, Any]) -> bool:
+    observation_id = payload["observation_id"]
+    service = MemoryObservationIndexingService()
+    return service.delete_observation_index(observation_id=observation_id)

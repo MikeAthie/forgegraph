@@ -83,3 +83,179 @@ func (r *GrpcMemoryRetriever) Retrieve(ctx context.Context, request port.MemoryR
 
 	return port.MemoryRetrieveResponse{Chunks: chunks}, nil
 }
+
+func (r *GrpcMemoryRetriever) SaveObservation(ctx context.Context, request port.ObservationSaveRequest) (port.Observation, error) {
+	if r == nil || r.client == nil {
+		return port.Observation{}, fmt.Errorf("memory retriever not configured")
+	}
+
+	resp, err := r.client.SaveObservation(ctx, &SaveObservationRequest{
+		TenantId:      request.TenantID,
+		ObservationId: request.ObservationID,
+		GraphId:       request.GraphID,
+		RunId:         request.RunID,
+		SessionId:     request.SessionID,
+		AgentId:       request.AgentID,
+		Type:          request.Type,
+		Title:         request.Title,
+		Content:       request.Content,
+		Scope:         request.Scope,
+		TopicKey:      request.TopicKey,
+		ToolName:      request.ToolName,
+		Dedupe:        request.Dedupe,
+		UpdateTopic:   request.UpdateTopic,
+	})
+	if err != nil {
+		return port.Observation{}, err
+	}
+	if resp.GetError() != "" {
+		return port.Observation{}, fmt.Errorf(resp.GetError())
+	}
+	if resp.GetObservation() == nil {
+		return port.Observation{}, fmt.Errorf("memory service returned no observation")
+	}
+	return observationFromProto(resp.GetObservation()), nil
+}
+
+func (r *GrpcMemoryRetriever) SearchObservations(ctx context.Context, request port.ObservationSearchRequest) ([]port.Observation, error) {
+	if r == nil || r.client == nil {
+		return nil, fmt.Errorf("memory retriever not configured")
+	}
+
+	resp, err := r.client.SearchObservations(ctx, &SearchObservationsRequest{
+		TenantId:       request.TenantID,
+		Query:          request.Query,
+		GraphId:        request.GraphID,
+		RunId:          request.RunID,
+		SessionId:      request.SessionID,
+		AgentId:        request.AgentID,
+		Scope:          request.Scope,
+		Type:           request.Type,
+		TopicKey:       request.TopicKey,
+		Limit:          int32(request.Limit),
+		IncludeDeleted: request.IncludeDeleted,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.GetError() != "" {
+		return nil, fmt.Errorf(resp.GetError())
+	}
+	return observationsFromProto(resp.GetObservations()), nil
+}
+
+func (r *GrpcMemoryRetriever) GetContext(ctx context.Context, request port.ObservationContextRequest) (port.ObservationContextResponse, error) {
+	if r == nil || r.client == nil {
+		return port.ObservationContextResponse{}, fmt.Errorf("memory retriever not configured")
+	}
+
+	resp, err := r.client.GetContext(ctx, &GetContextRequest{
+		TenantId:  request.TenantID,
+		GraphId:   request.GraphID,
+		RunId:     request.RunID,
+		SessionId: request.SessionID,
+		AgentId:   request.AgentID,
+		Query:     request.Query,
+		Limit:     int32(request.Limit),
+	})
+	if err != nil {
+		return port.ObservationContextResponse{}, err
+	}
+	if resp.GetError() != "" {
+		return port.ObservationContextResponse{}, fmt.Errorf(resp.GetError())
+	}
+	return port.ObservationContextResponse{
+		Observations: observationsFromProto(resp.GetObservations()),
+		Degraded:     resp.GetDegraded(),
+		Strategies:   append([]string(nil), resp.GetStrategies()...),
+	}, nil
+}
+
+func (r *GrpcMemoryRetriever) GetTimeline(ctx context.Context, request port.ObservationTimelineRequest) ([]port.Observation, error) {
+	if r == nil || r.client == nil {
+		return nil, fmt.Errorf("memory retriever not configured")
+	}
+
+	resp, err := r.client.GetTimeline(ctx, &GetTimelineRequest{
+		TenantId:       request.TenantID,
+		GraphId:        request.GraphID,
+		RunId:          request.RunID,
+		SessionId:      request.SessionID,
+		AgentId:        request.AgentID,
+		Scope:          request.Scope,
+		Limit:          int32(request.Limit),
+		IncludeDeleted: request.IncludeDeleted,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.GetError() != "" {
+		return nil, fmt.Errorf(resp.GetError())
+	}
+	return observationsFromProto(resp.GetObservations()), nil
+}
+
+func observationsFromProto(items []*Observation) []port.Observation {
+	if len(items) == 0 {
+		return nil
+	}
+
+	observations := make([]port.Observation, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		observations = append(observations, observationFromProto(item))
+	}
+	return observations
+}
+
+func observationFromProto(item *Observation) port.Observation {
+	if item == nil {
+		return port.Observation{}
+	}
+
+	return port.Observation{
+		ID:             item.GetId(),
+		TenantID:       item.GetTenantId(),
+		GraphID:        item.GetGraphId(),
+		RunID:          item.GetRunId(),
+		SessionID:      item.GetSessionId(),
+		AgentID:        item.GetAgentId(),
+		Type:           item.GetType(),
+		Title:          item.GetTitle(),
+		Content:        item.GetContent(),
+		Scope:          item.GetScope(),
+		TopicKey:       item.GetTopicKey(),
+		ToolName:       item.GetToolName(),
+		RevisionCount:  int(item.GetRevisionCount()),
+		DuplicateCount: int(item.GetDuplicateCount()),
+		LastSeenAt:     parseObservationTime(item.GetLastSeenAt()),
+		CreatedAt:      parseObservationTime(item.GetCreatedAt()),
+		UpdatedAt:      parseObservationTime(item.GetUpdatedAt()),
+		DeletedAt:      parseObservationTimePtr(item.GetDeletedAt()),
+		IsDeleted:      item.GetIsDeleted(),
+	}
+}
+
+func parseObservationTime(raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
+}
+
+func parseObservationTimePtr(raw string) *time.Time {
+	if raw == "" {
+		return nil
+	}
+	parsed := parseObservationTime(raw)
+	if parsed.IsZero() {
+		return nil
+	}
+	return &parsed
+}

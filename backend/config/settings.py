@@ -339,6 +339,12 @@ ALLOWED_LLM_PROVIDERS = [
     if provider.strip()
 ]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+FF_CURATED_MEMORY_ENABLED = _get_bool_env("FF_CURATED_MEMORY_ENABLED", True)
+FF_CURATED_MEMORY_VECTOR_INDEXING = _get_bool_env("FF_CURATED_MEMORY_VECTOR_INDEXING", True)
+CURATED_MEMORY_EMBEDDING_MODEL = os.environ.get(
+    "CURATED_MEMORY_EMBEDDING_MODEL",
+    "text-embedding-ada-002",
+)
 
 # Telegram Integration
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")

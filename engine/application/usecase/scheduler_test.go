@@ -272,6 +272,14 @@ type schedulerLLMClient struct {
 	response *executor.LLMResponse
 }
 
+type schedulerObservationClient struct {
+	saveRequest    *port.ObservationSaveRequest
+	saveResponse   port.Observation
+	searchResponse []port.Observation
+	contextResp    port.ObservationContextResponse
+	timelineResp   []port.Observation
+}
+
 func (m *schedulerLLMClient) Complete(ctx context.Context, request *executor.LLMRequest) (*executor.LLMResponse, error) {
 	if m.response != nil {
 		return m.response, nil
@@ -280,6 +288,23 @@ func (m *schedulerLLMClient) Complete(ctx context.Context, request *executor.LLM
 		Content: `{"action":"final_answer","final_answer":"done"}`,
 		Model:   request.Model,
 	}, nil
+}
+
+func (m *schedulerObservationClient) SaveObservation(ctx context.Context, request port.ObservationSaveRequest) (port.Observation, error) {
+	m.saveRequest = &request
+	return m.saveResponse, nil
+}
+
+func (m *schedulerObservationClient) SearchObservations(ctx context.Context, request port.ObservationSearchRequest) ([]port.Observation, error) {
+	return m.searchResponse, nil
+}
+
+func (m *schedulerObservationClient) GetContext(ctx context.Context, request port.ObservationContextRequest) (port.ObservationContextResponse, error) {
+	return m.contextResp, nil
+}
+
+func (m *schedulerObservationClient) GetTimeline(ctx context.Context, request port.ObservationTimelineRequest) ([]port.Observation, error) {
+	return m.timelineResp, nil
 }
 
 func newMockExecutor(nodeType string, fn func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error)) *mockExecutor {
@@ -534,6 +559,101 @@ func TestScheduler_AgentGraph(t *testing.T) {
 	}
 	if !sawAgentChunk {
 		t.Fatal("expected node_stream_chunk event for agent node")
+	}
+}
+
+func TestScheduler_ObservationSaveGraphPassesRuntimeIdentifiers(t *testing.T) {
+	graph := map[string]any{
+		"graph_id": "graph-observation-1",
+		"nodes": []map[string]any{
+			{
+				"id":   "observation_1",
+				"type": "observation_save",
+				"name": "Save Observation",
+				"config": map[string]any{
+					"type":    "fact",
+					"scope":   "session",
+					"content": "Remember the renewal date",
+				},
+			},
+			{
+				"id":     "output_1",
+				"type":   "output",
+				"name":   "Output",
+				"config": map[string]any{},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "observation_1", "to": "output_1"},
+		},
+	}
+	graphBytes, err := json.Marshal(graph)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+	registry := port.NewExecutorRegistry()
+	obsClient := &schedulerObservationClient{
+		saveResponse: port.Observation{
+			ID:        "obs-1",
+			TenantID:  "tenant-obs",
+			GraphID:   "graph-observation-1",
+			RunID:     "run-observation-1",
+			SessionID: "session-obs",
+			Scope:     "session",
+			Type:      "fact",
+			Content:   "Remember the renewal date",
+		},
+	}
+	registry.RegisterAll(
+		executor.NewObservationSaveExecutor(obsClient),
+		executor.NewOutputExecutor(),
+	)
+
+	scheduler := NewScheduler(
+		SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000},
+		registry,
+		repo,
+		emitter,
+		store.NewInMemoryMemoryStore(),
+	)
+
+	runID := "run-observation-1"
+	err = scheduler.StartRun(
+		context.Background(),
+		runID,
+		string(graphBytes),
+		"{}",
+		"",
+		"",
+		"tenant-obs",
+		"session-obs",
+	)
+	if err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, runID, 5*time.Second)
+
+	if obsClient.saveRequest == nil {
+		t.Fatal("expected observation save request")
+	}
+	if obsClient.saveRequest.TenantID != "tenant-obs" {
+		t.Fatalf("tenant_id = %q, want tenant-obs", obsClient.saveRequest.TenantID)
+	}
+	if obsClient.saveRequest.GraphID != "graph-observation-1" {
+		t.Fatalf("graph_id = %q, want graph-observation-1", obsClient.saveRequest.GraphID)
+	}
+	if obsClient.saveRequest.RunID != runID {
+		t.Fatalf("run_id = %q, want %s", obsClient.saveRequest.RunID, runID)
+	}
+	if obsClient.saveRequest.SessionID != "session-obs" {
+		t.Fatalf("session_id = %q, want session-obs", obsClient.saveRequest.SessionID)
+	}
+	if repo.getRunStatus(runID) != string(value.RunStatusSucceeded) {
+		t.Fatalf("expected succeeded run, got %s", repo.getRunStatus(runID))
 	}
 }
 

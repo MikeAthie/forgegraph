@@ -610,3 +610,56 @@ class TestGraphValidatorStrictMode:
 
         config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
         assert len(config_errors) == 0
+
+    def test_strict_mode_validates_observation_save_content_source(self):
+        """Strict mode should validate observation save nodes require content input."""
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "node1",
+                    "type": "observation_save",
+                    "name": "Save Observation",
+                    "config": {
+                        "type": "fact",
+                        "scope": "session",
+                    },
+                },
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        errors = self.validator.validate(graph_json, strict=True)
+
+        config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
+        assert len(config_errors) == 1
+        assert config_errors[0]["field"] == "content"
+
+    def test_strict_mode_accepts_valid_observation_context_config(self):
+        """Strict mode should accept observation context nodes with a query source."""
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "node1",
+                    "type": "observation_context",
+                    "name": "Observation Context",
+                    "config": {
+                        "query_template": "What do we know about {{input.topic}}?",
+                        "limit": 5,
+                    },
+                },
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        errors = self.validator.validate(graph_json, strict=True)
+
+        config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
+        assert len(config_errors) == 0

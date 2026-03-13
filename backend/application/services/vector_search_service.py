@@ -51,6 +51,7 @@ class VectorSearchService:
         *,
         tenant_id: str | UUID,
         query: str,
+        graph_id: str | UUID | None = None,
         agent_id: str | UUID | None = None,
         run_id: str | UUID | None = None,
         session_id: str | UUID | None = None,
@@ -65,6 +66,7 @@ class VectorSearchService:
         Args:
             tenant_id: Tenant ID for isolation
             query: Search query text
+            graph_id: Optional graph ID filter
             agent_id: Optional agent ID filter
             run_id: Optional run ID filter
             session_id: Optional session ID filter
@@ -95,6 +97,7 @@ class VectorSearchService:
         candidates = list(
             self._repository.search(
                 tenant_id=str(tenant_id) if isinstance(tenant_id, UUID) else tenant_id,
+                graph_id=str(graph_id) if isinstance(graph_id, UUID) else graph_id,
                 agent_id=str(agent_id) if isinstance(agent_id, UUID) else agent_id,
                 run_id=str(run_id) if isinstance(run_id, UUID) else run_id,
                 session_id=str(session_id) if isinstance(session_id, UUID) else session_id,

@@ -83,4 +83,17 @@ def _get_memory_metrics() -> dict[str, Any]:
         "memory_gc_last_reindex": cache.get("memory_gc_last_reindex"),
         "memory_grpc_requests_total": cache.get("memory_grpc_requests_total", 0),
         "memory_grpc_errors_total": cache.get("memory_grpc_errors_total", 0),
+        "memory_observation_index_jobs_total": cache.get("memory_observation_index_jobs_total", 0),
+        "memory_observation_index_success_total": cache.get(
+            "memory_observation_index_success_total", 0
+        ),
+        "memory_observation_index_delete_total": cache.get(
+            "memory_observation_index_delete_total", 0
+        ),
+        "memory_observation_index_enqueue_errors_total": cache.get(
+            "memory_observation_index_enqueue_errors_total", 0
+        ),
+        "memory_observation_delete_enqueue_errors_total": cache.get(
+            "memory_observation_delete_enqueue_errors_total", 0
+        ),
     }

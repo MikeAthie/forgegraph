@@ -8,12 +8,17 @@ import (
 
 // RunContext provides execution-scoped memory context to executors.
 type RunContext struct {
-	MemoryBuffer    *entity.MessageBuffer
-	MemoryConfig    *entity.MemoryConfig
-	CurrentSummary  *entity.Summary
-	TrackMessage    func(count int)
-	MemoryRetriever MemoryRetriever
-	Policy          *entity.ExecutionPolicy
+	TenantID          string
+	GraphID           string
+	RunID             string
+	SessionID         string
+	MemoryBuffer      *entity.MessageBuffer
+	MemoryConfig      *entity.MemoryConfig
+	CurrentSummary    *entity.Summary
+	TrackMessage      func(count int)
+	MemoryRetriever   MemoryRetriever
+	ObservationClient ObservationMemoryClient
+	Policy            *entity.ExecutionPolicy
 }
 
 // StreamChunkEmitter receives incremental LLM response chunks.

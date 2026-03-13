@@ -5,17 +5,21 @@ package value
 type NodeType string
 
 const (
-	NodeTypeAgent     NodeType = "agent"
-	NodeTypePrompt    NodeType = "prompt"
-	NodeTypeHTTP      NodeType = "http"
-	NodeTypeTransform NodeType = "transform"
-	NodeTypeBranch    NodeType = "branch"
-	NodeTypeMerge     NodeType = "merge"
-	NodeTypeHumanGate NodeType = "human_gate"
-	NodeTypeMemory    NodeType = "memory"
-	NodeTypeTool      NodeType = "tool"
-	NodeTypeSubgraph  NodeType = "subgraph"
-	NodeTypeOutput    NodeType = "output"
+	NodeTypeAgent               NodeType = "agent"
+	NodeTypePrompt              NodeType = "prompt"
+	NodeTypeHTTP                NodeType = "http"
+	NodeTypeTransform           NodeType = "transform"
+	NodeTypeBranch              NodeType = "branch"
+	NodeTypeMerge               NodeType = "merge"
+	NodeTypeHumanGate           NodeType = "human_gate"
+	NodeTypeMemory              NodeType = "memory"
+	NodeTypeObservationSave     NodeType = "observation_save"
+	NodeTypeObservationSearch   NodeType = "observation_search"
+	NodeTypeObservationContext  NodeType = "observation_context"
+	NodeTypeObservationTimeline NodeType = "observation_timeline"
+	NodeTypeTool                NodeType = "tool"
+	NodeTypeSubgraph            NodeType = "subgraph"
+	NodeTypeOutput              NodeType = "output"
 )
 
 // String returns the string representation of the node type
@@ -27,7 +31,9 @@ func (t NodeType) String() string {
 func (t NodeType) IsValid() bool {
 	switch t {
 	case NodeTypeAgent, NodeTypePrompt, NodeTypeHTTP, NodeTypeTransform,
-		NodeTypeBranch, NodeTypeMerge, NodeTypeHumanGate, NodeTypeMemory, NodeTypeTool, NodeTypeSubgraph, NodeTypeOutput:
+		NodeTypeBranch, NodeTypeMerge, NodeTypeHumanGate, NodeTypeMemory,
+		NodeTypeObservationSave, NodeTypeObservationSearch, NodeTypeObservationContext,
+		NodeTypeObservationTimeline, NodeTypeTool, NodeTypeSubgraph, NodeTypeOutput:
 		return true
 	}
 	return false
@@ -36,7 +42,9 @@ func (t NodeType) IsValid() bool {
 // RequiresExternalCall returns true if the node type makes external API calls
 func (t NodeType) RequiresExternalCall() bool {
 	switch t {
-	case NodeTypeAgent, NodeTypePrompt, NodeTypeHTTP:
+	case NodeTypeAgent, NodeTypePrompt, NodeTypeHTTP,
+		NodeTypeObservationSave, NodeTypeObservationSearch,
+		NodeTypeObservationContext, NodeTypeObservationTimeline:
 		return true
 	}
 	return false
@@ -62,6 +70,10 @@ func AllNodeTypes() []NodeType {
 		NodeTypeMerge,
 		NodeTypeHumanGate,
 		NodeTypeMemory,
+		NodeTypeObservationSave,
+		NodeTypeObservationSearch,
+		NodeTypeObservationContext,
+		NodeTypeObservationTimeline,
 		NodeTypeTool,
 		NodeTypeSubgraph,
 		NodeTypeOutput,
