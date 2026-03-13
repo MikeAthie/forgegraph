@@ -1,459 +1,461 @@
-# P0: Demo-Critical Tasks (Weeks 1-2)
+# P0: Sellable MVP Remediation Tasks
 
 ## Objective
-Deliver a 10-minute investor demo with secure engine callbacks, real-time updates, multi-model runs, cost visibility, and a guided onboarding flow.
+Deliver the smallest P0 slice that turns ForgeGraph from a technically impressive platform into a coherent, sellable MVP for agent workflows.
 
-## Prerequisites
-- Engine gRPC connectivity from Django control plane.
-- Redis configured for Channels in docker-compose.
-- Next.js app can reach backend API and WS/SSE endpoints.
-- ENCRYPTION_KEY configured for APIKey encryption.
+P0 is not "add more features."
+P0 is:
+- making `agent` a real runtime primitive
+- making marketplace semantics honest and executable
+- making Cloud execution safe
+- publishing the missing contracts the code already assumes
 
----
+## What P0 Must Achieve
+At the end of P0, ForgeGraph should be able to make the following promise without hand-waving:
 
-## Task List
+"You can visually build, run, inspect, and safely operate an agent workflow with approved tools and clear execution contracts."
 
-### P0-T01: S2S Auth + Engine Event Contract
-Effort: Large
+## What Is Already Done
+The following capabilities exist in the repo already and are not P0 build targets:
+- replay from checkpoint and run resume
+- `thread_id`, run history, node runs, WS/SSE streaming
+- LLM budgets, quotas, usage analytics, entitlements
+- RBAC, audit logs, retention policies, tenancy models
+- webhook-triggered runs
+- OAuth credential flows
+- cycle support behind `metadata.allow_cycles`
 
-Why critical:
-Secure engine callbacks are required to make real-time updates work without user JWTs.
+P0 work should reuse those capabilities, not replace them.
 
-Current code references:
-- `backend/adapters/api/runs/views.py:965` RunEventsView requires user auth.
-- `backend/adapters/api/runs/serializers.py:137` accepts only `run.updated`, `node_run.updated`.
-- `engine/application/port/event_emitter.go:11` emits `run_started`, `node_started`, etc.
-- `engine/proto/engine.proto:49` StartRunRequest includes `callback_url` only.
+## P0 Exit State
+P0 is complete only when all of the following are true:
+- [x] Users can add a real `agent` node and run it end-to-end.
+- [x] Marketplace packages mean the same thing in backend, frontend, and engine.
+- [x] Cloud mode blocks unsafe execution paths such as `exec`.
+- [x] `SPECS.md` and the run event contract exist and match real behavior.
+- [x] The product has a narrow, credible MVP story built on top of the above.
 
-Implementation steps:
-1. Define a signed callback protocol:
-   - Headers: `X-Forgegraph-Timestamp`, `X-Forgegraph-Signature`.
-   - Payload includes `event_id`, `type`, `run_id`, `timestamp_ms`, optional node fields.
-2. Add `ENGINE_CALLBACK_SECRET` and `ENGINE_CALLBACK_MAX_SKEW_SECONDS` env config in backend and engine.
-3. Implement signing in engine emitter (HMAC SHA-256 over `timestamp.body`).
-4. Implement verification helper in backend for later ingestion endpoint.
-5. Document the contract in `docs/mvp/forgegraph-mvp-implementation-plan.md`.
+## Implementation Readiness
+This file is ready to drive implementation.
 
-Recommended patterns / best practices:
-- HMAC SHA-256 signatures with constant-time comparison.
-- 5-10 minute clock skew tolerance.
-- Explicit event version field for future schema changes.
+Use these docs as the execution entry point:
+- `docs/mvp/forgegraph-mvp-implementation-plan.md`
+- `docs/mvp/p0-f01-implementation-tickets.md`
+- `docs/mvp/p0-f02-implementation-tickets.md`
 
-Testing strategy:
-- Unit: signature validation success/failure and skew handling.
-- Unit: event payload schema validation.
-- Integration: gRPC StartRun includes callback token end-to-end.
+Implementation order for P0:
+1. `P0-F01`
+2. `P0-F02`
+3. `P0-F03`
+4. `P0-F04`
 
-Success criteria / Definition of Done:
-- [ ] Engine can generate valid signed headers per event.
-- [ ] Backend rejects invalid signatures and stale timestamps.
-- [ ] Event payload includes stable `event_id` and `timestamp_ms`.
+Start work immediately with these first PRs:
+- `P0-F01`: contract/schema PR from `p0-f01-implementation-tickets.md`
+- `P0-F02`: package contract/release model PR from `p0-f02-implementation-tickets.md`
+- `P0-F03`: policy contract PR defining Cloud-safe runtime rules before enforcement changes
+- `P0-F04`: doc-first PR creating `SPECS.md` and the run event contract
 
-Dependencies:
-- None.
-
-Risks:
-- Clock skew causing false rejects.
-- Backward compatibility with existing local dev flows.
-
----
-
-### P0-T02: Backend Engine Events Endpoint + Normalization
-Effort: Large
-
-Why critical:
-Engine cannot post to user-auth endpoints; without normalization, frontend cannot render run state.
-
-Current code references:
-- `backend/adapters/api/runs/views.py:965` RunEventsView requires user auth.
-- `backend/adapters/api/runs/views.py:1087` expects `node_run.updated` payloads.
-- `backend/adapters/ws/runs/broadcast.py:32` broadcasts normalized events.
-
-Implementation steps:
-1. Add a new engine-only endpoint, e.g. `/api/engine/runs/{run_id}/events`.
-2. Validate S2S signature before any processing.
-3. Map engine events to normalized events:
-   - `run_started` -> `run.updated` (status=running, started_at)
-   - `run_completed` -> `run.updated` (status=succeeded, ended_at, output_json)
-   - `run_failed` -> `run.updated` (status=failed, error_message)
-   - `node_started` -> `node_run.updated` (status=running, started_at)
-   - `node_completed` -> `node_run.updated` (status=succeeded, ended_at, output_json)
-   - `node_failed` -> `node_run.updated` (status=failed, error_json)
-   - `run_paused` -> `run.updated` (status=paused, pause_payload)
-4. Enforce idempotency on `(run_id, event_id)`.
-5. Persist `RunEvent` rows and broadcast to WS/SSE groups.
-
-Recommended patterns / best practices:
-- Idempotent writes keyed by `event_id`.
-- Normalize timestamps to UTC ISO in backend.
-- Keep raw engine payload for debugging in `RunEvent.payload`.
-
-Testing strategy:
-- Unit: each event mapping into expected model updates.
-- Integration: POST engine event -> Run/NodeRun updates + WS broadcast.
-- E2E: run detail page shows updates without polling fallback.
-
-Success criteria / Definition of Done:
-- [ ] All engine event types map cleanly to normalized events.
-- [ ] Duplicate events do not create duplicate records.
-- [ ] WS/SSE updates appear within 1 second of event POST.
-
-Dependencies:
-- P0-T01.
-
-Risks:
-- Mapping mistakes causing incorrect run state transitions.
-- Run ownership checks must not block engine callbacks.
+No additional roadmap work should be required before opening the first implementation PRs for P0.
 
 ---
 
-### P0-T03: Engine HTTP Event Emitter Wiring (Per Run)
-Effort: Medium
+## P0-F01: Agent Node as a First-Class Runtime Primitive
 
-Why critical:
-No events means no real-time UI. Current engine uses NoOp emitter.
+### Feature Description
+Introduce a real `agent` node type that handles model-to-tool looping internally instead of forcing users to simulate agent behavior by chaining `prompt`, `tool`, and `http` nodes manually.
 
-Current code references:
-- `engine/main.go:320` uses `NoOpEventEmitter`.
-- `engine/adapter/gateway/http_event_emitter.go:16` exists but unused.
-- `engine/application/usecase/scheduler.go:565` emits events.
+This is the most important P0 feature because the current product language says "agents," but the runtime still exposes only workflow composition primitives.
 
-Implementation steps:
-1. Instantiate HTTP emitter per run using `callback_url` and S2S auth.
-2. Include `event_id` and `timestamp_ms` in every event.
-3. Call `Flush` on run completion, cancellation, and pause.
-4. Add emitter buffer size and retry limits to engine config.
+### Why This Is P0
+- It closes the biggest product truth gap.
+- It reduces graph complexity for real users.
+- It aligns the runtime model with market expectations.
+- It gives the debugger something meaningful to show at the step level.
 
-Recommended patterns / best practices:
-- Bounded buffer with metrics on dropped events.
-- Exponential backoff with jitter for retries.
+### User-Facing Outcome
+- A builder can drag in an `agent` node, choose a model, allow tools, define limits, and run it.
+- The run view shows agent steps, tool calls, stop reason, and paused approvals when needed.
 
-Testing strategy:
-- Integration: local HTTP server validates order + signature of events.
-- Engine test: flush ensures last event delivered.
+### Non-Goals for P0
+- Multi-agent collaboration
+- long-horizon planning systems
+- autonomous background task queues for agents
+- graph-wide visual loop authoring as the primary UX
 
-Success criteria / Definition of Done:
-- [ ] Engine emits events for run start, node updates, completion.
-- [ ] Retry logic works on transient failures.
+### Detailed Tasks
 
-Dependencies:
-- P0-T01.
+#### F01-T01: Define the agent execution contract
+- [x] Write `docs/architecture/agent-node.md`.
+- [x] Decide the first implementation shape:
+  - internal loop inside one node
+  - no graph-level loop authoring required for v1
+- [x] Define the canonical runtime state:
+  - `messages`
+  - `scratchpad`
+  - `tool_results`
+  - `final_output`
+  - `step_count`
+- [x] Define node config fields:
+  - `provider`
+  - `model`
+  - `credential_id`
+  - `system_prompt`
+  - `tools`
+  - `max_steps`
+  - `max_tool_calls`
+  - `temperature`
+  - `approval_required_tools`
+  - `stop_condition`
+- [x] Define stop reasons:
+  - final answer returned
+  - max steps reached
+  - max tool calls reached
+  - tool policy denied
+  - approval required
 
-Risks:
-- Event loss under high throughput if buffer is too small.
+#### F01-T02: Add backend graph/schema support
+- [x] Add `agent` to backend node type enums.
+- [x] Add agent config schema to backend validation.
+- [x] Extend graph serializers to support `agent`.
+- [x] Add validation rules for:
+  - missing tools
+  - invalid provider/model
+  - invalid step limits
+  - incompatible credentials
+- [x] Decide whether existing saved graphs need migration support or only forward compatibility.
 
----
+#### F01-T03: Add engine support for agent execution
+- [x] Add `agent` to engine node type definitions.
+- [x] Create `agent_executor.go`.
+- [x] Implement the execution loop:
+  - call model
+  - inspect tool call intent
+  - execute tool
+  - append tool result
+  - repeat until stop
+- [x] Reuse existing credential resolution and tenant policy enforcement.
+- [x] Fail clearly when step or tool-call budgets are exceeded.
+- [x] Ensure output shape is stable for downstream nodes.
 
-### P0-T04: Credentials API + UI (Multi-Tenant)
-Effort: Medium
+#### F01-T04: Add step-level tracing and persistence
+- [x] Define step-level events for agent runs.
+- [x] Normalize those events into existing run and node event persistence.
+- [x] Persist enough detail for:
+  - debugging
+  - replay
+  - support
+  - audit
+- [x] Redact sensitive tool arguments and credential-derived fields before persistence.
 
-Why critical:
-Secure per-tenant credentials are required for multi-model support and investor trust.
+#### F01-T05: Reuse HITL for agent tool approvals
+- [x] Define how an agent pauses before selected tools.
+- [x] Reuse the existing approval task flow.
+- [x] Store enough context to resume from the paused tool call instead of restarting the loop.
+- [x] Ensure replay semantics are documented for paused agent runs.
 
-Current code references:
-- `backend/infrastructure/orm/models.py:666` APIKey model.
-- `backend/infrastructure/crypto/encryption.py:101` encryption helpers.
-- No API endpoints exist for credentials.
+#### F01-T06: Add frontend authoring support
+- [x] Add `agent` to frontend graph types.
+- [x] Add an Agent node form with model, credential, tools, step limits, stop rules, and approval settings.
+- [x] Update the node palette to expose `agent` directly.
+- [x] Update the current agent wizard so it creates a real `agent` node instead of a preset-only pseudo-agent flow.
+- [x] Add agent trace rendering in the inspector and run detail UI.
 
-Implementation steps:
-1. Add CRUD endpoints under `/api/credentials/` with masked key output.
-2. Enforce per-user ownership checks.
-3. Add frontend pages for credential management.
-4. Validate provider-specific formats (basic regex validation).
+#### F01-T07: Test coverage
+- [x] Backend unit tests for schema and graph validation.
+- [x] Engine unit tests for:
+  - normal stop
+  - step-limit stop
+  - tool failure
+  - approval pause/resume
+  - invalid tool selection
+- [x] Integration tests for:
+  - save graph with `agent`
+  - start run with `agent`
+  - replay/resume after pause
+- [x] Frontend tests for form rendering and trace display.
 
-Recommended patterns / best practices:
-- Never return decrypted keys to frontend.
-- Show key hints only (last 4 chars).
+### Success Criteria
+- [x] A graph can include a real `agent` node end-to-end.
+- [x] The engine executes multi-step tool loops without manual graph wiring.
+- [x] Run detail surfaces step traces, tool calls, and stop reason.
+- [x] HITL pauses and resumes work inside an agent run.
 
-Testing strategy:
-- Unit: encryption/decryption error cases.
-- Integration: create/list/delete credential.
-
-Success criteria / Definition of Done:
-- [ ] User can create and delete provider credentials.
-- [ ] Encrypted keys stored in DB, not plaintext.
-
-Dependencies:
-- ENCRYPTION_KEY configured in env.
-
-Risks:
-- Misconfigured encryption key breaks decrypt.
-
----
-
-### P0-T05: Engine LLM Gateway (OpenAI + Anthropic)
-Effort: Large
-
-Why critical:
-Multi-model switching is required in demo and a key investor expectation.
-
-Current code references:
-- `engine/adapter/gateway/openai_client.go:61` uses env key only.
-- `engine/adapter/executor/prompt_executor.go:166` uses `model` only.
-
-Implementation steps:
-1. Add provider interface and registry in engine.
-2. Implement Anthropic client alongside OpenAI client.
-3. Resolve credentials via backend S2S endpoint per run.
-4. Route per node by `provider` + `model` fields.
-
-Recommended patterns / best practices:
-- Cache decrypted credentials in-memory for run duration only.
-- Provider allowlist in backend.
-
-Testing strategy:
-- Unit: routing logic and error mapping.
-- Integration: run with OpenAI and Anthropic.
-
-Success criteria / Definition of Done:
-- [ ] Prompt node runs with provider switch without config changes.
-- [ ] Invalid provider/model returns a clear error.
-
-Dependencies:
-- P0-T04 and P0-T01.
-
-Risks:
-- Provider API usage metrics differences.
-
----
-
-### P0-T06: Prompt Node Schema + Editor UI
-Effort: Medium
-
-Why critical:
-Users need to select provider, model, and credential per node.
-
-Current code references:
-- `backend/domain/value_objects/node_schemas.py:17` Prompt node schema.
-- `frontend/components/graph-editor/forms/*` prompt node form.
-
-Implementation steps:
-1. Add `provider` and `credential_id` to prompt node schema.
-2. Update graph editor UI to show provider/model/credential selectors.
-3. Add validation in backend for missing credentials.
-
-Recommended patterns / best practices:
-- Default provider/model based on available credentials.
-- Inline warnings when no credentials exist.
-
-Testing strategy:
-- Unit: schema validation for required fields.
-- UI: form validation for missing credentials.
-
-Success criteria / Definition of Done:
-- [ ] Prompt nodes can be configured with provider + credential.
-- [ ] Runs fail fast with clear error if credential missing.
-
-Dependencies:
-- P0-T04, P0-T05.
-
-Risks:
-- Schema changes require migration for existing graphs.
+### Proof / Demo Feat
+Create one demo graph with a single `agent` node plus output node that:
+- reads input
+- chooses a tool
+- pauses before a protected tool
+- resumes
+- returns a final answer with visible step trace
 
 ---
 
-### P0-T07: LLM Usage Ledger + Pricing + Budgets
-Effort: Large
+## P0-F02: Marketplace Runtime Contract and Delivery
 
-Why critical:
-Cost transparency and budget alerts are required for investor readiness.
+### Feature Description
+Fix the current mismatch where the marketplace behaves like a productized extension system in UI and DB, while the engine only knows how to load local manifests.
 
-Current code references:
-- `engine/adapter/summarizer/cost_tracker.go:20` summarization costs only.
-- `backend/adapters/api/analytics/memory_analytics.py:72` memory analytics UI.
+P0 requires one honest marketplace model. Either packages are templates, or they are executable runtime artifacts. The product cannot keep implying both at once.
 
-Implementation steps:
-1. Create `llm_usage` table with tokens, model, provider, cost, run/node IDs.
-2. Add pricing table config in backend (per model).
-3. Parse usage metrics from engine events and persist.
-4. Add `tenant_budget` table and alerts at thresholds.
+### Why This Is P0
+- It removes one of the biggest end-to-end inconsistencies in the stack.
+- It affects buyer trust immediately.
+- It directly impacts the node palette, quick add flow, and admin marketplace UI.
 
-Recommended patterns / best practices:
-- Immutable ledger entries.
-- Pricing table versioned and explicit mapping.
+### User-Facing Outcome
+- When a package appears installable and executable, it actually is.
+- When a package is only a template, the UI says so clearly.
 
-Testing strategy:
-- Unit: cost calculations by model.
-- Integration: run -> usage rows created -> totals aggregated.
+### Non-Goals for P0
+- public third-party package ecosystem
+- arbitrary remote code plugins
+- self-service package publishing for untrusted packages in Cloud
 
-Success criteria / Definition of Done:
-- [ ] Usage series and totals available via API.
-- [ ] Budget alert triggers at configured threshold.
+### Detailed Tasks
 
-Dependencies:
-- P0-T02 event ingestion.
+#### F02-T01: Decide and document package classes
+- [x] Write `docs/architecture/marketplace-runtime-contract.md`.
+- [x] Define package classes:
+  - `template_http`
+  - `template_prompt`
+  - `runtime_tool`
+  - `runtime_transform`
+- [x] Decide which classes are allowed in Cloud for P0.
+- [x] Define what "install" means for each class.
 
-Risks:
-- Missing usage data from provider APIs.
+#### F02-T02: Extend release metadata
+- [x] Add explicit release fields for:
+  - `package_kind`
+  - `runtime_manifest`
+  - `manifest_version`
+  - `cloud_allowed`
+  - `review_notes`
+- [x] Reject releases whose metadata does not match their package class.
+- [x] Validate template packages against `execution_node_type` and `config_defaults`.
+- [x] Validate runtime packages against a strict manifest schema.
 
----
+#### F02-T03: Implement backend delivery path
+- [x] Add a backend manifest rendering/fetch service for runtime packages.
+- [x] Keep tenant scoping explicit.
+- [x] Add versioned install payloads and cache headers.
+- [x] Add manifest signatures or checksums.
+- [x] Add admin-visible package load status.
 
-### P0-T08: Analytics UI for LLM Costs + Alerts
-Effort: Medium
+#### F02-T04: Implement engine loading path
+- [x] Decide refresh mode:
+  - startup only
+  - polling
+  - admin-triggered refresh
+- [x] Load tenant-aware runtime manifests if runtime packages are enabled.
+- [x] Preserve local filesystem manifests for self-host/dev.
+- [x] Reject invalid, unsigned, or unsupported manifests visibly.
 
-Why critical:
-Demo needs visible cost dashboard and alert state.
+#### F02-T05: Fix frontend marketplace semantics
+- [x] Show package class in admin marketplace and quick-add UI.
+- [x] Label template-only packages as templates.
+- [x] Label runtime-backed packages as executable.
+- [x] Disable quick-add for unsupported classes.
+- [x] Show why a package is blocked or unavailable.
 
-Current code references:
-- `frontend/pages/analytics/memory.tsx:110` existing analytics UI.
+#### F02-T06: Test coverage
+- [x] Integration tests for:
+  - install package
+  - fetch installed manifest set
+  - engine refresh
+  - execute installed runtime package
+- [x] Frontend tests for package labels and disabled states.
+- [x] Contract tests for manifest schema validation.
 
-Implementation steps:
-1. Add new API endpoints for LLM usage and budgets.
-2. Extend analytics UI to display LLM costs and budgets.
-3. Add alert banner when budget threshold crossed.
+### Success Criteria
+- [x] Package installation means the same thing in backend, frontend, and engine.
+- [x] No approved package appears executable in UI while lacking runtime support.
+- [x] Runtime-backed package delivery is tenant-aware, versioned, and test-backed.
 
-Recommended patterns / best practices:
-- Do not block UI on slow analytics calls.
-- Use cached aggregated endpoints.
-
-Testing strategy:
-- UI tests for alert banner rendering.
-- API integration tests for budget threshold.
-
-Success criteria / Definition of Done:
-- [ ] LLM cost chart renders with daily series.
-- [ ] Budget alert visible when threshold reached.
-
-Dependencies:
-- P0-T07.
-
-Risks:
-- Overfetching analytics on every page load.
-
----
-
-### P0-T09: Templates + Onboarding Wizard
-Effort: Medium
-
-Why critical:
-Time-to-value is the core demo flow: template -> credential -> run.
-
-Current code references:
-- `backend/infrastructure/orm/management/commands/seed_phase7_demos.py:351` demo graphs.
-- No template API or UI.
-
-Implementation steps:
-1. Create Template model or metadata table.
-2. Add `/api/templates/` endpoints and clone-from-template.
-3. Build onboarding wizard in frontend.
-4. Seed 2-3 demo templates (incl. human gate).
-
-Recommended patterns / best practices:
-- Immutable templates; always clone to user space.
-- Preflight credential checks before run.
-
-Testing strategy:
-- Integration: template clone creates graph + version.
-- E2E: onboarding flow completes with a successful run.
-
-Success criteria / Definition of Done:
-- [ ] New user can complete onboarding in <3 minutes.
-- [ ] Demo template run starts immediately after credential entry.
-
-Dependencies:
-- P0-T04.
-
-Risks:
-- Template schema drift with engine graph model.
+### Proof / Demo Feat
+Install one official package from the marketplace, add it from the palette, and execute it successfully without editing files or restarting the whole app stack manually.
 
 ---
 
-### P0-T10: Control Plane vs Execution Plane Contract (Doc)
-Effort: Small
+## P0-F03: Cloud-Safe Execution and Policy Enforcement
 
-Why critical:
-Investors and senior engineers will ask who owns run state, how failures are handled, and whether the engine can run headless.
+### Feature Description
+Introduce an explicit Cloud-safe execution policy so that runtime expansion does not accidentally expose unsafe behaviors such as `exec` tools.
 
-Current code references:
-- No existing architecture doc defining this contract.
+### Why This Is P0
+- This is the main operational and security blocker for a sellable cloud product.
+- It must be solved before marketplace runtime delivery can be trusted.
+- It lets the product draw a clean line between Cloud and self-hosted capabilities.
 
-Implementation steps:
-1. Add `docs/architecture/control-plane-vs-execution-plane.md` with:
-   - Ownership of run lifecycle and source of truth.
-   - Partial failure semantics (backend down, engine down, WS/SSE down).
-   - Delivery guarantees and idempotency assumptions.
-   - Replay ownership and non-goals for MVP.
-2. Ensure the doc references tenant isolation expectations.
+### User-Facing Outcome
+- Cloud customers can use approved packages and tools safely.
+- Operators can explain why something was blocked.
+- Self-host users still retain broader flexibility.
 
-Recommended patterns / best practices:
-- Explicitly document what happens during outages.
-- Keep the contract stable across teams (backend/engine/frontend).
+### Non-Goals for P0
+- full sandboxing infrastructure
+- syscall isolation
+- container-per-tool execution
+- enterprise governance UI depth
 
-Testing strategy:
-- N/A (documentation task).
+### Detailed Tasks
 
-Success criteria / Definition of Done:
-- [ ] Doc exists and answers: "backend down 10 minutes", "headless engine", "source of truth".
-- [ ] Doc states delivery guarantees and replay ownership.
+#### F03-T01: Introduce runtime mode
+- [x] Add an explicit runtime mode flag:
+  - `cloud`
+  - `self_hosted`
+- [x] Thread it through backend and engine configuration.
+- [x] Document capability differences by mode.
 
-Dependencies:
-- None.
+#### F03-T02: Block unsafe tool kinds in Cloud
+- [x] Reject `exec` manifests in engine load path when runtime mode is `cloud`.
+- [x] Reject runtime package releases that require `exec` in marketplace review when mode is `cloud`.
+- [x] Surface blocked-package reasons in the admin UI.
+- [x] Add an emergency kill switch for runtime package loading.
 
-Risks:
-- If omitted, architecture ambiguity undermines investor confidence.
+#### F03-T03: Tighten egress policy consistency
+- [x] Ensure the same tenant policy logic covers:
+  - HTTP nodes
+  - tool HTTP calls
+  - provider/model allowlists
+- [x] Add shared tests to prevent policy drift across executors.
+- [x] Add explicit error codes/messages for policy denials.
 
----
+#### F03-T04: Add auditability and operator visibility
+- [x] Log policy-denied executions to audit logs.
+- [x] Log rejected runtime package reviews.
+- [x] Add engine/backend telemetry for rejected runtime loads.
+- [x] Add operator-facing docs for what gets blocked and why.
 
-### P0-T11: Tenant ID Propagation and Enforcement (End-to-End)
-Effort: Medium
+#### F03-T05: Test coverage
+- [x] Engine tests for `exec` rejection in `cloud` mode.
+- [x] Backend integration tests for blocked release approval.
+- [x] Integration tests for policy-denied HTTP/tool executions.
 
-Why critical:
-Multi-tenancy must be enforced, not assumed. Tenant isolation is a core investor question.
+### Success Criteria
+- [x] `cloud` mode cannot execute `exec` tools.
+- [x] Unsafe packages fail before installation or runtime load.
+- [x] Policy denials are auditable and understandable.
 
-Current code references:
-- `backend/adapters/api/runs/views.py:76` derives tenant_id from user.
-- `engine/proto/engine.proto:66` includes tenant_id in StartRunRequest but events do not carry it explicitly.
-- `backend/adapters/api/analytics/memory_analytics.py:33` uses tenant_id for memory analytics only.
-
-Implementation steps:
-1. Include `tenant_id` in every engine event payload.
-2. Persist `tenant_id` on LLM usage rows and audit logs.
-3. Enforce tenant ownership on event ingestion before writing Run/NodeRun.
-4. Add cross-checks: run_id must belong to tenant_id.
-5. Add a lightweight tenant_id invariant check in event normalization path.
-
-Recommended patterns / best practices:
-- Treat tenant_id as a required field in engine events.
-- Validate tenant_id before any writes to prevent leakage.
-
-Testing strategy:
-- Unit: event ingestion rejects mismatched tenant_id.
-- Integration: tenant A cannot write events for tenant B run_id.
-
-Success criteria / Definition of Done:
-- [ ] tenant_id flows through engine events, usage, and audit logs.
-- [ ] Ingestion rejects any event with mismatched tenant ownership.
-
-Dependencies:
-- P0-T01, P0-T02.
-
-Risks:
-- Missing tenant_id in existing event emitters.
+### Proof / Demo Feat
+Attempt to install or run an unsafe package in Cloud mode and show a clean policy-denied response instead of silent failure or undefined behavior.
 
 ---
 
-### P0-T12: Demo Validation (Real-Time, Human Gate, Budget Alert)
-Effort: Small
+## P0-F04: Stable Graph and Event Contracts
 
-Why critical:
-Ensures demo story is reliable and repeatable.
+### Feature Description
+Publish the contracts that the code already references implicitly, especially `SPECS.md` and the run event contract.
 
-Implementation steps:
-1. Run the full demo flow and capture timings.
-2. Verify no polling fallback in run detail view.
-3. Validate human gate pause/resume works end-to-end.
-4. Simulate budget threshold breach to trigger alert.
+### Why This Is P0
+- The repo already refers to `SPECS.md`, but it is missing.
+- The product cannot sell extensibility or stability without contracts.
+- Agent node and marketplace work will drift immediately if the contracts are not written down.
 
-Testing strategy:
-- Manual demo checklist + recorded runs.
+### User-Facing Outcome
+- Internal teams and future external integrators have a stable source of truth.
+- Docs, code comments, and runtime behavior finally line up.
 
-Success criteria / Definition of Done:
-- [ ] 10-minute demo runs without manual fixes.
-- [ ] Live updates show WS/SSE status, not polling.
+### Non-Goals for P0
+- full SDKs
+- public API versioning program
+- generated developer portal
 
-Dependencies:
-- All P0 tasks.
+### Detailed Tasks
 
-Risks:
-- Hidden race conditions in WS/SSE handshake.
+#### F04-T01: Publish Graph JSON spec
+- [x] Create root `SPECS.md`.
+- [x] Document:
+  - node model
+  - edge model
+  - metadata
+  - editor-only state
+  - sentinel `START` and `END`
+  - cycle semantics
+  - `allow_cycles`
+  - `agent` node once available
+- [x] Link the spec from README and from the frontend graph type comments that reference it.
+
+#### F04-T02: Publish run event contract
+- [x] Create `docs/architecture/run-event-contract.md`.
+- [x] Document persisted event types and payloads.
+- [x] Document SSE/WS envelopes.
+- [x] Document redaction guarantees and non-guarantees.
+- [x] Document compatibility rules for new event fields.
+
+#### F04-T03: Clean documentation drift
+- [x] Update README feature list to reflect the actual repo state.
+- [x] Add "already implemented" notes for:
+  - replay
+  - budgets
+  - RBAC
+  - OAuth
+  - webhook triggers
+- [x] Remove outdated claims in MVP docs that describe existing capabilities as missing.
+
+#### F04-T04: Add contract validation
+- [x] Add Graph JSON fixture tests if shared fixtures are introduced.
+- [x] Add run event serialization/contract tests if a shared schema layer is introduced.
+
+### Success Criteria
+- [x] `SPECS.md` exists and is linked from the places that already reference it.
+- [x] Run events have one documented contract.
+- [x] Documentation no longer materially misdescribes the current repo.
+
+### Proof / Demo Feat
+A new engineer can answer "what is a valid graph?" and "what events does a run emit?" from repo docs without reverse-engineering the code.
+
+---
+
+## Cross-Cutting P0 Tasks
+
+### P0-X01: Slice the Work Into Reviewable PRs
+- [x] Define PR boundaries for F01-F04.
+- [x] Keep architecture/spec docs first where they unblock implementation.
+- [x] Avoid one mega-PR for all P0 work.
+
+### P0-X02: Demo and QA Validation
+- [x] Build one scripted demo flow around the new `agent` node.
+- [x] Validate:
+  - graph authoring
+  - package installation
+  - policy denial behavior
+  - pause/resume
+  - trace display
+- [x] Record known limitations explicitly.
+
+### P0-X03: Release Notes for Internal Launch
+- [x] Summarize what changed in runtime semantics.
+- [x] Summarize what is safe in Cloud vs self-hosted.
+- [x] Summarize what package classes are supported.
+
+---
+
+## Suggested Build Order
+
+### Week 1
+- F01-T01 to F01-T03
+- F02-T01 to F02-T02
+- F03-T01 to F03-T02
+- F04-T01
+
+### Week 2
+- F01-T04 to F01-T06
+- F02-T03 to F02-T05
+- F03-T03 to F03-T04
+- F04-T02 to F04-T03
+
+### Week 3
+- F01-T07
+- F02-T06
+- F03-T05
+- F04-T04
+- P0-X01 to P0-X03
+
+## Final Definition of Done
+- [x] P0-F01 complete
+- [x] P0-F02 complete
+- [x] P0-F03 complete
+- [x] P0-F04 complete
+- [x] Demo flow runs without repo-level caveats or hidden manual steps
+- [x] The product story is narrower, truer, and easier to defend
 

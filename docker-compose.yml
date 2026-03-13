@@ -47,11 +47,16 @@ services:
       REDIS_PORT: 6379
       DEBUG: "true"
       ALLOWED_HOSTS: "*"
+      FRONTEND_URL: http://localhost:3000
       DJANGO_SUPERUSER_EMAIL: admin@forgegraph.local
       DJANGO_SUPERUSER_PASSWORD: admin123456
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
     depends_on:
@@ -86,6 +91,8 @@ services:
       DEFAULT_TIMEOUT_MS: 30000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
+      CONTROL_PLANE_URL: http://backend:8000
+      TOOL_MANIFEST_DIR: /app/tool-manifests
       MEMORY_GRPC_HOST: memory-grpc
       MEMORY_GRPC_PORT: 50052
     depends_on:
@@ -95,6 +102,8 @@ services:
         condition: service_started
       memory-grpc:
         condition: service_started
+    volumes:
+      - ./engine/tool-manifests:/app/tool-manifests:ro
 
   memory-grpc:
     build:
@@ -116,6 +125,7 @@ services:
       ALLOWED_HOSTS: "*"
       MEMORY_GRPC_HOST: 0.0.0.0
       MEMORY_GRPC_PORT: 50052
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}
     depends_on:
       postgres:
         condition: service_healthy

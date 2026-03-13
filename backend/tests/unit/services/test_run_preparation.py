@@ -1,8 +1,10 @@
 """Unit tests for run preparation helpers."""
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
+from django.utils import timezone
 
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
@@ -149,3 +151,108 @@ def test_validate_prompt_credentials_rejects_revoked_credential() -> None:
 
     errors = validate_prompt_credentials(graph_json, owner)
     assert any("revoked credential" in str(error.get("message", "")).lower() for error in errors)
+
+
+def test_prepare_graph_for_engine_assigns_tool_provider_and_credential() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    ensure_default_organization(owner)
+    assert owner.default_organization is not None
+
+    credential = APIKey.objects.create(
+        organization=owner.default_organization,
+        user=owner,
+        provider="google_tasks",
+        name="tasks-oauth",
+        encrypted_key=b"opaque",
+        token_metadata={"provider": "google_tasks"},
+        token_expires_at=timezone.now() + timedelta(hours=1),
+    )
+
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "tool-1",
+                "type": "tool",
+                "name": "Tasks",
+                "config": {"tool_name": "google_tasks"},
+            }
+        ],
+        "edges": [],
+    }
+
+    prepared = prepare_graph_for_engine(graph_json, owner)
+    config = prepared["nodes"][0]["config"]
+    assert config["provider"] == "google_tasks"
+    assert config["credential_id"] == str(credential.id)
+
+
+def test_prepare_graph_for_engine_ignores_revoked_tool_credentials() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    ensure_default_organization(owner)
+    assert owner.default_organization is not None
+
+    APIKey.objects.create(
+        organization=owner.default_organization,
+        user=owner,
+        provider="google_calendar",
+        name="calendar-oauth-revoked",
+        encrypted_key=b"opaque",
+        token_metadata={"revoked": True},
+    )
+
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "tool-1",
+                "type": "tool",
+                "name": "Calendar",
+                "config": {"tool_name": "google_calendar"},
+            }
+        ],
+        "edges": [],
+    }
+
+    prepared = prepare_graph_for_engine(graph_json, owner)
+    config = prepared["nodes"][0]["config"]
+    assert config["provider"] == "google_calendar"
+    assert "credential_id" not in config
+
+
+def test_prepare_graph_for_engine_ignores_non_oauth_keys_for_oauth_tool_provider() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    ensure_default_organization(owner)
+    assert owner.default_organization is not None
+
+    APIKey.objects.create(
+        organization=owner.default_organization,
+        user=owner,
+        provider="gmail",
+        name="gmail-api-key",
+        encrypted_key=b"opaque",
+    )
+    oauth_credential = APIKey.objects.create(
+        organization=owner.default_organization,
+        user=owner,
+        provider="gmail",
+        name="gmail-oauth",
+        encrypted_key=b"opaque",
+        token_metadata={"provider": "gmail"},
+        token_expires_at=timezone.now() + timedelta(hours=1),
+    )
+
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "tool-1",
+                "type": "tool",
+                "name": "Gmail",
+                "config": {"tool_name": "gmail_reader"},
+            }
+        ],
+        "edges": [],
+    }
+
+    prepared = prepare_graph_for_engine(graph_json, owner)
+    config = prepared["nodes"][0]["config"]
+    assert config["provider"] == "gmail"
+    assert config["credential_id"] == str(oauth_credential.id)

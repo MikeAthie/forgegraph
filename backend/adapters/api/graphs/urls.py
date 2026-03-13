@@ -7,6 +7,7 @@ Clean Architecture: Interface Adapters layer.
 from django.urls import path
 
 from adapters.api.graphs.views import (
+    ExternalWorkflowCreateView,
     GraphDetailView,
     GraphListCreateView,
     GraphMemoryConfigView,
@@ -18,6 +19,11 @@ from adapters.api.graphs.views import (
 
 urlpatterns = [
     path("", GraphListCreateView.as_view(), name="graph-list-create"),
+    path(
+        "external-workflows",
+        ExternalWorkflowCreateView.as_view(),
+        name="graph-external-workflow-create",
+    ),
     path("validate", GraphValidateView.as_view(), name="graph-validate"),
     path("<uuid:graph_id>", GraphDetailView.as_view(), name="graph-detail"),
     path(

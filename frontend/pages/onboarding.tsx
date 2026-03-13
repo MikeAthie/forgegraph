@@ -115,7 +115,10 @@ export default function OnboardingPage() {
   );
 
   const filteredCredentials = useMemo(
-    () => credentials.filter((cred) => cred.provider === provider),
+    () =>
+      credentials.filter(
+        (cred) => cred.provider === provider && cred.health_status !== "revoked",
+      ),
     [credentials, provider],
   );
 
@@ -167,7 +170,9 @@ export default function OnboardingPage() {
 
   // Completion states for visual feedback
   const hasTemplate = Boolean(selectedTemplateId);
-  const hasCredential = Boolean(credentialId);
+  const hasCredential = Boolean(
+    credentialId && filteredCredentials.some((credential) => credential.id === credentialId),
+  );
 
   const checklist = useMemo(() => {
     if (milestones.length > 0) {
@@ -242,10 +247,25 @@ export default function OnboardingPage() {
   }, [availableModels, model]);
 
   useEffect(() => {
-    setCredentialId("");
     setShowCredentialForm(false);
     setCredentialRemediation(null);
   }, [provider]);
+
+  useEffect(() => {
+    if (filteredCredentials.length === 0) {
+      if (credentialId) {
+        setCredentialId("");
+      }
+      return;
+    }
+
+    const selectedIsStillValid = filteredCredentials.some(
+      (credential) => credential.id === credentialId,
+    );
+    if (!selectedIsStillValid) {
+      setCredentialId(filteredCredentials[0].id);
+    }
+  }, [credentialId, filteredCredentials]);
 
   useEffect(() => {
     setRunRemediation(null);
@@ -321,6 +341,20 @@ export default function OnboardingPage() {
 
   const handleRun = async () => {
     if (!selectedTemplate) return;
+    const resolvedCredentialId = credentialId || filteredCredentials[0]?.id || "";
+    if (!resolvedCredentialId) {
+      const message = `Select a ${provider} credential before running this template.`;
+      setRunRemediation(
+        buildRunRemediation({
+          message,
+          hasTemplate: true,
+          hasCredential: false,
+          useSampleData,
+        }),
+      );
+      showError("Run blocked", message);
+      return;
+    }
 
     let inputPayload: Record<string, unknown> = selectedTemplate.sample_input || {};
     if (!useSampleData) {
@@ -344,7 +378,7 @@ export default function OnboardingPage() {
         name: graphName.trim() || undefined,
         provider,
         model,
-        credential_id: credentialId || undefined,
+        credential_id: resolvedCredentialId,
       });
       const run = await runsApi.start({
         graph_version_id: clone.graph_version_id,
@@ -812,7 +846,7 @@ export default function OnboardingPage() {
                       )}
                     </div>
 
-                    {filteredCredentials.length > 0 ? (
+                  {filteredCredentials.length > 0 ? (
                       <Select value={credentialId} onValueChange={setCredentialId}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a credential" />
@@ -820,7 +854,7 @@ export default function OnboardingPage() {
                         <SelectContent>
                           {filteredCredentials.map((cred) => (
                             <SelectItem key={cred.id} value={cred.id}>
-                              {cred.name} · ****{cred.key_hint}
+                              {cred.name} · {cred.key_hint}
                             </SelectItem>
                           ))}
                         </SelectContent>

@@ -15,7 +15,11 @@ from uuid import UUID
 from django.conf import settings
 from django.utils import timezone
 
-from application.services.credential_state import is_credential_revoked
+from application.services.credential_state import (
+    is_credential_revoked,
+    is_oauth_credential,
+    is_oauth_provider,
+)
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import (
     APIKey,
@@ -29,6 +33,11 @@ from infrastructure.orm.models import (
 
 START_NODE_ID = "START"
 END_NODE_ID = "END"
+TOOL_PROVIDER_BY_NAME: dict[str, str] = {
+    "gmail_reader": "gmail",
+    "google_calendar": "google_calendar",
+    "google_tasks": "google_tasks",
+}
 
 
 class RunPreparationError(ValueError):
@@ -241,6 +250,78 @@ def resolve_prompt_templates(graph_json: dict[str, Any], owner: User) -> dict[st
     return data
 
 
+def apply_tool_runtime_credentials(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
+    """
+    Normalize tool providers and auto-assign provider credentials when available.
+
+    This keeps template tool nodes runnable without requiring manual credential_id on each node.
+    """
+    if not isinstance(graph_json, dict):
+        return graph_json
+
+    data = copy.deepcopy(graph_json)
+    nodes = data.get("nodes")
+    if not isinstance(nodes, list):
+        return data
+
+    provider_credential_ids: dict[str, str] = {}
+    org = owner.default_organization
+    if org is not None:
+        for provider in set(TOOL_PROVIDER_BY_NAME.values()):
+            candidates = APIKey.objects.filter(
+                organization=org,
+                provider=provider,
+            ).order_by("-created_at")
+            for candidate in candidates:
+                if is_credential_revoked(candidate.token_metadata):
+                    continue
+                if is_oauth_provider(provider) and not is_oauth_credential(
+                    provider=provider,
+                    raw_metadata=candidate.token_metadata,
+                    has_refresh_token=bool(candidate.encrypted_refresh_token),
+                    has_token_expiry=candidate.token_expires_at is not None,
+                ):
+                    continue
+                provider_credential_ids[provider] = str(candidate.id)
+                break
+
+    def _walk(nodes_to_walk: list[dict[str, Any]]) -> None:
+        for node in nodes_to_walk:
+            if not isinstance(node, dict):
+                continue
+
+            node_type = str(node.get("type") or "").strip().lower()
+            config_raw = node.get("config")
+            config = config_raw if isinstance(config_raw, dict) else {}
+
+            if node_type == "tool":
+                tool_name = str(config.get("tool") or config.get("tool_name") or "").strip().lower()
+                provider = str(config.get("provider") or "").strip().lower()
+                if not provider:
+                    provider = TOOL_PROVIDER_BY_NAME.get(tool_name, "")
+
+                if provider:
+                    config["provider"] = provider
+                    if not str(config.get("credential_id") or "").strip():
+                        credential_id = provider_credential_ids.get(provider)
+                        if credential_id:
+                            config["credential_id"] = credential_id
+
+                node["config"] = config
+                continue
+
+            if node_type == "subgraph" and isinstance(config.get("graph_json"), dict):
+                subgraph = config["graph_json"]
+                sub_nodes = subgraph.get("nodes")
+                if isinstance(sub_nodes, list):
+                    _walk(sub_nodes)
+                config["graph_json"] = subgraph
+                node["config"] = config
+
+    _walk(nodes)
+    return data
+
+
 def _resolve_prompt_templates_in_place(graph_json: dict[str, Any], owner: User) -> None:
     nodes = graph_json.get("nodes")
     if not isinstance(nodes, list):
@@ -297,9 +378,10 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
     expanded = expand_subgraphs(cleaned, owner)
     namespaced = apply_memory_namespace_prefix(expanded, owner.id)
     resolved = resolve_prompt_templates(namespaced, owner)
+    prepared = apply_tool_runtime_credentials(resolved, owner)
     policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(owner)).first()
     if policy:
-        metadata_raw = resolved.get("metadata")
+        metadata_raw = prepared.get("metadata")
         metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
         metadata["policy"] = {
             "http": {
@@ -312,8 +394,8 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
                 "allowed_models": policy.allowed_models,
             },
         }
-        resolved["metadata"] = metadata
-    return resolved
+        prepared["metadata"] = metadata
+    return prepared
 
 
 def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:

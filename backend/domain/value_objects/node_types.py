@@ -14,6 +14,7 @@ from domain.value_objects.retry_policy import RetryPolicy
 class NodeType(str, Enum):
     """Enumeration of supported node types."""
 
+    AGENT = "agent"
     PROMPT = "prompt"
     HTTP = "http"
     TRANSFORM = "transform"

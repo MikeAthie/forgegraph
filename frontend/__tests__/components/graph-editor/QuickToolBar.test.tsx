@@ -21,10 +21,20 @@ const buildPackage = (overrides: Partial<MarketplacePackage>): MarketplacePackag
     version: "1.0.0",
     changelog: "",
     status: "approved",
-    execution_node_type: "http",
+    package_kind: "runtime_tool",
+    execution_node_type: "tool",
     ui_schema: { label: "Slack Alerts" },
     config_schema: { type: "object" },
-    config_defaults: { method: "POST", url: "https://slack.com/api/chat.postMessage" },
+    config_defaults: { tool: "slack_alerts" },
+    runtime_manifest: {
+      name: "slack_alerts",
+      version: "1.0.0",
+      kind: "http",
+      http: { url: "https://slack.com/api/chat.postMessage", method: "POST" },
+    },
+    manifest_version: 1,
+    cloud_allowed: true,
+    review_notes: "",
     created_at: "2026-02-05T12:00:00Z",
   },
   installed_release: {
@@ -32,13 +42,31 @@ const buildPackage = (overrides: Partial<MarketplacePackage>): MarketplacePackag
     version: "1.0.0",
     changelog: "",
     status: "approved",
-    execution_node_type: "http",
+    package_kind: "runtime_tool",
+    execution_node_type: "tool",
     ui_schema: { label: "Slack Alerts" },
     config_schema: { type: "object" },
-    config_defaults: { method: "POST", url: "https://slack.com/api/chat.postMessage" },
+    config_defaults: { tool: "slack_alerts" },
+    runtime_manifest: {
+      name: "slack_alerts",
+      version: "1.0.0",
+      kind: "http",
+      http: { url: "https://slack.com/api/chat.postMessage", method: "POST" },
+    },
+    manifest_version: 1,
+    cloud_allowed: true,
+    review_notes: "",
     created_at: "2026-02-05T12:00:00Z",
   },
   installed_at: "2026-02-05T12:00:00Z",
+  runtime_delivery: {
+    state: "ready",
+    reason: "ready",
+    package_kind: "runtime_tool",
+    cloud_allowed: true,
+    manifest_version: 1,
+    checksum: "abc123",
+  },
   ...overrides,
 });
 
@@ -117,5 +145,41 @@ describe("QuickToolBar", () => {
     expect(onSelectPackage).toHaveBeenCalledWith(
       expect.objectContaining({ slug: "gmail-send-email" }),
     );
+  });
+
+  it("hides template-only packages from quick add", () => {
+    const packages = [
+      buildPackage({
+        slug: "template-only",
+        name: "Template Only",
+        runtime_delivery: {
+          state: "template",
+          reason: "template_only",
+          package_kind: "template_http",
+          cloud_allowed: true,
+          manifest_version: 1,
+          checksum: null,
+        },
+        latest_release: {
+          ...buildPackage({}).latest_release!,
+          package_kind: "template_http",
+          execution_node_type: "http",
+          config_defaults: { url: "https://example.com" },
+          runtime_manifest: null,
+        },
+        installed_release: {
+          ...buildPackage({}).installed_release!,
+          package_kind: "template_http",
+          execution_node_type: "http",
+          config_defaults: { url: "https://example.com" },
+          runtime_manifest: null,
+        },
+      }),
+    ];
+
+    render(<QuickToolBar marketplaceNodes={packages} onSelectPackage={jest.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /add template only integration node/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/no runtime-ready tools yet/i)).toBeInTheDocument();
   });
 });

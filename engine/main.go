@@ -32,67 +32,106 @@ import (
 
 // Config holds engine configuration
 type Config struct {
-	GRPCPort             string
-	DatabaseURL          string
-	MaxWorkers           int
-	DefaultTimeout       int
-	CacheTTLSeconds      int
-	CheckpointMode       string
-	CheckpointBatchSize  int
-	CheckpointIntervalMs int
-	ToolManifestDir      string
-	RedisAddr            string
-	RedisPassword        string
-	RedisDB              int
-	RedisPoolSize        int
-	RedisDialTimeoutMs   int
-	RedisReadTimeoutMs   int
-	RedisWriteTimeoutMs  int
-	TenantID             string
-	MetricsPort          string
-	MemoryGRPCHost       string
-	MemoryGRPCPort       string
-	CallbackSecret       string
-	CallbackURL          string
-	ControlPlaneURL      string
-	EventMaxRetries      int
-	EventRetryDelayMs    int
-	EventBufferSize      int
-	EventSpoolPath       string
+	GRPCPort                          string
+	DatabaseURL                       string
+	MaxWorkers                        int
+	DefaultTimeout                    int
+	CacheTTLSeconds                   int
+	CheckpointMode                    string
+	CheckpointBatchSize               int
+	CheckpointIntervalMs              int
+	ToolManifestDir                   string
+	RedisAddr                         string
+	RedisPassword                     string
+	RedisDB                           int
+	RedisPoolSize                     int
+	RedisDialTimeoutMs                int
+	RedisReadTimeoutMs                int
+	RedisWriteTimeoutMs               int
+	TenantID                          string
+	MetricsPort                       string
+	MemoryGRPCHost                    string
+	MemoryGRPCPort                    string
+	CallbackSecret                    string
+	CallbackURL                       string
+	ControlPlaneURL                   string
+	EventMaxRetries                   int
+	EventRetryDelayMs                 int
+	EventBufferSize                   int
+	EventSpoolPath                    string
+	MarketplaceManifestRefreshSeconds int
+	RuntimeMode                       string
 }
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
 	cfg := &Config{
-		GRPCPort:             getEnv("GRPC_PORT", "50051"),
-		DatabaseURL:          getEnv("DATABASE_URL", ""),
-		MaxWorkers:           getEnvInt("MAX_WORKERS", 10),
-		DefaultTimeout:       getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
-		CacheTTLSeconds:      getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
-		CheckpointMode:       strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
-		CheckpointBatchSize:  getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
-		CheckpointIntervalMs: getEnvInt("CHECKPOINT_INTERVAL_MS", 0),
-		ToolManifestDir:      getEnv("TOOL_MANIFEST_DIR", ""),
-		RedisAddr:            getEnv("REDIS_ADDR", ""),
-		RedisPassword:        getEnv("REDIS_PASSWORD", ""),
-		RedisDB:              getEnvInt("REDIS_DB", 0),
-		RedisPoolSize:        getEnvInt("REDIS_POOL_SIZE", 0),
-		RedisDialTimeoutMs:   getEnvInt("REDIS_DIAL_TIMEOUT_MS", 0),
-		RedisReadTimeoutMs:   getEnvInt("REDIS_READ_TIMEOUT_MS", 0),
-		RedisWriteTimeoutMs:  getEnvInt("REDIS_WRITE_TIMEOUT_MS", 0),
-		TenantID:             getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000000"),
-		MetricsPort:          getEnv("METRICS_PORT", "9090"),
-		MemoryGRPCHost:       getEnv("MEMORY_GRPC_HOST", ""),
-		MemoryGRPCPort:       getEnv("MEMORY_GRPC_PORT", ""),
-		CallbackSecret:       getEnv("ENGINE_CALLBACK_SECRET", ""),
-		CallbackURL:          getEnv("ENGINE_CALLBACK_URL", ""),
-		ControlPlaneURL:      getEnv("CONTROL_PLANE_URL", ""),
-		EventMaxRetries:      getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
-		EventRetryDelayMs:    getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
-		EventBufferSize:      getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
-		EventSpoolPath:       getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
+		GRPCPort:                          getEnv("GRPC_PORT", "50051"),
+		DatabaseURL:                       getEnv("DATABASE_URL", ""),
+		MaxWorkers:                        getEnvInt("MAX_WORKERS", 10),
+		DefaultTimeout:                    getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
+		CacheTTLSeconds:                   getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
+		CheckpointMode:                    strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
+		CheckpointBatchSize:               getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
+		CheckpointIntervalMs:              getEnvInt("CHECKPOINT_INTERVAL_MS", 0),
+		ToolManifestDir:                   getEnv("TOOL_MANIFEST_DIR", ""),
+		RedisAddr:                         getEnv("REDIS_ADDR", ""),
+		RedisPassword:                     getEnv("REDIS_PASSWORD", ""),
+		RedisDB:                           getEnvInt("REDIS_DB", 0),
+		RedisPoolSize:                     getEnvInt("REDIS_POOL_SIZE", 0),
+		RedisDialTimeoutMs:                getEnvInt("REDIS_DIAL_TIMEOUT_MS", 0),
+		RedisReadTimeoutMs:                getEnvInt("REDIS_READ_TIMEOUT_MS", 0),
+		RedisWriteTimeoutMs:               getEnvInt("REDIS_WRITE_TIMEOUT_MS", 0),
+		TenantID:                          getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000000"),
+		MetricsPort:                       getEnv("METRICS_PORT", "9090"),
+		MemoryGRPCHost:                    getEnv("MEMORY_GRPC_HOST", ""),
+		MemoryGRPCPort:                    getEnv("MEMORY_GRPC_PORT", ""),
+		CallbackSecret:                    getEnv("ENGINE_CALLBACK_SECRET", ""),
+		CallbackURL:                       getEnv("ENGINE_CALLBACK_URL", ""),
+		ControlPlaneURL:                   getEnv("CONTROL_PLANE_URL", ""),
+		EventMaxRetries:                   getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
+		EventRetryDelayMs:                 getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
+		EventBufferSize:                   getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
+		EventSpoolPath:                    getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
+		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
+		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
 	}
 	return cfg
+}
+
+func refreshMarketplaceManifests(
+	ctx context.Context,
+	log *logger.Logger,
+	client *gateway.MarketplaceManifestClient,
+	registry *tool.Registry,
+	tenantID string,
+	previousChecksum string,
+) string {
+	if client == nil || registry == nil || tenantID == "" {
+		return previousChecksum
+	}
+
+	payload, unchanged, err := client.Fetch(ctx, tenantID, previousChecksum)
+	if err != nil {
+		log.Warn("marketplace_manifest_fetch_failed", "tenant_id", tenantID, "error", err.Error())
+		return previousChecksum
+	}
+	if unchanged || payload == nil {
+		return previousChecksum
+	}
+
+	if err := registry.LoadDefinitions(payload.Tools); err != nil {
+		log.Warn("marketplace_manifest_load_failed", "tenant_id", tenantID, "checksum", payload.Checksum, "error", err.Error())
+		return previousChecksum
+	}
+
+	log.Info(
+		"marketplace_manifest_loaded",
+		"tenant_id", tenantID,
+		"checksum", payload.Checksum,
+		"tool_count", len(payload.Tools),
+	)
+	return payload.Checksum
 }
 
 func getEnv(key, defaultVal string) string {
@@ -277,6 +316,8 @@ func main() {
 		"checkpoint_batch_size", cfg.CheckpointBatchSize,
 		"checkpoint_interval_ms", cfg.CheckpointIntervalMs,
 		"tool_manifest_dir", cfg.ToolManifestDir,
+		"marketplace_manifest_refresh_seconds", cfg.MarketplaceManifestRefreshSeconds,
+		"runtime_mode", cfg.RuntimeMode,
 	)
 
 	// Initialize repository and memory store
@@ -347,15 +388,46 @@ func main() {
 
 	// Initialize node executors
 	registry := port.NewExecutorRegistry()
-	toolRegistry := tool.NewRegistry()
+	toolRegistry := tool.NewRegistryWithRuntimeMode(cfg.RuntimeMode)
 	if err := toolRegistry.LoadManifests(cfg.ToolManifestDir); err != nil {
 		log.Warn("tool_manifest_load_failed", "error", err.Error())
 	}
+
+	var manifestClient *gateway.MarketplaceManifestClient
 
 	// Shared credential resolver for executors that support credential_id.
 	var resolver gateway.CredentialResolver
 	if cfg.ControlPlaneURL != "" && cfg.CallbackSecret != "" {
 		resolver = gateway.NewBackendCredentialResolver(cfg.ControlPlaneURL, cfg.CallbackSecret)
+		manifestClient = gateway.NewMarketplaceManifestClient(cfg.ControlPlaneURL, cfg.CallbackSecret)
+	}
+	lastManifestChecksum := ""
+	if manifestClient != nil && cfg.TenantID != "" {
+		lastManifestChecksum = refreshMarketplaceManifests(
+			context.Background(),
+			log.WithComponent("marketplace"),
+			manifestClient,
+			toolRegistry,
+			cfg.TenantID,
+			lastManifestChecksum,
+		)
+		if cfg.MarketplaceManifestRefreshSeconds > 0 {
+			go func() {
+				ticker := time.NewTicker(time.Duration(cfg.MarketplaceManifestRefreshSeconds) * time.Second)
+				defer ticker.Stop()
+				manifestLog := log.WithComponent("marketplace")
+				for range ticker.C {
+					lastManifestChecksum = refreshMarketplaceManifests(
+						context.Background(),
+						manifestLog,
+						manifestClient,
+						toolRegistry,
+						cfg.TenantID,
+						lastManifestChecksum,
+					)
+				}
+			}()
+		}
 	}
 
 	registry.RegisterAll(
@@ -366,21 +438,22 @@ func main() {
 		executor.NewMergeExecutor(),
 		executor.NewHumanGateExecutor(),
 		executor.NewMemoryExecutor(memoryStore),
-		executor.NewToolExecutor(toolRegistry),
+		executor.NewToolExecutorWithResolverAndRuntimeMode(toolRegistry, resolver, cfg.RuntimeMode),
 		executor.NewSubgraphExecutor(registry),
 	)
 
-	// Initialize LLM client for Prompt nodes (multi-provider)
+	// Initialize LLM client for Prompt and Agent nodes (multi-provider)
 	fallbackKey := os.Getenv("OPENAI_API_KEY")
 	llmClient := gateway.NewMultiProviderClient(resolver, fallbackKey)
+	registry.Register(executor.NewAgentExecutorWithRuntimeMode(llmClient, toolRegistry, resolver, cfg.RuntimeMode))
 	registry.Register(executor.NewPromptExecutor(llmClient))
 	if fallbackKey == "" && resolver == nil {
-		log.Warn("llm_client_not_configured", "note", "Prompt nodes require credentials or OPENAI_API_KEY")
+		log.Warn("llm_client_not_configured", "note", "Prompt and agent nodes require credentials or OPENAI_API_KEY")
 	} else {
-		log.Info("llm_client_initialized", "note", "Prompt nodes enabled")
+		log.Info("llm_client_initialized", "note", "Prompt and agent nodes enabled")
 	}
 
-	log.Info("executors_registered", "types", []string{"output", "transform", "http", "branch", "merge", "human_gate", "memory", "tool", "subgraph", "prompt"})
+	log.Info("executors_registered", "types", []string{"agent", "output", "transform", "http", "branch", "merge", "human_gate", "memory", "tool", "subgraph", "prompt"})
 
 	// Initialize scheduler
 	schedulerConfig := usecase.SchedulerConfig{

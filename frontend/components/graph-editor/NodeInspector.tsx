@@ -517,6 +517,13 @@ export function NodeInspector({
           />
         )}
 
+        {nodeType === NODE_TYPES.AGENT && (
+          <AgentNodeConfig
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+          />
+        )}
+
         {nodeType === NODE_TYPES.PROMPT && (
           <PromptNodeConfig
             config={(nodeData.config as Record<string, unknown>) ?? {}}
@@ -627,6 +634,165 @@ function NoteNodeConfig({
         />
       </div>
     </CollapsibleSection>
+  );
+}
+
+// Agent Node Config
+function AgentNodeConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+}) {
+  const tools = Array.isArray(config.tools) ? (config.tools as string[]) : [];
+  const approvalRequiredTools = Array.isArray(config.approval_required_tools)
+    ? (config.approval_required_tools as string[])
+    : [];
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        Agent Configuration
+      </h4>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Task Instructions
+        </label>
+        <Textarea
+          value={(config.instructions as string) ?? ""}
+          onChange={(e) => onChange({ ...config, instructions: e.target.value })}
+          placeholder="Resolve the user's request using the allowed tools, then return a final answer."
+          rows={4}
+          className="text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          System Prompt
+        </label>
+        <Textarea
+          value={(config.system_prompt as string) ?? ""}
+          onChange={(e) => onChange({ ...config, system_prompt: e.target.value })}
+          placeholder="You are a reliable ops assistant. Verify before acting."
+          rows={3}
+          className="text-sm"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Provider
+          </label>
+          <select
+            value={(config.provider as string) ?? "openai"}
+            onChange={(e) => onChange({ ...config, provider: e.target.value })}
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="google">Google AI</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Model
+          </label>
+          <Input
+            value={(config.model as string) ?? ""}
+            onChange={(e) => onChange({ ...config, model: e.target.value })}
+            placeholder="gpt-4.1-mini"
+            className="text-sm"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Max Steps
+          </label>
+          <Input
+            type="number"
+            min={1}
+            value={typeof config.max_steps === "number" ? config.max_steps : ""}
+            onChange={(e) =>
+              onChange({
+                ...config,
+                max_steps: e.target.value ? parseInt(e.target.value, 10) : undefined,
+              })
+            }
+            placeholder="6"
+            className="text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Max Tool Calls
+          </label>
+          <Input
+            type="number"
+            min={1}
+            value={typeof config.max_tool_calls === "number" ? config.max_tool_calls : ""}
+            onChange={(e) =>
+              onChange({
+                ...config,
+                max_tool_calls: e.target.value ? parseInt(e.target.value, 10) : undefined,
+              })
+            }
+            placeholder="4"
+            className="text-sm"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Allowed Tools
+        </label>
+        <Textarea
+          value={tools.join("\n")}
+          onChange={(e) =>
+            onChange({
+              ...config,
+              tools: e.target.value
+                .split(/[\n,]/)
+                .map((item) => item.trim())
+                .filter(Boolean),
+            })
+          }
+          placeholder={"crm.lookup\nslack.send_message"}
+          rows={4}
+          className="text-sm font-mono"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Approval-Required Tools
+        </label>
+        <Textarea
+          value={approvalRequiredTools.join("\n")}
+          onChange={(e) =>
+            onChange({
+              ...config,
+              approval_required_tools: e.target.value
+                .split(/[\n,]/)
+                .map((item) => item.trim())
+                .filter(Boolean),
+            })
+          }
+          placeholder="send_email"
+          rows={3}
+          className="text-sm font-mono"
+        />
+      </div>
+    </div>
   );
 }
 

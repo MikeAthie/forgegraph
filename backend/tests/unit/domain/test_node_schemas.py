@@ -96,6 +96,74 @@ class TestPromptNodeSchema:
         assert errors[0]["field"] == "temperature"
 
 
+class TestAgentNodeSchema:
+    """Tests for agent node config validation."""
+
+    def test_model_required(self):
+        """Agent node must specify a model."""
+        errors = validate_node_config("agent", {"tools": ["lookup_customer"]})
+        assert len(errors) == 1
+        assert errors[0]["field"] == "model"
+
+    def test_tools_required(self):
+        """Agent node must specify at least one tool."""
+        errors = validate_node_config("agent", {"model": "gpt-4.1-mini"})
+        assert len(errors) == 1
+        assert errors[0]["field"] == "tools"
+
+    def test_tools_cannot_be_empty(self):
+        """Agent node must include at least one configured tool."""
+        errors = validate_node_config("agent", {"model": "gpt-4.1-mini", "tools": []})
+        assert len(errors) == 1
+        assert errors[0]["field"] == "tools"
+
+    def test_approval_required_tools_must_be_subset(self):
+        """Approval-required tools must already be allow-listed."""
+        errors = validate_node_config(
+            "agent",
+            {
+                "model": "gpt-4.1-mini",
+                "tools": ["lookup_customer"],
+                "approval_required_tools": ["send_email"],
+            },
+        )
+        assert len(errors) == 1
+        assert errors[0]["field"] == "approval_required_tools"
+
+    def test_max_tool_calls_cannot_exceed_max_steps(self):
+        """Tool call budget must not exceed the step budget."""
+        errors = validate_node_config(
+            "agent",
+            {
+                "model": "gpt-4.1-mini",
+                "tools": ["lookup_customer"],
+                "max_steps": 2,
+                "max_tool_calls": 3,
+            },
+        )
+        assert len(errors) == 1
+        assert errors[0]["field"] == "max_tool_calls"
+
+    def test_valid_agent_config(self):
+        """A valid agent config should pass validation."""
+        errors = validate_node_config(
+            "agent",
+            {
+                "system_prompt": "Resolve the request with available tools.",
+                "provider": "openai",
+                "credential_id": "cred_123",
+                "model": "gpt-4.1-mini",
+                "tools": ["lookup_customer", "send_email"],
+                "max_steps": 6,
+                "max_tool_calls": 4,
+                "temperature": 0.2,
+                "approval_required_tools": ["send_email"],
+                "stop_condition": "final_answer",
+            },
+        )
+        assert len(errors) == 0
+
+
 class TestHttpNodeSchema:
     """Tests for HTTP node config validation."""
 

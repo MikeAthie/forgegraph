@@ -94,6 +94,7 @@ describe("template-quick-starts", () => {
         provider: "openai",
         name: "OpenAI Key",
         key_hint: "1234",
+        is_oauth_connection: false,
         token_expires_at: null,
         health_status: "healthy",
         requires_reauth: false,
@@ -117,5 +118,43 @@ describe("template-quick-starts", () => {
         expect.objectContaining({ provider: "gmail", connected: false }),
       ]),
     );
+  });
+
+  it("only marks OAuth providers connected when OAuth credential is healthy", () => {
+    const template = makeTemplate({
+      id: "life-manager",
+      name: "Personal Life Manager",
+      description: "Uses gmail and calendar context",
+    });
+    const credentials: Credential[] = [
+      {
+        id: "gmail-api-key",
+        provider: "gmail",
+        name: "Gmail API Key",
+        key_hint: "1234",
+        is_oauth_connection: false,
+        token_expires_at: null,
+        health_status: "healthy",
+        requires_reauth: false,
+        health_message: null,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: "gmail-oauth-expired",
+        provider: "gmail",
+        name: "Gmail OAuth Expired",
+        key_hint: "5678",
+        is_oauth_connection: true,
+        token_expires_at: new Date().toISOString(),
+        health_status: "expired",
+        requires_reauth: true,
+        health_message: "OAuth access token expired",
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    const preview = buildTemplatePreview(template, credentials);
+    const gmailStatus = preview.requiredCredentials.find((item) => item.provider === "gmail");
+    expect(gmailStatus?.connected).toBe(false);
   });
 });

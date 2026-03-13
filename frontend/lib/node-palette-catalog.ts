@@ -1,5 +1,10 @@
 import { PHASE2_NODE_TYPES, type NodeType } from "./graph-types";
 import type { MarketplacePackage } from "./api";
+import {
+  canAddMarketplacePackageToEditor,
+  getMarketplacePackageBadges,
+  getMarketplacePackageDescription,
+} from "./marketplace-runtime";
 
 export type PaletteCatalogItem =
   | {
@@ -53,6 +58,7 @@ export const CATEGORY_ORDER = [
 ] as const;
 
 const NODE_CATEGORIES: Record<NodeType | "note", string> = {
+  agent: "AI",
   prompt: "AI",
   http: "I/O",
   transform: "Logic",
@@ -67,6 +73,7 @@ const NODE_CATEGORIES: Record<NodeType | "note", string> = {
 };
 
 const NODE_TAGS: Record<NodeType | "note", string[]> = {
+  agent: ["agent", "tools", "reasoning", "loop", "llm"],
   prompt: ["llm", "model", "template", "gpt", "chat"],
   http: ["api", "webhook", "rest", "request", "integration"],
   transform: ["map", "filter", "json", "expression", "data"],
@@ -81,6 +88,7 @@ const NODE_TAGS: Record<NodeType | "note", string[]> = {
 };
 
 const NODE_BADGES: Record<NodeType | "note", string[]> = {
+  agent: ["Agent", "LLM", "Credential"],
   prompt: ["LLM", "Credential"],
   http: ["API", "Credential"],
   transform: ["Data"],
@@ -94,7 +102,7 @@ const NODE_BADGES: Record<NodeType | "note", string[]> = {
   note: ["Annotation"],
 };
 
-const RECOMMENDED_ITEM_IDS = ["prompt", "http", "transform", "branch", "output"];
+const RECOMMENDED_ITEM_IDS = ["agent", "prompt", "http", "transform", "output"];
 const RECENT_STORAGE_KEY = "forgegraph.node_palette.recent";
 
 function tokenize(value: string): string[] {
@@ -155,11 +163,11 @@ export function buildNodePaletteCatalog(marketplaceNodes: MarketplacePackage[] =
     id: `marketplace:${pkg.slug}`,
     type: `marketplace:${pkg.slug}`,
     label: String(pkg.latest_release?.ui_schema?.label || pkg.name),
-    description: pkg.summary || "Installed from marketplace",
-    enabled: Boolean(pkg.installed_release),
+    description: getMarketplacePackageDescription(pkg),
+    enabled: canAddMarketplacePackageToEditor(pkg),
     category: "Marketplace",
     tags: tokenize(`${pkg.slug} ${pkg.name} ${pkg.summary ?? ""}`),
-    badges: ["Marketplace", "Credential"],
+    badges: getMarketplacePackageBadges(pkg),
     requiresCredential: true,
     package: pkg,
   }));

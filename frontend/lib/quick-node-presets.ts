@@ -10,7 +10,13 @@ import { NODE_TYPES, type NodeType } from "./graph-types";
 /**
  * Categories for organizing presets
  */
-export type PresetCategory = "ai" | "communication" | "data" | "logic" | "utility" | "integrations";
+export type PresetCategory =
+  | "ai"
+  | "communication"
+  | "data"
+  | "logic"
+  | "utility"
+  | "integrations";
 
 /**
  * Quick Node Preset definition
@@ -114,7 +120,7 @@ export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
       role: "Intent Classifier",
       job_description: "Classify user messages into predefined categories",
       system_prompt:
-        'You are an intent classifier. Analyze the user message and respond with ONLY the category name.',
+        "You are an intent classifier. Analyze the user message and respond with ONLY the category name.",
       prompt_template:
         'Classify the following message into one of these categories: [question, request, complaint, feedback, other]\n\nMessage: "{{input.message}}"\n\nCategory:',
       model: "gpt-4",
@@ -309,7 +315,7 @@ return {
     nodeType: NODE_TYPES.MEMORY,
     defaultConfig: {
       memory_type: "conversation",
-      memory_key: "stored_data",
+      key: "stored_data",
     },
     tags: ["memory", "store", "save"],
   },
@@ -322,7 +328,7 @@ return {
     nodeType: NODE_TYPES.MEMORY,
     defaultConfig: {
       memory_type: "conversation",
-      memory_key: "stored_data",
+      key: "stored_data",
     },
     tags: ["memory", "recall", "get"],
   },
@@ -362,13 +368,14 @@ return {
           text: "{{input.message}}",
         },
         null,
-        2
+        2,
       ),
       output_key: "telegram_response",
     },
     tags: ["telegram", "messaging", "bot", "chat"],
     requiredCredentialProvider: "telegram",
-    setupHint: "Connect a Telegram bot token from @BotFather, then set chat_id + text payload fields.",
+    setupHint:
+      "Connect a Telegram bot token from @BotFather, then set chat_id + text payload fields.",
     validationBadge: "Credential required",
   },
   {
@@ -390,7 +397,8 @@ return {
     },
     tags: ["whatsapp", "twilio", "messaging", "chatbot"],
     requiredCredentialProvider: "twilio",
-    setupHint: "Provide Twilio credential and Account SID, then map To/From/Body placeholders.",
+    setupHint:
+      "Provide Twilio credential and Account SID, then map To/From/Body placeholders.",
     validationBadge: "Credential required",
   },
   {
@@ -409,7 +417,8 @@ return {
     },
     tags: ["gmail", "email", "inbox", "unread"],
     requiredCredentialProvider: "gmail",
-    setupHint: "Use Gmail OAuth credential with readonly scope and adjust query/maxResults as needed.",
+    setupHint:
+      "Use Gmail OAuth credential with readonly scope and adjust query/maxResults as needed.",
     validationBadge: "OAuth required",
   },
   {
@@ -431,13 +440,14 @@ return {
           raw: "{{input.raw_message_base64url}}",
         },
         null,
-        2
+        2,
       ),
       output_key: "gmail_send_response",
     },
     tags: ["gmail", "email", "send", "reply"],
     requiredCredentialProvider: "gmail",
-    setupHint: "Use Gmail OAuth credential and provide RFC2822 message encoded as base64url raw payload.",
+    setupHint:
+      "Use Gmail OAuth credential and provide RFC2822 message encoded as base64url raw payload.",
     validationBadge: "OAuth required",
   },
   {
@@ -456,7 +466,8 @@ return {
     },
     tags: ["google", "calendar", "events", "schedule"],
     requiredCredentialProvider: "google_calendar",
-    setupHint: "Set ISO8601 time_min/time_max input values and connect Google Calendar OAuth credential.",
+    setupHint:
+      "Set ISO8601 time_min/time_max input values and connect Google Calendar OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -478,7 +489,8 @@ return {
     },
     tags: ["google", "calendar", "create", "event"],
     requiredCredentialProvider: "google_calendar",
-    setupHint: "Pass event_json with summary/start/end fields and a Google Calendar OAuth credential.",
+    setupHint:
+      "Pass event_json with summary/start/end fields and a Google Calendar OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -497,7 +509,8 @@ return {
     },
     tags: ["google", "tasks", "todo", "list"],
     requiredCredentialProvider: "google_tasks",
-    setupHint: "Provide task_list_id input and connect Google Tasks OAuth credential.",
+    setupHint:
+      "Provide task_list_id input and connect Google Tasks OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -519,7 +532,8 @@ return {
     },
     tags: ["google", "tasks", "create", "todo"],
     requiredCredentialProvider: "google_tasks",
-    setupHint: "Provide task_list_id + task_json and connect Google Tasks OAuth credential.",
+    setupHint:
+      "Provide task_list_id + task_json and connect Google Tasks OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -541,12 +555,13 @@ return {
           payload: "{{input.payload}}",
         },
         null,
-        2
+        2,
       ),
       output_key: "webhook_response",
     },
     tags: ["webhook", "http", "integration", "fallback"],
-    setupHint: "Use this fallback when no native connector exists and validate endpoint/auth with Run test.",
+    setupHint:
+      "Use this fallback when no native connector exists and validate endpoint/auth with Run test.",
     validationBadge: "Run test recommended",
   },
   {
@@ -574,7 +589,7 @@ return {
           },
         },
         null,
-        2
+        2,
       ),
       output_key: "notion_response",
     },
@@ -599,7 +614,7 @@ return {
           channel: "{{input.channel}}",
         },
         null,
-        2
+        2,
       ),
       output_key: "slack_response",
     },
@@ -624,7 +639,7 @@ return {
           username: "{{input.username}}",
         },
         null,
-        2
+        2,
       ),
       output_key: "discord_response",
     },
@@ -653,7 +668,7 @@ return {
           ],
         },
         null,
-        2
+        2,
       ),
       output_key: "openai_response",
     },
@@ -681,7 +696,7 @@ return {
           labels: ["{{input.labels}}"],
         },
         null,
-        2
+        2,
       ),
       output_key: "github_response",
     },
@@ -706,7 +721,7 @@ return {
           values: [["{{input.col1}}", "{{input.col2}}", "{{input.col3}}"]],
         },
         null,
-        2
+        2,
       ),
       output_key: "sheets_response",
     },
@@ -718,7 +733,7 @@ return {
  * Get presets by category
  */
 export function getPresetsByCategory(
-  category: PresetCategory
+  category: PresetCategory,
 ): QuickNodePreset[] {
   return QUICK_NODE_PRESETS.filter((preset) => preset.category === category);
 }
@@ -739,7 +754,7 @@ export function searchPresets(query: string): QuickNodePreset[] {
     (preset) =>
       preset.name.toLowerCase().includes(lowerQuery) ||
       preset.description.toLowerCase().includes(lowerQuery) ||
-      preset.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
+      preset.tags.some((tag) => tag.toLowerCase().includes(lowerQuery)),
   );
 }
 
@@ -766,5 +781,7 @@ export function getPopularPresets(limit = 6): QuickNodePreset[] {
  * Get integration presets for quick tool bar
  */
 export function getIntegrationPresets(): QuickNodePreset[] {
-  return QUICK_NODE_PRESETS.filter((preset) => preset.category === "integrations");
+  return QUICK_NODE_PRESETS.filter(
+    (preset) => preset.category === "integrations",
+  );
 }

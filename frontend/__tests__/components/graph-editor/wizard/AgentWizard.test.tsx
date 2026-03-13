@@ -1,21 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AgentWizard } from "@/components/graph-editor/wizard/AgentWizard";
-import { ValidationErrorCode } from "@/lib/graph-validator";
+import { NODE_TYPES } from "@/lib/graph-types";
 
 const mockUseWizard = jest.fn();
-const mockUseValidation = jest.fn();
 
 jest.mock("@/contexts/WizardContext", () => ({
   useWizard: () => mockUseWizard(),
-}));
-
-jest.mock("@/contexts/ValidationContext", () => ({
-  useValidation: () => mockUseValidation(),
-}));
-
-jest.mock("@/components/graph-editor/QuickNodePalette", () => ({
-  QuickNodePalette: () => <div data-testid="quick-node-palette" />,
 }));
 
 type WizardStepConfig = {
@@ -82,66 +73,31 @@ function configureWizardMock(overrides?: {
   return { markStepComplete, goToStep, exitWizard, setCanProceed, setStepData };
 }
 
-function configureValidationMock(overrides?: {
-  isValid?: boolean;
-  hasStartNode?: boolean;
-  hasOutputNode?: boolean;
-  errors?: Array<{ code: ValidationErrorCode; message: string; suggestion?: string }>;
-}) {
-  mockUseValidation.mockReturnValue({
-    isValid: overrides?.isValid ?? true,
-    hasStartNode: overrides?.hasStartNode ?? true,
-    hasOutputNode: overrides?.hasOutputNode ?? true,
-    hasEndNode: true,
-    errors: overrides?.errors ?? [],
-    warnings: [],
-    result: null,
-    validate: jest.fn(),
-    clearValidation: jest.fn(),
-    isStatusBarExpanded: false,
-    setStatusBarExpanded: jest.fn(),
-    focusedErrorId: null,
-    setFocusedErrorId: jest.fn(),
-  });
-}
-
 describe("AgentWizard", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it("applies starter presets from the start step", async () => {
-    configureWizardMock({ currentStep: 0, canProceed: false });
-    configureValidationMock({ hasStartNode: false, hasOutputNode: false, isValid: false });
-    const onApplyPreset = jest.fn();
+  it("applies starter presets into wizard step data", async () => {
     const user = userEvent.setup();
-
-    render(<AgentWizard onApplyPreset={onApplyPreset} />);
-
-    await user.click(screen.getByRole("button", { name: /telegram bot/i }));
-    expect(onApplyPreset).toHaveBeenCalledWith(expect.objectContaining({ id: "telegram-bot" }));
-  });
-
-  it("shows preflight fix actions and jumps to target steps", async () => {
-    const { goToStep } = configureWizardMock({ currentStep: 5, canProceed: false, isLastStep: true });
-    configureValidationMock({
-      isValid: false,
-      hasStartNode: true,
-      hasOutputNode: false,
-      errors: [
-        {
-          code: ValidationErrorCode.NO_OUTPUT_NODE,
-          message: "Graph needs an output node",
-          suggestion: "Add an Output node to define the workflow result",
-        },
-      ],
-    });
-    const user = userEvent.setup();
+    const { setStepData } = configureWizardMock({ currentStep: 0, canProceed: false });
 
     render(<AgentWizard />);
 
-    await user.click(screen.getByRole("button", { name: /fix in add output node/i }));
-    expect(goToStep).toHaveBeenCalledWith(4);
+    await user.click(screen.getByRole("button", { name: /telegram bot/i }));
+    expect(setStepData).toHaveBeenCalledWith(
+      "role",
+      expect.objectContaining({
+        agentLabel: "Telegram Support Agent",
+        model: "gpt-4.1-mini",
+      }),
+    );
+    expect(setStepData).toHaveBeenCalledWith(
+      "tools",
+      expect.objectContaining({
+        tools: ["telegram.send_message"],
+      }),
+    );
   });
 
   it("supports create-and-run-test completion from the review step", async () => {
@@ -149,8 +105,22 @@ describe("AgentWizard", () => {
       currentStep: 5,
       canProceed: true,
       isLastStep: true,
+      stepData: {
+        role: {
+          agentLabel: "Inbox Agent",
+          instructions: "Read unread email and send a reply when appropriate.",
+          model: "gpt-4.1-mini",
+          provider: "openai",
+          temperature: 0.3,
+        },
+        tools: {
+          tools: ["gmail.list_unread", "gmail.send_message"],
+          approvalRequiredTools: ["gmail.send_message"],
+        },
+        memory: { type: "none" },
+        output: { outputKey: "email_result" },
+      },
     });
-    configureValidationMock({ isValid: true, hasStartNode: true, hasOutputNode: true });
     const onComplete = jest.fn();
     const user = userEvent.setup();
 
@@ -159,7 +129,17 @@ describe("AgentWizard", () => {
     await user.click(screen.getByRole("button", { name: /create & run test/i }));
 
     expect(markStepComplete).toHaveBeenCalled();
-    expect(onComplete).toHaveBeenCalledWith({ runTest: true });
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runTest: true,
+        blueprint: expect.objectContaining({
+          nodes: expect.arrayContaining([
+            expect.objectContaining({ nodeType: NODE_TYPES.AGENT }),
+            expect.objectContaining({ nodeType: NODE_TYPES.OUTPUT }),
+          ]),
+        }),
+      }),
+    );
     expect(exitWizard).toHaveBeenCalled();
   });
 });

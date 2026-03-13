@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/router";
-import { Plus, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleAlert, Copy, ExternalLink, Plus, RefreshCw } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
@@ -21,6 +21,7 @@ import {
   Badge,
   Button,
   Card,
+  CardDescription,
   CardContent,
   CardHeader,
   CardTitle,
@@ -34,14 +35,26 @@ import {
   EmptyState,
   FormField,
   Input,
+  Separator,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
   Spinner,
-  Switch,
 } from "@/components/ui";
+
+const OAUTH_PROVIDERS: OAuthIntegrationProvider[] = [
+  "gmail",
+  "google_calendar",
+  "google_tasks",
+  "notion",
+  "slack",
+  "jira",
+  "linear",
+  "hubspot",
+  "google_drive",
+];
 
 const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] = [
   { value: "openai", label: "OpenAI" },
@@ -60,26 +73,75 @@ const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] =
   { value: "twilio", label: "Twilio" },
 ];
 
-const OAUTH_PROVIDERS: OAuthIntegrationProvider[] = [
-  "gmail",
-  "google_calendar",
-  "google_tasks",
-  "notion",
-  "slack",
-  "jira",
-  "linear",
-  "hubspot",
-  "google_drive",
-];
+const OAUTH_PROVIDER_SET = new Set<string>(OAUTH_PROVIDERS);
+const MANUAL_PROVIDERS = PROVIDERS.filter((provider) => !OAUTH_PROVIDER_SET.has(provider.value));
 
-type OAuthProviderConfigForm = {
-  client_id: string;
-  client_secret: string;
-  authorize_url: string;
-  token_url: string;
-  redirect_uri: string;
-  scopes: string;
-  enabled: boolean;
+type OAuthConnectionState = "ready" | "needs_reconnect" | "not_connected";
+
+const buildFallbackRedirectUri = () => {
+  const browserOrigin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const configuredBase = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const base = browserOrigin || configuredBase || "http://localhost:3000";
+  return `${base}/oauth/callback`;
+};
+
+const OAUTH_PROVIDER_GUIDANCE: Record<
+  OAuthIntegrationProvider,
+  { scopeHint: string; docsUrl: string }
+> = {
+  gmail: {
+    scopeHint: "Use Gmail send + readonly scopes for most templates.",
+    docsUrl: "https://developers.google.com/identity/protocols/oauth2",
+  },
+  google_calendar: {
+    scopeHint: "Use Calendar events + readonly scopes.",
+    docsUrl: "https://developers.google.com/identity/protocols/oauth2",
+  },
+  google_tasks: {
+    scopeHint: "Use Tasks + Tasks readonly scopes.",
+    docsUrl: "https://developers.google.com/identity/protocols/oauth2",
+  },
+  notion: {
+    scopeHint: "Use the scopes required by your Notion workspace actions.",
+    docsUrl: "https://developers.notion.com/docs/authorization",
+  },
+  slack: {
+    scopeHint: "chat:write and channels:read are common defaults.",
+    docsUrl: "https://api.slack.com/authentication/oauth-v2",
+  },
+  jira: {
+    scopeHint: "Include read/write Jira scopes and offline_access if needed.",
+    docsUrl: "https://developer.atlassian.com/cloud/jira/software/oauth-2-3lo-apps/",
+  },
+  linear: {
+    scopeHint: "Use read/write scopes depending on the workflow actions.",
+    docsUrl: "https://developers.linear.app/docs/oauth-authentication",
+  },
+  hubspot: {
+    scopeHint: "Add contact read/write scopes for CRM flows.",
+    docsUrl:
+      "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/authentication/oauth",
+  },
+  google_drive: {
+    scopeHint: "Use Drive file + metadata scopes.",
+    docsUrl: "https://developers.google.com/identity/protocols/oauth2",
+  },
+};
+
+const formatOAuthServiceMessage = (status: CredentialOAuthProviderStatus) => {
+  const missingFields = status.missing_config_fields ?? [];
+
+  if (missingFields.includes("provider_disabled")) {
+    return "OAuth for this provider is disabled at the service level.";
+  }
+  if (missingFields.includes("provider_configuration")) {
+    return "Service OAuth configuration is missing. Ask an admin to set provider env variables.";
+  }
+  if (missingFields.length > 0) {
+    return `Service OAuth setup is incomplete (${missingFields.join(", ")}).`;
+  }
+  return "Service OAuth configuration is ready.";
 };
 
 const formatDateTime = (isoString: string) => {
@@ -95,7 +157,7 @@ const getProviderLabel = (provider: string) => {
 };
 
 const isOAuthProvider = (provider: string): provider is OAuthIntegrationProvider => {
-  return OAUTH_PROVIDERS.includes(provider as OAuthIntegrationProvider);
+  return OAUTH_PROVIDER_SET.has(provider);
 };
 
 export default function CredentialsPage() {
@@ -112,19 +174,7 @@ export default function CredentialsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthStartingProvider, setOauthStartingProvider] = useState<OAuthIntegrationProvider | null>(null);
-  const [oauthConfigProvider, setOauthConfigProvider] = useState<OAuthIntegrationProvider | null>(null);
-  const [oauthConfigOpen, setOauthConfigOpen] = useState(false);
-  const [oauthConfigSaving, setOauthConfigSaving] = useState(false);
   const [providerPrefillApplied, setProviderPrefillApplied] = useState(false);
-  const [oauthConfigForm, setOauthConfigForm] = useState<OAuthProviderConfigForm>({
-    client_id: "",
-    client_secret: "",
-    authorize_url: "",
-    token_url: "",
-    redirect_uri: "",
-    scopes: "",
-    enabled: true,
-  });
 
   const [formState, setFormState] = useState<CredentialCreateInput>({
     provider: "openai",
@@ -184,17 +234,7 @@ export default function CredentialsPage() {
 
     setProviderPrefillApplied(true);
     if (isOAuthProvider(normalizedProvider)) {
-      setOauthConfigProvider(normalizedProvider);
-      setOauthConfigForm({
-        client_id: "",
-        client_secret: "",
-        authorize_url: "",
-        token_url: "",
-        redirect_uri: "",
-        scopes: "",
-        enabled: true,
-      });
-      setOauthConfigOpen(true);
+      showSuccess(`Select ${providerOption.label} and click Connect account in OAuth integrations.`);
       return;
     }
 
@@ -279,49 +319,19 @@ export default function CredentialsPage() {
     return map;
   }, [oauthProviders]);
 
-  const openOAuthConfig = useCallback(
-    (provider: OAuthIntegrationProvider) => {
-      const status = oauthProvidersByName.get(provider);
-      setOauthConfigProvider(provider);
-      setOauthConfigForm({
-        client_id: status?.client_id ?? "",
-        client_secret: "",
-        authorize_url: status?.authorize_url ?? "",
-        token_url: status?.token_url ?? "",
-        redirect_uri: status?.redirect_uri ?? "",
-        scopes: (status?.scopes ?? []).join(" "),
-        enabled: status?.enabled ?? true,
-      });
-      setOauthConfigOpen(true);
-    },
-    [oauthProvidersByName],
-  );
-
-  const handleSaveOAuthConfig = useCallback(async () => {
-    if (!oauthConfigProvider) return;
-    setOauthConfigSaving(true);
-    try {
-      await credentialsApi.upsertOAuthProviderConfig(oauthConfigProvider, {
-        client_id: oauthConfigForm.client_id.trim(),
-        client_secret: oauthConfigForm.client_secret.trim() || undefined,
-        authorize_url: oauthConfigForm.authorize_url.trim(),
-        token_url: oauthConfigForm.token_url.trim(),
-        redirect_uri: oauthConfigForm.redirect_uri.trim(),
-        scopes: oauthConfigForm.scopes
-          .split(/\s+/)
-          .map((item) => item.trim())
-          .filter(Boolean),
-        enabled: oauthConfigForm.enabled,
-      });
-      showSuccess(`${getProviderLabel(oauthConfigProvider)} OAuth config saved.`);
-      setOauthConfigOpen(false);
-      await fetchCredentials({ silent: true });
-    } catch (err: unknown) {
-      showError(getApiErrorMessage(err, "Failed to save OAuth provider config."));
-    } finally {
-      setOauthConfigSaving(false);
+  const handleCopyText = useCallback(async (label: string, value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      showError(`${label} is empty.`);
+      return;
     }
-  }, [fetchCredentials, oauthConfigForm, oauthConfigProvider]);
+    try {
+      await navigator.clipboard.writeText(trimmed);
+      showSuccess(`${label} copied.`);
+    } catch {
+      showError(`Could not copy ${label.toLowerCase()}.`);
+    }
+  }, []);
 
   const providerSummary = useMemo(() => {
     const counts = credentials.reduce<Record<string, number>>((acc, item) => {
@@ -333,6 +343,60 @@ export default function CredentialsPage() {
       count,
     }));
   }, [credentials]);
+
+  const latestOauthCredentialByProvider = useMemo(() => {
+    const map = new Map<OAuthIntegrationProvider, Credential>();
+    for (const provider of OAUTH_PROVIDERS) {
+      const latest = credentials
+        .filter(
+          (credential) =>
+            credential.provider === provider && credential.is_oauth_connection,
+        )
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      if (latest) {
+        map.set(provider, latest);
+      }
+    }
+    return map;
+  }, [credentials]);
+
+  const oauthConnectionStateByProvider = useMemo(() => {
+    const map = new Map<OAuthIntegrationProvider, OAuthConnectionState>();
+    for (const provider of OAUTH_PROVIDERS) {
+      const latest = latestOauthCredentialByProvider.get(provider);
+      if (!latest) {
+        map.set(provider, "not_connected");
+        continue;
+      }
+
+      const needsReconnect =
+        latest.health_status === "revoked" || latest.health_status === "expired";
+      map.set(provider, needsReconnect ? "needs_reconnect" : "ready");
+    }
+    return map;
+  }, [latestOauthCredentialByProvider]);
+
+  const oauthChecklist = useMemo(() => {
+    const total = OAUTH_PROVIDERS.length;
+    const serviceConfiguredCount = OAUTH_PROVIDERS.filter(
+      (provider) => oauthProvidersByName.get(provider)?.configured,
+    ).length;
+    const connectedCount = OAUTH_PROVIDERS.filter(
+      (provider) => oauthConnectionStateByProvider.get(provider) === "ready",
+    ).length;
+    const fallbackRedirectUri = buildFallbackRedirectUri();
+    const configuredRedirectUri =
+      OAUTH_PROVIDERS.map((provider) => oauthProvidersByName.get(provider)?.redirect_uri)
+        .find((value): value is string => Boolean(value)) ?? fallbackRedirectUri;
+
+    return {
+      total,
+      serviceConfiguredCount,
+      connectedCount,
+      remainingConnections: total - connectedCount,
+      redirectUri: configuredRedirectUri,
+    };
+  }, [oauthConnectionStateByProvider, oauthProvidersByName]);
 
   return (
     <ProtectedRoute>
@@ -360,7 +424,7 @@ export default function CredentialsPage() {
                     <DialogHeader>
                       <DialogTitle>Add provider credential</DialogTitle>
                       <DialogDescription>
-                        Store a provider API key for use in prompt nodes. The key is encrypted at rest.
+                        Store API keys for non-OAuth providers used in prompt nodes. OAuth providers connect below.
                       </DialogDescription>
                     </DialogHeader>
 
@@ -378,7 +442,7 @@ export default function CredentialsPage() {
                           <SelectValue placeholder="Select provider" />
                         </SelectTrigger>
                         <SelectContent>
-                          {PROVIDERS.map((provider) => (
+                          {MANUAL_PROVIDERS.map((provider) => (
                             <SelectItem key={provider.value} value={provider.value}>
                               {provider.label}
                             </SelectItem>
@@ -438,48 +502,116 @@ export default function CredentialsPage() {
           )}
 
           <Card>
-          <CardHeader>
-            <CardTitle>OAuth wizard integrations</CardTitle>
-            <p className="text-sm text-muted-foreground">
-                Connect Gmail, Google Calendar, Google Tasks, Notion, Slack, Jira, Linear, HubSpot,
-                and Google Drive via OAuth. Use API key credentials for Telegram and Twilio.
-              </p>
-          </CardHeader>
-            <CardContent className="space-y-3">
+            <CardHeader>
+              <CardTitle>OAuth integrations</CardTitle>
+              <CardDescription>
+                OAuth apps are configured at service level via environment variables. From this page, you only connect
+                and reconnect accounts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="rounded-xl border border-border bg-muted/30 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Connection checklist</p>
+                    <p className="text-xs text-muted-foreground">
+                      Connected {oauthChecklist.connectedCount} of {oauthChecklist.total} providers.
+                    </p>
+                  </div>
+                  <Badge variant={oauthChecklist.remainingConnections === 0 ? "default" : "outline"}>
+                    {oauthChecklist.remainingConnections === 0
+                      ? "All connected"
+                      : `${oauthChecklist.remainingConnections} remaining`}
+                  </Badge>
+                </div>
+                <Separator className="my-3" />
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <p>1. Service OAuth config ready: {oauthChecklist.serviceConfiguredCount} / {oauthChecklist.total}.</p>
+                  <p>2. Connect account for each provider you plan to use in your graph.</p>
+                  <p>
+                    Redirect URI configured in service:
+                    <span className="mx-1 font-mono text-foreground">{oauthChecklist.redirectUri}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => void handleCopyText("Redirect URI", oauthChecklist.redirectUri)}
+                    >
+                      <Copy className="mr-1 h-3.5 w-3.5" />
+                      Copy
+                    </Button>
+                  </p>
+                </div>
+              </div>
+
               {OAUTH_PROVIDERS.map((provider) => {
                 const status = oauthProvidersByName.get(provider);
                 const label = getProviderLabel(provider);
-                const configured = Boolean(status?.configured);
+                const serviceConfigured = Boolean(status?.configured);
+                const connectionState = oauthConnectionStateByProvider.get(provider) ?? "not_connected";
+                const guidance = OAUTH_PROVIDER_GUIDANCE[provider];
+                const connectButtonLabel =
+                  connectionState === "needs_reconnect" ? "Reconnect account" : "Connect account";
+
                 return (
                   <div key={provider} className="rounded-lg border border-border p-3">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">{label}</p>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{label}</p>
+                          {connectionState === "ready" ? (
+                            <Badge variant="outline" className="gap-1 text-emerald-600">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Ready
+                            </Badge>
+                          ) : connectionState === "needs_reconnect" ? (
+                            <Badge variant="outline" className="gap-1 text-amber-600">
+                              <CircleAlert className="h-3.5 w-3.5" />
+                              Reconnect needed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="gap-1 text-amber-600">
+                              <CircleAlert className="h-3.5 w-3.5" />
+                              Not connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {guidance.scopeHint}{" "}
+                          <a
+                            href={guidance.docsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                          >
+                            OAuth docs
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </p>
                         {!status ? (
                           <p className="text-xs text-muted-foreground">Provider status unavailable.</p>
-                        ) : configured ? (
+                        ) : !serviceConfigured ? (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">{formatOAuthServiceMessage(status)}</p>
+                        ) : connectionState === "ready" ? (
                           <p className="text-xs text-muted-foreground">
-                            Configured. Redirect URI: {status.redirect_uri ?? "not set"}
+                            Account connected. Click Connect account again to rotate or reconnect.
+                          </p>
+                        ) : connectionState === "needs_reconnect" ? (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            OAuth credential exists but requires reconnection.
                           </p>
                         ) : (
-                          <p className="text-xs text-destructive">
-                            Missing config fields: {status.missing_config_fields.join(", ")}
-                          </p>
+                          <p className="text-xs text-muted-foreground">Service ready. Connect an account to use this provider.</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openOAuthConfig(provider)}
-                          disabled={!canManageCredentials}
-                        >
-                          Configure
-                        </Button>
+                      <div className="flex flex-col items-end gap-2">
                         <Button
                           size="sm"
                           onClick={() => void handleStartOAuth(provider)}
-                          disabled={oauthStartingProvider === provider || !configured || !canManageCredentials}
+                          disabled={
+                            oauthStartingProvider === provider || !serviceConfigured || !canManageCredentials
+                          }
                         >
                           {oauthStartingProvider === provider ? (
                             <>
@@ -487,7 +619,7 @@ export default function CredentialsPage() {
                               Connecting...
                             </>
                           ) : (
-                            "Connect"
+                            connectButtonLabel
                           )}
                         </Button>
                       </div>
@@ -497,110 +629,6 @@ export default function CredentialsPage() {
               })}
             </CardContent>
           </Card>
-
-          <Dialog open={oauthConfigOpen} onOpenChange={setOauthConfigOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  Configure {oauthConfigProvider ? getProviderLabel(oauthConfigProvider) : "OAuth"} provider
-                </DialogTitle>
-                <DialogDescription>
-                  Store your OAuth app credentials for this organization. Client secret is encrypted at rest.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <FormField label="Client ID" htmlFor="oauth-client-id">
-                  <Input
-                    id="oauth-client-id"
-                    value={oauthConfigForm.client_id}
-                    onChange={(event) =>
-                      setOauthConfigForm((prev) => ({ ...prev, client_id: event.target.value }))
-                    }
-                    placeholder="client-id"
-                  />
-                </FormField>
-                <FormField
-                  label="Client secret"
-                  htmlFor="oauth-client-secret"
-                  description="Leave empty to keep existing secret."
-                >
-                  <Input
-                    id="oauth-client-secret"
-                    type="password"
-                    value={oauthConfigForm.client_secret}
-                    onChange={(event) =>
-                      setOauthConfigForm((prev) => ({ ...prev, client_secret: event.target.value }))
-                    }
-                    placeholder="client-secret"
-                  />
-                </FormField>
-                <FormField label="Authorize URL" htmlFor="oauth-authorize-url">
-                  <Input
-                    id="oauth-authorize-url"
-                    value={oauthConfigForm.authorize_url}
-                    onChange={(event) =>
-                      setOauthConfigForm((prev) => ({ ...prev, authorize_url: event.target.value }))
-                    }
-                    placeholder="https://provider.example.com/oauth/authorize"
-                  />
-                </FormField>
-                <FormField label="Token URL" htmlFor="oauth-token-url">
-                  <Input
-                    id="oauth-token-url"
-                    value={oauthConfigForm.token_url}
-                    onChange={(event) =>
-                      setOauthConfigForm((prev) => ({ ...prev, token_url: event.target.value }))
-                    }
-                    placeholder="https://provider.example.com/oauth/token"
-                  />
-                </FormField>
-                <FormField label="Redirect URI" htmlFor="oauth-redirect-uri">
-                  <Input
-                    id="oauth-redirect-uri"
-                    value={oauthConfigForm.redirect_uri}
-                    onChange={(event) =>
-                      setOauthConfigForm((prev) => ({ ...prev, redirect_uri: event.target.value }))
-                    }
-                    placeholder="https://app.example.com/oauth/callback"
-                  />
-                </FormField>
-                <FormField label="Scopes" htmlFor="oauth-scopes" description="Space-separated scopes">
-                  <Input
-                    id="oauth-scopes"
-                    value={oauthConfigForm.scopes}
-                    onChange={(event) =>
-                      setOauthConfigForm((prev) => ({ ...prev, scopes: event.target.value }))
-                    }
-                    placeholder="scope1 scope2"
-                  />
-                </FormField>
-                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                  <p className="text-sm text-muted-foreground">Provider enabled</p>
-                  <Switch
-                    checked={oauthConfigForm.enabled}
-                    onCheckedChange={(checked) =>
-                      setOauthConfigForm((prev) => ({ ...prev, enabled: Boolean(checked) }))
-                    }
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOauthConfigOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => void handleSaveOAuthConfig()} disabled={oauthConfigSaving}>
-                  {oauthConfigSaving ? (
-                    <>
-                      <Spinner className="mr-2 h-4 w-4" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save config"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
           {error && (
             <Alert variant="destructive">
@@ -639,6 +667,10 @@ export default function CredentialsPage() {
                 const oauthProvider = isOAuthProvider(credential.provider)
                   ? credential.provider
                   : null;
+                const isOAuthCredential = credential.is_oauth_connection;
+                const isActiveOAuthCredential =
+                  oauthProvider !== null &&
+                  latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
                 return (
                 <Card key={credential.id}>
                   <CardHeader className="flex flex-row items-start justify-between">
@@ -661,6 +693,17 @@ export default function CredentialsPage() {
                     )}
                   </CardHeader>
                   <CardContent className="space-y-2">
+                    {oauthProvider && !isOAuthCredential && (
+                      <Badge variant="outline">API key only (not OAuth)</Badge>
+                    )}
+                    {oauthProvider && isOAuthCredential && isActiveOAuthCredential && (
+                      <Badge variant="outline" className="text-emerald-600">
+                        Active OAuth credential
+                      </Badge>
+                    )}
+                    {oauthProvider && isOAuthCredential && !isActiveOAuthCredential && (
+                      <Badge variant="outline">Older OAuth credential</Badge>
+                    )}
                     {credential.health_status !== "healthy" && (
                       <Badge variant="outline">
                         {credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}
@@ -671,7 +714,8 @@ export default function CredentialsPage() {
                     )}
                     {credential.requires_reauth &&
                       canManageCredentials &&
-                      oauthProvider && (
+                      oauthProvider &&
+                      isOAuthCredential && (
                         <Button
                           size="sm"
                           variant="outline"

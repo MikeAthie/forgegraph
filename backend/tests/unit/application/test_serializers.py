@@ -10,6 +10,7 @@ import pytest
 
 from adapters.api.auth.serializers import LoginSerializer, RegisterSerializer
 from adapters.api.graphs.serializers import (
+    ExternalWorkflowCreateSerializer,
     GraphCreateSerializer,
     GraphUpdateSerializer,
     GraphVersionCreateSerializer,
@@ -19,6 +20,7 @@ from adapters.api.prompts.serializers import (
     PromptPublishSerializer,
     PromptUpdateSerializer,
 )
+from adapters.api.runs.serializers import EngineExecutionEventSerializer, RunEventSerializer
 
 pytestmark = pytest.mark.django_db
 
@@ -263,6 +265,168 @@ class TestGraphVersionCreateSerializer:
         serializer = GraphVersionCreateSerializer(data=data)
 
         assert serializer.is_valid()
+
+    def test_graph_json_accepts_optional_contract_fields(self):
+        """P0 graph contract fields should remain accepted by the serializer."""
+        data = {
+            "graph_json": {
+                "nodes": [{"id": "n1", "type": "prompt", "name": "Test", "config": {}}],
+                "edges": [],
+                "metadata": {"allow_cycles": False},
+                "editor_state": {"viewport": {"x": 0, "y": 0, "zoom": 1}},
+                "graph_id": "graph-123",
+                "version_id": "version-123",
+            }
+        }
+
+        serializer = GraphVersionCreateSerializer(data=data)
+
+        assert serializer.is_valid(), serializer.errors
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("metadata", []),
+            ("editor_state", []),
+            ("graph_id", 123),
+            ("version_id", 456),
+        ],
+    )
+    def test_graph_json_rejects_invalid_contract_field_types(self, field: str, value: Any):
+        """Optional contract fields must keep the documented types."""
+        payload = {
+            "nodes": [{"id": "n1", "type": "prompt", "name": "Test"}],
+            "edges": [],
+        }
+        payload[field] = value
+
+        serializer = GraphVersionCreateSerializer(data={"graph_json": payload})
+
+        assert not serializer.is_valid()
+        assert "graph_json" in serializer.errors
+
+
+class TestExternalWorkflowCreateSerializer:
+    """Tests for ExternalWorkflowCreateSerializer."""
+
+    def test_accepts_documented_graph_contract_fields(self):
+        serializer = ExternalWorkflowCreateSerializer(
+            data={
+                "name": "Contract Workflow",
+                "graph_json": {
+                    "nodes": [{"id": "n1", "type": "prompt", "name": "Prompt", "config": {}}],
+                    "edges": [],
+                    "metadata": {"source": "playwright"},
+                    "editor_state": {"selection": []},
+                },
+            }
+        )
+
+        assert serializer.is_valid(), serializer.errors
+
+
+class TestRunEventSerializer:
+    """Tests for stable broadcast event contract validation."""
+
+    def test_rejects_unknown_event_type(self):
+        serializer = RunEventSerializer(data={"event_type": "node_stream.chunk"})
+
+        assert not serializer.is_valid()
+        assert "event_type" in serializer.errors
+
+    def test_requires_payload_for_schema_validation(self):
+        serializer = RunEventSerializer(data={"event_type": "run.schema_validation"})
+
+        assert not serializer.is_valid()
+        assert "payload" in serializer.errors
+
+    def test_accepts_documented_run_updated_payload(self):
+        serializer = RunEventSerializer(
+            data={
+                "event_type": "run.updated",
+                "run": {
+                    "status": "paused",
+                    "paused_node_id": "human_gate_1",
+                    "pause_payload": {"prompt_message": "Approve?"},
+                },
+            }
+        )
+
+        assert serializer.is_valid(), serializer.errors
+
+
+class TestEngineExecutionEventSerializer:
+    """Tests for stable engine callback contract validation."""
+
+    def test_rejects_unknown_engine_event_type(self):
+        serializer = EngineExecutionEventSerializer(
+            data={
+                "type": "agent.step.started",
+                "run_id": "00000000-0000-0000-0000-000000000001",
+                "tenant_id": "00000000-0000-0000-0000-000000000002",
+            }
+        )
+
+        assert not serializer.is_valid()
+        assert "type" in serializer.errors
+
+    def test_requires_node_identity_for_node_scoped_events(self):
+        serializer = EngineExecutionEventSerializer(
+            data={
+                "type": "node_started",
+                "run_id": "00000000-0000-0000-0000-000000000001",
+                "tenant_id": "00000000-0000-0000-0000-000000000002",
+            }
+        )
+
+        assert not serializer.is_valid()
+        assert "node_id" in serializer.errors
+        assert "node_type" in serializer.errors
+
+    def test_requires_output_chunk_for_node_stream_chunk(self):
+        serializer = EngineExecutionEventSerializer(
+            data={
+                "type": "node_stream_chunk",
+                "run_id": "00000000-0000-0000-0000-000000000001",
+                "tenant_id": "00000000-0000-0000-0000-000000000002",
+                "node_id": "agent_1",
+                "node_type": "agent",
+                "output": {"chunk_index": 0},
+            }
+        )
+
+        assert not serializer.is_valid()
+        assert "output" in serializer.errors
+
+    def test_accepts_documented_node_stream_chunk_shape(self):
+        serializer = EngineExecutionEventSerializer(
+            data={
+                "type": "node_stream_chunk",
+                "run_id": "00000000-0000-0000-0000-000000000001",
+                "tenant_id": "00000000-0000-0000-0000-000000000002",
+                "node_id": "agent_1",
+                "node_type": "agent",
+                "attempt": 1,
+                "output": {
+                    "chunk": '{"event":"agent.step.started","step_index":1}',
+                    "chunk_index": 0,
+                },
+            }
+        )
+
+        assert serializer.is_valid(), serializer.errors
+
+    def test_requires_output_for_schema_validation_event(self):
+        serializer = EngineExecutionEventSerializer(
+            data={
+                "type": "run.schema_validation",
+                "run_id": "00000000-0000-0000-0000-000000000001",
+                "tenant_id": "00000000-0000-0000-0000-000000000002",
+            }
+        )
+
+        assert not serializer.is_valid()
+        assert "output" in serializer.errors
 
 
 class TestPromptCreateSerializer:

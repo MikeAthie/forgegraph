@@ -178,6 +178,143 @@ class TestRunDetail:
         assert response.data["data"]["node_runs"][0]["duration_ms"] == 100
         assert response.data["data"]["node_runs"][1]["id"] == str(node_run2.id)
 
+    def test_get_run_returns_agent_trace_state(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Agent Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        node_run = NodeRun.objects.create(
+            run=run,
+            node_id="agent_1",
+            node_type="agent",
+            status="succeeded",
+            attempt=1,
+            started_at=timezone.now(),
+            ended_at=timezone.now() + timedelta(milliseconds=200),
+            output_json={
+                "output": {
+                    "final_output": "Customer is active.",
+                    "stop_reason": "final_answer",
+                    "step_count": 2,
+                    "tool_call_count": 1,
+                    "steps": [
+                        {
+                            "step_index": 1,
+                            "action": "tool_call",
+                            "tool": "crm_lookup",
+                            "tool_output": {"status": "active"},
+                        },
+                        {
+                            "step_index": 2,
+                            "action": "final_answer",
+                            "final_answer": "Customer is active.",
+                        },
+                    ],
+                    "usage": {
+                        "prompt_tokens": 20,
+                        "completion_tokens": 8,
+                        "total_tokens": 28,
+                    },
+                }
+            },
+        )
+        RunEvent.objects.create(
+            run=run,
+            event_type="agent.step.started",
+            payload={
+                "event": "agent.step.started",
+                "node_id": "agent_1",
+                "node_type": "agent",
+                "attempt": 1,
+                "step_index": 1,
+                "chunk_index": 1,
+            },
+        )
+        RunEvent.objects.create(
+            run=run,
+            event_type="agent.tool.completed",
+            payload={
+                "event": "agent.tool.completed",
+                "node_id": "agent_1",
+                "node_type": "agent",
+                "attempt": 1,
+                "step_index": 1,
+                "tool": "crm_lookup",
+                "status": "ok",
+                "chunk_index": 3,
+            },
+        )
+
+        response = authenticated_client.get(f"/api/runs/{run.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data["data"]
+        assert len(data["agent_events"]) == 2
+        returned_node_run = next(
+            item for item in data["node_runs"] if item["id"] == str(node_run.id)
+        )
+        assert returned_node_run["agent_trace"]["stop_reason"] == "final_answer"
+        assert returned_node_run["agent_trace"]["tool_call_count"] == 1
+        assert len(returned_node_run["agent_trace"]["steps"]) == 2
+        assert len(returned_node_run["agent_trace"]["events"]) == 2
+
+    def test_get_run_returns_paused_agent_trace_from_pause_payload(
+        self, authenticated_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Paused Agent Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="paused",
+            paused_node_id="agent_1",
+        )
+
+        node_run = NodeRun.objects.create(
+            run=run,
+            node_id="agent_1",
+            node_type="agent",
+            status="waiting",
+            attempt=1,
+            started_at=timezone.now(),
+            output_json={
+                "pause_payload": {
+                    "prompt_message": "Approve agent tool call 'send_email'",
+                    "tool": "send_email",
+                    "agent_trace": {
+                        "final_output": "",
+                        "stop_reason": "approval_required",
+                        "step_count": 1,
+                        "tool_call_count": 0,
+                        "approval_pending": True,
+                        "steps": [
+                            {
+                                "step_index": 1,
+                                "action": "tool_call",
+                                "tool": "send_email",
+                                "approval_required": True,
+                            }
+                        ],
+                    },
+                }
+            },
+        )
+
+        response = authenticated_client.get(f"/api/runs/{run.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data["data"]
+        returned_node_run = next(
+            item for item in data["node_runs"] if item["id"] == str(node_run.id)
+        )
+        assert returned_node_run["agent_trace"]["stop_reason"] == "approval_required"
+        assert returned_node_run["agent_trace"]["approval_pending"] is True
+        assert returned_node_run["agent_trace"]["steps"][0]["tool"] == "send_email"
+
     def test_get_run_not_found_returns_standard_error(self, authenticated_client):
         fake_id = "00000000-0000-0000-0000-000000000000"
         response = authenticated_client.get(f"/api/runs/{fake_id}")
@@ -1439,6 +1576,59 @@ class TestEngineRunEvents:
         ).exists()
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_agent_stream_chunk_persists_structured_agent_event(
+        self, api_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Agent Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        timestamp_ms = int(time.time() * 1000)
+        payload = {
+            "event_id": "evt-agent-stream-1",
+            "type": "node_stream_chunk",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "agent_1",
+            "node_type": "agent",
+            "attempt": 1,
+            "timestamp": timestamp_ms,
+            "output": {
+                "chunk": json.dumps(
+                    {
+                        "event": "agent.step.started",
+                        "step_index": 1,
+                    }
+                ),
+                "chunk_index": 1,
+            },
+        }
+        body = json.dumps(payload)
+        signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+        headers = {
+            "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
+            "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
+        }
+
+        response = api_client.post(
+            "/api/runs/engine-events",
+            data=body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["node_stream"]["agent_event"]["event"] == "agent.step.started"
+        assert RunEvent.objects.filter(
+            run=run,
+            event_type="agent.step.started",
+            payload__node_id="agent_1",
+            payload__step_index=1,
+        ).exists()
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_node_failed_persists_structured_error_payload(self, api_client, user):
         graph = Graph.objects.create(owner=user, name="My Graph")
         version = GraphVersion.objects.create(
@@ -1491,6 +1681,60 @@ class TestEngineRunEvents:
         assert node_run.error_json["on_error_action"] == "skip"
         assert node_run.error_json["attempt"] == 2
         assert node_run.error_json["error"] == payload["error"]
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_agent_completed_records_llm_usage(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="Agent Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        timestamp_ms = int(time.time() * 1000)
+        payload = {
+            "event_id": "evt-agent-complete-1",
+            "type": "node_completed",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "agent_1",
+            "node_type": "agent",
+            "attempt": 1,
+            "timestamp": timestamp_ms,
+            "output": {
+                "output": {
+                    "final_output": "done",
+                    "stop_reason": "final_answer",
+                    "provider": "openai",
+                    "model": "gpt-4.1-mini",
+                    "usage": {
+                        "prompt_tokens": 42,
+                        "completion_tokens": 18,
+                        "total_tokens": 60,
+                    },
+                }
+            },
+        }
+        body = json.dumps(payload)
+        signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+        headers = {
+            "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
+            "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
+        }
+
+        response = api_client.post(
+            "/api/runs/engine-events",
+            data=body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        usage = LLMUsage.objects.get(run=run, node_id="agent_1")
+        assert usage.provider == "openai"
+        assert usage.model == "gpt-4.1-mini"
+        assert usage.prompt_tokens == 42
+        assert usage.completion_tokens == 18
+        assert usage.total_tokens == 60
 
     def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Schema Graph")

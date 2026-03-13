@@ -19,6 +19,16 @@ import (
 	"github.com/forgegraph/engine/domain/value"
 )
 
+type mockToolCredentialResolver struct {
+	provider string
+	apiKey   string
+	err      error
+}
+
+func (m *mockToolCredentialResolver) Resolve(ctx context.Context, credentialID string, tenantID string) (string, string, error) {
+	return m.provider, m.apiKey, m.err
+}
+
 func TestToolExecutor_NodeType(t *testing.T) {
 	executor := NewToolExecutor(tool.NewRegistry())
 	if executor.NodeType() != string(value.NodeTypeTool) {
@@ -84,6 +94,137 @@ func TestToolExecutor_HTTPRetrySucceeds(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&attempts); got != 2 {
 		t.Fatalf("server attempts = %d, want 2", got)
+	}
+}
+
+func TestToolExecutor_AcceptsLegacyToolNameKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.legacy-tool-name",
+		Version: "1.0.0",
+		Kind:    "http",
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodPost,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_legacy_name",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool_name": "test.http.legacy-tool-name",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+}
+
+func TestToolExecutor_HTTPToolSubstitutesConfigParametersInURL(t *testing.T) {
+	var receivedQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.params",
+		Version: "1.0.0",
+		Kind:    "http",
+		DefaultConfig: map[string]any{
+			"max_results": 5,
+		},
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL + "/messages?max={{config.max_results}}",
+			Method: http.MethodGet,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_params",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.http.params",
+			"parameters": map[string]any{
+				"max_results": 12,
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if !strings.Contains(receivedQuery, "max=12") {
+		t.Fatalf("query = %s, expected max=12", receivedQuery)
+	}
+}
+
+func TestToolExecutor_HTTPToolInjectsCredentialAuthorization(t *testing.T) {
+	var receivedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.http.auth",
+		Version: "1.0.0",
+		Kind:    "http",
+		DefaultConfig: map[string]any{
+			"provider": "gmail",
+		},
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodGet,
+		},
+	})
+
+	resolver := &mockToolCredentialResolver{provider: "gmail", apiKey: "token-abc"}
+	executor := NewToolExecutorWithResolver(registry, resolver)
+	node := &entity.Node{
+		ID:   "tool_auth",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool":          "test.http.auth",
+			"provider":      "gmail",
+			"credential_id": "cred-123",
+		},
+	}
+
+	ctx := port.WithTenantID(context.Background(), "tenant-1")
+	result, err := executor.Execute(ctx, node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if receivedAuth != "Bearer token-abc" {
+		t.Fatalf("Authorization = %s, want Bearer token-abc", receivedAuth)
 	}
 }
 
@@ -416,7 +557,40 @@ func TestToolExecutor_HTTPToolBlocksEgressByPolicy(t *testing.T) {
 	if result.Error == nil {
 		t.Fatal("expected policy validation error")
 	}
-	if !strings.Contains(result.Error.Error(), "egress blocked") {
+	if !strings.Contains(result.Error.Error(), "policy denied: egress blocked by policy") {
+		t.Fatalf("unexpected error message: %v", result.Error)
+	}
+}
+
+func TestToolExecutor_ExecToolBlockedInCloudMode(t *testing.T) {
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.exec.cloud-blocked",
+		Version: "1.0.0",
+		Kind:    "exec",
+		Exec: &tool.ExecToolConfig{
+			Command: os.Args[0],
+			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "success"},
+		},
+	})
+
+	executor := NewToolExecutorWithRuntimeMode(registry, tool.RuntimeModeCloud)
+	node := &entity.Node{
+		ID:   "tool_exec_cloud",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.exec.cloud-blocked",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected cloud-mode exec policy error")
+	}
+	if !strings.Contains(result.Error.Error(), "policy denied: exec tools are disabled in cloud mode") {
 		t.Fatalf("unexpected error message: %v", result.Error)
 	}
 }

@@ -1,4 +1,8 @@
-import { AGENT_WIZARD_PRESETS, getAgentWizardPreset } from "@/lib/agent-wizard-presets";
+import {
+  AGENT_WIZARD_PRESETS,
+  buildAgentWizardBlueprint,
+  getAgentWizardPreset,
+} from "@/lib/agent-wizard-presets";
 import { NODE_TYPES } from "@/lib/graph-types";
 
 describe("agent-wizard-presets", () => {
@@ -28,12 +32,23 @@ describe("agent-wizard-presets", () => {
     expect(email?.credentialHints.length).toBeGreaterThan(0);
   });
 
-  it("builds memory-first preset with memory and output nodes", () => {
+  it("builds memory-first preset with a real agent flow and memory wrappers", () => {
     const preset = getAgentWizardPreset("memory-first-assistant");
     expect(preset).toBeDefined();
 
-    const nodeTypes = preset!.nodes.map((node) => node.nodeType);
+    const blueprint = buildAgentWizardBlueprint(preset!.seed);
+    const nodeTypes = blueprint.nodes.map((node) => node.nodeType);
+
     expect(nodeTypes).toContain(NODE_TYPES.MEMORY);
+    expect(nodeTypes).toContain(NODE_TYPES.AGENT);
     expect(nodeTypes).toContain(NODE_TYPES.OUTPUT);
+  });
+
+  it("stores tool-first agent seeds for integration presets", () => {
+    const email = getAgentWizardPreset("email-responder");
+    expect(email?.seed.tools).toEqual(
+      expect.arrayContaining(["gmail.list_unread", "gmail.send_message"]),
+    );
+    expect(email?.seed.approval_required_tools).toEqual(["gmail.send_message"]);
   });
 });

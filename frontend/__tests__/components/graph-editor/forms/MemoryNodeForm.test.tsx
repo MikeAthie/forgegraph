@@ -91,7 +91,7 @@ describe("MemoryNodeForm", () => {
     it("should render with populated config", () => {
       const config = {
         memory_type: "buffer" as const,
-        memory_key: "chat_history",
+        key: "chat_history",
         max_messages: 50,
       };
 
@@ -254,7 +254,7 @@ describe("MemoryNodeForm", () => {
 
       await waitFor(() => {
         const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1][0];
-        expect(lastCall.memory_key).toContain("session_memory");
+        expect(lastCall.key).toContain("session_memory");
       });
     });
 

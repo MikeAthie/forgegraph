@@ -128,7 +128,6 @@ const API_PATHS = {
     listCreate: "/api/credentials/",
     detail: (credentialId: string) => `/api/credentials/${credentialId}`,
     oauthProviders: "/api/credentials/oauth/providers",
-    oauthProviderConfig: (provider: string) => `/api/credentials/oauth/providers/${provider}`,
     oauthStart: "/api/credentials/oauth/start",
     oauthCallback: "/api/credentials/oauth/callback",
   },
@@ -167,6 +166,7 @@ const API_PATHS = {
     packages: "/api/marketplace/packages",
     installed: "/api/marketplace/installed",
     install: (slug: string) => `/api/marketplace/packages/${slug}/install`,
+    runtimePreview: "/api/marketplace/runtime-manifest-preview",
     releases: "/api/marketplace/releases",
     reviewRelease: (releaseId: string) => `/api/marketplace/releases/${releaseId}/review`,
   },
@@ -606,6 +606,7 @@ export type Credential = {
   provider: string;
   name: string;
   key_hint: string;
+  is_oauth_connection: boolean;
   token_expires_at: string | null;
   health_status: "healthy" | "expiring_soon" | "expired" | string;
   requires_reauth: boolean;
@@ -635,6 +636,7 @@ export type CredentialOAuthProviderStatus = {
   configured: boolean;
   missing_config_fields: string[];
   has_provider_config: boolean;
+  configuration_mode?: "environment" | string;
   enabled: boolean;
   client_id: string;
   authorize_url: string;
@@ -643,18 +645,6 @@ export type CredentialOAuthProviderStatus = {
   scopes: string[];
   authorize_extra_params: Record<string, unknown>;
   token_extra_params: Record<string, unknown>;
-};
-
-export type CredentialOAuthProviderConfigInput = {
-  client_id: string;
-  client_secret?: string;
-  authorize_url?: string;
-  token_url?: string;
-  redirect_uri?: string;
-  scopes?: string[];
-  authorize_extra_params?: Record<string, unknown>;
-  token_extra_params?: Record<string, unknown>;
-  enabled?: boolean;
 };
 
 export type HttpNodeTestInput = {
@@ -716,10 +706,20 @@ export type MarketplaceRelease = {
   version: string;
   changelog: string;
   status: "draft" | "pending_review" | "approved" | "rejected" | string;
+  package_kind:
+    | "template_http"
+    | "template_prompt"
+    | "runtime_tool"
+    | "runtime_transform"
+    | string;
   execution_node_type: "http" | "prompt" | "tool" | "transform" | string;
   ui_schema: Record<string, unknown>;
   config_schema: Record<string, unknown>;
   config_defaults: Record<string, unknown>;
+  runtime_manifest: Record<string, unknown> | null;
+  manifest_version: number | null;
+  cloud_allowed: boolean;
+  review_notes: string;
   created_at: string;
 };
 
@@ -735,6 +735,45 @@ export type MarketplacePackage = {
   latest_release: MarketplaceRelease | null;
   installed_release?: MarketplaceRelease | null;
   installed_at?: string | null;
+  install_metadata?: Record<string, unknown> | null;
+  runtime_delivery?: {
+    state: "ready" | "blocked" | "invalid" | "template" | string;
+    reason: string;
+    package_kind: string;
+    cloud_allowed: boolean;
+    manifest_version: number | null;
+    checksum?: string | null;
+  } | null;
+};
+
+export type MarketplaceRuntimeManifestPackage = {
+  package_slug: string;
+  package_name: string;
+  release_id: string;
+  release_version: string;
+  package_kind: string;
+  delivery_state: string;
+  delivery_reason: string;
+  cloud_allowed: boolean;
+  manifest_version: number | null;
+  manifest_checksum: string | null;
+};
+
+export type MarketplaceRuntimeManifestTool = {
+  name: string;
+  version?: string;
+  kind: string;
+  description?: string;
+  [key: string]: unknown;
+};
+
+export type MarketplaceRuntimeManifestPreview = {
+  tenant_id: string;
+  manifest_version: number;
+  checksum: string;
+  generated_at: string;
+  packages: MarketplaceRuntimeManifestPackage[];
+  tools: MarketplaceRuntimeManifestTool[];
 };
 
 export type MarketplaceReleaseSummary = {
@@ -743,7 +782,14 @@ export type MarketplaceReleaseSummary = {
   package_name: string;
   version: string;
   status: "draft" | "pending_review" | "approved" | "rejected" | string;
+  package_kind:
+    | "template_http"
+    | "template_prompt"
+    | "runtime_tool"
+    | "runtime_transform"
+    | string;
   execution_node_type: "http" | "prompt" | "tool" | "transform" | string;
+  cloud_allowed: boolean;
   created_at: string;
 };
 
@@ -897,24 +943,6 @@ export const credentialsApi = {
     );
     return response.data.data;
   },
-  getOAuthProviderConfig: async (
-    provider: OAuthIntegrationProvider,
-  ): Promise<CredentialOAuthProviderStatus> => {
-    const response = await api.get<ApiSuccessResponse<CredentialOAuthProviderStatus>>(
-      API_PATHS.credentials.oauthProviderConfig(provider),
-    );
-    return response.data.data;
-  },
-  upsertOAuthProviderConfig: async (
-    provider: OAuthIntegrationProvider,
-    input: CredentialOAuthProviderConfigInput,
-  ): Promise<CredentialOAuthProviderStatus> => {
-    const response = await api.put<ApiSuccessResponse<CredentialOAuthProviderStatus>>(
-      API_PATHS.credentials.oauthProviderConfig(provider),
-      input,
-    );
-    return response.data.data;
-  },
   startOAuth: async (
     provider: OAuthIntegrationProvider,
     name?: string,
@@ -978,6 +1006,12 @@ export const marketplaceApi = {
     const response = await api.get<ApiSuccessResponse<MarketplacePackage[]>>(API_PATHS.marketplace.installed);
     return response.data.data;
   },
+  getRuntimePreview: async (): Promise<MarketplaceRuntimeManifestPreview> => {
+    const response = await api.get<ApiSuccessResponse<MarketplaceRuntimeManifestPreview>>(
+      API_PATHS.marketplace.runtimePreview,
+    );
+    return response.data.data;
+  },
   install: async (slug: string, input?: { version?: string }): Promise<MarketplacePackage> => {
     const response = await api.post<ApiSuccessResponse<MarketplacePackage>>(
       API_PATHS.marketplace.install(slug),
@@ -999,10 +1033,15 @@ export const marketplaceApi = {
     package_icon?: string;
     version: string;
     changelog?: string;
+    package_kind?: "template_http" | "template_prompt" | "runtime_tool" | "runtime_transform";
     execution_node_type: "http" | "prompt" | "tool" | "transform";
     ui_schema?: Record<string, unknown>;
     config_schema?: Record<string, unknown>;
     config_defaults?: Record<string, unknown>;
+    runtime_manifest?: Record<string, unknown> | null;
+    manifest_version?: number;
+    cloud_allowed?: boolean;
+    review_notes?: string;
   }): Promise<{ id: string; package_slug: string; version: string; status: string }> => {
     const response = await api.post<
       ApiSuccessResponse<{ id: string; package_slug: string; version: string; status: string }>
@@ -1079,6 +1118,57 @@ export interface NodeRunItem {
   input_json: Record<string, unknown>;
   output_json: Record<string, unknown> | null;
   error_json: Record<string, unknown> | null;
+  agent_trace?: AgentTrace | null;
+}
+
+export interface AgentEventItem {
+  event: string;
+  node_id?: string;
+  node_type?: string;
+  attempt?: number;
+  step_index?: number;
+  tool?: string;
+  status?: string;
+  stop_reason?: string;
+  chunk_index?: number;
+  [key: string]: unknown;
+}
+
+export interface AgentTraceStep {
+  step_index?: number;
+  action?: string;
+  tool?: string;
+  tool_input?: unknown;
+  tool_output?: unknown;
+  final_answer?: string;
+  error?: string;
+  approval_required?: boolean;
+  response_model?: string;
+  finish_reason?: string;
+  usage?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentTrace {
+  final_output?: string;
+  stop_reason?: string;
+  step_count?: number;
+  tool_call_count?: number;
+  steps?: AgentTraceStep[];
+  events?: AgentEventItem[];
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    [key: string]: unknown;
+  } | null;
+  approval_pending?: boolean;
+  model?: string;
+  provider?: string;
+  allowed_tools?: string[];
+  agent_node_id?: string;
+  agent_node_name?: string;
+  [key: string]: unknown;
 }
 
 export interface RunDetail {
@@ -1100,6 +1190,7 @@ export interface RunDetail {
   error_message: string;
   duration_ms: number | null;
   node_runs: NodeRunItem[];
+  agent_events?: AgentEventItem[] | null;
   // Human Gate pause fields
   paused_node_id?: string | null;
   pause_payload?: {

@@ -17,7 +17,50 @@ import (
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/domain/entity"
+	"github.com/forgegraph/engine/domain/value"
 )
+
+type integrationSequenceLLMClient struct {
+	responses []*executor.LLMResponse
+	calls     int
+}
+
+func (m *integrationSequenceLLMClient) Complete(ctx context.Context, request *executor.LLMRequest) (*executor.LLMResponse, error) {
+	if len(m.responses) == 0 {
+		return &executor.LLMResponse{Content: `{"action":"final_answer","final_answer":"done"}`, Model: request.Model}, nil
+	}
+	index := m.calls
+	if index >= len(m.responses) {
+		index = len(m.responses) - 1
+	}
+	m.calls++
+	return m.responses[index], nil
+}
+
+func (m *integrationSequenceLLMClient) StreamComplete(
+	ctx context.Context,
+	request *executor.LLMRequest,
+	onChunk func(string),
+) (*executor.LLMResponse, error) {
+	response, err := m.Complete(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if onChunk != nil && response != nil && response.Content != "" {
+		onChunk(response.Content)
+	}
+	return response, nil
+}
+
+type integrationToolInvoker struct {
+	calls  int
+	output any
+}
+
+func (m *integrationToolInvoker) Execute(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+	m.calls++
+	return port.NewSuccessResult(m.output), nil
+}
 
 // waitForRunCompletion polls for run completion with a timeout
 func waitForRunCompletion(t *testing.T, scheduler *usecase.Scheduler, repo *repository.MemoryRunRepository, runID string, timeout time.Duration) string {
@@ -55,6 +98,18 @@ func waitForRunCompletion(t *testing.T, scheduler *usecase.Scheduler, repo *repo
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
+}
+
+func waitForRunInactive(t *testing.T, scheduler *usecase.Scheduler, runID string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !scheduler.IsRunActive(runID) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for run %s to become inactive", runID)
 }
 
 // TestSimpleTransformToOutput tests a simple workflow: Transform → Output
@@ -262,6 +317,201 @@ func TestLinearWorkflow(t *testing.T) {
 	nodeCompletedEvents := emitter.GetEventsByType(port.EventTypeNodeCompleted)
 	if len(nodeCompletedEvents) != 3 {
 		t.Errorf("Expected 3 node_completed events, got %d", len(nodeCompletedEvents))
+	}
+}
+
+func TestAgentWorkflowApprovalResume(t *testing.T) {
+	repo := repository.NewMemoryRunRepository()
+	emitter := gateway.NewRecordingEventEmitter()
+
+	llmClient := &integrationSequenceLLMClient{
+		responses: []*executor.LLMResponse{
+			{Content: `{"action":"tool_call","tool":"send_email","tool_input":{"to":"user@example.com"}}`, Model: "gpt-4.1-mini"},
+			{Content: `{"action":"final_answer","final_answer":"Email approved and sent."}`, Model: "gpt-4.1-mini"},
+		},
+	}
+	toolInvoker := &integrationToolInvoker{output: map[string]any{"queued": true}}
+
+	registry := port.NewExecutorRegistry()
+	registry.RegisterAll(
+		executor.NewOutputExecutor(),
+		executor.NewAgentExecutorWithToolInvoker(llmClient, toolInvoker),
+	)
+
+	config := usecase.SchedulerConfig{
+		MaxWorkers:       2,
+		DefaultTimeoutMs: 5000,
+	}
+	scheduler := usecase.NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
+
+	graph := map[string]any{
+		"nodes": []map[string]any{
+			{
+				"id":   "agent_1",
+				"type": "agent",
+				"name": "Approval Agent",
+				"config": map[string]any{
+					"model":                   "gpt-4.1-mini",
+					"tools":                   []string{"send_email"},
+					"approval_required_tools": []string{"send_email"},
+					"max_steps":               4,
+				},
+			},
+			{
+				"id":     "output_1",
+				"type":   "output",
+				"name":   "Output",
+				"config": map[string]any{},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "e1", "from": "agent_1", "to": "output_1"},
+		},
+	}
+
+	graphJSON, err := json.Marshal(graph)
+	if err != nil {
+		t.Fatalf("Failed to marshal graph: %v", err)
+	}
+
+	runID := "test-agent-approval-resume"
+	repo.AddRun(&entity.Run{
+		ID:        runID,
+		Status:    "pending",
+		StartedAt: time.Now(),
+	})
+
+	if err := scheduler.StartRun(context.Background(), runID, string(graphJSON), `{"ticket":"A-1"}`, "", "", "", ""); err != nil {
+		t.Fatalf("Failed to start run: %v", err)
+	}
+
+	waitForRunInactive(t, scheduler, runID, 5*time.Second)
+
+	run, err := repo.GetRun(context.Background(), runID)
+	if err != nil || run == nil {
+		t.Fatalf("Failed to load paused run: %v", err)
+	}
+	if run.Status != string(value.RunStatusPaused) {
+		t.Fatalf("Expected paused run, got %s", run.Status)
+	}
+
+	nodeRun, err := repo.GetNodeRun(context.Background(), runID, "agent_1")
+	if err != nil || nodeRun == nil {
+		t.Fatalf("Failed to load agent node run: %v", err)
+	}
+	if nodeRun.Status != string(value.NodeRunStatusWaiting) {
+		t.Fatalf("Expected waiting node run, got %s", nodeRun.Status)
+	}
+
+	if err := scheduler.ResumeRun(context.Background(), runID, "agent_1", `{"approved": true}`); err != nil {
+		t.Fatalf("ResumeRun failed: %v", err)
+	}
+
+	status := waitForRunCompletion(t, scheduler, repo, runID, 10*time.Second)
+	if status != "succeeded" {
+		t.Fatalf("Expected status succeeded, got %s", status)
+	}
+	if toolInvoker.calls != 1 {
+		t.Fatalf("Expected 1 tool invocation, got %d", toolInvoker.calls)
+	}
+
+	nodeRun, err = repo.GetNodeRun(context.Background(), runID, "agent_1")
+	if err != nil || nodeRun == nil {
+		t.Fatalf("Failed to reload agent node run: %v", err)
+	}
+	output, ok := nodeRun.OutputJSON["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected agent output map, got %#v", nodeRun.OutputJSON)
+	}
+	if output["stop_reason"] != "final_answer" {
+		t.Fatalf("Expected final_answer stop reason, got %v", output["stop_reason"])
+	}
+	if output["tool_call_count"] != 1 {
+		t.Fatalf("Expected tool_call_count=1, got %v", output["tool_call_count"])
+	}
+
+	var sawPaused bool
+	var sawResumed bool
+	for _, event := range emitter.GetEvents() {
+		if event.Type == port.EventTypeRunPaused {
+			sawPaused = true
+		}
+		if event.Type == port.EventTypeRunResumed {
+			sawResumed = true
+		}
+	}
+	if !sawPaused {
+		t.Fatal("Expected run_paused event to be emitted")
+	}
+	if !sawResumed {
+		t.Fatal("Expected run_resumed event to be emitted")
+	}
+}
+
+func TestRuntimeBackedToolCanExecuteAfterRemoteLoad(t *testing.T) {
+	toolServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"customer_status":"active"}`)
+	}))
+	defer toolServer.Close()
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("tenant_id"); got != "tenant-1" {
+			t.Fatalf("tenant_id = %s, want tenant-1", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(
+			w,
+			`{"data":{"tenant_id":"tenant-1","manifest_version":1,"checksum":"manifest-1","generated_at":"2026-03-12T00:00:00Z","tools":[{"name":"crm_lookup","version":"1.0.0","kind":"http","http":{"url":"%s","method":"POST"}}],"packages":[]}}`,
+			toolServer.URL,
+		)
+	}))
+	defer controlPlane.Close()
+
+	manifestClient := gateway.NewMarketplaceManifestClient(controlPlane.URL, "test-secret")
+	payload, unchanged, err := manifestClient.Fetch(context.Background(), "tenant-1", "")
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if unchanged {
+		t.Fatal("expected changed manifest")
+	}
+
+	registry := tool.NewRegistry()
+	if err := registry.LoadDefinitions(payload.Tools); err != nil {
+		t.Fatalf("LoadDefinitions() error = %v", err)
+	}
+
+	exec := executor.NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_1",
+		Type: "tool",
+		Config: map[string]any{
+			"tool": "crm_lookup",
+			"input": map[string]any{
+				"customer_id": "cust_123",
+			},
+		},
+	}
+
+	result, err := exec.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("result.Output = %T, want map[string]any", result.Output)
+	}
+	body, ok := output["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("output[result] = %#v, want map[string]any", output["result"])
+	}
+	if body["customer_status"] != "active" {
+		t.Fatalf("customer_status = %v, want active", body["customer_status"])
 	}
 }
 

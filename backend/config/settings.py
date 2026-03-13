@@ -40,6 +40,10 @@ ALLOWED_HOSTS = _get_csv_env("ALLOWED_HOSTS", _default_allowed_hosts)
 if not ALLOWED_HOSTS and not DEBUG:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be configured when DEBUG is False.")
 
+FORGEGRAPH_RUNTIME_MODE = os.environ.get("FORGEGRAPH_RUNTIME_MODE", "cloud").strip().lower()
+if FORGEGRAPH_RUNTIME_MODE not in {"cloud", "self_hosted"}:
+    FORGEGRAPH_RUNTIME_MODE = "cloud"
+
 # Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -185,12 +189,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = DEBUG and _get_bool_env("CORS_ALLOW_ALL_ORIGINS", False)
 CORS_ALLOWED_ORIGINS = _get_csv_env(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
+    if DEBUG
+    else "",
 )
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = _get_csv_env(
     "CSRF_TRUSTED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
+    if DEBUG
+    else "",
 )
 
 # Web security defaults

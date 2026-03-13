@@ -844,6 +844,104 @@ describe("Run Detail Page", () => {
         expect(screen.getByText(/Request timed out after 30s/i)).toBeInTheDocument();
       });
     });
+
+    it("renders agent step traces and approval state for agent nodes", async () => {
+      jest.spyOn(api.runsApi, "get").mockResolvedValue({
+        id: runId,
+        graph_id: "g1",
+        graph_version_id: "v1",
+        graph_name: "My Graph",
+        status: "succeeded",
+        agent_events: [
+          {
+            event: "agent.step.started",
+            node_id: "agent_1",
+            step_index: 1,
+          },
+        ],
+        node_runs: [
+          {
+            id: "nr1",
+            node_id: "agent_1",
+            node_type: "agent",
+            status: "succeeded",
+            attempt: 1,
+            started_at: "2024-01-15T10:00:00Z",
+            ended_at: "2024-01-15T10:00:05Z",
+            duration_ms: 5000,
+            input_json: { customer_id: "cust_123" },
+            output_json: {
+              output: {
+                final_output: "",
+                stop_reason: "approval_required",
+                step_count: 1,
+                tool_call_count: 0,
+                approval_pending: true,
+                steps: [
+                  {
+                    step_index: 1,
+                    action: "tool_call",
+                    tool: "send_email",
+                    tool_input: { to: "user@example.com" },
+                    approval_required: true,
+                  },
+                ],
+              },
+            },
+            error_json: null,
+            agent_trace: {
+              final_output: "",
+              stop_reason: "approval_required",
+              step_count: 1,
+              tool_call_count: 0,
+              approval_pending: true,
+              steps: [
+                {
+                  step_index: 1,
+                  action: "tool_call",
+                  tool: "send_email",
+                  tool_input: { to: "user@example.com" },
+                  approval_required: true,
+                },
+              ],
+              events: [
+                {
+                  event: "agent.step.started",
+                  node_id: "agent_1",
+                  step_index: 1,
+                },
+              ],
+            },
+          },
+        ],
+      } as any);
+
+      jest.spyOn(api.graphsApi, "getVersion").mockResolvedValue({
+        id: "v1",
+        version: 1,
+        checksum: "x".repeat(64),
+        created_at: "2024-01-15T09:00:00Z",
+        graph_json: {
+          nodes: [{ id: "agent_1", type: "agent", name: "Support Agent", config: {} }],
+          edges: [],
+        },
+      } as any);
+
+      render(<RunDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Support Agent/i })).toBeInTheDocument();
+      });
+
+      await actClick(screen.getByRole("button", { name: /Support Agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Agent execution/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/Approval required/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/send_email/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/Tool input/i)).toBeInTheDocument();
+      });
+    });
   });
 
   describe("Final Output", () => {

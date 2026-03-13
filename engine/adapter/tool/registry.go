@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Definition describes a tool entry loaded from manifests.
@@ -40,15 +41,36 @@ type manifestFile struct {
 	Tools []Definition `json:"tools"`
 }
 
+const (
+	RuntimeModeCloud      = "cloud"
+	RuntimeModeSelfHosted = "self_hosted"
+)
+
+func NormalizeRuntimeMode(runtimeMode string) string {
+	normalized := strings.ToLower(strings.TrimSpace(runtimeMode))
+	if normalized == RuntimeModeSelfHosted {
+		return RuntimeModeSelfHosted
+	}
+	return RuntimeModeCloud
+}
+
 // Registry stores tools by name/version.
 type Registry struct {
-	tools map[string]map[string]*Definition
+	tools       map[string]map[string]*Definition
+	mu          sync.RWMutex
+	runtimeMode string
 }
 
 // NewRegistry creates a registry with builtin tools.
 func NewRegistry() *Registry {
+	return NewRegistryWithRuntimeMode(RuntimeModeSelfHosted)
+}
+
+// NewRegistryWithRuntimeMode creates a registry with builtin tools and runtime policy mode.
+func NewRegistryWithRuntimeMode(runtimeMode string) *Registry {
 	reg := &Registry{
-		tools: make(map[string]map[string]*Definition),
+		tools:       make(map[string]map[string]*Definition),
+		runtimeMode: NormalizeRuntimeMode(runtimeMode),
 	}
 	for _, toolDef := range BuiltinTools() {
 		reg.Register(toolDef)
@@ -61,6 +83,8 @@ func (r *Registry) Register(def Definition) {
 	if def.Name == "" || def.Version == "" {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	name := strings.ToLower(def.Name)
 	version := strings.ToLower(def.Version)
 	if r.tools[name] == nil {
@@ -70,11 +94,24 @@ func (r *Registry) Register(def Definition) {
 	r.tools[name][version] = &copyDef
 }
 
+// LoadDefinitions validates and registers a batch of tool definitions.
+func (r *Registry) LoadDefinitions(defs []Definition) error {
+	for _, def := range defs {
+		if err := ValidateDefinitionForRuntimeMode(def, r.runtimeMode); err != nil {
+			return err
+		}
+		r.Register(def)
+	}
+	return nil
+}
+
 // Resolve returns a tool definition by name/version (latest if version empty).
 func (r *Registry) Resolve(name, version string) (*Definition, bool) {
 	if name == "" {
 		return nil, false
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	nameKey := strings.ToLower(name)
 	versions := r.tools[nameKey]
 	if versions == nil {
@@ -89,6 +126,8 @@ func (r *Registry) Resolve(name, version string) (*Definition, bool) {
 
 // List returns all tool definitions.
 func (r *Registry) List() []*Definition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var result []*Definition
 	for _, versions := range r.tools {
 		for _, def := range versions {
@@ -133,10 +172,50 @@ func (r *Registry) LoadManifests(dir string) error {
 		if err := json.Unmarshal(content, &manifest); err != nil {
 			return fmt.Errorf("parse tool manifest %s: %w", path, err)
 		}
-		for _, def := range manifest.Tools {
-			r.Register(def)
+		if err := r.LoadDefinitions(manifest.Tools); err != nil {
+			return fmt.Errorf("load tool manifest %s: %w", path, err)
 		}
 	}
+	return nil
+}
+
+// ValidateDefinition validates a tool definition before it becomes executable.
+func ValidateDefinition(def Definition) error {
+	return ValidateDefinitionForRuntimeMode(def, RuntimeModeSelfHosted)
+}
+
+// ValidateDefinitionForRuntimeMode validates a tool definition before it becomes executable.
+func ValidateDefinitionForRuntimeMode(def Definition, runtimeMode string) error {
+	runtimeMode = NormalizeRuntimeMode(runtimeMode)
+	if strings.TrimSpace(def.Name) == "" {
+		return fmt.Errorf("tool definition requires name")
+	}
+	if strings.TrimSpace(def.Version) == "" {
+		return fmt.Errorf("tool definition %s requires version", def.Name)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(def.Kind)) {
+	case "http":
+		if def.HTTP == nil {
+			return fmt.Errorf("http tool %s requires http config", def.Name)
+		}
+		if strings.TrimSpace(def.HTTP.URL) == "" {
+			return fmt.Errorf("http tool %s requires http.url", def.Name)
+		}
+	case "exec":
+		if def.Exec == nil {
+			return fmt.Errorf("exec tool %s requires exec config", def.Name)
+		}
+		if strings.TrimSpace(def.Exec.Command) == "" {
+			return fmt.Errorf("exec tool %s requires exec.command", def.Name)
+		}
+		if runtimeMode == RuntimeModeCloud {
+			return fmt.Errorf("policy denied: exec tools are disabled in cloud mode")
+		}
+	default:
+		return fmt.Errorf("tool %s has unsupported kind %q", def.Name, def.Kind)
+	}
+
 	return nil
 }
 

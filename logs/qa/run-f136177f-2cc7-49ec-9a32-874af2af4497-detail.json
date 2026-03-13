@@ -1,0 +1,163 @@
+{
+    "id":  "f136177f-2cc7-49ec-9a32-874af2af4497",
+    "owner_id":  "bc069dc6-ec5c-4b48-9d95-3bf610583ab7",
+    "owner_email":  "test@example.com",
+    "thread_id":  null,
+    "graph_id":  "b1e71a56-35a0-4935-ad45-2c6bd8623427",
+    "graph_name":  "QA Recheck - Personal Life Manager",
+    "graph_version_id":  "94273208-f65b-4054-812b-b61433ad4cf1",
+    "graph_version":  1,
+    "status":  "failed",
+    "queue_status":  null,
+    "queue_attempts":  null,
+    "queue_available_at":  null,
+    "started_at":  "2026-02-18T00:27:54.445328Z",
+    "ended_at":  "2026-02-18T00:27:56.926376Z",
+    "input_json":  {
+                       "message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                       "timezone":  "America/New_York",
+                       "user_name":  "Alex"
+                   },
+    "output_json":  null,
+    "error_message":  "node email_tool (tool): HTTP 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Gmail API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n    \"errors\": [\n      {\n        \"message\": \"Gmail API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n        \"domain\": \"usageLimits\",\n        \"reason\": \"accessNotConfigured\",\n        \"extendedHelp\": \"https://console.developers.google.com\"\n      }\n    ],\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"SERVICE_DISABLED\",\n        \"domain\": \"googleapis.com\",\n        \"metadata\": {\n          \"service\": \"gmail.googleapis.com\",\n          \"serviceTitle\": \"Gmail API\",\n          \"consumer\": \"projects/702951723813\",\n          \"activationUrl\": \"https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813\",\n          \"containerInfo\": \"702951723813\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.LocalizedMessage\",\n        \"locale\": \"en-US\",\n        \"message\": \"Gmail API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\"\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Google developers console API activation\",\n            \"url\": \"https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+    "duration_ms":  2481,
+    "paused_node_id":  null,
+    "pause_payload":  null,
+    "node_outcomes":  {
+                          "pending":  0,
+                          "running":  2,
+                          "waiting":  0,
+                          "succeeded":  1,
+                          "failed":  1,
+                          "skipped":  0
+                      },
+    "node_runs":  [
+                      {
+                          "id":  "38d6ea26-722d-4040-b826-846764f62be6",
+                          "node_id":  "intent_classifier",
+                          "node_type":  "prompt",
+                          "status":  "succeeded",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:27:54.457992Z",
+                          "ended_at":  "2026-02-18T00:27:56.787236Z",
+                          "duration_ms":  2329,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex"
+                                         },
+                          "output_json":  {
+                                              "output":  {
+                                                             "model":  "gpt-4-0613",
+                                                             "usage":  {
+                                                                           "total_tokens":  164,
+                                                                           "prompt_tokens":  138,
+                                                                           "completion_tokens":  26
+                                                                       },
+                                                             "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                             "provider":  "openai",
+                                                             "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                             "finish_reason":  "stop"
+                                                         }
+                                          },
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "8cd6fb92-0098-4032-9865-44a38a9035aa",
+                          "node_id":  "email_tool",
+                          "node_type":  "tool",
+                          "status":  "failed",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:27:56.787312Z",
+                          "ended_at":  "2026-02-18T00:27:56.924409Z",
+                          "duration_ms":  137,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  {
+                                             "type":  "runtime_error",
+                                             "attempt":  1,
+                                             "message":  "HTTP 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Gmail API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n    \"errors\": [\n      {\n        \"message\": \"Gmail API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n        \"domain\": \"usageLimits\",\n        \"reason\": \"accessNotConfigured\",\n        \"extendedHelp\": \"https://console.developers.google.com\"\n      }\n    ],\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"SERVICE_DISABLED\",\n        \"domain\": \"googleapis.com\",\n        \"metadata\": {\n          \"service\": \"gmail.googleapis.com\",\n          \"serviceTitle\": \"Gmail API\",\n          \"consumer\": \"projects/702951723813\",\n          \"activationUrl\": \"https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813\",\n          \"containerInfo\": \"702951723813\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.LocalizedMessage\",\n        \"locale\": \"en-US\",\n        \"message\": \"Gmail API has not been used in project 702951723813 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\"\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Google developers console API activation\",\n            \"url\": \"https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=702951723813\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+                                             "failed_at":  "2026-02-18T00:27:56.924404823Z",
+                                             "retryable":  false,
+                                             "backoff_ms":  1000,
+                                             "max_attempts":  3,
+                                             "on_error_action":  "fail",
+                                             "backoff_strategy":  "exponential"
+                                         }
+                      },
+                      {
+                          "id":  "3f2830f1-01c2-4d87-9f05-6f6f45eba957",
+                          "node_id":  "calendar_tool",
+                          "node_type":  "tool",
+                          "status":  "running",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:27:56.787353Z",
+                          "ended_at":  null,
+                          "duration_ms":  null,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  null
+                      },
+                      {
+                          "id":  "2680c4e5-a0bb-449c-88aa-d93cab36459b",
+                          "node_id":  "tasks_tool",
+                          "node_type":  "tool",
+                          "status":  "running",
+                          "attempt":  1,
+                          "started_at":  "2026-02-18T00:27:56.787364Z",
+                          "ended_at":  null,
+                          "duration_ms":  null,
+                          "input_json":  {
+                                             "input.message":  "What\u0027s on my calendar today and do I have any unread emails?",
+                                             "input.timezone":  "America/New_York",
+                                             "input.user_name":  "Alex",
+                                             "node.intent_classifier.output":  {
+                                                                                   "model":  "gpt-4-0613",
+                                                                                   "usage":  {
+                                                                                                 "total_tokens":  164,
+                                                                                                 "prompt_tokens":  138,
+                                                                                                 "completion_tokens":  26
+                                                                                             },
+                                                                                   "prompt":  "You are a personal assistant named Jackie helping Alex.\n\nUser message: What\u0027s on my calendar today and do I have any unread emails?\n\nAnalyze this request and determine what the user needs help with.\nCategories: email, calendar, tasks, general_chat\n\nRespond with:\n1. Intent category (one or more from above)\n2. Specific action needed (summarize, create, list, etc.)\n3. Any extracted parameters (dates, names, priorities)\n\nFormat as structured analysis.",
+                                                                                   "provider":  "openai",
+                                                                                   "response":  "1. Intent category: Email, Calendar\n2. Specific action needed: List\n3. Extracted parameters: Today\u0027s date",
+                                                                                   "finish_reason":  "stop"
+                                                                               }
+                                         },
+                          "output_json":  null,
+                          "error_json":  null
+                      }
+                  ]
+}

@@ -24,15 +24,34 @@ import (
 
 // ToolExecutor runs tools defined in the tool registry.
 type ToolExecutor struct {
-	registry   *tool.Registry
-	httpClient *http.Client
+	registry    *tool.Registry
+	httpClient  *http.Client
+	resolver    CredentialResolver
+	runtimeMode string
 }
 
 // NewToolExecutor creates a tool executor with a registry.
 func NewToolExecutor(registry *tool.Registry) *ToolExecutor {
+	return NewToolExecutorWithResolverAndRuntimeMode(registry, nil, tool.RuntimeModeSelfHosted)
+}
+
+// NewToolExecutorWithRuntimeMode creates a tool executor with a registry and runtime mode.
+func NewToolExecutorWithRuntimeMode(registry *tool.Registry, runtimeMode string) *ToolExecutor {
+	return NewToolExecutorWithResolverAndRuntimeMode(registry, nil, runtimeMode)
+}
+
+// NewToolExecutorWithResolver creates a tool executor with a registry and credential resolver.
+func NewToolExecutorWithResolver(registry *tool.Registry, resolver CredentialResolver) *ToolExecutor {
+	return NewToolExecutorWithResolverAndRuntimeMode(registry, resolver, tool.RuntimeModeSelfHosted)
+}
+
+// NewToolExecutorWithResolverAndRuntimeMode creates a tool executor with a registry, credential resolver, and runtime mode.
+func NewToolExecutorWithResolverAndRuntimeMode(registry *tool.Registry, resolver CredentialResolver, runtimeMode string) *ToolExecutor {
 	return &ToolExecutor{
-		registry:   registry,
-		httpClient: &http.Client{},
+		registry:    registry,
+		httpClient:  &http.Client{},
+		resolver:    resolver,
+		runtimeMode: tool.NormalizeRuntimeMode(runtimeMode),
 	}
 }
 
@@ -45,6 +64,7 @@ func (e *ToolExecutor) NodeType() string {
 //
 // Config options:
 //   - tool: string (required)
+//   - tool_name: string (legacy alias for tool)
 //   - version: string (optional, defaults to latest)
 //   - input: any (optional)
 //   - input_path: string (optional)
@@ -59,6 +79,9 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	}
 
 	toolName := strings.TrimSpace(node.GetConfigString("tool"))
+	if toolName == "" {
+		toolName = strings.TrimSpace(node.GetConfigString("tool_name"))
+	}
 	if toolName == "" {
 		toolName = strings.TrimSpace(node.GetConfigString("name"))
 	}
@@ -88,6 +111,16 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 			toolConfig[k] = v
 		}
 	}
+	if params, ok := node.Config["parameters"].(map[string]any); ok {
+		for k, v := range params {
+			toolConfig[k] = v
+		}
+	}
+	if params, ok := node.Config["parameters"].(map[string]string); ok {
+		for k, v := range params {
+			toolConfig[k] = v
+		}
+	}
 
 	if def.ConfigSchema != nil {
 		validator, err := service.CompileSchema(def.ConfigSchema)
@@ -108,7 +141,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 
 	switch strings.ToLower(def.Kind) {
 	case "http":
-		result, err := e.executeHTTPTool(ctx, def, payload, node, toolConfig)
+		result, err := e.executeHTTPTool(ctx, def, payload, node, state, toolConfig)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
@@ -129,18 +162,30 @@ func (e *ToolExecutor) executeHTTPTool(
 	def *tool.Definition,
 	payload map[string]any,
 	node *entity.Node,
+	state *entity.State,
 	toolConfig map[string]any,
 ) (map[string]any, error) {
 	if def.HTTP == nil {
 		return nil, fmt.Errorf("tool missing http configuration")
 	}
 
+	provider, apiKey, err := e.resolveToolCredentialContext(ctx, node, toolConfig, def)
+	if err != nil {
+		return nil, err
+	}
+
+	templateValues := credentialTemplateValues(provider, apiKey)
+	for k, v := range flattenToolConfigTemplateValues(toolConfig) {
+		templateValues[k] = v
+	}
+
 	urlStr := os.ExpandEnv(def.HTTP.URL)
+	urlStr = SubstituteTemplateWithExtras(urlStr, state, templateValues)
 	if urlStr == "" {
 		return nil, fmt.Errorf("tool URL not configured")
 	}
 	if !isHTTPAllowed(port.PolicyFromContext(ctx), urlStr) {
-		return nil, domain.NewValidationError("url", "tool egress blocked by policy")
+		return nil, newPolicyDeniedValidationError("url", "egress blocked by policy")
 	}
 
 	method := def.HTTP.Method
@@ -148,9 +193,12 @@ func (e *ToolExecutor) executeHTTPTool(
 		method = "POST"
 	}
 
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
+	var bodyBytes []byte
+	if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
+		bodyBytes, err = json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	headers := map[string]string{}
@@ -163,29 +211,32 @@ func (e *ToolExecutor) executeHTTPTool(
 		}
 	}
 	for k, v := range headers {
-		headers[k] = v
+		headers[k] = SubstituteTemplateWithExtras(v, state, templateValues)
+	}
+	if strings.TrimSpace(apiKey) != "" && strings.TrimSpace(headers["Authorization"]) == "" {
+		headers["Authorization"] = "Bearer " + apiKey
 	}
 
 	timeoutMs := resolveToolTimeoutMs(node, toolConfig, def.HTTP.TimeoutMs)
 	retryAttempts := resolveToolRetryAttempts(node, toolConfig)
 	retryBackoffMs := resolveToolRetryBackoffMs(node, toolConfig)
-	provider := strings.TrimSpace(strings.ToLower(node.GetConfigString("provider")))
-	if provider == "" {
-		provider = strings.TrimSpace(strings.ToLower(def.Name))
+	throttleProvider := provider
+	if throttleProvider == "" {
+		throttleProvider = strings.TrimSpace(strings.ToLower(def.Name))
 	}
-	throttleMs := resolveTenantProviderThrottleMs(ctx, provider, node.Config)
+	throttleMs := resolveTenantProviderThrottleMs(ctx, throttleProvider, node.Config)
 
 	var lastErr error
 	for attempt := 1; attempt <= retryAttempts; attempt++ {
 		if throttleMs > 0 {
-			if throttleErr := throttleTenantProvider(ctx, port.TenantIDFrom(ctx), provider, throttleMs); throttleErr != nil {
+			if throttleErr := throttleTenantProvider(ctx, port.TenantIDFrom(ctx), throttleProvider, throttleMs); throttleErr != nil {
 				return nil, domain.NewRetryableErrorWithDetails(
 					throttleErr,
 					"tenant provider throttle interrupted",
 					"tenant_throttle",
 					0,
 					map[string]any{
-						"provider":         provider,
+						"provider":         throttleProvider,
 						"throttle_ms":      throttleMs,
 						"tenant_throttled": true,
 						"tool":             def.Name,
@@ -196,12 +247,18 @@ func (e *ToolExecutor) executeHTTPTool(
 
 		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 
-		req, err := http.NewRequestWithContext(attemptCtx, method, urlStr, bytes.NewReader(bodyBytes))
+		var bodyReader io.Reader
+		if len(bodyBytes) > 0 {
+			bodyReader = bytes.NewReader(bodyBytes)
+		}
+		req, err := http.NewRequestWithContext(attemptCtx, method, urlStr, bodyReader)
 		if err != nil {
 			cancel()
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
+		if len(bodyBytes) > 0 {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}
@@ -321,6 +378,60 @@ func (e *ToolExecutor) executeHTTPTool(
 	return nil, fmt.Errorf("tool request failed")
 }
 
+func (e *ToolExecutor) resolveToolCredentialContext(
+	ctx context.Context,
+	node *entity.Node,
+	toolConfig map[string]any,
+	def *tool.Definition,
+) (string, string, error) {
+	provider := strings.ToLower(strings.TrimSpace(node.GetConfigString("provider")))
+	if provider == "" {
+		if providerFromCfg, ok := toolConfig["provider"].(string); ok {
+			provider = strings.ToLower(strings.TrimSpace(providerFromCfg))
+		}
+	}
+	if provider == "" {
+		provider = strings.ToLower(strings.TrimSpace(def.Name))
+	}
+
+	credentialID := strings.TrimSpace(node.GetConfigString("credential_id"))
+	if credentialID == "" {
+		return provider, "", nil
+	}
+	if e.resolver == nil {
+		return "", "", domain.NewValidationError("credential_id", "credential resolver not configured")
+	}
+
+	tenantID := strings.TrimSpace(port.TenantIDFrom(ctx))
+	if tenantID == "" {
+		return "", "", domain.NewValidationError("tenant_id", "tenant_id is required for credential resolution")
+	}
+
+	resolvedProvider, apiKey, err := e.resolver.Resolve(ctx, credentialID, tenantID)
+	if err != nil {
+		return "", "", domain.NewValidationError("credential_id", fmt.Sprintf("credential resolution failed: %v", err))
+	}
+	resolvedProvider = strings.ToLower(strings.TrimSpace(resolvedProvider))
+	if provider == "" {
+		provider = resolvedProvider
+	} else if resolvedProvider != "" && provider != resolvedProvider {
+		return "", "", domain.NewValidationError(
+			"credential_id",
+			fmt.Sprintf("credential provider mismatch: expected %s, got %s", provider, resolvedProvider),
+		)
+	}
+
+	return provider, apiKey, nil
+}
+
+func flattenToolConfigTemplateValues(config map[string]any) map[string]string {
+	values := map[string]string{}
+	for k, v := range config {
+		values["config."+k] = fmt.Sprintf("%v", v)
+	}
+	return values
+}
+
 func (e *ToolExecutor) executeExecTool(
 	ctx context.Context,
 	def *tool.Definition,
@@ -330,6 +441,9 @@ func (e *ToolExecutor) executeExecTool(
 ) (map[string]any, error) {
 	if def.Exec == nil {
 		return nil, fmt.Errorf("tool missing exec configuration")
+	}
+	if tool.NormalizeRuntimeMode(e.runtimeMode) == tool.RuntimeModeCloud {
+		return nil, newPolicyDeniedValidationError("tool", "exec tools are disabled in cloud mode")
 	}
 	command := os.ExpandEnv(def.Exec.Command)
 	if command == "" {

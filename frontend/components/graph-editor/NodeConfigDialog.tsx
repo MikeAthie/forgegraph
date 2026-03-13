@@ -29,6 +29,7 @@ export interface NodeFormProps {
  * Node type display info
  */
 const NODE_TYPE_INFO: Record<string, { label: string; color: string; icon: string }> = {
+  [NODE_TYPES.AGENT]: { label: "Agent", color: "bg-sky-500", icon: "A" },
   [NODE_TYPES.PROMPT]: { label: "Prompt", color: "bg-violet-500", icon: "P" },
   [NODE_TYPES.HTTP]: { label: "HTTP", color: "bg-blue-500", icon: "H" },
   [NODE_TYPES.TRANSFORM]: { label: "Transform", color: "bg-amber-500", icon: "T" },

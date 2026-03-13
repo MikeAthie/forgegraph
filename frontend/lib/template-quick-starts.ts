@@ -59,6 +59,18 @@ const PROVIDER_PLACEHOLDERS: Record<string, string> = {
   twilio: "Account SID / Auth Token",
 };
 
+const OAUTH_PROVIDERS = new Set([
+  "gmail",
+  "google_calendar",
+  "google_tasks",
+  "notion",
+  "slack",
+  "jira",
+  "linear",
+  "hubspot",
+  "google_drive",
+]);
+
 const QUICK_START_DEFINITIONS: QuickStartDefinition[] = [
   {
     id: "personal-assistant-telegram-gmail",
@@ -227,14 +239,33 @@ export function buildTemplatePreview(
     ? QUICK_START_DEFINITIONS.find((definition) => definition.title === quickStartTitle)
     : undefined;
   const requiredProviders = uniq(quickStart?.requiredProviders ?? inferTemplateProviders(template));
-  const credentialProviders = new Set(credentials.map((credential) => credential.provider.toLowerCase()));
+  const connectedForProvider = (provider: string): boolean => {
+    const normalizedProvider = provider.toLowerCase();
+    const providerCredentials = credentials.filter(
+      (credential) => credential.provider.toLowerCase() === normalizedProvider,
+    );
+    if (providerCredentials.length === 0) {
+      return false;
+    }
+
+    if (OAUTH_PROVIDERS.has(normalizedProvider)) {
+      return providerCredentials.some(
+        (credential) =>
+          credential.is_oauth_connection &&
+          credential.health_status !== "revoked" &&
+          credential.health_status !== "expired",
+      );
+    }
+
+    return providerCredentials.some((credential) => credential.health_status !== "revoked");
+  };
 
   return {
     expectedOutput: getTemplateExpectedOutput(template, quickStartTitle),
     requiredCredentials: requiredProviders.map((provider) => ({
       provider,
       label: PROVIDER_LABELS[provider] ?? provider,
-      connected: credentialProviders.has(provider),
+      connected: connectedForProvider(provider),
       placeholder: PROVIDER_PLACEHOLDERS[provider] ?? "API token",
     })),
     placeholderVariables: getTemplatePlaceholders(template),

@@ -83,16 +83,14 @@ describe("GraphNode", () => {
       const props = createNodeProps(NODE_TYPES.PROMPT, "Node");
       const { container } = render(<GraphNode {...props} />);
 
-      // Handles are now positioned Left/Right instead of Top/Bottom
-      expect(container.querySelector('[data-testid="handle-target-left"]')).toBeInTheDocument();
+      expect(container.querySelector('[data-testid="handle-target-top"]')).toBeInTheDocument();
     });
 
     it("should render output handle", () => {
       const props = createNodeProps(NODE_TYPES.PROMPT, "Node");
       const { container } = render(<GraphNode {...props} />);
 
-      // Handles are now positioned Left/Right instead of Top/Bottom
-      expect(container.querySelector('[data-testid="handle-source-right"]')).toBeInTheDocument();
+      expect(container.querySelector('[data-testid="handle-source-bottom"]')).toBeInTheDocument();
     });
 
     it("should show 'Unnamed Node' when label is missing", () => {
@@ -132,12 +130,11 @@ describe("GraphNode", () => {
       expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-indigo-500");
     });
 
-    it("should apply orange accent styling for Branch nodes", () => {
+    it("should apply rose accent styling for Branch nodes", () => {
       const props = createNodeProps(NODE_TYPES.BRANCH, "Branch");
       render(<GraphNode {...props} />);
 
-      // Branch is now a diamond shape with orange accent
-      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-orange-500");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-rose-500");
     });
 
     it("should apply emerald accent styling for Merge nodes", () => {
@@ -347,11 +344,10 @@ describe("GraphNode", () => {
     });
 
     it("should display correct label for Branch type", () => {
-      // Diamond shape shows nodeData.label or falls back to typeLabel ("Conditional")
-      const props = createNodeProps(NODE_TYPES.BRANCH, "");
+      const props = createNodeProps(NODE_TYPES.BRANCH, "Node");
       render(<GraphNode {...props} />);
 
-      expect(screen.getByText("Conditional")).toBeInTheDocument();
+      expect(screen.getByText("Branch")).toBeInTheDocument();
     });
 
     it("should display correct label for Merge type", () => {
@@ -375,7 +371,7 @@ describe("GraphNode", () => {
       const { container } = render(<GraphNode {...props} />);
 
       const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("min-w-[180px]");
+      expect(nodeElement).toHaveClass("min-w-[200px]");
     });
 
     it("should have rounded corners", () => {
@@ -404,13 +400,12 @@ describe("GraphNode", () => {
   });
 
   describe("Badge Styling", () => {
-    it("should render type label with appropriate styling", () => {
+    it("should render type badge with appropriate color", () => {
       const props = createNodeProps(NODE_TYPES.PROMPT, "Node");
       render(<GraphNode {...props} />);
 
-      // Type label is now shown as a subtle caption below the node name
       const badge = screen.getByText("Prompt");
-      expect(badge).toHaveClass("text-[11px]", "text-muted-foreground", "capitalize");
+      expect(badge).toHaveClass("rounded-full", "text-xs", "font-medium", "bg-violet-500/15");
     });
   });
 

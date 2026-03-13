@@ -5,17 +5,66 @@ import { X, AlertCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NODE_TYPES, type NodeType } from "../../../lib/graph-types";
 import { useNodeValidation } from "@/contexts/ValidationContext";
-import { NodeTypeBadge } from "../DataTypeIndicator";
-import { DataType } from "@/lib/data-types";
-import { getPrimaryInputType, getPrimaryOutputType } from "@/lib/type-inference";
-import { getNodeVisual, type NodeVisualConfig } from "./nodeShapes";
+import { DataTypeIndicator, NodeTypeBadge } from "../DataTypeIndicator";
+import {
+  getPrimaryInputType,
+  getPrimaryOutputType,
+} from "@/lib/type-inference";
+
+const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
+  [NODE_TYPES.AGENT]: {
+    strip: "bg-sky-500",
+    pill: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
+  },
+  [NODE_TYPES.PROMPT]: {
+    strip: "bg-violet-500",
+    pill: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  },
+  [NODE_TYPES.HTTP]: {
+    strip: "bg-amber-500",
+    pill: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+  },
+  [NODE_TYPES.TRANSFORM]: {
+    strip: "bg-blue-500",
+    pill: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+  },
+  [NODE_TYPES.BRANCH]: {
+    strip: "bg-rose-500",
+    pill: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  },
+  [NODE_TYPES.MERGE]: {
+    strip: "bg-emerald-500",
+    pill: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  },
+  [NODE_TYPES.OUTPUT]: {
+    strip: "bg-indigo-500",
+    pill: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
+  },
+  [NODE_TYPES.HUMAN_GATE]: {
+    strip: "bg-orange-500",
+    pill: "bg-orange-500/15 text-orange-800 dark:text-orange-300",
+  },
+  [NODE_TYPES.MEMORY]: {
+    strip: "bg-teal-500",
+    pill: "bg-teal-500/15 text-teal-800 dark:text-teal-300",
+  },
+  [NODE_TYPES.TOOL]: {
+    strip: "bg-cyan-500",
+    pill: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300",
+  },
+  [NODE_TYPES.SUBGRAPH]: {
+    strip: "bg-fuchsia-500",
+    pill: "bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300",
+  },
+};
 
 const nodeTypeLabels: Record<string, string> = {
+  [NODE_TYPES.AGENT]: "Agent",
   [NODE_TYPES.PROMPT]: "Prompt",
   [NODE_TYPES.HTTP]: "HTTP",
   [NODE_TYPES.TRANSFORM]: "Transform",
   [NODE_TYPES.OUTPUT]: "Output",
-  [NODE_TYPES.BRANCH]: "Conditional",
+  [NODE_TYPES.BRANCH]: "Branch",
   [NODE_TYPES.MERGE]: "Merge",
   [NODE_TYPES.HUMAN_GATE]: "Human Gate",
   [NODE_TYPES.MEMORY]: "Memory",
@@ -37,20 +86,28 @@ interface GraphNodeData {
   timeout_ms?: number;
 }
 
+function getHandleTestId(
+  direction: "source" | "target",
+  handleId: string = "default",
+): string {
+  return `node-handle-${direction}-${handleId}`;
+}
+
 function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
   const [isHovered, setIsHovered] = useState(false);
   const { setNodes, setEdges } = useReactFlow();
   const nodeData = data as unknown as GraphNodeData;
   const nodeType = type ?? nodeData.nodeType ?? NODE_TYPES.PROMPT;
   const typeLabel = nodeTypeLabels[nodeType] ?? nodeType;
+  const styles = nodeTypeStyles[nodeType] ?? nodeTypeStyles[NODE_TYPES.PROMPT];
   const isDisabled = nodeData.disabled === true;
   const executionStatus = nodeData.executionStatus;
 
-  const visual = getNodeVisual(nodeType, nodeData.isTrigger, nodeData.isEnd);
-
   // Validation state
   const { hasError, hasWarning, errors, warnings } = useNodeValidation(id);
-  const validationMessages = [...errors, ...warnings].map((e) => e.message).join(", ");
+  const validationMessages = [...errors, ...warnings]
+    .map((e) => e.message)
+    .join(", ");
 
   const executionDotClass: string | null =
     executionStatus === "succeeded"
@@ -70,6 +127,11 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
                   : null;
 
   const isSkipped = executionStatus === "skipped";
+  const hasAdvancedConfig =
+    Boolean(
+      nodeData.retry_policy?.max_attempts &&
+      nodeData.retry_policy.max_attempts > 1,
+    ) || Boolean(nodeData.timeout_ms);
 
   // Get input/output types for this node
   const { inputType, outputType } = useMemo(() => {
@@ -88,476 +150,251 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setNodes((nodes) => nodes.filter((n) => n.id !== id));
-    setEdges((edges) => edges.filter((e) => e.source !== id && e.target !== id));
+    setEdges((edges) =>
+      edges.filter((e) => e.source !== id && e.target !== id),
+    );
   };
 
-  if (visual.shape === "pill") {
-    return (
-      <PillNode
-        id={id}
-        nodeData={nodeData}
-        nodeType={nodeType}
-        visual={visual}
-        selected={selected}
-        isHovered={isHovered}
-        setIsHovered={setIsHovered}
-        isDisabled={isDisabled}
-        isSkipped={isSkipped}
-        executionDotClass={executionDotClass}
-        executionStatus={executionStatus}
-        hasError={hasError}
-        hasWarning={hasWarning}
-        validationMessages={validationMessages}
-        handleDelete={handleDelete}
-      />
-    );
-  }
-
-  if (visual.shape === "diamond") {
-    return (
-      <DiamondNode
-        id={id}
-        nodeData={nodeData}
-        nodeType={nodeType}
-        typeLabel={typeLabel}
-        visual={visual}
-        selected={selected}
-        isHovered={isHovered}
-        setIsHovered={setIsHovered}
-        isDisabled={isDisabled}
-        isSkipped={isSkipped}
-        executionDotClass={executionDotClass}
-        executionStatus={executionStatus}
-        hasError={hasError}
-        hasWarning={hasWarning}
-        validationMessages={validationMessages}
-        handleDelete={handleDelete}
-      />
-    );
-  }
-
-  // Default: rectangle shape
-  return (
-    <RectangleNode
-      id={id}
-      nodeData={nodeData}
-      nodeType={nodeType}
-      typeLabel={typeLabel}
-      visual={visual}
-      selected={selected}
-      isHovered={isHovered}
-      setIsHovered={setIsHovered}
-      isDisabled={isDisabled}
-      isSkipped={isSkipped}
-      executionDotClass={executionDotClass}
-      executionStatus={executionStatus}
-      hasError={hasError}
-      hasWarning={hasWarning}
-      validationMessages={validationMessages}
-      inputType={inputType}
-      outputType={outputType}
-      handleDelete={handleDelete}
-    />
-  );
-}
-
-/* ============================================================
-   Shared types & helpers
-   ============================================================ */
-
-interface BaseNodeProps {
-  id: string;
-  nodeData: GraphNodeData;
-  nodeType: string;
-  visual: NodeVisualConfig;
-  selected: boolean | undefined;
-  isHovered: boolean;
-  setIsHovered: (v: boolean) => void;
-  isDisabled: boolean;
-  isSkipped: boolean;
-  executionDotClass: string | null;
-  executionStatus?: string;
-  hasError: boolean;
-  hasWarning: boolean;
-  validationMessages: string;
-  handleDelete: (e: React.MouseEvent) => void;
-}
-
-function ValidationBadge({ hasError, hasWarning, validationMessages }: { hasError: boolean; hasWarning: boolean; validationMessages: string }) {
-  if (!hasError && !hasWarning) return null;
   return (
     <div
+      data-testid="graph-node"
+      data-node-id={id}
+      data-node-type={nodeType}
       className={cn(
-        "absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center z-30",
-        hasError ? "bg-destructive" : "bg-amber-500"
-      )}
-      title={validationMessages}
-    >
-      {hasError ? (
-        <AlertCircle className="w-3 h-3 text-white" />
-      ) : (
-        <AlertTriangle className="w-3 h-3 text-white" />
-      )}
-    </div>
-  );
-}
-
-function DeleteButton({ isVisible, onDelete }: { isVisible: boolean; onDelete: (e: React.MouseEvent) => void }) {
-  if (!isVisible) return null;
-  return (
-    <button
-      type="button"
-      onClick={onDelete}
-      className="absolute -top-2 -right-2 w-5 h-5 bg-destructive hover:bg-destructive/90 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-20"
-      aria-label="Delete node"
-    >
-      <X className="w-3 h-3" />
-    </button>
-  );
-}
-
-function ExecutionDot({ dotClass, status }: { dotClass: string | null; status?: string }) {
-  if (!dotClass) return null;
-  return (
-    <span
-      className={cn("h-2.5 w-2.5 rounded-full", dotClass)}
-      title={`Execution: ${status}`}
-      aria-hidden="true"
-    />
-  );
-}
-
-/* ============================================================
-   PILL SHAPE (Start Trigger / End)
-   ============================================================ */
-
-function PillNode({
-  id,
-  nodeData,
-  visual,
-  selected,
-  isHovered,
-  setIsHovered,
-  isDisabled,
-  isSkipped,
-  executionDotClass,
-  executionStatus,
-  hasError,
-  hasWarning,
-  validationMessages,
-  handleDelete,
-}: BaseNodeProps) {
-  const Icon = visual.icon;
-  const isTrigger = nodeData.isTrigger;
-  const label = isTrigger ? "Start Trigger" : "Workflow End";
-  const sublabel = isTrigger ? "Workflow Start" : "Workflow End";
-
-  return (
-    <div
-      className={cn(
-        "group relative",
-        isDisabled && "opacity-50 grayscale",
-        isSkipped && "opacity-70",
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      title={validationMessages || undefined}
-    >
-      <div
-        className={cn(
-          "flex items-center gap-3 rounded-full px-5 py-3 shadow-lg border transition-all",
-          isTrigger
-            ? "bg-emerald-500/15 border-emerald-500/40"
-            : "bg-rose-500/15 border-rose-500/40",
-          selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-          hasError && !selected && "border-destructive/60 shadow-destructive/20 shadow-md",
-          hasWarning && !hasError && !selected && "border-amber-500/60 shadow-amber-500/20 shadow-md",
-        )}
-      >
-        <div
-          data-testid="node-accent-strip"
-          className={cn(
-            "w-9 h-9 rounded-full flex items-center justify-center shadow-sm",
-            visual.bgClass,
-          )}
-        >
-          <Icon className="w-4 h-4 text-white" />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-foreground">{nodeData.label || label}</span>
-          <span className="text-[11px] text-muted-foreground">{sublabel}</span>
-        </div>
-        <ExecutionDot dotClass={executionDotClass} status={executionStatus} />
-      </div>
-
-      <ValidationBadge hasError={hasError} hasWarning={hasWarning} validationMessages={validationMessages} />
-      <DeleteButton isVisible={isHovered || !!selected} onDelete={handleDelete} />
-
-      {/* Handles */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="!w-3 !h-3 !bg-muted-foreground/60 !border-2 !border-background !z-10"
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!w-3 !h-3 !bg-muted-foreground/60 !border-2 !border-background !z-10"
-      />
-    </div>
-  );
-}
-
-/* ============================================================
-   DIAMOND SHAPE (Branch / Conditional)
-   ============================================================ */
-
-function DiamondNode({
-  id,
-  nodeData,
-  nodeType,
-  typeLabel,
-  visual,
-  selected,
-  isHovered,
-  setIsHovered,
-  isDisabled,
-  isSkipped,
-  executionDotClass,
-  executionStatus,
-  hasError,
-  hasWarning,
-  validationMessages,
-  handleDelete,
-}: BaseNodeProps & { typeLabel: string }) {
-  const Icon = visual.icon;
-
-  return (
-    <div
-      className={cn(
-        "group relative",
-        isDisabled && "opacity-50 grayscale",
-        isSkipped && "opacity-70",
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      title={validationMessages || undefined}
-      style={{ width: 120, height: 120 }}
-    >
-      {/* Diamond shape via rotation */}
-      <div
-        className={cn(
-          "absolute inset-[10px] rotate-45 rounded-xl border shadow-lg transition-all",
-          "bg-orange-500/15 border-orange-500/40",
-          selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-          hasError && !selected && "border-destructive/60 shadow-destructive/20 shadow-md",
-          hasWarning && !hasError && !selected && "border-amber-500/60 shadow-amber-500/20 shadow-md",
-        )}
-      />
-
-      {/* Content (counter-rotated) */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-        <div
-          data-testid="node-accent-strip"
-          className={cn(
-            "w-9 h-9 rounded-full flex items-center justify-center shadow-sm mb-1",
-            visual.bgClass,
-          )}
-        >
-          <Icon className="w-4 h-4 text-white" />
-        </div>
-        <span className="text-xs font-semibold text-foreground">{nodeData.label || typeLabel}</span>
-        <ExecutionDot dotClass={executionDotClass} status={executionStatus} />
-      </div>
-
-      <ValidationBadge hasError={hasError} hasWarning={hasWarning} validationMessages={validationMessages} />
-      <DeleteButton isVisible={isHovered || !!selected} onDelete={handleDelete} />
-
-      {/* True/False output labels */}
-      <div className="absolute -bottom-6 left-[15%] transform -translate-x-1/2 z-20">
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-          True
-        </span>
-      </div>
-      <div className="absolute -bottom-6 left-[85%] transform -translate-x-1/2 z-20">
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40">
-          False
-        </span>
-      </div>
-
-      {/* Handles - top for input, bottom-left for True, bottom-right for False */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="!w-3 !h-3 !bg-orange-500 !border-2 !border-background !z-10"
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="true"
-        className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-background !z-10"
-        style={{ left: "15%" }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="false"
-        className="!w-3 !h-3 !bg-rose-500 !border-2 !border-background !z-10"
-        style={{ left: "85%" }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="default"
-        className="!w-3 !h-3 !bg-muted-foreground/60 !border-2 !border-background !z-10"
-        style={{ opacity: 0 }}
-      />
-    </div>
-  );
-}
-
-/* ============================================================
-   RECTANGLE SHAPE (Default for most node types)
-   ============================================================ */
-
-function RectangleNode({
-  id,
-  nodeData,
-  nodeType,
-  typeLabel,
-  visual,
-  selected,
-  isHovered,
-  setIsHovered,
-  isDisabled,
-  isSkipped,
-  executionDotClass,
-  executionStatus,
-  hasError,
-  hasWarning,
-  validationMessages,
-  inputType,
-  outputType,
-  handleDelete,
-}: BaseNodeProps & { typeLabel: string; inputType: DataType; outputType: DataType }) {
-  const Icon = visual.icon;
-  const hasAdvancedConfig = Boolean(nodeData.retry_policy?.max_attempts && nodeData.retry_policy.max_attempts > 1) || Boolean(nodeData.timeout_ms);
-
-  return (
-    <div
-      className={cn(
-        "group relative min-w-[180px] max-w-[240px] rounded-xl border border-border bg-card shadow-sm transition-all",
-        isDisabled && "opacity-50 grayscale border-dashed border-muted-foreground/40",
+        "group relative min-w-[200px] rounded-xl border border-border bg-card shadow-sm transition-all",
+        isDisabled &&
+          "opacity-50 grayscale border-dashed border-muted-foreground/40",
         isSkipped && "opacity-70",
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-        hasError && !selected && "border-destructive/60 shadow-destructive/20 shadow-md",
-        hasWarning && !hasError && !selected && "border-amber-500/60 shadow-amber-500/20 shadow-md",
+        // Validation error/warning styles
+        hasError &&
+          !selected &&
+          "border-destructive/60 shadow-destructive/20 shadow-md",
+        hasWarning &&
+          !hasError &&
+          !selected &&
+          "border-amber-500/60 shadow-amber-500/20 shadow-md",
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       title={validationMessages || undefined}
     >
-      <ValidationBadge hasError={hasError} hasWarning={hasWarning} validationMessages={validationMessages} />
-      <DeleteButton isVisible={isHovered || !!selected} onDelete={handleDelete} />
+      <div
+        data-testid="node-accent-strip"
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 h-1",
+          hasError
+            ? "bg-destructive"
+            : hasWarning
+              ? "bg-amber-500"
+              : styles.strip,
+        )}
+      />
+
+      {/* Validation Error Badge */}
+      {(hasError || hasWarning) && (
+        <div
+          className={cn(
+            "absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center z-30",
+            hasError ? "bg-destructive" : "bg-amber-500",
+          )}
+          title={validationMessages}
+        >
+          {hasError ? (
+            <AlertCircle className="w-3 h-3 text-white" />
+          ) : (
+            <AlertTriangle className="w-3 h-3 text-white" />
+          )}
+        </div>
+      )}
+
+      {/* Delete button on hover */}
+      {(isHovered || selected) && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="absolute top-2 right-2 w-6 h-6 bg-destructive hover:bg-destructive/90 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-20"
+          aria-label="Delete node"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
 
       {/* Node Content */}
-      <div className="flex items-start gap-3 p-3">
-        {/* Colored Icon Circle */}
-        <div
-          data-testid="node-accent-strip"
-          className={cn(
-            "w-10 h-10 rounded-lg flex items-center justify-center shadow-sm shrink-0",
-            visual.bgClass,
+      <div className="p-3 pt-4">
+        {/* Type Badge */}
+        <div className="flex items-center gap-2 mb-2">
+          <span
+            className={cn(
+              "px-2 py-0.5 rounded-full text-xs font-medium capitalize",
+              styles.pill,
+              isDisabled && "bg-muted text-muted-foreground",
+            )}
+          >
+            {typeLabel}
+          </span>
+          {nodeData.isTrigger && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              Start
+            </span>
           )}
-        >
-          <Icon className="w-5 h-5 text-white" />
+          {nodeData.isEnd && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-300">
+              End
+            </span>
+          )}
+          {isDisabled && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-dashed border-muted-foreground/30">
+              disabled
+            </span>
+          )}
+          {executionDotClass && (
+            <span
+              className={`ml-auto h-2.5 w-2.5 rounded-full ${executionDotClass}`}
+              title={`Execution: ${executionStatus}`}
+              aria-hidden="true"
+            />
+          )}
         </div>
 
-        {/* Text content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={cn("text-sm font-semibold truncate text-foreground", isDisabled && "line-through")}>
-              {nodeData.label || "Unnamed Node"}
-            </span>
-            <ExecutionDot dotClass={executionDotClass} status={executionStatus} />
-          </div>
-          <span className="text-[11px] text-muted-foreground capitalize">{typeLabel}</span>
-
-          {/* Config Preview */}
-          {nodeData.config && Object.keys(nodeData.config).length > 0 && (
-            <div data-testid="node-config-preview" className="mt-1 text-[11px] text-muted-foreground/80 truncate">
-              {getConfigPreview(nodeType, nodeData.config)}
-            </div>
+        {/* Node Name */}
+        <div
+          className={cn(
+            "text-sm font-semibold truncate text-foreground",
+            isDisabled && "line-through",
           )}
+        >
+          <span data-testid="graph-node-label">
+            {nodeData.label || "Unnamed Node"}
+          </span>
+        </div>
 
-          {/* Advanced Config Indicator */}
-          {hasAdvancedConfig && (
-            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-              {nodeData.retry_policy?.max_attempts && nodeData.retry_policy.max_attempts > 1 && (
-                <span className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40" title={`Max ${nodeData.retry_policy.max_attempts} attempts`}>
+        {/* Config Preview */}
+        {nodeData.config && Object.keys(nodeData.config).length > 0 && (
+          <div
+            data-testid="node-config-preview"
+            className="mt-2 text-xs text-muted-foreground truncate"
+          >
+            {getConfigPreview(nodeType, nodeData.config)}
+          </div>
+        )}
+
+        {/* Advanced Config Indicator */}
+        {hasAdvancedConfig && (
+          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            {nodeData.retry_policy?.max_attempts &&
+              nodeData.retry_policy.max_attempts > 1 && (
+                <span
+                  className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40"
+                  title={`Max ${nodeData.retry_policy.max_attempts} attempts`}
+                >
                   {nodeData.retry_policy.max_attempts}x retry
                 </span>
               )}
-              {nodeData.timeout_ms && (
-                <span className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40" title={`Timeout: ${nodeData.timeout_ms}ms`}>
-                  {nodeData.timeout_ms >= 1000 ? `${Math.round(nodeData.timeout_ms / 1000)}s` : `${nodeData.timeout_ms}ms`} timeout
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Data Type Indicators */}
-          <div className="mt-1.5 flex items-center justify-end">
-            <NodeTypeBadge inputType={inputType} outputType={outputType} />
+            {nodeData.timeout_ms && (
+              <span
+                className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40"
+                title={`Timeout: ${nodeData.timeout_ms}ms`}
+              >
+                {nodeData.timeout_ms >= 1000
+                  ? `${Math.round(nodeData.timeout_ms / 1000)}s`
+                  : `${nodeData.timeout_ms}ms`}{" "}
+                timeout
+              </span>
+            )}
           </div>
+        )}
+
+        {/* Data Type Indicators */}
+        <div className="mt-2 flex items-center justify-end">
+          <NodeTypeBadge inputType={inputType} outputType={outputType} />
         </div>
       </div>
 
       {/* Input Handles */}
       {nodeType === NODE_TYPES.MERGE ? (
+        // Merge node: multiple inputs
         <>
           <Handle
+            data-testid={getHandleTestId("target", "input-1")}
             type="target"
-            position={Position.Left}
+            position={Position.Top}
             id="input-1"
             className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-card !z-10"
-            style={{ top: "35%" }}
+            style={{ left: "30%" }}
           />
           <Handle
+            data-testid={getHandleTestId("target", "input-2")}
             type="target"
-            position={Position.Left}
+            position={Position.Top}
             id="input-2"
             className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-card !z-10"
-            style={{ top: "65%" }}
+            style={{ left: "70%" }}
           />
         </>
       ) : (
         <Handle
+          data-testid={getHandleTestId("target")}
           type="target"
-          position={Position.Left}
+          position={Position.Top}
           className="!w-3 !h-3 !bg-muted-foreground/60 !border-2 !border-card !z-10"
         />
       )}
 
-      {/* Output Handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!w-3 !h-3 !bg-muted-foreground/60 !border-2 !border-card !z-10"
-      />
+      {/* Output Handles */}
+      {nodeType === NODE_TYPES.BRANCH ? (
+        // Branch node: two outputs (True/False)
+        <>
+          <div className="absolute -bottom-5 left-[30%] transform -translate-x-1/2 text-[10px] text-emerald-600 dark:text-emerald-300 font-medium">
+            True
+          </div>
+          <Handle
+            data-testid={getHandleTestId("source", "true")}
+            type="source"
+            position={Position.Bottom}
+            id="true"
+            className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-card !z-10"
+            style={{ left: "30%" }}
+          />
+          <div className="absolute -bottom-5 left-[70%] transform -translate-x-1/2 text-[10px] text-rose-600 dark:text-rose-300 font-medium">
+            False
+          </div>
+          <Handle
+            data-testid={getHandleTestId("source", "false")}
+            type="source"
+            position={Position.Bottom}
+            id="false"
+            className="!w-3 !h-3 !bg-rose-500 !border-2 !border-card !z-10"
+            style={{ left: "70%" }}
+          />
+        </>
+      ) : (
+        <Handle
+          data-testid={getHandleTestId("source")}
+          type="source"
+          position={Position.Bottom}
+          className="!w-3 !h-3 !bg-muted-foreground/60 !border-2 !border-card !z-10"
+        />
+      )}
     </div>
   );
 }
 
-/* ============================================================
-   Config Preview Helper (unchanged)
-   ============================================================ */
-
 function getConfigPreview(
   nodeType: string,
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
 ): string {
   switch (nodeType) {
+    case NODE_TYPES.AGENT: {
+      const model = (config.model as string) ?? "";
+      const tools = Array.isArray(config.tools) ? config.tools.length : 0;
+      if (model) {
+        return `${model} · ${tools} tool${tools === 1 ? "" : "s"}`.slice(0, 32);
+      }
+      return tools > 0
+        ? `${tools} tool${tools === 1 ? "" : "s"} configured`
+        : "Agent loop";
+    }
     case NODE_TYPES.PROMPT:
       if (config.prompt_id) {
         return `Prompt: ${config.prompt_id}`;
@@ -597,7 +434,9 @@ function getConfigPreview(
       const toolName = (config.tool as string) ?? (config.name as string) ?? "";
       const version = (config.version as string) ?? "";
       if (toolName) {
-        return version ? `${toolName}@${version}`.slice(0, 32) : toolName.slice(0, 32);
+        return version
+          ? `${toolName}@${version}`.slice(0, 32)
+          : toolName.slice(0, 32);
       }
       return "Tool call";
     }
@@ -605,7 +444,9 @@ function getConfigPreview(
       const graphId = (config.graph_id as string) ?? "";
       const graphVersion = config.graph_version as number | undefined;
       if (graphId) {
-        return graphVersion ? `Graph ${graphId} v${graphVersion}`.slice(0, 32) : `Graph ${graphId}`.slice(0, 32);
+        return graphVersion
+          ? `Graph ${graphId} v${graphVersion}`.slice(0, 32)
+          : `Graph ${graphId}`.slice(0, 32);
       }
       return "Subgraph";
     }

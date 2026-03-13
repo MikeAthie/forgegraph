@@ -8,6 +8,8 @@ from adapters.api.marketplace.views import (
     MarketplaceInstallView,
     MarketplaceReleaseListCreateView,
     MarketplaceReleaseReviewView,
+    MarketplaceRuntimeManifestPreviewView,
+    MarketplaceRuntimeManifestView,
 )
 
 urlpatterns = [
@@ -18,6 +20,16 @@ urlpatterns = [
         name="marketplace-install",
     ),
     path("installed", MarketplaceInstalledView.as_view(), name="marketplace-installed"),
+    path(
+        "runtime-manifests",
+        MarketplaceRuntimeManifestView.as_view(),
+        name="marketplace-runtime-manifests",
+    ),
+    path(
+        "runtime-manifest-preview",
+        MarketplaceRuntimeManifestPreviewView.as_view(),
+        name="marketplace-runtime-manifest-preview",
+    ),
     path("releases", MarketplaceReleaseListCreateView.as_view(), name="marketplace-releases"),
     path(
         "releases/<uuid:release_id>/review",

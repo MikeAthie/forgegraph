@@ -10,6 +10,30 @@ from rest_framework import serializers
 
 RUN_STATUS_CHOICES = ["pending", "running", "paused", "succeeded", "failed", "canceled"]
 NODE_RUN_STATUS_CHOICES = ["pending", "running", "waiting", "succeeded", "failed", "skipped"]
+RUN_EVENT_TYPE_CHOICES = ["node_run.updated", "run.updated", "run.schema_validation"]
+ENGINE_EVENT_TYPE_CHOICES = [
+    "run_started",
+    "run_completed",
+    "run_failed",
+    "run_paused",
+    "run_resumed",
+    "run_canceled",
+    "node_started",
+    "node_completed",
+    "node_failed",
+    "node_skipped",
+    "node_retrying",
+    "node_stream_chunk",
+    "run.schema_validation",
+]
+NODE_SCOPED_ENGINE_EVENT_TYPES = {
+    "node_started",
+    "node_completed",
+    "node_failed",
+    "node_skipped",
+    "node_retrying",
+    "node_stream_chunk",
+}
 
 
 class RunStartSerializer(serializers.Serializer[Any]):
@@ -84,6 +108,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
     node_outcomes = serializers.JSONField(read_only=True, allow_null=True)
+    agent_events = serializers.JSONField(read_only=True, allow_null=True)
 
 
 class NodeRunSerializer(serializers.Serializer[Any]):
@@ -102,10 +127,16 @@ class NodeRunSerializer(serializers.Serializer[Any]):
     error_json = serializers.JSONField(read_only=True, allow_null=True)
 
 
+class RunDetailNodeRunSerializer(NodeRunSerializer):
+    """NodeRun payload for run detail, including derived agent trace data."""
+
+    agent_trace = serializers.JSONField(read_only=True, allow_null=True)
+
+
 class RunDetailWithNodeRunsSerializer(RunDetailSerializer):
     """Run detail output including nested node run objects."""
 
-    node_runs = NodeRunSerializer(many=True, read_only=True)
+    node_runs = RunDetailNodeRunSerializer(many=True, read_only=True)
 
 
 class RunDeltaBroadcastSerializer(serializers.Serializer[Any]):
@@ -152,9 +183,7 @@ class RunUpdateDeltaSerializer(serializers.Serializer[Any]):
 class RunEventSerializer(serializers.Serializer[Any]):
     """Run event wrapper used by the broadcast endpoint."""
 
-    event_type = serializers.ChoiceField(
-        choices=["node_run.updated", "run.updated", "run.schema_validation"]
-    )
+    event_type = serializers.ChoiceField(choices=RUN_EVENT_TYPE_CHOICES)
     node_run = NodeRunDeltaSerializer(required=False)
     run = RunUpdateDeltaSerializer(required=False)
     payload = serializers.JSONField(required=False)
@@ -181,7 +210,7 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
 
     event_id = serializers.CharField(required=False, allow_blank=True)
     version = serializers.IntegerField(required=False)
-    type = serializers.CharField()
+    type = serializers.ChoiceField(choices=ENGINE_EVENT_TYPE_CHOICES)
     run_id = serializers.UUIDField()
     tenant_id = serializers.UUIDField()
     node_id = serializers.CharField(required=False, allow_blank=True)
@@ -193,3 +222,32 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
     error = serializers.CharField(required=False, allow_blank=True)
     timestamp = serializers.IntegerField(required=False)
     duration_ms = serializers.IntegerField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        event_type = attrs["type"]
+        if event_type in NODE_SCOPED_ENGINE_EVENT_TYPES:
+            errors: dict[str, list[str]] = {}
+            if not attrs.get("node_id"):
+                errors["node_id"] = ["node_id is required for node-scoped engine events"]
+            if not attrs.get("node_type"):
+                errors["node_type"] = ["node_type is required for node-scoped engine events"]
+            if errors:
+                raise serializers.ValidationError(errors)
+
+        if event_type == "node_stream_chunk":
+            output = attrs.get("output")
+            if not isinstance(output, dict):
+                raise serializers.ValidationError(
+                    {"output": ["output is required for node_stream_chunk"]}
+                )
+            if "chunk" not in output:
+                raise serializers.ValidationError(
+                    {"output": ["output.chunk is required for node_stream_chunk"]}
+                )
+
+        if event_type == "run.schema_validation" and "output" not in attrs:
+            raise serializers.ValidationError(
+                {"output": ["output is required for run.schema_validation"]}
+            )
+
+        return attrs

@@ -10,13 +10,15 @@ A visual workflow graph execution platform for building, testing, and running AI
 
 ## Features
 
-- **Visual Graph Editor** — Drag-and-drop interface for building workflow graphs with real-time validation
-- **Multiple Node Types** — Prompt, Tool, Transform, Branch, Merge, Output, Memory, and Subgraph nodes
-- **Human-in-the-Loop** — Approval gates that pause execution for human review
-- **Version Control** — Graph versioning with SHA256 checksums for reproducibility
-- **Real-time Monitoring** — WebSocket-powered run status updates and event streaming
-- **Checkpoints & Caching** — Resume failed runs and cache node outputs for efficiency
-- **JSON Schema Validation** — Validate node inputs and outputs against schemas
+- **Visual Graph Editor** — Drag-and-drop graph builder with validation, inspector flows, templates, and quick-add runtime packages
+- **Agent Node Runtime** — First-class `agent` nodes with bounded tool loops, step traces, and approval-aware tool policies
+- **Runtime Marketplace** — Honest package classes for templates vs executable runtime tools, with tenant-scoped manifest delivery
+- **Human-in-the-Loop** — Approval pauses, resumable runs, and agent approval states surfaced in the run UI
+- **Version Control** — Graph versioning with SHA256 checksums and stable Graph JSON contracts
+- **Real-time Monitoring** — WebSocket/SSE run updates, per-node status, agent traces, and streamed chunks
+- **Checkpoints, Replay, and Caching** — Resume paused runs, replay from checkpoints, and cache node outputs
+- **Cloud-Safe Policies** — Runtime mode enforcement, blocked `exec` tools in Cloud, policy-denied auditability
+- **Budgets and Usage Controls** — Token/cost analytics, quotas, budgets, and entitlements already built into the control plane
 
 ## Architecture
 
@@ -179,13 +181,51 @@ The Backend exposes a REST API with the following main endpoints:
 | `/api/graphs` | GET, POST | List and create graphs |
 | `/api/graphs/{id}` | GET, PUT, DELETE | Graph operations |
 | `/api/graphs/{id}/versions` | POST | Save new graph version |
+| `/api/graphs/external-workflows` | POST | Create/update workflows from external systems with idempotency |
 | `/api/runs` | POST | Start graph execution |
 | `/api/runs/{id}` | GET | Get run status |
 | `/api/runs/{id}/events` | GET | Stream run events |
 | `/api/approvals` | GET, POST | Human gate approvals |
 | `/api/auth/login` | POST | JWT authentication |
 
+External workflow import example (QA-friendly, repeatable):
+
+```bash
+curl -X POST "http://localhost:8000/api/graphs/external-workflows" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: qa-workflow-001:v3" \
+  -d '{
+    "name": "QA Lead Capture",
+    "description": "Imported from QA seed script",
+    "external_source": "qa",
+    "external_ref": "qa-workflow-001",
+    "graph_json": {
+      "nodes": [
+        {"id": "prompt1", "type": "prompt", "name": "Prompt", "config": {}},
+        {"id": "output1", "type": "output", "name": "Done", "config": {}}
+      ],
+      "edges": [
+        {"id": "e1", "from": "START", "to": "prompt1"},
+        {"id": "e2", "from": "prompt1", "to": "output1"}
+      ]
+    }
+  }'
+```
+
+- `external_ref`: stable key from your external system. Reusing it updates the same graph.
+- `Idempotency-Key` (or body `idempotency_key`): safely retries without duplicate versions.
+
 Full API documentation available at `http://localhost:8000/api/docs/` when running.
+
+## Contracts and Ops
+
+- Graph JSON contract: [`SPECS.md`](SPECS.md)
+- Run/event contract: [`docs/architecture/run-event-contract.md`](docs/architecture/run-event-contract.md)
+- Marketplace/runtime contract: [`docs/architecture/marketplace-runtime-contract.md`](docs/architecture/marketplace-runtime-contract.md)
+- Engine runtime delivery ops: [`docs/ops/engine-marketplace-runtime.md`](docs/ops/engine-marketplace-runtime.md)
+- P0 beta scope and operator notes: [`docs/ops/p0-beta-launch-notes.md`](docs/ops/p0-beta-launch-notes.md)
+- P0 QA and proof commands: [`docs/ops/p0-qa-checklist.md`](docs/ops/p0-qa-checklist.md)
 
 ## Environment Variables
 
@@ -202,6 +242,38 @@ Full API documentation available at `http://localhost:8000/api/docs/` when runni
 | `REDIS_PORT` | `6379` | Redis port |
 | `ENGINE_HOST` | `localhost` | gRPC engine host |
 | `ENGINE_PORT` | `50051` | gRPC engine port |
+| `FORGEGRAPH_RUNTIME_MODE` | `cloud` | Engine runtime mode: `cloud` or `self_hosted` |
+| `CONTROL_PLANE_URL` | — | Backend base URL for tenant runtime manifest delivery |
+| `ENGINE_CALLBACK_SECRET` | — | Shared secret for engine event callbacks and manifest fetch signatures |
+| `MARKETPLACE_MANIFEST_REFRESH_SECONDS` | `0` | Polling interval for tenant runtime manifest refresh (`0` = startup-only) |
+| `TOOL_MANIFEST_DIR` | — | Engine path to JSON tool manifests (for `tool` nodes like Gmail/Calendar/Tasks) |
+| `ENCRYPTION_KEY` | — | Fernet key used to encrypt stored credentials/tokens |
+| `GOOGLE_OAUTH_CLIENT_ID` | — | Service-level Google OAuth client id (shared Gmail/Calendar/Tasks/Drive) |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | — | Service-level Google OAuth client secret |
+| `GOOGLE_OAUTH_REDIRECT_URI` | `http://localhost:3000/oauth/callback` | OAuth redirect URI for Google providers |
+
+### OAuth Setup (Service-Level)
+
+OAuth app credentials are configured once at service level via environment variables.  
+Users only need to click **Connect account** on the Credentials page.
+
+1. Set OAuth env vars in `.env` (see `.env.example`).
+2. Restart backend: `docker compose up -d --force-recreate backend`.
+3. In Google Cloud OAuth client, set redirect URI to `http://localhost:3000/oauth/callback`.
+4. From ForgeGraph Credentials page, connect Gmail/Calendar/Tasks accounts as needed.
+
+### Tool Manifests (Service-Level)
+
+Tool nodes are resolved from engine manifest files (JSON).
+
+1. Define tool manifests under `engine/tool-manifests/`.
+2. Set `TOOL_MANIFEST_DIR` for engine (Docker compose uses `/app/tool-manifests`).
+3. Restart engine: `docker compose up -d --build engine`.
+
+Included by default:
+- `gmail_reader`
+- `google_calendar`
+- `google_tasks`
 
 ## Contributing
 

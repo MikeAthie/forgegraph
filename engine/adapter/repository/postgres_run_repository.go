@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
+	"github.com/google/uuid"
 )
 
 // PostgresRunRepository implements RunRepository using PostgreSQL.
@@ -76,9 +78,9 @@ func (r *PostgresRunRepository) GetRun(ctx context.Context, runID string) (*enti
 
 // UpdateRunStatus updates the status of a run
 func (r *PostgresRunRepository) UpdateRunStatus(ctx context.Context, runID string, status string) error {
-	query := `UPDATE runs SET status = $1, updated_at = $2 WHERE id = $3`
+	query := `UPDATE runs SET status = $1 WHERE id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, status, time.Now(), runID)
+	result, err := r.db.ExecContext(ctx, query, status, runID)
 	if err != nil {
 		return fmt.Errorf("failed to update run status: %w", err)
 	}
@@ -101,9 +103,9 @@ func (r *PostgresRunRepository) UpdateRunOutput(ctx context.Context, runID strin
 		return fmt.Errorf("failed to marshal output: %w", err)
 	}
 
-	query := `UPDATE runs SET output_json = $1, updated_at = $2 WHERE id = $3`
+	query := `UPDATE runs SET output_json = $1 WHERE id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, string(outputBytes), time.Now(), runID)
+	result, err := r.db.ExecContext(ctx, query, string(outputBytes), runID)
 	if err != nil {
 		return fmt.Errorf("failed to update run output: %w", err)
 	}
@@ -121,9 +123,9 @@ func (r *PostgresRunRepository) UpdateRunOutput(ctx context.Context, runID strin
 
 // UpdateRunError sets the error message for a failed run
 func (r *PostgresRunRepository) UpdateRunError(ctx context.Context, runID string, errorMsg string) error {
-	query := `UPDATE runs SET error_message = $1, updated_at = $2 WHERE id = $3`
+	query := `UPDATE runs SET error_message = $1 WHERE id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, errorMsg, time.Now(), runID)
+	result, err := r.db.ExecContext(ctx, query, errorMsg, runID)
 	if err != nil {
 		return fmt.Errorf("failed to update run error: %w", err)
 	}
@@ -151,19 +153,17 @@ func (r *PostgresRunRepository) SetRunEnded(ctx context.Context, runID string, s
 		outputStr = &s
 	}
 
-	var errorMsgPtr *string
-	if errorMsg != "" {
-		errorMsgPtr = &errorMsg
-	}
+	// runs.error_message is non-null in the backend schema; persist empty string on success.
+	errorMsgValue := errorMsg
 
 	query := `
 		UPDATE runs
-		SET status = $1, output_json = $2, error_message = $3, ended_at = $4, updated_at = $5
-		WHERE id = $6
+		SET status = $1, output_json = $2, error_message = $3, ended_at = $4
+		WHERE id = $5
 	`
 
 	now := time.Now()
-	result, err := r.db.ExecContext(ctx, query, status, outputStr, errorMsgPtr, now, now, runID)
+	result, err := r.db.ExecContext(ctx, query, status, outputStr, errorMsgValue, now, runID)
 	if err != nil {
 		return fmt.Errorf("failed to set run ended: %w", err)
 	}
@@ -186,15 +186,22 @@ func (r *PostgresRunRepository) CreateNodeRun(ctx context.Context, nodeRun *enti
 		return fmt.Errorf("failed to marshal input: %w", err)
 	}
 
+	// The backend schema uses UUID primary keys for node_runs.
+	// Scheduler IDs are logical strings (<run>-<node>), so mint a UUID when needed.
+	nodeRunID := strings.TrimSpace(nodeRun.ID)
+	if _, parseErr := uuid.Parse(nodeRunID); parseErr != nil {
+		nodeRunID = uuid.NewString()
+		nodeRun.ID = nodeRunID
+	}
+
 	query := `
 		INSERT INTO node_runs (id, run_id, node_id, node_type, status, attempt,
-		                       input_json, started_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		                       input_json, started_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
-	now := time.Now()
 	_, err = r.db.ExecContext(ctx, query,
-		nodeRun.ID,
+		nodeRunID,
 		nodeRun.RunID,
 		nodeRun.NodeID,
 		nodeRun.NodeType,
@@ -202,8 +209,6 @@ func (r *PostgresRunRepository) CreateNodeRun(ctx context.Context, nodeRun *enti
 		nodeRun.Attempt,
 		string(inputBytes),
 		nodeRun.StartedAt,
-		now,
-		now,
 	)
 
 	if err != nil {
@@ -238,8 +243,8 @@ func (r *PostgresRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *enti
 	query := `
 		UPDATE node_runs
 		SET status = $1, attempt = $2, output_json = $3, error_json = $4,
-		    ended_at = $5, duration_ms = $6, updated_at = $7
-		WHERE id = $8
+		    ended_at = $5
+		WHERE id = $6
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
@@ -248,8 +253,6 @@ func (r *PostgresRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *enti
 		outputStr,
 		errorStr,
 		nodeRun.EndedAt,
-		nodeRun.DurationMs,
-		time.Now(),
 		nodeRun.ID,
 	)
 
@@ -272,7 +275,7 @@ func (r *PostgresRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *enti
 func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID string) (*entity.NodeRun, error) {
 	query := `
 		SELECT id, run_id, node_id, node_type, status, attempt,
-		       input_json, output_json, error_json, started_at, ended_at, duration_ms
+		       input_json, output_json, error_json, started_at, ended_at
 		FROM node_runs
 		WHERE run_id = $1 AND node_id = $2
 	`
@@ -280,7 +283,6 @@ func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID st
 	var nodeRun entity.NodeRun
 	var inputJSON, outputJSON, errorJSON sql.NullString
 	var endedAt sql.NullTime
-	var durationMs sql.NullInt64
 
 	err := r.db.QueryRowContext(ctx, query, runID, nodeID).Scan(
 		&nodeRun.ID,
@@ -294,7 +296,6 @@ func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID st
 		&errorJSON,
 		&nodeRun.StartedAt,
 		&endedAt,
-		&durationMs,
 	)
 
 	if err == sql.ErrNoRows {
@@ -323,9 +324,6 @@ func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID st
 	if endedAt.Valid {
 		nodeRun.EndedAt = &endedAt.Time
 	}
-	if durationMs.Valid {
-		nodeRun.DurationMs = durationMs.Int64
-	}
 
 	return &nodeRun, nil
 }
@@ -334,7 +332,7 @@ func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID st
 func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID string) ([]*entity.NodeRun, error) {
 	query := `
 		SELECT id, run_id, node_id, node_type, status, attempt,
-		       input_json, output_json, error_json, started_at, ended_at, duration_ms
+		       input_json, output_json, error_json, started_at, ended_at
 		FROM node_runs
 		WHERE run_id = $1
 		ORDER BY started_at ASC
@@ -351,7 +349,6 @@ func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID st
 		var nodeRun entity.NodeRun
 		var inputJSON, outputJSON, errorJSON sql.NullString
 		var endedAt sql.NullTime
-		var durationMs sql.NullInt64
 
 		err := rows.Scan(
 			&nodeRun.ID,
@@ -365,7 +362,6 @@ func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID st
 			&errorJSON,
 			&nodeRun.StartedAt,
 			&endedAt,
-			&durationMs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan node run: %w", err)
@@ -383,9 +379,6 @@ func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID st
 		}
 		if endedAt.Valid {
 			nodeRun.EndedAt = &endedAt.Time
-		}
-		if durationMs.Valid {
-			nodeRun.DurationMs = durationMs.Int64
 		}
 
 		result = append(result, &nodeRun)
@@ -416,11 +409,11 @@ func (r *PostgresRunRepository) SavePauseState(ctx context.Context, runID, pause
 
 	query := `
 		UPDATE runs
-		SET pause_state_json = $1, paused_node_id = $2, updated_at = $3
-		WHERE id = $4
+		SET pause_state_json = $1, paused_node_id = $2
+		WHERE id = $3
 	`
 
-	result, err := r.db.ExecContext(ctx, query, string(pauseStateBytes), pausedNodeID, time.Now(), runID)
+	result, err := r.db.ExecContext(ctx, query, string(pauseStateBytes), pausedNodeID, runID)
 	if err != nil {
 		return fmt.Errorf("failed to save pause state: %w", err)
 	}
@@ -501,11 +494,11 @@ func (r *PostgresRunRepository) LoadPauseState(ctx context.Context, runID string
 func (r *PostgresRunRepository) ClearPauseState(ctx context.Context, runID string) error {
 	query := `
 		UPDATE runs
-		SET pause_state_json = NULL, paused_node_id = NULL, updated_at = $1
-		WHERE id = $2
+		SET pause_state_json = NULL, paused_node_id = NULL
+		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query, time.Now(), runID)
+	result, err := r.db.ExecContext(ctx, query, runID)
 	if err != nil {
 		return fmt.Errorf("failed to clear pause state: %w", err)
 	}

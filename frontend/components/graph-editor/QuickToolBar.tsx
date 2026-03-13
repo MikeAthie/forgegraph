@@ -4,30 +4,28 @@ import { useMemo, useState, type ComponentType } from "react";
 import {
   AlertCircle,
   BookOpen,
-  Brain,
   Briefcase,
   CheckCircle2,
-  Cloud,
   Database,
   FileText,
   Folder,
   Github,
-  Globe,
   Hash,
-  Layers,
   Link2,
-  Mail,
   MessageCircle,
   Plus,
   Search,
   Send,
-  Sheet,
   Sparkles,
   Table,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketplacePackage } from "@/lib/api";
+import {
+  canQuickAddMarketplacePackage,
+  getMarketplacePackageBadges,
+  getMarketplacePackageDescription,
+} from "@/lib/marketplace-runtime";
 import {
   Badge,
   Dialog,
@@ -38,47 +36,37 @@ import {
   Input,
 } from "@/components/ui";
 
+/**
+ * Icon mapping for integration tools
+ */
 const INTEGRATION_ICONS: Record<
   string,
-  { icon: ComponentType<{ className?: string }>; color: string }
+  { icon: ComponentType<{ className?: string }>; color: string; dot: string }
 > = {
-  Send: { icon: Send, color: "bg-blue-500" },
-  BookOpen: { icon: BookOpen, color: "bg-stone-700" },
-  Hash: { icon: Hash, color: "bg-violet-500" },
-  MessageCircle: { icon: MessageCircle, color: "bg-indigo-500" },
-  Sparkles: { icon: Sparkles, color: "bg-emerald-600" },
-  Github: { icon: Github, color: "bg-zinc-700" },
-  Table: { icon: Table, color: "bg-green-600" },
-  Folder: { icon: Folder, color: "bg-amber-500" },
-  FileText: { icon: FileText, color: "bg-cyan-600" },
-  Briefcase: { icon: Briefcase, color: "bg-orange-600" },
-  Database: { icon: Database, color: "bg-pink-600" },
-  Brain: { icon: Brain, color: "bg-violet-600" },
-  Globe: { icon: Globe, color: "bg-blue-600" },
-  Mail: { icon: Mail, color: "bg-red-500" },
-  Sheet: { icon: Sheet, color: "bg-green-500" },
-  Cloud: { icon: Cloud, color: "bg-sky-500" },
-  Layers: { icon: Layers, color: "bg-fuchsia-500" },
-  Zap: { icon: Zap, color: "bg-yellow-500" },
+  Send: { icon: Send, color: "bg-blue-500", dot: "text-blue-500" },
+  BookOpen: { icon: BookOpen, color: "bg-stone-700", dot: "text-stone-600" },
+  Hash: { icon: Hash, color: "bg-violet-500", dot: "text-violet-500" },
+  MessageCircle: {
+    icon: MessageCircle,
+    color: "bg-indigo-500",
+    dot: "text-indigo-500",
+  },
+  Sparkles: {
+    icon: Sparkles,
+    color: "bg-emerald-600",
+    dot: "text-emerald-500",
+  },
+  Github: { icon: Github, color: "bg-zinc-700", dot: "text-zinc-500" },
+  Table: { icon: Table, color: "bg-green-600", dot: "text-green-500" },
+  Folder: { icon: Folder, color: "bg-amber-500", dot: "text-amber-500" },
+  FileText: { icon: FileText, color: "bg-cyan-600", dot: "text-cyan-500" },
+  Briefcase: {
+    icon: Briefcase,
+    color: "bg-orange-600",
+    dot: "text-orange-500",
+  },
+  Database: { icon: Database, color: "bg-pink-600", dot: "text-pink-500" },
 };
-
-/** Default integration tiles shown when no marketplace packages are installed */
-const DEFAULT_TILES: Array<{ label: string; iconKey: string }> = [
-  { label: "LLM", iconKey: "Brain" },
-  { label: "OpenAI", iconKey: "Sparkles" },
-  { label: "Notion", iconKey: "BookOpen" },
-  { label: "Slack", iconKey: "Hash" },
-  { label: "Linear", iconKey: "Zap" },
-  { label: "Sheets", iconKey: "Sheet" },
-  { label: "GitHub", iconKey: "Github" },
-  { label: "Stripe", iconKey: "Briefcase" },
-  { label: "Drive", iconKey: "Folder" },
-  { label: "Dropbox", iconKey: "Cloud" },
-  { label: "Email", iconKey: "Mail" },
-  { label: "HTTP", iconKey: "Globe" },
-  { label: "DB", iconKey: "Database" },
-  { label: "Layers", iconKey: "Layers" },
-];
 
 interface QuickToolBarProps {
   marketplaceNodes: MarketplacePackage[];
@@ -87,6 +75,7 @@ interface QuickToolBarProps {
   className?: string;
 }
 
+const FEATURED_TOOL_COUNT = 6;
 const FEATURED_PACKAGE_ORDER = [
   "whatsapp-send-message",
   "gmail-list-unread",
@@ -98,12 +87,12 @@ const FEATURED_PACKAGE_ORDER = [
   "telegram-send-message",
 ];
 
-const ICON_BY_KEY: Record<string, string> = {
+const ICON_BY_KEY: Record<string, keyof typeof INTEGRATION_ICONS> = {
   slack: "Hash",
   notion: "BookOpen",
   gmail: "Send",
   jira: "MessageCircle",
-  linear: "Zap",
+  linear: "Sparkles",
   hubspot: "Briefcase",
   "google-drive": "Folder",
   telegram: "Send",
@@ -113,13 +102,14 @@ const ICON_BY_KEY: Record<string, string> = {
   tasks: "Table",
   github: "Github",
   salesforce: "Database",
-  stripe: "Briefcase",
-  openai: "Sparkles",
-  anthropic: "Brain",
 };
 
-const pickIconKey = (pkg: MarketplacePackage): string => {
-  const icon = String(pkg.icon || "").toLowerCase().trim();
+const pickIconKey = (
+  pkg: MarketplacePackage,
+): keyof typeof INTEGRATION_ICONS => {
+  const icon = String(pkg.icon || "")
+    .toLowerCase()
+    .trim();
   const slug = pkg.slug.toLowerCase();
   for (const [needle, key] of Object.entries(ICON_BY_KEY)) {
     if (icon.includes(needle) || slug.includes(needle)) {
@@ -134,6 +124,9 @@ const packageRank = (pkg: MarketplacePackage): number => {
   return index === -1 ? FEATURED_PACKAGE_ORDER.length + 1 : index;
 };
 
+/**
+ * Quick Tool Bar - horizontal bar of popular API integrations for fast node creation
+ */
 export function QuickToolBar({
   marketplaceNodes,
   onSelectPackage,
@@ -142,15 +135,21 @@ export function QuickToolBar({
 }: QuickToolBarProps) {
   const [isBrowseOpen, setIsBrowseOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
+  const runtimeReadyPackages = useMemo(
+    () => marketplaceNodes.filter((pkg) => canQuickAddMarketplacePackage(pkg)),
+    [marketplaceNodes],
+  );
   const integrations = useMemo(() => {
-    return [...marketplaceNodes].sort((a, b) => {
+    return [...runtimeReadyPackages].sort((a, b) => {
       const rankDiff = packageRank(a) - packageRank(b);
       if (rankDiff !== 0) return rankDiff;
       return a.name.localeCompare(b.name);
     });
-  }, [marketplaceNodes]);
-
+  }, [runtimeReadyPackages]);
+  const featured = useMemo(
+    () => integrations.slice(0, FEATURED_TOOL_COUNT),
+    [integrations],
+  );
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return integrations;
@@ -158,10 +157,14 @@ export function QuickToolBar({
       return (
         pkg.name.toLowerCase().includes(query) ||
         pkg.slug.toLowerCase().includes(query) ||
-        pkg.summary.toLowerCase().includes(query)
+        pkg.summary.toLowerCase().includes(query) ||
+        String(pkg.icon || "")
+          .toLowerCase()
+          .includes(query)
       );
     });
   }, [integrations, searchQuery]);
+  const extraCount = Math.max(integrations.length - featured.length, 0);
 
   const handleSelectPackage = (pkg: MarketplacePackage) => {
     onSelectPackage(pkg);
@@ -169,88 +172,99 @@ export function QuickToolBar({
     setSearchQuery("");
   };
 
-  // Build the tile list from marketplace packages or defaults
-  const tiles = useMemo(() => {
-    if (integrations.length > 0) {
-      return integrations.slice(0, 14).map((pkg) => {
-        const iconKey = pickIconKey(pkg);
-        const config = INTEGRATION_ICONS[iconKey] ?? INTEGRATION_ICONS.Sparkles;
-        return {
-          key: pkg.slug,
-          label: pkg.name,
-          icon: config.icon,
-          color: config.color,
-          onClick: () => handleSelectPackage(pkg),
-        };
-      });
-    }
-    return DEFAULT_TILES.map((tile) => {
-      const config = INTEGRATION_ICONS[tile.iconKey] ?? INTEGRATION_ICONS.Sparkles;
-      return {
-        key: tile.label,
-        label: tile.label,
-        icon: config.icon,
-        color: config.color,
-        onClick: undefined as (() => void) | undefined,
-      };
-    });
-  }, [integrations]);
-
   return (
     <>
       <div
         className={cn(
-          "flex items-center gap-1 px-3 py-2 border-b border-border bg-card/50 backdrop-blur-sm overflow-x-auto",
+          "flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-xl border border-border/80 bg-background/75 px-2 py-1.5 shadow-sm backdrop-blur-md",
           className,
         )}
       >
-        {tiles.map((tile) => {
-          const Icon = tile.icon;
-          return (
-            <button
-              key={tile.key}
-              type="button"
-              onClick={tile.onClick}
-              disabled={!tile.onClick}
-              title={tile.label}
-              className={cn(
-                "flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg shrink-0 transition-all",
-                tile.onClick
-                  ? "hover:bg-accent/40 cursor-pointer"
-                  : "opacity-50 cursor-default",
-              )}
-            >
-              <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-sm", tile.color)}>
-                <Icon className="w-4.5 h-4.5" />
-              </div>
-              <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[56px]">
-                {tile.label}
-              </span>
-            </button>
-          );
-        })}
+        <div className="hidden md:flex items-center gap-2 pr-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70 text-foreground">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          </div>
+          <div className="leading-none">
+            <p className="text-xs font-semibold text-foreground">Quick Tools</p>
+            <p className="text-[10px] text-muted-foreground">
+              {hasSelectedNode
+                ? "Adds and links from selected node"
+                : "Adds standalone node"}
+            </p>
+          </div>
+        </div>
 
-        {/* Browse / + button */}
+        <div className="h-6 w-px bg-border/70 hidden md:block" />
+
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto pr-1">
+          {integrations.length === 0 && (
+            <p className="hidden sm:block text-xs text-muted-foreground px-2">
+              {marketplaceNodes.length === 0
+                ? "Install integrations in Marketplace to enable quick add."
+                : "No runtime-ready tools yet. Template-only or blocked packages stay in the palette."}
+            </p>
+          )}
+          {featured.map((pkg) => {
+            const iconConfig = INTEGRATION_ICONS[pickIconKey(pkg)] || {
+              icon: Sparkles,
+              color: "bg-primary",
+              dot: "text-primary",
+            };
+            const IconComponent = iconConfig.icon;
+            return (
+              <button
+                key={pkg.slug}
+                type="button"
+                onClick={() => handleSelectPackage(pkg)}
+                title={`Add ${pkg.name}`}
+                aria-label={`Add ${pkg.name} integration node`}
+                data-testid={`quick-tool-${pkg.slug}`}
+                className="group flex shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-transparent bg-background/70 px-2 py-1.5 text-xs font-medium text-foreground transition-colors transition-transform transition-shadow hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 motion-reduce:transform-none motion-reduce:transition-none"
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-md text-white",
+                    iconConfig.color,
+                  )}
+                >
+                  <IconComponent className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                <span className="hidden sm:inline">{pkg.name}</span>
+                {hasSelectedNode && (
+                  <Link2
+                    className={cn("h-3 w-3", iconConfig.dot)}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         <button
           type="button"
           onClick={() => setIsBrowseOpen(true)}
           aria-label="Browse integration tools"
-          className="flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg shrink-0 transition-all hover:bg-accent/40"
+          data-testid="quick-tool-browse"
+          className="flex shrink-0 touch-manipulation items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1"
         >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center border-2 border-dashed border-border text-muted-foreground">
-            <Plus className="w-4 h-4" />
-          </div>
-          <span className="text-[10px] text-muted-foreground font-medium">More</span>
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="hidden sm:inline">Browse</span>
+          {extraCount > 0 && (
+            <span className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              +{extraCount}
+            </span>
+          )}
         </button>
       </div>
 
-      {/* Browse dialog */}
       <Dialog open={isBrowseOpen} onOpenChange={setIsBrowseOpen}>
         <DialogContent className="max-w-3xl overscroll-contain">
           <DialogHeader>
             <DialogTitle>Integration Tools</DialogTitle>
             <DialogDescription>
-              Add installed marketplace integrations to your graph with one click.
+              Add installed runtime-ready marketplace tools to your graph with
+              one click.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -261,7 +275,8 @@ export function QuickToolBar({
                 name="integration-search"
                 autoComplete="off"
                 aria-label="Search integration tools"
-                placeholder="Search integrations..."
+                data-testid="quick-tool-search"
+                placeholder="Search integrations…"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="pl-9"
@@ -279,34 +294,65 @@ export function QuickToolBar({
                 </div>
               ) : (
                 filtered.map((pkg) => {
-                  const iconKey = pickIconKey(pkg);
-                  const config = INTEGRATION_ICONS[iconKey] ?? INTEGRATION_ICONS.Sparkles;
-                  const IconComponent = config.icon;
+                  const iconConfig = INTEGRATION_ICONS[pickIconKey(pkg)] || {
+                    icon: Sparkles,
+                    color: "bg-primary",
+                    dot: "text-primary",
+                  };
+                  const IconComponent = iconConfig.icon;
                   return (
                     <button
                       key={pkg.slug}
                       type="button"
                       onClick={() => handleSelectPackage(pkg)}
-                      className="flex w-full items-start gap-3 rounded-lg border border-border bg-background/70 p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+                      data-testid={`quick-tool-browse-item-${pkg.slug}`}
+                      className="flex w-full touch-manipulation items-start gap-3 rounded-lg border border-border bg-background/70 p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1"
                     >
-                      <span className={cn("flex h-8 w-8 items-center justify-center rounded-md text-white", config.color)}>
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-md text-white",
+                          iconConfig.color,
+                        )}
+                      >
                         <IconComponent className="h-4 w-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-medium text-foreground">{pkg.name}</p>
-                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                            {pkg.category}
-                          </Badge>
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {pkg.name}
+                          </p>
+                          {getMarketplacePackageBadges(pkg)
+                            .slice(0, 2)
+                            .map((badge) => (
+                              <Badge
+                                key={`${pkg.slug}-${badge}`}
+                                variant="outline"
+                                className="text-[10px] uppercase tracking-wide"
+                              >
+                                {badge}
+                              </Badge>
+                            ))}
                         </div>
-                        <p className="line-clamp-2 text-xs text-muted-foreground">{pkg.summary || "Installed integration package"}</p>
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                          {getMarketplacePackageDescription(pkg)}
+                        </p>
                       </div>
-                      <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500" aria-hidden="true" />
+                      <CheckCircle2
+                        className="mt-1 h-4 w-4 text-emerald-500"
+                        aria-hidden="true"
+                      />
                     </button>
                   );
                 })
               )}
             </div>
+            {marketplaceNodes.length > runtimeReadyPackages.length && (
+              <p className="text-xs text-muted-foreground">
+                {marketplaceNodes.length - runtimeReadyPackages.length}{" "}
+                installed package(s) are hidden here because they are
+                template-only or blocked for runtime execution.
+              </p>
+            )}
           </div>
         </DialogContent>
       </Dialog>
