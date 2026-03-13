@@ -207,36 +207,8 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		}
 	}
 
-	if runCtx != nil && runCtx.Policy != nil {
-		if len(runCtx.Policy.AllowedProviders) > 0 {
-			allowed := false
-			for _, allowedProvider := range runCtx.Policy.AllowedProviders {
-				if provider == allowedProvider {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return port.NewErrorResult(
-					domain.NewValidationError("provider", "provider blocked by policy"),
-				), nil
-			}
-		}
-
-		if len(runCtx.Policy.AllowedModels) > 0 {
-			allowed := false
-			for _, allowedModel := range runCtx.Policy.AllowedModels {
-				if model == allowedModel {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return port.NewErrorResult(
-					domain.NewValidationError("model", "model blocked by policy"),
-				), nil
-			}
-		}
+	if validation := validateLLMPolicy(runCtx, provider, model); validation != nil {
+		return port.NewErrorResult(validation), nil
 	}
 
 	// Get temperature (default: 0.7)

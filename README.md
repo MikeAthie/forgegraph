@@ -10,13 +10,15 @@ A visual workflow graph execution platform for building, testing, and running AI
 
 ## Features
 
-- **Visual Graph Editor** — Drag-and-drop interface for building workflow graphs with real-time validation
-- **Multiple Node Types** — Prompt, Tool, Transform, Branch, Merge, Output, Memory, and Subgraph nodes
-- **Human-in-the-Loop** — Approval gates that pause execution for human review
-- **Version Control** — Graph versioning with SHA256 checksums for reproducibility
-- **Real-time Monitoring** — WebSocket-powered run status updates and event streaming
-- **Checkpoints & Caching** — Resume failed runs and cache node outputs for efficiency
-- **JSON Schema Validation** — Validate node inputs and outputs against schemas
+- **Visual Graph Editor** — Drag-and-drop graph builder with validation, inspector flows, templates, and quick-add runtime packages
+- **Agent Node Runtime** — First-class `agent` nodes with bounded tool loops, step traces, and approval-aware tool policies
+- **Runtime Marketplace** — Honest package classes for templates vs executable runtime tools, with tenant-scoped manifest delivery
+- **Human-in-the-Loop** — Approval pauses, resumable runs, and agent approval states surfaced in the run UI
+- **Version Control** — Graph versioning with SHA256 checksums and stable Graph JSON contracts
+- **Real-time Monitoring** — WebSocket/SSE run updates, per-node status, agent traces, and streamed chunks
+- **Checkpoints, Replay, and Caching** — Resume paused runs, replay from checkpoints, and cache node outputs
+- **Cloud-Safe Policies** — Runtime mode enforcement, blocked `exec` tools in Cloud, policy-denied auditability
+- **Budgets and Usage Controls** — Token/cost analytics, quotas, budgets, and entitlements already built into the control plane
 
 ## Architecture
 
@@ -216,6 +218,15 @@ curl -X POST "http://localhost:8000/api/graphs/external-workflows" \
 
 Full API documentation available at `http://localhost:8000/api/docs/` when running.
 
+## Contracts and Ops
+
+- Graph JSON contract: [`SPECS.md`](SPECS.md)
+- Run/event contract: [`docs/architecture/run-event-contract.md`](docs/architecture/run-event-contract.md)
+- Marketplace/runtime contract: [`docs/architecture/marketplace-runtime-contract.md`](docs/architecture/marketplace-runtime-contract.md)
+- Engine runtime delivery ops: [`docs/ops/engine-marketplace-runtime.md`](docs/ops/engine-marketplace-runtime.md)
+- P0 beta scope and operator notes: [`docs/ops/p0-beta-launch-notes.md`](docs/ops/p0-beta-launch-notes.md)
+- P0 QA and proof commands: [`docs/ops/p0-qa-checklist.md`](docs/ops/p0-qa-checklist.md)
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -231,6 +242,10 @@ Full API documentation available at `http://localhost:8000/api/docs/` when runni
 | `REDIS_PORT` | `6379` | Redis port |
 | `ENGINE_HOST` | `localhost` | gRPC engine host |
 | `ENGINE_PORT` | `50051` | gRPC engine port |
+| `FORGEGRAPH_RUNTIME_MODE` | `cloud` | Engine runtime mode: `cloud` or `self_hosted` |
+| `CONTROL_PLANE_URL` | — | Backend base URL for tenant runtime manifest delivery |
+| `ENGINE_CALLBACK_SECRET` | — | Shared secret for engine event callbacks and manifest fetch signatures |
+| `MARKETPLACE_MANIFEST_REFRESH_SECONDS` | `0` | Polling interval for tenant runtime manifest refresh (`0` = startup-only) |
 | `TOOL_MANIFEST_DIR` | — | Engine path to JSON tool manifests (for `tool` nodes like Gmail/Calendar/Tasks) |
 | `ENCRYPTION_KEY` | — | Fernet key used to encrypt stored credentials/tokens |
 | `GOOGLE_OAUTH_CLIENT_ID` | — | Service-level Google OAuth client id (shared Gmail/Calendar/Tasks/Drive) |

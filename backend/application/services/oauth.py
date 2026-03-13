@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import urlencode
 from uuid import UUID
@@ -195,16 +195,18 @@ def _resolve_provider_settings(provider: str) -> dict[str, Any]:
     defaults = PROVIDER_DEFAULTS[provider]
 
     client_id = _read_first_non_empty_env_value(_provider_env_candidates(provider, "CLIENT_ID"))
-    client_secret = _read_first_non_empty_env_value(_provider_env_candidates(provider, "CLIENT_SECRET"))
+    client_secret = _read_first_non_empty_env_value(
+        _provider_env_candidates(provider, "CLIENT_SECRET")
+    )
     authorize_url = _read_first_non_empty_env_value(
         _provider_env_candidates(provider, "AUTHORIZE_URL")
     ) or str(defaults["authorize_url"])
-    token_url = _read_first_non_empty_env_value(_provider_env_candidates(provider, "TOKEN_URL")) or str(
-        defaults["token_url"]
-    )
-    redirect_uri = _read_first_non_empty_env_value(_provider_env_candidates(provider, "REDIRECT_URI")) or (
-        f"{_frontend_url()}/oauth/callback"
-    )
+    token_url = _read_first_non_empty_env_value(
+        _provider_env_candidates(provider, "TOKEN_URL")
+    ) or str(defaults["token_url"])
+    redirect_uri = _read_first_non_empty_env_value(
+        _provider_env_candidates(provider, "REDIRECT_URI")
+    ) or (f"{_frontend_url()}/oauth/callback")
     scopes = _parse_scopes(
         _read_first_non_empty_env_value(_provider_env_candidates(provider, "SCOPES")),
         fallback=[str(item) for item in defaults["scopes"]],
@@ -216,7 +218,9 @@ def _resolve_provider_settings(provider: str) -> dict[str, Any]:
         fallback=cast(dict[str, Any], defaults["authorize_extra_params"]),
     )
     token_extra_params = _parse_json_object(
-        _read_first_non_empty_env_value(_provider_env_candidates(provider, "TOKEN_EXTRA_PARAMS_JSON")),
+        _read_first_non_empty_env_value(
+            _provider_env_candidates(provider, "TOKEN_EXTRA_PARAMS_JSON")
+        ),
         fallback=cast(dict[str, Any], defaults["token_extra_params"]),
     )
     enabled = _parse_bool(
@@ -276,7 +280,9 @@ def get_oauth_provider_config(
         token_url=cast(str, resolved["token_url"]),
         redirect_uri=cast(str, resolved["redirect_uri"]),
         scopes=cast(list[str], resolved["scopes"]),
-        authorize_extra_params=cast(dict[str, str | int | bool], resolved["authorize_extra_params"]),
+        authorize_extra_params=cast(
+            dict[str, str | int | bool], resolved["authorize_extra_params"]
+        ),
         token_extra_params=cast(dict[str, str | int | bool], resolved["token_extra_params"]),
     )
     return config, []
@@ -405,7 +411,9 @@ def get_oauth_provider_status(tenant_id: str | UUID) -> list[dict[str, Any]]:
                 "authorize_extra_params": cast(
                     dict[str, str | int | bool], resolved["authorize_extra_params"]
                 ),
-                "token_extra_params": cast(dict[str, str | int | bool], resolved["token_extra_params"]),
+                "token_extra_params": cast(
+                    dict[str, str | int | bool], resolved["token_extra_params"]
+                ),
                 "configuration_mode": "environment",
             }
         )

@@ -16,6 +16,19 @@ import { NODE_TYPES, type GraphNode, type GraphEdge, START_NODE_ID, END_NODE_ID 
 
 describe("type-inference", () => {
   describe("inferOutputType", () => {
+    it("should infer ANY for AGENT node", () => {
+      const node: GraphNode = {
+        id: "agent1",
+        type: NODE_TYPES.AGENT,
+        name: "Test Agent",
+        config: { model: "gpt-4.1-mini", tools: ["lookup_customer"] },
+      };
+      const result = inferOutputType(node);
+      expect(result.type).toBe(DataType.ANY);
+      expect(result.isInferred).toBe(true);
+      expect(result.description).toContain("Agent final output");
+    });
+
     it("should infer TEXT for PROMPT node", () => {
       const node: GraphNode = {
         id: "prompt1",
@@ -265,6 +278,18 @@ describe("type-inference", () => {
   });
 
   describe("inferInputTypes", () => {
+    it("should infer JSON input for AGENT node", () => {
+      const node: GraphNode = {
+        id: "agent1",
+        type: NODE_TYPES.AGENT,
+        name: "Agent",
+        config: {},
+      };
+      const result = inferInputTypes(node);
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe(DataType.JSON);
+    });
+
     it("should return correct input types for PROMPT node", () => {
       const node: GraphNode = {
         id: "prompt1",

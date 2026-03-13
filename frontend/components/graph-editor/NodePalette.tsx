@@ -26,6 +26,7 @@ interface NodePaletteProps {
 }
 
 const nodeTypeIcons: Record<string, string> = {
+  agent: "A",
   prompt: "M",
   http: "H",
   transform: "T",
@@ -40,6 +41,7 @@ const nodeTypeIcons: Record<string, string> = {
 };
 
 const nodeTypeColors: Record<string, string> = {
+  agent: "bg-sky-500",
   prompt: "bg-violet-500",
   http: "bg-amber-500",
   transform: "bg-blue-500",
@@ -269,7 +271,9 @@ export function NodePalette({
                     <div className="text-sm font-medium text-foreground flex items-center gap-1">
                       {item.label}
                       {!item.enabled && (
-                        <span className="ml-2 text-xs text-muted-foreground">(Coming soon)</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {item.kind === "marketplace" ? "(Unavailable)" : "(Coming soon)"}
+                        </span>
                       )}
                       {item.kind !== "note" && hasSelectedNode && item.enabled && (
                         <Link className="w-3 h-3 text-primary ml-1" />

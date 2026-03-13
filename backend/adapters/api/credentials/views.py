@@ -396,7 +396,8 @@ class CredentialOAuthProviderConfigView(APIView):
 
         provider_name = provider.strip().lower()
         statuses = {
-            item["provider"]: item for item in get_oauth_provider_status(get_tenant_id_for_user(user))
+            item["provider"]: item
+            for item in get_oauth_provider_status(get_tenant_id_for_user(user))
         }
         if provider_name not in statuses:
             return error_response(

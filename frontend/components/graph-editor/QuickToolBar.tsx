@@ -22,6 +22,11 @@ import {
 import { cn } from "@/lib/utils";
 import type { MarketplacePackage } from "@/lib/api";
 import {
+  canQuickAddMarketplacePackage,
+  getMarketplacePackageBadges,
+  getMarketplacePackageDescription,
+} from "@/lib/marketplace-runtime";
+import {
   Badge,
   Dialog,
   DialogContent,
@@ -114,13 +119,17 @@ export function QuickToolBar({
 }: QuickToolBarProps) {
   const [isBrowseOpen, setIsBrowseOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const runtimeReadyPackages = useMemo(
+    () => marketplaceNodes.filter((pkg) => canQuickAddMarketplacePackage(pkg)),
+    [marketplaceNodes],
+  );
   const integrations = useMemo(() => {
-    return [...marketplaceNodes].sort((a, b) => {
+    return [...runtimeReadyPackages].sort((a, b) => {
       const rankDiff = packageRank(a) - packageRank(b);
       if (rankDiff !== 0) return rankDiff;
       return a.name.localeCompare(b.name);
     });
-  }, [marketplaceNodes]);
+  }, [runtimeReadyPackages]);
   const featured = useMemo(
     () => integrations.slice(0, FEATURED_TOOL_COUNT),
     [integrations],
@@ -168,7 +177,9 @@ export function QuickToolBar({
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto pr-1">
           {integrations.length === 0 && (
             <p className="hidden sm:block text-xs text-muted-foreground px-2">
-              Install integrations in Marketplace to enable quick add.
+              {marketplaceNodes.length === 0
+                ? "Install integrations in Marketplace to enable quick add."
+                : "No runtime-ready tools yet. Template-only or blocked packages stay in the palette."}
             </p>
           )}
           {featured.map((pkg) => {
@@ -220,7 +231,7 @@ export function QuickToolBar({
           <DialogHeader>
             <DialogTitle>Integration Tools</DialogTitle>
             <DialogDescription>
-              Add installed marketplace integrations to your graph with one click.
+              Add installed runtime-ready marketplace tools to your graph with one click.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -268,11 +279,21 @@ export function QuickToolBar({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate text-sm font-medium text-foreground">{pkg.name}</p>
-                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                            {pkg.category}
-                          </Badge>
+                          {getMarketplacePackageBadges(pkg)
+                            .slice(0, 2)
+                            .map((badge) => (
+                              <Badge
+                                key={`${pkg.slug}-${badge}`}
+                                variant="outline"
+                                className="text-[10px] uppercase tracking-wide"
+                              >
+                                {badge}
+                              </Badge>
+                            ))}
                         </div>
-                        <p className="line-clamp-2 text-xs text-muted-foreground">{pkg.summary || "Installed integration package"}</p>
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                          {getMarketplacePackageDescription(pkg)}
+                        </p>
                       </div>
                       <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500" aria-hidden="true" />
                     </button>
@@ -280,6 +301,11 @@ export function QuickToolBar({
                 })
               )}
             </div>
+            {marketplaceNodes.length > runtimeReadyPackages.length && (
+              <p className="text-xs text-muted-foreground">
+                {marketplaceNodes.length - runtimeReadyPackages.length} installed package(s) are hidden here because they are template-only or blocked for runtime execution.
+              </p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

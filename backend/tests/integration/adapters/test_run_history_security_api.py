@@ -160,3 +160,45 @@ def test_engine_events_redact_sensitive_node_failure_payload(api_client, user):
     assert node_run.error_json is not None
     assert node_run.error_json["api_key"] == "***REDACTED***"
     assert "***REDACTED***" in str(node_run.error_json.get("error") or "")
+
+
+@override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+def test_engine_events_policy_denied_creates_audit_log(api_client, user):
+    _, version = _create_graph_version(user)
+    run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+    event = {
+        "type": "node_failed",
+        "run_id": str(run.id),
+        "tenant_id": str(user.default_organization_id),
+        "node_id": "tool-1",
+        "node_type": "tool",
+        "attempt": 1,
+        "error": "policy denied: exec tools are disabled in cloud mode",
+        "output": {
+            "error": {
+                "message": "policy denied: exec tools are disabled in cloud mode",
+            }
+        },
+        "timestamp": int(time.time() * 1000),
+    }
+    body = json.dumps(event)
+    timestamp_ms = int(time.time() * 1000)
+    signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
+
+    response = api_client.post(
+        "/api/runs/engine-events",
+        data=body,
+        content_type="application/json",
+        HTTP_X_FORGEGRAPH_TIMESTAMP=str(timestamp_ms),
+        HTTP_X_FORGEGRAPH_SIGNATURE=signature,
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    node_run = NodeRun.objects.get(run=run, node_id="tool-1", attempt=1)
+    log = AuditLog.objects.filter(action="run.policy_denied", resource_id=str(node_run.id)).latest(
+        "created_at"
+    )
+    assert log.metadata["run_id"] == str(run.id)
+    assert log.metadata["node_id"] == "tool-1"
+    assert log.metadata["node_type"] == "tool"

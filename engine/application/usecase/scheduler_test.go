@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/forgegraph/engine/adapter/executor"
 	"github.com/forgegraph/engine/adapter/store"
+	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
@@ -266,6 +268,20 @@ type mockExecutor struct {
 	mu            sync.Mutex
 }
 
+type schedulerLLMClient struct {
+	response *executor.LLMResponse
+}
+
+func (m *schedulerLLMClient) Complete(ctx context.Context, request *executor.LLMRequest) (*executor.LLMResponse, error) {
+	if m.response != nil {
+		return m.response, nil
+	}
+	return &executor.LLMResponse{
+		Content: `{"action":"final_answer","final_answer":"done"}`,
+		Model:   request.Model,
+	}, nil
+}
+
 func newMockExecutor(nodeType string, fn func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error)) *mockExecutor {
 	return &mockExecutor{
 		nodeType:      nodeType,
@@ -438,6 +454,86 @@ func TestScheduler_LinearGraph(t *testing.T) {
 	}
 	if !emitter.hasEventType(port.EventTypeRunCompleted) {
 		t.Error("Expected run_completed event")
+	}
+}
+
+func TestScheduler_AgentGraph(t *testing.T) {
+	nodes := []entity.Node{
+		{
+			ID:   "agent1",
+			Type: string(value.NodeTypeAgent),
+			Name: "Agent 1",
+			Config: map[string]any{
+				"model":          "gpt-4.1-mini",
+				"provider":       "openai",
+				"tools":          []any{"crm_lookup"},
+				"max_steps":      3,
+				"max_tool_calls": 1,
+			},
+		},
+		{
+			ID:   "output1",
+			Type: string(value.NodeTypeOutput),
+			Name: "Output 1",
+			Config: map[string]any{
+				"output_mapping": map[string]any{
+					"agent_result": "node.agent1.output",
+				},
+			},
+		},
+	}
+	edges := []entity.Edge{
+		{From: "agent1", To: "output1"},
+	}
+	graphJSON := makeGraphJSON(nodes, edges)
+
+	repo := newMockRepository()
+	emitter := newRecordingEmitter()
+	registry := port.NewExecutorRegistry()
+
+	llmClient := &schedulerLLMClient{
+		response: &executor.LLMResponse{
+			Content: `{"action":"final_answer","final_answer":"Agent completed successfully."}`,
+			Model:   "gpt-4.1-mini",
+		},
+	}
+
+	registry.RegisterAll(
+		executor.NewAgentExecutor(llmClient, tool.NewRegistry(), nil),
+		executor.NewOutputExecutor(),
+	)
+
+	config := SchedulerConfig{MaxWorkers: 2, DefaultTimeoutMs: 5000}
+	scheduler := NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
+
+	if err := scheduler.StartRun(context.Background(), "run-agent-1", graphJSON, `{"ticket_id":"T-999"}`, "", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	waitForRunCompletion(t, scheduler, repo, "run-agent-1", 5*time.Second)
+
+	if repo.getRunStatus("run-agent-1") != string(value.RunStatusSucceeded) {
+		t.Fatalf("expected run status succeeded, got %s", repo.getRunStatus("run-agent-1"))
+	}
+
+	run, err := repo.GetRun(context.Background(), "run-agent-1")
+	if err != nil {
+		t.Fatalf("GetRun failed: %v", err)
+	}
+	if run.OutputJSON["agent_result"] == nil {
+		t.Fatalf("expected output mapping to include agent_result, got %#v", run.OutputJSON)
+	}
+
+	events := emitter.getEvents()
+	var sawAgentChunk bool
+	for _, event := range events {
+		if event.Type == port.EventTypeNodeStreamChunk && event.NodeID == "agent1" {
+			sawAgentChunk = true
+			break
+		}
+	}
+	if !sawAgentChunk {
+		t.Fatal("expected node_stream_chunk event for agent node")
 	}
 }
 

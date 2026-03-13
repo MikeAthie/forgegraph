@@ -443,7 +443,7 @@ class ExternalWorkflowCreateView(APIView):
         )
         if external_ref:
             versions = versions.filter(graph__external_ref=external_ref)
-        return versions.order_by("-created_at").first()
+        return cast(GraphVersion | None, versions.order_by("-created_at").first())
 
     @extend_schema(
         tags=["graphs"],
@@ -536,9 +536,7 @@ class ExternalWorkflowCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        request_data: dict[str, Any] = (
-            dict(request.data) if isinstance(request.data, dict) else {}
-        )
+        request_data: dict[str, Any] = dict(request.data) if isinstance(request.data, dict) else {}
         header_idempotency_key = (request.headers.get("Idempotency-Key") or "").strip()
         if header_idempotency_key and not request_data.get("idempotency_key"):
             request_data["idempotency_key"] = header_idempotency_key
@@ -706,7 +704,9 @@ class ExternalWorkflowCreateView(APIView):
             idempotent_replay=False,
             warnings=warnings,
         )
-        response_status = status.HTTP_201_CREATED if (created_graph or created_version) else status.HTTP_200_OK
+        response_status = (
+            status.HTTP_201_CREATED if (created_graph or created_version) else status.HTTP_200_OK
+        )
         return success_response(payload, status=response_status)
 
 

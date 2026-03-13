@@ -5,6 +5,7 @@ package value
 type NodeType string
 
 const (
+	NodeTypeAgent     NodeType = "agent"
 	NodeTypePrompt    NodeType = "prompt"
 	NodeTypeHTTP      NodeType = "http"
 	NodeTypeTransform NodeType = "transform"
@@ -25,7 +26,7 @@ func (t NodeType) String() string {
 // IsValid returns true if the node type is recognized
 func (t NodeType) IsValid() bool {
 	switch t {
-	case NodeTypePrompt, NodeTypeHTTP, NodeTypeTransform,
+	case NodeTypeAgent, NodeTypePrompt, NodeTypeHTTP, NodeTypeTransform,
 		NodeTypeBranch, NodeTypeMerge, NodeTypeHumanGate, NodeTypeMemory, NodeTypeTool, NodeTypeSubgraph, NodeTypeOutput:
 		return true
 	}
@@ -35,7 +36,7 @@ func (t NodeType) IsValid() bool {
 // RequiresExternalCall returns true if the node type makes external API calls
 func (t NodeType) RequiresExternalCall() bool {
 	switch t {
-	case NodeTypePrompt, NodeTypeHTTP:
+	case NodeTypeAgent, NodeTypePrompt, NodeTypeHTTP:
 		return true
 	}
 	return false
@@ -53,6 +54,7 @@ func (t NodeType) IsControlFlow() bool {
 // AllNodeTypes returns all valid node types
 func AllNodeTypes() []NodeType {
 	return []NodeType{
+		NodeTypeAgent,
 		NodeTypePrompt,
 		NodeTypeHTTP,
 		NodeTypeTransform,

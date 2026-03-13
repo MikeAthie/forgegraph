@@ -1,7 +1,7 @@
 /**
  * Graph JSON Types
  *
- * These types define the structure of graph data as specified in SPECS.md section 8.
+ * These types define the structure of graph data as specified in the root SPECS.md.
  * They are used for:
  * - Persisting graphs to the backend (GraphVersion.graph_json)
  * - Converting between React Flow format and our canonical format
@@ -13,6 +13,7 @@
  * @see backend/domain/value_objects/node_types.py
  */
 export const NODE_TYPES = {
+  AGENT: "agent",
   PROMPT: "prompt",
   HTTP: "http",
   TRANSFORM: "transform",
@@ -59,6 +60,24 @@ export interface NodeOutput {
  */
 export interface BaseNodeConfig {
   [key: string]: unknown;
+}
+
+/**
+ * Agent node configuration.
+ */
+export interface AgentNodeConfig extends BaseNodeConfig {
+  instructions?: string;
+  system_prompt?: string;
+  provider?: string;
+  credential_id?: string;
+  model?: string;
+  tools?: string[];
+  max_steps?: number;
+  max_tool_calls?: number;
+  max_tokens?: number;
+  temperature?: number;
+  approval_required_tools?: string[];
+  stop_condition?: "final_answer";
 }
 
 /**
@@ -178,7 +197,7 @@ export type NodeConfig = Record<string, unknown>;
 
 /**
  * A node in the graph JSON structure.
- * @see SPECS.md section 8.2
+ * @see ../../SPECS.md
  */
 export interface GraphNode {
   /** Unique identifier for the node */
@@ -201,7 +220,7 @@ export interface GraphNode {
 
 /**
  * An edge connecting two nodes.
- * @see SPECS.md section 8.3
+ * @see ../../SPECS.md
  */
 export interface GraphEdge {
   /** Unique identifier for the edge */
@@ -252,7 +271,7 @@ export interface EditorState {
 
 /**
  * Complete graph JSON structure.
- * @see SPECS.md section 8.1
+ * @see ../../SPECS.md
  */
 export interface GraphJson {
   /** Graph ID (optional when creating new) */
@@ -324,6 +343,12 @@ export interface NodeTypeInfo {
  * Node types available in Phase 2 (MVP).
  */
 export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
+  {
+    type: NODE_TYPES.AGENT,
+    label: "Agent",
+    description: "Run a model-to-tool loop inside one workflow node",
+    enabled: true,
+  },
   {
     type: NODE_TYPES.PROMPT,
     label: "Prompt",

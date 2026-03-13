@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
+import { AgentNodeForm } from "./AgentNodeForm";
 import { PromptNodeForm } from "./PromptNodeForm";
 import { HttpNodeForm } from "./HttpNodeForm";
 import { TransformNodeForm } from "./TransformNodeForm";
@@ -42,6 +43,16 @@ interface NodeFormEntry {
  * Registry mapping node types to their form components and metadata
  */
 export const nodeFormRegistry: Record<string, NodeFormEntry> = {
+  agent: {
+    component: AgentNodeForm,
+    info: {
+      label: "Agent",
+      description: "Run a bounded model-to-tool loop inside one node",
+      icon: "Bot",
+      category: "processing",
+      color: "#0ea5e9",
+    },
+  },
   prompt: {
     component: PromptNodeForm,
     info: {

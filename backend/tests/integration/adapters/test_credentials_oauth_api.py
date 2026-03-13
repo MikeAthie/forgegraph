@@ -141,7 +141,9 @@ def test_oauth_start_and_callback_create_credential(authenticated_client, user, 
     assert decrypt_api_key(bytes(key.encrypted_refresh_token)) == "notion-refresh-token"
 
 
-def test_oauth_callback_fails_when_token_response_missing_access_token(authenticated_client, monkeypatch):
+def test_oauth_callback_fails_when_token_response_missing_access_token(
+    authenticated_client, monkeypatch
+):
     _configure_google_env(monkeypatch)
 
     start_response = authenticated_client.post(
@@ -200,7 +202,9 @@ def test_oauth_start_for_hubspot_works_after_provider_config(authenticated_clien
     assert "hubspot.com" in payload["authorize_url"]
 
 
-def test_oauth_start_for_google_calendar_works_after_provider_config(authenticated_client, monkeypatch):
+def test_oauth_start_for_google_calendar_works_after_provider_config(
+    authenticated_client, monkeypatch
+):
     _configure_google_env(monkeypatch)
     response = authenticated_client.post(
         "/api/credentials/oauth/start",
@@ -213,7 +217,9 @@ def test_oauth_start_for_google_calendar_works_after_provider_config(authenticat
     assert "accounts.google.com" in payload["authorize_url"]
 
 
-def test_oauth_start_for_google_tasks_works_after_provider_config(authenticated_client, monkeypatch):
+def test_oauth_start_for_google_tasks_works_after_provider_config(
+    authenticated_client, monkeypatch
+):
     _configure_google_env(monkeypatch)
     response = authenticated_client.post(
         "/api/credentials/oauth/start",

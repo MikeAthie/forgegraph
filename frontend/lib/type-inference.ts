@@ -53,6 +53,13 @@ export function inferOutputType(node: GraphNode): DataTypeSchema {
 
   // Refine based on node type and config
   switch (node.type) {
+    case NODE_TYPES.AGENT:
+      return {
+        type: DataType.ANY,
+        description: "Agent final output",
+        isInferred: true,
+      };
+
     case NODE_TYPES.PROMPT:
       // Prompts always output text (LLM responses)
       return {

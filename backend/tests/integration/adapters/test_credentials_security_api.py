@@ -6,8 +6,8 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
-from django.utils import timezone
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 
 from application.services.oauth import OAuthProviderConfig
@@ -153,16 +153,19 @@ def test_engine_credential_endpoint_refreshes_expired_oauth_token(api_client, us
     body = b""
     signature = s2s.build_signature("test-secret", str(timestamp_ms), body)
 
-    with patch(
-        "adapters.api.engine.views.get_oauth_provider_config",
-        return_value=(config, []),
-    ), patch(
-        "adapters.api.engine.views.exchange_refresh_token_for_access_token",
-        return_value={
-            "access_token": "new-access-token",
-            "expires_in": 3600,
-            "token_type": "Bearer",
-        },
+    with (
+        patch(
+            "adapters.api.engine.views.get_oauth_provider_config",
+            return_value=(config, []),
+        ),
+        patch(
+            "adapters.api.engine.views.exchange_refresh_token_for_access_token",
+            return_value={
+                "access_token": "new-access-token",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        ),
     ):
         response = api_client.get(
             f"/api/engine/credentials/{credential.id}?tenant_id={user.default_organization_id}",
@@ -208,12 +211,15 @@ def test_engine_credential_endpoint_returns_refresh_failed_when_refresh_errors(a
     timestamp_ms = int(time.time() * 1000)
     signature = s2s.build_signature("test-secret", str(timestamp_ms), b"")
 
-    with patch(
-        "adapters.api.engine.views.get_oauth_provider_config",
-        return_value=(config, []),
-    ), patch(
-        "adapters.api.engine.views.exchange_refresh_token_for_access_token",
-        side_effect=ValueError("refresh failed"),
+    with (
+        patch(
+            "adapters.api.engine.views.get_oauth_provider_config",
+            return_value=(config, []),
+        ),
+        patch(
+            "adapters.api.engine.views.exchange_refresh_token_for_access_token",
+            side_effect=ValueError("refresh failed"),
+        ),
     ):
         response = api_client.get(
             f"/api/engine/credentials/{credential.id}?tenant_id={user.default_organization_id}",

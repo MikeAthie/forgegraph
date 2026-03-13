@@ -32,6 +32,25 @@ export interface NodeSignature {
  * Node type signatures defining what each node type accepts and produces
  */
 export const NODE_SIGNATURES: Record<NodeType, NodeSignature> = {
+  [NODE_TYPES.AGENT]: {
+    inputs: [
+      {
+        name: "context",
+        type: DataType.JSON,
+        required: false,
+        description: "Structured state or user input available to the agent",
+      },
+    ],
+    outputs: [
+      {
+        name: "result",
+        type: DataType.ANY,
+        description: "Final agent output after tool-assisted reasoning",
+      },
+    ],
+    description: "Runs a bounded model-to-tool loop and returns the final result",
+  },
+
   [NODE_TYPES.PROMPT]: {
     inputs: [
       {

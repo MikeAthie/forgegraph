@@ -25,15 +25,16 @@ import { Brain, Play, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "
 
 import { WizardProvider, useWizard } from "@/contexts/WizardContext";
 import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
-import { AgentWizard } from "./wizard";
+import { AgentWizard, type AgentWizardCompletePayload } from "./wizard";
 import { ValidationOverlay, ValidationStatusBar } from "./validation";
 
 import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson, isValidNodeType } from "../../lib/graph-types";
 import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
-import { getApiErrorMessage, graphsApi, marketplaceApi, runsApi, type MarketplacePackage, type NodeRunItem, type RunDetail } from "../../lib/api";
+import { getApiErrorMessage, graphsApi, marketplaceApi, runsApi, type AgentTrace, type MarketplacePackage, type NodeRunItem, type RunDetail } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
+import { canAddMarketplacePackageToEditor, getMarketplacePackageReason } from "../../lib/marketplace-runtime";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import {
@@ -42,7 +43,10 @@ import {
   snapPositionToGrid,
   validateGraphConnection,
 } from "../../lib/graph-editor-interactions";
-import type { AgentWizardPreset } from "../../lib/agent-wizard-presets";
+import {
+  AGENT_OUTPUT_PLACEHOLDER,
+  type AgentWizardBlueprint,
+} from "../../lib/agent-wizard-presets";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
@@ -50,12 +54,27 @@ import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
 import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
 import { NodeConfigDialog } from "./NodeConfigDialog";
 import { MemoryConfigDialog } from "./dialogs/MemoryConfigDialog";
-import { getNodeTypeInfo } from "./forms/node-form-registry";
+import { getNodeFormComponent, getNodeTypeInfo } from "./forms/node-form-registry";
 import { TypedEdge } from "./TypedEdge";
 import { QuickToolBar } from "./QuickToolBar";
 import { useEdgeTypes } from "@/hooks/useEdgeTypes";
+import { AgentTracePanel } from "../runs/AgentTracePanel";
 
 const NOTE_NODE_TYPE = "note";
+
+const getNodeRunAgentTrace = (nodeRun: NodeRunItem | null): AgentTrace | null => {
+  if (!nodeRun || String(nodeRun.node_type) !== "agent") {
+    return null;
+  }
+  if (nodeRun.agent_trace && typeof nodeRun.agent_trace === "object") {
+    return nodeRun.agent_trace;
+  }
+  const nestedOutput = nodeRun.output_json?.output;
+  if (nestedOutput && typeof nestedOutput === "object") {
+    return nestedOutput as AgentTrace;
+  }
+  return null;
+};
 
 // Custom edge types for React Flow
 const edgeTypes: EdgeTypes = {
@@ -64,6 +83,7 @@ const edgeTypes: EdgeTypes = {
 
 // Custom node types for React Flow
 const nodeTypes: NodeTypes = {
+  [NODE_TYPES.AGENT]: GraphNodeComponent,
   [NODE_TYPES.PROMPT]: GraphNodeComponent,
   [NODE_TYPES.HTTP]: GraphNodeComponent,
   [NODE_TYPES.TRANSFORM]: GraphNodeComponent,
@@ -109,12 +129,43 @@ type ClipboardSnapshot = {
   edges: ClipboardEdge[];
 };
 
+type MaterializedBlueprint = {
+  nodes: Node[];
+  edges: Edge[];
+  createdNodeIds: string[];
+};
+
 function deepClone<T>(value: T): T {
   const cloneFn = (globalThis as any).structuredClone as ((input: T) => T) | undefined;
   if (typeof cloneFn === "function") {
     return cloneFn(value);
   }
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function replaceBlueprintPlaceholders(
+  value: unknown,
+  replacements: Record<string, string>
+): unknown {
+  if (typeof value === "string") {
+    let next = value;
+    for (const [token, replacement] of Object.entries(replacements)) {
+      next = next.split(token).join(replacement);
+    }
+    return next;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceBlueprintPlaceholders(item, replacements));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, replaceBlueprintPlaceholders(child, replacements)])
+    );
+  }
+
+  return value;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -879,6 +930,15 @@ export function GraphEditor({
 
   const handleAddMarketplaceNode = useCallback(
     (pkg: MarketplacePackage, connectToSelected = false) => {
+      if (!canAddMarketplacePackageToEditor(pkg)) {
+        showError(
+          "Package unavailable",
+          getMarketplacePackageReason(pkg) ??
+            "This marketplace package cannot be added in the current product mode.",
+        );
+        return;
+      }
+
       const release = pkg.installed_release ?? pkg.latest_release;
       if (!release) {
         return;
@@ -1073,12 +1133,118 @@ export function GraphEditor({
     [edges, pushHistory, setEdges, selectedEdgeId],
   );
 
-  const handleSave = useCallback(async () => {
-    let normalizedNodes = nodes;
+  const materializeAgentBlueprint = useCallback(
+    (
+      blueprint: AgentWizardBlueprint,
+      options?: { nodes?: Node[]; edges?: Edge[]; sourceNodeId?: string | null }
+    ): MaterializedBlueprint => {
+      const currentNodes = options?.nodes ?? nodes;
+      const currentEdges = options?.edges ?? edges;
+      const sourceNodeId = options?.sourceNodeId ?? selectedNodeId;
+      const selectedSourceNode =
+        sourceNodeId &&
+        currentNodes.some((node) => node.id === sourceNodeId && node.type !== NOTE_NODE_TYPE)
+          ? currentNodes.find((node) => node.id === sourceNodeId) ?? null
+          : null;
+
+      const maxX = currentNodes.reduce((max, node) => Math.max(max, node.position.x), 0);
+      const baseX = selectedSourceNode ? selectedSourceNode.position.x + 260 : maxX + 140;
+      const baseY = selectedSourceNode ? selectedSourceNode.position.y : 120;
+      const hasTriggerNode = currentNodes.some(
+        (node) => node.type !== NOTE_NODE_TYPE && (node.data as Record<string, unknown>)?.isTrigger === true,
+      );
+
+      const createdNodeIds: string[] = [];
+      const agentNodeTemplateIndex = blueprint.nodes.findIndex((template) => template.nodeType === NODE_TYPES.AGENT);
+
+      const draftNodes: Node[] = blueprint.nodes.map((template, index) => {
+        const newNodeId = generateId();
+        createdNodeIds.push(newNodeId);
+        const rawConfig = deepClone(template.config);
+        return {
+          id: newNodeId,
+          type: template.nodeType,
+          position: {
+            x: baseX,
+            y: baseY + index * 170,
+          },
+          data: {
+            label: template.label,
+            nodeType: template.nodeType,
+            config: rawConfig,
+            ...(!hasTriggerNode && index === 0 ? { isTrigger: true } : {}),
+            ...(template.nodeType === NODE_TYPES.OUTPUT ? { isEnd: true } : {}),
+          },
+          selected: false,
+        } satisfies Node;
+      });
+
+      const agentNodeId = agentNodeTemplateIndex >= 0 ? createdNodeIds[agentNodeTemplateIndex] : "";
+      const replacements: Record<string, string> = {};
+      if (agentNodeId) {
+        replacements[AGENT_OUTPUT_PLACEHOLDER] = agentNodeId;
+      }
+
+      const newNodes = draftNodes.map((node) => ({
+        ...node,
+        data: {
+          ...(node.data as Record<string, unknown>),
+          config: replaceBlueprintPlaceholders((node.data as Record<string, unknown>).config, replacements),
+        },
+      }));
+
+      const newEdges: Edge[] = [];
+      const appendEdge = (source: string, target: string) => {
+        const exists =
+          currentEdges.some((edge) => edge.source === source && edge.target === target) ||
+          newEdges.some((edge) => edge.source === source && edge.target === target);
+        if (exists) {
+          return;
+        }
+        newEdges.push({
+          id: generateId(),
+          source,
+          target,
+        } as Edge);
+      };
+
+      if (selectedSourceNode && newNodes[0]) {
+        appendEdge(selectedSourceNode.id, newNodes[0].id);
+      }
+
+      for (let index = 0; index < newNodes.length - 1; index += 1) {
+        appendEdge(newNodes[index].id, newNodes[index + 1].id);
+      }
+
+      return {
+        nodes: [...currentNodes.map((node) => ({ ...node, selected: false })), ...newNodes],
+        edges: [...currentEdges.map((edge) => ({ ...edge, selected: false })), ...newEdges],
+        createdNodeIds,
+      };
+    },
+    [edges, nodes, selectedNodeId]
+  );
+
+  const applyAgentBlueprint = useCallback(
+    (blueprint: AgentWizardBlueprint): MaterializedBlueprint => {
+      pushHistory();
+      const materialized = materializeAgentBlueprint(blueprint);
+      setNodes(materialized.nodes);
+      setEdges(materialized.edges);
+      setSelectedNodeId(materialized.createdNodeIds[materialized.createdNodeIds.length - 1] ?? null);
+      setSelectedEdgeId(null);
+      setIsDirty(true);
+      return materialized;
+    },
+    [materializeAgentBlueprint, pushHistory, setEdges, setNodes]
+  );
+
+  const saveGraphSnapshot = useCallback(async (draftNodes: Node[], draftEdges: Edge[]) => {
+    let normalizedNodes = draftNodes;
     let addedTrigger = false;
     let addedEnds = 0;
 
-    const executableNodes = nodes.filter((node) => node.type !== NOTE_NODE_TYPE);
+    const executableNodes = draftNodes.filter((node) => node.type !== NOTE_NODE_TYPE);
 
     // Validation: Cannot save empty graph
     if (executableNodes.length === 0) {
@@ -1095,9 +1261,9 @@ export function GraphEditor({
     if (executableNodes.length > 0) {
       const hasTrigger = executableNodes.some((node) => (node.data as any)?.isTrigger === true);
       if (!hasTrigger) {
-        const firstExecutableIndex = nodes.findIndex((node) => node.type !== NOTE_NODE_TYPE);
+        const firstExecutableIndex = draftNodes.findIndex((node) => node.type !== NOTE_NODE_TYPE);
         if (firstExecutableIndex >= 0) {
-          normalizedNodes = nodes.map((node, index) =>
+          normalizedNodes = draftNodes.map((node, index) =>
             index === firstExecutableIndex
               ? { ...node, data: { ...node.data, isTrigger: true } }
               : node
@@ -1113,7 +1279,7 @@ export function GraphEditor({
         for (const id of executableIds) {
           outdegree.set(id, 0);
         }
-        for (const edge of edges) {
+        for (const edge of draftEdges) {
           if (executableIds.has(edge.source) && executableIds.has(edge.target)) {
             outdegree.set(edge.source, (outdegree.get(edge.source) ?? 0) + 1);
           }
@@ -1130,7 +1296,7 @@ export function GraphEditor({
       }
     }
 
-    if (normalizedNodes !== nodes) {
+    if (normalizedNodes !== draftNodes) {
       setNodes(normalizedNodes);
     }
 
@@ -1143,7 +1309,7 @@ export function GraphEditor({
 
     const graphJson = reactFlowToGraphJson(
       normalizedNodes,
-      edges,
+      draftEdges,
       { name: graphName, description: graphDescription },
       graphId,
       undefined,
@@ -1152,7 +1318,11 @@ export function GraphEditor({
     await onSave(graphJson);
     setIsDirty(false);
     return true;
-  }, [nodes, edges, graphName, graphDescription, graphId, onSave, currentViewport, setNodes]);
+  }, [currentViewport, graphDescription, graphId, graphName, onSave, setNodes]);
+
+  const handleSave = useCallback(async () => {
+    return saveGraphSnapshot(nodes, edges);
+  }, [edges, nodes, saveGraphSnapshot]);
 
   const runDisabledReason =
     startingRun
@@ -1380,114 +1550,14 @@ export function GraphEditor({
     }
   }, [handleAddStartNode, handleAddOutputNode, handleDeleteNode]);
 
-  // Handler for wizard to add nodes from quick presets
-  const handleWizardAddNode = useCallback((preset: import("@/lib/quick-node-presets").QuickNodePreset) => {
-    const sourceNodeId =
-      selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
-        ? selectedNodeId
-        : null;
-
-    if (preset.category === "integrations") {
-      captureFocusableTarget();
-      setConfigDialogNodeType(preset.nodeType);
-      setConfigDialogSourceNodeId(sourceNodeId);
-      setConfigDialogInitialConfig(deepClone(preset.defaultConfig));
-      setConfigDialogInitialLabel(preset.name);
-      setConfigDialogOpen(true);
-      showInfo(
-        "Shortcut ready",
-        "Confirm credential assignment in the node dialog, then add the shortcut node.",
-      );
-      return;
-    }
-
-    addExecutableNode(preset.nodeType, {
-      sourceNodeId,
-      config: preset.defaultConfig,
-      label: preset.name,
-    });
-  }, [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId]);
-
-  const handleWizardApplyPreset = useCallback((preset: AgentWizardPreset) => {
-    if (preset.nodes.length === 0) {
-      return;
-    }
-
-    pushHistory();
-
-    const selectedSourceNode =
-      selectedNodeId && nodes.some((node) => node.id === selectedNodeId && node.type !== NOTE_NODE_TYPE)
-        ? nodes.find((node) => node.id === selectedNodeId) ?? null
-        : null;
-
-    const maxX = nodes.reduce((max, node) => Math.max(max, node.position.x), 0);
-    const baseX = selectedSourceNode ? selectedSourceNode.position.x + 260 : maxX + 140;
-    const baseY = selectedSourceNode ? selectedSourceNode.position.y : 120;
-
-    const hasTriggerNode = nodes.some(
-      (node) => node.type !== NOTE_NODE_TYPE && (node.data as Record<string, unknown>)?.isTrigger === true,
+  const handleWizardComplete = useCallback(async (payload: AgentWizardCompletePayload) => {
+    const materialized = applyAgentBlueprint(payload.blueprint);
+    showSuccess(
+      "Agent workflow added",
+      `${payload.blueprint.name} was added as a real agent flow.`,
     );
 
-    const newNodes: Node[] = preset.nodes.map((template, index) => {
-      const nodeData: Record<string, unknown> = {
-        label: template.label,
-        config: deepClone(template.config),
-      };
-
-      if (!hasTriggerNode && index === 0) {
-        nodeData.isTrigger = true;
-      }
-      if (template.nodeType === NODE_TYPES.OUTPUT) {
-        nodeData.isEnd = true;
-      }
-
-      return {
-        id: generateId(),
-        type: template.nodeType,
-        position: {
-          x: baseX,
-          y: baseY + index * 170,
-        },
-        data: nodeData,
-        selected: false,
-      } satisfies Node;
-    });
-
-    const newEdges: Edge[] = [];
-    const appendEdge = (source: string, target: string) => {
-      const exists =
-        edges.some((edge) => edge.source === source && edge.target === target) ||
-        newEdges.some((edge) => edge.source === source && edge.target === target);
-      if (exists) {
-        return;
-      }
-      newEdges.push({
-        id: generateId(),
-        source,
-        target,
-      } as Edge);
-    };
-
-    if (selectedSourceNode && newNodes[0]) {
-      appendEdge(selectedSourceNode.id, newNodes[0].id);
-    }
-
-    for (let index = 0; index < newNodes.length - 1; index += 1) {
-      appendEdge(newNodes[index].id, newNodes[index + 1].id);
-    }
-
-    setNodes((currentNodes) => [...currentNodes.map((node) => ({ ...node, selected: false })), ...newNodes]);
-    setEdges((currentEdges) => [...currentEdges.map((edge) => ({ ...edge, selected: false })), ...newEdges]);
-    setSelectedNodeId(newNodes[newNodes.length - 1]?.id ?? null);
-    setSelectedEdgeId(null);
-    setIsDirty(true);
-
-    showSuccess("Preset applied", `${preset.name} added ${newNodes.length} nodes.`);
-  }, [edges, nodes, pushHistory, selectedNodeId, setEdges, setNodes]);
-
-  const handleWizardComplete = useCallback(async (options?: { runTest?: boolean }) => {
-    if (!options?.runTest) {
-      showSuccess("Agent wizard completed", "Your agent workflow is ready");
+    if (!payload.runTest) {
       return;
     }
 
@@ -1501,8 +1571,8 @@ export function GraphEditor({
     let versionId = currentVersionId;
 
     try {
-      if (isDirty || !versionId) {
-        const saveOk = await handleSave();
+      if (isDirty || !versionId || materialized.createdNodeIds.length > 0) {
+        const saveOk = await saveGraphSnapshot(materialized.nodes, materialized.edges);
         if (!saveOk) {
           return;
         }
@@ -1525,7 +1595,7 @@ export function GraphEditor({
     } finally {
       setStartingRun(false);
     }
-  }, [currentVersionId, graphId, handleSave, isDirty, loadingVersion, router, saving]);
+  }, [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, router, saveGraphSnapshot, saving]);
 
   return (
     <ValidationProvider>
@@ -1534,13 +1604,11 @@ export function GraphEditor({
       <div className="flex h-full flex-col">
         <div className="flex flex-1 overflow-hidden">
         <AgentWizard
-          onComplete={(options) => {
-            void handleWizardComplete(options);
+          onComplete={(payload) => {
+            void handleWizardComplete(payload);
             restoreFocusableTarget();
           }}
           onExit={restoreFocusableTarget}
-          onAddNode={handleWizardAddNode}
-          onApplyPreset={handleWizardApplyPreset}
         />
         <PromptNodeWizardDialog
           open={promptWizardOpen}
@@ -1573,6 +1641,11 @@ export function GraphEditor({
           initialConfig={configDialogInitialConfig}
           initialLabel={configDialogInitialLabel ?? undefined}
           onSave={handleConfigDialogComplete}
+          FormComponent={
+            configDialogNodeType === NODE_TYPES.AGENT
+              ? getNodeFormComponent(configDialogNodeType) ?? undefined
+              : undefined
+          }
         />
         <MemoryConfigDialog
           graphId={graphId ?? null}
@@ -1824,16 +1897,22 @@ export function GraphEditor({
                     <p className="text-xs text-muted-foreground">No trace records for this node.</p>
                   ) : (
                     <div className="space-y-2">
-                      {overlaySelectedNodeRuns.map((nodeRun) => (
-                        <div
-                          key={nodeRun.id}
-                          className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
-                        >
+                      {overlaySelectedNodeRuns.map((nodeRun) => {
+                        const agentTrace = getNodeRunAgentTrace(nodeRun);
+                        return (
+                          <div
+                            key={nodeRun.id}
+                            className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
+                          >
                           <div className="flex items-center justify-between gap-2 text-xs">
                             <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
                             <span className="text-muted-foreground">{String(nodeRun.status)}</span>
                             <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
                           </div>
+
+                          {agentTrace ? (
+                            <AgentTracePanel trace={agentTrace} compact />
+                          ) : null}
 
                           <details open>
                             <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
@@ -1861,8 +1940,9 @@ export function GraphEditor({
                               {formatJsonForDisplay(nodeRun.input_json)}
                             </pre>
                           </details>
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -4,16 +4,89 @@
  * Tests node type rendering, enabled/disabled states, and click handlers.
  */
 
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodePalette } from "@/components/graph-editor/NodePalette";
+import type { MarketplacePackage } from "@/lib/api";
 import { NODE_TYPES, PHASE2_NODE_TYPES } from "@/lib/graph-types";
 
 describe("NodePalette", () => {
   const mockOnAddNode = jest.fn();
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      keyboard: (text: string) => act(async () => user.keyboard(text)),
+    };
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  const buildMarketplacePackage = (
+    overrides: Partial<MarketplacePackage> = {},
+  ): MarketplacePackage => ({
+    id: "pkg-1",
+    slug: "crm-lookup",
+    name: "CRM Lookup",
+    summary: "Runtime-backed CRM lookup package.",
+    category: "developer",
+    icon: "sparkles",
+    docs_url: "",
+    homepage_url: "",
+    latest_release: {
+      id: "rel-1",
+      version: "1.0.0",
+      changelog: "",
+      status: "approved",
+      package_kind: "runtime_tool",
+      execution_node_type: "tool",
+      ui_schema: { label: "CRM Lookup" },
+      config_schema: { type: "object" },
+      config_defaults: { tool: "crm_lookup" },
+      runtime_manifest: {
+        name: "crm_lookup",
+        version: "1.0.0",
+        kind: "http",
+        http: { url: "https://example.com/crm", method: "POST" },
+      },
+      manifest_version: 1,
+      cloud_allowed: true,
+      review_notes: "",
+      created_at: "2026-02-05T12:00:00Z",
+    },
+    installed_release: {
+      id: "rel-1",
+      version: "1.0.0",
+      changelog: "",
+      status: "approved",
+      package_kind: "runtime_tool",
+      execution_node_type: "tool",
+      ui_schema: { label: "CRM Lookup" },
+      config_schema: { type: "object" },
+      config_defaults: { tool: "crm_lookup" },
+      runtime_manifest: {
+        name: "crm_lookup",
+        version: "1.0.0",
+        kind: "http",
+        http: { url: "https://example.com/crm", method: "POST" },
+      },
+      manifest_version: 1,
+      cloud_allowed: true,
+      review_notes: "",
+      created_at: "2026-02-05T12:00:00Z",
+    },
+    runtime_delivery: {
+      state: "ready",
+      reason: "ready",
+      package_kind: "runtime_tool",
+      cloud_allowed: true,
+      manifest_version: 1,
+      checksum: "abc123",
+    },
+    ...overrides,
   });
 
   describe("Rendering", () => {
@@ -143,7 +216,7 @@ describe("NodePalette", () => {
 
   describe("User Interactions", () => {
     it("should call onAddNode with Prompt type when Prompt button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const promptButton = screen.getByRole("button", { name: /^prompt$/i });
@@ -154,7 +227,7 @@ describe("NodePalette", () => {
     });
 
     it("should call onAddNode with HTTP type when HTTP button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const httpButton = screen.getByRole("button", { name: /^http$/i });
@@ -165,7 +238,7 @@ describe("NodePalette", () => {
     });
 
     it("should call onAddNode with Transform type when Transform button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const transformButton = screen.getByRole("button", { name: /^transform$/i });
@@ -176,7 +249,7 @@ describe("NodePalette", () => {
     });
 
     it("should call onAddNode with Output type when Output button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const outputButton = screen.getByRole("button", { name: /^output$/i });
@@ -187,7 +260,7 @@ describe("NodePalette", () => {
     });
 
     it("should call onAddNode with connectToSelected=true when hasSelectedNode is true", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} hasSelectedNode={true} />);
 
       const promptButton = screen.getByRole("button", { name: /^prompt$/i });
@@ -198,7 +271,7 @@ describe("NodePalette", () => {
     });
 
     it("should call onAddNode when Human Gate button is clicked", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const humanGateButton = screen.getByRole("button", { name: /^human gate$/i });
@@ -209,7 +282,7 @@ describe("NodePalette", () => {
     });
 
     it("should allow multiple clicks on enabled nodes", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const promptButton = screen.getByRole("button", { name: /^prompt$/i });
@@ -221,7 +294,7 @@ describe("NodePalette", () => {
     });
 
     it("should support keyboard-first quick add from search", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
@@ -232,7 +305,7 @@ describe("NodePalette", () => {
     });
 
     it("should track recently used nodes after selection", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       await user.click(screen.getByRole("button", { name: /^prompt$/i }));
@@ -314,7 +387,7 @@ describe("NodePalette", () => {
     });
 
     it("should show badges in search results", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
@@ -329,6 +402,32 @@ describe("NodePalette", () => {
 
       expect(screen.getByText("Recommended")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^recommended prompt$/i })).toBeInTheDocument();
+    });
+
+    it("shows blocked marketplace packages as unavailable", () => {
+      render(
+        <NodePalette
+          onAddNode={mockOnAddNode}
+          marketplaceNodes={[
+            buildMarketplacePackage({
+              name: "Blocked CRM",
+              runtime_delivery: {
+                state: "blocked",
+                reason: "exec_not_supported_in_cloud",
+                package_kind: "runtime_tool",
+                cloud_allowed: true,
+                manifest_version: 1,
+                checksum: "abc123",
+              },
+            }),
+          ]}
+        />,
+      );
+
+      const button = screen.getByRole("button", { name: /^CRM Lookup$/i });
+      expect(button).toBeDisabled();
+      expect(screen.getByText("(Unavailable)")).toBeInTheDocument();
+      expect(screen.getByText(/exec tools are blocked in cloud/i)).toBeInTheDocument();
     });
   });
 });

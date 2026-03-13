@@ -726,7 +726,7 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 
 		// Create timeout context
 		execCtx, cancel := context.WithTimeout(rc.ctx, time.Duration(timeout)*time.Millisecond)
-		if node.Type == string(value.NodeTypePrompt) {
+		if node.Type == string(value.NodeTypePrompt) || node.Type == string(value.NodeTypeAgent) {
 			var chunkIndex int64
 			execCtx = port.WithStreamChunkEmitter(execCtx, func(chunk string) {
 				if strings.TrimSpace(chunk) == "" {
@@ -2080,6 +2080,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	approved, _ := decision["approved"].(bool)
 	feedback, _ := decision["feedback"].(string)
 
+	nodeRun, _ := s.repository.GetNodeRun(ctx, runID, nodeID)
+	isAgentPause := nodeRun != nil && nodeRun.NodeType == string(value.NodeTypeAgent)
+
 	// Handle rejection - terminate the run
 	if !approved {
 		errorMsg := "Rejected by user"
@@ -2088,7 +2091,6 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		}
 
 		// Update node run to failed
-		nodeRun, _ := s.repository.GetNodeRun(ctx, runID, nodeID)
 		if nodeRun != nil {
 			nodeRun.Status = string(value.NodeRunStatusFailed)
 			now := time.Now()
@@ -2133,16 +2135,26 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		"feedback":   feedback,
 		"decided_at": time.Now().Format(time.RFC3339),
 	}
-	state.SetNodeOutput(nodeID, humanDecision)
+	if isAgentPause {
+		state.Set("node."+nodeID+".approval_decision", humanDecision)
+		if nodeRun != nil {
+			nodeRun.Status = string(value.NodeRunStatusRunning)
+			nodeRun.EndedAt = nil
+			nodeRun.OutputJSON = nil
+			nodeRun.ErrorJSON = nil
+			s.repository.UpdateNodeRun(ctx, nodeRun)
+		}
+	} else {
+		state.SetNodeOutput(nodeID, humanDecision)
 
-	// Update human gate node run to succeeded
-	nodeRun, _ := s.repository.GetNodeRun(ctx, runID, nodeID)
-	if nodeRun != nil {
-		nodeRun.Status = string(value.NodeRunStatusSucceeded)
-		now := time.Now()
-		nodeRun.EndedAt = &now
-		nodeRun.OutputJSON = map[string]any{"output": humanDecision}
-		s.repository.UpdateNodeRun(ctx, nodeRun)
+		// Update human gate node run to succeeded
+		if nodeRun != nil {
+			nodeRun.Status = string(value.NodeRunStatusSucceeded)
+			now := time.Now()
+			nodeRun.EndedAt = &now
+			nodeRun.OutputJSON = map[string]any{"output": humanDecision}
+			s.repository.UpdateNodeRun(ctx, nodeRun)
+		}
 	}
 
 	// Create a detached run context for resumed execution.
@@ -2203,15 +2215,21 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	for _, skippedID := range skippedNodes {
 		rc.skipped[skippedID] = true
 	}
-	// Also mark the human gate node as completed
-	rc.completed[nodeID] = true
-	if rc.visitCounts[nodeID] < 1 {
-		rc.visitCounts[nodeID] = 1
+	// Human gate resumes continue downstream; paused agent resumes re-enter the same node.
+	if !isAgentPause {
+		rc.completed[nodeID] = true
+		if rc.visitCounts[nodeID] < 1 {
+			rc.visitCounts[nodeID] = 1
+		}
 	}
 
 	// Rebuild pending counts based on completed/skipped nodes
 	s.applyCheckpointToPending(rc)
-	rc.initialNodes = s.computeReadyNodes(rc)
+	if isAgentPause {
+		rc.initialNodes = []string{nodeID}
+	} else {
+		rc.initialNodes = s.computeReadyNodes(rc)
+	}
 
 	// Store active run
 	s.activeRuns.Store(runID, rc)

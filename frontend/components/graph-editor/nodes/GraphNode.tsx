@@ -9,6 +9,10 @@ import { DataTypeIndicator, NodeTypeBadge } from "../DataTypeIndicator";
 import { getPrimaryInputType, getPrimaryOutputType } from "@/lib/type-inference";
 
 const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
+  [NODE_TYPES.AGENT]: {
+    strip: "bg-sky-500",
+    pill: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
+  },
   [NODE_TYPES.PROMPT]: {
     strip: "bg-violet-500",
     pill: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
@@ -52,6 +56,7 @@ const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
 };
 
 const nodeTypeLabels: Record<string, string> = {
+  [NODE_TYPES.AGENT]: "Agent",
   [NODE_TYPES.PROMPT]: "Prompt",
   [NODE_TYPES.HTTP]: "HTTP",
   [NODE_TYPES.TRANSFORM]: "Transform",
@@ -323,6 +328,14 @@ function getConfigPreview(
   config: Record<string, unknown>
 ): string {
   switch (nodeType) {
+    case NODE_TYPES.AGENT: {
+      const model = (config.model as string) ?? "";
+      const tools = Array.isArray(config.tools) ? config.tools.length : 0;
+      if (model) {
+        return `${model} · ${tools} tool${tools === 1 ? "" : "s"}`.slice(0, 32);
+      }
+      return tools > 0 ? `${tools} tool${tools === 1 ? "" : "s"} configured` : "Agent loop";
+    }
     case NODE_TYPES.PROMPT:
       if (config.prompt_id) {
         return `Prompt: ${config.prompt_id}`;

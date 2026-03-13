@@ -4,9 +4,10 @@ import { useRouter } from "next/router";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type NodeRunItem, type RunDetail, type ResumeRunInput } from "../../lib/api";
+import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type AgentTrace, type NodeRunItem, type RunDetail, type ResumeRunInput } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
 import { showError, showSuccess, showWarning } from "../../lib/toast";
+import { AgentTracePanel } from "../../components/runs/AgentTracePanel";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ConfirmButton, Input, Separator, Spinner, Textarea } from "@/components/ui";
 
 const formatDateTime = (isoString: string) => {
@@ -31,6 +32,20 @@ const formatDuration = (durationMs: number | null) => {
 const formatNodeStatusLabel = (status: string) => {
   if (status === "running") return "in progress";
   return status;
+};
+
+const getNodeRunAgentTrace = (nodeRun: NodeRunItem | null): AgentTrace | null => {
+  if (!nodeRun || String(nodeRun.node_type) !== "agent") {
+    return null;
+  }
+  if (nodeRun.agent_trace && typeof nodeRun.agent_trace === "object") {
+    return nodeRun.agent_trace;
+  }
+  const nestedOutput = nodeRun.output_json?.output;
+  if (nestedOutput && typeof nestedOutput === "object") {
+    return nestedOutput as AgentTrace;
+  }
+  return null;
 };
 
 function StatusIcon({ status }: { status: string }) {
@@ -915,6 +930,10 @@ export default function RunDetailPage() {
     );
   }, [selectedNodeRun, nodeStreamText]);
 
+  const selectedNodeAgentTrace = useMemo(() => {
+    return getNodeRunAgentTrace(selectedNodeRun);
+  }, [selectedNodeRun]);
+
   const displayedRunDurationMs = useMemo(() => {
     if (!run) return null;
     if (run.duration_ms !== null && run.duration_ms !== undefined) return run.duration_ms;
@@ -1359,6 +1378,22 @@ export default function RunDetailPage() {
                         </div>
 
                         <Separator />
+
+                        {selectedNodeAgentTrace && (
+                          <>
+                            <div className="space-y-3">
+                              <p className="text-sm font-medium">Agent execution</p>
+                              <AgentTracePanel
+                                trace={selectedNodeAgentTrace}
+                                showApprovalHint={
+                                  String(run.status) === "paused" &&
+                                  String(run.paused_node_id ?? "") === String(selectedNodeRun.node_id)
+                                }
+                              />
+                            </div>
+                            <Separator />
+                          </>
+                        )}
 
                         <details open>
                           <summary className="cursor-pointer text-sm font-medium">Response</summary>

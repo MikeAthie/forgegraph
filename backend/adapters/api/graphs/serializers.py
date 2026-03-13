@@ -27,6 +27,18 @@ def _validate_graph_json_payload(value: Any) -> dict[str, Any]:
     if not isinstance(value.get("edges"), list):
         raise serializers.ValidationError("'edges' must be an array")
 
+    if "metadata" in value and not isinstance(value.get("metadata"), dict):
+        raise serializers.ValidationError("'metadata' must be an object")
+
+    if "editor_state" in value and not isinstance(value.get("editor_state"), dict):
+        raise serializers.ValidationError("'editor_state' must be an object")
+
+    if "graph_id" in value and not isinstance(value.get("graph_id"), str):
+        raise serializers.ValidationError("'graph_id' must be a string")
+
+    if "version_id" in value and not isinstance(value.get("version_id"), str):
+        raise serializers.ValidationError("'version_id' must be a string")
+
     return value
 
 

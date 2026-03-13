@@ -278,6 +278,26 @@ class TestGraphVersionListCreate:
         assert "checksum" in response.data["data"]
         assert len(response.data["data"]["checksum"]) == 64  # SHA256
 
+    def test_create_version_accepts_agent_node_type(self, authenticated_client, user):
+        """Graph version creation should accept the agent node type."""
+        graph = Graph.objects.create(owner=user, name="Agent Graph")
+        graph_json: dict[str, Any] = {
+            "nodes": [
+                {"id": "agent-1", "type": "agent", "name": "Agent", "config": {}},
+                {"id": "output-1", "type": "output", "name": "Output", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "agent-1", "to": "output-1"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            f"/api/graphs/{graph.id}/versions", {"graph_json": graph_json}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["data"]["graph_json"]["nodes"][0]["type"] == "agent"
+
     def test_create_version_preserves_edge_labels_and_node_policies(
         self, authenticated_client, user
     ):
@@ -316,6 +336,32 @@ class TestGraphVersionListCreate:
         create_response = authenticated_client.post(
             f"/api/graphs/{graph.id}/versions", {"graph_json": graph_json}, format="json"
         )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        version_id = create_response.data["data"]["id"]
+
+        detail_response = authenticated_client.get(f"/api/graphs/{graph.id}/versions/{version_id}")
+        assert detail_response.status_code == status.HTTP_200_OK
+        assert detail_response.data["data"]["graph_json"] == graph_json
+
+    def test_create_version_preserves_documented_contract_fields(self, authenticated_client, user):
+        """The API should persist optional P0 graph contract fields unchanged."""
+        graph = Graph.objects.create(owner=user, name="Contract Graph")
+        graph_json = {
+            "nodes": [
+                {"id": "prompt1", "type": "prompt", "name": "Prompt", "config": {}},
+                {"id": "output1", "type": "output", "name": "Output", "config": {}},
+            ],
+            "edges": [{"id": "e1", "from": "prompt1", "to": "output1"}],
+            "metadata": {"allow_cycles": False, "source": "contract-test"},
+            "editor_state": {"viewport": {"x": 10, "y": 20, "zoom": 1.25}},
+            "graph_id": "graph-contract-1",
+            "version_id": "version-contract-1",
+        }
+
+        create_response = authenticated_client.post(
+            f"/api/graphs/{graph.id}/versions", {"graph_json": graph_json}, format="json"
+        )
+
         assert create_response.status_code == status.HTTP_201_CREATED
         version_id = create_response.data["data"]["id"]
 
@@ -449,7 +495,9 @@ class TestExternalWorkflowCreate:
                 ],
             },
         }
-        first = authenticated_client.post("/api/graphs/external-workflows", payload_v1, format="json")
+        first = authenticated_client.post(
+            "/api/graphs/external-workflows", payload_v1, format="json"
+        )
         assert first.status_code == status.HTTP_201_CREATED
         graph_id = first.data["data"]["graph_id"]
 
@@ -794,3 +842,71 @@ class TestGraphValidateEndpoint:
         assert response.data["data"]["valid"] is True
         warning_types = [w["type"] for w in response.data["data"]["warnings"]]
         assert "disconnected_node" in warning_types
+
+    def test_validate_strict_agent_config_error(self, authenticated_client):
+        """Strict validation should reject malformed agent config."""
+        graph = {
+            "nodes": [
+                {
+                    "id": "agent-1",
+                    "type": "agent",
+                    "name": "Agent",
+                    "config": {"model": "gpt-4.1-mini"},
+                },
+                {"id": "output-1", "type": "output", "name": "End", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "START", "to": "agent-1"},
+                {"id": "e2", "from": "agent-1", "to": "output-1"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/validate",
+            {"graph_json": graph, "strict": True},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["valid"] is False
+        config_errors = [
+            error
+            for error in response.data["data"]["errors"]
+            if error.get("type") == "invalid_node_config"
+        ]
+        assert len(config_errors) == 1
+        assert config_errors[0]["field"] == "tools"
+
+    def test_validate_strict_agent_config_success(self, authenticated_client):
+        """Strict validation should accept a valid agent config."""
+        graph = {
+            "nodes": [
+                {
+                    "id": "agent-1",
+                    "type": "agent",
+                    "name": "Agent",
+                    "config": {
+                        "model": "gpt-4.1-mini",
+                        "tools": ["lookup_customer", "send_email"],
+                        "max_steps": 5,
+                        "max_tool_calls": 3,
+                        "approval_required_tools": ["send_email"],
+                    },
+                },
+                {"id": "output-1", "type": "output", "name": "End", "config": {}},
+            ],
+            "edges": [
+                {"id": "e1", "from": "START", "to": "agent-1"},
+                {"id": "e2", "from": "agent-1", "to": "output-1"},
+            ],
+        }
+
+        response = authenticated_client.post(
+            "/api/graphs/validate",
+            {"graph_json": graph, "strict": True},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["valid"] is True
+        assert response.data["data"]["errors"] == []

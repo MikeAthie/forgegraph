@@ -557,3 +557,56 @@ class TestGraphValidatorStrictMode:
 
         config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
         assert len(config_errors) == 0
+
+    def test_strict_mode_validates_agent_tools_required(self):
+        """Strict mode should validate agent nodes require tools."""
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "node1",
+                    "type": "agent",
+                    "name": "Agent",
+                    "config": {"model": "gpt-4.1-mini"},
+                },
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        errors = self.validator.validate(graph_json, strict=True)
+
+        config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
+        assert len(config_errors) == 1
+        assert config_errors[0]["field"] == "tools"
+
+    def test_strict_mode_accepts_valid_agent_config(self):
+        """Strict mode should accept a valid agent node config."""
+        graph_json = {
+            "nodes": [
+                {
+                    "id": "node1",
+                    "type": "agent",
+                    "name": "Agent",
+                    "config": {
+                        "model": "gpt-4.1-mini",
+                        "tools": ["lookup_customer", "send_email"],
+                        "max_steps": 5,
+                        "max_tool_calls": 3,
+                        "approval_required_tools": ["send_email"],
+                    },
+                },
+                {"id": "node2", "type": "output", "name": "Output"},
+            ],
+            "edges": [
+                {"id": "start-node1", "from": "START", "to": "node1"},
+                {"id": "e1", "from": "node1", "to": "node2"},
+            ],
+        }
+
+        errors = self.validator.validate(graph_json, strict=True)
+
+        config_errors = [e for e in errors if e.get("type") == "invalid_node_config"]
+        assert len(config_errors) == 0

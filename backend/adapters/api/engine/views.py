@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
+from typing import SupportsInt, cast
 from uuid import UUID
 
 from django.db import transaction
@@ -31,7 +32,7 @@ def _parse_expires_at(token_payload: dict[str, object]) -> datetime | None:
     if raw_expires_in is None:
         return None
     try:
-        expires_in = int(raw_expires_in)
+        expires_in = int(cast(str | bytes | SupportsInt, raw_expires_in))
         if expires_in > 0:
             return timezone.now() + timedelta(seconds=expires_in)
     except (TypeError, ValueError):

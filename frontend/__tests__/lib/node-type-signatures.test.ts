@@ -18,9 +18,9 @@ describe("node-type-signatures", () => {
       });
     });
 
-    it("should have exactly 10 node type signatures", () => {
+    it("should have exactly 11 node type signatures", () => {
       const signatures = Object.keys(NODE_SIGNATURES);
-      expect(signatures.length).toBe(10);
+      expect(signatures.length).toBe(11);
     });
 
     it("should have inputs and outputs arrays for each signature", () => {
@@ -45,6 +45,23 @@ describe("node-type-signatures", () => {
     });
 
     describe("individual node signatures", () => {
+      describe("AGENT node", () => {
+        it("should have correct input signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.AGENT];
+          expect(signature.inputs.length).toBe(1);
+          expect(signature.inputs[0].name).toBe("context");
+          expect(signature.inputs[0].type).toBe(DataType.JSON);
+          expect(signature.inputs[0].required).toBe(false);
+        });
+
+        it("should have correct output signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.AGENT];
+          expect(signature.outputs.length).toBe(1);
+          expect(signature.outputs[0].name).toBe("result");
+          expect(signature.outputs[0].type).toBe(DataType.ANY);
+        });
+      });
+
       describe("PROMPT node", () => {
         it("should have correct input signature", () => {
           const signature = NODE_SIGNATURES[NODE_TYPES.PROMPT];

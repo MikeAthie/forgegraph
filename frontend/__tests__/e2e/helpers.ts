@@ -22,6 +22,13 @@ export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {
   };
 }
 
+export function getPlaywrightRuntimeFixtureUser(): TestUser {
+  return {
+    email: process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL ?? "playwright-runtime@example.com",
+    password: process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD ?? TEST_PASSWORD,
+  };
+}
+
 export async function ensureUserRegistered(request: APIRequestContext, user: TestUser): Promise<void> {
   const response = await request.post(`${API_BASE_URL}/api/auth/register`, {
     data: { email: user.email, password: user.password },
@@ -41,7 +48,7 @@ export async function login(page: Page, user: TestUser): Promise<void> {
   await page.locator("#email").fill(user.email);
   await page.locator("#password").fill(user.password);
   await page.getByRole("button", { name: /^sign in$/i }).click();
-  await page.waitForURL("/graphs", { timeout: 10_000 });
+  await page.waitForURL(/\/graphs(?:\?.*)?$/, { timeout: 20_000 });
   await page.waitForLoadState("networkidle");
 }
 

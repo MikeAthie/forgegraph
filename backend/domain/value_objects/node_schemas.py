@@ -14,6 +14,25 @@ from domain.value_objects.node_types import NodeType
 # Schema definitions for each node type
 # Format: {field_name: {required: bool, type: str, min_length?: int, ...}}
 
+AGENT_NODE_SCHEMA = {
+    "instructions": {"type": "string", "required": False},
+    "system_prompt": {"type": "string", "required": False},
+    "provider": {"type": "string", "required": False, "min_length": 1},
+    "credential_id": {"type": "string", "required": False, "min_length": 1},
+    "model": {"type": "string", "required": True, "min_length": 1},
+    "tools": {"type": "array", "required": True, "min_items": 1, "items_type": "string"},
+    "max_steps": {"type": "integer", "min": 1, "required": False},
+    "max_tool_calls": {"type": "integer", "min": 1, "required": False},
+    "max_tokens": {"type": "integer", "min": 1, "required": False},
+    "temperature": {"type": "number", "min": 0, "max": 2, "required": False},
+    "approval_required_tools": {
+        "type": "array",
+        "required": False,
+        "items_type": "string",
+    },
+    "stop_condition": {"type": "string", "required": False, "enum": ["final_answer"]},
+}
+
 PROMPT_NODE_SCHEMA = {
     "prompt_template": {"type": "string", "required": False},
     "prompt_id": {"type": "string", "required": False},
@@ -105,6 +124,7 @@ OUTPUT_NODE_SCHEMA = {
 
 # Registry of node type -> schema
 NODE_SCHEMAS: dict[str, dict[str, Any]] = {
+    NodeType.AGENT.value: AGENT_NODE_SCHEMA,
     NodeType.PROMPT.value: PROMPT_NODE_SCHEMA,
     NodeType.HTTP.value: HTTP_NODE_SCHEMA,
     NodeType.TRANSFORM.value: TRANSFORM_NODE_SCHEMA,
@@ -191,6 +211,31 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
                     }
                 )
 
+        # Minimum items validation for arrays
+        if field_type == "array" and "min_items" in field_schema:
+            if len(value) < field_schema["min_items"]:
+                errors.append(
+                    {
+                        "field": field_name,
+                        "message": f"'{field_name}' must contain at least {field_schema['min_items']} item(s)",
+                        "suggestion": f"Add at least {field_schema['min_items']} item(s) to '{field_name}'",
+                    }
+                )
+
+        if field_type == "array" and "items_type" in field_schema:
+            expected_item_type = field_schema["items_type"]
+            for item in value:
+                item_error = _validate_type(field_name, item, {"type": expected_item_type})
+                if item_error:
+                    errors.append(
+                        {
+                            "field": field_name,
+                            "message": f"All items in '{field_name}' must be {expected_item_type} values",
+                            "suggestion": f"Only include {expected_item_type} values in '{field_name}'",
+                        }
+                    )
+                    break
+
         # Enum validation
         if "enum" in field_schema and value not in field_schema["enum"]:
             errors.append(
@@ -212,6 +257,53 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
                     "field": "prompt_template",
                     "message": "Prompt node requires either 'prompt_template' or 'prompt_id'",
                     "suggestion": "Set a prompt template directly or reference a prompt by id",
+                }
+            )
+
+    if node_type == NodeType.AGENT.value:
+        tools = config.get("tools")
+        if isinstance(tools, list):
+            normalized_tools = [
+                tool.strip() for tool in tools if isinstance(tool, str) and tool.strip()
+            ]
+
+            if len(normalized_tools) != len(tools):
+                errors.append(
+                    {
+                        "field": "tools",
+                        "message": "Agent tools must be non-empty strings",
+                        "suggestion": "Provide one or more tool names as non-empty strings",
+                    }
+                )
+
+            approval_required_tools = config.get("approval_required_tools")
+            if isinstance(approval_required_tools, list):
+                invalid_tools = [
+                    tool
+                    for tool in approval_required_tools
+                    if not isinstance(tool, str) or tool.strip() not in normalized_tools
+                ]
+                if invalid_tools:
+                    errors.append(
+                        {
+                            "field": "approval_required_tools",
+                            "message": "Approval-required tools must be included in 'tools'",
+                            "suggestion": "Only require approval for tools already listed in 'tools'",
+                        }
+                    )
+
+        max_steps = config.get("max_steps")
+        max_tool_calls = config.get("max_tool_calls")
+        if (
+            isinstance(max_steps, int)
+            and isinstance(max_tool_calls, int)
+            and max_tool_calls > max_steps
+        ):
+            errors.append(
+                {
+                    "field": "max_tool_calls",
+                    "message": "'max_tool_calls' cannot exceed 'max_steps'",
+                    "suggestion": "Set 'max_tool_calls' to a value less than or equal to 'max_steps'",
                 }
             )
 

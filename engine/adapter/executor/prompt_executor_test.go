@@ -621,3 +621,37 @@ func TestPromptExecutor_Execute_UsesPromptCache(t *testing.T) {
 		t.Fatalf("expected second response to be marked cached")
 	}
 }
+
+func TestPromptExecutor_Execute_BlocksProviderByPolicy(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{Content: "response", Model: "gpt-4"},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	node := &entity.Node{
+		ID:   "prompt_policy",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Hello",
+			"provider":        "openai",
+			"model":           "gpt-4",
+		},
+	}
+
+	ctx := port.WithRunContext(context.Background(), &port.RunContext{
+		Policy: &entity.ExecutionPolicy{
+			AllowedProviders: []string{"anthropic"},
+		},
+	})
+
+	result, err := executor.Execute(ctx, node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected provider policy denial")
+	}
+	if !strings.Contains(result.Error.Error(), "policy denied: provider blocked by policy") {
+		t.Fatalf("unexpected error: %v", result.Error)
+	}
+}

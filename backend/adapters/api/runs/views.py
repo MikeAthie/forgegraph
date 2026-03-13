@@ -7,6 +7,7 @@ Clean Architecture: Interface Adapters layer.
 import asyncio
 import json as pyjson
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -291,6 +292,126 @@ def _apply_rate_limit(
     response["X-RateLimit-Remaining"] = str(result.remaining)
     response["X-RateLimit-Reset"] = result.reset_at.isoformat()
     return response
+
+
+def _parse_agent_stream_chunk(chunk: Any) -> dict[str, Any] | None:
+    if not isinstance(chunk, str):
+        return None
+    stripped = chunk.strip()
+    if not stripped:
+        return None
+
+    try:
+        parsed = pyjson.loads(stripped)
+    except (TypeError, ValueError):
+        return None
+
+    if not isinstance(parsed, dict):
+        return None
+
+    event_name = parsed.get("event")
+    if not isinstance(event_name, str) or not event_name.startswith("agent."):
+        return None
+
+    return parsed
+
+
+def _normalize_agent_stream_event(
+    *,
+    node_id: str,
+    node_type: str,
+    attempt: int,
+    chunk_index: int,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    normalized: dict[str, Any] = {
+        "event": str(payload.get("event") or ""),
+        "node_id": node_id,
+        "node_type": node_type,
+        "attempt": attempt,
+        "chunk_index": chunk_index,
+    }
+    for key in ("step_index", "action", "tool", "stop_reason", "status"):
+        value = payload.get(key)
+        if value is not None:
+            normalized[key] = value
+    return cast(dict[str, Any], redact_payload(normalized))
+
+
+def _derive_agent_trace(
+    *,
+    node_run: NodeRun,
+    agent_events_by_node: dict[tuple[str, int], list[dict[str, Any]]],
+) -> dict[str, Any] | None:
+    if node_run.node_type != "agent":
+        return None
+
+    output_json = redact_payload(node_run.output_json) if node_run.output_json else None
+    agent_output = None
+    if isinstance(output_json, dict):
+        candidate = output_json.get("output")
+        if isinstance(candidate, dict):
+            agent_output = candidate
+        elif isinstance(output_json.get("pause_payload"), dict):
+            pause_payload = cast(dict[str, Any], output_json["pause_payload"])
+            pause_trace = pause_payload.get("agent_trace")
+            if isinstance(pause_trace, dict):
+                agent_output = pause_trace
+
+    stream_events = agent_events_by_node.get((str(node_run.node_id), int(node_run.attempt)), [])
+    if not agent_output and not stream_events:
+        return None
+
+    trace: dict[str, Any] = {
+        "events": stream_events,
+    }
+    if isinstance(agent_output, dict):
+        for key in (
+            "final_output",
+            "stop_reason",
+            "step_count",
+            "tool_call_count",
+            "steps",
+            "usage",
+            "approval_pending",
+            "allowed_tools",
+        ):
+            value = agent_output.get(key)
+            if value is not None:
+                trace[key] = value
+    return trace
+
+
+def _extract_llm_usage_payload(*, node_type: str, output_json: Any) -> dict[str, Any] | None:
+    if not isinstance(output_json, dict):
+        return None
+
+    candidate = output_json
+    nested_output = output_json.get("output")
+    if node_type == "agent" and isinstance(nested_output, dict):
+        candidate = nested_output
+
+    usage = candidate.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    return {
+        "provider": str(candidate.get("provider") or "openai"),
+        "model": str(candidate.get("model") or ""),
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+    }
+
+
+def _payload_contains_policy_denied(value: Any) -> bool:
+    if isinstance(value, str):
+        return "policy denied:" in value.lower()
+    if isinstance(value, dict):
+        return any(_payload_contains_policy_denied(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_payload_contains_policy_denied(item) for item in value)
+    return False
 
 
 def _get_downstream_nodes(graph_json: dict[str, Any], start_node_id: str) -> set[str]:
@@ -590,6 +711,26 @@ class RunDetailView(APIView):
             if waiting_node_run and waiting_node_run.output_json:
                 pause_payload = waiting_node_run.output_json.get("pause_payload")
         node_runs = list(run.node_runs.all())
+        agent_event_rows = list(
+            RunEvent.objects.filter(run=run, event_type__startswith="agent.")
+            .order_by("created_at", "id")
+            .only("id", "event_type", "payload", "created_at")
+        )
+        agent_events: list[dict[str, Any]] = []
+        agent_events_by_node: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+        for event_row in agent_event_rows:
+            payload = redact_payload(event_row.payload or {})
+            event_payload = {
+                "id": str(event_row.id),
+                "type": event_row.event_type,
+                "created_at": event_row.created_at.isoformat(),
+                **payload,
+            }
+            agent_events.append(event_payload)
+            node_id = str(payload.get("node_id") or "")
+            attempt = int(payload.get("attempt") or 1)
+            if node_id:
+                agent_events_by_node[(node_id, attempt)].append(event_payload)
         node_outcomes = {
             "pending": 0,
             "running": 0,
@@ -623,6 +764,7 @@ class RunDetailView(APIView):
             "paused_node_id": run.paused_node_id,
             "pause_payload": redact_payload(pause_payload),
             "node_outcomes": node_outcomes,
+            "agent_events": agent_events,
             "node_runs": [
                 {
                     "id": node_run.id,
@@ -636,6 +778,10 @@ class RunDetailView(APIView):
                     "input_json": redact_payload(node_run.input_json),
                     "output_json": redact_payload(node_run.output_json),
                     "error_json": redact_payload(node_run.error_json),
+                    "agent_trace": _derive_agent_trace(
+                        node_run=node_run,
+                        agent_events_by_node=agent_events_by_node,
+                    ),
                 }
                 for node_run in node_runs
             ],
@@ -1709,13 +1855,18 @@ class EngineRunEventsView(APIView):
         timestamp_ms = event.get("timestamp")
         event_time = _datetime_from_timestamp_ms(timestamp_ms)
 
-        def _save_event(event_type_name: str, payload: dict[str, Any]) -> None:
+        def _save_event(
+            event_type_name: str,
+            payload: dict[str, Any],
+            *,
+            derived: bool = False,
+        ) -> None:
             try:
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type_name,
                     payload=payload,
-                    external_id=event_id,
+                    external_id=None if derived else event_id,
                 )
             except IntegrityError:
                 logger.info(
@@ -1737,14 +1888,34 @@ class EngineRunEventsView(APIView):
             output = event.get("output")
             payload = output if isinstance(output, dict) else {}
             chunk = str(redact_payload(payload.get("chunk") or ""))
+            chunk_index = int(payload.get("chunk_index") or 0)
+            stream_node_id = str(event.get("node_id") or "")
+            stream_node_type = str(event.get("node_type") or "")
+            stream_attempt = int(cast(int | str, event.get("attempt") or 1))
             stream_payload = {
-                "node_id": str(event.get("node_id") or ""),
-                "node_type": str(event.get("node_type") or ""),
-                "attempt": int(event.get("attempt") or 1),
+                "node_id": stream_node_id,
+                "node_type": stream_node_type,
+                "attempt": stream_attempt,
                 "chunk": chunk,
-                "chunk_index": int(payload.get("chunk_index") or 0),
+                "chunk_index": chunk_index,
             }
+            agent_chunk = _parse_agent_stream_chunk(chunk)
+            if agent_chunk:
+                normalized_agent_event = _normalize_agent_stream_event(
+                    node_id=stream_node_id,
+                    node_type=stream_node_type,
+                    attempt=stream_attempt,
+                    chunk_index=chunk_index,
+                    payload=agent_chunk,
+                )
+                stream_payload["agent_event"] = normalized_agent_event
             _save_event("node_stream.chunk", stream_payload)
+            if agent_chunk:
+                _save_event(
+                    str(agent_chunk.get("event") or "agent.unknown"),
+                    cast(dict[str, Any], stream_payload["agent_event"]),
+                    derived=True,
+                )
             message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
             return success_response(message)
 
@@ -1934,18 +2105,37 @@ class EngineRunEventsView(APIView):
                     node_update_fields.append("error_json")
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
+                if event_type == "node_failed" and _payload_contains_policy_denied(
+                    node_payload.get("error_json")
+                ):
+                    record_audit_log(
+                        actor=None,
+                        tenant_id=get_tenant_id_for_run(run),
+                        action="run.policy_denied",
+                        resource_type="node_run",
+                        resource_id=str(node_run.id),
+                        metadata={
+                            "run_id": str(run.id),
+                            "node_id": node_id,
+                            "node_type": node_type,
+                            "attempt": attempt,
+                            "error_json": redact_payload(node_payload.get("error_json") or {}),
+                        },
+                    )
                 _save_event(
                     "node_run.updated", _serialize_event_payload(redact_payload(node_payload))
                 )
 
-                if node_type == "prompt" and node_payload.get("output_json"):
-                    output_json = node_payload.get("output_json") or {}
-                    usage = output_json.get("usage") or {}
-                    prompt_tokens = int(usage.get("prompt_tokens") or 0)
-                    completion_tokens = int(usage.get("completion_tokens") or 0)
-                    total_tokens = int(usage.get("total_tokens") or 0)
-                    model = str(output_json.get("model") or "")
-                    provider = str(output_json.get("provider") or "openai")
+                usage_payload = _extract_llm_usage_payload(
+                    node_type=node_type,
+                    output_json=node_payload.get("output_json"),
+                )
+                if node_type in {"prompt", "agent"} and usage_payload:
+                    prompt_tokens = usage_payload["prompt_tokens"]
+                    completion_tokens = usage_payload["completion_tokens"]
+                    total_tokens = usage_payload["total_tokens"]
+                    model = usage_payload["model"]
+                    provider = usage_payload["provider"]
                     if prompt_tokens or completion_tokens or total_tokens:
                         tenant_id = get_tenant_id_for_run(run)
                         cost = calculate_cost(provider, model, prompt_tokens, completion_tokens)

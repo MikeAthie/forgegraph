@@ -15,6 +15,10 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-key-change-in-pro
 
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 
+FORGEGRAPH_RUNTIME_MODE = os.environ.get("FORGEGRAPH_RUNTIME_MODE", "cloud").strip().lower()
+if FORGEGRAPH_RUNTIME_MODE not in {"cloud", "self_hosted"}:
+    FORGEGRAPH_RUNTIME_MODE = "cloud"
+
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 # Application definition
@@ -160,10 +164,18 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = [
+_default_cors_allowed_origins = {
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-]
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+}
+_extra_cors_allowed_origins = {
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+}
+CORS_ALLOWED_ORIGINS = sorted(_default_cors_allowed_origins | _extra_cors_allowed_origins)
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework Configuration

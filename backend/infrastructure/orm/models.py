@@ -611,6 +611,13 @@ class NodeRegistryRelease(models.Model):
         ("transform", "Transform"),
     ]
 
+    PACKAGE_KIND_CHOICES = [
+        ("template_http", "Template HTTP"),
+        ("template_prompt", "Template Prompt"),
+        ("runtime_tool", "Runtime Tool"),
+        ("runtime_transform", "Runtime Transform"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     package = models.ForeignKey(
         NodeRegistryPackage,
@@ -620,6 +627,11 @@ class NodeRegistryRelease(models.Model):
     version = models.CharField(max_length=32)
     changelog = models.TextField(blank=True, default="")
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="draft")
+    package_kind = models.CharField(
+        max_length=32,
+        choices=PACKAGE_KIND_CHOICES,
+        default="template_http",
+    )
     execution_node_type = models.CharField(
         max_length=32,
         choices=EXECUTION_TYPE_CHOICES,
@@ -627,6 +639,10 @@ class NodeRegistryRelease(models.Model):
     ui_schema = models.JSONField(default=dict, blank=True)
     config_schema = models.JSONField(default=dict, blank=True)
     config_defaults = models.JSONField(default=dict, blank=True)
+    runtime_manifest = models.JSONField(null=True, blank=True)
+    manifest_version = models.PositiveSmallIntegerField(default=1)
+    cloud_allowed = models.BooleanField(default=True)
+    review_notes = models.TextField(blank=True, default="")
     reviewed_by = models.ForeignKey(
         "User",
         on_delete=models.SET_NULL,

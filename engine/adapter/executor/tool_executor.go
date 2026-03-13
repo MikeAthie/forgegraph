@@ -24,22 +24,34 @@ import (
 
 // ToolExecutor runs tools defined in the tool registry.
 type ToolExecutor struct {
-	registry   *tool.Registry
-	httpClient *http.Client
-	resolver   CredentialResolver
+	registry    *tool.Registry
+	httpClient  *http.Client
+	resolver    CredentialResolver
+	runtimeMode string
 }
 
 // NewToolExecutor creates a tool executor with a registry.
 func NewToolExecutor(registry *tool.Registry) *ToolExecutor {
-	return NewToolExecutorWithResolver(registry, nil)
+	return NewToolExecutorWithResolverAndRuntimeMode(registry, nil, tool.RuntimeModeSelfHosted)
+}
+
+// NewToolExecutorWithRuntimeMode creates a tool executor with a registry and runtime mode.
+func NewToolExecutorWithRuntimeMode(registry *tool.Registry, runtimeMode string) *ToolExecutor {
+	return NewToolExecutorWithResolverAndRuntimeMode(registry, nil, runtimeMode)
 }
 
 // NewToolExecutorWithResolver creates a tool executor with a registry and credential resolver.
 func NewToolExecutorWithResolver(registry *tool.Registry, resolver CredentialResolver) *ToolExecutor {
+	return NewToolExecutorWithResolverAndRuntimeMode(registry, resolver, tool.RuntimeModeSelfHosted)
+}
+
+// NewToolExecutorWithResolverAndRuntimeMode creates a tool executor with a registry, credential resolver, and runtime mode.
+func NewToolExecutorWithResolverAndRuntimeMode(registry *tool.Registry, resolver CredentialResolver, runtimeMode string) *ToolExecutor {
 	return &ToolExecutor{
-		registry:   registry,
-		httpClient: &http.Client{},
-		resolver:   resolver,
+		registry:    registry,
+		httpClient:  &http.Client{},
+		resolver:    resolver,
+		runtimeMode: tool.NormalizeRuntimeMode(runtimeMode),
 	}
 }
 
@@ -173,7 +185,7 @@ func (e *ToolExecutor) executeHTTPTool(
 		return nil, fmt.Errorf("tool URL not configured")
 	}
 	if !isHTTPAllowed(port.PolicyFromContext(ctx), urlStr) {
-		return nil, domain.NewValidationError("url", "tool egress blocked by policy")
+		return nil, newPolicyDeniedValidationError("url", "egress blocked by policy")
 	}
 
 	method := def.HTTP.Method
@@ -429,6 +441,9 @@ func (e *ToolExecutor) executeExecTool(
 ) (map[string]any, error) {
 	if def.Exec == nil {
 		return nil, fmt.Errorf("tool missing exec configuration")
+	}
+	if tool.NormalizeRuntimeMode(e.runtimeMode) == tool.RuntimeModeCloud {
+		return nil, newPolicyDeniedValidationError("tool", "exec tools are disabled in cloud mode")
 	}
 	command := os.ExpandEnv(def.Exec.Command)
 	if command == "" {

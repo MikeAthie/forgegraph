@@ -557,7 +557,40 @@ func TestToolExecutor_HTTPToolBlocksEgressByPolicy(t *testing.T) {
 	if result.Error == nil {
 		t.Fatal("expected policy validation error")
 	}
-	if !strings.Contains(result.Error.Error(), "egress blocked") {
+	if !strings.Contains(result.Error.Error(), "policy denied: egress blocked by policy") {
+		t.Fatalf("unexpected error message: %v", result.Error)
+	}
+}
+
+func TestToolExecutor_ExecToolBlockedInCloudMode(t *testing.T) {
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.exec.cloud-blocked",
+		Version: "1.0.0",
+		Kind:    "exec",
+		Exec: &tool.ExecToolConfig{
+			Command: os.Args[0],
+			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "success"},
+		},
+	})
+
+	executor := NewToolExecutorWithRuntimeMode(registry, tool.RuntimeModeCloud)
+	node := &entity.Node{
+		ID:   "tool_exec_cloud",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.exec.cloud-blocked",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected cloud-mode exec policy error")
+	}
+	if !strings.Contains(result.Error.Error(), "policy denied: exec tools are disabled in cloud mode") {
 		t.Fatalf("unexpected error message: %v", result.Error)
 	}
 }
