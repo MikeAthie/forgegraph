@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { Link } from "lucide-react";
 
 import { type NodeType } from "../../lib/graph-types";
@@ -19,7 +26,10 @@ import {
 interface NodePaletteProps {
   onAddNode: (nodeType: NodeType, connectToSelected?: boolean) => void;
   onAddNote?: () => void;
-  onAddMarketplaceNode?: (pkg: MarketplacePackage, connectToSelected?: boolean) => void;
+  onAddMarketplaceNode?: (
+    pkg: MarketplacePackage,
+    connectToSelected?: boolean,
+  ) => void;
   marketplaceNodes?: MarketplacePackage[];
   hasSelectedNode?: boolean;
   searchInputRef?: RefObject<HTMLInputElement | null>;
@@ -67,7 +77,9 @@ export function NodePalette({
   searchInputRef,
 }: NodePaletteProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [recentItemIds, setRecentItemIds] = useState<string[]>(() => loadRecentPaletteIds());
+  const [recentItemIds, setRecentItemIds] = useState<string[]>(() =>
+    loadRecentPaletteIds(),
+  );
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
 
   useEffect(() => {
@@ -87,14 +99,23 @@ export function NodePalette({
   }, [paletteItems]);
 
   const recentItems = useMemo(() => {
-    return getRecentPaletteItems(paletteItems, recentItemIds, RECENT_ITEM_LIMIT);
+    return getRecentPaletteItems(
+      paletteItems,
+      recentItemIds,
+      RECENT_ITEM_LIMIT,
+    );
   }, [paletteItems, recentItemIds]);
 
-  const searchNavigableItems = useMemo(() => filteredItems.filter((item) => item.enabled), [filteredItems]);
+  const searchNavigableItems = useMemo(
+    () => filteredItems.filter((item) => item.enabled),
+    [filteredItems],
+  );
 
   const groupedItems = useMemo(() => {
     if (searchQuery.trim()) {
-      return [["Search results", filteredItems] as [string, PaletteCatalogItem[]]];
+      return [
+        ["Search results", filteredItems] as [string, PaletteCatalogItem[]],
+      ];
     }
     return groupPaletteItems(paletteItems);
   }, [paletteItems, filteredItems, searchQuery]);
@@ -103,38 +124,48 @@ export function NodePalette({
     searchNavigableItems.length === 0
       ? 0
       : Math.min(activeSearchIndex, searchNavigableItems.length - 1);
-  const activeSearchItemId = searchNavigableItems[resolvedActiveSearchIndex]?.id ?? null;
+  const activeSearchItemId =
+    searchNavigableItems[resolvedActiveSearchIndex]?.id ?? null;
 
-  const addPaletteItem = useCallback((item: PaletteCatalogItem) => {
-    if (!item.enabled) return;
+  const addPaletteItem = useCallback(
+    (item: PaletteCatalogItem) => {
+      if (!item.enabled) return;
 
-    setRecentItemIds((current) => updateRecentPaletteIds(current, item.id));
+      setRecentItemIds((current) => updateRecentPaletteIds(current, item.id));
 
-    if (item.kind === "note") {
-      onAddNote?.();
-      return;
-    }
+      if (item.kind === "note") {
+        onAddNote?.();
+        return;
+      }
 
-    if (item.kind === "marketplace") {
-      onAddMarketplaceNode?.(item.package, hasSelectedNode);
-      return;
-    }
+      if (item.kind === "marketplace") {
+        onAddMarketplaceNode?.(item.package, hasSelectedNode);
+        return;
+      }
 
-    onAddNode(item.type, hasSelectedNode);
-  }, [hasSelectedNode, onAddMarketplaceNode, onAddNode, onAddNote]);
+      onAddNode(item.type, hasSelectedNode);
+    },
+    [hasSelectedNode, onAddMarketplaceNode, onAddNode, onAddNote],
+  );
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!searchQuery.trim() || searchNavigableItems.length === 0) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveSearchIndex((current) => (current + 1) % searchNavigableItems.length);
+      setActiveSearchIndex(
+        (current) => (current + 1) % searchNavigableItems.length,
+      );
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveSearchIndex((current) => (current - 1 + searchNavigableItems.length) % searchNavigableItems.length);
+      setActiveSearchIndex(
+        (current) =>
+          (current - 1 + searchNavigableItems.length) %
+          searchNavigableItems.length,
+      );
       return;
     }
 
@@ -164,11 +195,18 @@ export function NodePalette({
           }}
           onKeyDown={handleSearchKeyDown}
           aria-label="Search nodes"
+          data-testid="palette-query-input"
         />
         {searchQuery.trim() && searchNavigableItems.length > 0 && (
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Press <kbd className="px-1 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">Enter</kbd> to add{" "}
-            <span className="font-medium text-foreground">{searchNavigableItems[resolvedActiveSearchIndex]?.label}</span>
+            Press{" "}
+            <kbd className="px-1 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
+              Enter
+            </kbd>{" "}
+            to add{" "}
+            <span className="font-medium text-foreground">
+              {searchNavigableItems[resolvedActiveSearchIndex]?.label}
+            </span>
           </p>
         )}
       </div>
@@ -199,6 +237,7 @@ export function NodePalette({
                       key={`recent-${item.id}`}
                       type="button"
                       aria-label={`Recent ${item.label}`}
+                      data-testid={`palette-recent-${item.id}`}
                       onClick={() => addPaletteItem(item)}
                       className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-accent/40"
                     >
@@ -220,6 +259,7 @@ export function NodePalette({
                       key={`recommended-${item.id}`}
                       type="button"
                       aria-label={`Recommended ${item.label}`}
+                      data-testid={`palette-recommended-${item.id}`}
                       onClick={() => addPaletteItem(item)}
                       className="rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-primary/10"
                     >
@@ -240,9 +280,10 @@ export function NodePalette({
             <div className="space-y-2">
               {items.map((item) => (
                 <button
-                  key={item.type}
+                  key={item.id}
                   type="button"
                   aria-label={item.label}
+                  data-testid={`palette-item-${item.id}`}
                   onClick={() => addPaletteItem(item)}
                   disabled={!item.enabled}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
@@ -260,31 +301,40 @@ export function NodePalette({
                     className={`w-8 h-8 rounded-md flex items-center justify-center text-white text-sm font-bold shadow-xs ${
                       item.kind === "marketplace"
                         ? "bg-cyan-500"
-                        : nodeTypeColors[item.type] ?? "bg-gray-500"
+                        : (nodeTypeColors[item.type] ?? "bg-gray-500")
                     }`}
                   >
                     {item.kind === "marketplace"
                       ? item.label.slice(0, 2).toUpperCase()
-                      : nodeTypeIcons[item.type] ?? "?"}
+                      : (nodeTypeIcons[item.type] ?? "?")}
                   </div>
                   <div className="flex-1 text-left">
                     <div className="text-sm font-medium text-foreground flex items-center gap-1">
                       {item.label}
                       {!item.enabled && (
                         <span className="ml-2 text-xs text-muted-foreground">
-                          {item.kind === "marketplace" ? "(Unavailable)" : "(Coming soon)"}
+                          {item.kind === "marketplace"
+                            ? "(Unavailable)"
+                            : "(Coming soon)"}
                         </span>
                       )}
-                      {item.kind !== "note" && hasSelectedNode && item.enabled && (
-                        <Link className="w-3 h-3 text-primary ml-1" />
-                      )}
+                      {item.kind !== "note" &&
+                        hasSelectedNode &&
+                        item.enabled && (
+                          <Link className="w-3 h-3 text-primary ml-1" />
+                        )}
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-1">
                       {item.description}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {(item.requiresCredential ? ["Credential", ...item.badges] : item.badges)
-                        .filter((badge, index, all) => all.indexOf(badge) === index)
+                      {(item.requiresCredential
+                        ? ["Credential", ...item.badges]
+                        : item.badges
+                      )
+                        .filter(
+                          (badge, index, all) => all.indexOf(badge) === index,
+                        )
                         .slice(0, 3)
                         .map((badge) => (
                           <span

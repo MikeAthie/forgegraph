@@ -86,6 +86,16 @@ type openAIError struct {
 	Code    string `json:"code"`
 }
 
+func resolveOpenAIBaseURL() string {
+	for _, key := range []string{"OPENAI_BASE_URL", "OPENAI_API_BASE_URL"} {
+		value := strings.TrimSpace(os.Getenv(key))
+		if value != "" {
+			return strings.TrimRight(value, "/")
+		}
+	}
+	return "https://api.openai.com/v1"
+}
+
 // NewOpenAIClient creates a new OpenAI client.
 // It reads the API key from the OPENAI_API_KEY environment variable.
 func NewOpenAIClient() (*OpenAIClient, error) {
@@ -96,7 +106,7 @@ func NewOpenAIClient() (*OpenAIClient, error) {
 
 	return &OpenAIClient{
 		apiKey:  apiKey,
-		baseURL: "https://api.openai.com/v1",
+		baseURL: resolveOpenAIBaseURL(),
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second, // LLM calls can be slow
 		},
@@ -107,7 +117,7 @@ func NewOpenAIClient() (*OpenAIClient, error) {
 func NewOpenAIClientWithKey(apiKey string) *OpenAIClient {
 	return &OpenAIClient{
 		apiKey:  apiKey,
-		baseURL: "https://api.openai.com/v1",
+		baseURL: resolveOpenAIBaseURL(),
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},

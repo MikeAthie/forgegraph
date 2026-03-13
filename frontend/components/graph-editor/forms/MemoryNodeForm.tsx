@@ -14,6 +14,7 @@ import type { NodeFormProps } from "../NodeConfigDialog";
  */
 interface MemoryConfig extends AgentConfig, AdvancedConfig {
   memory_type?: "conversation" | "buffer" | "summary" | "vector";
+  key?: string;
   memory_key?: string;
   max_messages?: number;
   max_tokens?: number;
@@ -22,10 +23,26 @@ interface MemoryConfig extends AgentConfig, AdvancedConfig {
 }
 
 const MEMORY_TYPES = [
-  { value: "conversation", label: "Conversation Buffer", description: "Store full conversation history" },
-  { value: "buffer", label: "Rolling Buffer", description: "Keep last N messages" },
-  { value: "summary", label: "Summary Memory", description: "Summarize older messages to save tokens" },
-  { value: "vector", label: "Vector Store", description: "Semantic search over stored memories" },
+  {
+    value: "conversation",
+    label: "Conversation Buffer",
+    description: "Store full conversation history",
+  },
+  {
+    value: "buffer",
+    label: "Rolling Buffer",
+    description: "Keep last N messages",
+  },
+  {
+    value: "summary",
+    label: "Summary Memory",
+    description: "Summarize older messages to save tokens",
+  },
+  {
+    value: "vector",
+    label: "Vector Store",
+    description: "Semantic search over stored memories",
+  },
 ] as const;
 
 const MEMORY_DEPTH_OPTIONS = [
@@ -38,29 +55,31 @@ const MEMORY_DEPTH_OPTIONS = [
 
 export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
   const memoryConfig = config as MemoryConfig;
+  const resolvedKey = memoryConfig.key ?? memoryConfig.memory_key ?? "";
   const selectedDepth =
-    MEMORY_DEPTH_OPTIONS.find((option) => option.bufferSize === memoryConfig.max_messages)?.value ||
-    "custom";
+    MEMORY_DEPTH_OPTIONS.find(
+      (option) => option.bufferSize === memoryConfig.max_messages,
+    )?.value || "custom";
 
   const handleChange = useCallback(
     <K extends keyof MemoryConfig>(field: K, value: MemoryConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const showBufferOptions = memoryConfig.memory_type === "buffer";
@@ -84,7 +103,8 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         <h3 className="text-sm font-medium">Memory Configuration</h3>
 
         <p className="text-sm text-muted-foreground">
-          Configure how the agent stores and retrieves information across interactions.
+          Configure how the agent stores and retrieves information across
+          interactions.
         </p>
 
         <FormField
@@ -96,7 +116,10 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
             id="memory-type"
             value={memoryConfig.memory_type || "conversation"}
             onChange={(e) =>
-              handleChange("memory_type", e.target.value as MemoryConfig["memory_type"])
+              handleChange(
+                "memory_type",
+                e.target.value as MemoryConfig["memory_type"],
+              )
             }
             className="w-full px-3 py-2 border rounded-md bg-background text-sm"
           >
@@ -109,7 +132,11 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         </FormField>
 
         <div className="p-3 bg-muted/50 rounded-md text-xs">
-          {MEMORY_TYPES.find((t) => t.value === (memoryConfig.memory_type || "conversation"))?.description}
+          {
+            MEMORY_TYPES.find(
+              (t) => t.value === (memoryConfig.memory_type || "conversation"),
+            )?.description
+          }
         </div>
 
         <FormField
@@ -119,8 +146,8 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         >
           <Input
             id="memory-key"
-            value={memoryConfig.memory_key || ""}
-            onChange={(e) => handleChange("memory_key", e.target.value)}
+            value={resolvedKey}
+            onChange={(e) => onChange({ ...config, key: e.target.value })}
             placeholder="conversation_history"
             className="text-sm"
           />
@@ -137,7 +164,9 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
                 id="memory-depth"
                 value={selectedDepth}
                 onChange={(e) => {
-                  const option = MEMORY_DEPTH_OPTIONS.find((o) => o.value === e.target.value);
+                  const option = MEMORY_DEPTH_OPTIONS.find(
+                    (o) => o.value === e.target.value,
+                  );
                   if (!option) return;
                   if (option.bufferSize) {
                     handleChange("max_messages", option.bufferSize);
@@ -170,7 +199,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
                   onChange={(e) =>
                     handleChange(
                       "max_messages",
-                      e.target.value ? parseInt(e.target.value, 10) : undefined
+                      e.target.value ? parseInt(e.target.value, 10) : undefined,
                     )
                   }
                   placeholder="100"
@@ -196,7 +225,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
               onChange={(e) =>
                 handleChange(
                   "max_tokens",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="4000"
@@ -215,7 +244,9 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
               <Textarea
                 id="retrieval-query"
                 value={memoryConfig.retrieval_query || ""}
-                onChange={(e) => handleChange("retrieval_query", e.target.value)}
+                onChange={(e) =>
+                  handleChange("retrieval_query", e.target.value)
+                }
                 placeholder="{{input.question}}"
                 rows={2}
                 className="text-sm resize-none font-mono"
@@ -236,7 +267,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
                 onChange={(e) =>
                   handleChange(
                     "top_k",
-                    e.target.value ? parseInt(e.target.value, 10) : undefined
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
                 placeholder="5"

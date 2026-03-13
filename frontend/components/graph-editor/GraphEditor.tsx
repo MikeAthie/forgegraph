@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -22,20 +28,52 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import { Brain, Play, Plus, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
+import {
+  Brain,
+  Play,
+  Plus,
+  Save as SaveIcon,
+  LayoutGrid,
+  Redo2,
+  Undo2,
+  Wand2,
+} from "lucide-react";
 
 import { WizardProvider, useWizard } from "@/contexts/WizardContext";
-import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
+import {
+  ValidationProvider,
+  useValidation,
+} from "@/contexts/ValidationContext";
 import { AgentWizard, type AgentWizardCompletePayload } from "./wizard";
 import { ValidationOverlay, ValidationStatusBar } from "./validation";
 
 import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
-import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson, isValidNodeType } from "../../lib/graph-types";
-import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
+import {
+  NODE_TYPES,
+  PHASE2_NODE_TYPES,
+  createEmptyGraphJson,
+  isValidNodeType,
+} from "../../lib/graph-types";
+import {
+  graphJsonToReactFlow,
+  reactFlowToGraphJson,
+} from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
-import { getApiErrorMessage, graphsApi, marketplaceApi, runsApi, type AgentTrace, type MarketplacePackage, type NodeRunItem, type RunDetail } from "../../lib/api";
+import {
+  getApiErrorMessage,
+  graphsApi,
+  marketplaceApi,
+  runsApi,
+  type AgentTrace,
+  type MarketplacePackage,
+  type NodeRunItem,
+  type RunDetail,
+} from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
-import { canAddMarketplacePackageToEditor, getMarketplacePackageReason } from "../../lib/marketplace-runtime";
+import {
+  canAddMarketplacePackageToEditor,
+  getMarketplacePackageReason,
+} from "../../lib/marketplace-runtime";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import {
@@ -55,7 +93,10 @@ import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
 import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
 import { NodeConfigDialog } from "./NodeConfigDialog";
 import { MemoryConfigDialog } from "./dialogs/MemoryConfigDialog";
-import { getNodeFormComponent, getNodeTypeInfo } from "./forms/node-form-registry";
+import {
+  getNodeFormComponent,
+  getNodeTypeInfo,
+} from "./forms/node-form-registry";
 import { TypedEdge } from "./TypedEdge";
 import { QuickToolBar } from "./QuickToolBar";
 import { useEdgeTypes } from "@/hooks/useEdgeTypes";
@@ -63,7 +104,9 @@ import { AgentTracePanel } from "../runs/AgentTracePanel";
 
 const NOTE_NODE_TYPE = "note";
 
-const getNodeRunAgentTrace = (nodeRun: NodeRunItem | null): AgentTrace | null => {
+const getNodeRunAgentTrace = (
+  nodeRun: NodeRunItem | null,
+): AgentTrace | null => {
   if (!nodeRun || String(nodeRun.node_type) !== "agent") {
     return null;
   }
@@ -123,7 +166,10 @@ type EditorSnapshot = {
   edges: Edge[];
 };
 
-type ClipboardNode = Pick<Node, "id" | "type" | "position" | "data" | "connectable" | "draggable">;
+type ClipboardNode = Pick<
+  Node,
+  "id" | "type" | "position" | "data" | "connectable" | "draggable"
+>;
 type ClipboardEdge = Pick<Edge, "source" | "target" | "label" | "data">;
 type ClipboardSnapshot = {
   nodes: ClipboardNode[];
@@ -137,7 +183,9 @@ type MaterializedBlueprint = {
 };
 
 function deepClone<T>(value: T): T {
-  const cloneFn = (globalThis as any).structuredClone as ((input: T) => T) | undefined;
+  const cloneFn = (globalThis as any).structuredClone as
+    | ((input: T) => T)
+    | undefined;
   if (typeof cloneFn === "function") {
     return cloneFn(value);
   }
@@ -146,7 +194,7 @@ function deepClone<T>(value: T): T {
 
 function replaceBlueprintPlaceholders(
   value: unknown,
-  replacements: Record<string, string>
+  replacements: Record<string, string>,
 ): unknown {
   if (typeof value === "string") {
     let next = value;
@@ -157,12 +205,17 @@ function replaceBlueprintPlaceholders(
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => replaceBlueprintPlaceholders(item, replacements));
+    return value.map((item) =>
+      replaceBlueprintPlaceholders(item, replacements),
+    );
   }
 
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [key, replaceBlueprintPlaceholders(child, replacements)])
+      Object.entries(value).map(([key, child]) => [
+        key,
+        replaceBlueprintPlaceholders(child, replacements),
+      ]),
     );
   }
 
@@ -257,7 +310,12 @@ export function GraphEditor({
 
   const initial = initialGraphJson
     ? graphJsonToReactFlow(initialGraphJson)
-    : graphJsonToReactFlow(createEmptyGraphJson({ name: graphName, description: graphDescription }));
+    : graphJsonToReactFlow(
+        createEmptyGraphJson({
+          name: graphName,
+          description: graphDescription,
+        }),
+      );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
@@ -272,7 +330,7 @@ export function GraphEditor({
       // The position is stored so the next added node can be placed there
       paletteSearchRef.current?.focus();
     },
-    [edges]
+    [edges],
   );
 
   // Enrich edges with type information for visual display
@@ -290,21 +348,31 @@ export function GraphEditor({
   const [overlayCanceling, setOverlayCanceling] = useState(false);
 
   const [promptWizardOpen, setPromptWizardOpen] = useState(false);
-  const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<string | null>(null);
+  const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<
+    string | null
+  >(null);
 
   // Node config dialog state
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [configDialogNodeType, setConfigDialogNodeType] = useState<NodeType | null>(null);
-  const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
-  const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
-  const [configDialogInitialLabel, setConfigDialogInitialLabel] = useState<string | null>(null);
+  const [configDialogNodeType, setConfigDialogNodeType] =
+    useState<NodeType | null>(null);
+  const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<
+    string | null
+  >(null);
+  const [configDialogInitialConfig, setConfigDialogInitialConfig] =
+    useState<NodeConfig>({});
+  const [configDialogInitialLabel, setConfigDialogInitialLabel] = useState<
+    string | null
+  >(null);
   const [memoryConfigOpen, setMemoryConfigOpen] = useState(false);
-  const [marketplaceNodes, setMarketplaceNodes] = useState<MarketplacePackage[]>([]);
+  const [marketplaceNodes, setMarketplaceNodes] = useState<
+    MarketplacePackage[]
+  >([]);
 
   // Viewport state for preserving pan/zoom across saves
-  const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
-    initialGraphJson?.editor_state?.viewport
-  );
+  const [currentViewport, setCurrentViewport] = useState<
+    { x: number; y: number; zoom: number } | undefined
+  >(initialGraphJson?.editor_state?.viewport);
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
   const wizardButtonRef = useRef<HTMLButtonElement>(null);
@@ -322,7 +390,9 @@ export function GraphEditor({
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const editHistoryArmedRef = useRef(false);
-  const editHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const dragHistoryPushedRef = useRef(false);
 
   const captureFocusableTarget = useCallback(() => {
@@ -481,7 +551,9 @@ export function GraphEditor({
         idMap.set(node.id, newId);
 
         const label =
-          typeof (node.data as any)?.label === "string" ? String((node.data as any).label) : "";
+          typeof (node.data as any)?.label === "string"
+            ? String((node.data as any).label)
+            : "";
 
         return {
           ...deepClone(node),
@@ -514,8 +586,14 @@ export function GraphEditor({
         })
         .filter((edge): edge is Edge => edge !== null);
 
-      setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
-      setEdges((eds) => [...eds.map((e) => ({ ...e, selected: false })), ...newEdges]);
+      setNodes((nds) => [
+        ...nds.map((n) => ({ ...n, selected: false })),
+        ...newNodes,
+      ]);
+      setEdges((eds) => [
+        ...eds.map((e) => ({ ...e, selected: false })),
+        ...newEdges,
+      ]);
       setSelectedNodeId(newNodes[0]?.id ?? null);
       setSelectedEdgeId(null);
       setIsDirty(true);
@@ -681,7 +759,9 @@ export function GraphEditor({
         setOverlayRun(run);
       } catch (err: unknown) {
         setOverlayRun(null);
-        setOverlayRunError(getApiErrorMessage(err, "Failed to load execution trace."));
+        setOverlayRunError(
+          getApiErrorMessage(err, "Failed to load execution trace."),
+        );
         applyExecutionOverlay(null);
       } finally {
         setOverlayRunLoading(false);
@@ -723,8 +803,11 @@ export function GraphEditor({
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId)
     : null;
-  const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
-  const canQuickAddConnect = !!selectedNode && selectedNode.type !== NOTE_NODE_TYPE;
+  const selectedEdge = selectedEdgeId
+    ? edges.find((e) => e.id === selectedEdgeId)
+    : null;
+  const canQuickAddConnect =
+    !!selectedNode && selectedNode.type !== NOTE_NODE_TYPE;
 
   const handleSelectVersion = useCallback(
     async (versionId: string) => {
@@ -732,7 +815,7 @@ export function GraphEditor({
 
       if (isDirty) {
         const confirmed = window.confirm(
-          "You have unsaved changes. Discard them and switch versions?"
+          "You have unsaved changes. Discard them and switch versions?",
         );
         if (!confirmed) return;
       }
@@ -774,7 +857,7 @@ export function GraphEditor({
       setEdges((eds) => addEdge(newEdge, eds));
       setIsDirty(true);
     },
-    [edges, nodes, pushHistory, setEdges]
+    [edges, nodes, pushHistory, setEdges],
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -787,42 +870,51 @@ export function GraphEditor({
     setSelectedNodeId(null);
   }, []);
 
-  const onNodeDragStop = useCallback<OnNodeDrag>((_, node, draggingNodes) => {
-    dragHistoryPushedRef.current = false;
+  const onNodeDragStop = useCallback<OnNodeDrag>(
+    (_, node, draggingNodes) => {
+      dragHistoryPushedRef.current = false;
 
-    const movedNodes = (draggingNodes && draggingNodes.length > 0 ? draggingNodes : [node]).filter(
-      (draggedNode): draggedNode is Node => Boolean(draggedNode),
-    );
+      const movedNodes = (
+        draggingNodes && draggingNodes.length > 0 ? draggingNodes : [node]
+      ).filter((draggedNode): draggedNode is Node => Boolean(draggedNode));
 
-    const snappedPositions = new Map<string, { x: number; y: number }>();
-    for (const movedNode of movedNodes) {
-      snappedPositions.set(movedNode.id, snapPositionToGrid(movedNode.position, GRAPH_EDITOR_SNAP_GRID));
-    }
+      const snappedPositions = new Map<string, { x: number; y: number }>();
+      for (const movedNode of movedNodes) {
+        snappedPositions.set(
+          movedNode.id,
+          snapPositionToGrid(movedNode.position, GRAPH_EDITOR_SNAP_GRID),
+        );
+      }
 
-    setNodes((currentNodes) => {
-      let hasChanges = false;
-      const nextNodes = currentNodes.map((currentNode) => {
-        const snapped = snappedPositions.get(currentNode.id);
-        if (!snapped) {
-          return currentNode;
-        }
+      setNodes((currentNodes) => {
+        let hasChanges = false;
+        const nextNodes = currentNodes.map((currentNode) => {
+          const snapped = snappedPositions.get(currentNode.id);
+          if (!snapped) {
+            return currentNode;
+          }
 
-        if (currentNode.position.x === snapped.x && currentNode.position.y === snapped.y) {
-          return currentNode;
-        }
+          if (
+            currentNode.position.x === snapped.x &&
+            currentNode.position.y === snapped.y
+          ) {
+            return currentNode;
+          }
 
-        hasChanges = true;
-        return {
-          ...currentNode,
-          position: snapped,
-        };
+          hasChanges = true;
+          return {
+            ...currentNode,
+            position: snapped,
+          };
+        });
+
+        return hasChanges ? nextNodes : currentNodes;
       });
 
-      return hasChanges ? nextNodes : currentNodes;
-    });
-
-    setIsDirty(true);
-  }, [setNodes]);
+      setIsDirty(true);
+    },
+    [setNodes],
+  );
 
   const onNodeDragStart = useCallback<OnNodeDrag>(() => {
     if (dragHistoryPushedRef.current) return;
@@ -836,7 +928,14 @@ export function GraphEditor({
   }, []);
 
   const addExecutableNode = useCallback(
-    (nodeType: NodeType, options?: { sourceNodeId?: string | null; config?: Record<string, unknown>; label?: string }) => {
+    (
+      nodeType: NodeType,
+      options?: {
+        sourceNodeId?: string | null;
+        config?: Record<string, unknown>;
+        label?: string;
+      },
+    ) => {
       const typeInfo = PHASE2_NODE_TYPES.find((t) => t.type === nodeType);
       if (!typeInfo) return;
 
@@ -853,7 +952,9 @@ export function GraphEditor({
 
       setNodes((nds) => {
         const hasTrigger = nds.some(
-          (node) => node.type !== NOTE_NODE_TYPE && (node.data as any)?.isTrigger === true
+          (node) =>
+            node.type !== NOTE_NODE_TYPE &&
+            (node.data as any)?.isTrigger === true,
         );
         const nodeConfig = deepClone(options?.config ?? {});
         let position: { x: number; y: number };
@@ -900,7 +1001,7 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [nodes, pushHistory, setEdges, setNodes]
+    [nodes, pushHistory, setEdges, setNodes],
   );
 
   const handleAddNode = useCallback(
@@ -912,7 +1013,9 @@ export function GraphEditor({
       if (!typeInfo.enabled && nodeType !== NODE_TYPES.HUMAN_GATE) return;
 
       const sourceNodeId =
-        connectToSelected && selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+        connectToSelected &&
+        selectedNodeId &&
+        nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
           ? selectedNodeId
           : null;
 
@@ -939,7 +1042,7 @@ export function GraphEditor({
       // Fallback: add node directly without config dialog
       addExecutableNode(nodeType, { sourceNodeId, config: {} });
     },
-    [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId]
+    [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId],
   );
 
   const handleAddMarketplaceNode = useCallback(
@@ -959,11 +1062,16 @@ export function GraphEditor({
       }
       const executionType = String(release.execution_node_type);
       if (!isValidNodeType(executionType)) {
-        showError("Unsupported package", "This marketplace package uses an unsupported node type.");
+        showError(
+          "Unsupported package",
+          "This marketplace package uses an unsupported node type.",
+        );
         return;
       }
       const sourceNodeId =
-        connectToSelected && selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+        connectToSelected &&
+        selectedNodeId &&
+        nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
           ? selectedNodeId
           : null;
 
@@ -994,7 +1102,7 @@ export function GraphEditor({
         );
       }
     },
-    [captureFocusableTarget, nodes, selectedNodeId]
+    [captureFocusableTarget, nodes, selectedNodeId],
   );
 
   const handleConfigDialogComplete = useCallback(
@@ -1011,7 +1119,7 @@ export function GraphEditor({
       setConfigDialogInitialConfig({});
       setConfigDialogInitialLabel(null);
     },
-    [addExecutableNode, configDialogNodeType, configDialogSourceNodeId]
+    [addExecutableNode, configDialogNodeType, configDialogSourceNodeId],
   );
 
   const handleOpenMemoryConfig = useCallback(() => {
@@ -1019,12 +1127,15 @@ export function GraphEditor({
     setMemoryConfigOpen(true);
   }, [captureFocusableTarget]);
 
-  const handleMemoryConfigOpenChange = useCallback((open: boolean) => {
-    setMemoryConfigOpen(open);
-    if (!open) {
-      restoreFocusableTarget();
-    }
-  }, [restoreFocusableTarget]);
+  const handleMemoryConfigOpenChange = useCallback(
+    (open: boolean) => {
+      setMemoryConfigOpen(open);
+      if (!open) {
+        restoreFocusableTarget();
+      }
+    },
+    [restoreFocusableTarget],
+  );
 
   const handleAddNote = useCallback(() => {
     pushHistory();
@@ -1063,12 +1174,12 @@ export function GraphEditor({
         nds.map((node) =>
           node.id === nodeId
             ? { ...node, data: { ...node.data, ...updates } }
-            : node
-        )
+            : node,
+        ),
       );
       setIsDirty(true);
     },
-    [pushHistoryForEdit, setNodes]
+    [pushHistoryForEdit, setNodes],
   );
 
   const handleUpdateEdge = useCallback(
@@ -1085,7 +1196,7 @@ export function GraphEditor({
               ...(updates.data ?? {}),
             },
           };
-        })
+        }),
       );
       setIsDirty(true);
     },
@@ -1097,13 +1208,15 @@ export function GraphEditor({
       if (!nodes.some((n) => n.id === nodeId)) return;
       pushHistory();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      );
       if (selectedNodeId === nodeId) {
         setSelectedNodeId(null);
       }
       setIsDirty(true);
     },
-    [nodes, pushHistory, setNodes, setEdges, selectedNodeId]
+    [nodes, pushHistory, setNodes, setEdges, selectedNodeId],
   );
 
   const handleDuplicateNode = useCallback(
@@ -1131,7 +1244,7 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [nodes, pushHistory, setNodes]
+    [nodes, pushHistory, setNodes],
   );
 
   const handleDeleteEdge = useCallback(
@@ -1150,26 +1263,41 @@ export function GraphEditor({
   const materializeAgentBlueprint = useCallback(
     (
       blueprint: AgentWizardBlueprint,
-      options?: { nodes?: Node[]; edges?: Edge[]; sourceNodeId?: string | null }
+      options?: {
+        nodes?: Node[];
+        edges?: Edge[];
+        sourceNodeId?: string | null;
+      },
     ): MaterializedBlueprint => {
       const currentNodes = options?.nodes ?? nodes;
       const currentEdges = options?.edges ?? edges;
       const sourceNodeId = options?.sourceNodeId ?? selectedNodeId;
       const selectedSourceNode =
         sourceNodeId &&
-        currentNodes.some((node) => node.id === sourceNodeId && node.type !== NOTE_NODE_TYPE)
-          ? currentNodes.find((node) => node.id === sourceNodeId) ?? null
+        currentNodes.some(
+          (node) => node.id === sourceNodeId && node.type !== NOTE_NODE_TYPE,
+        )
+          ? (currentNodes.find((node) => node.id === sourceNodeId) ?? null)
           : null;
 
-      const maxX = currentNodes.reduce((max, node) => Math.max(max, node.position.x), 0);
-      const baseX = selectedSourceNode ? selectedSourceNode.position.x + 260 : maxX + 140;
+      const maxX = currentNodes.reduce(
+        (max, node) => Math.max(max, node.position.x),
+        0,
+      );
+      const baseX = selectedSourceNode
+        ? selectedSourceNode.position.x + 260
+        : maxX + 140;
       const baseY = selectedSourceNode ? selectedSourceNode.position.y : 120;
       const hasTriggerNode = currentNodes.some(
-        (node) => node.type !== NOTE_NODE_TYPE && (node.data as Record<string, unknown>)?.isTrigger === true,
+        (node) =>
+          node.type !== NOTE_NODE_TYPE &&
+          (node.data as Record<string, unknown>)?.isTrigger === true,
       );
 
       const createdNodeIds: string[] = [];
-      const agentNodeTemplateIndex = blueprint.nodes.findIndex((template) => template.nodeType === NODE_TYPES.AGENT);
+      const agentNodeTemplateIndex = blueprint.nodes.findIndex(
+        (template) => template.nodeType === NODE_TYPES.AGENT,
+      );
 
       const draftNodes: Node[] = blueprint.nodes.map((template, index) => {
         const newNodeId = generateId();
@@ -1193,7 +1321,10 @@ export function GraphEditor({
         } satisfies Node;
       });
 
-      const agentNodeId = agentNodeTemplateIndex >= 0 ? createdNodeIds[agentNodeTemplateIndex] : "";
+      const agentNodeId =
+        agentNodeTemplateIndex >= 0
+          ? createdNodeIds[agentNodeTemplateIndex]
+          : "";
       const replacements: Record<string, string> = {};
       if (agentNodeId) {
         replacements[AGENT_OUTPUT_PLACEHOLDER] = agentNodeId;
@@ -1203,15 +1334,22 @@ export function GraphEditor({
         ...node,
         data: {
           ...(node.data as Record<string, unknown>),
-          config: replaceBlueprintPlaceholders((node.data as Record<string, unknown>).config, replacements),
+          config: replaceBlueprintPlaceholders(
+            (node.data as Record<string, unknown>).config,
+            replacements,
+          ),
         },
       }));
 
       const newEdges: Edge[] = [];
       const appendEdge = (source: string, target: string) => {
         const exists =
-          currentEdges.some((edge) => edge.source === source && edge.target === target) ||
-          newEdges.some((edge) => edge.source === source && edge.target === target);
+          currentEdges.some(
+            (edge) => edge.source === source && edge.target === target,
+          ) ||
+          newEdges.some(
+            (edge) => edge.source === source && edge.target === target,
+          );
         if (exists) {
           return;
         }
@@ -1231,12 +1369,18 @@ export function GraphEditor({
       }
 
       return {
-        nodes: [...currentNodes.map((node) => ({ ...node, selected: false })), ...newNodes],
-        edges: [...currentEdges.map((edge) => ({ ...edge, selected: false })), ...newEdges],
+        nodes: [
+          ...currentNodes.map((node) => ({ ...node, selected: false })),
+          ...newNodes,
+        ],
+        edges: [
+          ...currentEdges.map((edge) => ({ ...edge, selected: false })),
+          ...newEdges,
+        ],
         createdNodeIds,
       };
     },
-    [edges, nodes, selectedNodeId]
+    [edges, nodes, selectedNodeId],
   );
 
   const applyAgentBlueprint = useCallback(
@@ -1245,111 +1389,142 @@ export function GraphEditor({
       const materialized = materializeAgentBlueprint(blueprint);
       setNodes(materialized.nodes);
       setEdges(materialized.edges);
-      setSelectedNodeId(materialized.createdNodeIds[materialized.createdNodeIds.length - 1] ?? null);
+      setSelectedNodeId(
+        materialized.createdNodeIds[materialized.createdNodeIds.length - 1] ??
+          null,
+      );
       setSelectedEdgeId(null);
       setIsDirty(true);
       return materialized;
     },
-    [materializeAgentBlueprint, pushHistory, setEdges, setNodes]
+    [materializeAgentBlueprint, pushHistory, setEdges, setNodes],
   );
 
-  const saveGraphSnapshot = useCallback(async (draftNodes: Node[], draftEdges: Edge[]) => {
-    let normalizedNodes = draftNodes;
-    let addedTrigger = false;
-    let addedEnds = 0;
+  const saveGraphSnapshot = useCallback(
+    async (draftNodes: Node[], draftEdges: Edge[]) => {
+      let normalizedNodes = draftNodes;
+      let addedTrigger = false;
+      let addedEnds = 0;
 
-    const executableNodes = draftNodes.filter((node) => node.type !== NOTE_NODE_TYPE);
+      const executableNodes = draftNodes.filter(
+        (node) => node.type !== NOTE_NODE_TYPE,
+      );
 
-    // Validation: Cannot save empty graph
-    if (executableNodes.length === 0) {
-      showError("Cannot save empty graph", "Add at least one node to the graph");
-      return false;
-    }
-
-    // Validation: Must have at least one output node
-    const hasOutputNode = executableNodes.some((node) => node.type === NODE_TYPES.OUTPUT);
-    if (!hasOutputNode) {
-      showError("Graph needs an output node", "Add an Output node to define the graph's result");
-      return false;
-    }
-    if (executableNodes.length > 0) {
-      const hasTrigger = executableNodes.some((node) => (node.data as any)?.isTrigger === true);
-      if (!hasTrigger) {
-        const firstExecutableIndex = draftNodes.findIndex((node) => node.type !== NOTE_NODE_TYPE);
-        if (firstExecutableIndex >= 0) {
-          normalizedNodes = draftNodes.map((node, index) =>
-            index === firstExecutableIndex
-              ? { ...node, data: { ...node.data, isTrigger: true } }
-              : node
-          );
-          addedTrigger = true;
-        }
+      // Validation: Cannot save empty graph
+      if (executableNodes.length === 0) {
+        showError(
+          "Cannot save empty graph",
+          "Add at least one node to the graph",
+        );
+        return false;
       }
 
-      const hasEnd = executableNodes.some((node) => (node.data as any)?.isEnd === true);
-      if (!hasEnd) {
-        const executableIds = new Set(executableNodes.map((node) => node.id));
-        const outdegree = new Map<string, number>();
-        for (const id of executableIds) {
-          outdegree.set(id, 0);
-        }
-        for (const edge of draftEdges) {
-          if (executableIds.has(edge.source) && executableIds.has(edge.target)) {
-            outdegree.set(edge.source, (outdegree.get(edge.source) ?? 0) + 1);
+      // Validation: Must have at least one output node
+      const hasOutputNode = executableNodes.some(
+        (node) => node.type === NODE_TYPES.OUTPUT,
+      );
+      if (!hasOutputNode) {
+        showError(
+          "Graph needs an output node",
+          "Add an Output node to define the graph's result",
+        );
+        return false;
+      }
+      if (executableNodes.length > 0) {
+        const hasTrigger = executableNodes.some(
+          (node) => (node.data as any)?.isTrigger === true,
+        );
+        if (!hasTrigger) {
+          const firstExecutableIndex = draftNodes.findIndex(
+            (node) => node.type !== NOTE_NODE_TYPE,
+          );
+          if (firstExecutableIndex >= 0) {
+            normalizedNodes = draftNodes.map((node, index) =>
+              index === firstExecutableIndex
+                ? { ...node, data: { ...node.data, isTrigger: true } }
+                : node,
+            );
+            addedTrigger = true;
           }
         }
 
-        const sinkIds = [...executableIds].filter((id) => (outdegree.get(id) ?? 0) === 0);
-        if (sinkIds.length > 0) {
-          const sinkSet = new Set(sinkIds);
-          normalizedNodes = normalizedNodes.map((node) =>
-            sinkSet.has(node.id) ? { ...node, data: { ...node.data, isEnd: true } } : node
+        const hasEnd = executableNodes.some(
+          (node) => (node.data as any)?.isEnd === true,
+        );
+        if (!hasEnd) {
+          const executableIds = new Set(executableNodes.map((node) => node.id));
+          const outdegree = new Map<string, number>();
+          for (const id of executableIds) {
+            outdegree.set(id, 0);
+          }
+          for (const edge of draftEdges) {
+            if (
+              executableIds.has(edge.source) &&
+              executableIds.has(edge.target)
+            ) {
+              outdegree.set(edge.source, (outdegree.get(edge.source) ?? 0) + 1);
+            }
+          }
+
+          const sinkIds = [...executableIds].filter(
+            (id) => (outdegree.get(id) ?? 0) === 0,
           );
-          addedEnds = sinkIds.length;
+          if (sinkIds.length > 0) {
+            const sinkSet = new Set(sinkIds);
+            normalizedNodes = normalizedNodes.map((node) =>
+              sinkSet.has(node.id)
+                ? { ...node, data: { ...node.data, isEnd: true } }
+                : node,
+            );
+            addedEnds = sinkIds.length;
+          }
         }
       }
-    }
 
-    if (normalizedNodes !== draftNodes) {
-      setNodes(normalizedNodes);
-    }
+      if (normalizedNodes !== draftNodes) {
+        setNodes(normalizedNodes);
+      }
 
-    if (addedTrigger || addedEnds > 0) {
-      const parts: string[] = [];
-      if (addedTrigger) parts.push("added START entry");
-      if (addedEnds > 0) parts.push(`added ${addedEnds} END exit${addedEnds === 1 ? "" : "s"}`);
-      showInfo("Graph structure updated", parts.join(" and "));
-    }
+      if (addedTrigger || addedEnds > 0) {
+        const parts: string[] = [];
+        if (addedTrigger) parts.push("added START entry");
+        if (addedEnds > 0)
+          parts.push(
+            `added ${addedEnds} END exit${addedEnds === 1 ? "" : "s"}`,
+          );
+        showInfo("Graph structure updated", parts.join(" and "));
+      }
 
-    const graphJson = reactFlowToGraphJson(
-      normalizedNodes,
-      draftEdges,
-      { name: graphName, description: graphDescription },
-      graphId,
-      undefined,
-      currentViewport
-    );
-    await onSave(graphJson);
-    setIsDirty(false);
-    return true;
-  }, [currentViewport, graphDescription, graphId, graphName, onSave, setNodes]);
+      const graphJson = reactFlowToGraphJson(
+        normalizedNodes,
+        draftEdges,
+        { name: graphName, description: graphDescription },
+        graphId,
+        undefined,
+        currentViewport,
+      );
+      await onSave(graphJson);
+      setIsDirty(false);
+      return true;
+    },
+    [currentViewport, graphDescription, graphId, graphName, onSave, setNodes],
+  );
 
   const handleSave = useCallback(async () => {
     return saveGraphSnapshot(nodes, edges);
   }, [edges, nodes, saveGraphSnapshot]);
 
-  const runDisabledReason =
-    startingRun
-      ? "Starting run..."
-      : saving
-        ? "Save in progress"
-        : loadingVersion
-          ? "Loading version"
-          : !currentVersionId
-            ? "Save the graph to create a version first"
-            : isDirty
-              ? "Save changes before running"
-              : null;
+  const runDisabledReason = startingRun
+    ? "Starting run..."
+    : saving
+      ? "Save in progress"
+      : loadingVersion
+        ? "Loading version"
+        : !currentVersionId
+          ? "Save the graph to create a version first"
+          : isDirty
+            ? "Save changes before running"
+            : null;
 
   const handleRunWorkflow = useCallback(async () => {
     if (runDisabledReason) {
@@ -1360,11 +1535,17 @@ export function GraphEditor({
 
     setStartingRun(true);
     try {
-      const run = await runsApi.start({ graph_version_id: currentVersionId, input_json: {} });
+      const run = await runsApi.start({
+        graph_version_id: currentVersionId,
+        input_json: {},
+      });
       showSuccess("Run created");
       void router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
-      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
+      showError(
+        "Run failed",
+        getApiErrorMessage(err, ERROR_FALLBACKS.run.start),
+      );
     } finally {
       setStartingRun(false);
     }
@@ -1384,7 +1565,10 @@ export function GraphEditor({
       setOverlayRun(updated);
       showSuccess("Run canceled");
     } catch (err: unknown) {
-      showError("Cancel failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.cancel));
+      showError(
+        "Cancel failed",
+        getApiErrorMessage(err, ERROR_FALLBACKS.run.cancel),
+      );
     } finally {
       setOverlayCanceling(false);
     }
@@ -1393,17 +1577,20 @@ export function GraphEditor({
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
     pushHistory();
-    const executableNodes = nodes.filter((node) => node.type !== NOTE_NODE_TYPE);
+    const executableNodes = nodes.filter(
+      (node) => node.type !== NOTE_NODE_TYPE,
+    );
     const noteNodes = nodes.filter((node) => node.type === NOTE_NODE_TYPE);
     const executableIds = new Set(executableNodes.map((node) => node.id));
     const executableEdges = edges.filter(
-      (edge) => executableIds.has(edge.source) && executableIds.has(edge.target)
+      (edge) =>
+        executableIds.has(edge.source) && executableIds.has(edge.target),
     );
 
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       executableNodes,
       executableEdges,
-      { direction: "TB", nodeSpacing: 50, rankSpacing: 100 }
+      { direction: "TB", nodeSpacing: 50, rankSpacing: 100 },
     );
     setNodes([...layoutedNodes, ...noteNodes]);
     setEdges(layoutedEdges);
@@ -1520,9 +1707,11 @@ export function GraphEditor({
 
   const overlaySelectedNodeRuns: NodeRunItem[] =
     overlayRun && selectedNodeId
-      ? [...overlayRun.node_runs.filter((nodeRun) => nodeRun.node_id === selectedNodeId)].sort(
-          (a, b) => a.attempt - b.attempt,
-        )
+      ? [
+          ...overlayRun.node_runs.filter(
+            (nodeRun) => nodeRun.node_id === selectedNodeId,
+          ),
+        ].sort((a, b) => a.attempt - b.attempt)
       : [];
 
   // Handlers for validation quick fixes
@@ -1532,7 +1721,10 @@ export function GraphEditor({
     if (executableNodes.length > 0) {
       const firstNode = executableNodes[0];
       handleUpdateNode(firstNode.id, { isTrigger: true });
-      showSuccess("Start node added", `"${(firstNode.data as Record<string, unknown>).label}" is now the entry point`);
+      showSuccess(
+        "Start node added",
+        `"${(firstNode.data as Record<string, unknown>).label}" is now the entry point`,
+      );
     } else {
       // Open the prompt wizard to add a new prompt node as start
       setPromptWizardSourceNodeId(null);
@@ -1541,7 +1733,10 @@ export function GraphEditor({
   }, [nodes, handleUpdateNode]);
 
   const handleAddOutputNode = useCallback(() => {
-    addExecutableNode(NODE_TYPES.OUTPUT, { sourceNodeId: selectedNodeId, config: {} });
+    addExecutableNode(NODE_TYPES.OUTPUT, {
+      sourceNodeId: selectedNodeId,
+      config: {},
+    });
   }, [addExecutableNode, selectedNodeId]);
 
   const handleFocusNode = useCallback((nodeId: string) => {
@@ -1554,454 +1749,545 @@ export function GraphEditor({
     setSelectedNodeId(null);
   }, []);
 
-  const handleQuickFix = useCallback((error: import("@/lib/graph-validator").ValidationError, fixLabel: string) => {
-    if (error.code === "NO_START_NODE" && fixLabel === "Add Start") {
-      handleAddStartNode();
-    } else if (error.code === "NO_OUTPUT_NODE" && fixLabel === "Add Output") {
-      handleAddOutputNode();
-    } else if (error.code === "DISCONNECTED_NODE" && fixLabel === "Remove" && error.nodeId) {
-      handleDeleteNode(error.nodeId);
-    }
-  }, [handleAddStartNode, handleAddOutputNode, handleDeleteNode]);
-
-  const handleWizardComplete = useCallback(async (payload: AgentWizardCompletePayload) => {
-    const materialized = applyAgentBlueprint(payload.blueprint);
-    showSuccess(
-      "Agent workflow added",
-      `${payload.blueprint.name} was added as a real agent flow.`,
-    );
-
-    if (!payload.runTest) {
-      return;
-    }
-
-    if (saving || loadingVersion) {
-      showError("Cannot run test now", "Please wait for current save/version operations to finish.");
-      return;
-    }
-
-    showInfo("Starting test run", "Saving workflow and launching a test run...");
-
-    let versionId = currentVersionId;
-
-    try {
-      if (isDirty || !versionId || materialized.createdNodeIds.length > 0) {
-        const saveOk = await saveGraphSnapshot(materialized.nodes, materialized.edges);
-        if (!saveOk) {
-          return;
-        }
-
-        const latestVersion = await graphsApi.getLatestVersion(graphId);
-        versionId = latestVersion?.id ?? versionId;
+  const handleQuickFix = useCallback(
+    (
+      error: import("@/lib/graph-validator").ValidationError,
+      fixLabel: string,
+    ) => {
+      if (error.code === "NO_START_NODE" && fixLabel === "Add Start") {
+        handleAddStartNode();
+      } else if (error.code === "NO_OUTPUT_NODE" && fixLabel === "Add Output") {
+        handleAddOutputNode();
+      } else if (
+        error.code === "DISCONNECTED_NODE" &&
+        fixLabel === "Remove" &&
+        error.nodeId
+      ) {
+        handleDeleteNode(error.nodeId);
       }
+    },
+    [handleAddStartNode, handleAddOutputNode, handleDeleteNode],
+  );
 
-      if (!versionId) {
-        showError("Run failed", "Save the graph to create a version first.");
+  const handleWizardComplete = useCallback(
+    async (payload: AgentWizardCompletePayload) => {
+      const materialized = applyAgentBlueprint(payload.blueprint);
+      showSuccess(
+        "Agent workflow added",
+        `${payload.blueprint.name} was added as a real agent flow.`,
+      );
+
+      if (!payload.runTest) {
         return;
       }
 
-      setStartingRun(true);
-      const run = await runsApi.start({ graph_version_id: versionId, input_json: { mode: "wizard_test" } });
-      showSuccess("Test run started");
-      void router.push(`/runs/${run.id}`);
-    } catch (err: unknown) {
-      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
-    } finally {
-      setStartingRun(false);
-    }
-  }, [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, router, saveGraphSnapshot, saving]);
+      if (saving || loadingVersion) {
+        showError(
+          "Cannot run test now",
+          "Please wait for current save/version operations to finish.",
+        );
+        return;
+      }
+
+      showInfo(
+        "Starting test run",
+        "Saving workflow and launching a test run...",
+      );
+
+      let versionId = currentVersionId;
+
+      try {
+        if (isDirty || !versionId || materialized.createdNodeIds.length > 0) {
+          const saveOk = await saveGraphSnapshot(
+            materialized.nodes,
+            materialized.edges,
+          );
+          if (!saveOk) {
+            return;
+          }
+
+          const latestVersion = await graphsApi.getLatestVersion(graphId);
+          versionId = latestVersion?.id ?? versionId;
+        }
+
+        if (!versionId) {
+          showError("Run failed", "Save the graph to create a version first.");
+          return;
+        }
+
+        setStartingRun(true);
+        const run = await runsApi.start({
+          graph_version_id: versionId,
+          input_json: { mode: "wizard_test" },
+        });
+        showSuccess("Test run started");
+        void router.push(`/runs/${run.id}`);
+      } catch (err: unknown) {
+        showError(
+          "Run failed",
+          getApiErrorMessage(err, ERROR_FALLBACKS.run.start),
+        );
+      } finally {
+        setStartingRun(false);
+      }
+    },
+    [
+      applyAgentBlueprint,
+      currentVersionId,
+      graphId,
+      isDirty,
+      loadingVersion,
+      router,
+      saveGraphSnapshot,
+      saving,
+    ],
+  );
 
   return (
     <ValidationProvider>
-    <WizardProvider>
-      <ValidationTrigger nodes={nodes} edges={edges} />
-      <div className="flex h-full flex-col">
-        {/* Integration Quick Tool Bar - full width above panels */}
-        <QuickToolBar
-          marketplaceNodes={marketplaceNodes}
-          onSelectPackage={(pkg) => handleAddMarketplaceNode(pkg, canQuickAddConnect)}
-          hasSelectedNode={canQuickAddConnect}
-        />
-        <div className="flex flex-1 overflow-hidden">
-        <AgentWizard
-          onComplete={(payload) => {
-            void handleWizardComplete(payload);
-            restoreFocusableTarget();
-          }}
-          onExit={restoreFocusableTarget}
-        />
-        <PromptNodeWizardDialog
-          open={promptWizardOpen}
-          onOpenChange={(nextOpen) => {
-            setPromptWizardOpen(nextOpen);
-            if (!nextOpen) {
-              setPromptWizardSourceNodeId(null);
-              restoreFocusableTarget();
+      <WizardProvider>
+        <ValidationTrigger nodes={nodes} edges={edges} />
+        <div className="flex h-full flex-col">
+          {/* Integration Quick Tool Bar - full width above panels */}
+          <QuickToolBar
+            marketplaceNodes={marketplaceNodes}
+            onSelectPackage={(pkg) =>
+              handleAddMarketplaceNode(pkg, canQuickAddConnect)
             }
-          }}
-          onComplete={(config) => {
-            addExecutableNode(NODE_TYPES.PROMPT, {
-              sourceNodeId: promptWizardSourceNodeId,
-              config,
-            });
-            setPromptWizardSourceNodeId(null);
-          }}
-        />
-        <NodeConfigDialog
-          isOpen={configDialogOpen}
-          onClose={() => {
-            setConfigDialogOpen(false);
-            setConfigDialogNodeType(null);
-            setConfigDialogSourceNodeId(null);
-            setConfigDialogInitialConfig({});
-            setConfigDialogInitialLabel(null);
-            restoreFocusableTarget();
-          }}
-          nodeType={configDialogNodeType}
-          initialConfig={configDialogInitialConfig}
-          initialLabel={configDialogInitialLabel ?? undefined}
-          onSave={handleConfigDialogComplete}
-          FormComponent={
-            configDialogNodeType === NODE_TYPES.AGENT
-              ? getNodeFormComponent(configDialogNodeType) ?? undefined
-              : undefined
-          }
-        />
-        <MemoryConfigDialog
-          graphId={graphId ?? null}
-          open={memoryConfigOpen}
-          onOpenChange={handleMemoryConfigOpenChange}
-        />
-      {/* Left Panel - Node Palette */}
-      <div
-        ref={palettePanelRef}
-        role="complementary"
-        aria-label="Node palette panel"
-        tabIndex={-1}
-        className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-      >
-        <NodePalette
-          onAddNode={handleAddNode}
-          onAddNote={handleAddNote}
-          onAddMarketplaceNode={handleAddMarketplaceNode}
-          marketplaceNodes={marketplaceNodes}
-          hasSelectedNode={canQuickAddConnect}
-          searchInputRef={paletteSearchRef}
-        />
-      </div>
-
-      {/* Center - Canvas */}
-      <div
-        ref={canvasPanelRef}
-        role="region"
-        aria-label="Canvas panel"
-        data-testid="graph-canvas-panel"
-        tabIndex={-1}
-        className="flex-1 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-      >
-        <ReactFlow
-          className="bg-background"
-          aria-label="Graph canvas"
-          nodes={nodes}
-          edges={typedEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          connectOnClick
-          onNodeClick={onNodeClick}
-          onEdgeClick={onEdgeClick}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDragStop={onNodeDragStop}
-          onPaneClick={onPaneClick}
-          onMoveEnd={(_, viewport) => setCurrentViewport(viewport)}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          defaultViewport={currentViewport}
-          fitView={!currentViewport}
-          onlyRenderVisibleElements
-          snapToGrid
-          snapGrid={GRAPH_EDITOR_SNAP_GRID}
-          selectionOnDrag
-          selectionMode={SelectionMode.Partial}
-          selectNodesOnDrag={false}
-          panOnDrag={[1, 2]}
-          defaultEdgeOptions={{
-            type: "typed",
-            style: { strokeWidth: 2 },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 14,
-              height: 14,
-            },
-          }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={0.8} color="rgba(255,255,255,0.06)" />
-          <Controls />
-          <MiniMap
-            nodeStrokeWidth={3}
-            zoomable
-            pannable
-            className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
+            hasSelectedNode={canQuickAddConnect}
           />
-          <Panel position="top-right" className="flex items-center gap-2">
-            <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
-              <button
-                type="button"
-                aria-label="Undo"
-                onClick={handleUndo}
-                disabled={!canUndo}
-                title="Undo (Ctrl+Z)"
-                className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <Undo2 aria-hidden="true" className="h-4 w-4" />
-              </button>
-              <div className="w-px bg-border" />
-              <button
-                type="button"
-                aria-label="Redo"
-                onClick={handleRedo}
-                disabled={!canRedo}
-                title="Redo (Ctrl+Y)"
-                className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <Redo2 aria-hidden="true" className="h-4 w-4" />
-              </button>
-            </div>
-            <button
-              type="button"
-              aria-label="Auto-layout"
-              onClick={handleAutoLayout}
-              disabled={nodes.length === 0}
-              className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
-              title="Tidy up layout"
+          <div className="flex flex-1 overflow-hidden">
+            <AgentWizard
+              onComplete={(payload) => {
+                void handleWizardComplete(payload);
+                restoreFocusableTarget();
+              }}
+              onExit={restoreFocusableTarget}
+            />
+            <PromptNodeWizardDialog
+              open={promptWizardOpen}
+              onOpenChange={(nextOpen) => {
+                setPromptWizardOpen(nextOpen);
+                if (!nextOpen) {
+                  setPromptWizardSourceNodeId(null);
+                  restoreFocusableTarget();
+                }
+              }}
+              onComplete={(config) => {
+                addExecutableNode(NODE_TYPES.PROMPT, {
+                  sourceNodeId: promptWizardSourceNodeId,
+                  config,
+                });
+                setPromptWizardSourceNodeId(null);
+              }}
+            />
+            <NodeConfigDialog
+              isOpen={configDialogOpen}
+              onClose={() => {
+                setConfigDialogOpen(false);
+                setConfigDialogNodeType(null);
+                setConfigDialogSourceNodeId(null);
+                setConfigDialogInitialConfig({});
+                setConfigDialogInitialLabel(null);
+                restoreFocusableTarget();
+              }}
+              nodeType={configDialogNodeType}
+              initialConfig={configDialogInitialConfig}
+              initialLabel={configDialogInitialLabel ?? undefined}
+              onSave={handleConfigDialogComplete}
+              FormComponent={
+                configDialogNodeType
+                  ? (getNodeFormComponent(configDialogNodeType) ?? undefined)
+                  : undefined
+              }
+            />
+            <MemoryConfigDialog
+              graphId={graphId ?? null}
+              open={memoryConfigOpen}
+              onOpenChange={handleMemoryConfigOpenChange}
+            />
+            {/* Left Panel - Node Palette */}
+            <div
+              ref={palettePanelRef}
+              role="complementary"
+              aria-label="Node palette panel"
+              tabIndex={-1}
+              className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
             >
-              <LayoutGrid aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">Tidy</span>
-            </button>
-            <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
-              <select
-                aria-label="Version"
-                value={currentVersionId ?? ""}
-                disabled={loadingVersion || saving || availableVersions.length === 0}
-                onChange={(e) => void handleSelectVersion(e.target.value)}
-                className="bg-transparent text-sm text-muted-foreground outline-none"
-              >
-                {availableVersions.length === 0 ? (
-                  <option value="">No version</option>
-                ) : (
-                  [...availableVersions]
-                    .sort((a, b) => b.version - a.version)
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        v{v.version}
-                      </option>
-                    ))
-                )}
-              </select>
-              {isDirty && <span className="text-amber-500 ml-1">*</span>}
+              <NodePalette
+                onAddNode={handleAddNode}
+                onAddNote={handleAddNote}
+                onAddMarketplaceNode={handleAddMarketplaceNode}
+                marketplaceNodes={marketplaceNodes}
+                hasSelectedNode={canQuickAddConnect}
+                searchInputRef={paletteSearchRef}
+              />
             </div>
-            {!isEditingMetadata && (
-              <>
-                <WizardButton buttonRef={wizardButtonRef} onBeforeStart={captureFocusableTarget} />
-                <button
-                  ref={memoryButtonRef}
-                  type="button"
-                  aria-label="Memory settings"
-                  onClick={handleOpenMemoryConfig}
-                  className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
-                >
-                  <Brain aria-hidden="true" className="h-4 w-4" />
-                  <span className="hidden sm:inline">Memory</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={runDisabledReason ?? "Run workflow"}
-                  onClick={() => void handleRunWorkflow()}
-                  disabled={Boolean(runDisabledReason)}
-                  title={runDisabledReason ?? "Run workflow"}
-                  className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                >
-                  {startingRun ? "Starting..." : <Play aria-hidden="true" className="h-4 w-4" />}
-                </button>
-                <button
-                  type="button"
-                  aria-label={saving ? "Saving..." : "Save"}
-                  onClick={() => void handleSave()}
-                  disabled={saving || !isDirty}
-                  className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                >
-                  {saving ? "Saving..." : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
-                </button>
-              </>
-            )}
-          </Panel>
-          <Panel position="bottom-center">
-            <button
-              type="button"
-              onClick={() => paletteSearchRef.current?.focus()}
-              className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
+
+            {/* Center - Canvas */}
+            <div
+              ref={canvasPanelRef}
+              role="region"
+              aria-label="Canvas panel"
+              data-testid="graph-canvas-panel"
+              tabIndex={-1}
+              className="flex-1 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
             >
-              <Plus className="h-4 w-4" />
-              Add Node
-            </button>
-          </Panel>
-        </ReactFlow>
-        {/* Validation Overlay - shows missing start/output indicators */}
-        <ValidationOverlay
-          onAddStartNode={handleAddStartNode}
-          onAddOutputNode={handleAddOutputNode}
-        />
-      </div>
-
-      {/* Right Panel - Inspector */}
-      <div
-        ref={inspectorPanelRef}
-        role="complementary"
-        aria-label="Inspector panel"
-        tabIndex={-1}
-        className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-      >
-        {overlayRunId && (
-          <div className="border-b border-border bg-muted/30 p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Execution</h3>
-              <button
-                type="button"
-                onClick={handleExitExecutionView}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              <ReactFlow
+                className="bg-background"
+                aria-label="Graph canvas"
+                nodes={nodes}
+                edges={typedEdges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                connectOnClick
+                onNodeClick={onNodeClick}
+                onEdgeClick={onEdgeClick}
+                onNodeDragStart={onNodeDragStart}
+                onNodeDragStop={onNodeDragStop}
+                onPaneClick={onPaneClick}
+                onMoveEnd={(_, viewport) => setCurrentViewport(viewport)}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                defaultViewport={currentViewport}
+                fitView={!currentViewport}
+                onlyRenderVisibleElements
+                snapToGrid
+                snapGrid={GRAPH_EDITOR_SNAP_GRID}
+                selectionOnDrag
+                selectionMode={SelectionMode.Partial}
+                selectNodesOnDrag={false}
+                panOnDrag={[1, 2]}
+                defaultEdgeOptions={{
+                  type: "typed",
+                  style: { strokeWidth: 2 },
+                  markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 14,
+                    height: 14,
+                  },
+                }}
               >
-                Exit
-              </button>
-            </div>
-
-            {overlayRunLoading && !overlayRun && (
-              <p className="text-xs text-muted-foreground">Loading execution trace...</p>
-            )}
-
-            {overlayRunError && (
-              <p className="text-xs text-destructive whitespace-pre-wrap">{overlayRunError}</p>
-            )}
-
-            {overlayRun && (
-              <>
-                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>
-                    Status:{" "}
-                    <span className="font-medium text-foreground">{String(overlayRun.status)}</span>
-                  </span>
-                  <Link href={`/runs/${overlayRun.id}`} className="text-primary hover:underline">
-                    Open run
-                  </Link>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {!isTerminalRunStatus(String(overlayRun.status)) && (
+                <Background
+                  variant={BackgroundVariant.Dots}
+                  gap={24}
+                  size={0.8}
+                  color="rgba(255,255,255,0.06)"
+                />
+                <Controls />
+                <MiniMap
+                  nodeStrokeWidth={3}
+                  zoomable
+                  pannable
+                  className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
+                />
+                <Panel position="top-right" className="flex items-center gap-2">
+                  <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
                     <button
                       type="button"
-                      onClick={() => void handleCancelExecution()}
-                      disabled={overlayCanceling}
-                      className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Undo"
+                      onClick={handleUndo}
+                      disabled={!canUndo}
+                      title="Undo (Ctrl+Z)"
+                      className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      {overlayCanceling ? "Stopping..." : "Stop"}
+                      <Undo2 aria-hidden="true" className="h-4 w-4" />
                     </button>
-                  )}
+                    <div className="w-px bg-border" />
+                    <button
+                      type="button"
+                      aria-label="Redo"
+                      onClick={handleRedo}
+                      disabled={!canRedo}
+                      title="Redo (Ctrl+Y)"
+                      className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Redo2 aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => void fetchOverlayRun()}
-                    disabled={overlayRunLoading || overlayRunRefreshing}
-                    className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Auto-layout"
+                    onClick={handleAutoLayout}
+                    disabled={nodes.length === 0}
+                    className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
+                    title="Tidy up layout"
                   >
-                    {overlayRunLoading || overlayRunRefreshing ? "Refreshing..." : "Refresh"}
+                    <LayoutGrid aria-hidden="true" className="h-4 w-4" />
+                    <span className="hidden sm:inline">Tidy</span>
                   </button>
-                </div>
+                  <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
+                    <select
+                      aria-label="Version"
+                      value={currentVersionId ?? ""}
+                      disabled={
+                        loadingVersion ||
+                        saving ||
+                        availableVersions.length === 0
+                      }
+                      onChange={(e) => void handleSelectVersion(e.target.value)}
+                      className="bg-transparent text-sm text-muted-foreground outline-none"
+                    >
+                      {availableVersions.length === 0 ? (
+                        <option value="">No version</option>
+                      ) : (
+                        [...availableVersions]
+                          .sort((a, b) => b.version - a.version)
+                          .map((v) => (
+                            <option key={v.id} value={v.id}>
+                              v{v.version}
+                            </option>
+                          ))
+                      )}
+                    </select>
+                    {isDirty && <span className="text-amber-500 ml-1">*</span>}
+                  </div>
+                  {!isEditingMetadata && (
+                    <>
+                      <WizardButton
+                        buttonRef={wizardButtonRef}
+                        onBeforeStart={captureFocusableTarget}
+                      />
+                      <button
+                        ref={memoryButtonRef}
+                        type="button"
+                        aria-label="Memory settings"
+                        onClick={handleOpenMemoryConfig}
+                        className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
+                      >
+                        <Brain aria-hidden="true" className="h-4 w-4" />
+                        <span className="hidden sm:inline">Memory</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={runDisabledReason ?? "Run workflow"}
+                        onClick={() => void handleRunWorkflow()}
+                        disabled={Boolean(runDisabledReason)}
+                        title={runDisabledReason ?? "Run workflow"}
+                        className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                      >
+                        {startingRun ? (
+                          "Starting..."
+                        ) : (
+                          <Play aria-hidden="true" className="h-4 w-4" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={saving ? "Saving..." : "Save"}
+                        onClick={() => void handleSave()}
+                        disabled={saving || !isDirty}
+                        className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                      >
+                        {saving ? (
+                          "Saving..."
+                        ) : (
+                          <SaveIcon aria-hidden="true" className="h-4 w-4" />
+                        )}
+                      </button>
+                    </>
+                  )}
+                </Panel>
+                <Panel position="bottom-center">
+                  <button
+                    type="button"
+                    onClick={() => paletteSearchRef.current?.focus()}
+                    className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Node
+                  </button>
+                </Panel>
+              </ReactFlow>
+              {/* Validation Overlay - shows missing start/output indicators */}
+              <ValidationOverlay
+                onAddStartNode={handleAddStartNode}
+                onAddOutputNode={handleAddOutputNode}
+              />
+            </div>
 
-                <div className="pt-3 border-t border-border space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">Node trace</p>
+            {/* Right Panel - Inspector */}
+            <div
+              ref={inspectorPanelRef}
+              role="complementary"
+              aria-label="Inspector panel"
+              tabIndex={-1}
+              className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+            >
+              {overlayRunId && (
+                <div className="border-b border-border bg-muted/30 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Execution
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={handleExitExecutionView}
+                      className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Exit
+                    </button>
+                  </div>
 
-                  {!selectedNodeId ? (
-                    <p className="text-xs text-muted-foreground">Select a node to inspect its execution.</p>
-                  ) : overlaySelectedNodeRuns.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No trace records for this node.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {overlaySelectedNodeRuns.map((nodeRun) => {
-                        const agentTrace = getNodeRunAgentTrace(nodeRun);
-                        return (
-                          <div
-                            key={nodeRun.id}
-                            className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
+                  {overlayRunLoading && !overlayRun && (
+                    <p className="text-xs text-muted-foreground">
+                      Loading execution trace...
+                    </p>
+                  )}
+
+                  {overlayRunError && (
+                    <p className="text-xs text-destructive whitespace-pre-wrap">
+                      {overlayRunError}
+                    </p>
+                  )}
+
+                  {overlayRun && (
+                    <>
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                          Status:{" "}
+                          <span className="font-medium text-foreground">
+                            {String(overlayRun.status)}
+                          </span>
+                        </span>
+                        <Link
+                          href={`/runs/${overlayRun.id}`}
+                          className="text-primary hover:underline"
+                        >
+                          Open run
+                        </Link>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {!isTerminalRunStatus(String(overlayRun.status)) && (
+                          <button
+                            type="button"
+                            onClick={() => void handleCancelExecution()}
+                            disabled={overlayCanceling}
+                            className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
-                          <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
-                            <span className="text-muted-foreground">{String(nodeRun.status)}</span>
-                            <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
+                            {overlayCanceling ? "Stopping..." : "Stop"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void fetchOverlayRun()}
+                          disabled={overlayRunLoading || overlayRunRefreshing}
+                          className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {overlayRunLoading || overlayRunRefreshing
+                            ? "Refreshing..."
+                            : "Refresh"}
+                        </button>
+                      </div>
+
+                      <div className="pt-3 border-t border-border space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">
+                          Node trace
+                        </p>
+
+                        {!selectedNodeId ? (
+                          <p className="text-xs text-muted-foreground">
+                            Select a node to inspect its execution.
+                          </p>
+                        ) : overlaySelectedNodeRuns.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            No trace records for this node.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {overlaySelectedNodeRuns.map((nodeRun) => {
+                              const agentTrace = getNodeRunAgentTrace(nodeRun);
+                              return (
+                                <div
+                                  key={nodeRun.id}
+                                  className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
+                                >
+                                  <div className="flex items-center justify-between gap-2 text-xs">
+                                    <span className="font-medium text-foreground">
+                                      attempt {nodeRun.attempt}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {String(nodeRun.status)}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {formatDuration(nodeRun.duration_ms)}
+                                    </span>
+                                  </div>
+
+                                  {agentTrace ? (
+                                    <AgentTracePanel
+                                      trace={agentTrace}
+                                      compact
+                                    />
+                                  ) : null}
+
+                                  <details open>
+                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                                      Response
+                                    </summary>
+                                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
+                                      {formatJsonForDisplay(
+                                        nodeRun.output_json,
+                                      )}
+                                    </pre>
+                                  </details>
+
+                                  <details
+                                    open={String(nodeRun.status) === "failed"}
+                                  >
+                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                                      Failure
+                                    </summary>
+                                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
+                                      {formatJsonForDisplay(nodeRun.error_json)}
+                                    </pre>
+                                  </details>
+
+                                  <details>
+                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                                      Input
+                                    </summary>
+                                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
+                                      {formatJsonForDisplay(nodeRun.input_json)}
+                                    </pre>
+                                  </details>
+                                </div>
+                              );
+                            })}
                           </div>
-
-                          {agentTrace ? (
-                            <AgentTracePanel trace={agentTrace} compact />
-                          ) : null}
-
-                          <details open>
-                            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                              Response
-                            </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                              {formatJsonForDisplay(nodeRun.output_json)}
-                            </pre>
-                          </details>
-
-                          <details open={String(nodeRun.status) === "failed"}>
-                            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                              Failure
-                            </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                              {formatJsonForDisplay(nodeRun.error_json)}
-                            </pre>
-                          </details>
-
-                          <details>
-                            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                              Input
-                            </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                              {formatJsonForDisplay(nodeRun.input_json)}
-                            </pre>
-                          </details>
-                          </div>
-                        );
-                      })}
-                    </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
-              </>
-            )}
+              )}
+              <NodeInspector
+                selectedNode={selectedNode}
+                selectedEdge={selectedEdge}
+                nodes={nodes}
+                edges={edges}
+                graphName={graphName}
+                graphDescription={graphDescription}
+                onUpdateNode={handleUpdateNode}
+                onUpdateEdge={handleUpdateEdge}
+                onDeleteNode={handleDeleteNode}
+                onDeleteEdge={handleDeleteEdge}
+                onDuplicateNode={handleDuplicateNode}
+                onUpdateMetadata={onUpdateMetadata}
+                onEditingMetadataChange={setIsEditingMetadata}
+              />
+            </div>
           </div>
-        )}
-        <NodeInspector
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          nodes={nodes}
-          edges={edges}
-          graphName={graphName}
-          graphDescription={graphDescription}
-          onUpdateNode={handleUpdateNode}
-          onUpdateEdge={handleUpdateEdge}
-          onDeleteNode={handleDeleteNode}
-          onDeleteEdge={handleDeleteEdge}
-          onDuplicateNode={handleDuplicateNode}
-          onUpdateMetadata={onUpdateMetadata}
-          onEditingMetadataChange={setIsEditingMetadata}
-        />
-      </div>
-      </div>
-      {/* Validation Status Bar - shows errors/warnings */}
-      <ValidationStatusBar
-        onFocusNode={handleFocusNode}
-        onFocusEdge={handleFocusEdge}
-        onQuickFix={handleQuickFix}
-      />
-    </div>
-    </WizardProvider>
+          {/* Validation Status Bar - shows errors/warnings */}
+          <ValidationStatusBar
+            onFocusNode={handleFocusNode}
+            onFocusEdge={handleFocusEdge}
+            onQuickFix={handleQuickFix}
+          />
+        </div>
+      </WizardProvider>
     </ValidationProvider>
   );
 }

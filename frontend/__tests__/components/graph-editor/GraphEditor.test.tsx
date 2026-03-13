@@ -444,7 +444,11 @@ describe("GraphEditor", () => {
     expect(targetId).toBeTruthy();
 
     const flow = screen.getByTestId("reactflow");
-    expect(within(flow).getAllByTestId(/edge-/)).toHaveLength(1);
+    const initialEdges = within(flow)
+      .getAllByTestId(/edge-/)
+      .map((edge) => edge.textContent);
+
+    expect(initialEdges).toHaveLength(1);
     await actClick(user, flow);
 
     expect(typeof lastOnConnect).toBe("function");
@@ -452,7 +456,10 @@ describe("GraphEditor", () => {
       lastOnConnect?.({ source: sourceId, target: targetId });
     });
 
-    expect(within(flow).getAllByTestId(/edge-/)).toHaveLength(1);
+    const edgesAfterDuplicateAttempt = within(flow)
+      .getAllByTestId(/edge-/)
+      .map((edge) => edge.textContent);
+    expect(edgesAfterDuplicateAttempt).toEqual(initialEdges);
     expect(showInfo).toHaveBeenCalledWith(
       "Connection already exists",
       "Use a different target or remove the existing edge first.",

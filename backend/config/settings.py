@@ -15,6 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 
+
 def _get_bool_env(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None:
