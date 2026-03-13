@@ -16,6 +16,7 @@ from django.utils import timezone
 from infrastructure.orm.models import (
     Graph,
     GraphVersion,
+    MemoryObservation,
     NodeRun,
     PromptTemplate,
     Run,
@@ -533,6 +534,34 @@ class TestRunModel:
         version.delete()
 
         assert not Run.objects.filter(id=run_id).exists()
+
+
+class TestMemoryObservationModel:
+    def test_memory_observation_requires_a_scope_identifier(self, user):
+        """Observations must be tied to graph, run, or session scope."""
+        with pytest.raises(IntegrityError):
+            MemoryObservation.objects.create(
+                tenant_id=user.default_organization_id,
+                type="fact",
+                title="No Scope",
+                content="Missing scope identifiers.",
+                scope="graph",
+            )
+
+    def test_memory_observation_str_includes_id_and_type(self, user):
+        """String representation should surface the domain object identity."""
+        observation = MemoryObservation.objects.create(
+            tenant_id=user.default_organization_id,
+            graph_id=user.default_organization_id,
+            type="fact",
+            title="Scoped",
+            content="Valid observation.",
+            scope="graph",
+        )
+
+        str_repr = str(observation)
+        assert str(observation.id) in str_repr
+        assert "fact" in str_repr
 
 
 class TestNodeRunModel:

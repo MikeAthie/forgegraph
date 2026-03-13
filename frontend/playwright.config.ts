@@ -1,10 +1,41 @@
 import { defineConfig, devices } from "@playwright/test";
+import fs from "fs";
 import path from "path";
 import os from "os";
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
+function loadRootEnvFile() {
+  const envPath = path.resolve(__dirname, "..", ".env");
+  if (!fs.existsSync(envPath)) {
+    return;
+  }
+
+  const envFile = fs.readFileSync(envPath, "utf8");
+  for (const rawLine of envFile.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex < 1) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line
+      .slice(separatorIndex + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+
+    process.env[key] ??= value;
+  }
+}
+
+loadRootEnvFile();
+
 const devPort = process.env.PLAYWRIGHT_DEV_PORT
   ? Number(process.env.PLAYWRIGHT_DEV_PORT)
   : 3001;
@@ -64,6 +95,20 @@ process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME = runtimeFixturePackageName;
 process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME = runtimeFixtureToolName;
 process.env.PLAYWRIGHT_RUNTIME_TOOL_URL = runtimeFixtureToolUrl;
 process.env.PLAYWRIGHT_LLM_MOCK_URL = llmMockUrl;
+process.env.TESTING = process.env.TESTING ?? "true";
+process.env.SECRET_KEY =
+  process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production";
+process.env.ALLOWED_HOSTS =
+  process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver";
+process.env.ENCRYPTION_KEY =
+  process.env.ENCRYPTION_KEY ??
+  "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=";
+process.env.SECURE_SSL_REDIRECT = process.env.SECURE_SSL_REDIRECT ?? "false";
+process.env.SESSION_COOKIE_SECURE =
+  process.env.SESSION_COOKIE_SECURE ?? "false";
+process.env.CSRF_COOKIE_SECURE = process.env.CSRF_COOKIE_SECURE ?? "false";
+process.env.AUTH_REFRESH_COOKIE_SECURE =
+  process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false";
 
 const workerOverride = process.env.PLAYWRIGHT_WORKERS
   ? Number(process.env.PLAYWRIGHT_WORKERS)
@@ -146,11 +191,24 @@ export default defineConfig({
       cwd: path.join(__dirname, "..", "backend"),
       env: {
         ...process.env,
+        TESTING: process.env.TESTING ?? "true",
         DEBUG: process.env.DEBUG ?? "true",
+        SECRET_KEY:
+          process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production",
+        ALLOWED_HOSTS:
+          process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver",
+        ENCRYPTION_KEY:
+          process.env.ENCRYPTION_KEY ??
+          "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=",
         USE_SQLITE: process.env.USE_SQLITE ?? "false",
         SQLITE_DB_PATH: sqliteDbPath,
         USE_IN_MEMORY_CHANNEL_LAYER:
           process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
+        SECURE_SSL_REDIRECT: process.env.SECURE_SSL_REDIRECT ?? "false",
+        SESSION_COOKIE_SECURE: process.env.SESSION_COOKIE_SECURE ?? "false",
+        CSRF_COOKIE_SECURE: process.env.CSRF_COOKIE_SECURE ?? "false",
+        AUTH_REFRESH_COOKIE_SECURE:
+          process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false",
         DB_HOST: dbHost,
         DB_PORT: dbPort,
         DB_NAME: dbName,

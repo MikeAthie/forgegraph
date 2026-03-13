@@ -68,6 +68,9 @@ Primary workstreams:
 Reference:
 - `docs/mvp/mvp-tasks-p1.md`
 - `docs/architecture/curated-memory.md`
+- `docs/mvp/p1-f01-implementation-tickets.md`
+- `docs/mvp/p1-f02-implementation-tickets.md`
+- `docs/mvp/p1-f03-implementation-tickets.md`
 
 ### P2: Operational Readiness, Governance, and Memory Hardening
 P2 turns the memory-native MVP into something a real team can govern and operate over time.
@@ -139,9 +142,9 @@ These decisions should be treated as fixed for the MVP unless there is a deliber
 - Avoid phase-wide mega-PRs.
 
 ## Immediate Next Steps
-1. Convert `P1-F01` into implementation tickets centered on the curated-memory contract, backend model, and additive gRPC surface.
-2. Define the Jackie-style memory-first workflow as the supported MVP proof for P1.
-3. Move onboarding/admin/export work that is not required for that memory journey behind the new P1 sequence.
+1. Start `P1-F01` from `docs/mvp/p1-f01-implementation-tickets.md`.
+2. Continue into `P1-F02` and `P1-F03` using the new ticket docs instead of inventing PR boundaries during implementation.
+3. Define the Jackie-style memory-first workflow as the supported MVP proof for P1.
 
 ## Linked Planning Docs
 - `docs/mvp/mvp-tasks-p0.md`
@@ -151,3 +154,6 @@ These decisions should be treated as fixed for the MVP unless there is a deliber
 - `docs/mvp/mvp-remediation-tasks.md`
 - `docs/mvp/p0-f01-implementation-tickets.md`
 - `docs/mvp/p0-f02-implementation-tickets.md`
+- `docs/mvp/p1-f01-implementation-tickets.md`
+- `docs/mvp/p1-f02-implementation-tickets.md`
+- `docs/mvp/p1-f03-implementation-tickets.md`

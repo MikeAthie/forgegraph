@@ -10,6 +10,9 @@ This MVP task list is split into phased files for execution by a small team:
 - `docs/mvp/forgegraph-mvp-implementation-plan.md` (Cross-phase sequencing and constraints)
 - `docs/mvp/p0-f01-implementation-tickets.md` (PR slices for `P0-F01`)
 - `docs/mvp/p0-f02-implementation-tickets.md` (PR slices for `P0-F02`)
+- `docs/mvp/p1-f01-implementation-tickets.md` (PR slices for `P1-F01`)
+- `docs/mvp/p1-f02-implementation-tickets.md` (PR slices for `P1-F02`)
+- `docs/mvp/p1-f03-implementation-tickets.md` (PR slices for `P1-F03`)
 
 Each `mvp-tasks` file includes implementation-readiness guidance, sequencing, and phase entry criteria.
 

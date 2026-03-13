@@ -12,6 +12,10 @@ It is intentionally scoped to the current codebase, so it does not re-plan capab
 - RBAC, audit logs, tenant policies, retention policies, OIDC, SCIM, and billing models already exist.
 - Webhook-triggered runs and OAuth credential flows already exist.
 - Graph cycles are already supported behind `metadata.allow_cycles`.
+- The three-tier memory foundation already exists:
+  - Tier 1 `MessageBuffer`
+  - Tier 2 `MemoryStore`/Redis summaries and session memory
+  - Tier 3 semantic retrieval over `MemoryChunk`
 
 The work below focuses on what is still missing or structurally inconsistent.
 
@@ -20,9 +24,9 @@ The work below focuses on what is still missing or structurally inconsistent.
 2. P0-B: Marketplace runtime delivery
 3. P0-C: Cloud-safe execution policy
 4. P0-D: Stable contracts and missing specs
-5. P1-A: Product packaging and onboarding polish
-6. P1-B: Debugger UX polish
-7. P1-C: Official integration package hardening
+5. P1-A: Curated memory domain and contracts
+6. P1-B: Curated memory runtime integration
+7. P1-C: Memory Browser and Jackie-style UX packaging
 
 ---
 
@@ -329,94 +333,110 @@ Versioned graph and run-event specs in the repo.
 
 ---
 
-## P1-A: Product Packaging and Onboarding Polish
+## P1-A: Curated Memory Domain and Contracts
 
 ### Objective
-Turn the existing technical surface into a buyer-facing experience with a tight time-to-value loop.
+Add a native curated memory subdomain that introduces structured observations, session-aware context assembly, deterministic search, and additive contracts over the existing three-tier memory foundations.
 
 ### Deliverable
-One guided path: template -> credential check -> run -> debug.
+A first-class `MemoryObservation` domain with REST and additive gRPC contracts, async observation indexing, and stable service semantics.
 
 ### Microtasks
-- [ ] Select 2 concrete MVP journeys only.
-- [ ] Rewrite template catalog copy around those journeys.
-- [ ] Add per-template prerequisites:
-  - required credentials
-  - estimated setup time
-  - expected output
-- [ ] Add preflight checks before run:
-  - credentials connected
-  - blocked policy
-  - over budget
-  - missing runtime package
-- [ ] Update onboarding to route new users into one of those templates first.
-- [ ] Add success metrics to onboarding events:
-  - template picked
-  - credentials connected
-  - first run started
-  - first run succeeded
+- [ ] Write `docs/architecture/curated-memory.md` and lock the MVP decisions:
+  - native subdomain
+  - internal-only exposure
+  - explicit capture first
+  - hybrid FTS + vector retrieval
+  - graph/run/session scope
+- [ ] Add `MemoryObservation` model and migration.
+- [ ] Add indexes for:
+  - tenant + recency
+  - tenant + topic_key
+  - FTS search
+- [ ] Add REST endpoints for:
+  - create/update/delete
+  - search
+  - detail
+  - timeline
+  - context
+- [ ] Extend memory gRPC with additive methods:
+  - `SaveObservation`
+  - `SearchObservations`
+  - `GetObservation`
+  - `GetContext`
+  - `GetTimeline`
+- [ ] Keep `RetrieveMemory`, `MemoryEntry`, and `MemoryChunk` backward compatible.
+- [ ] Add service behavior for:
+  - normalization
+  - dedupe
+  - topic upsert
+  - soft delete
+  - async observation-to-vector indexing
 
 ### Exit criteria
-- [ ] A new user can complete a meaningful flow in under 5 minutes.
-- [ ] The first-run funnel fails early with actionable messaging.
+- [ ] Curated memory exists as a native backend domain.
+- [ ] REST and gRPC contracts are stable and additive.
+- [ ] Observation writes do not block on embeddings.
+- [ ] Existing KV/session/vector memory features remain intact.
 
 ---
 
-## P1-B: Debugger UX Polish
+## P1-B: Curated Memory Runtime Integration
 
 ### Objective
-Upgrade the existing run detail surface into a usable agent/workflow debugger without rebuilding the backend.
+Expose curated memory to workflows and agents as explicit runtime primitives.
 
 ### Deliverable
-A run debugger that makes node paths, agent steps, failures, and replay obvious.
+New observation node types and runtime integration that let graphs save, search, contextualize, and inspect curated memory explicitly.
 
 ### Microtasks
-- [ ] Add branch-path highlighting in run detail/canvas overlay.
-- [ ] Add a timeline view for run events grouped by node.
-- [ ] Add a compact “why stopped” summary for failed and paused runs.
-- [ ] Add step drill-down for agent runs.
-- [ ] Improve replay entry point UX:
-  - replay whole run
-  - replay from node
-  - show side-effect warning
-- [ ] Add trace export button for support/debug use.
+- [ ] Add node types for:
+  - `observation_save`
+  - `observation_search`
+  - `observation_context`
+  - `observation_timeline`
+- [ ] Add engine executors for those node types.
+- [ ] Wire them to the extended memory gRPC service.
+- [ ] Respect tenant, graph, run, and session scope automatically.
+- [ ] Define stable config and output shapes for each node.
+- [ ] Persist observation save/search/context events into run surfaces.
+- [ ] Allow prompt/agent flows to consume explicit curated-context outputs.
+- [ ] Keep the existing KV `memory` node unchanged.
 
 ### Exit criteria
-- [ ] A user can answer “what happened?” from the run page without digging into raw JSON first.
+- [ ] Workflows can explicitly save and retrieve curated memory end to end.
+- [ ] Run/debug surfaces show what memory was saved or used.
+- [ ] Prompt/agent behavior remains unchanged unless curated-memory nodes are used.
 
 ---
 
-## P1-C: Official Integration Package Hardening
+## P1-C: Memory Browser and Jackie-Style UX Packaging
 
 ### Objective
-Ship a small, trustworthy official package set instead of a wide but shallow marketplace.
+Turn curated memory into a user-understandable product surface and one supported memory-first workflow.
 
 ### Deliverable
-Five to ten high-confidence packages that are reviewed, documented, and tested end-to-end.
-
-### Candidate MVP set
-- Gmail
-- Slack
-- Notion
-- Generic HTTP helper
-- Telegram or WhatsApp, but not both for the first pass
+A Memory Browser UI, curated-memory authoring support in the editor, and one Jackie-style journey proving save -> later retrieval -> final answer.
 
 ### Microtasks
-- [ ] Pick the official package list.
-- [ ] Mark those packages as ForgeGraph-verified.
-- [ ] Add end-to-end execution tests per package.
-- [ ] Add docs with:
-  - required credential type
-  - scopes
-  - sample input
-  - sample output
-  - expected failures
-- [ ] Add package-specific health checks where possible.
-- [ ] Remove or hide low-confidence seeded packages from the MVP surface.
+- [ ] Add a Memory Browser page for:
+  - search
+  - filters
+  - detail
+  - timeline
+- [ ] Add graph editor forms and palette entries for curated-memory nodes.
+- [ ] Add memory-aware debugger surfaces on run detail pages.
+- [ ] Define one supported Jackie-style workflow that demonstrates:
+  - explicit observation save
+  - later retrieval through context
+  - final agent answer using that context
+- [ ] Add Playwright coverage for authoring and running the supported memory flow.
+- [ ] Keep required integrations narrow and documented.
 
 ### Exit criteria
-- [ ] Every official package can be installed, configured, and executed in CI-backed tests.
-- [ ] The marketplace UI clearly separates verified packages from everything else.
+- [ ] Users can browse and understand curated memory without source-code reading.
+- [ ] The editor supports curated-memory authoring end to end.
+- [ ] The Jackie-style workflow proves the memory value end to end.
 
 ---
 
@@ -444,4 +464,4 @@ Five to ten high-confidence packages that are reviewed, documented, and tested e
 - [ ] Marketplace semantics are consistent end-to-end.
 - [ ] Cloud mode blocks unsafe execution.
 - [ ] Graph and event contracts are documented and versionable.
-- [ ] The MVP path is narrow, polished, and test-backed.
+- [ ] Curated memory is the next implementation-ready product differentiator.

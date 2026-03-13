@@ -50,6 +50,9 @@ Use these docs as the execution entry point:
 - `docs/mvp/forgegraph-mvp-implementation-plan.md`
 - `docs/mvp/mvp-tasks-p1.md`
 - `docs/architecture/curated-memory.md`
+- `docs/mvp/p1-f01-implementation-tickets.md`
+- `docs/mvp/p1-f02-implementation-tickets.md`
+- `docs/mvp/p1-f03-implementation-tickets.md`
 
 Implementation order for P1:
 1. `P1-F01`
@@ -57,9 +60,9 @@ Implementation order for P1:
 3. `P1-F03`
 
 Start work immediately with these first PRs:
-- `P1-F01`: domain/contract PR adding the curated memory architecture doc, `MemoryObservation` model, and API/gRPC contract definitions
-- `P1-F02`: engine node/runtime PR for observation save/search/context/timeline behavior
-- `P1-F03`: frontend/browser PR for Memory Browser, node forms, and the Jackie-style save/retrieve journey
+- `P1-F01`: contract/model PR from `p1-f01-implementation-tickets.md`
+- `P1-F02`: runtime PR from `p1-f02-implementation-tickets.md`
+- `P1-F03`: product-surface PR from `p1-f03-implementation-tickets.md`
 
 No additional phase-planning doc should be needed before opening the first P1 implementation PRs.
 

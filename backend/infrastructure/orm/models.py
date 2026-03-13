@@ -986,6 +986,96 @@ class MemoryEntry(models.Model):
         return f"MemoryEntry {self.namespace}:{self.key}"
 
 
+class MemoryObservationQuerySet(models.QuerySet["MemoryObservation"]):
+    def active(self) -> MemoryObservationQuerySet:
+        return self.filter(deleted_at__isnull=True)
+
+    def for_tenant(self, tenant_id: uuid.UUID) -> MemoryObservationQuerySet:
+        return self.filter(tenant_id=tenant_id)
+
+
+class MemoryObservationManager(models.Manager.from_queryset(MemoryObservationQuerySet)):  # type: ignore[misc]
+    pass
+
+
+class MemoryObservation(models.Model):
+    """MemoryObservation stores curated, inspectable memory observations."""
+
+    SCOPE_CHOICES = [
+        ("graph", "Graph"),
+        ("run", "Run"),
+        ("session", "Session"),
+    ]
+
+    objects = MemoryObservationManager()
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    graph_id = models.UUIDField(null=True, blank=True)
+    run_id = models.UUIDField(null=True, blank=True)
+    session_id = models.UUIDField(null=True, blank=True)
+    agent_id = models.UUIDField(null=True, blank=True)
+    type = models.CharField(max_length=64)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    scope = models.CharField(max_length=16, choices=SCOPE_CHOICES, default="graph")
+    topic_key = models.CharField(max_length=128, blank=True, default="")
+    tool_name = models.CharField(max_length=128, blank=True, default="")
+    revision_count = models.PositiveIntegerField(default=1)
+    duplicate_count = models.PositiveIntegerField(default=0)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    memory_chunk = models.ForeignKey(
+        "MemoryChunk",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="observation_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "memory_observations"
+        ordering = ["-last_seen_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant_id", "last_seen_at"], name="mem_obs_tenant_seen_idx"),
+            models.Index(fields=["tenant_id", "topic_key"], name="mem_obs_tenant_topic_idx"),
+            models.Index(
+                fields=["tenant_id", "scope", "last_seen_at"], name="mem_obs_scope_seen_idx"
+            ),
+            models.Index(fields=["tenant_id", "deleted_at"], name="mem_obs_deleted_idx"),
+            models.Index(
+                fields=["tenant_id", "type", "last_seen_at"], name="mem_obs_type_seen_idx"
+            ),
+        ]
+        constraints = [
+            _make_check_constraint(
+                ~(
+                    models.Q(graph_id__isnull=True)
+                    & models.Q(run_id__isnull=True)
+                    & models.Q(session_id__isnull=True)
+                ),
+                name="mem_obs_requires_scope",
+            ),
+            _make_check_constraint(
+                ~(models.Q(scope="graph") & models.Q(graph_id__isnull=True)),
+                name="mem_obs_graph_scope_req",
+            ),
+            _make_check_constraint(
+                ~(models.Q(scope="run") & models.Q(run_id__isnull=True)),
+                name="mem_obs_run_scope_req",
+            ),
+            _make_check_constraint(
+                ~(models.Q(scope="session") & models.Q(session_id__isnull=True)),
+                name="mem_obs_session_scope_req",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"MemoryObservation {self.id} ({self.type})"
+
+
 class MemoryUsage(models.Model):
     """Daily memory usage totals per tenant."""
 
