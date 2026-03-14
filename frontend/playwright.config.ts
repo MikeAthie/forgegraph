@@ -52,6 +52,13 @@ const engineMetricsPort = process.env.PLAYWRIGHT_ENGINE_METRICS_PORT
   ? Number(process.env.PLAYWRIGHT_ENGINE_METRICS_PORT)
   : 9091;
 const engineMetricsUrl = `http://127.0.0.1:${engineMetricsPort}`;
+const memoryGrpcHost =
+  process.env.MEMORY_GRPC_HOST ?? process.env.PLAYWRIGHT_MEMORY_GRPC_HOST ?? "127.0.0.1";
+const memoryGrpcPort = process.env.MEMORY_GRPC_PORT
+  ? Number(process.env.MEMORY_GRPC_PORT)
+  : process.env.PLAYWRIGHT_MEMORY_GRPC_PORT
+    ? Number(process.env.PLAYWRIGHT_MEMORY_GRPC_PORT)
+    : 50052;
 const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT
   ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT)
   : 8011;
@@ -109,6 +116,9 @@ process.env.SESSION_COOKIE_SECURE =
 process.env.CSRF_COOKIE_SECURE = process.env.CSRF_COOKIE_SECURE ?? "false";
 process.env.AUTH_REFRESH_COOKIE_SECURE =
   process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false";
+process.env.MEMORY_GRPC_HOST = process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost;
+process.env.MEMORY_GRPC_PORT =
+  process.env.MEMORY_GRPC_PORT ?? String(memoryGrpcPort);
 
 const workerOverride = process.env.PLAYWRIGHT_WORKERS
   ? Number(process.env.PLAYWRIGHT_WORKERS)
@@ -185,7 +195,7 @@ export default defineConfig({
       },
     },
     {
-      command: `python manage.py migrate --noinput --verbosity 0 && python manage.py seed_playwright_runtime_fixture --email "${runtimeFixtureEmail}" --password "${runtimeFixturePassword}" --tenant-id "${runtimeFixtureTenantId}" --package-slug "${runtimeFixturePackageSlug}" --package-name "${runtimeFixturePackageName}" --tool-name "${runtimeFixtureToolName}" --runtime-url "${runtimeFixtureToolUrl}" && python manage.py runserver 127.0.0.1:${backendPort} --noreload --verbosity 0`,
+      command: "python scripts/run_playwright_backend.py",
       url: `${backendUrl}/health`,
       reuseExistingServer: !process.env.CI,
       cwd: path.join(__dirname, "..", "backend"),
@@ -214,12 +224,15 @@ export default defineConfig({
         DB_NAME: dbName,
         DB_USER: dbUser,
         DB_PASSWORD: dbPassword,
+        PLAYWRIGHT_BACKEND_PORT: String(backendPort),
         ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
         ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
         ENGINE_CALLBACK_URL:
           process.env.ENGINE_CALLBACK_URL ??
           `${backendUrl}/api/runs/engine-events`,
         ENGINE_CALLBACK_SECRET: callbackSecret,
+        MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
+        MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
         FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
       },
     },
@@ -240,6 +253,8 @@ export default defineConfig({
         FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
         TOOL_MANIFEST_DIR: process.env.TOOL_MANIFEST_DIR ?? "",
         DATABASE_URL: engineDatabaseUrl,
+        MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
+        MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
         OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? `${llmMockUrl}/v1`,
       },

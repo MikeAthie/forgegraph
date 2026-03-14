@@ -101,6 +101,7 @@ describe('Header', () => {
       render(<Header />);
 
       expect(screen.queryByRole('link', { name: /graphs/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /memory/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /prompts/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /runs/i })).not.toBeInTheDocument();
     });
@@ -139,6 +140,7 @@ describe('Header', () => {
       render(<Header />);
 
       expect(screen.getByRole('link', { name: /^graphs$/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /^memory$/i })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /^prompts$/i })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /^runs$/i })).toBeInTheDocument();
     });
@@ -167,6 +169,7 @@ describe('Header', () => {
       render(<Header />);
 
       expect(screen.getByRole('link', { name: /^graphs$/i })).toHaveAttribute('href', '/graphs');
+      expect(screen.getByRole('link', { name: /^memory$/i })).toHaveAttribute('href', '/memory');
       expect(screen.getByRole('link', { name: /^prompts$/i })).toHaveAttribute('href', '/prompts');
       expect(screen.getByRole('link', { name: /^runs$/i })).toHaveAttribute('href', '/runs');
     });

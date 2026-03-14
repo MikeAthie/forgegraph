@@ -84,6 +84,7 @@ import {
 } from "../../lib/graph-editor-interactions";
 import {
   AGENT_OUTPUT_PLACEHOLDER,
+  OBSERVATION_CONTEXT_PLACEHOLDER,
   type AgentWizardBlueprint,
 } from "../../lib/agent-wizard-presets";
 import { NodePalette } from "./NodePalette";
@@ -136,6 +137,10 @@ const nodeTypes: NodeTypes = {
   [NODE_TYPES.MERGE]: GraphNodeComponent,
   [NODE_TYPES.HUMAN_GATE]: GraphNodeComponent,
   [NODE_TYPES.MEMORY]: GraphNodeComponent,
+  [NODE_TYPES.OBSERVATION_SAVE]: GraphNodeComponent,
+  [NODE_TYPES.OBSERVATION_SEARCH]: GraphNodeComponent,
+  [NODE_TYPES.OBSERVATION_CONTEXT]: GraphNodeComponent,
+  [NODE_TYPES.OBSERVATION_TIMELINE]: GraphNodeComponent,
   [NODE_TYPES.TOOL]: GraphNodeComponent,
   [NODE_TYPES.SUBGRAPH]: GraphNodeComponent,
   [NOTE_NODE_TYPE]: NoteNodeComponent,
@@ -1325,9 +1330,20 @@ export function GraphEditor({
         agentNodeTemplateIndex >= 0
           ? createdNodeIds[agentNodeTemplateIndex]
           : "";
+      const observationContextTemplateIndex = blueprint.nodes.findIndex(
+        (template) => template.nodeType === NODE_TYPES.OBSERVATION_CONTEXT,
+      );
+      const observationContextNodeId =
+        observationContextTemplateIndex >= 0
+          ? createdNodeIds[observationContextTemplateIndex]
+          : "";
       const replacements: Record<string, string> = {};
       if (agentNodeId) {
         replacements[AGENT_OUTPUT_PLACEHOLDER] = agentNodeId;
+      }
+      if (observationContextNodeId) {
+        replacements[OBSERVATION_CONTEXT_PLACEHOLDER] =
+          observationContextNodeId;
       }
 
       const newNodes = draftNodes.map((node) => ({

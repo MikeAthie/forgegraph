@@ -9,6 +9,9 @@ Convert `P1-F02` into reviewable implementation slices with explicit file target
 - prompts and agents must be able to consume explicit curated context
 - run/debug surfaces must persist enough memory activity to explain what happened
 
+## Status
+`P1-F02` is complete as of March 13, 2026.
+
 ## Dependency
 `P1-F01` should be merged or stable first.
 
@@ -71,13 +74,13 @@ Introduce the new curated-memory node types to the shared graph/runtime contract
 - `frontend/lib/type-inference.ts`
 
 ### Acceptance Criteria
-- [ ] The graph contract supports:
+- [x] The graph contract supports:
   - `observation_save`
   - `observation_search`
   - `observation_context`
   - `observation_timeline`
-- [ ] Validation rules exist for required config and unsupported config combinations.
-- [ ] Node contracts are stable before runtime implementation starts.
+- [x] Validation rules exist for required config and unsupported config combinations.
+- [x] Node contracts are stable before runtime implementation starts.
 
 ### Tests
 - backend unit tests for schema validation
@@ -117,10 +120,10 @@ Allow the engine to execute curated-memory node types against the additive gRPC 
 - `engine/test/integration_test.go`
 
 ### Acceptance Criteria
-- [ ] Each curated-memory node type executes successfully through gRPC.
-- [ ] Runtime errors are explicit for unavailable or invalid memory responses.
-- [ ] Scheduler integration works without breaking existing node types.
-- [ ] Node outputs are stable and usable by downstream nodes.
+- [x] Each curated-memory node type executes successfully through gRPC.
+- [x] Runtime errors are explicit for unavailable or invalid memory responses.
+- [x] Scheduler integration works without breaking existing node types.
+- [x] Node outputs are stable and usable by downstream nodes.
 
 ### Tests
 - engine unit tests for each executor
@@ -156,14 +159,14 @@ Allow prompt and agent runtime paths to consume explicit curated context outputs
 - `backend/adapters/api/runs/serializers.py`
 
 ### Acceptance Criteria
-- [ ] Prompt and agent flows can consume curated context explicitly.
-- [ ] Context composition order is stable:
+- [x] Prompt and agent flows can consume curated context explicitly.
+- [x] Context composition order is stable:
   - curated observations
   - summary/facts
   - semantic chunk retrieval
   - recent buffer
-- [ ] Existing flows behave the same unless curated-memory nodes are present.
-- [ ] The runtime emits enough information to explain curated-memory usage later.
+- [x] Existing flows behave the same unless curated-memory nodes are present.
+- [x] The runtime emits enough information to explain curated-memory usage later.
 
 ### Tests
 - prompt executor tests for context composition
@@ -200,10 +203,10 @@ Persist and expose curated-memory runtime activity so run surfaces can explain w
 - `backend/domain/events/run_events.py`
 
 ### Acceptance Criteria
-- [ ] Observation save/search/context/timeline events persist in run history.
-- [ ] Run detail exposes enough information for future debugger surfaces.
-- [ ] Sensitive observation payloads respect redaction rules where required.
-- [ ] Non-memory runs remain unchanged.
+- [x] Observation save/search/context/timeline events persist in run history.
+- [x] Run detail exposes enough information for future debugger surfaces.
+- [x] Sensitive observation payloads respect redaction rules where required.
+- [x] Non-memory runs remain unchanged.
 
 ### Tests
 - integration tests for run detail payloads
@@ -238,10 +241,10 @@ Prove the runtime path end to end with curated-memory graphs before the full Mem
 - `docs/mvp/p1-f02-implementation-tickets.md`
 
 ### Acceptance Criteria
-- [ ] One graph can save an observation and another step can retrieve curated context successfully.
-- [ ] Prompt or agent output can be shown to depend on curated context.
-- [ ] The runtime proof is test-backed, not just manually described.
-- [ ] `P1-F03` can start from a stable runtime and read model.
+- [x] One graph can save an observation and another step can retrieve curated context successfully.
+- [x] Prompt or agent output can be shown to depend on curated context.
+- [x] The runtime proof is test-backed, not just manually described.
+- [x] `P1-F03` can start from a stable runtime and read model.
 
 ### Tests
 - backend/engine integration tests for save -> later retrieval
@@ -261,8 +264,8 @@ Prove the runtime path end to end with curated-memory graphs before the full Mem
 5. PR-5
 
 ## Final Ticket-Level Definition of Done
-- [ ] Observation node contracts are stable
-- [ ] Engine can execute curated-memory nodes
-- [ ] Prompt and agent flows can consume explicit curated context
-- [ ] Run surfaces expose enough memory activity for debugger work
-- [ ] `P1-F03` can proceed without inventing runtime semantics
+- [x] Observation node contracts are stable
+- [x] Engine can execute curated-memory nodes
+- [x] Prompt and agent flows can consume explicit curated context
+- [x] Run surfaces expose enough memory activity for debugger work
+- [x] `P1-F03` can proceed without inventing runtime semantics

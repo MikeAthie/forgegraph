@@ -122,6 +122,122 @@ class TestRunList:
         assert ids[1] == str(run_old.id)
         assert ids[2] == str(run_null.id)
 
+    def test_list_runs_includes_curated_memory_summary(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Memory Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+
+        NodeRun.objects.create(
+            run=run,
+            node_id="obs_save",
+            node_type="observation_save",
+            status="succeeded",
+            output_json={
+                "saved": True,
+                "scope": "session",
+                "observation": {
+                    "id": "obs-1",
+                    "title": "Customer preference",
+                    "content": "Customer prefers SMS updates.",
+                },
+            },
+        )
+        NodeRun.objects.create(
+            run=run,
+            node_id="prompt_1",
+            node_type="prompt",
+            status="succeeded",
+            output_json={
+                "response": "Will use memory.",
+                "memory_context": {
+                    "curated_context_paths": ["node.obs_ctx.output"],
+                    "curated_observation_count": 1,
+                    "curated_degraded": False,
+                    "curated_strategies": ["fts"],
+                    "curated_observations": [
+                        {
+                            "id": "obs-1",
+                            "title": "Customer preference",
+                            "content": "Customer prefers SMS updates.",
+                        }
+                    ],
+                },
+            },
+        )
+
+        response = authenticated_client.get("/api/runs/")
+
+        assert response.status_code == status.HTTP_200_OK
+        run_data = next(item for item in response.data["data"] if item["id"] == str(run.id))
+        assert run_data["memory_activity"]["has_activity"] is True
+        assert run_data["memory_activity"]["save_node_count"] == 1
+        assert run_data["memory_activity"]["saved_observation_count"] == 1
+        assert run_data["memory_activity"]["influenced_node_count"] == 1
+        assert run_data["memory_activity"]["influenced_observation_count"] == 1
+
+    def test_list_runs_includes_wrapped_curated_memory_operations(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Wrapped Memory Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+
+        NodeRun.objects.create(
+            run=run,
+            node_id="obs_ctx",
+            node_type="observation_context",
+            status="succeeded",
+            output_json={
+                "output": {
+                    "query": "What should I remember about Jackie before answering?",
+                    "count": 1,
+                    "degraded": True,
+                    "strategies": ["fts", "timeline"],
+                    "observations": [
+                        {
+                            "id": "obs-ctx-1",
+                            "title": "Jackie preference",
+                            "content": "Jackie prefers concise planning updates.",
+                            "scope": "graph",
+                            "topic_key": "jackie-memory",
+                        }
+                    ],
+                }
+            },
+        )
+        NodeRun.objects.create(
+            run=run,
+            node_id="obs_save",
+            node_type="observation_save",
+            status="succeeded",
+            output_json={
+                "output": {
+                    "saved": True,
+                    "scope": "graph",
+                    "observation": {
+                        "id": "obs-save-1",
+                        "title": "Jackie preference",
+                        "content": "Jackie prefers concise planning updates.",
+                        "scope": "graph",
+                        "topic_key": "jackie-memory",
+                    },
+                }
+            },
+        )
+
+        response = authenticated_client.get("/api/runs/")
+
+        assert response.status_code == status.HTTP_200_OK
+        run_data = next(item for item in response.data["data"] if item["id"] == str(run.id))
+        assert run_data["memory_activity"]["has_activity"] is True
+        assert run_data["memory_activity"]["save_node_count"] == 1
+        assert run_data["memory_activity"]["saved_observation_count"] == 1
+        assert run_data["memory_activity"]["retrieval_node_count"] == 1
+        assert run_data["memory_activity"]["retrieved_observation_count"] == 1
+        assert run_data["memory_activity"]["degraded"] is True
+
 
 class TestRunDetail:
     """Tests for GET /api/runs/{run_id}"""
@@ -314,6 +430,124 @@ class TestRunDetail:
         assert returned_node_run["agent_trace"]["stop_reason"] == "approval_required"
         assert returned_node_run["agent_trace"]["approval_pending"] is True
         assert returned_node_run["agent_trace"]["steps"][0]["tool"] == "send_email"
+
+    def test_get_run_returns_curated_memory_activity_summary(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Curated Memory Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+
+        NodeRun.objects.create(
+            run=run,
+            node_id="obs_save",
+            node_type="observation_save",
+            status="succeeded",
+            attempt=1,
+            output_json={
+                "saved": True,
+                "scope": "session",
+                "observation": {
+                    "id": "obs-1",
+                    "type": "fact",
+                    "title": "Snack preference",
+                    "content": "Customer prefers sweet snacks during meetings.",
+                    "scope": "session",
+                    "topic_key": "snacks",
+                },
+            },
+        )
+        NodeRun.objects.create(
+            run=run,
+            node_id="obs_search",
+            node_type="observation_search",
+            status="succeeded",
+            attempt=1,
+            output_json={
+                "query": "sweet snacks",
+                "scope": "session",
+                "count": 1,
+                "observations": [
+                    {
+                        "id": "obs-1",
+                        "title": "Snack preference",
+                        "content": "Customer prefers sweet snacks during meetings.",
+                    }
+                ],
+            },
+        )
+        NodeRun.objects.create(
+            run=run,
+            node_id="obs_context",
+            node_type="observation_context",
+            status="succeeded",
+            attempt=1,
+            output_json={
+                "query": "meeting prep",
+                "count": 1,
+                "degraded": True,
+                "strategies": ["fts"],
+                "observations": [
+                    {
+                        "id": "obs-1",
+                        "title": "Snack preference",
+                        "content": "Customer prefers sweet snacks during meetings.",
+                    }
+                ],
+            },
+        )
+        NodeRun.objects.create(
+            run=run,
+            node_id="prompt_1",
+            node_type="prompt",
+            status="succeeded",
+            attempt=1,
+            output_json={
+                "response": "Bring sweet snacks.",
+                "memory_context": {
+                    "curated_context_paths": ["node.obs_context.output"],
+                    "curated_observation_count": 1,
+                    "curated_degraded": True,
+                    "curated_strategies": ["fts"],
+                    "curated_observations": [
+                        {
+                            "id": "obs-1",
+                            "type": "fact",
+                            "title": "Snack preference",
+                            "content": "Customer prefers sweet snacks during meetings.",
+                            "scope": "session",
+                            "topic_key": "snacks",
+                        }
+                    ],
+                },
+            },
+        )
+
+        response = authenticated_client.get(f"/api/runs/{run.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data["data"]
+        assert data["memory_activity"]["has_activity"] is True
+        assert data["memory_activity"]["save_node_count"] == 1
+        assert data["memory_activity"]["saved_observation_count"] == 1
+        assert data["memory_activity"]["retrieval_node_count"] == 2
+        assert data["memory_activity"]["retrieved_observation_count"] == 2
+        assert data["memory_activity"]["influenced_node_count"] == 1
+        assert data["memory_activity"]["influenced_observation_count"] == 1
+        assert data["memory_activity"]["degraded"] is True
+        assert len(data["memory_activity"]["operations"]) == 4
+
+        save_node = next(item for item in data["node_runs"] if item["node_id"] == "obs_save")
+        assert save_node["memory_activity"]["category"] == "save"
+        assert save_node["memory_activity"]["observation"]["title"] == "Snack preference"
+
+        context_node = next(item for item in data["node_runs"] if item["node_id"] == "obs_context")
+        assert context_node["memory_activity"]["operation"] == "context"
+        assert context_node["memory_activity"]["degraded"] is True
+
+        prompt_node = next(item for item in data["node_runs"] if item["node_id"] == "prompt_1")
+        assert prompt_node["memory_activity"]["category"] == "influence"
+        assert prompt_node["memory_activity"]["observation_count"] == 1
 
     def test_get_run_not_found_returns_standard_error(self, authenticated_client):
         fake_id = "00000000-0000-0000-0000-000000000000"

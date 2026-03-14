@@ -9,6 +9,10 @@ import { OutputNodeForm } from "./OutputNodeForm";
 import { BranchNodeForm } from "./BranchNodeForm";
 import { MergeNodeForm } from "./MergeNodeForm";
 import { MemoryNodeForm } from "./MemoryNodeForm";
+import { ObservationSaveNodeForm } from "./ObservationSaveNodeForm";
+import { ObservationSearchNodeForm } from "./ObservationSearchNodeForm";
+import { ObservationContextNodeForm } from "./ObservationContextNodeForm";
+import { ObservationTimelineNodeForm } from "./ObservationTimelineNodeForm";
 import { ToolNodeForm } from "./ToolNodeForm";
 import { SubgraphNodeForm } from "./SubgraphNodeForm";
 import { HumanGateNodeForm } from "./HumanGateNodeForm";
@@ -121,6 +125,46 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
       icon: "Database",
       category: "processing",
       color: "#6366f1", // indigo
+    },
+  },
+  observation_save: {
+    component: ObservationSaveNodeForm,
+    info: {
+      label: "Observation Save",
+      description: "Persist curated observations for later runs",
+      icon: "BookmarkPlus",
+      category: "processing",
+      color: "#0f766e",
+    },
+  },
+  observation_search: {
+    component: ObservationSearchNodeForm,
+    info: {
+      label: "Observation Search",
+      description: "Search curated observations by query, type, or topic",
+      icon: "SearchCheck",
+      category: "processing",
+      color: "#0369a1",
+    },
+  },
+  observation_context: {
+    component: ObservationContextNodeForm,
+    info: {
+      label: "Observation Context",
+      description: "Assemble a curated context pack for prompts and agents",
+      icon: "BrainCircuit",
+      category: "processing",
+      color: "#2563eb",
+    },
+  },
+  observation_timeline: {
+    component: ObservationTimelineNodeForm,
+    info: {
+      label: "Observation Timeline",
+      description: "Load recent curated observations as an ordered timeline",
+      icon: "History",
+      category: "processing",
+      color: "#7c3aed",
     },
   },
   tool: {

@@ -115,6 +115,21 @@ def test_run_detail_redacts_sensitive_fields(authenticated_client, user):
         output_json={"safe": True},
         error_json={"token": "hidden-token"},
     )
+    NodeRun.objects.create(
+        run=run,
+        node_id="obs-save",
+        node_type="observation_save",
+        status="succeeded",
+        output_json={
+            "saved": True,
+            "scope": "session",
+            "observation": {
+                "id": "obs-1",
+                "title": "Credentials snapshot",
+                "content": "Bearer token-123 api_key=secret-value",
+            },
+        },
+    )
 
     response = authenticated_client.get(f"/api/runs/{run.id}")
     assert response.status_code == status.HTTP_200_OK
@@ -122,9 +137,15 @@ def test_run_detail_redacts_sensitive_fields(authenticated_client, user):
     assert payload["input_json"]["api_key"] == "***REDACTED***"
     assert payload["output_json"]["authorization"] == "***REDACTED***"
     assert "***REDACTED***" in payload["error_message"]
-    node = payload["node_runs"][0]
-    assert node["input_json"]["password"] == "***REDACTED***"
-    assert node["error_json"]["token"] == "***REDACTED***"
+    http_node = next(node for node in payload["node_runs"] if node["node_id"] == "node-1")
+    assert http_node["input_json"]["password"] == "***REDACTED***"
+    assert http_node["error_json"]["token"] == "***REDACTED***"
+    memory_node = next(node for node in payload["node_runs"] if node["node_id"] == "obs-save")
+    assert "***REDACTED***" in memory_node["memory_activity"]["observation"]["content_preview"]
+    operation = next(
+        item for item in payload["memory_activity"]["operations"] if item["node_id"] == "obs-save"
+    )
+    assert "***REDACTED***" in operation["observation"]["content_preview"]
 
 
 @override_settings(ENGINE_CALLBACK_SECRET="test-secret")

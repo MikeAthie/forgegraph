@@ -24,6 +24,7 @@ interface PromptConfig extends AgentConfig, AdvancedConfig {
   temperature?: number;
   max_tokens?: number;
   variables?: Record<string, string>;
+  observation_context_paths?: string[];
 }
 
 const AVAILABLE_MODELS = [
@@ -100,6 +101,13 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
     () => credentials.filter((item) => item.provider === provider),
     [credentials, provider]
   );
+  const observationContextPaths = useMemo(
+    () =>
+      Array.isArray(promptConfig.observation_context_paths)
+        ? promptConfig.observation_context_paths.join("\n")
+        : "",
+    [promptConfig.observation_context_paths],
+  );
 
   return (
     <div className="space-y-6">
@@ -159,6 +167,29 @@ Please {{task}}"
             onChange={(vars) => handleChange("variables", vars)}
             keyPlaceholder="Variable name"
             valuePlaceholder="Default value or path"
+          />
+        </FormField>
+
+        <FormField
+          label="Curated Context Paths"
+          htmlFor="prompt-observation-context-paths"
+          description="Optional observation_context output paths to prepend before the prompt executes."
+        >
+          <Textarea
+            id="prompt-observation-context-paths"
+            value={observationContextPaths}
+            onChange={(event) =>
+              handleChange(
+                "observation_context_paths",
+                event.target.value
+                  .split(/[\n,]/)
+                  .map((item) => item.trim())
+                  .filter(Boolean),
+              )
+            }
+            placeholder={"node.recall_jackie_context.output"}
+            rows={3}
+            className="text-sm resize-none font-mono"
           />
         </FormField>
       </div>

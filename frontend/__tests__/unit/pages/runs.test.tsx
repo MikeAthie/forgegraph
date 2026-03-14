@@ -507,6 +507,132 @@ describe("Run Detail Page", () => {
 
       jest.useRealTimers();
     });
+
+    it("renders curated memory timeline for memory-backed runs", async () => {
+      jest.spyOn(api.runsApi, "get").mockResolvedValue({
+        id: runId,
+        owner_id: "u1",
+        graph_id: "g1",
+        graph_name: "Memory Graph",
+        graph_version_id: "v1",
+        graph_version: 1,
+        status: "succeeded",
+        started_at: "2024-01-15T10:00:00Z",
+        ended_at: "2024-01-15T10:01:00Z",
+        duration_ms: 60000,
+        input_json: {},
+        output_json: { answer: "Bring sweet snacks." },
+        error_message: "",
+        node_runs: [
+          {
+            id: "nr1",
+            node_id: "obs_save",
+            node_type: "observation_save",
+            status: "succeeded",
+            attempt: 1,
+            started_at: "2024-01-15T10:00:00Z",
+            ended_at: "2024-01-15T10:00:01Z",
+            duration_ms: 1000,
+            input_json: {},
+            output_json: {},
+            error_json: null,
+            memory_activity: {
+              category: "save",
+              operation: "save",
+              saved_observation_count: 1,
+              scope: "session",
+              observation: {
+                id: "obs-1",
+                title: "Snack preference",
+                content_preview: "Customer prefers sweet snacks during meetings.",
+              },
+            },
+          },
+          {
+            id: "nr2",
+            node_id: "obs_context",
+            node_type: "observation_context",
+            status: "succeeded",
+            attempt: 1,
+            started_at: "2024-01-15T10:00:02Z",
+            ended_at: "2024-01-15T10:00:03Z",
+            duration_ms: 1000,
+            input_json: {},
+            output_json: {},
+            error_json: null,
+            memory_activity: {
+              category: "retrieval",
+              operation: "context",
+              count: 1,
+              query: "sweet snacks",
+              degraded: true,
+              strategies: ["fts"],
+              observations: [
+                {
+                  id: "obs-1",
+                  title: "Snack preference",
+                  content_preview: "Customer prefers sweet snacks during meetings.",
+                },
+              ],
+            },
+          },
+          {
+            id: "nr3",
+            node_id: "prompt_1",
+            node_type: "prompt",
+            status: "succeeded",
+            attempt: 1,
+            started_at: "2024-01-15T10:00:04Z",
+            ended_at: "2024-01-15T10:00:05Z",
+            duration_ms: 1000,
+            input_json: {},
+            output_json: {},
+            error_json: null,
+            memory_activity: {
+              category: "influence",
+              operation: "context_use",
+              observation_count: 1,
+              curated_context_paths: ["node.obs_context.output"],
+              observations: [
+                {
+                  id: "obs-1",
+                  title: "Snack preference",
+                  content_preview: "Customer prefers sweet snacks during meetings.",
+                },
+              ],
+            },
+          },
+        ],
+      } as any);
+
+      jest.spyOn(api.graphsApi, "getVersion").mockResolvedValue({
+        id: "v1",
+        version: 1,
+        checksum: "x".repeat(64),
+        created_at: "2024-01-15T09:00:00Z",
+        graph_json: {
+          nodes: [
+            { id: "obs_save", type: "observation_save", name: "Save preference", config: {} },
+            { id: "obs_context", type: "observation_context", name: "Load context", config: {} },
+            { id: "prompt_1", type: "prompt", name: "Answer", config: {} },
+          ],
+          edges: [],
+        },
+      } as any);
+
+      render(<RunDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/Curated memory/i).length).toBeGreaterThan(0);
+      });
+
+      expect(screen.getAllByText(/Saved observation/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Built curated context/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Used curated memory/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Snack preference/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/sweet snacks/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/Degraded retrieval seen/i)).toBeInTheDocument();
+    });
   });
 
   describe("Node Runs List", () => {
@@ -941,6 +1067,81 @@ describe("Run Detail Page", () => {
         expect(screen.getAllByText(/send_email/i).length).toBeGreaterThan(0);
         expect(screen.getByText(/Tool input/i)).toBeInTheDocument();
       });
+    });
+
+    it("shows curated memory influence before raw response payloads", async () => {
+      jest.spyOn(api.runsApi, "get").mockResolvedValue({
+        id: runId,
+        graph_id: "g1",
+        graph_version_id: "v1",
+        graph_name: "My Graph",
+        status: "succeeded",
+        node_runs: [
+          {
+            id: "nr1",
+            node_id: "prompt_1",
+            node_type: "prompt",
+            status: "succeeded",
+            attempt: 1,
+            started_at: "2024-01-15T10:00:00Z",
+            ended_at: "2024-01-15T10:00:01Z",
+            duration_ms: 1000,
+            input_json: { prompt: "Prepare the answer" },
+            output_json: { response: "Bring sweet snacks." },
+            error_json: null,
+            memory_activity: {
+              category: "influence",
+              operation: "context_use",
+              observation_count: 1,
+              degraded: false,
+              curated_context_paths: ["node.obs_context.output"],
+              strategies: ["fts"],
+              observations: [
+                {
+                  id: "obs-1",
+                  type: "fact",
+                  title: "Snack preference",
+                  scope: "session",
+                  topic_key: "snacks",
+                  content_preview: "Customer prefers sweet snacks during meetings.",
+                },
+              ],
+            },
+          },
+        ],
+      } as any);
+
+      jest.spyOn(api.graphsApi, "getVersion").mockResolvedValue({
+        id: "v1",
+        version: 1,
+        checksum: "x".repeat(64),
+        created_at: "2024-01-15T09:00:00Z",
+        graph_json: {
+          nodes: [{ id: "prompt_1", type: "prompt", name: "Answer", config: {} }],
+          edges: [],
+        },
+      } as any);
+
+      render(<RunDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByRole("button", { name: /Answer/i }).length).toBeGreaterThan(0);
+      });
+
+      const answerButtons = screen.getAllByRole("button", { name: /Answer/i });
+      await actClick(answerButtons[answerButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Curated memory activity/i)).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByText(/Context sources/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/node\.obs_context\.output/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Snack preference/i).length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(/Customer prefers sweet snacks during meetings\./i).length
+      ).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Response/i).length).toBeGreaterThan(0);
     });
   });
 

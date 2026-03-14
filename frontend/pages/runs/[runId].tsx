@@ -4,10 +4,26 @@ import { useRouter } from "next/router";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { getAccessToken, getApiErrorMessage, graphsApi, runsApi, type AgentTrace, type NodeRunItem, type RunDetail, type ResumeRunInput } from "../../lib/api";
+import {
+  getAccessToken,
+  getApiErrorMessage,
+  graphsApi,
+  runsApi,
+  type AgentTrace,
+  type NodeMemoryActivity,
+  type NodeRunItem,
+  type RunDetail,
+  type ResumeRunInput,
+} from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
 import { showError, showSuccess, showWarning } from "../../lib/toast";
 import { AgentTracePanel } from "../../components/runs/AgentTracePanel";
+import {
+  deriveRunMemoryActivity,
+  getNodeRunMemoryActivity,
+  NodeMemoryActivityPanel,
+  RunMemoryActivityPanel,
+} from "../../components/runs/MemoryActivityPanel";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ConfirmButton, Input, Separator, Spinner, Textarea } from "@/components/ui";
 
 const formatDateTime = (isoString: string) => {
@@ -32,6 +48,28 @@ const formatDuration = (durationMs: number | null) => {
 const formatNodeStatusLabel = (status: string) => {
   if (status === "running") return "in progress";
   return status;
+};
+
+const getNodeMemoryLabel = (activity: NodeMemoryActivity | null) => {
+  if (!activity) {
+    return null;
+  }
+  if (activity.category === "save") {
+    return "saved";
+  }
+  if (activity.operation === "context") {
+    return "context";
+  }
+  if (activity.operation === "search") {
+    return "search";
+  }
+  if (activity.operation === "timeline") {
+    return "timeline";
+  }
+  if (activity.category === "influence") {
+    return "used";
+  }
+  return "memory";
 };
 
 const getNodeRunAgentTrace = (nodeRun: NodeRunItem | null): AgentTrace | null => {
@@ -307,6 +345,20 @@ export default function RunDetailPage() {
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const hasPrefilledApprovalFieldsRef = useRef(false);
+
+  const selectNodeAttempt = useCallback(
+    (nodeId: string, attempt: number) => {
+      if (!run) return;
+      const match =
+        run.node_runs.find((nodeRun) => nodeRun.node_id === nodeId && nodeRun.attempt === attempt) ??
+        run.node_runs.find((nodeRun) => nodeRun.node_id === nodeId) ??
+        null;
+      if (match) {
+        setSelectedNodeRunId(match.id);
+      }
+    },
+    [run],
+  );
 
   const formatNodeLabel = useCallback(
     (nodeRun: NodeRunItem) => {
@@ -934,6 +986,14 @@ export default function RunDetailPage() {
     return getNodeRunAgentTrace(selectedNodeRun);
   }, [selectedNodeRun]);
 
+  const runMemoryActivity = useMemo(() => {
+    return deriveRunMemoryActivity(run);
+  }, [run]);
+
+  const selectedNodeMemoryActivity = useMemo(() => {
+    return getNodeRunMemoryActivity(selectedNodeRun);
+  }, [selectedNodeRun]);
+
   const displayedRunDurationMs = useMemo(() => {
     if (!run) return null;
     if (run.duration_ms !== null && run.duration_ms !== undefined) return run.duration_ms;
@@ -1268,6 +1328,12 @@ export default function RunDetailPage() {
                 </Card>
               )}
 
+              <RunMemoryActivityPanel
+                summary={runMemoryActivity}
+                getNodeLabel={(nodeId) => nodeNameById[nodeId] ?? nodeId}
+                onSelectNode={selectNodeAttempt}
+              />
+
               <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle>Run data</CardTitle>
@@ -1298,6 +1364,8 @@ export default function RunDetailPage() {
                         {run.node_runs.map((nodeRun) => {
                           const isSelected = nodeRun.id === selectedNodeRunId;
                           const nodeName = formatNodeLabel(nodeRun);
+                          const nodeMemoryActivity = getNodeRunMemoryActivity(nodeRun);
+                          const nodeMemoryLabel = getNodeMemoryLabel(nodeMemoryActivity);
                           const showNodeStatusText =
                             !(String(run.status) === "failed" && String(nodeRun.status) === "failed");
 
@@ -1314,9 +1382,19 @@ export default function RunDetailPage() {
                               <div className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate">{nodeName}</p>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    attempt {nodeRun.attempt}
-                                  </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <p className="text-xs text-muted-foreground">
+                                      attempt {nodeRun.attempt}
+                                    </p>
+                                    {nodeMemoryLabel ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-border/50 bg-background/70 text-[11px] uppercase tracking-[0.14em] text-muted-foreground"
+                                      >
+                                        {nodeMemoryLabel}
+                                      </Badge>
+                                    ) : null}
+                                  </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
                                   <Badge
@@ -1378,6 +1456,13 @@ export default function RunDetailPage() {
                         </div>
 
                         <Separator />
+
+                        {selectedNodeMemoryActivity ? (
+                          <>
+                            <NodeMemoryActivityPanel activity={selectedNodeMemoryActivity} />
+                            <Separator />
+                          </>
+                        ) : null}
 
                         {selectedNodeAgentTrace && (
                           <>

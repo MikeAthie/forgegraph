@@ -39,6 +39,7 @@ export interface AgentWizardPreset {
 }
 
 export const AGENT_OUTPUT_PLACEHOLDER = "__AGENT_NODE__";
+export const OBSERVATION_CONTEXT_PLACEHOLDER = "__OBSERVATION_CONTEXT_NODE__";
 
 export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
   {
@@ -122,19 +123,24 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
   },
   {
     id: "memory-first-assistant",
-    name: "Memory-first assistant",
-    description: "Use persistent memory before answering and store the final answer after.",
+    name: "Jackie memory workflow",
+    description:
+      "Recall Jackie-specific curated memory before answering and save a new observation after.",
     expectedOutcome:
-      "The workflow loads memory, runs the agent, stores the final answer back to memory, and returns the response.",
-    credentialHints: ["Optional: configure a persistent memory backend before running this flow"],
+      "The workflow recalls Jackie context, answers with that context in view, saves a new observation, and returns the response.",
+    credentialHints: [
+      "Optional: configure a persistent memory backend before running this flow",
+      "No external integration is required for the supported Jackie demo path",
+    ],
     seed: {
-      agentLabel: "Context Agent",
-      role: "Context-Aware Assistant",
-      job_description: "Answer using recalled context and the latest user request.",
+      agentLabel: "Jackie",
+      role: "Jackie Relationship Assistant",
+      job_description:
+        "Answer using recalled customer context and the latest user request.",
       instructions:
-        "Review available workflow state, use the conversation history if present, and return a final answer once the task is complete.",
+        "Review the curated observation context before answering. Use remembered customer details when they are relevant, then return a direct final answer.",
       system_prompt:
-        "Use available memory context when relevant. If memory is empty, continue normally.",
+        "You are Jackie, a memory-first assistant. Prefer retrieved curated observations when they help you answer accurately, but continue normally if context is empty.",
       provider: "openai",
       model: "gpt-4.1-mini",
       temperature: 0.3,
@@ -157,12 +163,12 @@ export function buildAgentWizardBlueprint(seed: AgentWizardPresetSeed & {
 
   if (seed.memoryMode === "persistent") {
     nodes.push({
-      nodeType: NODE_TYPES.MEMORY,
-      label: "Load Memory",
+      nodeType: NODE_TYPES.OBSERVATION_CONTEXT,
+      label: "Recall Jackie Context",
       config: {
-        action: "get",
-        key: "conversation_history",
-        namespace_path: "input.thread_id",
+        query_template:
+          "What should I remember about Jackie before answering this request?",
+        limit: 5,
       },
     });
   }
@@ -181,6 +187,13 @@ export function buildAgentWizardBlueprint(seed: AgentWizardPresetSeed & {
       temperature: seed.temperature,
       tools: seed.tools,
       approval_required_tools: seed.approval_required_tools,
+      ...(seed.memoryMode === "persistent"
+        ? {
+            observation_context_paths: [
+              `node.${OBSERVATION_CONTEXT_PLACEHOLDER}.output`,
+            ],
+          }
+        : {}),
       max_steps: 6,
       max_tool_calls: 4,
     } satisfies Partial<AgentNodeConfig>,
@@ -188,13 +201,16 @@ export function buildAgentWizardBlueprint(seed: AgentWizardPresetSeed & {
 
   if (seed.memoryMode === "persistent") {
     nodes.push({
-      nodeType: NODE_TYPES.MEMORY,
-      label: "Store Memory",
+      nodeType: NODE_TYPES.OBSERVATION_SAVE,
+      label: "Save Jackie Observation",
       config: {
-        action: "set",
-        key: "conversation_history",
-        namespace_path: "input.thread_id",
-        value_path: `node.${AGENT_OUTPUT_PLACEHOLDER}.output.final_output`,
+        type: "customer_memory",
+        scope: "graph",
+        title_template: "Jackie follow-up memory",
+        content_template: `Latest request: {{input.message}}. Final answer: {{node.${AGENT_OUTPUT_PLACEHOLDER}.output.final_output}}`,
+        topic_key: "jackie-memory",
+        dedupe: true,
+        update_topic: true,
       },
     });
   }

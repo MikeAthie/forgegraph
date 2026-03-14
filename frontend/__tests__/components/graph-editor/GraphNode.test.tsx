@@ -363,6 +363,26 @@ describe("GraphNode", () => {
 
       expect(screen.getByText("Human Gate")).toBeInTheDocument();
     });
+
+    it("should display correct label for Observation Save type", () => {
+      const props = createNodeProps(NODE_TYPES.OBSERVATION_SAVE, "Node");
+      render(<GraphNode {...props} />);
+
+      expect(screen.getByText("Observation Save")).toBeInTheDocument();
+    });
+  });
+
+  describe("Config Preview - Observation Nodes", () => {
+    it("shows observation context preview when configured", () => {
+      const props = createNodeProps(NODE_TYPES.OBSERVATION_CONTEXT, "Recall", {
+        query: "Remember Jackie preferences",
+      });
+      render(<GraphNode {...props} />);
+
+      expect(screen.getByTestId("node-config-preview")).toHaveTextContent(
+        "Context",
+      );
+    });
   });
 
   describe("Layout and Structure", () => {

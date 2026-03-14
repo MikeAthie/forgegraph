@@ -9,6 +9,9 @@ Convert `P1-F01` into reviewable implementation slices with explicit file target
 - REST and gRPC must expose observation-centric workflows
 - indexing, dedupe, and tenant scoping must be explicit and testable
 
+## Status
+`P1-F01` is complete as of March 13, 2026.
+
 ## Current Repo Reality
 The current codebase already has:
 - graph-level memory configuration
@@ -60,15 +63,15 @@ Introduce the curated-memory architecture and lock the domain decisions before i
 - `docs/mvp/mvp-remediation-tasks.md`
 
 ### Acceptance Criteria
-- [ ] Curated memory is documented as a native ForgeGraph subdomain.
-- [ ] The MVP decisions are locked:
+- [x] Curated memory is documented as a native ForgeGraph subdomain.
+- [x] The MVP decisions are locked:
   - internal-only exposure
   - explicit capture first
   - hybrid FTS + vector
   - graph/run/session scope
   - async indexing
-- [ ] Existing KV/session/vector memory is explicitly preserved.
-- [ ] P1 docs and implementation plan point to curated memory instead of the older onboarding-first P1 narrative.
+- [x] Existing KV/session/vector memory is explicitly preserved.
+- [x] P1 docs and implementation plan point to curated memory instead of the older onboarding-first P1 narrative.
 
 ### Tests
 - doc-only PR; no new code tests required
@@ -103,11 +106,11 @@ Add the `MemoryObservation` persistence model and service-layer primitives witho
 - `backend/tests/unit/domain/test_models.py`
 
 ### Acceptance Criteria
-- [ ] `MemoryObservation` exists with the agreed core fields.
-- [ ] Tenant, graph, run, and session scope are represented explicitly.
-- [ ] Soft-delete-ready fields exist.
-- [ ] Service methods exist for create/update/delete/search/detail/timeline/context orchestration, even if API handlers are not wired yet.
-- [ ] Existing memory models remain backward compatible.
+- [x] `MemoryObservation` exists with the agreed core fields.
+- [x] Tenant, graph, run, and session scope are represented explicitly.
+- [x] Soft-delete-ready fields exist.
+- [x] Service methods exist for create/update/delete/search/detail/timeline/context orchestration, even if API handlers are not wired yet.
+- [x] Existing memory models remain backward compatible.
 
 ### Tests
 - backend model tests for indexes/constraints where appropriate
@@ -143,15 +146,15 @@ Expose curated memory through backend REST endpoints for product UI and browser 
 - `backend/adapters/api/runs/views.py`
 
 ### Acceptance Criteria
-- [ ] REST endpoints exist for:
+- [x] REST endpoints exist for:
   - create/update/delete
   - search
   - detail
   - timeline
   - context
-- [ ] Filters, pagination, and scope constraints are explicit and stable.
-- [ ] Redaction and field-size validation are enforced at API boundaries.
-- [ ] Cross-tenant access is denied consistently.
+- [x] Filters, pagination, and scope constraints are explicit and stable.
+- [x] Redaction and field-size validation are enforced at API boundaries.
+- [x] Cross-tenant access is denied consistently.
 
 ### Tests
 - integration tests for create/search/detail/delete flows
@@ -191,15 +194,15 @@ Extend the memory gRPC surface so runtime components can save and retrieve curat
 - client wrapper files that P1-F02 will later consume
 
 ### Acceptance Criteria
-- [ ] The memory service exposes additive methods for:
+- [x] The memory service exposes additive methods for:
   - `SaveObservation`
   - `SearchObservations`
   - `GetObservation`
   - `GetContext`
   - `GetTimeline`
-- [ ] `RetrieveMemory` remains backward compatible.
-- [ ] Timeout and error handling match the existing memory gRPC expectations.
-- [ ] Response shapes are stable enough for engine/runtime work to build on directly.
+- [x] `RetrieveMemory` remains backward compatible.
+- [x] Timeout and error handling match the existing memory gRPC expectations.
+- [x] Response shapes are stable enough for engine/runtime work to build on directly.
 
 ### Tests
 - gRPC integration tests for new methods
@@ -238,11 +241,11 @@ Finish the domain with production-grade search and write-path semantics: dedupe,
 - `backend/adapters/api/analytics/memory_analytics.py`
 
 ### Acceptance Criteria
-- [ ] Observation writes support normalization, dedupe, and topic-aware updates.
-- [ ] Async indexing creates or updates `MemoryChunk` records with observation metadata.
-- [ ] Search degrades safely when embeddings are unavailable or delayed.
-- [ ] Retention/GC behavior for observations is defined and does not conflict with existing memory cleanup.
-- [ ] Domain metrics or counters exist for indexing failures and observation volume if needed for the next phase.
+- [x] Observation writes support normalization, dedupe, and topic-aware updates.
+- [x] Async indexing creates or updates `MemoryChunk` records with observation metadata.
+- [x] Search degrades safely when embeddings are unavailable or delayed.
+- [x] Retention/GC behavior for observations is defined and does not conflict with existing memory cleanup.
+- [x] Domain metrics or counters exist for indexing failures and observation volume if needed for the next phase.
 
 ### Tests
 - unit tests for dedupe and topic-upsert behavior
@@ -267,7 +270,7 @@ Land the memory architecture and planning docs before implementation if the team
 - `docs/mvp/p1-f01-implementation-tickets.md`
 
 ### Acceptance Criteria
-- [ ] The domain and roadmap decisions are agreed before model/API work starts.
+- [x] The domain and roadmap decisions are agreed before model/API work starts.
 
 ---
 
@@ -280,8 +283,8 @@ Land the memory architecture and planning docs before implementation if the team
 6. PR-5
 
 ## Final Ticket-Level Definition of Done
-- [ ] All PRs merged in order or with explicitly managed overlap
-- [ ] Curated memory exists as a first-class backend domain
-- [ ] REST and gRPC contracts are stable and additive
-- [ ] Observation writes, search, context, and indexing behavior are test-backed
-- [ ] `P1-F02` can start without making new contract decisions
+- [x] All PRs merged in order or with explicitly managed overlap
+- [x] Curated memory exists as a first-class backend domain
+- [x] REST and gRPC contracts are stable and additive
+- [x] Observation writes, search, context, and indexing behavior are test-backed
+- [x] `P1-F02` can start without making new contract decisions

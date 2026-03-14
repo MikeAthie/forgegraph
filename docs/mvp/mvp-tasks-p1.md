@@ -5,6 +5,13 @@ Turn ForgeGraph's current memory foundations into a product-level differentiator
 
 If P0 made ForgeGraph truthful, P1 makes it memory-native.
 
+## Status
+P1 is complete as of March 13, 2026.
+
+Validation and close-out references:
+- `docs/mvp/p1-memory-qa-matrix.md`
+- `docs/mvp/p1-memory-narrative.md`
+
 ## What P1 Must Achieve
 At the end of P1, ForgeGraph should be able to make the following promise:
 
@@ -37,11 +44,11 @@ P1 is about adding a curated memory layer on top of those foundations, not repla
 
 ## P1 Exit State
 P1 is complete only when all of the following are true:
-- [ ] ForgeGraph has a first-class curated memory domain centered on observations.
-- [ ] Agents and workflows can save and retrieve curated memory through explicit nodes.
-- [ ] Users can browse memory items, search them, inspect details, and view timelines.
-- [ ] A Jackie-style supported workflow proves save -> later retrieval -> agent response end to end.
-- [ ] Memory behavior is inspectable in the run/debug surfaces rather than hidden inside raw state.
+- [x] ForgeGraph has a first-class curated memory domain centered on observations.
+- [x] Agents and workflows can save and retrieve curated memory through explicit nodes.
+- [x] Users can browse memory items, search them, inspect details, and view timelines.
+- [x] A Jackie-style supported workflow proves save -> later retrieval -> agent response end to end.
+- [x] Memory behavior is inspectable in the run/debug surfaces rather than hidden inside raw state.
 
 ## Implementation Readiness
 This file is ready to drive implementation once P0 is stable enough for product-facing work.
@@ -94,9 +101,9 @@ This is the core P1 feature. It changes ForgeGraph from having only operational 
 ### Detailed Tasks
 
 #### F01-T01: Define the curated memory contract
-- [ ] Finalize `docs/architecture/curated-memory.md`.
-- [ ] Define the `MemoryObservation` domain shape.
-- [ ] Define observation lifecycle semantics:
+- [x] Finalize `docs/architecture/curated-memory.md`.
+- [x] Define the `MemoryObservation` domain shape.
+- [x] Define observation lifecycle semantics:
   - create
   - update
   - soft delete
@@ -104,24 +111,24 @@ This is the core P1 feature. It changes ForgeGraph from having only operational 
   - topic upsert
   - timeline
   - context assembly
-- [ ] Define the scope model:
+- [x] Define the scope model:
   - graph
   - run
   - session
   - tenant isolation
-- [ ] Define degradation behavior when vector indexing is unavailable.
+- [x] Define degradation behavior when vector indexing is unavailable.
 
 #### F01-T02: Add backend model and persistence
-- [ ] Add `MemoryObservation` ORM model and migration.
-- [ ] Add indexes for:
+- [x] Add `MemoryObservation` ORM model and migration.
+- [x] Add indexes for:
   - tenant + recency
   - tenant + topic_key
   - FTS search
-- [ ] Keep `MemoryEntry` and `MemoryChunk` unchanged and additive.
-- [ ] Add metadata linkage from observations to optional `MemoryChunk` rows.
+- [x] Keep `MemoryEntry` and `MemoryChunk` unchanged and additive.
+- [x] Add metadata linkage from observations to optional `MemoryChunk` rows.
 
 #### F01-T03: Add REST contracts
-- [ ] Add endpoints for:
+- [x] Add endpoints for:
   - create observation
   - update observation
   - delete observation
@@ -129,42 +136,42 @@ This is the core P1 feature. It changes ForgeGraph from having only operational 
   - get observation detail
   - get timeline
   - get context
-- [ ] Define redaction, pagination, and filtering behavior.
-- [ ] Keep the API isolated under `/api/memory/...`.
+- [x] Define redaction, pagination, and filtering behavior.
+- [x] Keep the API isolated under `/api/memory/...`.
 
 #### F01-T04: Extend gRPC contracts
-- [ ] Extend the memory service with additive methods:
+- [x] Extend the memory service with additive methods:
   - `SaveObservation`
   - `SearchObservations`
   - `GetObservation`
   - `GetContext`
   - `GetTimeline`
-- [ ] Keep `RetrieveMemory` backward compatible.
-- [ ] Version contract changes so old engine behavior does not break.
+- [x] Keep `RetrieveMemory` backward compatible.
+- [x] Version contract changes so old engine behavior does not break.
 
 #### F01-T05: Add observation service behavior
-- [ ] Implement normalization and `topic_key` handling.
-- [ ] Implement duplicate detection.
-- [ ] Implement soft delete and timeline paging.
-- [ ] Implement async observation-to-vector indexing.
-- [ ] Ensure observation writes do not block on embedding generation.
+- [x] Implement normalization and `topic_key` handling.
+- [x] Implement duplicate detection.
+- [x] Implement soft delete and timeline paging.
+- [x] Implement async observation-to-vector indexing.
+- [x] Ensure observation writes do not block on embedding generation.
 
 #### F01-T06: Test coverage
-- [ ] Unit tests for:
+- [x] Unit tests for:
   - normalization
   - dedupe
   - topic upsert
   - soft delete
   - timeline ordering
-- [ ] Integration tests for REST and gRPC contract behavior.
-- [ ] Tenant isolation tests.
-- [ ] Failure tests for indexing lag/fallback behavior.
+- [x] Integration tests for REST and gRPC contract behavior.
+- [x] Tenant isolation tests.
+- [x] Failure tests for indexing lag/fallback behavior.
 
 ### Success Criteria
-- [ ] Curated memory exists as a native backend domain, not an overloaded extension of KV memory.
-- [ ] REST and gRPC contracts are stable and additive.
-- [ ] Observation writes succeed independently of vector indexing progress.
-- [ ] Existing memory features continue to work unchanged.
+- [x] Curated memory exists as a native backend domain, not an overloaded extension of KV memory.
+- [x] REST and gRPC contracts are stable and additive.
+- [x] Observation writes succeed independently of vector indexing progress.
+- [x] Existing memory features continue to work unchanged.
 
 ### Proof / Demo Feat
 Create an observation through the new API, retrieve it through search and detail views, and show the same memory item available for runtime context assembly later.
@@ -193,48 +200,48 @@ Expose curated memory to workflows and agents as explicit runtime primitives rat
 ### Detailed Tasks
 
 #### F02-T01: Add curated memory node types
-- [ ] Add node types for:
+- [x] Add node types for:
   - `observation_save`
   - `observation_search`
   - `observation_context`
   - `observation_timeline`
-- [ ] Define stable config and output shapes for each node.
-- [ ] Keep existing `memory` node behavior intact.
+- [x] Define stable config and output shapes for each node.
+- [x] Keep existing `memory` node behavior intact.
 
 #### F02-T02: Implement engine executors
-- [ ] Add engine executors for the new node types.
-- [ ] Wire them to the extended memory gRPC service.
-- [ ] Respect tenant, graph, run, and session scope automatically.
-- [ ] Surface explicit runtime errors for unavailable memory backends or contract failures.
+- [x] Add engine executors for the new node types.
+- [x] Wire them to the extended memory gRPC service.
+- [x] Respect tenant, graph, run, and session scope automatically.
+- [x] Surface explicit runtime errors for unavailable memory backends or contract failures.
 
 #### F02-T03: Integrate curated context with prompts and agents
-- [ ] Allow prompt/agent flows to consume `observation_context` outputs.
-- [ ] Define the context composition order:
+- [x] Allow prompt/agent flows to consume `observation_context` outputs.
+- [x] Define the context composition order:
   - curated observations
   - summary/facts if enabled
   - semantic chunk retrieval if enabled
   - recent buffer if enabled
-- [ ] Ensure this remains explicit in graph authoring for MVP.
+- [x] Ensure this remains explicit in graph authoring for MVP.
 
 #### F02-T04: Add trace/debug visibility
-- [ ] Persist observation save/search/context events in run surfaces.
-- [ ] Show retrieved memory summaries in run detail.
-- [ ] Make memory influence on prompt/agent execution inspectable.
+- [x] Persist observation save/search/context events in run surfaces.
+- [x] Show retrieved memory summaries in run detail.
+- [x] Make memory influence on prompt/agent execution inspectable.
 
 #### F02-T05: Test coverage
-- [ ] Engine tests for save/search/context/timeline nodes.
-- [ ] Integration tests for run-time observation usage.
-- [ ] Negative tests for:
+- [x] Engine tests for save/search/context/timeline nodes.
+- [x] Integration tests for run-time observation usage.
+- [x] Negative tests for:
   - missing scope
   - invalid observation payloads
   - unavailable gRPC methods
   - degraded vector indexing
 
 ### Success Criteria
-- [ ] Workflows can explicitly save and retrieve curated memory end to end.
-- [ ] Curated memory works with agent and prompt flows without hidden magic.
-- [ ] Run/debug views show what memory was created or used.
-- [ ] Existing prompt/agent behavior is unchanged unless curated memory nodes are used.
+- [x] Workflows can explicitly save and retrieve curated memory end to end.
+- [x] Curated memory works with agent and prompt flows without hidden magic.
+- [x] Run/debug views show what memory was created or used.
+- [x] Existing prompt/agent behavior is unchanged unless curated memory nodes are used.
 
 ### Proof / Demo Feat
 Run a workflow that saves an observation in one step, retrieves contextual memory in a later step, and shows both operations clearly in the run trace.
@@ -263,45 +270,45 @@ Turn curated memory into a user-understandable product surface with a browser UI
 ### Detailed Tasks
 
 #### F03-T01: Add Memory Browser UI
-- [ ] Add a Memory Browser page for:
+- [x] Add a Memory Browser page for:
   - search
   - filters
   - detail view
   - timeline view
-- [ ] Support keyword and semantic retrieval results clearly.
-- [ ] Make scope and recency visible.
+- [x] Support keyword and semantic retrieval results clearly.
+- [x] Make scope and recency visible.
 
 #### F03-T02: Add authoring support
-- [ ] Add graph editor forms for all curated-memory node types.
-- [ ] Add palette entries and inspector support.
-- [ ] Add validation and empty-state guidance.
+- [x] Add graph editor forms for all curated-memory node types.
+- [x] Add palette entries and inspector support.
+- [x] Add validation and empty-state guidance.
 
 #### F03-T03: Add memory-aware debugger surfaces
-- [ ] Show observation hits and context assembly on run detail pages.
-- [ ] Group memory events so users can see what was saved, what was reused, and why.
-- [ ] Keep raw payloads available only as drill-down.
+- [x] Show observation hits and context assembly on run detail pages.
+- [x] Group memory events so users can see what was saved, what was reused, and why.
+- [x] Keep raw payloads available only as drill-down.
 
 #### F03-T04: Package the Jackie-style supported journey
-- [ ] Define one supported memory-first workflow based on Jackie.
-- [ ] Ensure the journey demonstrates:
+- [x] Define one supported memory-first workflow based on Jackie.
+- [x] Ensure the journey demonstrates:
   - explicit observation save
   - later retrieval through context
   - final agent answer using that context
-- [ ] Keep required integrations narrow and documented.
+- [x] Keep required integrations narrow and documented.
 
 #### F03-T05: Browser and QA proof
-- [ ] Add Playwright coverage for:
+- [x] Add Playwright coverage for:
   - authoring curated-memory nodes
   - saving a graph with memory flow
   - executing save -> later retrieval
   - inspecting memory influence in the run UI
-- [ ] Record known limitations explicitly.
+- [x] Record known limitations explicitly.
 
 ### Success Criteria
-- [ ] Users can browse and understand curated memory without source-code reading.
-- [ ] The editor supports curated-memory authoring end to end.
-- [ ] A Jackie-style workflow demonstrates the full save -> later retrieval story.
-- [ ] Browser-level proof exists for the supported memory journey.
+- [x] Users can browse and understand curated memory without source-code reading.
+- [x] The editor supports curated-memory authoring end to end.
+- [x] A Jackie-style workflow demonstrates the full save -> later retrieval story.
+- [x] Browser-level proof exists for the supported memory journey.
 
 ### Proof / Demo Feat
 Use the product UI to create a Jackie-style workflow that saves an observation during one interaction and uses it in a later run to answer with visible, memory-backed context.
@@ -311,20 +318,20 @@ Use the product UI to create a Jackie-style workflow that saves an observation d
 ## Cross-Cutting P1 Tasks
 
 ### P1-X01: Scope Discipline
-- [ ] Keep P1 focused on explicit curated memory and one supported Jackie-style journey.
-- [ ] Reject passive capture, public MCP, and broad memory-product expansion from the MVP surface.
+- [x] Keep P1 focused on explicit curated memory and one supported Jackie-style journey.
+- [x] Reject passive capture, public MCP, and broad memory-product expansion from the MVP surface.
 
 ### P1-X02: Internal QA Matrix
-- [ ] Build a QA matrix covering:
+- [x] Build a QA matrix covering:
   - observation create/update/delete
   - search and timeline behavior
   - vector indexing lag/fallback
   - save -> later retrieval runtime flow
   - Jackie-style browser proof
-- [ ] Record known limitations and unsupported states.
+- [x] Record known limitations and unsupported states.
 
 ### P1-X03: Internal Product Narrative
-- [ ] Write one internal positioning note covering:
+- [x] Write one internal positioning note covering:
   - why curated memory exists
   - how it differs from KV/session/vector memory
   - which workflows are officially supported in MVP
@@ -349,9 +356,9 @@ Use the product UI to create a Jackie-style workflow that saves an observation d
 - P1-X01 to P1-X03
 
 ## Final Definition of Done
-- [ ] P1-F01 complete
-- [ ] P1-F02 complete
-- [ ] P1-F03 complete
-- [ ] ForgeGraph has a memory-first MVP story built around curated observations
-- [ ] Users can save, retrieve, inspect, and debug curated memory through the product UI
-- [ ] The Jackie-style workflow proves the memory value end to end
+- [x] P1-F01 complete
+- [x] P1-F02 complete
+- [x] P1-F03 complete
+- [x] ForgeGraph has a memory-first MVP story built around curated observations
+- [x] Users can save, retrieve, inspect, and debug curated memory through the product UI
+- [x] The Jackie-style workflow proves the memory value end to end

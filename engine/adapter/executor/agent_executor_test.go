@@ -396,3 +396,94 @@ func TestAgentExecutor_Execute_ResumesApprovedToolCall(t *testing.T) {
 		t.Fatal("expected resume state to be cleared after resume")
 	}
 }
+
+func TestAgentExecutor_Execute_WithExplicitCuratedContext(t *testing.T) {
+	client := &sequenceLLMClient{
+		responses: []*LLMResponse{
+			{Content: `{"action":"final_answer","final_answer":"Use the saved context."}`, Model: "gpt-4.1-mini"},
+		},
+	}
+	retriever := &testMemoryRetriever{
+		response: port.MemoryRetrieveResponse{
+			Chunks: []port.MemoryChunk{
+				{Content: "Semantic memory about the renewal process"},
+			},
+		},
+	}
+	executor := NewAgentExecutorWithToolInvoker(client, &mockAgentToolInvoker{})
+	state := entity.NewStateWithInput(map[string]any{"ticket": "T-123"})
+	state.SetNodeOutput("obs_ctx", map[string]any{
+		"observations": []any{
+			map[string]any{
+				"id":      "obs-1",
+				"type":    "fact",
+				"title":   "Renewal status",
+				"content": "Customer confirmed renewal interest.",
+				"scope":   "session",
+			},
+		},
+		"strategies": []any{"fts"},
+	})
+
+	buffer := entity.NewMessageBuffer(5)
+	buffer.Push(entity.Message{Role: "user", Content: "Earlier question"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "Earlier answer"})
+
+	runCtx := &port.RunContext{
+		MemoryBuffer: buffer,
+		MemoryConfig: &entity.MemoryConfig{
+			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: true},
+			Tier3: entity.Tier3Config{Enabled: true, TopK: 5, Threshold: 0.7, RecencyWeight: 0.2},
+		},
+		CurrentSummary: &entity.Summary{
+			Content: "We already qualified this account.",
+		},
+		MemoryRetriever: retriever,
+	}
+	ctx := port.WithRunContext(context.Background(), runCtx)
+	ctx = port.WithTenantID(ctx, "tenant-1")
+
+	node := &entity.Node{
+		ID:   "agent_curated",
+		Type: string(value.NodeTypeAgent),
+		Config: map[string]any{
+			"model":                     "gpt-4.1-mini",
+			"tools":                     []any{"crm_lookup"},
+			"instructions":              "Resolve ticket {{input.ticket}}.",
+			"observation_context_paths": []any{"node.obs_ctx.output"},
+		},
+	}
+
+	result, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	prompt := client.received[0].Prompt
+	curatedIndex := strings.Index(prompt, "Curated observations:")
+	summaryIndex := strings.Index(prompt, "Summary of earlier conversation:")
+	vectorIndex := strings.Index(prompt, "Relevant memories:")
+	bufferIndex := strings.Index(prompt, "Recent messages:")
+	stateIndex := strings.Index(prompt, "Current workflow state:")
+	if curatedIndex < 0 || summaryIndex < 0 || vectorIndex < 0 || bufferIndex < 0 || stateIndex < 0 {
+		t.Fatalf("expected all memory sections in agent prompt, got: %s", prompt)
+	}
+	if !(curatedIndex < summaryIndex && summaryIndex < vectorIndex && vectorIndex < bufferIndex && bufferIndex < stateIndex) {
+		t.Fatalf("unexpected section order in agent prompt: %s", prompt)
+	}
+
+	output := result.Output.(map[string]any)
+	memoryContext, ok := output["memory_context"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected memory_context output, got %T", output["memory_context"])
+	}
+	if memoryContext["curated_observation_count"] != 1 {
+		t.Fatalf("curated_observation_count = %v, want 1", memoryContext["curated_observation_count"])
+	}
+	if memoryContext["vector_memory_count"] != 1 {
+		t.Fatalf("vector_memory_count = %v, want 1", memoryContext["vector_memory_count"])
+	}
+}

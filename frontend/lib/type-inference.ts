@@ -114,6 +114,16 @@ export function inferOutputType(node: GraphNode): DataTypeSchema {
       // Get returns the stored value (type unknown)
       return { type: DataType.ANY, isInferred: true };
 
+    case NODE_TYPES.OBSERVATION_SAVE:
+    case NODE_TYPES.OBSERVATION_SEARCH:
+    case NODE_TYPES.OBSERVATION_CONTEXT:
+    case NODE_TYPES.OBSERVATION_TIMELINE:
+      return {
+        type: DataType.JSON,
+        description: "Curated memory payload",
+        isInferred: true,
+      };
+
     case NODE_TYPES.TOOL:
       // Tool output depends on the specific tool
       return { type: DataType.JSON, isInferred: true };

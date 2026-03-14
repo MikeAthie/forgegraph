@@ -38,6 +38,26 @@ const NODE_TYPE_INFO: Record<string, { label: string; color: string; icon: strin
   [NODE_TYPES.MERGE]: { label: "Merge", color: "bg-cyan-500", icon: "M" },
   [NODE_TYPES.HUMAN_GATE]: { label: "Human Gate", color: "bg-rose-500", icon: "G" },
   [NODE_TYPES.MEMORY]: { label: "Memory", color: "bg-indigo-500", icon: "M" },
+  [NODE_TYPES.OBSERVATION_SAVE]: {
+    label: "Observation Save",
+    color: "bg-teal-700",
+    icon: "OS",
+  },
+  [NODE_TYPES.OBSERVATION_SEARCH]: {
+    label: "Observation Search",
+    color: "bg-sky-700",
+    icon: "SR",
+  },
+  [NODE_TYPES.OBSERVATION_CONTEXT]: {
+    label: "Observation Context",
+    color: "bg-blue-700",
+    icon: "CX",
+  },
+  [NODE_TYPES.OBSERVATION_TIMELINE]: {
+    label: "Observation Timeline",
+    color: "bg-violet-700",
+    icon: "TL",
+  },
   [NODE_TYPES.TOOL]: { label: "Tool", color: "bg-teal-500", icon: "T" },
   [NODE_TYPES.SUBGRAPH]: { label: "Subgraph", color: "bg-purple-500", icon: "S" },
 };

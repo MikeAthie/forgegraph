@@ -29,6 +29,7 @@ export default function Header() {
     { href: "/graphs", label: "Graphs" },
     { href: "/prompts", label: "Prompts" },
     { href: "/credentials", label: "Credentials" },
+    { href: "/memory", label: "Memory" },
     { href: "/runs", label: "Runs" },
     { href: "/analytics/llm", label: "Analytics" },
     { href: "/approvals", label: "Approvals" },
@@ -43,6 +44,7 @@ export default function Header() {
     if (router.pathname.startsWith("/graphs")) return "/graphs";
     if (router.pathname.startsWith("/prompts")) return "/prompts";
     if (router.pathname.startsWith("/credentials")) return "/credentials";
+    if (router.pathname.startsWith("/memory")) return "/memory";
     if (router.pathname.startsWith("/runs")) return "/runs";
     if (router.pathname.startsWith("/analytics")) return "/analytics/llm";
     if (router.pathname.startsWith("/approvals")) return "/approvals";
