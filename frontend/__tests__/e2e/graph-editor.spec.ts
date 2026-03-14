@@ -457,7 +457,10 @@ test.describe("Graph Editor", () => {
 
     // Configure HTTP settings
     await expect(page.getByText("HTTP Configuration")).toBeVisible();
-    const methodSelect = page.getByRole("complementary", { name: /inspector panel/i }).locator("select").first();
+    const methodSelect = page
+      .getByRole("complementary", { name: /inspector panel/i })
+      .locator("select")
+      .first();
     await methodSelect.selectOption("POST");
 
     const urlInput = page.getByPlaceholder(/https:\/\/api\.example\.com/i);
