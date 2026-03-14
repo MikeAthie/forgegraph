@@ -11,12 +11,7 @@ import {
   validateObservationSource,
 } from "./observation-form-utils";
 
-export function ObservationContextNodeForm({
-  config,
-  onChange,
-  errors,
-  setErrors,
-}: NodeFormProps) {
+export function ObservationContextNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const contextConfig = config as Record<string, unknown>;
 
   const computedErrors = {
@@ -90,15 +85,7 @@ export function ObservationContextNodeForm({
             type="number"
             min={1}
             value={String(contextConfig.limit ?? "")}
-            onChange={(event) =>
-              onChange(
-                updateObservationNumberField(
-                  contextConfig,
-                  "limit",
-                  event.target.value,
-                ),
-              )
-            }
+            onChange={(event) => onChange(updateObservationNumberField(contextConfig, "limit", event.target.value))}
             placeholder="5"
             className="text-sm"
           />

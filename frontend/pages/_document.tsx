@@ -14,7 +14,10 @@ export default function Document() {
           name="description"
           content="Create powerful AI agents without the complexity. Visual workflow builder that lets you design, test, and deploy AI automation in minutes."
         />
-        <meta name="keywords" content="AI agents, workflow automation, AI builder, no-code AI, visual programming, LLM automation, AI workflows" />
+        <meta
+          name="keywords"
+          content="AI agents, workflow automation, AI builder, no-code AI, visual programming, LLM automation, AI workflows"
+        />
         <meta name="author" content="ForgeGraph" />
 
         {/* Open Graph / Facebook */}

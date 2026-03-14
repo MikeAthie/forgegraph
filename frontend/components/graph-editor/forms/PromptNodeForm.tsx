@@ -52,21 +52,21 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
     <K extends keyof PromptConfig>(field: K, value: PromptConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   useEffect(() => {
@@ -99,24 +99,18 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
   const provider = promptConfig.provider || "openai";
   const filteredCredentials = useMemo(
     () => credentials.filter((item) => item.provider === provider),
-    [credentials, provider]
+    [credentials, provider],
   );
   const observationContextPaths = useMemo(
     () =>
-      Array.isArray(promptConfig.observation_context_paths)
-        ? promptConfig.observation_context_paths.join("\n")
-        : "",
+      Array.isArray(promptConfig.observation_context_paths) ? promptConfig.observation_context_paths.join("\n") : "",
     [promptConfig.observation_context_paths],
   );
 
   return (
     <div className="space-y-6">
       {/* Agent Context */}
-      <AgentFields
-        config={promptConfig}
-        onChange={handleAgentChange}
-        showExamples={true}
-      />
+      <AgentFields config={promptConfig} onChange={handleAgentChange} showExamples={true} />
 
       <Separator />
 
@@ -127,7 +121,7 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
         <FormField
           label="System Prompt"
           htmlFor="system-prompt"
-          description="Instructions that define the assistant&apos;s behavior"
+          description="Instructions that define the assistant's behavior"
         >
           <Textarea
             id="system-prompt"
@@ -158,10 +152,7 @@ Please {{task}}"
           />
         </FormField>
 
-        <FormField
-          label="Variables"
-          description="Define variables to use in the prompt template"
-        >
+        <FormField label="Variables" description="Define variables to use in the prompt template">
           <KeyValueEditor
             value={promptConfig.variables || {}}
             onChange={(vars) => handleChange("variables", vars)}
@@ -265,11 +256,7 @@ Please {{task}}"
             </select>
           </FormField>
 
-          <FormField
-            label="Temperature"
-            htmlFor="temperature"
-            description="0 = deterministic, 2 = creative"
-          >
+          <FormField label="Temperature" htmlFor="temperature" description="0 = deterministic, 2 = creative">
             <div className="flex items-center gap-2">
               <input
                 id="temperature"
@@ -278,35 +265,22 @@ Please {{task}}"
                 max={2}
                 step={0.1}
                 value={promptConfig.temperature ?? 0.7}
-                onChange={(e) =>
-                  handleChange("temperature", parseFloat(e.target.value))
-                }
+                onChange={(e) => handleChange("temperature", parseFloat(e.target.value))}
                 className="flex-1"
               />
-              <span className="text-sm text-muted-foreground w-8 text-right">
-                {promptConfig.temperature ?? 0.7}
-              </span>
+              <span className="text-sm text-muted-foreground w-8 text-right">{promptConfig.temperature ?? 0.7}</span>
             </div>
           </FormField>
         </div>
 
-        <FormField
-          label="Max Tokens"
-          htmlFor="max-tokens"
-          description="Maximum number of tokens in the response"
-        >
+        <FormField label="Max Tokens" htmlFor="max-tokens" description="Maximum number of tokens in the response">
           <Input
             id="max-tokens"
             type="number"
             min={1}
             max={128000}
             value={promptConfig.max_tokens || ""}
-            onChange={(e) =>
-              handleChange(
-                "max_tokens",
-                e.target.value ? parseInt(e.target.value, 10) : undefined
-              )
-            }
+            onChange={(e) => handleChange("max_tokens", e.target.value ? parseInt(e.target.value, 10) : undefined)}
             placeholder="4096"
             className="text-sm"
           />

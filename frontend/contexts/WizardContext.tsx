@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useReducer,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 
 /**
  * Wizard step configuration
@@ -267,13 +260,19 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_STEP_DATA", payload: { stepId, data } });
   }, []);
 
-  const markStepComplete = useCallback((step?: number) => {
-    dispatch({ type: "MARK_STEP_COMPLETE", payload: step ?? state.currentStep });
-  }, [state.currentStep]);
+  const markStepComplete = useCallback(
+    (step?: number) => {
+      dispatch({ type: "MARK_STEP_COMPLETE", payload: step ?? state.currentStep });
+    },
+    [state.currentStep],
+  );
 
-  const markStepSkipped = useCallback((step?: number) => {
-    dispatch({ type: "MARK_STEP_SKIPPED", payload: step ?? state.currentStep });
-  }, [state.currentStep]);
+  const markStepSkipped = useCallback(
+    (step?: number) => {
+      dispatch({ type: "MARK_STEP_SKIPPED", payload: step ?? state.currentStep });
+    },
+    [state.currentStep],
+  );
 
   const setCanProceed = useCallback((canProceed: boolean) => {
     dispatch({ type: "SET_CAN_PROCEED", payload: canProceed });
@@ -289,9 +288,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
 
   const isFirstStep = state.currentStep === 0;
   const isLastStep = state.currentStep === state.totalSteps - 1;
-  const progress = state.totalSteps > 0
-    ? ((state.completedSteps.size / state.totalSteps) * 100)
-    : 0;
+  const progress = state.totalSteps > 0 ? (state.completedSteps.size / state.totalSteps) * 100 : 0;
 
   const value = useMemo<WizardContextValue>(
     () => ({
@@ -331,9 +328,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return (
-    <WizardContext.Provider value={value}>{children}</WizardContext.Provider>
-  );
+  return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;
 }
 
 export function useWizard(): WizardContextValue {

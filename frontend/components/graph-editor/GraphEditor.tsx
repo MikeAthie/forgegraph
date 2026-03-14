@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -28,36 +22,16 @@ import {
   BackgroundVariant,
   Panel,
 } from "@xyflow/react";
-import {
-  Brain,
-  Play,
-  Plus,
-  Save as SaveIcon,
-  LayoutGrid,
-  Redo2,
-  Undo2,
-  Wand2,
-} from "lucide-react";
+import { Brain, Play, Plus, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
 
 import { WizardProvider, useWizard } from "@/contexts/WizardContext";
-import {
-  ValidationProvider,
-  useValidation,
-} from "@/contexts/ValidationContext";
+import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
 import { AgentWizard, type AgentWizardCompletePayload } from "./wizard";
 import { ValidationOverlay, ValidationStatusBar } from "./validation";
 
 import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
-import {
-  NODE_TYPES,
-  PHASE2_NODE_TYPES,
-  createEmptyGraphJson,
-  isValidNodeType,
-} from "../../lib/graph-types";
-import {
-  graphJsonToReactFlow,
-  reactFlowToGraphJson,
-} from "../../lib/graph-conversion";
+import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson, isValidNodeType } from "../../lib/graph-types";
+import { graphJsonToReactFlow, reactFlowToGraphJson } from "../../lib/graph-conversion";
 import { getLayoutedElements } from "../../lib/graph-layout";
 import {
   getApiErrorMessage,
@@ -70,10 +44,7 @@ import {
   type RunDetail,
 } from "../../lib/api";
 import { formatJsonForDisplay } from "../../lib/json";
-import {
-  canAddMarketplacePackageToEditor,
-  getMarketplacePackageReason,
-} from "../../lib/marketplace-runtime";
+import { canAddMarketplacePackageToEditor, getMarketplacePackageReason } from "../../lib/marketplace-runtime";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import {
@@ -94,10 +65,7 @@ import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
 import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
 import { NodeConfigDialog } from "./NodeConfigDialog";
 import { MemoryConfigDialog } from "./dialogs/MemoryConfigDialog";
-import {
-  getNodeFormComponent,
-  getNodeTypeInfo,
-} from "./forms/node-form-registry";
+import { getNodeFormComponent, getNodeTypeInfo } from "./forms/node-form-registry";
 import { TypedEdge } from "./TypedEdge";
 import { QuickToolBar } from "./QuickToolBar";
 import { useEdgeTypes } from "@/hooks/useEdgeTypes";
@@ -105,9 +73,7 @@ import { AgentTracePanel } from "../runs/AgentTracePanel";
 
 const NOTE_NODE_TYPE = "note";
 
-const getNodeRunAgentTrace = (
-  nodeRun: NodeRunItem | null,
-): AgentTrace | null => {
+const getNodeRunAgentTrace = (nodeRun: NodeRunItem | null): AgentTrace | null => {
   if (!nodeRun || String(nodeRun.node_type) !== "agent") {
     return null;
   }
@@ -171,10 +137,7 @@ type EditorSnapshot = {
   edges: Edge[];
 };
 
-type ClipboardNode = Pick<
-  Node,
-  "id" | "type" | "position" | "data" | "connectable" | "draggable"
->;
+type ClipboardNode = Pick<Node, "id" | "type" | "position" | "data" | "connectable" | "draggable">;
 type ClipboardEdge = Pick<Edge, "source" | "target" | "label" | "data">;
 type ClipboardSnapshot = {
   nodes: ClipboardNode[];
@@ -188,19 +151,14 @@ type MaterializedBlueprint = {
 };
 
 function deepClone<T>(value: T): T {
-  const cloneFn = (globalThis as any).structuredClone as
-    | ((input: T) => T)
-    | undefined;
+  const cloneFn = (globalThis as any).structuredClone as ((input: T) => T) | undefined;
   if (typeof cloneFn === "function") {
     return cloneFn(value);
   }
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function replaceBlueprintPlaceholders(
-  value: unknown,
-  replacements: Record<string, string>,
-): unknown {
+function replaceBlueprintPlaceholders(value: unknown, replacements: Record<string, string>): unknown {
   if (typeof value === "string") {
     let next = value;
     for (const [token, replacement] of Object.entries(replacements)) {
@@ -210,17 +168,12 @@ function replaceBlueprintPlaceholders(
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) =>
-      replaceBlueprintPlaceholders(item, replacements),
-    );
+    return value.map((item) => replaceBlueprintPlaceholders(item, replacements));
   }
 
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        replaceBlueprintPlaceholders(child, replacements),
-      ]),
+      Object.entries(value).map(([key, child]) => [key, replaceBlueprintPlaceholders(child, replacements)]),
     );
   }
 
@@ -353,31 +306,21 @@ export function GraphEditor({
   const [overlayCanceling, setOverlayCanceling] = useState(false);
 
   const [promptWizardOpen, setPromptWizardOpen] = useState(false);
-  const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<
-    string | null
-  >(null);
+  const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<string | null>(null);
 
   // Node config dialog state
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [configDialogNodeType, setConfigDialogNodeType] =
-    useState<NodeType | null>(null);
-  const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<
-    string | null
-  >(null);
-  const [configDialogInitialConfig, setConfigDialogInitialConfig] =
-    useState<NodeConfig>({});
-  const [configDialogInitialLabel, setConfigDialogInitialLabel] = useState<
-    string | null
-  >(null);
+  const [configDialogNodeType, setConfigDialogNodeType] = useState<NodeType | null>(null);
+  const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
+  const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
+  const [configDialogInitialLabel, setConfigDialogInitialLabel] = useState<string | null>(null);
   const [memoryConfigOpen, setMemoryConfigOpen] = useState(false);
-  const [marketplaceNodes, setMarketplaceNodes] = useState<
-    MarketplacePackage[]
-  >([]);
+  const [marketplaceNodes, setMarketplaceNodes] = useState<MarketplacePackage[]>([]);
 
   // Viewport state for preserving pan/zoom across saves
-  const [currentViewport, setCurrentViewport] = useState<
-    { x: number; y: number; zoom: number } | undefined
-  >(initialGraphJson?.editor_state?.viewport);
+  const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
+    initialGraphJson?.editor_state?.viewport,
+  );
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
   const wizardButtonRef = useRef<HTMLButtonElement>(null);
@@ -395,9 +338,7 @@ export function GraphEditor({
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const editHistoryArmedRef = useRef(false);
-  const editHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const editHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragHistoryPushedRef = useRef(false);
 
   const captureFocusableTarget = useCallback(() => {
@@ -514,9 +455,7 @@ export function GraphEditor({
     if (selectedNodes.length === 0) return;
 
     const selectedIds = new Set(selectedNodes.map((n) => n.id));
-    const selectedEdges = edges.filter(
-      (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target),
-    );
+    const selectedEdges = edges.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target));
 
     clipboardRef.current = deepClone({
       nodes: selectedNodes.map((node) => ({
@@ -555,10 +494,7 @@ export function GraphEditor({
         const newId = generateId();
         idMap.set(node.id, newId);
 
-        const label =
-          typeof (node.data as any)?.label === "string"
-            ? String((node.data as any).label)
-            : "";
+        const label = typeof (node.data as any)?.label === "string" ? String((node.data as any).label) : "";
 
         return {
           ...deepClone(node),
@@ -591,14 +527,8 @@ export function GraphEditor({
         })
         .filter((edge): edge is Edge => edge !== null);
 
-      setNodes((nds) => [
-        ...nds.map((n) => ({ ...n, selected: false })),
-        ...newNodes,
-      ]);
-      setEdges((eds) => [
-        ...eds.map((e) => ({ ...e, selected: false })),
-        ...newEdges,
-      ]);
+      setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
+      setEdges((eds) => [...eds.map((e) => ({ ...e, selected: false })), ...newEdges]);
       setSelectedNodeId(newNodes[0]?.id ?? null);
       setSelectedEdgeId(null);
       setIsDirty(true);
@@ -617,9 +547,7 @@ export function GraphEditor({
     if (selectedNodes.length === 0) return;
 
     const selectedIds = new Set(selectedNodes.map((n) => n.id));
-    const selectedEdges = edges.filter(
-      (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target),
-    );
+    const selectedEdges = edges.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target));
 
     applyClipboard(
       {
@@ -764,9 +692,7 @@ export function GraphEditor({
         setOverlayRun(run);
       } catch (err: unknown) {
         setOverlayRun(null);
-        setOverlayRunError(
-          getApiErrorMessage(err, "Failed to load execution trace."),
-        );
+        setOverlayRunError(getApiErrorMessage(err, "Failed to load execution trace."));
         applyExecutionOverlay(null);
       } finally {
         setOverlayRunLoading(false);
@@ -805,23 +731,16 @@ export function GraphEditor({
     };
   }, [fetchOverlayRun, overlayRun, overlayRunId]);
 
-  const selectedNode = selectedNodeId
-    ? nodes.find((n) => n.id === selectedNodeId)
-    : null;
-  const selectedEdge = selectedEdgeId
-    ? edges.find((e) => e.id === selectedEdgeId)
-    : null;
-  const canQuickAddConnect =
-    !!selectedNode && selectedNode.type !== NOTE_NODE_TYPE;
+  const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
+  const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
+  const canQuickAddConnect = !!selectedNode && selectedNode.type !== NOTE_NODE_TYPE;
 
   const handleSelectVersion = useCallback(
     async (versionId: string) => {
       if (!versionId || versionId === currentVersionId) return;
 
       if (isDirty) {
-        const confirmed = window.confirm(
-          "You have unsaved changes. Discard them and switch versions?",
-        );
+        const confirmed = window.confirm("You have unsaved changes. Discard them and switch versions?");
         if (!confirmed) return;
       }
 
@@ -879,16 +798,13 @@ export function GraphEditor({
     (_, node, draggingNodes) => {
       dragHistoryPushedRef.current = false;
 
-      const movedNodes = (
-        draggingNodes && draggingNodes.length > 0 ? draggingNodes : [node]
-      ).filter((draggedNode): draggedNode is Node => Boolean(draggedNode));
+      const movedNodes = (draggingNodes && draggingNodes.length > 0 ? draggingNodes : [node]).filter(
+        (draggedNode): draggedNode is Node => Boolean(draggedNode),
+      );
 
       const snappedPositions = new Map<string, { x: number; y: number }>();
       for (const movedNode of movedNodes) {
-        snappedPositions.set(
-          movedNode.id,
-          snapPositionToGrid(movedNode.position, GRAPH_EDITOR_SNAP_GRID),
-        );
+        snappedPositions.set(movedNode.id, snapPositionToGrid(movedNode.position, GRAPH_EDITOR_SNAP_GRID));
       }
 
       setNodes((currentNodes) => {
@@ -899,10 +815,7 @@ export function GraphEditor({
             return currentNode;
           }
 
-          if (
-            currentNode.position.x === snapped.x &&
-            currentNode.position.y === snapped.y
-          ) {
+          if (currentNode.position.x === snapped.x && currentNode.position.y === snapped.y) {
             return currentNode;
           }
 
@@ -951,16 +864,10 @@ export function GraphEditor({
       const newNodeId = generateId();
 
       const sourceNodeId = options?.sourceNodeId ?? null;
-      const sourceNode = sourceNodeId
-        ? nodes.find((n) => n.id === sourceNodeId && n.type !== NOTE_NODE_TYPE)
-        : null;
+      const sourceNode = sourceNodeId ? nodes.find((n) => n.id === sourceNodeId && n.type !== NOTE_NODE_TYPE) : null;
 
       setNodes((nds) => {
-        const hasTrigger = nds.some(
-          (node) =>
-            node.type !== NOTE_NODE_TYPE &&
-            (node.data as any)?.isTrigger === true,
-        );
+        const hasTrigger = nds.some((node) => node.type !== NOTE_NODE_TYPE && (node.data as any)?.isTrigger === true);
         const nodeConfig = deepClone(options?.config ?? {});
         let position: { x: number; y: number };
 
@@ -1018,9 +925,7 @@ export function GraphEditor({
       if (!typeInfo.enabled && nodeType !== NODE_TYPES.HUMAN_GATE) return;
 
       const sourceNodeId =
-        connectToSelected &&
-        selectedNodeId &&
-        nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+        connectToSelected && selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
           ? selectedNodeId
           : null;
 
@@ -1055,8 +960,7 @@ export function GraphEditor({
       if (!canAddMarketplacePackageToEditor(pkg)) {
         showError(
           "Package unavailable",
-          getMarketplacePackageReason(pkg) ??
-            "This marketplace package cannot be added in the current product mode.",
+          getMarketplacePackageReason(pkg) ?? "This marketplace package cannot be added in the current product mode.",
         );
         return;
       }
@@ -1067,27 +971,18 @@ export function GraphEditor({
       }
       const executionType = String(release.execution_node_type);
       if (!isValidNodeType(executionType)) {
-        showError(
-          "Unsupported package",
-          "This marketplace package uses an unsupported node type.",
-        );
+        showError("Unsupported package", "This marketplace package uses an unsupported node type.");
         return;
       }
       const sourceNodeId =
-        connectToSelected &&
-        selectedNodeId &&
-        nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
+        connectToSelected && selectedNodeId && nodes.some((n) => n.id === selectedNodeId && n.type !== NOTE_NODE_TYPE)
           ? selectedNodeId
           : null;
 
       const label =
-        typeof release.ui_schema?.label === "string" && release.ui_schema.label
-          ? release.ui_schema.label
-          : pkg.name;
+        typeof release.ui_schema?.label === "string" && release.ui_schema.label ? release.ui_schema.label : pkg.name;
       const config =
-        release.config_defaults && typeof release.config_defaults === "object"
-          ? release.config_defaults
-          : {};
+        release.config_defaults && typeof release.config_defaults === "object" ? release.config_defaults : {};
 
       captureFocusableTarget();
       setConfigDialogNodeType(executionType);
@@ -1101,10 +996,7 @@ export function GraphEditor({
           ? String((config as Record<string, unknown>).provider || "").trim()
           : "";
       if (provider) {
-        showInfo(
-          "Credential setup",
-          `Configure ${provider} credentials in this dialog before adding the node.`,
-        );
+        showInfo("Credential setup", `Configure ${provider} credentials in this dialog before adding the node.`);
       }
     },
     [captureFocusableTarget, nodes, selectedNodeId],
@@ -1176,11 +1068,7 @@ export function GraphEditor({
     (nodeId: string, updates: Partial<Node["data"]>) => {
       pushHistoryForEdit();
       setNodes((nds) =>
-        nds.map((node) =>
-          node.id === nodeId
-            ? { ...node, data: { ...node.data, ...updates } }
-            : node,
-        ),
+        nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node)),
       );
       setIsDirty(true);
     },
@@ -1213,9 +1101,7 @@ export function GraphEditor({
       if (!nodes.some((n) => n.id === nodeId)) return;
       pushHistory();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-      setEdges((eds) =>
-        eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
-      );
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
       if (selectedNodeId === nodeId) {
         setSelectedNodeId(null);
       }
@@ -1278,31 +1164,19 @@ export function GraphEditor({
       const currentEdges = options?.edges ?? edges;
       const sourceNodeId = options?.sourceNodeId ?? selectedNodeId;
       const selectedSourceNode =
-        sourceNodeId &&
-        currentNodes.some(
-          (node) => node.id === sourceNodeId && node.type !== NOTE_NODE_TYPE,
-        )
+        sourceNodeId && currentNodes.some((node) => node.id === sourceNodeId && node.type !== NOTE_NODE_TYPE)
           ? (currentNodes.find((node) => node.id === sourceNodeId) ?? null)
           : null;
 
-      const maxX = currentNodes.reduce(
-        (max, node) => Math.max(max, node.position.x),
-        0,
-      );
-      const baseX = selectedSourceNode
-        ? selectedSourceNode.position.x + 260
-        : maxX + 140;
+      const maxX = currentNodes.reduce((max, node) => Math.max(max, node.position.x), 0);
+      const baseX = selectedSourceNode ? selectedSourceNode.position.x + 260 : maxX + 140;
       const baseY = selectedSourceNode ? selectedSourceNode.position.y : 120;
       const hasTriggerNode = currentNodes.some(
-        (node) =>
-          node.type !== NOTE_NODE_TYPE &&
-          (node.data as Record<string, unknown>)?.isTrigger === true,
+        (node) => node.type !== NOTE_NODE_TYPE && (node.data as Record<string, unknown>)?.isTrigger === true,
       );
 
       const createdNodeIds: string[] = [];
-      const agentNodeTemplateIndex = blueprint.nodes.findIndex(
-        (template) => template.nodeType === NODE_TYPES.AGENT,
-      );
+      const agentNodeTemplateIndex = blueprint.nodes.findIndex((template) => template.nodeType === NODE_TYPES.AGENT);
 
       const draftNodes: Node[] = blueprint.nodes.map((template, index) => {
         const newNodeId = generateId();
@@ -1326,46 +1200,33 @@ export function GraphEditor({
         } satisfies Node;
       });
 
-      const agentNodeId =
-        agentNodeTemplateIndex >= 0
-          ? createdNodeIds[agentNodeTemplateIndex]
-          : "";
+      const agentNodeId = agentNodeTemplateIndex >= 0 ? createdNodeIds[agentNodeTemplateIndex] : "";
       const observationContextTemplateIndex = blueprint.nodes.findIndex(
         (template) => template.nodeType === NODE_TYPES.OBSERVATION_CONTEXT,
       );
       const observationContextNodeId =
-        observationContextTemplateIndex >= 0
-          ? createdNodeIds[observationContextTemplateIndex]
-          : "";
+        observationContextTemplateIndex >= 0 ? createdNodeIds[observationContextTemplateIndex] : "";
       const replacements: Record<string, string> = {};
       if (agentNodeId) {
         replacements[AGENT_OUTPUT_PLACEHOLDER] = agentNodeId;
       }
       if (observationContextNodeId) {
-        replacements[OBSERVATION_CONTEXT_PLACEHOLDER] =
-          observationContextNodeId;
+        replacements[OBSERVATION_CONTEXT_PLACEHOLDER] = observationContextNodeId;
       }
 
       const newNodes = draftNodes.map((node) => ({
         ...node,
         data: {
           ...(node.data as Record<string, unknown>),
-          config: replaceBlueprintPlaceholders(
-            (node.data as Record<string, unknown>).config,
-            replacements,
-          ),
+          config: replaceBlueprintPlaceholders((node.data as Record<string, unknown>).config, replacements),
         },
       }));
 
       const newEdges: Edge[] = [];
       const appendEdge = (source: string, target: string) => {
         const exists =
-          currentEdges.some(
-            (edge) => edge.source === source && edge.target === target,
-          ) ||
-          newEdges.some(
-            (edge) => edge.source === source && edge.target === target,
-          );
+          currentEdges.some((edge) => edge.source === source && edge.target === target) ||
+          newEdges.some((edge) => edge.source === source && edge.target === target);
         if (exists) {
           return;
         }
@@ -1385,14 +1246,8 @@ export function GraphEditor({
       }
 
       return {
-        nodes: [
-          ...currentNodes.map((node) => ({ ...node, selected: false })),
-          ...newNodes,
-        ],
-        edges: [
-          ...currentEdges.map((edge) => ({ ...edge, selected: false })),
-          ...newEdges,
-        ],
+        nodes: [...currentNodes.map((node) => ({ ...node, selected: false })), ...newNodes],
+        edges: [...currentEdges.map((edge) => ({ ...edge, selected: false })), ...newEdges],
         createdNodeIds,
       };
     },
@@ -1405,10 +1260,7 @@ export function GraphEditor({
       const materialized = materializeAgentBlueprint(blueprint);
       setNodes(materialized.nodes);
       setEdges(materialized.edges);
-      setSelectedNodeId(
-        materialized.createdNodeIds[materialized.createdNodeIds.length - 1] ??
-          null,
-      );
+      setSelectedNodeId(materialized.createdNodeIds[materialized.createdNodeIds.length - 1] ?? null);
       setSelectedEdgeId(null);
       setIsDirty(true);
       return materialized;
@@ -1422,51 +1274,33 @@ export function GraphEditor({
       let addedTrigger = false;
       let addedEnds = 0;
 
-      const executableNodes = draftNodes.filter(
-        (node) => node.type !== NOTE_NODE_TYPE,
-      );
+      const executableNodes = draftNodes.filter((node) => node.type !== NOTE_NODE_TYPE);
 
       // Validation: Cannot save empty graph
       if (executableNodes.length === 0) {
-        showError(
-          "Cannot save empty graph",
-          "Add at least one node to the graph",
-        );
+        showError("Cannot save empty graph", "Add at least one node to the graph");
         return false;
       }
 
       // Validation: Must have at least one output node
-      const hasOutputNode = executableNodes.some(
-        (node) => node.type === NODE_TYPES.OUTPUT,
-      );
+      const hasOutputNode = executableNodes.some((node) => node.type === NODE_TYPES.OUTPUT);
       if (!hasOutputNode) {
-        showError(
-          "Graph needs an output node",
-          "Add an Output node to define the graph's result",
-        );
+        showError("Graph needs an output node", "Add an Output node to define the graph's result");
         return false;
       }
       if (executableNodes.length > 0) {
-        const hasTrigger = executableNodes.some(
-          (node) => (node.data as any)?.isTrigger === true,
-        );
+        const hasTrigger = executableNodes.some((node) => (node.data as any)?.isTrigger === true);
         if (!hasTrigger) {
-          const firstExecutableIndex = draftNodes.findIndex(
-            (node) => node.type !== NOTE_NODE_TYPE,
-          );
+          const firstExecutableIndex = draftNodes.findIndex((node) => node.type !== NOTE_NODE_TYPE);
           if (firstExecutableIndex >= 0) {
             normalizedNodes = draftNodes.map((node, index) =>
-              index === firstExecutableIndex
-                ? { ...node, data: { ...node.data, isTrigger: true } }
-                : node,
+              index === firstExecutableIndex ? { ...node, data: { ...node.data, isTrigger: true } } : node,
             );
             addedTrigger = true;
           }
         }
 
-        const hasEnd = executableNodes.some(
-          (node) => (node.data as any)?.isEnd === true,
-        );
+        const hasEnd = executableNodes.some((node) => (node.data as any)?.isEnd === true);
         if (!hasEnd) {
           const executableIds = new Set(executableNodes.map((node) => node.id));
           const outdegree = new Map<string, number>();
@@ -1474,23 +1308,16 @@ export function GraphEditor({
             outdegree.set(id, 0);
           }
           for (const edge of draftEdges) {
-            if (
-              executableIds.has(edge.source) &&
-              executableIds.has(edge.target)
-            ) {
+            if (executableIds.has(edge.source) && executableIds.has(edge.target)) {
               outdegree.set(edge.source, (outdegree.get(edge.source) ?? 0) + 1);
             }
           }
 
-          const sinkIds = [...executableIds].filter(
-            (id) => (outdegree.get(id) ?? 0) === 0,
-          );
+          const sinkIds = [...executableIds].filter((id) => (outdegree.get(id) ?? 0) === 0);
           if (sinkIds.length > 0) {
             const sinkSet = new Set(sinkIds);
             normalizedNodes = normalizedNodes.map((node) =>
-              sinkSet.has(node.id)
-                ? { ...node, data: { ...node.data, isEnd: true } }
-                : node,
+              sinkSet.has(node.id) ? { ...node, data: { ...node.data, isEnd: true } } : node,
             );
             addedEnds = sinkIds.length;
           }
@@ -1504,10 +1331,7 @@ export function GraphEditor({
       if (addedTrigger || addedEnds > 0) {
         const parts: string[] = [];
         if (addedTrigger) parts.push("added START entry");
-        if (addedEnds > 0)
-          parts.push(
-            `added ${addedEnds} END exit${addedEnds === 1 ? "" : "s"}`,
-          );
+        if (addedEnds > 0) parts.push(`added ${addedEnds} END exit${addedEnds === 1 ? "" : "s"}`);
         showInfo("Graph structure updated", parts.join(" and "));
       }
 
@@ -1558,10 +1382,7 @@ export function GraphEditor({
       showSuccess("Run created");
       void router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
-      showError(
-        "Run failed",
-        getApiErrorMessage(err, ERROR_FALLBACKS.run.start),
-      );
+      showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
     } finally {
       setStartingRun(false);
     }
@@ -1581,10 +1402,7 @@ export function GraphEditor({
       setOverlayRun(updated);
       showSuccess("Run canceled");
     } catch (err: unknown) {
-      showError(
-        "Cancel failed",
-        getApiErrorMessage(err, ERROR_FALLBACKS.run.cancel),
-      );
+      showError("Cancel failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.cancel));
     } finally {
       setOverlayCanceling(false);
     }
@@ -1593,21 +1411,16 @@ export function GraphEditor({
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
     pushHistory();
-    const executableNodes = nodes.filter(
-      (node) => node.type !== NOTE_NODE_TYPE,
-    );
+    const executableNodes = nodes.filter((node) => node.type !== NOTE_NODE_TYPE);
     const noteNodes = nodes.filter((node) => node.type === NOTE_NODE_TYPE);
     const executableIds = new Set(executableNodes.map((node) => node.id));
-    const executableEdges = edges.filter(
-      (edge) =>
-        executableIds.has(edge.source) && executableIds.has(edge.target),
-    );
+    const executableEdges = edges.filter((edge) => executableIds.has(edge.source) && executableIds.has(edge.target));
 
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-      executableNodes,
-      executableEdges,
-      { direction: "TB", nodeSpacing: 50, rankSpacing: 100 },
-    );
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(executableNodes, executableEdges, {
+      direction: "TB",
+      nodeSpacing: 50,
+      rankSpacing: 100,
+    });
     setNodes([...layoutedNodes, ...noteNodes]);
     setEdges(layoutedEdges);
     setIsDirty(true);
@@ -1723,11 +1536,9 @@ export function GraphEditor({
 
   const overlaySelectedNodeRuns: NodeRunItem[] =
     overlayRun && selectedNodeId
-      ? [
-          ...overlayRun.node_runs.filter(
-            (nodeRun) => nodeRun.node_id === selectedNodeId,
-          ),
-        ].sort((a, b) => a.attempt - b.attempt)
+      ? [...overlayRun.node_runs.filter((nodeRun) => nodeRun.node_id === selectedNodeId)].sort(
+          (a, b) => a.attempt - b.attempt,
+        )
       : [];
 
   // Handlers for validation quick fixes
@@ -1737,10 +1548,7 @@ export function GraphEditor({
     if (executableNodes.length > 0) {
       const firstNode = executableNodes[0];
       handleUpdateNode(firstNode.id, { isTrigger: true });
-      showSuccess(
-        "Start node added",
-        `"${(firstNode.data as Record<string, unknown>).label}" is now the entry point`,
-      );
+      showSuccess("Start node added", `"${(firstNode.data as Record<string, unknown>).label}" is now the entry point`);
     } else {
       // Open the prompt wizard to add a new prompt node as start
       setPromptWizardSourceNodeId(null);
@@ -1766,19 +1574,12 @@ export function GraphEditor({
   }, []);
 
   const handleQuickFix = useCallback(
-    (
-      error: import("@/lib/graph-validator").ValidationError,
-      fixLabel: string,
-    ) => {
+    (error: import("@/lib/graph-validator").ValidationError, fixLabel: string) => {
       if (error.code === "NO_START_NODE" && fixLabel === "Add Start") {
         handleAddStartNode();
       } else if (error.code === "NO_OUTPUT_NODE" && fixLabel === "Add Output") {
         handleAddOutputNode();
-      } else if (
-        error.code === "DISCONNECTED_NODE" &&
-        fixLabel === "Remove" &&
-        error.nodeId
-      ) {
+      } else if (error.code === "DISCONNECTED_NODE" && fixLabel === "Remove" && error.nodeId) {
         handleDeleteNode(error.nodeId);
       }
     },
@@ -1788,36 +1589,24 @@ export function GraphEditor({
   const handleWizardComplete = useCallback(
     async (payload: AgentWizardCompletePayload) => {
       const materialized = applyAgentBlueprint(payload.blueprint);
-      showSuccess(
-        "Agent workflow added",
-        `${payload.blueprint.name} was added as a real agent flow.`,
-      );
+      showSuccess("Agent workflow added", `${payload.blueprint.name} was added as a real agent flow.`);
 
       if (!payload.runTest) {
         return;
       }
 
       if (saving || loadingVersion) {
-        showError(
-          "Cannot run test now",
-          "Please wait for current save/version operations to finish.",
-        );
+        showError("Cannot run test now", "Please wait for current save/version operations to finish.");
         return;
       }
 
-      showInfo(
-        "Starting test run",
-        "Saving workflow and launching a test run...",
-      );
+      showInfo("Starting test run", "Saving workflow and launching a test run...");
 
       let versionId = currentVersionId;
 
       try {
         if (isDirty || !versionId || materialized.createdNodeIds.length > 0) {
-          const saveOk = await saveGraphSnapshot(
-            materialized.nodes,
-            materialized.edges,
-          );
+          const saveOk = await saveGraphSnapshot(materialized.nodes, materialized.edges);
           if (!saveOk) {
             return;
           }
@@ -1839,24 +1628,12 @@ export function GraphEditor({
         showSuccess("Test run started");
         void router.push(`/runs/${run.id}`);
       } catch (err: unknown) {
-        showError(
-          "Run failed",
-          getApiErrorMessage(err, ERROR_FALLBACKS.run.start),
-        );
+        showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
       } finally {
         setStartingRun(false);
       }
     },
-    [
-      applyAgentBlueprint,
-      currentVersionId,
-      graphId,
-      isDirty,
-      loadingVersion,
-      router,
-      saveGraphSnapshot,
-      saving,
-    ],
+    [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, router, saveGraphSnapshot, saving],
   );
 
   return (
@@ -1867,9 +1644,7 @@ export function GraphEditor({
           {/* Integration Quick Tool Bar - full width above panels */}
           <QuickToolBar
             marketplaceNodes={marketplaceNodes}
-            onSelectPackage={(pkg) =>
-              handleAddMarketplaceNode(pkg, canQuickAddConnect)
-            }
+            onSelectPackage={(pkg) => handleAddMarketplaceNode(pkg, canQuickAddConnect)}
             hasSelectedNode={canQuickAddConnect}
           />
           <div className="flex flex-1 overflow-hidden">
@@ -1912,9 +1687,7 @@ export function GraphEditor({
               initialLabel={configDialogInitialLabel ?? undefined}
               onSave={handleConfigDialogComplete}
               FormComponent={
-                configDialogNodeType
-                  ? (getNodeFormComponent(configDialogNodeType) ?? undefined)
-                  : undefined
+                configDialogNodeType ? (getNodeFormComponent(configDialogNodeType) ?? undefined) : undefined
               }
             />
             <MemoryConfigDialog
@@ -1985,12 +1758,7 @@ export function GraphEditor({
                   },
                 }}
               >
-                <Background
-                  variant={BackgroundVariant.Dots}
-                  gap={24}
-                  size={0.8}
-                  color="rgba(255,255,255,0.06)"
-                />
+                <Background variant={BackgroundVariant.Dots} gap={24} size={0.8} color="rgba(255,255,255,0.06)" />
                 <Controls />
                 <MiniMap
                   nodeStrokeWidth={3}
@@ -2037,11 +1805,7 @@ export function GraphEditor({
                     <select
                       aria-label="Version"
                       value={currentVersionId ?? ""}
-                      disabled={
-                        loadingVersion ||
-                        saving ||
-                        availableVersions.length === 0
-                      }
+                      disabled={loadingVersion || saving || availableVersions.length === 0}
                       onChange={(e) => void handleSelectVersion(e.target.value)}
                       className="bg-transparent text-sm text-muted-foreground outline-none"
                     >
@@ -2061,10 +1825,7 @@ export function GraphEditor({
                   </div>
                   {!isEditingMetadata && (
                     <>
-                      <WizardButton
-                        buttonRef={wizardButtonRef}
-                        onBeforeStart={captureFocusableTarget}
-                      />
+                      <WizardButton buttonRef={wizardButtonRef} onBeforeStart={captureFocusableTarget} />
                       <button
                         ref={memoryButtonRef}
                         type="button"
@@ -2083,11 +1844,7 @@ export function GraphEditor({
                         title={runDisabledReason ?? "Run workflow"}
                         className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        {startingRun ? (
-                          "Starting..."
-                        ) : (
-                          <Play aria-hidden="true" className="h-4 w-4" />
-                        )}
+                        {startingRun ? "Starting..." : <Play aria-hidden="true" className="h-4 w-4" />}
                       </button>
                       <button
                         type="button"
@@ -2096,11 +1853,7 @@ export function GraphEditor({
                         disabled={saving || !isDirty}
                         className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        {saving ? (
-                          "Saving..."
-                        ) : (
-                          <SaveIcon aria-hidden="true" className="h-4 w-4" />
-                        )}
+                        {saving ? "Saving..." : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
                       </button>
                     </>
                   )}
@@ -2117,10 +1870,7 @@ export function GraphEditor({
                 </Panel>
               </ReactFlow>
               {/* Validation Overlay - shows missing start/output indicators */}
-              <ValidationOverlay
-                onAddStartNode={handleAddStartNode}
-                onAddOutputNode={handleAddOutputNode}
-              />
+              <ValidationOverlay onAddStartNode={handleAddStartNode} onAddOutputNode={handleAddOutputNode} />
             </div>
 
             {/* Right Panel - Inspector */}
@@ -2134,9 +1884,7 @@ export function GraphEditor({
               {overlayRunId && (
                 <div className="border-b border-border bg-muted/30 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Execution
-                    </h3>
+                    <h3 className="text-sm font-semibold text-foreground">Execution</h3>
                     <button
                       type="button"
                       onClick={handleExitExecutionView}
@@ -2147,30 +1895,18 @@ export function GraphEditor({
                   </div>
 
                   {overlayRunLoading && !overlayRun && (
-                    <p className="text-xs text-muted-foreground">
-                      Loading execution trace...
-                    </p>
+                    <p className="text-xs text-muted-foreground">Loading execution trace...</p>
                   )}
 
-                  {overlayRunError && (
-                    <p className="text-xs text-destructive whitespace-pre-wrap">
-                      {overlayRunError}
-                    </p>
-                  )}
+                  {overlayRunError && <p className="text-xs text-destructive whitespace-pre-wrap">{overlayRunError}</p>}
 
                   {overlayRun && (
                     <>
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span>
-                          Status:{" "}
-                          <span className="font-medium text-foreground">
-                            {String(overlayRun.status)}
-                          </span>
+                          Status: <span className="font-medium text-foreground">{String(overlayRun.status)}</span>
                         </span>
-                        <Link
-                          href={`/runs/${overlayRun.id}`}
-                          className="text-primary hover:underline"
-                        >
+                        <Link href={`/runs/${overlayRun.id}`} className="text-primary hover:underline">
                           Open run
                         </Link>
                       </div>
@@ -2192,25 +1928,17 @@ export function GraphEditor({
                           disabled={overlayRunLoading || overlayRunRefreshing}
                           className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                          {overlayRunLoading || overlayRunRefreshing
-                            ? "Refreshing..."
-                            : "Refresh"}
+                          {overlayRunLoading || overlayRunRefreshing ? "Refreshing..." : "Refresh"}
                         </button>
                       </div>
 
                       <div className="pt-3 border-t border-border space-y-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase">
-                          Node trace
-                        </p>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">Node trace</p>
 
                         {!selectedNodeId ? (
-                          <p className="text-xs text-muted-foreground">
-                            Select a node to inspect its execution.
-                          </p>
+                          <p className="text-xs text-muted-foreground">Select a node to inspect its execution.</p>
                         ) : overlaySelectedNodeRuns.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No trace records for this node.
-                          </p>
+                          <p className="text-xs text-muted-foreground">No trace records for this node.</p>
                         ) : (
                           <div className="space-y-2">
                             {overlaySelectedNodeRuns.map((nodeRun) => {
@@ -2221,38 +1949,23 @@ export function GraphEditor({
                                   className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
                                 >
                                   <div className="flex items-center justify-between gap-2 text-xs">
-                                    <span className="font-medium text-foreground">
-                                      attempt {nodeRun.attempt}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {String(nodeRun.status)}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {formatDuration(nodeRun.duration_ms)}
-                                    </span>
+                                    <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
+                                    <span className="text-muted-foreground">{String(nodeRun.status)}</span>
+                                    <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
                                   </div>
 
-                                  {agentTrace ? (
-                                    <AgentTracePanel
-                                      trace={agentTrace}
-                                      compact
-                                    />
-                                  ) : null}
+                                  {agentTrace ? <AgentTracePanel trace={agentTrace} compact /> : null}
 
                                   <details open>
                                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                                       Response
                                     </summary>
                                     <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                                      {formatJsonForDisplay(
-                                        nodeRun.output_json,
-                                      )}
+                                      {formatJsonForDisplay(nodeRun.output_json)}
                                     </pre>
                                   </details>
 
-                                  <details
-                                    open={String(nodeRun.status) === "failed"}
-                                  >
+                                  <details open={String(nodeRun.status) === "failed"}>
                                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                                       Failure
                                     </summary>

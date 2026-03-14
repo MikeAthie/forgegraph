@@ -20,6 +20,39 @@ from application.services.tenancy import get_default_membership
 from infrastructure.orm.models import OrganizationMembership, User
 
 
+def _role_capabilities() -> dict[str, dict[str, bool]]:
+    return {
+        "owner": {
+            "can_view_observations": True,
+            "can_delete_observations": True,
+            "can_manage_retention": True,
+            "can_export_memory_data": True,
+            "can_manage_members": True,
+        },
+        "admin": {
+            "can_view_observations": True,
+            "can_delete_observations": True,
+            "can_manage_retention": True,
+            "can_export_memory_data": True,
+            "can_manage_members": True,
+        },
+        "member": {
+            "can_view_observations": True,
+            "can_delete_observations": True,
+            "can_manage_retention": False,
+            "can_export_memory_data": False,
+            "can_manage_members": False,
+        },
+        "viewer": {
+            "can_view_observations": True,
+            "can_delete_observations": False,
+            "can_manage_retention": False,
+            "can_export_memory_data": False,
+            "can_manage_members": False,
+        },
+    }
+
+
 class OrganizationMeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -34,9 +67,14 @@ class OrganizationMeView(APIView):
             )
 
         org = membership.organization
+        role_capabilities = _role_capabilities()
         payload = {
             "organization": OrganizationSerializer(org).data,
             "role": membership.role,
+            "governance": {
+                "current_role_capabilities": role_capabilities[membership.role],
+                "role_capabilities": role_capabilities,
+            },
         }
         return success_response(payload)
 

@@ -18,6 +18,7 @@ from adapters.api.memory.serializers import (
     MemoryObservationUpdateSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.audit_log import record_audit_log
 from application.services.memory_observation_service import (
     MemoryObservationService,
     ObservationContext,
@@ -74,6 +75,35 @@ def _validation_error(serializer: object) -> Response:
     )
 
 
+def _record_memory_observation_audit(
+    *,
+    user: User,
+    action: str,
+    observation: MemoryObservation,
+    changed_fields: list[str] | None = None,
+) -> None:
+    metadata: dict[str, Any] = {
+        "type": observation.type,
+        "title": observation.title,
+        "scope": observation.scope,
+        "topic_key": observation.topic_key,
+        "graph_id": str(observation.graph_id) if observation.graph_id else None,
+        "run_id": str(observation.run_id) if observation.run_id else None,
+        "session_id": str(observation.session_id) if observation.session_id else None,
+    }
+    if changed_fields:
+        metadata["changed_fields"] = changed_fields
+
+    record_audit_log(
+        actor=user,
+        tenant_id=get_tenant_id_for_user(user),
+        action=action,
+        resource_type="memory_observation",
+        resource_id=str(observation.id),
+        metadata=metadata,
+    )
+
+
 class MemoryObservationListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -103,6 +133,11 @@ class MemoryObservationListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        _record_memory_observation_audit(
+            user=user,
+            action="memory.observation_created",
+            observation=observation,
+        )
         return success_response(_observation_payload(observation), status=status.HTTP_201_CREATED)
 
 
@@ -143,6 +178,7 @@ class MemoryObservationDetailView(APIView):
         serializer = MemoryObservationUpdateSerializer(data=request.data)
         if not serializer.is_valid():
             return _validation_error(serializer)
+        changed_fields = sorted(serializer.validated_data.keys())
 
         service = MemoryObservationService()
         try:
@@ -164,6 +200,12 @@ class MemoryObservationDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        _record_memory_observation_audit(
+            user=user,
+            action="memory.observation_updated",
+            observation=observation,
+            changed_fields=changed_fields,
+        )
         return success_response(_observation_payload(observation))
 
     def delete(self, request: Request, observation_id: UUID) -> Response:
@@ -177,6 +219,10 @@ class MemoryObservationDetailView(APIView):
 
         service = MemoryObservationService()
         try:
+            observation = service.get_observation(
+                tenant_id=get_tenant_id_for_user(user),
+                observation_id=observation_id,
+            )
             service.delete_observation(
                 tenant_id=get_tenant_id_for_user(user),
                 observation_id=observation_id,
@@ -188,6 +234,11 @@ class MemoryObservationDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        _record_memory_observation_audit(
+            user=user,
+            action="memory.observation_deleted",
+            observation=observation,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

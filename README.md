@@ -3,7 +3,7 @@
 A visual workflow graph execution platform for building, testing, and running AI-powered automation pipelines.
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
-![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -39,7 +39,7 @@ A visual workflow graph execution platform for building, testing, and running AI
 |-----------|------------|---------|
 | Frontend | Next.js 14, React 18, TypeScript | Visual graph editor and monitoring UI |
 | Backend | Django 5, DRF, Channels | REST API, WebSocket, authentication |
-| Engine | Go 1.22, gRPC | High-performance graph execution |
+| Engine | Go 1.23, gRPC | High-performance graph execution |
 | Database | PostgreSQL 16 | Persistent storage |
 | Cache | Redis 7 | Caching and message broker |
 
@@ -50,7 +50,7 @@ A visual workflow graph execution platform for building, testing, and running AI
 - Docker & Docker Compose
 - Node.js 20+ (for frontend development)
 - Python 3.12+ (for backend development)
-- Go 1.22+ (for engine development)
+- Go 1.23+ (for engine development)
 
 ### Quick Start with Docker
 
@@ -139,6 +139,7 @@ go test -race -v ./...                # With race detection
 
 # Frontend
 cd frontend
+npm run format:check                     # Prettier check
 npm test                              # Jest unit tests
 npm run test:e2e                      # Playwright E2E tests
 npm run lint                          # ESLint
@@ -289,7 +290,7 @@ Included by default:
 
 - **Python**: Follow PEP 8, enforced by `ruff` and `mypy`
 - **Go**: Follow standard Go conventions, use `go fmt`
-- **TypeScript**: ESLint configuration in `frontend/.eslintrc.json`
+- **TypeScript**: ESLint plus Prettier (`npm run lint`, `npm run format:check`)
 
 ### Clean Architecture
 

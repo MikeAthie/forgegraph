@@ -62,25 +62,21 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   const [credentialsError, setCredentialsError] = useState<string | null>(null);
   const [toolsText, setToolsText] = useState(() => serializeToolList(agentConfig.tools));
   const [approvalToolsText, setApprovalToolsText] = useState(() =>
-    serializeToolList(agentConfig.approval_required_tools)
+    serializeToolList(agentConfig.approval_required_tools),
   );
   const [observationContextText, setObservationContextText] = useState(() =>
-    serializeToolList(agentConfig.observation_context_paths)
+    serializeToolList(agentConfig.observation_context_paths),
   );
 
   const handleChange = useCallback(
     <K extends keyof AgentFormConfig>(field: K, value: AgentFormConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentFieldsChange = useCallback(
-    (agentFields: {
-      role?: string;
-      jobDescription?: string;
-      notes?: string;
-    }) => {
+    (agentFields: { role?: string; jobDescription?: string; notes?: string }) => {
       onChange({
         ...config,
         role: agentFields.role,
@@ -88,14 +84,14 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
         notes: agentFields.notes,
       });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   useEffect(() => {
@@ -139,9 +135,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   }, [agentConfig.approval_required_tools]);
 
   useEffect(() => {
-    setObservationContextText(
-      serializeToolList(agentConfig.observation_context_paths),
-    );
+    setObservationContextText(serializeToolList(agentConfig.observation_context_paths));
   }, [agentConfig.observation_context_paths]);
 
   useEffect(() => {
@@ -170,8 +164,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
     }
 
     if (approvalTools.some((tool) => !tools.includes(tool))) {
-      nextErrors.approval_required_tools =
-        "Approval-required tools must also appear in the allowed tools list.";
+      nextErrors.approval_required_tools = "Approval-required tools must also appear in the allowed tools list.";
     }
 
     setErrors(nextErrors);
@@ -215,7 +208,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   const provider = agentConfig.provider || "openai";
   const filteredCredentials = useMemo(
     () => credentials.filter((item) => item.provider === provider),
-    [credentials, provider]
+    [credentials, provider],
   );
 
   return (
@@ -364,9 +357,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
                 onChange={(event) => handleChange("temperature", parseFloat(event.target.value))}
                 className="flex-1"
               />
-              <span className="text-sm text-muted-foreground w-8 text-right">
-                {agentConfig.temperature ?? 0.2}
-              </span>
+              <span className="text-sm text-muted-foreground w-8 text-right">{agentConfig.temperature ?? 0.2}</span>
             </div>
           </FormField>
 
@@ -377,31 +368,21 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
               min={1}
               value={agentConfig.max_steps || ""}
               onChange={(event) =>
-                handleChange(
-                  "max_steps",
-                  event.target.value ? parseInt(event.target.value, 10) : undefined
-                )
+                handleChange("max_steps", event.target.value ? parseInt(event.target.value, 10) : undefined)
               }
               placeholder="6"
               className="text-sm"
             />
           </FormField>
 
-          <FormField
-            label="Max Tool Calls"
-            htmlFor="agent-max-tool-calls"
-            error={errors.max_tool_calls}
-          >
+          <FormField label="Max Tool Calls" htmlFor="agent-max-tool-calls" error={errors.max_tool_calls}>
             <Input
               id="agent-max-tool-calls"
               type="number"
               min={1}
               value={agentConfig.max_tool_calls || ""}
               onChange={(event) =>
-                handleChange(
-                  "max_tool_calls",
-                  event.target.value ? parseInt(event.target.value, 10) : undefined
-                )
+                handleChange("max_tool_calls", event.target.value ? parseInt(event.target.value, 10) : undefined)
               }
               placeholder="4"
               className="text-sm"
@@ -415,10 +396,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
               min={1}
               value={agentConfig.max_tokens || ""}
               onChange={(event) =>
-                handleChange(
-                  "max_tokens",
-                  event.target.value ? parseInt(event.target.value, 10) : undefined
-                )
+                handleChange("max_tokens", event.target.value ? parseInt(event.target.value, 10) : undefined)
               }
               placeholder="800"
               className="text-sm"

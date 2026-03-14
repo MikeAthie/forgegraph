@@ -174,6 +174,14 @@ def check_llm_budget(user: User) -> Response | None:
             code="BUDGET_EXCEEDED",
             message="Monthly LLM budget exceeded. Increase your limit or wait for next month.",
             status=status.HTTP_402_PAYMENT_REQUIRED,
+            details=[
+                {
+                    "reason": "budget",
+                    "scope": "tenant_monthly_spend",
+                    "current_cost_usd": float(total_cost),
+                    "limit_cost_usd": float(budget.monthly_limit_usd),
+                }
+            ],
         )
 
     return None
@@ -198,6 +206,14 @@ def check_llm_quota(user: User) -> Response | None:
             code="QUOTA_EXCEEDED",
             message="Monthly LLM token quota exceeded. Increase your quota or wait for next month.",
             status=status.HTTP_402_PAYMENT_REQUIRED,
+            details=[
+                {
+                    "reason": "quota",
+                    "scope": "tenant_monthly_tokens",
+                    "current_total_tokens": total_tokens,
+                    "limit_total_tokens": quota.monthly_token_limit,
+                }
+            ],
         )
 
     if quota.monthly_cost_limit_usd and total_cost >= quota.monthly_cost_limit_usd:
@@ -205,6 +221,14 @@ def check_llm_quota(user: User) -> Response | None:
             code="QUOTA_EXCEEDED",
             message="Monthly LLM cost quota exceeded. Increase your quota or wait for next month.",
             status=status.HTTP_402_PAYMENT_REQUIRED,
+            details=[
+                {
+                    "reason": "quota",
+                    "scope": "tenant_monthly_cost",
+                    "current_cost_usd": float(total_cost),
+                    "limit_cost_usd": float(quota.monthly_cost_limit_usd),
+                }
+            ],
         )
 
     return None
@@ -225,6 +249,14 @@ def check_entitlements(user: User) -> Response | None:
             code="SUBSCRIPTION_INACTIVE",
             message="Your subscription is not active. Update billing to continue.",
             status=status.HTTP_402_PAYMENT_REQUIRED,
+            details=[
+                {
+                    "reason": "plan_entitlement",
+                    "scope": "subscription_status",
+                    "subscription_status": subscription.status,
+                    "plan_name": subscription.plan.name if subscription.plan else None,
+                }
+            ],
         )
 
     entitlements = subscription.plan.entitlements or {}
@@ -243,6 +275,15 @@ def check_entitlements(user: User) -> Response | None:
                 code="ENTITLEMENT_LIMIT",
                 message="Monthly token entitlement exceeded for your plan.",
                 status=status.HTTP_402_PAYMENT_REQUIRED,
+                details=[
+                    {
+                        "reason": "plan_entitlement",
+                        "scope": "plan_monthly_tokens",
+                        "current_total_tokens": int(total_tokens),
+                        "limit_total_tokens": int(max_tokens),
+                        "plan_name": subscription.plan.name,
+                    }
+                ],
             )
 
     max_cost = entitlements.get("max_monthly_cost_usd")
@@ -255,6 +296,15 @@ def check_entitlements(user: User) -> Response | None:
                 code="ENTITLEMENT_LIMIT",
                 message="Monthly cost entitlement exceeded for your plan.",
                 status=status.HTTP_402_PAYMENT_REQUIRED,
+                details=[
+                    {
+                        "reason": "plan_entitlement",
+                        "scope": "plan_monthly_cost",
+                        "current_cost_usd": float(total_cost),
+                        "limit_cost_usd": float(Decimal(str(max_cost))),
+                        "plan_name": subscription.plan.name,
+                    }
+                ],
             )
 
     max_runs = entitlements.get("max_runs_per_month")
@@ -267,6 +317,15 @@ def check_entitlements(user: User) -> Response | None:
                 code="ENTITLEMENT_LIMIT",
                 message="Monthly run entitlement exceeded for your plan.",
                 status=status.HTTP_402_PAYMENT_REQUIRED,
+                details=[
+                    {
+                        "reason": "plan_entitlement",
+                        "scope": "plan_monthly_runs",
+                        "current_run_count": run_count,
+                        "limit_run_count": int(max_runs),
+                        "plan_name": subscription.plan.name,
+                    }
+                ],
             )
 
     return None

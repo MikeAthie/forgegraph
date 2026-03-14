@@ -75,7 +75,10 @@ test.describe("Prompts", () => {
     await page.getByRole("button", { name: /^new prompt$/i }).click();
     await page.locator("#create-prompt-title").fill(title);
     await page.locator("#create-prompt-content").fill("Initial content.");
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expect(page.locator('[data-slot="card"]').filter({ hasText: title })).toBeVisible();
 
@@ -109,13 +112,19 @@ test.describe("Prompts", () => {
     await page.getByRole("button", { name: /^new prompt$/i }).click();
     await page.locator("#create-prompt-title").fill(title);
     await page.locator("#create-prompt-content").fill("Clone me.");
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await openPromptDetail(page, title);
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: /^publish$/i }).click();
     await expect(dialog.getByText(/^public$/i)).toBeVisible();
-    await dialog.locator('[data-slot="dialog-footer"]').getByRole("button", { name: /^close$/i }).click();
+    await dialog
+      .locator('[data-slot="dialog-footer"]')
+      .getByRole("button", { name: /^close$/i })
+      .click();
 
     await logout(page, primaryUser.email);
 
@@ -131,7 +140,10 @@ test.describe("Prompts", () => {
     await expect(cloneDialog.locator('[data-slot="dialog-title"]')).toContainText("(Copy)");
     await expect(cloneDialog.getByRole("button", { name: /^edit$/i })).toBeVisible();
     const clonedTitle = (await cloneDialog.locator('[data-slot="dialog-title"]').innerText()).trim();
-    await cloneDialog.locator('[data-slot="dialog-footer"]').getByRole("button", { name: /^close$/i }).click();
+    await cloneDialog
+      .locator('[data-slot="dialog-footer"]')
+      .getByRole("button", { name: /^close$/i })
+      .click();
     await expect(cloneDialog).toBeHidden();
 
     await page.getByRole("button", { name: /^my prompts$/i }).click();

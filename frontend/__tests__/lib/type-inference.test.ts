@@ -998,11 +998,7 @@ describe("type-inference", () => {
         name: "Prompt",
         config: {},
       };
-      const availableNodeTypes = [
-        NODE_TYPES.TRANSFORM,
-        NODE_TYPES.OUTPUT,
-        NODE_TYPES.HTTP,
-      ];
+      const availableNodeTypes = [NODE_TYPES.TRANSFORM, NODE_TYPES.OUTPUT, NODE_TYPES.HTTP];
       const suggested = getSuggestedNextNodes(node, availableNodeTypes);
       // TRANSFORM and OUTPUT accept TEXT (via ANY)
       expect(suggested).toContain(NODE_TYPES.TRANSFORM);
@@ -1018,11 +1014,7 @@ describe("type-inference", () => {
         name: "Branch",
         config: {},
       };
-      const availableNodeTypes = [
-        NODE_TYPES.PROMPT,
-        NODE_TYPES.HTTP,
-        NODE_TYPES.TRANSFORM,
-      ];
+      const availableNodeTypes = [NODE_TYPES.PROMPT, NODE_TYPES.HTTP, NODE_TYPES.TRANSFORM];
       const suggested = getSuggestedNextNodes(node, availableNodeTypes);
       expect(suggested.length).toBe(availableNodeTypes.length);
     });

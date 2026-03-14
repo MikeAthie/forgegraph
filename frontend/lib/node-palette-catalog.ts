@@ -228,10 +228,10 @@ export function groupPaletteItems(items: PaletteCatalogItem[]): Array<[string, P
   }
 
   return Array.from(groups.entries())
-    .map(([category, groupedItems]) => [
-      category,
-      [...groupedItems].sort((a, b) => a.label.localeCompare(b.label)),
-    ] as [string, PaletteCatalogItem[]])
+    .map(
+      ([category, groupedItems]) =>
+        [category, [...groupedItems].sort((a, b) => a.label.localeCompare(b.label))] as [string, PaletteCatalogItem[]],
+    )
     .sort(([a], [b]) => {
       const aIndex = CATEGORY_ORDER.indexOf(a as (typeof CATEGORY_ORDER)[number]);
       const bIndex = CATEGORY_ORDER.indexOf(b as (typeof CATEGORY_ORDER)[number]);

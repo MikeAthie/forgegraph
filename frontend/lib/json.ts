@@ -38,9 +38,9 @@ function normalizeJsonForDisplay(
   }
 
   if (Array.isArray(value)) {
-    const items = value.slice(0, options.maxArrayLength).map((item) =>
-      normalizeJsonForDisplay(item, options, depth + 1, seen),
-    );
+    const items = value
+      .slice(0, options.maxArrayLength)
+      .map((item) => normalizeJsonForDisplay(item, options, depth + 1, seen));
     if (value.length > options.maxArrayLength) {
       items.push(`… (${value.length - options.maxArrayLength} more items)`);
     }

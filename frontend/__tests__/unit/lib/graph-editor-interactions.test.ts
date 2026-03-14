@@ -21,19 +21,13 @@ describe("graph-editor-interactions", () => {
     });
 
     it("rejects duplicate edges", () => {
-      const result = validateGraphConnection(
-        { source: "a", target: "b" },
-        [{ source: "a", target: "b" }],
-      );
+      const result = validateGraphConnection({ source: "a", target: "b" }, [{ source: "a", target: "b" }]);
 
       expect(result).toEqual({ valid: false, reason: "duplicate_connection" });
     });
 
     it("accepts valid unique connections", () => {
-      const result = validateGraphConnection(
-        { source: "a", target: "b" },
-        [{ source: "a", target: "c" }],
-      );
+      const result = validateGraphConnection({ source: "a", target: "b" }, [{ source: "a", target: "c" }]);
 
       expect(result).toEqual({ valid: true });
     });

@@ -88,8 +88,7 @@ const QUICK_START_DEFINITIONS: QuickStartDefinition[] = [
     title: "WhatsApp Chatbot",
     description: "Message-first conversational workflow for support and FAQ style replies.",
     matchers: [/whatsapp/i, /faq/i, /customer/i],
-    expectedOutput:
-      "Returns a ready-to-send chat reply with actionable follow-up details for the conversation.",
+    expectedOutput: "Returns a ready-to-send chat reply with actionable follow-up details for the conversation.",
     requiredProviders: ["openai", "twilio"],
     recommendedProvider: "openai",
     recommendedModel: "gpt-4",
@@ -145,10 +144,7 @@ export function getTemplatePlaceholders(template: GraphTemplate): string[] {
     .map((key) => `{{input.${key}}}`);
 }
 
-export function getTemplateExpectedOutput(
-  template: GraphTemplate,
-  quickStartTitle?: string,
-): string {
+export function getTemplateExpectedOutput(template: GraphTemplate, quickStartTitle?: string): string {
   const matchedQuickStart = quickStartTitle
     ? QUICK_START_DEFINITIONS.find((definition) => definition.title === quickStartTitle)
     : undefined;

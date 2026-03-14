@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -14,31 +15,54 @@ from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import TenantPolicy, User
 
 
+def _policy_payload(policy: TenantPolicy | None) -> dict[str, object]:
+    http_allowlist = policy.http_allowlist if policy else []
+    http_denylist = policy.http_denylist if policy else []
+    http_default_deny = policy.http_default_deny if policy else False
+    allowed_providers = policy.allowed_providers if policy else []
+    allowed_models = policy.allowed_models if policy else []
+    runtime_mode = getattr(settings, "FORGEGRAPH_RUNTIME_MODE", "cloud")
+
+    if http_default_deny:
+        http_access_mode = "default_deny"
+    elif http_allowlist:
+        http_access_mode = "allowlist_first"
+    else:
+        http_access_mode = "open"
+
+    return {
+        "http_allowlist": http_allowlist,
+        "http_denylist": http_denylist,
+        "http_default_deny": http_default_deny,
+        "allowed_providers": allowed_providers,
+        "allowed_models": allowed_models,
+        "summary": {
+            "runtime_mode": runtime_mode,
+            "http_access_mode": http_access_mode,
+            "egress_allowlist_count": len(http_allowlist),
+            "egress_denylist_count": len(http_denylist),
+            "provider_allowlist_count": len(allowed_providers),
+            "model_allowlist_count": len(allowed_models),
+            "exec_tools_policy": (
+                "restricted_in_cloud"
+                if runtime_mode == "cloud"
+                else "package_and_policy_controlled"
+            ),
+            "curated_memory_enabled": getattr(settings, "FF_CURATED_MEMORY_ENABLED", True),
+            "curated_memory_vector_indexing_enabled": getattr(
+                settings, "FF_CURATED_MEMORY_VECTOR_INDEXING", True
+            ),
+        },
+    }
+
+
 class TenantPolicyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         user = cast(User, request.user)
         policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(user)).first()
-        if not policy:
-            return success_response(
-                {
-                    "http_allowlist": [],
-                    "http_denylist": [],
-                    "http_default_deny": False,
-                    "allowed_providers": [],
-                    "allowed_models": [],
-                }
-            )
-        return success_response(
-            {
-                "http_allowlist": policy.http_allowlist,
-                "http_denylist": policy.http_denylist,
-                "http_default_deny": policy.http_default_deny,
-                "allowed_providers": policy.allowed_providers,
-                "allowed_models": policy.allowed_models,
-            }
-        )
+        return success_response(_policy_payload(policy))
 
     def put(self, request: Request) -> Response:
         serializer = TenantPolicySerializer(data=request.data)
@@ -72,12 +96,4 @@ class TenantPolicyView(APIView):
             },
         )
 
-        return success_response(
-            {
-                "http_allowlist": policy.http_allowlist,
-                "http_denylist": policy.http_denylist,
-                "http_default_deny": policy.http_default_deny,
-                "allowed_providers": policy.allowed_providers,
-                "allowed_models": policy.allowed_models,
-            }
-        )
+        return success_response(_policy_payload(policy))

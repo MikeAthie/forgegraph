@@ -180,10 +180,7 @@ export function getPrimaryOutputType(node: GraphNode): DataType {
 /**
  * Analyze type compatibility for all edges in a graph
  */
-export function analyzeEdgeTypes(
-  nodes: GraphNode[],
-  edges: GraphEdge[]
-): EdgeTypeMismatch[] {
+export function analyzeEdgeTypes(nodes: GraphNode[], edges: GraphEdge[]): EdgeTypeMismatch[] {
   const mismatches: EdgeTypeMismatch[] = [];
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
@@ -223,11 +220,7 @@ export function analyzeEdgeTypes(
 /**
  * Get all data available to a node from its upstream connections
  */
-export function getAvailableData(
-  nodeId: string,
-  nodes: GraphNode[],
-  edges: GraphEdge[]
-): AvailableData[] {
+export function getAvailableData(nodeId: string, nodes: GraphNode[], edges: GraphEdge[]): AvailableData[] {
   const available: AvailableData[] = [];
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
@@ -269,7 +262,7 @@ export function getUpstreamNodes(
   nodeId: string,
   nodes: GraphNode[],
   edges: GraphEdge[],
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
 ): GraphNode[] {
   if (visited.has(nodeId)) {
     return [];
@@ -301,10 +294,7 @@ export function getUpstreamNodes(
 /**
  * Build a complete type map for all nodes in a graph
  */
-export function buildTypeMap(
-  nodes: GraphNode[],
-  edges: GraphEdge[]
-): Map<string, NodeTypeInfo> {
+export function buildTypeMap(nodes: GraphNode[], edges: GraphEdge[]): Map<string, NodeTypeInfo> {
   const typeMap = new Map<string, NodeTypeInfo>();
 
   for (const node of nodes) {
@@ -351,10 +341,7 @@ export function nodeAcceptsType(node: GraphNode, type: DataType): boolean {
 /**
  * Get suggested nodes that could connect after a given node
  */
-export function getSuggestedNextNodes(
-  node: GraphNode,
-  availableNodeTypes: NodeType[]
-): NodeType[] {
+export function getSuggestedNextNodes(node: GraphNode, availableNodeTypes: NodeType[]): NodeType[] {
   const outputType = getPrimaryOutputType(node);
 
   return availableNodeTypes.filter((nodeType) => {

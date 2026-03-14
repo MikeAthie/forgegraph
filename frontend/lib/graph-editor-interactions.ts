@@ -2,14 +2,9 @@ import type { Connection, Edge } from "@xyflow/react";
 
 export const GRAPH_EDITOR_SNAP_GRID: [number, number] = [15, 15];
 
-export type InvalidConnectionReason =
-  | "missing_endpoint"
-  | "self_connection"
-  | "duplicate_connection";
+export type InvalidConnectionReason = "missing_endpoint" | "self_connection" | "duplicate_connection";
 
-export type ConnectionValidationResult =
-  | { valid: true }
-  | { valid: false; reason: InvalidConnectionReason };
+export type ConnectionValidationResult = { valid: true } | { valid: false; reason: InvalidConnectionReason };
 
 export function validateGraphConnection(
   connection: Connection,
@@ -23,9 +18,7 @@ export function validateGraphConnection(
     return { valid: false, reason: "self_connection" };
   }
 
-  const isDuplicate = edges.some(
-    (edge) => edge.source === connection.source && edge.target === connection.target,
-  );
+  const isDuplicate = edges.some((edge) => edge.source === connection.source && edge.target === connection.target);
   if (isDuplicate) {
     return { valid: false, reason: "duplicate_connection" };
   }
@@ -79,9 +72,7 @@ function getUndirectedPairKey(source: string, target: string): string {
   return source <= target ? `${source}::${target}` : `${target}::${source}`;
 }
 
-export function buildEdgeRouteLanes(
-  edges: Pick<Edge, "id" | "source" | "target">[],
-): Map<string, number> {
+export function buildEdgeRouteLanes(edges: Pick<Edge, "id" | "source" | "target">[]): Map<string, number> {
   const groupedByPair = new Map<string, Pick<Edge, "id" | "source" | "target">[]>();
 
   for (const edge of edges) {

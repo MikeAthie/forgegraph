@@ -31,3 +31,5 @@ def test_entitlement_blocks_run_start(authenticated_client, user):
 
     assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
     assert response.data["error"]["code"] == "ENTITLEMENT_LIMIT"
+    assert response.data["error"]["details"][0]["reason"] == "plan_entitlement"
+    assert response.data["error"]["details"][0]["scope"] == "plan_monthly_runs"

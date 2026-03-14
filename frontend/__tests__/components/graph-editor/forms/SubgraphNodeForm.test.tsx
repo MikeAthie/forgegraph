@@ -23,10 +23,7 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 jest.mock("@/components/ui/key-value-editor", () => ({
   KeyValueEditor: ({ value, onChange, keyPlaceholder }: any) => (
     <div data-testid={`key-value-editor-${keyPlaceholder}`}>
-      <button
-        data-testid={`add-mapping-${keyPlaceholder}`}
-        onClick={() => onChange({ ...value, newKey: "newValue" })}
-      >
+      <button data-testid={`add-mapping-${keyPlaceholder}`} onClick={() => onChange({ ...value, newKey: "newValue" })}>
         Add Mapping
       </button>
       <div data-testid={`mapping-display-${keyPlaceholder}`}>{JSON.stringify(value)}</div>
@@ -45,14 +42,11 @@ describe("SubgraphNodeForm", () => {
       click: (element: HTMLElement) => act(async () => user.click(element)),
       clear: (element: HTMLElement) => act(async () => user.clear(element)),
       type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
-      selectOptions: (element: HTMLElement, value: string) =>
-        act(async () => user.selectOptions(element, value)),
+      selectOptions: (element: HTMLElement, value: string) => act(async () => user.selectOptions(element, value)),
     };
   };
 
-  const renderWithConfig = (
-    initialConfig: NodeFormProps["config"] = {}
-  ) => {
+  const renderWithConfig = (initialConfig: NodeFormProps["config"] = {}) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
       const handleChange = (nextConfig: NodeFormProps["config"]) => {
@@ -60,14 +54,7 @@ describe("SubgraphNodeForm", () => {
         mockOnChange(nextConfig);
       };
 
-      return (
-        <SubgraphNodeForm
-          config={config}
-          onChange={handleChange}
-          errors={{}}
-          setErrors={mockSetErrors}
-        />
-      );
+      return <SubgraphNodeForm config={config} onChange={handleChange} errors={{}} setErrors={mockSetErrors} />;
     };
 
     return render(<Wrapper />);
@@ -109,8 +96,8 @@ describe("SubgraphNodeForm", () => {
 
       expect(
         screen.getByText(
-          /execute another graph as a node within this workflow. this enables modular, reusable agent components/i
-        )
+          /execute another graph as a node within this workflow. this enables modular, reusable agent components/i,
+        ),
       ).toBeInTheDocument();
     });
   });
@@ -235,7 +222,7 @@ describe("SubgraphNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             input_mapping: expect.objectContaining({ newKey: "newValue" }),
-          })
+          }),
         );
       });
     });
@@ -254,9 +241,7 @@ describe("SubgraphNodeForm", () => {
     it("should display description for input mapping", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/map values from parent state to subgraph inputs/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/map values from parent state to subgraph inputs/i)).toBeInTheDocument();
     });
   });
 
@@ -278,7 +263,7 @@ describe("SubgraphNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             output_mapping: expect.objectContaining({ newKey: "newValue" }),
-          })
+          }),
         );
       });
     });
@@ -297,9 +282,7 @@ describe("SubgraphNodeForm", () => {
     it("should display description for output mapping", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/map subgraph outputs back to parent state/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/map subgraph outputs back to parent state/i)).toBeInTheDocument();
     });
   });
 
@@ -314,9 +297,7 @@ describe("SubgraphNodeForm", () => {
       renderWithConfig();
 
       expect(screen.getByText("query", { selector: "code" })).toBeInTheDocument();
-      expect(
-        screen.getByText(/node.prompt_1.output/, { selector: "code" })
-      ).toBeInTheDocument();
+      expect(screen.getByText(/node.prompt_1.output/, { selector: "code" })).toBeInTheDocument();
     });
 
     it("should show output mapping example", () => {
@@ -333,9 +314,7 @@ describe("SubgraphNodeForm", () => {
 
       expect(screen.getByText(/version pinning recommended/i)).toBeInTheDocument();
       expect(
-        screen.getByText(
-          /pin to a specific version for production workflows to ensure consistent behavior/i
-        )
+        screen.getByText(/pin to a specific version for production workflows to ensure consistent behavior/i),
       ).toBeInTheDocument();
     });
 
@@ -421,7 +400,7 @@ describe("SubgraphNodeForm", () => {
             graph_id: expect.stringContaining("new_graph"),
             input_mapping: { key: "value" },
             output_mapping: { out: "result" },
-          })
+          }),
         );
       });
     });

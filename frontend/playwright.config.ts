@@ -36,61 +36,39 @@ function loadRootEnvFile() {
 
 loadRootEnvFile();
 
-const devPort = process.env.PLAYWRIGHT_DEV_PORT
-  ? Number(process.env.PLAYWRIGHT_DEV_PORT)
-  : 3001;
+const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_DEV_PORT) : 3001;
 // Use 127.0.0.1 to keep frontend/backend on the same "site" for SameSite=Lax cookies.
 const devUrl = `http://127.0.0.1:${devPort}`;
-const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT
-  ? Number(process.env.PLAYWRIGHT_BACKEND_PORT)
-  : 8002;
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ? Number(process.env.PLAYWRIGHT_BACKEND_PORT) : 8002;
 const backendUrl = `http://127.0.0.1:${backendPort}`;
-const enginePort = process.env.PLAYWRIGHT_ENGINE_PORT
-  ? Number(process.env.PLAYWRIGHT_ENGINE_PORT)
-  : 50071;
+const enginePort = process.env.PLAYWRIGHT_ENGINE_PORT ? Number(process.env.PLAYWRIGHT_ENGINE_PORT) : 50071;
 const engineMetricsPort = process.env.PLAYWRIGHT_ENGINE_METRICS_PORT
   ? Number(process.env.PLAYWRIGHT_ENGINE_METRICS_PORT)
   : 9091;
 const engineMetricsUrl = `http://127.0.0.1:${engineMetricsPort}`;
-const memoryGrpcHost =
-  process.env.MEMORY_GRPC_HOST ?? process.env.PLAYWRIGHT_MEMORY_GRPC_HOST ?? "127.0.0.1";
+const memoryGrpcHost = process.env.MEMORY_GRPC_HOST ?? process.env.PLAYWRIGHT_MEMORY_GRPC_HOST ?? "127.0.0.1";
 const memoryGrpcPort = process.env.MEMORY_GRPC_PORT
   ? Number(process.env.MEMORY_GRPC_PORT)
   : process.env.PLAYWRIGHT_MEMORY_GRPC_PORT
     ? Number(process.env.PLAYWRIGHT_MEMORY_GRPC_PORT)
     : 50052;
-const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT
-  ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT)
-  : 8011;
+const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT) : 8011;
 const llmMockUrl = `http://127.0.0.1:${llmMockPort}`;
-const runtimeFixtureTenantId =
-  process.env.PLAYWRIGHT_RUNTIME_TENANT_ID ??
-  "00000000-0000-0000-0000-00000000e2e1";
-const runtimeFixtureEmail =
-  process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL ??
-  "playwright-runtime@example.com";
-const runtimeFixturePassword =
-  process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD ?? "ForgeGraphTest!12345";
-const runtimeFixturePackageSlug =
-  process.env.PLAYWRIGHT_RUNTIME_PACKAGE_SLUG ??
-  "playwright-runtime-health-check";
-const runtimeFixturePackageName =
-  process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ??
-  "Playwright Runtime Health Check";
-const runtimeFixtureToolName =
-  process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
-const runtimeFixtureToolUrl =
-  process.env.PLAYWRIGHT_RUNTIME_TOOL_URL ?? `${backendUrl}/health`;
-const callbackSecret =
-  process.env.ENGINE_CALLBACK_SECRET ?? "playwright-callback-secret";
+const runtimeFixtureTenantId = process.env.PLAYWRIGHT_RUNTIME_TENANT_ID ?? "00000000-0000-0000-0000-00000000e2e1";
+const runtimeFixtureEmail = process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL ?? "playwright-runtime@example.com";
+const runtimeFixturePassword = process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD ?? "ForgeGraphTest!12345";
+const runtimeFixturePackageSlug = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_SLUG ?? "playwright-runtime-health-check";
+const runtimeFixturePackageName = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ?? "Playwright Runtime Health Check";
+const runtimeFixtureToolName = process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
+const runtimeFixtureToolUrl = process.env.PLAYWRIGHT_RUNTIME_TOOL_URL ?? `${backendUrl}/health`;
+const callbackSecret = process.env.ENGINE_CALLBACK_SECRET ?? "playwright-callback-secret";
 const dbHost = process.env.DB_HOST ?? "localhost";
 const dbPort = process.env.DB_PORT ?? "5433";
 const dbName = process.env.DB_NAME ?? "forgegraph";
 const dbUser = process.env.DB_USER ?? "forgegraph";
 const dbPassword = process.env.DB_PASSWORD ?? "forgegraph_secret";
 const engineDatabaseUrl =
-  process.env.DATABASE_URL ??
-  `postgres://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbName}?sslmode=disable`;
+  process.env.DATABASE_URL ?? `postgres://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbName}?sslmode=disable`;
 
 // Give E2E helpers a stable default API URL (avoids IPv6 localhost issues on some hosts).
 process.env.PLAYWRIGHT_API_URL = process.env.PLAYWRIGHT_API_URL ?? backendUrl;
@@ -103,37 +81,25 @@ process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME = runtimeFixtureToolName;
 process.env.PLAYWRIGHT_RUNTIME_TOOL_URL = runtimeFixtureToolUrl;
 process.env.PLAYWRIGHT_LLM_MOCK_URL = llmMockUrl;
 process.env.TESTING = process.env.TESTING ?? "true";
-process.env.SECRET_KEY =
-  process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production";
-process.env.ALLOWED_HOSTS =
-  process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver";
-process.env.ENCRYPTION_KEY =
-  process.env.ENCRYPTION_KEY ??
-  "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=";
+process.env.SECRET_KEY = process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production";
+process.env.ALLOWED_HOSTS = process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver";
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY ?? "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=";
 process.env.SECURE_SSL_REDIRECT = process.env.SECURE_SSL_REDIRECT ?? "false";
-process.env.SESSION_COOKIE_SECURE =
-  process.env.SESSION_COOKIE_SECURE ?? "false";
+process.env.SESSION_COOKIE_SECURE = process.env.SESSION_COOKIE_SECURE ?? "false";
 process.env.CSRF_COOKIE_SECURE = process.env.CSRF_COOKIE_SECURE ?? "false";
-process.env.AUTH_REFRESH_COOKIE_SECURE =
-  process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false";
+process.env.AUTH_REFRESH_COOKIE_SECURE = process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false";
 process.env.MEMORY_GRPC_HOST = process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost;
-process.env.MEMORY_GRPC_PORT =
-  process.env.MEMORY_GRPC_PORT ?? String(memoryGrpcPort);
+process.env.MEMORY_GRPC_PORT = process.env.MEMORY_GRPC_PORT ?? String(memoryGrpcPort);
 
-const workerOverride = process.env.PLAYWRIGHT_WORKERS
-  ? Number(process.env.PLAYWRIGHT_WORKERS)
-  : undefined;
+const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
 const useSqlite = (process.env.USE_SQLITE ?? "false").toLowerCase() === "true";
-const sqliteDbPath =
-  process.env.SQLITE_DB_PATH ??
-  path.join(os.tmpdir(), "forgegraph-playwright-db.sqlite3");
+const sqliteDbPath = process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), "forgegraph-playwright-db.sqlite3");
 
 // Ensure the Playwright test process and any helper subprocesses (e.g. seed_run_trace)
 // point at the same SQLite DB as the Django webServer.
 process.env.SQLITE_DB_PATH = sqliteDbPath;
 process.env.USE_SQLITE = process.env.USE_SQLITE ?? "false";
-process.env.USE_IN_MEMORY_CHANNEL_LAYER =
-  process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true";
+process.env.USE_IN_MEMORY_CHANNEL_LAYER = process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true";
 // SQLite-backed Django dev server can get flaky under high concurrency; default to serial execution unless overridden.
 const workerCount =
   Number.isFinite(workerOverride) && workerOverride && workerOverride > 0
@@ -203,22 +169,16 @@ export default defineConfig({
         ...process.env,
         TESTING: process.env.TESTING ?? "true",
         DEBUG: process.env.DEBUG ?? "true",
-        SECRET_KEY:
-          process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production",
-        ALLOWED_HOSTS:
-          process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver",
-        ENCRYPTION_KEY:
-          process.env.ENCRYPTION_KEY ??
-          "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=",
+        SECRET_KEY: process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production",
+        ALLOWED_HOSTS: process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver",
+        ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=",
         USE_SQLITE: process.env.USE_SQLITE ?? "false",
         SQLITE_DB_PATH: sqliteDbPath,
-        USE_IN_MEMORY_CHANNEL_LAYER:
-          process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
+        USE_IN_MEMORY_CHANNEL_LAYER: process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
         SECURE_SSL_REDIRECT: process.env.SECURE_SSL_REDIRECT ?? "false",
         SESSION_COOKIE_SECURE: process.env.SESSION_COOKIE_SECURE ?? "false",
         CSRF_COOKIE_SECURE: process.env.CSRF_COOKIE_SECURE ?? "false",
-        AUTH_REFRESH_COOKIE_SECURE:
-          process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false",
+        AUTH_REFRESH_COOKIE_SECURE: process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false",
         DB_HOST: dbHost,
         DB_PORT: dbPort,
         DB_NAME: dbName,
@@ -227,9 +187,7 @@ export default defineConfig({
         PLAYWRIGHT_BACKEND_PORT: String(backendPort),
         ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
         ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
-        ENGINE_CALLBACK_URL:
-          process.env.ENGINE_CALLBACK_URL ??
-          `${backendUrl}/api/runs/engine-events`,
+        ENGINE_CALLBACK_URL: process.env.ENGINE_CALLBACK_URL ?? `${backendUrl}/api/runs/engine-events`,
         ENGINE_CALLBACK_SECRET: callbackSecret,
         MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
         MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
@@ -248,8 +206,7 @@ export default defineConfig({
         CONTROL_PLANE_URL: backendUrl,
         ENGINE_CALLBACK_SECRET: callbackSecret,
         TENANT_ID: runtimeFixtureTenantId,
-        MARKETPLACE_MANIFEST_REFRESH_SECONDS:
-          process.env.MARKETPLACE_MANIFEST_REFRESH_SECONDS ?? "1",
+        MARKETPLACE_MANIFEST_REFRESH_SECONDS: process.env.MARKETPLACE_MANIFEST_REFRESH_SECONDS ?? "1",
         FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
         TOOL_MANIFEST_DIR: process.env.TOOL_MANIFEST_DIR ?? "",
         DATABASE_URL: engineDatabaseUrl,

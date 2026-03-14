@@ -171,6 +171,33 @@ def _build_budget_payload(budget: LLMBudget | None, month_cost: Decimal) -> dict
     }
 
 
+def _build_quota_payload(tenant_id: str) -> dict[str, object]:
+    quota = LLMQuota.objects.filter(tenant_id=tenant_id).first()
+
+    month_start, now = _month_window()
+    totals = LLMUsage.objects.filter(
+        tenant_id=tenant_id, created_at__gte=month_start, created_at__lte=now
+    ).aggregate(
+        total_tokens=Coalesce(Sum("total_tokens"), Value(0)),
+        total_cost=Coalesce(Sum("cost_usd"), Value(Decimal("0"))),
+    )
+
+    return {
+        "quota": None
+        if quota is None
+        else {
+            "monthly_token_limit": quota.monthly_token_limit,
+            "monthly_cost_limit_usd": float(quota.monthly_cost_limit_usd)
+            if quota.monthly_cost_limit_usd is not None
+            else None,
+        },
+        "usage": {
+            "month_total_tokens": int(totals["total_tokens"]),
+            "month_cost_usd": float(totals["total_cost"]),
+        },
+    }
+
+
 class LLMUsageAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -292,74 +319,199 @@ class LLMUsageExportView(APIView):
             return date_range
         start_date, end_date = date_range
 
-        pagination = _parse_pagination(request)
-        if isinstance(pagination, Response):
-            return pagination
-        limit, offset = pagination
+        export_dataset = (request.query_params.get("dataset") or "usage").lower()
+        export_format = (request.query_params.get("export_format") or "json").lower()
 
-        usage_qs = LLMUsage.objects.filter(
-            tenant_id=tenant_id,
-            created_at__date__gte=start_date,
-            created_at__date__lte=end_date,
-        ).order_by("-created_at")
+        if export_dataset == "usage":
+            pagination = _parse_pagination(request)
+            if isinstance(pagination, Response):
+                return pagination
+            limit, offset = pagination
 
-        export_format = (request.query_params.get("format") or "json").lower()
+            usage_qs = LLMUsage.objects.filter(
+                tenant_id=tenant_id,
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+            ).order_by("-created_at")
 
-        if export_format == "csv":
-            response = HttpResponse(content_type="text/csv")
-            response["Content-Disposition"] = "attachment; filename=llm-usage-export.csv"
-            writer = csv.writer(response)
-            writer.writerow(
-                [
-                    "run_id",
-                    "node_id",
-                    "provider",
-                    "model",
-                    "prompt_tokens",
-                    "completion_tokens",
-                    "total_tokens",
-                    "cost_usd",
-                    "created_at",
-                ]
-            )
-            for usage in usage_qs[offset : offset + limit]:
+            if export_format == "csv":
+                response = HttpResponse(content_type="text/csv")
+                response["Content-Disposition"] = "attachment; filename=llm-usage-export.csv"
+                writer = csv.writer(response)
                 writer.writerow(
                     [
-                        str(usage.run_id),
-                        usage.node_id,
-                        usage.provider,
-                        usage.model,
-                        usage.prompt_tokens,
-                        usage.completion_tokens,
-                        usage.total_tokens,
-                        f"{usage.cost_usd:.6f}",
-                        usage.created_at.isoformat(),
+                        "run_id",
+                        "node_id",
+                        "provider",
+                        "model",
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "total_tokens",
+                        "cost_usd",
+                        "created_at",
                     ]
                 )
-            return response
+                for usage in usage_qs[offset : offset + limit]:
+                    writer.writerow(
+                        [
+                            str(usage.run_id),
+                            usage.node_id,
+                            usage.provider,
+                            usage.model,
+                            usage.prompt_tokens,
+                            usage.completion_tokens,
+                            usage.total_tokens,
+                            f"{usage.cost_usd:.6f}",
+                            usage.created_at.isoformat(),
+                        ]
+                    )
+                return response
 
-        total_count = usage_qs.count()
-        page = usage_qs[offset : offset + limit]
-        data = [
-            {
-                "run_id": str(usage.run_id),
-                "node_id": usage.node_id,
-                "provider": usage.provider,
-                "model": usage.model,
-                "prompt_tokens": usage.prompt_tokens,
-                "completion_tokens": usage.completion_tokens,
-                "total_tokens": usage.total_tokens,
-                "cost_usd": float(usage.cost_usd),
-                "created_at": usage.created_at.isoformat(),
-            }
-            for usage in page
-        ]
+            total_count = usage_qs.count()
+            page = usage_qs[offset : offset + limit]
+            data = [
+                {
+                    "run_id": str(usage.run_id),
+                    "node_id": usage.node_id,
+                    "provider": usage.provider,
+                    "model": usage.model,
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.total_tokens,
+                    "cost_usd": float(usage.cost_usd),
+                    "created_at": usage.created_at.isoformat(),
+                }
+                for usage in page
+            ]
 
-        return paginated_response(
-            data=data,
-            page=(offset // limit) + 1,
-            page_size=limit,
-            total_count=total_count,
+            return paginated_response(
+                data=data,
+                page=(offset // limit) + 1,
+                page_size=limit,
+                total_count=total_count,
+            )
+
+        if export_dataset == "costs":
+            usage_qs = LLMUsage.objects.filter(
+                tenant_id=tenant_id,
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+            )
+            by_model = (
+                usage_qs.values("provider", "model")
+                .annotate(
+                    total_tokens=Coalesce(Sum("total_tokens"), Value(0)),
+                    cost_usd=Coalesce(Sum("cost_usd"), Value(Decimal("0"))),
+                    calls=Count("id"),
+                )
+                .order_by("-cost_usd", "provider", "model")
+            )
+            data = [
+                {
+                    "provider": row["provider"],
+                    "model": row["model"],
+                    "total_tokens": int(row["total_tokens"]),
+                    "cost_usd": float(row["cost_usd"]),
+                    "calls": int(row["calls"]),
+                }
+                for row in by_model
+            ]
+            if export_format == "csv":
+                response = HttpResponse(content_type="text/csv")
+                response["Content-Disposition"] = "attachment; filename=llm-costs-export.csv"
+                writer = csv.writer(response)
+                writer.writerow(["provider", "model", "total_tokens", "cost_usd", "calls"])
+                for row in data:
+                    writer.writerow(
+                        [
+                            row["provider"],
+                            row["model"],
+                            row["total_tokens"],
+                            f"{row['cost_usd']:.6f}",
+                            row["calls"],
+                        ]
+                    )
+                return response
+            return success_response(
+                {
+                    "dataset": "costs",
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "rows": data,
+                }
+            )
+
+        if export_dataset == "budget":
+            month_start, now = _month_window()
+            month_cost = LLMUsage.objects.filter(
+                tenant_id=tenant_id, created_at__gte=month_start, created_at__lte=now
+            ).aggregate(total=Coalesce(Sum("cost_usd"), Value(Decimal("0")))).get(
+                "total"
+            ) or Decimal("0")
+            budget_data = _build_budget_payload(
+                LLMBudget.objects.filter(tenant_id=tenant_id).first(),
+                month_cost,
+            )
+            if export_format == "csv":
+                response = HttpResponse(content_type="text/csv")
+                response["Content-Disposition"] = "attachment; filename=llm-budget-export.csv"
+                writer = csv.writer(response)
+                writer.writerow(
+                    [
+                        "monthly_limit_usd",
+                        "warning_threshold_pct",
+                        "month_cost_usd",
+                        "warning_threshold_usd",
+                        "warning",
+                        "over_budget",
+                    ]
+                )
+                budget_payload = cast(dict[str, object] | None, budget_data["budget"])
+                usage_payload = cast(dict[str, object], budget_data["usage"])
+                writer.writerow(
+                    [
+                        budget_payload.get("monthly_limit_usd") if budget_payload else None,
+                        budget_payload.get("warning_threshold_pct") if budget_payload else None,
+                        usage_payload["month_cost_usd"],
+                        budget_data["warning_threshold_usd"],
+                        budget_data["warning"],
+                        budget_data["over_budget"],
+                    ]
+                )
+                return response
+            return success_response({"dataset": "budget", **budget_data})
+
+        if export_dataset == "quota":
+            quota_data = _build_quota_payload(tenant_id)
+            if export_format == "csv":
+                response = HttpResponse(content_type="text/csv")
+                response["Content-Disposition"] = "attachment; filename=llm-quota-export.csv"
+                writer = csv.writer(response)
+                writer.writerow(
+                    [
+                        "monthly_token_limit",
+                        "monthly_cost_limit_usd",
+                        "month_total_tokens",
+                        "month_cost_usd",
+                    ]
+                )
+                quota_payload = cast(dict[str, object] | None, quota_data["quota"])
+                usage_payload = cast(dict[str, object], quota_data["usage"])
+                writer.writerow(
+                    [
+                        quota_payload.get("monthly_token_limit") if quota_payload else None,
+                        quota_payload.get("monthly_cost_limit_usd") if quota_payload else None,
+                        usage_payload["month_total_tokens"],
+                        usage_payload["month_cost_usd"],
+                    ]
+                )
+                return response
+            return success_response({"dataset": "quota", **quota_data})
+
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="dataset must be one of usage, costs, budget, quota",
+            status=400,
         )
 
 
@@ -435,32 +587,7 @@ class LLMQuotaView(APIView):
         if isinstance(tenant_id, Response):
             return tenant_id
 
-        quota = LLMQuota.objects.filter(tenant_id=tenant_id).first()
-
-        month_start, now = _month_window()
-        totals = LLMUsage.objects.filter(
-            tenant_id=tenant_id, created_at__gte=month_start, created_at__lte=now
-        ).aggregate(
-            total_tokens=Coalesce(Sum("total_tokens"), Value(0)),
-            total_cost=Coalesce(Sum("cost_usd"), Value(Decimal("0"))),
-        )
-
-        payload = {
-            "quota": None
-            if quota is None
-            else {
-                "monthly_token_limit": quota.monthly_token_limit,
-                "monthly_cost_limit_usd": float(quota.monthly_cost_limit_usd)
-                if quota.monthly_cost_limit_usd is not None
-                else None,
-            },
-            "usage": {
-                "month_total_tokens": int(totals["total_tokens"]),
-                "month_cost_usd": float(totals["total_cost"]),
-            },
-        }
-
-        return success_response(payload)
+        return success_response(_build_quota_payload(tenant_id))
 
     def put(self, request: Request) -> Response:
         user = cast(User, request.user)

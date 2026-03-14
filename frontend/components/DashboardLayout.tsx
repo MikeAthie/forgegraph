@@ -27,10 +27,7 @@ export default function DashboardLayout({ children, mainClassName }: DashboardLa
 
       <Header />
 
-      <main className={cn("max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8", mainClassName)}>
-        {children}
-      </main>
+      <main className={cn("max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8", mainClassName)}>{children}</main>
     </div>
   );
 }
-

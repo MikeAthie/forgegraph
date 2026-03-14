@@ -17,8 +17,7 @@ describe("Observation node forms", () => {
       click: (element: HTMLElement) => act(async () => user.click(element)),
       type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
       clear: (element: HTMLElement) => act(async () => user.clear(element)),
-      select: (element: HTMLElement, value: string) =>
-        act(async () => user.selectOptions(element, value)),
+      select: (element: HTMLElement, value: string) => act(async () => user.selectOptions(element, value)),
     };
   };
 
@@ -26,10 +25,7 @@ describe("Observation node forms", () => {
     jest.clearAllMocks();
   });
 
-  function renderWithState(
-    Component: ComponentType<NodeFormProps>,
-    initialConfig: NodeFormProps["config"] = {},
-  ) {
+  function renderWithState(Component: ComponentType<NodeFormProps>, initialConfig: NodeFormProps["config"] = {}) {
     const onChange = jest.fn();
 
     const Wrapper = () => {
@@ -39,14 +35,7 @@ describe("Observation node forms", () => {
         onChange(nextConfig);
       };
 
-      return (
-        <Component
-          config={config}
-          onChange={handleChange}
-          errors={{}}
-          setErrors={mockSetErrors}
-        />
-      );
+      return <Component config={config} onChange={handleChange} errors={{}} setErrors={mockSetErrors} />;
     };
 
     const result = render(<Wrapper />);
@@ -76,10 +65,7 @@ describe("Observation node forms", () => {
 
     const input = screen.getByDisplayValue("node.old.output");
     await user.clear(input);
-    await user.type(
-      input,
-      "node.prompt_1.output",
-    );
+    await user.type(input, "node.prompt_1.output");
 
     await waitFor(() => {
       const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];

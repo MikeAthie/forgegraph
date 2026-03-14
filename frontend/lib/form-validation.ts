@@ -108,7 +108,7 @@ export function validateNumberRange(
   value: number | undefined,
   fieldName: string,
   min?: number,
-  max?: number
+  max?: number,
 ): FieldError | null {
   if (value === undefined || value === null) {
     return null;
@@ -136,7 +136,7 @@ export function validateLength(
   value: string | undefined,
   fieldName: string,
   minLength?: number,
-  maxLength?: number
+  maxLength?: number,
 ): FieldError | null {
   if (!value) {
     return null;

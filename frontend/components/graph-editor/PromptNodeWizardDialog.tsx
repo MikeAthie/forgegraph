@@ -286,9 +286,7 @@ export function PromptNodeWizardDialog({
   };
 
   const setExampleField = (index: number, field: "input" | "output", value: string) => {
-    setExamples((prev) =>
-      prev.map((ex, i) => (i === index ? { ...ex, [field]: value } : ex)),
-    );
+    setExamples((prev) => prev.map((ex, i) => (i === index ? { ...ex, [field]: value } : ex)));
   };
 
   const addExample = () => {
@@ -346,9 +344,7 @@ export function PromptNodeWizardDialog({
 
       return (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">
-            Review the prompt content before adding the node.
-          </div>
+          <div className="text-sm text-muted-foreground">Review the prompt content before adding the node.</div>
           {existingPrompt ? (
             <div className="rounded-lg border border-border bg-muted/10 p-3 text-sm">
               <div className="font-medium text-foreground">{existingPrompt.title}</div>
@@ -384,9 +380,7 @@ export function PromptNodeWizardDialog({
             </FormField>
 
             <div className="rounded-lg border border-border bg-muted/10 p-3">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Advanced
-              </div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Advanced</div>
               <div className="mt-2 flex flex-col gap-2">
                 <Button
                   type="button"
@@ -492,7 +486,10 @@ export function PromptNodeWizardDialog({
             </div>
 
             <FormField label="Output format preset">
-              <Select value={outputPreset} onValueChange={(value) => setOutputPreset(value as PromptWizardOutputPreset)}>
+              <Select
+                value={outputPreset}
+                onValueChange={(value) => setOutputPreset(value as PromptWizardOutputPreset)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Choose a format" />
                 </SelectTrigger>
@@ -529,9 +526,7 @@ export function PromptNodeWizardDialog({
       case "Review":
         return (
           <div className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Give your prompt a name and confirm the final template.
-            </div>
+            <div className="text-sm text-muted-foreground">Give your prompt a name and confirm the final template.</div>
 
             <FormField
               label="Prompt title"
@@ -578,9 +573,7 @@ export function PromptNodeWizardDialog({
       <DialogContent className="sm:max-w-3xl" showCloseButton={!submitting && !loadingExisting}>
         <DialogHeader>
           <DialogTitle>Prompt Node Wizard</DialogTitle>
-          <DialogDescription>
-            Build a high-quality prompt template with best-practice structure.
-          </DialogDescription>
+          <DialogDescription>Build a high-quality prompt template with best-practice structure.</DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center justify-between gap-3">
@@ -623,13 +616,13 @@ export function PromptNodeWizardDialog({
 
           <div className="min-w-0">
             <div className="rounded-lg border border-border bg-muted/5 p-3">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Prompt Preview
-              </div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt Preview</div>
               <Textarea
                 value={promptTemplate}
                 readOnly
-                placeholder={mode === "existing" ? "Load a prompt to preview it..." : "Start typing to see the preview..."}
+                placeholder={
+                  mode === "existing" ? "Load a prompt to preview it..." : "Start typing to see the preview..."
+                }
                 rows={18}
                 className="mt-2 font-mono text-xs"
               />

@@ -201,9 +201,7 @@ export default function GraphsPage() {
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
                   Graphs
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Manage your workflow graphs and their versions.
-                </p>
+                <p className="mt-1 text-sm text-muted-foreground">Manage your workflow graphs and their versions.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" onClick={() => void refreshGraphs()} disabled={loading}>
@@ -239,14 +237,14 @@ export default function GraphsPage() {
               className="py-16"
               title="No graphs yet"
               description="Create your first graph to start building workflows."
-              action={(
+              action={
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={openCreate}>Create a graph</Button>
                   <Button variant="outline" asChild>
                     <Link href="/onboarding">Use template</Link>
                   </Button>
                 </div>
-              )}
+              }
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -259,15 +257,10 @@ export default function GraphsPage() {
 
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
-                      <Link
-                        href={`/graphs/${graph.id}`}
-                        className="hover:text-primary transition-colors"
-                      >
+                      <Link href={`/graphs/${graph.id}`} className="hover:text-primary transition-colors">
                         <CardTitle className="text-lg">{graph.name}</CardTitle>
                       </Link>
-                      {graph.latest_version != null && (
-                        <Badge variant="secondary">v{graph.latest_version}</Badge>
-                      )}
+                      {graph.latest_version != null && <Badge variant="secondary">v{graph.latest_version}</Badge>}
                     </div>
                     <CardDescription className="line-clamp-2">
                       {graph.description || <span className="italic">No description</span>}
@@ -323,9 +316,7 @@ export default function GraphsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create new graph</DialogTitle>
-              <DialogDescription>
-                Give your graph a name and optional description.
-              </DialogDescription>
+              <DialogDescription>Give your graph a name and optional description.</DialogDescription>
             </DialogHeader>
 
             {createError && (
@@ -380,9 +371,7 @@ export default function GraphsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit graph</DialogTitle>
-              <DialogDescription>
-                Update the graph name and description.
-              </DialogDescription>
+              <DialogDescription>Update the graph name and description.</DialogDescription>
             </DialogHeader>
 
             {editError && (
@@ -431,13 +420,14 @@ export default function GraphsPage() {
         </Dialog>
 
         {/* Versions Dialog */}
-        <Dialog open={Boolean(versionsGraph)} onOpenChange={(open) => !versionsLoading && !open && setVersionsGraph(null)}>
+        <Dialog
+          open={Boolean(versionsGraph)}
+          onOpenChange={(open) => !versionsLoading && !open && setVersionsGraph(null)}
+        >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Versions {versionsGraph && `— ${versionsGraph.name}`}</DialogTitle>
-              <DialogDescription>
-                View all saved versions of this graph.
-              </DialogDescription>
+              <DialogDescription>View all saved versions of this graph.</DialogDescription>
             </DialogHeader>
 
             {versionsError && (
@@ -452,9 +442,7 @@ export default function GraphsPage() {
                 <span className="ml-3 text-sm text-muted-foreground">Loading versions...</span>
               </div>
             ) : versions.length === 0 ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                No versions yet.
-              </div>
+              <div className="py-6 text-center text-sm text-muted-foreground">No versions yet.</div>
             ) : (
               <div className="overflow-x-auto max-h-64">
                 <table className="min-w-full divide-y divide-border">
@@ -480,9 +468,7 @@ export default function GraphsPage() {
                           <td className="px-4 py-2 text-sm font-medium">
                             <Badge variant="outline">v{v.version}</Badge>
                           </td>
-                          <td className="px-4 py-2 text-sm text-muted-foreground">
-                            {formatDateTime(v.created_at)}
-                          </td>
+                          <td className="px-4 py-2 text-sm text-muted-foreground">{formatDateTime(v.created_at)}</td>
                           <td className="px-4 py-2 text-sm text-muted-foreground font-mono">
                             {v.checksum.slice(0, 10)}
                           </td>

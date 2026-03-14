@@ -202,9 +202,7 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
 /**
  * Get the form component for a node type
  */
-export function getNodeFormComponent(
-  nodeType: string
-): ComponentType<NodeFormProps> | null {
+export function getNodeFormComponent(nodeType: string): ComponentType<NodeFormProps> | null {
   return nodeFormRegistry[nodeType]?.component || null;
 }
 
@@ -225,9 +223,7 @@ export function getAllNodeTypes(): string[] {
 /**
  * Get node types by category
  */
-export function getNodeTypesByCategory(
-  category: NodeTypeInfo["category"]
-): string[] {
+export function getNodeTypesByCategory(category: NodeTypeInfo["category"]): string[] {
   return Object.entries(nodeFormRegistry)
     .filter(([, entry]) => entry.info.category === category)
     .map(([type]) => type);

@@ -11,18 +11,12 @@ import {
   validateObservationSource,
 } from "./observation-form-utils";
 
-export function ObservationTimelineNodeForm({
-  config,
-  onChange,
-  errors,
-  setErrors,
-}: NodeFormProps) {
+export function ObservationTimelineNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const timelineConfig = config as Record<string, unknown>;
 
   const computedErrors = {
     scope:
-      typeof timelineConfig.scope === "string" &&
-      timelineConfig.scope.trim().length > 0
+      typeof timelineConfig.scope === "string" && timelineConfig.scope.trim().length > 0
         ? undefined
         : "Scope is required.",
     agent_id: validateObservationSource(
@@ -45,11 +39,7 @@ export function ObservationTimelineNodeForm({
       </div>
 
       <ObservationScopeField
-        value={
-          typeof timelineConfig.scope === "string"
-            ? timelineConfig.scope
-            : undefined
-        }
+        value={typeof timelineConfig.scope === "string" ? timelineConfig.scope : undefined}
         onChange={(scope) => onChange({ ...timelineConfig, scope })}
       />
 
@@ -75,15 +65,7 @@ export function ObservationTimelineNodeForm({
             type="number"
             min={1}
             value={String(timelineConfig.limit ?? "")}
-            onChange={(event) =>
-              onChange(
-                updateObservationNumberField(
-                  timelineConfig,
-                  "limit",
-                  event.target.value,
-                ),
-              )
-            }
+            onChange={(event) => onChange(updateObservationNumberField(timelineConfig, "limit", event.target.value))}
             placeholder="10"
             className="text-sm"
           />

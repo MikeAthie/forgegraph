@@ -153,10 +153,7 @@ const COMPATIBILITY_MATRIX: Record<DataType, Set<DataType>> = {
  * @param targetType - The type expected as input
  * @returns Compatibility result with reason if incompatible
  */
-export function areTypesCompatible(
-  sourceType: DataType,
-  targetType: DataType
-): TypeCompatibility {
+export function areTypesCompatible(sourceType: DataType, targetType: DataType): TypeCompatibility {
   // ANY target accepts everything
   if (targetType === DataType.ANY) {
     return { compatible: true };
@@ -222,7 +219,5 @@ export function parseDataType(value: string | undefined): DataType {
   if (!value) return DataType.ANY;
   const normalized = value.toLowerCase();
   const types = Object.values(DataType);
-  return types.includes(normalized as DataType)
-    ? (normalized as DataType)
-    : DataType.ANY;
+  return types.includes(normalized as DataType) ? (normalized as DataType) : DataType.ANY;
 }

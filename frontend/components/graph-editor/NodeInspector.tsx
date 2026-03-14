@@ -36,15 +36,9 @@ function CollapsibleSection({
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 w-full text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
       >
-        {isOpen ? (
-          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        )}
+        {isOpen ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
         <span className="uppercase tracking-wider">{title}</span>
-        {badge && !isOpen && (
-          <span className="ml-auto text-primary text-xs">{badge}</span>
-        )}
+        {badge && !isOpen && <span className="ml-auto text-primary text-xs">{badge}</span>}
       </button>
       {isOpen && <div className="mt-3 space-y-3">{children}</div>}
     </div>
@@ -122,10 +116,8 @@ export function NodeInspector({
   if (selectedEdge) {
     const sourceNode = nodes.find((node) => node.id === selectedEdge.source);
     const targetNode = nodes.find((node) => node.id === selectedEdge.target);
-    const sourceLabel =
-      (sourceNode?.data?.label as string | undefined) ?? selectedEdge.source;
-    const targetLabel =
-      (targetNode?.data?.label as string | undefined) ?? selectedEdge.target;
+    const sourceLabel = (sourceNode?.data?.label as string | undefined) ?? selectedEdge.source;
+    const targetLabel = (targetNode?.data?.label as string | undefined) ?? selectedEdge.target;
 
     const sourceIsTrigger = (sourceNode?.data as any)?.isTrigger === true;
     const targetIsEnd = (targetNode?.data as any)?.isEnd === true;
@@ -137,11 +129,7 @@ export function NodeInspector({
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-foreground">Edge Config</h3>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => onDeleteEdge(selectedEdge.id)}
-          >
+          <Button size="sm" variant="destructive" onClick={() => onDeleteEdge(selectedEdge.id)}>
             Delete
           </Button>
         </div>
@@ -157,14 +145,10 @@ export function NodeInspector({
           </div>
 
           <div className="space-y-2 pt-3 border-t border-border">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Graph Structure
-            </h4>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Graph Structure</h4>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">
-                Mark source as Trigger (START)
-              </label>
+              <label className="text-xs font-medium text-muted-foreground">Mark source as Trigger (START)</label>
               <button
                 type="button"
                 role="switch"
@@ -185,9 +169,7 @@ export function NodeInspector({
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">
-                Mark target as End (END)
-              </label>
+              <label className="text-xs font-medium text-muted-foreground">Mark target as End (END)</label>
               <button
                 type="button"
                 role="switch"
@@ -213,18 +195,12 @@ export function NodeInspector({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-              ID
-            </label>
-            <p className="text-xs text-muted-foreground font-mono break-all">
-              {selectedEdge.id}
-            </p>
+            <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">ID</label>
+            <p className="text-xs text-muted-foreground font-mono break-all">{selectedEdge.id}</p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Label
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Label</label>
             <Input
               value={edgeLabel}
               onChange={(e) => onUpdateEdge(selectedEdge.id, { label: e.target.value })}
@@ -234,14 +210,10 @@ export function NodeInspector({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Condition (optional)
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Condition (optional)</label>
             <Textarea
               value={edgeCondition}
-              onChange={(e) =>
-                onUpdateEdge(selectedEdge.id, { data: { condition: e.target.value } })
-              }
+              onChange={(e) => onUpdateEdge(selectedEdge.id, { data: { condition: e.target.value } })}
               rows={3}
               className="text-sm font-mono"
               placeholder='Example: vars.status == "done"'
@@ -264,10 +236,7 @@ export function NodeInspector({
         {editingMetadata ? (
           <div className="space-y-4">
             <div>
-              <label
-                htmlFor="edit-graph-name"
-                className="block text-xs font-medium text-muted-foreground mb-1"
-              >
+              <label htmlFor="edit-graph-name" className="block text-xs font-medium text-muted-foreground mb-1">
                 Name
               </label>
               <Input
@@ -278,10 +247,7 @@ export function NodeInspector({
               />
             </div>
             <div>
-              <label
-                htmlFor="edit-graph-description"
-                className="block text-xs font-medium text-muted-foreground mb-1"
-              >
+              <label htmlFor="edit-graph-description" className="block text-xs font-medium text-muted-foreground mb-1">
                 Description
               </label>
               <Textarea
@@ -293,11 +259,7 @@ export function NodeInspector({
               />
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => void handleSaveMetadata()}
-                disabled={savingMetadata}
-              >
+              <Button size="sm" onClick={() => void handleSaveMetadata()} disabled={savingMetadata}>
                 {savingMetadata ? "Saving..." : "Save"}
               </Button>
               <Button
@@ -329,9 +291,7 @@ export function NodeInspector({
                     Description
                   </label>
                   <p className="text-sm text-foreground whitespace-pre-wrap">
-                    {graphDescription || (
-                      <span className="text-muted-foreground">No description</span>
-                    )}
+                    {graphDescription || <span className="text-muted-foreground">No description</span>}
                   </p>
                 </div>
               </>
@@ -381,9 +341,7 @@ export function NodeInspector({
         <div className="flex-1 min-w-0">
           <Input
             value={(nodeData.label as string) ?? ""}
-            onChange={(e) =>
-              onUpdateNode(selectedNode.id, { label: e.target.value })
-            }
+            onChange={(e) => onUpdateNode(selectedNode.id, { label: e.target.value })}
             className="text-sm font-semibold h-8"
             aria-label="Node name"
           />
@@ -395,20 +353,10 @@ export function NodeInspector({
 
       {/* Action buttons */}
       <div className="flex gap-2 mb-4">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1"
-          onClick={() => onDuplicateNode(selectedNode.id)}
-        >
+        <Button size="sm" variant="outline" className="flex-1" onClick={() => onDuplicateNode(selectedNode.id)}>
           Duplicate
         </Button>
-        <Button
-          size="sm"
-          variant="destructive"
-          className="flex-1"
-          onClick={() => onDeleteNode(selectedNode.id)}
-        >
+        <Button size="sm" variant="destructive" className="flex-1" onClick={() => onDeleteNode(selectedNode.id)}>
           Delete
         </Button>
       </div>
@@ -416,26 +364,18 @@ export function NodeInspector({
       <div className="space-y-0">
         {/* Node ID (read-only) */}
         <div className="pb-3">
-          <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-            ID
-          </label>
-          <p className="text-xs text-muted-foreground font-mono break-all">
-            {selectedNode.id}
-          </p>
+          <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">ID</label>
+          <p className="text-xs text-muted-foreground font-mono break-all">{selectedNode.id}</p>
         </div>
 
         {!isNote && (
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground">
-              Enabled
-            </label>
+            <label className="text-xs font-medium text-muted-foreground">Enabled</label>
             <button
               type="button"
               role="switch"
               aria-checked={!nodeData.disabled}
-              onClick={() =>
-                onUpdateNode(selectedNode.id, { disabled: !nodeData.disabled })
-              }
+              onClick={() => onUpdateNode(selectedNode.id, { disabled: !nodeData.disabled })}
               className={`
                 relative inline-flex h-5 w-9 items-center rounded-full transition-colors
                 ${nodeData.disabled ? "bg-muted" : "bg-primary"}
@@ -452,11 +392,13 @@ export function NodeInspector({
         )}
 
         {!isNote && (
-          <CollapsibleSection title="Graph Structure" defaultOpen={false} badge={isTrigger || isEnd ? "configured" : undefined}>
+          <CollapsibleSection
+            title="Graph Structure"
+            defaultOpen={false}
+            badge={isTrigger || isEnd ? "configured" : undefined}
+          >
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">
-                Trigger (START)
-              </label>
+              <label className="text-xs font-medium text-muted-foreground">Trigger (START)</label>
               <button
                 type="button"
                 role="switch"
@@ -481,9 +423,7 @@ export function NodeInspector({
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">
-                End (END)
-              </label>
+              <label className="text-xs font-medium text-muted-foreground">End (END)</label>
               <button
                 type="button"
                 role="switch"
@@ -652,19 +592,11 @@ export function NodeInspector({
   );
 }
 
-function NoteNodeConfig({
-  text,
-  onChange,
-}: {
-  text: string;
-  onChange: (text: string) => void;
-}) {
+function NoteNodeConfig({ text, onChange }: { text: string; onChange: (text: string) => void }) {
   return (
     <CollapsibleSection title="Note">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Text
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Text</label>
         <Textarea
           value={text}
           onChange={(e) => onChange(e.target.value)}
@@ -695,14 +627,10 @@ function AgentNodeConfig({
 
   return (
     <div className="space-y-3 pt-3 border-t border-border">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        Agent Configuration
-      </h4>
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agent Configuration</h4>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Task Instructions
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Task Instructions</label>
         <Textarea
           value={(config.instructions as string) ?? ""}
           onChange={(e) => onChange({ ...config, instructions: e.target.value })}
@@ -713,9 +641,7 @@ function AgentNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          System Prompt
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">System Prompt</label>
         <Textarea
           value={(config.system_prompt as string) ?? ""}
           onChange={(e) => onChange({ ...config, system_prompt: e.target.value })}
@@ -727,9 +653,7 @@ function AgentNodeConfig({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Provider
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Provider</label>
           <select
             value={(config.provider as string) ?? "openai"}
             onChange={(e) => onChange({ ...config, provider: e.target.value })}
@@ -742,9 +666,7 @@ function AgentNodeConfig({
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Model
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
           <Input
             value={(config.model as string) ?? ""}
             onChange={(e) => onChange({ ...config, model: e.target.value })}
@@ -756,9 +678,7 @@ function AgentNodeConfig({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Max Steps
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Max Steps</label>
           <Input
             type="number"
             min={1}
@@ -775,9 +695,7 @@ function AgentNodeConfig({
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Max Tool Calls
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Max Tool Calls</label>
           <Input
             type="number"
             min={1}
@@ -795,9 +713,7 @@ function AgentNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Allowed Tools
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Allowed Tools</label>
         <Textarea
           value={tools.join("\n")}
           onChange={(e) =>
@@ -816,9 +732,7 @@ function AgentNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Approval-Required Tools
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Approval-Required Tools</label>
         <Textarea
           value={approvalRequiredTools.join("\n")}
           onChange={(e) =>
@@ -837,9 +751,7 @@ function AgentNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Curated Context Paths
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Curated Context Paths</label>
         <Textarea
           value={observationContextPaths.join("\n")}
           onChange={(e) =>
@@ -903,9 +815,7 @@ function PromptNodeConfig({
   return (
     <CollapsibleSection title="Prompt Configuration">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Prompt Template ID (optional)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Prompt Template ID (optional)</label>
         <div className="flex gap-2">
           <Input
             value={(config.prompt_id as string) ?? ""}
@@ -923,16 +833,10 @@ function PromptNodeConfig({
         <p className="mt-1 text-xs text-muted-foreground">
           Load a prompt from the Prompt Library by ID (fills <code>prompt_template</code> for execution).
         </p>
-        {promptLoadError && (
-          <p className="mt-2 text-xs text-destructive">
-            {promptLoadError}
-          </p>
-        )}
+        {promptLoadError && <p className="mt-2 text-xs text-destructive">{promptLoadError}</p>}
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Prompt Template
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Prompt Template</label>
         <Textarea
           value={(config.prompt_template as string) ?? ""}
           onChange={(e) => {
@@ -950,9 +854,7 @@ function PromptNodeConfig({
         </p>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          System Prompt (optional)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">System Prompt (optional)</label>
         <Textarea
           value={(config.system_prompt as string) ?? ""}
           onChange={(e) => onChange({ ...config, system_prompt: e.target.value })}
@@ -960,15 +862,11 @@ function PromptNodeConfig({
           rows={4}
           className="text-sm font-mono"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          System instructions prepended to the conversation.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">System instructions prepended to the conversation.</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Model
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
           <Input
             value={(config.model as string) ?? "gpt-4"}
             onChange={(e) => onChange({ ...config, model: e.target.value })}
@@ -977,9 +875,7 @@ function PromptNodeConfig({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Temperature (0-2)
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Temperature (0-2)</label>
           <Input
             type="number"
             value={(config.temperature as number) ?? 0.7}
@@ -995,9 +891,7 @@ function PromptNodeConfig({
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Max Tokens (optional)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Max Tokens (optional)</label>
         <Input
           type="number"
           value={(config.max_tokens as number) ?? ""}
@@ -1011,9 +905,7 @@ function PromptNodeConfig({
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Variables
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Variables</label>
         <KeyValueEditor
           value={(config.variables as Record<string, string>) ?? {}}
           onChange={(variables) => onChange({ ...config, variables })}
@@ -1025,9 +917,7 @@ function PromptNodeConfig({
         </p>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Curated Context Paths
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Curated Context Paths</label>
         <Textarea
           value={observationContextPaths.join("\n")}
           onChange={(e) =>
@@ -1077,9 +967,7 @@ function HttpNodeConfig({
   return (
     <CollapsibleSection title="HTTP Configuration">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Method
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Method</label>
         <select
           value={(config.method as string) ?? "GET"}
           onChange={(e) => onChange({ ...config, method: e.target.value })}
@@ -1093,9 +981,7 @@ function HttpNodeConfig({
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          URL
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">URL</label>
         <Input
           value={(config.url as string) ?? ""}
           onChange={(e) => {
@@ -1107,14 +993,10 @@ function HttpNodeConfig({
           className="text-sm"
           aria-invalid={!!urlError}
         />
-        {urlError && (
-          <p className="mt-1 text-xs text-destructive">{urlError}</p>
-        )}
+        {urlError && <p className="mt-1 text-xs text-destructive">{urlError}</p>}
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Headers
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Headers</label>
         <KeyValueEditor
           value={(config.headers as Record<string, string>) ?? {}}
           onChange={(headers) => onChange({ ...config, headers })}
@@ -1123,9 +1005,7 @@ function HttpNodeConfig({
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Request Body (JSON)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Request Body (JSON)</label>
         <Textarea
           value={(config.body as string) ?? ""}
           onChange={(e) => onChange({ ...config, body: e.target.value })}
@@ -1133,23 +1013,17 @@ function HttpNodeConfig({
           rows={4}
           className="text-sm font-mono"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          JSON body for POST/PUT/PATCH requests
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">JSON body for POST/PUT/PATCH requests</p>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Output Key
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Output Key</label>
         <Input
           value={(config.output_key as string) ?? ""}
           onChange={(e) => onChange({ ...config, output_key: e.target.value })}
           placeholder="response"
           className="text-sm"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Key to store the response in state
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Key to store the response in state</p>
       </div>
     </CollapsibleSection>
   );
@@ -1166,9 +1040,7 @@ function TransformNodeConfig({
   return (
     <CollapsibleSection title="Transform Configuration">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Expression
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Expression</label>
         <Textarea
           value={(config.expression as string) ?? ""}
           onChange={(e) => onChange({ ...config, expression: e.target.value })}
@@ -1176,14 +1048,10 @@ function TransformNodeConfig({
           rows={3}
           className="text-sm font-mono"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Expression to transform the state
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Expression to transform the state</p>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Output Key
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Output Key</label>
         <Input
           value={(config.output_key as string) ?? ""}
           onChange={(e) => onChange({ ...config, output_key: e.target.value })}
@@ -1213,18 +1081,14 @@ function OutputNodeConfig({
   return (
     <CollapsibleSection title="Output Configuration">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Output Mapping
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Output Mapping</label>
         <KeyValueEditor
           value={mappingAsStrings}
           onChange={(mapping) => onChange({ ...config, output_mapping: mapping })}
           keyPlaceholder="Output key"
           valuePlaceholder="State path (e.g., node.prompt_1.output)"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Map state values to output keys
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Map state values to output keys</p>
       </div>
     </CollapsibleSection>
   );
@@ -1248,231 +1112,206 @@ function AdvancedNodeConfig({
 }) {
   const cacheConfig = (config.cache as Record<string, unknown>) ?? {};
   const cacheEnabled = cacheConfig.enabled === true;
-  const cacheTtlSeconds =
-    typeof cacheConfig.ttl_seconds === "number" ? cacheConfig.ttl_seconds : "";
+  const cacheTtlSeconds = typeof cacheConfig.ttl_seconds === "number" ? cacheConfig.ttl_seconds : "";
   const useGlobalTTL = cacheEnabled && typeof cacheConfig.ttl_seconds !== "number";
   const defaultCacheTTL = 3600;
   const hasAdvancedConfig = cacheEnabled || timeoutMs !== undefined || retryPolicy !== undefined;
 
   return (
     <CollapsibleSection title="Advanced" defaultOpen={false} badge={hasAdvancedConfig ? "configured" : undefined}>
-          {/* Cache */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-2">
-              Cache Results
-            </label>
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">
-                Enable cache
-              </label>
-              <button
-                type="button"
-                role="switch"
-                aria-label="Enable cache"
-                aria-checked={cacheEnabled}
-                onClick={() =>
-                  onChangeConfig({
-                    ...config,
-                    cache: { ...cacheConfig, enabled: !cacheEnabled },
-                  })
-                }
-                className={`
+      {/* Cache */}
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-2">Cache Results</label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted-foreground">Enable cache</label>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Enable cache"
+            aria-checked={cacheEnabled}
+            onClick={() =>
+              onChangeConfig({
+                ...config,
+                cache: { ...cacheConfig, enabled: !cacheEnabled },
+              })
+            }
+            className={`
                   relative inline-flex h-5 w-9 items-center rounded-full transition-colors
                   ${cacheEnabled ? "bg-primary" : "bg-muted"}
                 `}
-              >
-                <span
-                  className={`
+          >
+            <span
+              className={`
                     inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
                     ${cacheEnabled ? "translate-x-4.5" : "translate-x-0.5"}
                   `}
-                />
-              </button>
-            </div>
-            {cacheEnabled && (
-              <div className="mt-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Use global TTL
-                  </label>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-label="Use global TTL"
-                    aria-checked={useGlobalTTL}
-                    onClick={() => {
-                      const nextCache: Record<string, unknown> = {
-                        ...cacheConfig,
-                        enabled: true,
-                      };
-                      if (useGlobalTTL) {
-                        nextCache.ttl_seconds =
-                          typeof cacheConfig.ttl_seconds === "number"
-                            ? cacheConfig.ttl_seconds
-                            : defaultCacheTTL;
-                      } else {
-                        delete nextCache.ttl_seconds;
-                      }
-                      onChangeConfig({ ...config, cache: nextCache });
-                    }}
-                    className={`
+            />
+          </button>
+        </div>
+        {cacheEnabled && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">Use global TTL</label>
+              <button
+                type="button"
+                role="switch"
+                aria-label="Use global TTL"
+                aria-checked={useGlobalTTL}
+                onClick={() => {
+                  const nextCache: Record<string, unknown> = {
+                    ...cacheConfig,
+                    enabled: true,
+                  };
+                  if (useGlobalTTL) {
+                    nextCache.ttl_seconds =
+                      typeof cacheConfig.ttl_seconds === "number" ? cacheConfig.ttl_seconds : defaultCacheTTL;
+                  } else {
+                    delete nextCache.ttl_seconds;
+                  }
+                  onChangeConfig({ ...config, cache: nextCache });
+                }}
+                className={`
                       relative inline-flex h-5 w-9 items-center rounded-full transition-colors
                       ${useGlobalTTL ? "bg-primary" : "bg-muted"}
                     `}
-                  >
-                    <span
-                      className={`
+              >
+                <span
+                  className={`
                         inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform
                         ${useGlobalTTL ? "translate-x-4.5" : "translate-x-0.5"}
                       `}
-                    />
-                  </button>
-                </div>
+                />
+              </button>
+            </div>
 
-                {!useGlobalTTL && (
-                  <div className="mt-2">
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
-                      TTL (seconds)
-                    </label>
-                    <Input
-                      type="number"
-                      value={cacheTtlSeconds}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const parsed = val ? parseInt(val, 10) : undefined;
-                        const nextCache: Record<string, unknown> = {
-                          ...cacheConfig,
-                          enabled: true,
-                        };
-                        if (parsed && !Number.isNaN(parsed)) {
-                          nextCache.ttl_seconds = parsed;
-                        } else {
-                          delete nextCache.ttl_seconds;
-                        }
-                        onChangeConfig({ ...config, cache: nextCache });
-                      }}
-                      placeholder={String(defaultCacheTTL)}
-                      className="text-sm"
-                      min={1}
-                    />
-                  </div>
-                )}
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Uses input + config hash to reuse node outputs.
-                </p>
+            {!useGlobalTTL && (
+              <div className="mt-2">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">TTL (seconds)</label>
+                <Input
+                  type="number"
+                  value={cacheTtlSeconds}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const parsed = val ? parseInt(val, 10) : undefined;
+                    const nextCache: Record<string, unknown> = {
+                      ...cacheConfig,
+                      enabled: true,
+                    };
+                    if (parsed && !Number.isNaN(parsed)) {
+                      nextCache.ttl_seconds = parsed;
+                    } else {
+                      delete nextCache.ttl_seconds;
+                    }
+                    onChangeConfig({ ...config, cache: nextCache });
+                  }}
+                  placeholder={String(defaultCacheTTL)}
+                  className="text-sm"
+                  min={1}
+                />
               </div>
             )}
+            <p className="mt-1 text-xs text-muted-foreground">Uses input + config hash to reuse node outputs.</p>
           </div>
+        )}
+      </div>
 
-          {/* Timeout */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Timeout (ms)
-            </label>
-            <Input
-              type="number"
-              value={timeoutMs ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                onChangeTimeout(val ? parseInt(val, 10) : undefined);
-              }}
-              placeholder="30000"
-              className="text-sm"
-              min={0}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Max execution time before timeout (leave empty for default)
-            </p>
-          </div>
+      {/* Timeout */}
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Timeout (ms)</label>
+        <Input
+          type="number"
+          value={timeoutMs ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            onChangeTimeout(val ? parseInt(val, 10) : undefined);
+          }}
+          placeholder="30000"
+          className="text-sm"
+          min={0}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Max execution time before timeout (leave empty for default)
+        </p>
+      </div>
 
-          {/* Retry Policy */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Max Retry Attempts
-            </label>
-            <Input
-              type="number"
-              value={retryPolicy?.max_attempts ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                const max_attempts = val ? parseInt(val, 10) : undefined;
+      {/* Retry Policy */}
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Max Retry Attempts</label>
+        <Input
+          type="number"
+          value={retryPolicy?.max_attempts ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            const max_attempts = val ? parseInt(val, 10) : undefined;
 
-                if (max_attempts === undefined && retryPolicy?.backoff_ms === undefined) {
-                  onChangeRetryPolicy(undefined);
-                  return;
-                }
+            if (max_attempts === undefined && retryPolicy?.backoff_ms === undefined) {
+              onChangeRetryPolicy(undefined);
+              return;
+            }
 
-                onChangeRetryPolicy({
-                  max_attempts: max_attempts ?? retryPolicy?.max_attempts ?? 3,
-                  backoff_ms: retryPolicy?.backoff_ms ?? 1000,
-                  backoff_strategy: retryPolicy?.backoff_strategy ?? "exponential",
-                });
-              }}
-              placeholder="3"
-              className="text-sm"
-              min={1}
-              max={10}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Total attempts on failure (1 = no retries)
-            </p>
-          </div>
+            onChangeRetryPolicy({
+              max_attempts: max_attempts ?? retryPolicy?.max_attempts ?? 3,
+              backoff_ms: retryPolicy?.backoff_ms ?? 1000,
+              backoff_strategy: retryPolicy?.backoff_strategy ?? "exponential",
+            });
+          }}
+          placeholder="3"
+          className="text-sm"
+          min={1}
+          max={10}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">Total attempts on failure (1 = no retries)</p>
+      </div>
 
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Backoff (ms)
-            </label>
-            <Input
-              type="number"
-              value={retryPolicy?.backoff_ms ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                const backoff_ms = val ? parseInt(val, 10) : undefined;
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Backoff (ms)</label>
+        <Input
+          type="number"
+          value={retryPolicy?.backoff_ms ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            const backoff_ms = val ? parseInt(val, 10) : undefined;
 
-                if (backoff_ms === undefined && retryPolicy?.max_attempts === undefined) {
-                  onChangeRetryPolicy(undefined);
-                  return;
-                }
+            if (backoff_ms === undefined && retryPolicy?.max_attempts === undefined) {
+              onChangeRetryPolicy(undefined);
+              return;
+            }
 
-                onChangeRetryPolicy({
-                  max_attempts: retryPolicy?.max_attempts ?? 3,
-                  backoff_ms: backoff_ms ?? retryPolicy?.backoff_ms ?? 1000,
-                  backoff_strategy: retryPolicy?.backoff_strategy ?? "exponential",
-                });
-              }}
-              placeholder="1000"
-              className="text-sm"
-              min={0}
-              step={100}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Base delay between retries (fixed), or base delay for exponential backoff
-            </p>
-          </div>
+            onChangeRetryPolicy({
+              max_attempts: retryPolicy?.max_attempts ?? 3,
+              backoff_ms: backoff_ms ?? retryPolicy?.backoff_ms ?? 1000,
+              backoff_strategy: retryPolicy?.backoff_strategy ?? "exponential",
+            });
+          }}
+          placeholder="1000"
+          className="text-sm"
+          min={0}
+          step={100}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Base delay between retries (fixed), or base delay for exponential backoff
+        </p>
+      </div>
 
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Backoff Strategy
-            </label>
-            <select
-              value={retryPolicy?.backoff_strategy ?? "exponential"}
-              onChange={(e) => {
-                const backoff_strategy = e.target.value as RetryPolicy["backoff_strategy"];
-                onChangeRetryPolicy({
-                  max_attempts: retryPolicy?.max_attempts ?? 3,
-                  backoff_ms: retryPolicy?.backoff_ms ?? 1000,
-                  backoff_strategy: backoff_strategy ?? "exponential",
-                });
-              }}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
-            >
-              <option value="exponential">exponential</option>
-              <option value="fixed">fixed</option>
-            </select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Exponential uses backoff * 2^(attempt-2)
-            </p>
-          </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Backoff Strategy</label>
+        <select
+          value={retryPolicy?.backoff_strategy ?? "exponential"}
+          onChange={(e) => {
+            const backoff_strategy = e.target.value as RetryPolicy["backoff_strategy"];
+            onChangeRetryPolicy({
+              max_attempts: retryPolicy?.max_attempts ?? 3,
+              backoff_ms: retryPolicy?.backoff_ms ?? 1000,
+              backoff_strategy: backoff_strategy ?? "exponential",
+            });
+          }}
+          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30"
+        >
+          <option value="exponential">exponential</option>
+          <option value="fixed">fixed</option>
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">Exponential uses backoff * 2^(attempt-2)</p>
+      </div>
     </CollapsibleSection>
   );
 }
@@ -1514,9 +1353,7 @@ function BranchNodeConfig({
     <>
       <CollapsibleSection title="Condition">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Condition Type
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Condition Type</label>
           <select
             value={conditionType}
             onChange={(e) => onChange({ ...config, condition_type: e.target.value })}
@@ -1529,17 +1366,18 @@ function BranchNodeConfig({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Condition Expression
-          </label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Condition Expression</label>
           <Textarea
             value={(config.condition as string) ?? ""}
             onChange={(e) => onChange({ ...config, condition: e.target.value })}
             placeholder={
-              conditionType === "number" ? "vars.score > 80" :
-              conditionType === "boolean" ? "vars.approved" :
-              conditionType === "string" ? 'vars.status == "done"' :
-              "vars.score > 80"
+              conditionType === "number"
+                ? "vars.score > 80"
+                : conditionType === "boolean"
+                  ? "vars.approved"
+                  : conditionType === "string"
+                    ? 'vars.status == "done"'
+                    : "vars.score > 80"
             }
             rows={2}
             className="text-sm font-mono"
@@ -1596,9 +1434,7 @@ function MergeNodeConfig({
   return (
     <CollapsibleSection title="Merge Configuration">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Merge Strategy
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Merge Strategy</label>
         <select
           value={(config.merge_strategy as string) ?? "namespaced"}
           onChange={(e) => onChange({ ...config, merge_strategy: e.target.value })}
@@ -1607,9 +1443,7 @@ function MergeNodeConfig({
           <option value="namespaced">Namespaced (default)</option>
           <option value="last_write_wins">Last Write Wins</option>
         </select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          How to combine outputs from incoming branches
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">How to combine outputs from incoming branches</p>
       </div>
       <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
         <div>
@@ -1634,8 +1468,7 @@ function MemoryNodeConfig({
   onChange: (config: Record<string, unknown>) => void;
 }) {
   const action = (config.action as string) ?? "get";
-  const ttlSeconds =
-    typeof config.ttl_seconds === "number" ? config.ttl_seconds : "";
+  const ttlSeconds = typeof config.ttl_seconds === "number" ? config.ttl_seconds : "";
   const valueText =
     config.value === undefined
       ? ""
@@ -1645,11 +1478,8 @@ function MemoryNodeConfig({
 
   return (
     <CollapsibleSection title="Memory Configuration">
-
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Action
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Action</label>
         <select
           value={action}
           onChange={(e) => onChange({ ...config, action: e.target.value })}
@@ -1662,9 +1492,7 @@ function MemoryNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Key
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Key</label>
         <Input
           value={(config.key as string) ?? ""}
           onChange={(e) => onChange({ ...config, key: e.target.value })}
@@ -1674,24 +1502,18 @@ function MemoryNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Namespace
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Namespace</label>
         <Input
           value={(config.namespace as string) ?? ""}
           onChange={(e) => onChange({ ...config, namespace: e.target.value })}
           placeholder="global"
           className="text-sm"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Optional namespace prefix for key isolation.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Optional namespace prefix for key isolation.</p>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Namespace Path
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Namespace Path</label>
         <Input
           value={(config.namespace_path as string) ?? ""}
           onChange={(e) => onChange({ ...config, namespace_path: e.target.value })}
@@ -1706,9 +1528,7 @@ function MemoryNodeConfig({
       {action === "set" && (
         <>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Value Path
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Value Path</label>
             <Input
               value={(config.value_path as string) ?? ""}
               onChange={(e) => onChange({ ...config, value_path: e.target.value })}
@@ -1721,24 +1541,18 @@ function MemoryNodeConfig({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Value Template
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Value Template</label>
             <Input
               value={(config.value_template as string) ?? ""}
               onChange={(e) => onChange({ ...config, value_template: e.target.value })}
               placeholder="User {{input.user_id}} summary"
               className="text-sm"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Template values from state if Value Path is empty.
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Template values from state if Value Path is empty.</p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              Value (JSON or text)
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Value (JSON or text)</label>
             <Textarea
               value={valueText}
               onChange={(e) => {
@@ -1766,9 +1580,7 @@ function MemoryNodeConfig({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
-              TTL (seconds)
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">TTL (seconds)</label>
             <Input
               type="number"
               value={ttlSeconds}
@@ -1805,10 +1617,7 @@ function ToolNodeConfig({
   const version = (config.version as string) ?? "";
   const inputTemplate = (config.input_template as string) ?? "";
   const inputPath = (config.input_path as string) ?? "";
-  const configText =
-    config.config && typeof config.config === "object"
-      ? JSON.stringify(config.config, null, 2)
-      : "";
+  const configText = config.config && typeof config.config === "object" ? JSON.stringify(config.config, null, 2) : "";
   const inputText =
     config.input === undefined
       ? ""
@@ -1818,11 +1627,8 @@ function ToolNodeConfig({
 
   return (
     <CollapsibleSection title="Tool Configuration">
-
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Tool Name
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Tool Name</label>
         <Input
           value={toolName}
           onChange={(e) => onChange({ ...config, tool: e.target.value })}
@@ -1832,9 +1638,7 @@ function ToolNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Version
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Version</label>
         <Input
           value={version}
           onChange={(e) => onChange({ ...config, version: e.target.value })}
@@ -1844,9 +1648,7 @@ function ToolNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Input Path
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Input Path</label>
         <Input
           value={inputPath}
           onChange={(e) => onChange({ ...config, input_path: e.target.value })}
@@ -1856,9 +1658,7 @@ function ToolNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Input Template
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Input Template</label>
         <Input
           value={inputTemplate}
           onChange={(e) => onChange({ ...config, input_template: e.target.value })}
@@ -1868,9 +1668,7 @@ function ToolNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Static Input (JSON or text)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Static Input (JSON or text)</label>
         <Textarea
           value={inputText}
           onChange={(e) => {
@@ -1895,9 +1693,7 @@ function ToolNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Tool Config Overrides (JSON)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Tool Config Overrides (JSON)</label>
         <Textarea
           value={configText}
           onChange={(e) => {
@@ -1943,11 +1739,8 @@ function SubgraphNodeConfig({
 
   return (
     <CollapsibleSection title="Subgraph Configuration">
-
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Graph ID
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Graph ID</label>
         <Input
           value={(config.graph_id as string) ?? ""}
           onChange={(e) => onChange({ ...config, graph_id: e.target.value })}
@@ -1957,9 +1750,7 @@ function SubgraphNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Graph Version ID (optional)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Graph Version ID (optional)</label>
         <Input
           value={(config.graph_version_id as string) ?? ""}
           onChange={(e) => onChange({ ...config, graph_version_id: e.target.value })}
@@ -1969,9 +1760,7 @@ function SubgraphNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Input Path
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Input Path</label>
         <Input
           value={(config.input_path as string) ?? ""}
           onChange={(e) => onChange({ ...config, input_path: e.target.value })}
@@ -1981,9 +1770,7 @@ function SubgraphNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Input Mapping (JSON)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Input Mapping (JSON)</label>
         <Textarea
           value={inputMappingText}
           onChange={(e) => {
@@ -2008,9 +1795,7 @@ function SubgraphNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Output Mapping (JSON)
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Output Mapping (JSON)</label>
         <Textarea
           value={outputMappingText}
           onChange={(e) => {
@@ -2035,9 +1820,7 @@ function SubgraphNodeConfig({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Output Key
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Output Key</label>
         <Input
           value={(config.output_key as string) ?? ""}
           onChange={(e) => onChange({ ...config, output_key: e.target.value })}
@@ -2081,11 +1864,8 @@ function HumanGateNodeConfig({
 
   return (
     <CollapsibleSection title="Human Gate Configuration">
-
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Prompt Message
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Prompt Message</label>
         <Textarea
           value={(config.prompt_message as string) ?? ""}
           onChange={(e) => {
@@ -2101,24 +1881,16 @@ function HumanGateNodeConfig({
         {promptError ? (
           <p className="mt-1 text-xs text-destructive">{promptError}</p>
         ) : (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Message shown to the reviewer when the workflow pauses
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Message shown to the reviewer when the workflow pauses</p>
         )}
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1">
-          Required Fields
-        </label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">Required Fields</label>
         <div className="space-y-2">
           {requiredFields.map((field, index) => (
             <div key={index} className="flex items-center gap-2">
-              <Input
-                value={field}
-                readOnly
-                className="text-sm flex-1"
-              />
+              <Input value={field} readOnly className="text-sm flex-1" />
               <Button
                 size="sm"
                 variant="ghost"
@@ -2156,15 +1928,16 @@ function HumanGateNodeConfig({
             </Button>
           </div>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Fields the reviewer must fill in before approving
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Fields the reviewer must fill in before approving</p>
       </div>
 
       <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
         <div>
           <p className="font-medium text-foreground">Approve:</p>
-          <p>Run continues with submitted fields available in state as <code className="font-mono">node.&lt;id&gt;.output</code></p>
+          <p>
+            Run continues with submitted fields available in state as{" "}
+            <code className="font-mono">node.&lt;id&gt;.output</code>
+          </p>
         </div>
         <div>
           <p className="font-medium text-foreground">Reject:</p>

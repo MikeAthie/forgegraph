@@ -281,9 +281,7 @@ describe("graph-validator", () => {
         const { nodes, edges } = createValidGraph();
         const result = validateGraph(nodes, edges);
 
-        const startError = result.errors.find(
-          (e) => e.code === ValidationErrorCode.NO_START_NODE
-        );
+        const startError = result.errors.find((e) => e.code === ValidationErrorCode.NO_START_NODE);
         expect(startError).toBeUndefined();
       });
 
@@ -306,9 +304,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        const startError = result.errors.find(
-          (e) => e.code === ValidationErrorCode.NO_START_NODE
-        );
+        const startError = result.errors.find((e) => e.code === ValidationErrorCode.NO_START_NODE);
         expect(startError).toBeUndefined();
       });
     });
@@ -330,9 +326,7 @@ describe("graph-validator", () => {
         const { nodes, edges } = createValidGraph();
         const result = validateGraph(nodes, edges);
 
-        const outputError = result.errors.find(
-          (e) => e.code === ValidationErrorCode.NO_OUTPUT_NODE
-        );
+        const outputError = result.errors.find((e) => e.code === ValidationErrorCode.NO_OUTPUT_NODE);
         expect(outputError).toBeUndefined();
       });
     });
@@ -364,9 +358,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        const disconnectedWarnings = result.warnings.filter(
-          (w) => w.code === ValidationErrorCode.DISCONNECTED_NODE
-        );
+        const disconnectedWarnings = result.warnings.filter((w) => w.code === ValidationErrorCode.DISCONNECTED_NODE);
         expect(disconnectedWarnings).toHaveLength(0);
       });
 
@@ -389,9 +381,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        const disconnectedWarnings = result.warnings.filter(
-          (w) => w.code === ValidationErrorCode.DISCONNECTED_NODE
-        );
+        const disconnectedWarnings = result.warnings.filter((w) => w.code === ValidationErrorCode.DISCONNECTED_NODE);
         expect(disconnectedWarnings).toHaveLength(0);
       });
 
@@ -429,9 +419,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        const disconnectedWarnings = result.warnings.filter(
-          (w) => w.code === ValidationErrorCode.DISCONNECTED_NODE
-        );
+        const disconnectedWarnings = result.warnings.filter((w) => w.code === ValidationErrorCode.DISCONNECTED_NODE);
         expect(disconnectedWarnings).toHaveLength(2);
         expect(disconnectedWarnings.map((w) => w.nodeId)).toContain("prompt-2");
         expect(disconnectedWarnings.map((w) => w.nodeId)).toContain("prompt-3");
@@ -454,9 +442,7 @@ describe("graph-validator", () => {
         const { nodes, edges } = createValidGraph();
         const result = validateGraph(nodes, edges);
 
-        const cycleError = result.errors.find(
-          (e) => e.code === ValidationErrorCode.CYCLE_DETECTED
-        );
+        const cycleError = result.errors.find((e) => e.code === ValidationErrorCode.CYCLE_DETECTED);
         expect(cycleError).toBeUndefined();
       });
 
@@ -483,9 +469,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        expect(result.errors.some((e) => e.code === ValidationErrorCode.CYCLE_DETECTED)).toBe(
-          true
-        );
+        expect(result.errors.some((e) => e.code === ValidationErrorCode.CYCLE_DETECTED)).toBe(true);
       });
 
       it("should handle complex cycles with multiple paths", () => {
@@ -525,9 +509,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        expect(result.errors.some((e) => e.code === ValidationErrorCode.CYCLE_DETECTED)).toBe(
-          true
-        );
+        expect(result.errors.some((e) => e.code === ValidationErrorCode.CYCLE_DETECTED)).toBe(true);
       });
     });
 
@@ -556,9 +538,7 @@ describe("graph-validator", () => {
         const result = validateGraph(nodes, edges);
 
         expect(result.isValid).toBe(false);
-        const selfConnectionError = result.errors.find(
-          (e) => e.code === ValidationErrorCode.SELF_CONNECTION
-        );
+        const selfConnectionError = result.errors.find((e) => e.code === ValidationErrorCode.SELF_CONNECTION);
         expect(selfConnectionError).toBeDefined();
         expect(selfConnectionError?.severity).toBe("error");
         expect(selfConnectionError?.edgeId).toBe("e2");
@@ -591,9 +571,7 @@ describe("graph-validator", () => {
 
         const result = validateGraph(nodes, edges);
 
-        expect(result.warnings.some((w) => w.code === ValidationErrorCode.EMPTY_GRAPH)).toBe(
-          true
-        );
+        expect(result.warnings.some((w) => w.code === ValidationErrorCode.EMPTY_GRAPH)).toBe(true);
       });
     });
 
@@ -656,9 +634,7 @@ describe("graph-validator", () => {
 
         expect(result.hasStartNode).toBe(true);
         expect(result.hasOutputNode).toBe(false);
-        expect(result.errors.some((e) => e.code === ValidationErrorCode.NO_OUTPUT_NODE)).toBe(
-          true
-        );
+        expect(result.errors.some((e) => e.code === ValidationErrorCode.NO_OUTPUT_NODE)).toBe(true);
       });
 
       it("should handle graph with END edge", () => {
@@ -814,9 +790,7 @@ describe("graph-validator", () => {
         // hasEndNode is false because there's no explicit end marker,
         // but sink nodes are accepted so there's no NO_END_NODE warning
         expect(result.hasEndNode).toBe(false);
-        const endWarning = result.warnings.find(
-          (w) => w.code === ValidationErrorCode.NO_END_NODE
-        );
+        const endWarning = result.warnings.find((w) => w.code === ValidationErrorCode.NO_END_NODE);
         expect(endWarning).toBeUndefined();
       });
     });

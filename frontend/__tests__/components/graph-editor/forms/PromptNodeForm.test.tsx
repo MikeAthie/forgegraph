@@ -40,10 +40,7 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 jest.mock("@/components/ui/key-value-editor", () => ({
   KeyValueEditor: ({ value, onChange }: any) => (
     <div data-testid="key-value-editor">
-      <button
-        data-testid="add-variable"
-        onClick={() => onChange({ ...value, newKey: "newValue" })}
-      >
+      <button data-testid="add-variable" onClick={() => onChange({ ...value, newKey: "newValue" })}>
         Add Variable
       </button>
       <div data-testid="variables-display">{JSON.stringify(value)}</div>
@@ -69,7 +66,7 @@ describe("PromptNodeForm", () => {
 
   const renderWithConfig = async (
     initialConfig: NodeFormProps["config"] = {},
-    options: { errors?: NodeFormProps["errors"] } = {}
+    options: { errors?: NodeFormProps["errors"] } = {},
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
@@ -200,7 +197,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             model: "claude-3-opus",
-          })
+          }),
         );
       });
     });
@@ -215,7 +212,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             temperature: 1.2,
-          })
+          }),
         );
       });
     });
@@ -246,7 +243,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             max_tokens: undefined,
-          })
+          }),
         );
       });
     });
@@ -262,7 +259,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             variables: expect.objectContaining({ newKey: "newValue" }),
-          })
+          }),
         );
       });
     });
@@ -304,7 +301,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             role: expect.stringContaining("New Role"),
-          })
+          }),
         );
       });
     });
@@ -326,7 +323,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             cache_enabled: true,
-          })
+          }),
         );
       });
     });
@@ -350,7 +347,7 @@ describe("PromptNodeForm", () => {
             model: "gpt-4",
             temperature: 0.8,
             role: expect.any(String),
-          })
+          }),
         );
       });
     });
@@ -360,9 +357,7 @@ describe("PromptNodeForm", () => {
     it("should display helpful descriptions for each field", async () => {
       await renderWithConfig();
 
-      expect(
-        screen.getByText(/instructions that define the assistant's behavior/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/instructions that define the assistant's behavior/i)).toBeInTheDocument();
       expect(screen.getByText(/use {{variable}} for interpolation/i)).toBeInTheDocument();
       expect(screen.getByText(/0 = deterministic, 2 = creative/i)).toBeInTheDocument();
     });
@@ -396,7 +391,7 @@ describe("PromptNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             temperature: 0.3,
-          })
+          }),
         );
       });
     });

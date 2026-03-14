@@ -35,8 +35,7 @@ export default function Header() {
     { href: "/approvals", label: "Approvals" },
   ] as const;
 
-  const canManageOrg =
-    user?.organization_role === "owner" || user?.organization_role === "admin";
+  const canManageOrg = user?.organization_role === "owner" || user?.organization_role === "admin";
   const canViewAuditLogs = canManageOrg;
 
   const activeHref = (() => {
@@ -149,11 +148,7 @@ export default function Header() {
             {isAuthenticated && (
               <div className="hidden sm:ml-8 sm:flex sm:space-x-1">
                 {navItems.map((item) => (
-                  <Button
-                    key={item.href}
-                    variant={activeHref === item.href ? "secondary" : "ghost"}
-                    asChild
-                  >
+                  <Button key={item.href} variant={activeHref === item.href ? "secondary" : "ghost"} asChild>
                     <Link href={item.href} className="flex items-center gap-2">
                       <span>{item.label}</span>
                       {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
@@ -178,9 +173,7 @@ export default function Header() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="gap-2">
-                    <span className="hidden sm:inline max-w-[150px] truncate">
-                      {user?.email}
-                    </span>
+                    <span className="hidden sm:inline max-w-[150px] truncate">{user?.email}</span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="16"
@@ -202,9 +195,7 @@ export default function Header() {
                       <p className="text-sm font-medium">Account</p>
                       <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                       {user?.organization_role && (
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {user.organization_role} access
-                        </p>
+                        <p className="text-xs text-muted-foreground capitalize">{user.organization_role} access</p>
                       )}
                     </div>
                   </DropdownMenuLabel>
@@ -212,11 +203,11 @@ export default function Header() {
                   <DropdownMenuItem
                     onSelect={(event) => {
                       event.preventDefault();
-                      void router.push("/admin/organization");
+                      void router.push("/admin");
                     }}
                     className="cursor-pointer"
                   >
-                    Organization
+                    Admin & Governance
                   </DropdownMenuItem>
                   {canManageOrg && (
                     <DropdownMenuItem

@@ -161,3 +161,35 @@ def test_memory_observation_endpoints_are_tenant_scoped(api_client: APIClient, u
     search_response = api_client.get("/api/memory/observations/search", data={"query": "visible"})
     assert search_response.status_code == 200
     assert search_response.json()["data"] == []
+
+
+def test_memory_observation_permissions_match_role_contract(api_client: APIClient, user: User):
+    viewer = User.objects.create_user(email="viewer@example.com", password="testpassword123")
+    organization = user.default_organization
+    assert organization is not None
+    viewer.default_organization = organization
+    viewer.save(update_fields=["default_organization"])
+    viewer.organization_memberships.create(
+        organization=organization,
+        role="viewer",
+        is_default=True,
+    )
+
+    observation = MemoryObservation.objects.create(
+        tenant_id=organization.id,
+        graph_id=uuid4(),
+        session_id=uuid4(),
+        type="fact",
+        title="Tenant Note",
+        content="Visible to authenticated tenant users.",
+        scope="graph",
+        topic_key="tenant-note",
+    )
+
+    api_client.force_authenticate(user=viewer)
+
+    detail_response = api_client.get(f"/api/memory/observations/{observation.id}")
+    assert detail_response.status_code == 200
+
+    delete_response = api_client.delete(f"/api/memory/observations/{observation.id}")
+    assert delete_response.status_code == 403

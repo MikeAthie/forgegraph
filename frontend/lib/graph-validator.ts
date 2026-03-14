@@ -72,9 +72,7 @@ function checkStartNode(nodes: Node[], edges: Edge[]): ValidationError | null {
   }
 
   // Check for explicit trigger node
-  const hasTrigger = executableNodes.some(
-    (node) => (node.data as Record<string, unknown>)?.isTrigger === true
-  );
+  const hasTrigger = executableNodes.some((node) => (node.data as Record<string, unknown>)?.isTrigger === true);
 
   // Check for START -> node edge
   const hasStartEdge = edges.some((edge) => edge.source === START_NODE_ID);
@@ -100,9 +98,7 @@ function checkOutputNode(nodes: Node[]): ValidationError | null {
     return null; // Empty graph check handled separately
   }
 
-  const hasOutput = executableNodes.some(
-    (node) => node.type === NODE_TYPES.OUTPUT
-  );
+  const hasOutput = executableNodes.some((node) => node.type === NODE_TYPES.OUTPUT);
 
   if (!hasOutput) {
     return {
@@ -126,9 +122,7 @@ function checkEndNode(nodes: Node[], edges: Edge[]): ValidationError | null {
   }
 
   // Check for explicit end node
-  const hasExplicitEnd = executableNodes.some(
-    (node) => (node.data as Record<string, unknown>)?.isEnd === true
-  );
+  const hasExplicitEnd = executableNodes.some((node) => (node.data as Record<string, unknown>)?.isEnd === true);
 
   // Check for END edge
   const hasEndEdge = edges.some((edge) => edge.target === END_NODE_ID);
@@ -136,21 +130,16 @@ function checkEndNode(nodes: Node[], edges: Edge[]): ValidationError | null {
   // Check for sink nodes (nodes with no outgoing edges to other nodes)
   const executableIds = new Set(executableNodes.map((n) => n.id));
   const sourcesWithOutgoing = new Set(
-    edges
-      .filter((e) => executableIds.has(e.source) && executableIds.has(e.target))
-      .map((e) => e.source)
+    edges.filter((e) => executableIds.has(e.source) && executableIds.has(e.target)).map((e) => e.source),
   );
-  const sinkNodes = executableNodes.filter(
-    (node) => !sourcesWithOutgoing.has(node.id)
-  );
+  const sinkNodes = executableNodes.filter((node) => !sourcesWithOutgoing.has(node.id));
 
   if (!hasExplicitEnd && !hasEndEdge && sinkNodes.length === 0) {
     return {
       code: ValidationErrorCode.NO_END_NODE,
       severity: "warning",
       message: "Graph has no clear end point",
-      suggestion:
-        "Mark a node as the end point or ensure sink nodes exist",
+      suggestion: "Mark a node as the end point or ensure sink nodes exist",
     };
   }
 
@@ -160,10 +149,7 @@ function checkEndNode(nodes: Node[], edges: Edge[]): ValidationError | null {
 /**
  * Check for disconnected nodes
  */
-function checkDisconnectedNodes(
-  nodes: Node[],
-  edges: Edge[]
-): ValidationError[] {
+function checkDisconnectedNodes(nodes: Node[], edges: Edge[]): ValidationError[] {
   const errors: ValidationError[] = [];
   const executableNodes = getExecutableNodes(nodes);
 
@@ -367,18 +353,14 @@ export function validateGraph(nodes: Node[], edges: Edge[]): ValidationResult {
   // Compute summary flags
   const executableNodes = getExecutableNodes(nodes);
   const hasStartNode =
-    executableNodes.some(
-      (n) => (n.data as Record<string, unknown>)?.isTrigger === true
-    ) || edges.some((e) => e.source === START_NODE_ID);
+    executableNodes.some((n) => (n.data as Record<string, unknown>)?.isTrigger === true) ||
+    edges.some((e) => e.source === START_NODE_ID);
 
-  const hasOutputNode = executableNodes.some(
-    (n) => n.type === NODE_TYPES.OUTPUT
-  );
+  const hasOutputNode = executableNodes.some((n) => n.type === NODE_TYPES.OUTPUT);
 
   const hasEndNode =
-    executableNodes.some(
-      (n) => (n.data as Record<string, unknown>)?.isEnd === true
-    ) || edges.some((e) => e.target === END_NODE_ID);
+    executableNodes.some((n) => (n.data as Record<string, unknown>)?.isEnd === true) ||
+    edges.some((e) => e.target === END_NODE_ID);
 
   return {
     isValid: errors.length === 0,

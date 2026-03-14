@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -136,10 +143,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
       showError("Buffer size must be between 1 and 200.");
       return;
     }
-    if (
-      formState.summarizationEnabled &&
-      formState.summarizationThreshold < formState.summarizationKeepRecent + 10
-    ) {
+    if (formState.summarizationEnabled && formState.summarizationThreshold < formState.summarizationKeepRecent + 10) {
       showError("Summarization threshold must be at least keep recent + 10.");
       return;
     }
@@ -197,9 +201,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Memory Settings</DialogTitle>
-          <DialogDescription>
-            Control how much context your agent retains across prompts.
-          </DialogDescription>
+          <DialogDescription>Control how much context your agent retains across prompts.</DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -250,9 +252,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
               <Switch
                 id="enable-persistence"
                 checked={formState.enablePersistence}
-                onCheckedChange={(checked) =>
-                  setFormState((prev) => ({ ...prev, enablePersistence: checked }))
-                }
+                onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, enablePersistence: checked }))}
               />
             </FormField>
 
@@ -272,9 +272,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
                   <Switch
                     id="auto-prepend"
                     checked={formState.autoPrepend}
-                    onCheckedChange={(checked) =>
-                      setFormState((prev) => ({ ...prev, autoPrepend: checked }))
-                    }
+                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, autoPrepend: checked }))}
                   />
                 </FormField>
 
@@ -288,9 +286,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
                   <Switch
                     id="vector-enabled"
                     checked={formState.vectorEnabled}
-                    onCheckedChange={(checked) =>
-                      setFormState((prev) => ({ ...prev, vectorEnabled: checked }))
-                    }
+                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, vectorEnabled: checked }))}
                   />
                 </FormField>
 
@@ -428,9 +424,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
                   <Switch
                     id="summarization-enabled"
                     checked={formState.summarizationEnabled}
-                    onCheckedChange={(checked) =>
-                      setFormState((prev) => ({ ...prev, summarizationEnabled: checked }))
-                    }
+                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, summarizationEnabled: checked }))}
                   />
                 </FormField>
 

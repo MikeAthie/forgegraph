@@ -68,7 +68,14 @@ export default function OAuthCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [callbackPayload.code, callbackPayload.error, callbackPayload.errorDescription, callbackPayload.state, router, router.isReady]);
+  }, [
+    callbackPayload.code,
+    callbackPayload.error,
+    callbackPayload.errorDescription,
+    callbackPayload.state,
+    router,
+    router.isReady,
+  ]);
 
   return (
     <ProtectedRoute>

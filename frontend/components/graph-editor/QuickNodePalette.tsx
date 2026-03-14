@@ -136,7 +136,7 @@ export function QuickNodePalette({
               "touch-manipulation px-2 py-1 rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1",
               selectedCategory === null
                 ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
             )}
           >
             Popular
@@ -150,7 +150,7 @@ export function QuickNodePalette({
                 "touch-manipulation px-2 py-1 rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1",
                 selectedCategory === key
                   ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80",
               )}
             >
               {label}
@@ -167,12 +167,7 @@ export function QuickNodePalette({
           </p>
         ) : (
           displayedPresets.map((preset) => (
-            <PresetCard
-              key={preset.id}
-              preset={preset}
-              compact={compact}
-              onClick={() => onSelectPreset(preset)}
-            />
+            <PresetCard key={preset.id} preset={preset} compact={compact} onClick={() => onSelectPreset(preset)} />
           ))
         )}
       </div>
@@ -209,26 +204,19 @@ function PresetCard({ preset, compact = false, onClick }: PresetCardProps) {
       onClick={onClick}
       className={cn(
         "group flex items-start gap-3 rounded-lg border border-border bg-background/60 p-3 text-left transition-colors transition-shadow hover:border-primary/30 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 touch-manipulation",
-        compact && "p-2"
+        compact && "p-2",
       )}
     >
       <div
         className={cn(
           "flex items-center justify-center rounded-md bg-primary/10 text-primary shrink-0",
-          compact ? "w-8 h-8" : "w-10 h-10"
+          compact ? "w-8 h-8" : "w-10 h-10",
         )}
       >
         <IconComponent className={cn(compact ? "w-4 h-4" : "w-5 h-5")} />
       </div>
       <div className="flex-1 min-w-0">
-        <p
-          className={cn(
-            "font-medium text-foreground truncate",
-            compact ? "text-xs" : "text-sm"
-          )}
-        >
-          {preset.name}
-        </p>
+        <p className={cn("font-medium text-foreground truncate", compact ? "text-xs" : "text-sm")}>{preset.name}</p>
         {preset.validationBadge && (
           <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
             {preset.validationBadge}
@@ -236,13 +224,9 @@ function PresetCard({ preset, compact = false, onClick }: PresetCardProps) {
         )}
         {!compact && (
           <>
-            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-              {preset.description}
-            </p>
+            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{preset.description}</p>
             {preset.setupHint && (
-              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1">
-                {preset.setupHint}
-              </p>
+              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1">{preset.setupHint}</p>
             )}
           </>
         )}

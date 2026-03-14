@@ -33,9 +33,7 @@ describe("HumanGateNodeForm", () => {
     };
   };
 
-  const renderWithConfig = (
-    initialConfig: NodeFormProps["config"] = {}
-  ) => {
+  const renderWithConfig = (initialConfig: NodeFormProps["config"] = {}) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
       const handleChange = (nextConfig: NodeFormProps["config"]) => {
@@ -43,14 +41,7 @@ describe("HumanGateNodeForm", () => {
         mockOnChange(nextConfig);
       };
 
-      return (
-        <HumanGateNodeForm
-          config={config}
-          onChange={handleChange}
-          errors={{}}
-          setErrors={mockSetErrors}
-        />
-      );
+      return <HumanGateNodeForm config={config} onChange={handleChange} errors={{}} setErrors={mockSetErrors} />;
     };
 
     return render(<Wrapper />);
@@ -88,19 +79,13 @@ describe("HumanGateNodeForm", () => {
       expect(screen.getByDisplayValue("Please review this output")).toBeInTheDocument();
       expect(screen.getByDisplayValue("Check for accuracy and tone")).toBeInTheDocument();
       expect(screen.getByDisplayValue("48")).toBeInTheDocument();
-      expect(
-        screen.getByDisplayValue("user@example.com, admin@example.com")
-      ).toBeInTheDocument();
+      expect(screen.getByDisplayValue("user@example.com, admin@example.com")).toBeInTheDocument();
     });
 
     it("should display helpful description", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(
-          /pause the workflow and wait for human approval before proceeding/i
-        )
-      ).toBeInTheDocument();
+      expect(screen.getByText(/pause the workflow and wait for human approval before proceeding/i)).toBeInTheDocument();
     });
   });
 
@@ -218,9 +203,7 @@ describe("HumanGateNodeForm", () => {
       };
       renderWithConfig(config);
 
-      expect(
-        screen.getByDisplayValue("user1@example.com, user2@example.com")
-      ).toBeInTheDocument();
+      expect(screen.getByDisplayValue("user1@example.com, user2@example.com")).toBeInTheDocument();
     });
 
     it("should call onChange with parsed email array", async () => {
@@ -237,7 +220,7 @@ describe("HumanGateNodeForm", () => {
               expect.stringContaining("test@example.com"),
               expect.stringContaining("admin@example.com"),
             ]),
-          })
+          }),
         );
       });
     });
@@ -263,9 +246,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig();
 
       expect(screen.getByText(/auto-approve on timeout/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/automatically approve if no response within timeout/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/automatically approve if no response within timeout/i)).toBeInTheDocument();
     });
 
     it("should call onChange when auto-approve is toggled", async () => {
@@ -273,10 +254,12 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig();
 
       const switches = screen.getAllByRole("switch");
-      const autoApproveSwitch = switches.find((s) =>
-        s.getAttribute("aria-label")?.includes("auto-approve") ||
-        s.closest("div")?.textContent?.includes("Auto-approve")
-      ) || switches[0];
+      const autoApproveSwitch =
+        switches.find(
+          (s) =>
+            s.getAttribute("aria-label")?.includes("auto-approve") ||
+            s.closest("div")?.textContent?.includes("Auto-approve"),
+        ) || switches[0];
 
       await click(autoApproveSwitch as HTMLElement);
 
@@ -284,7 +267,7 @@ describe("HumanGateNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             auto_approve_after_timeout: true,
-          })
+          }),
         );
       });
     });
@@ -313,9 +296,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig();
 
       expect(screen.getByText(/^require comment$/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/reviewer must provide a comment with their decision/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/reviewer must provide a comment with their decision/i)).toBeInTheDocument();
     });
 
     it("should call onChange when require comment is toggled", async () => {
@@ -331,7 +312,7 @@ describe("HumanGateNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             require_comment: true,
-          })
+          }),
         );
       });
     });
@@ -342,9 +323,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig();
 
       expect(screen.getByText(/^show context$/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/display upstream node outputs to the reviewer/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/display upstream node outputs to the reviewer/i)).toBeInTheDocument();
     });
 
     it("should call onChange when show context is toggled", async () => {
@@ -376,9 +355,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig(config);
 
       expect(screen.getByText(/auto-approval warning/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/the workflow will continue automatically if not reviewed/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/the workflow will continue automatically if not reviewed/i)).toBeInTheDocument();
     });
 
     it("should not display warning when auto-approve is disabled", () => {
@@ -467,9 +444,7 @@ describe("HumanGateNodeForm", () => {
     it("should display description for timeout", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/max wait time before timeout action/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/max wait time before timeout action/i)).toBeInTheDocument();
     });
 
     it("should display description for notify emails", () => {
@@ -499,7 +474,7 @@ describe("HumanGateNodeForm", () => {
             timeout_hours: 24,
             auto_approve_after_timeout: true,
             instructions: expect.any(String),
-          })
+          }),
         );
       });
     });
@@ -519,7 +494,7 @@ describe("HumanGateNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             require_comment: true,
-          })
+          }),
         );
       });
     });
@@ -537,7 +512,7 @@ describe("HumanGateNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             require_comment: false,
-          })
+          }),
         );
       });
     });

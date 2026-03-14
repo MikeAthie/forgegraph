@@ -79,10 +79,7 @@ export function selectObservationSourceMode(
   if (keys.path && Object.prototype.hasOwnProperty.call(config, keys.path)) {
     return "path";
   }
-  if (
-    keys.template &&
-    Object.prototype.hasOwnProperty.call(config, keys.template)
-  ) {
+  if (keys.template && Object.prototype.hasOwnProperty.call(config, keys.template)) {
     return "template";
   }
   if (Object.prototype.hasOwnProperty.call(config, keys.value)) {
@@ -97,12 +94,7 @@ export function updateObservationSourceMode(
   mode: ObservationSourceMode,
 ): Record<string, unknown> {
   const next = { ...config };
-  const activeKey =
-    mode === "path"
-      ? keys.path
-      : mode === "template"
-        ? keys.template
-        : keys.value;
+  const activeKey = mode === "path" ? keys.path : mode === "template" ? keys.template : keys.value;
 
   for (const key of [keys.value, keys.path, keys.template]) {
     if (!key || key === activeKey) {
@@ -125,12 +117,7 @@ export function updateObservationSourceValue(
   rawValue: string,
 ): Record<string, unknown> {
   const next = updateObservationSourceMode(config, keys, mode);
-  const targetKey =
-    mode === "path"
-      ? keys.path
-      : mode === "template"
-        ? keys.template
-        : keys.value;
+  const targetKey = mode === "path" ? keys.path : mode === "template" ? keys.template : keys.value;
 
   if (!targetKey) {
     return next;
@@ -177,8 +164,8 @@ export function validateObservationSource(
     required: boolean;
   },
 ): string | undefined {
-  const populatedFields = [keys.value, keys.path, keys.template].filter(
-    (key): key is string => Boolean(key && hasValue(config[key])),
+  const populatedFields = [keys.value, keys.path, keys.template].filter((key): key is string =>
+    Boolean(key && hasValue(config[key])),
   );
 
   if (populatedFields.length > 1) {
@@ -196,12 +183,7 @@ export function useObservationErrors(
   computedErrors: Record<string, string | undefined>,
 ): void {
   const serializedErrors = useMemo(
-    () =>
-      JSON.stringify(
-        Object.fromEntries(
-          Object.entries(computedErrors).filter(([, value]) => Boolean(value)),
-        ),
-      ),
+    () => JSON.stringify(Object.fromEntries(Object.entries(computedErrors).filter(([, value]) => Boolean(value)))),
     [computedErrors],
   );
 
@@ -227,10 +209,7 @@ export function ObservationScopeField({
     <FormField
       label="Scope"
       htmlFor="observation-scope"
-      description={
-        description ??
-        "Choose how broadly this observation should be reused at runtime."
-      }
+      description={description ?? "Choose how broadly this observation should be reused at runtime."}
       required
     >
       <select
@@ -275,22 +254,12 @@ export function ObservationSourceField({
   return (
     <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
       <div className="grid gap-4 md:grid-cols-[180px_1fr] md:items-start">
-        <FormField
-          label={modeLabel}
-          htmlFor={`${keys.value}-mode`}
-          description={description}
-        >
+        <FormField label={modeLabel} htmlFor={`${keys.value}-mode`} description={description}>
           <select
             id={`${keys.value}-mode`}
             value={mode}
             onChange={(event) =>
-              onChange(
-                updateObservationSourceMode(
-                  config,
-                  keys,
-                  event.target.value as ObservationSourceMode,
-                ),
-              )
+              onChange(updateObservationSourceMode(config, keys, event.target.value as ObservationSourceMode))
             }
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
@@ -317,21 +286,12 @@ export function ObservationSourceField({
             <Textarea
               id={`${keys.value}-${mode}`}
               value={currentValue}
-              onChange={(event) =>
-                onChange(
-                  updateObservationSourceValue(
-                    config,
-                    keys,
-                    mode,
-                    event.target.value,
-                  ),
-                )
-              }
+              onChange={(event) => onChange(updateObservationSourceValue(config, keys, mode, event.target.value))}
               placeholder={
                 mode === "path"
-                  ? pathPlaceholder ?? "node.prompt_1.output"
+                  ? (pathPlaceholder ?? "node.prompt_1.output")
                   : mode === "template"
-                    ? templatePlaceholder ?? "Customer: {{input.customer_name}}"
+                    ? (templatePlaceholder ?? "Customer: {{input.customer_name}}")
                     : placeholder
               }
               rows={4}
@@ -341,21 +301,12 @@ export function ObservationSourceField({
             <Input
               id={`${keys.value}-${mode}`}
               value={currentValue}
-              onChange={(event) =>
-                onChange(
-                  updateObservationSourceValue(
-                    config,
-                    keys,
-                    mode,
-                    event.target.value,
-                  ),
-                )
-              }
+              onChange={(event) => onChange(updateObservationSourceValue(config, keys, mode, event.target.value))}
               placeholder={
                 mode === "path"
-                  ? pathPlaceholder ?? "node.prompt_1.output"
+                  ? (pathPlaceholder ?? "node.prompt_1.output")
                   : mode === "template"
-                    ? templatePlaceholder ?? "Customer: {{input.customer_name}}"
+                    ? (templatePlaceholder ?? "Customer: {{input.customer_name}}")
                     : placeholder
               }
               className="text-sm"

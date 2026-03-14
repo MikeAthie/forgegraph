@@ -40,9 +40,7 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
         type="number"
         data-testid="timeout-ms"
         value={config.timeout_ms || ""}
-        onChange={(e) =>
-          onChange({ ...config, timeout_ms: parseInt(e.target.value, 10) })
-        }
+        onChange={(e) => onChange({ ...config, timeout_ms: parseInt(e.target.value, 10) })}
       />
     </div>
   ),
@@ -61,7 +59,7 @@ describe("TransformNodeForm", () => {
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
-    options: { errors?: NodeFormProps["errors"] } = {}
+    options: { errors?: NodeFormProps["errors"] } = {},
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
@@ -105,9 +103,7 @@ describe("TransformNodeForm", () => {
 
       renderWithConfig(config);
 
-      expect(
-        screen.getByDisplayValue("state.data.map(item => item.name)")
-      ).toBeInTheDocument();
+      expect(screen.getByDisplayValue("state.data.map(item => item.name)")).toBeInTheDocument();
       expect(screen.getByDisplayValue("transformed_data")).toBeInTheDocument();
     });
 
@@ -154,8 +150,7 @@ describe("TransformNodeForm", () => {
       renderWithConfig();
 
       const expressionInput = screen.getByLabelText(/expression/i);
-      const testExpression =
-        "const input = state.previousNode.output;\nreturn { transformed: input.data };";
+      const testExpression = "const input = state.previousNode.output;\nreturn { transformed: input.data };";
       fireEvent.change(expressionInput, { target: { value: testExpression } });
 
       await waitFor(() => {
@@ -174,7 +169,7 @@ describe("TransformNodeForm", () => {
         expect(mockSetErrors).toHaveBeenCalledWith(
           expect.objectContaining({
             expression: "Unbalanced brackets in expression",
-          })
+          }),
         );
       });
     });
@@ -246,7 +241,7 @@ describe("TransformNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             notes: expect.stringContaining("Transform notes"),
-          })
+          }),
         );
       });
     });
@@ -268,7 +263,7 @@ describe("TransformNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             timeout_ms: expect.any(Number),
-          })
+          }),
         );
       });
     });
@@ -290,7 +285,7 @@ describe("TransformNodeForm", () => {
             expression: "state.value * 2",
             output_key: "result",
             notes: expect.any(String),
-          })
+          }),
         );
       });
     });
@@ -300,12 +295,8 @@ describe("TransformNodeForm", () => {
     it("should display helpful descriptions", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/javascript expression or jsonpath to transform data/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/key to store the transformed data under in state/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/javascript expression or jsonpath to transform data/i)).toBeInTheDocument();
+      expect(screen.getByText(/key to store the transformed data under in state/i)).toBeInTheDocument();
     });
 
     it("should mark expression as required", () => {

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ForgeGraph is a workflow graph execution platform with three components:
 - **Backend**: Django REST API control plane (Python 3.12+)
-- **Engine**: Go gRPC execution engine (Go 1.22)
+- **Engine**: Go gRPC execution engine (Go 1.23)
 - **Frontend**: Next.js React UI for graph editing (Node 20, TypeScript)
 
 ## Build & Test Commands

@@ -279,17 +279,11 @@ export default function PromptsPage() {
   const isOrgAdmin = user?.organization_role === "owner" || user?.organization_role === "admin";
 
   const canEditSelected = Boolean(
-    selectedPrompt &&
-      user?.id &&
-      selectedPrompt.owner_id &&
-      (selectedPrompt.owner_id === user.id || isOrgAdmin),
+    selectedPrompt && user?.id && selectedPrompt.owner_id && (selectedPrompt.owner_id === user.id || isOrgAdmin),
   );
 
   const canPublishSelected = Boolean(
-    selectedPrompt &&
-      canEditSelected &&
-      selectedPrompt.visibility !== "public" &&
-      isOrgAdmin,
+    selectedPrompt && canEditSelected && selectedPrompt.visibility !== "public" && isOrgAdmin,
   );
 
   const cloneSelected = async () => {
@@ -382,9 +376,7 @@ export default function PromptsPage() {
     try {
       const updated = await promptsApi.publish(selectedPrompt.id);
       setSelectedPrompt(updated);
-      setPrompts((prev) =>
-        prev.map((p) => (p.id === updated.id ? { ...p, visibility: updated.visibility } : p)),
-      );
+      setPrompts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, visibility: updated.visibility } : p)));
       showSuccess("Prompt published", `"${updated.title}" is now public.`);
     } catch (err: unknown) {
       setDetailError(getApiErrorMessage(err, "Failed to publish prompt."));
@@ -506,19 +498,12 @@ export default function PromptsPage() {
               className="py-10"
               title={emptyStateTitle}
               description={emptyStateDescription}
-              action={
-                ownership !== "builtin" ? (
-                  <Button onClick={openCreate}>Create a prompt</Button>
-                ) : undefined
-              }
+              action={ownership !== "builtin" ? <Button onClick={openCreate}>Create a prompt</Button> : undefined}
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {prompts.map((prompt) => (
-                <Card
-                  key={prompt.id}
-                  className={prompt.is_builtin ? "border-primary/30 bg-primary/5" : ""}
-                >
+                <Card key={prompt.id} className={prompt.is_builtin ? "border-primary/30 bg-primary/5" : ""}>
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="text-base line-clamp-2">{prompt.title}</CardTitle>
@@ -531,21 +516,14 @@ export default function PromptsPage() {
                         </Badge>
                       </div>
                     </div>
-                    <CardDescription className="line-clamp-2">
-                      {prompt.description || "No description"}
-                    </CardDescription>
+                    <CardDescription className="line-clamp-2">{prompt.description || "No description"}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
                       <span>{formatCategory(prompt.category)}</span>
                       <span>{formatDateTime(prompt.created_at)}</span>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => void openDetail(prompt.id)}
-                    >
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => void openDetail(prompt.id)}>
                       View
                     </Button>
                   </CardContent>
@@ -554,321 +532,315 @@ export default function PromptsPage() {
             </div>
           )}
 
-        {/* Create Dialog */}
-        <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Create new prompt</DialogTitle>
-              <DialogDescription>Create a reusable prompt template.</DialogDescription>
-            </DialogHeader>
+          {/* Create Dialog */}
+          <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Create new prompt</DialogTitle>
+                <DialogDescription>Create a reusable prompt template.</DialogDescription>
+              </DialogHeader>
 
-            {createError && (
-              <Alert variant="destructive">
-                <AlertDescription>{createError}</AlertDescription>
-              </Alert>
-            )}
+              {createError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{createError}</AlertDescription>
+                </Alert>
+              )}
 
-            <form id="create-prompt-form" className="space-y-4" onSubmit={submitCreate}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField label="Title" required htmlFor="create-prompt-title">
+              <form id="create-prompt-form" className="space-y-4" onSubmit={submitCreate}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Title" required htmlFor="create-prompt-title">
+                    <Input
+                      id="create-prompt-title"
+                      value={createForm.title}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
+                      disabled={isCreating}
+                    />
+                  </FormField>
+
+                  <FormField label="Category" htmlFor="create-prompt-category">
+                    <Select
+                      value={createForm.category}
+                      onValueChange={(v) => setCreateForm((prev) => ({ ...prev, category: v as PromptCategory }))}
+                      disabled={isCreating}
+                    >
+                      <SelectTrigger id="create-prompt-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIES.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                </div>
+
+                <FormField label="Description" htmlFor="create-prompt-description">
                   <Input
-                    id="create-prompt-title"
-                    value={createForm.title}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
+                    id="create-prompt-description"
+                    value={createForm.description}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                     disabled={isCreating}
                   />
                 </FormField>
 
-                <FormField label="Category" htmlFor="create-prompt-category">
-                  <Select
-                    value={createForm.category}
-                    onValueChange={(v) => setCreateForm((prev) => ({ ...prev, category: v as PromptCategory }))}
+                <FormField label="Content" required htmlFor="create-prompt-content">
+                  <Textarea
+                    id="create-prompt-content"
+                    value={createForm.content}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, content: e.target.value }))}
                     disabled={isCreating}
-                  >
-                    <SelectTrigger id="create-prompt-category">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    className="font-mono"
+                    rows={10}
+                  />
                 </FormField>
-              </div>
 
-              <FormField label="Description" htmlFor="create-prompt-description">
-                <Input
-                  id="create-prompt-description"
-                  value={createForm.description}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
-                  disabled={isCreating}
-                />
-              </FormField>
+                <FormField
+                  label="Variables schema (JSON)"
+                  description="Leave empty for no variables."
+                  htmlFor="create-prompt-variables"
+                >
+                  <Textarea
+                    id="create-prompt-variables"
+                    value={createForm.variablesSchemaText}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
+                    disabled={isCreating}
+                    className="font-mono"
+                    rows={4}
+                  />
+                </FormField>
+              </form>
 
-              <FormField label="Content" required htmlFor="create-prompt-content">
-                <Textarea
-                  id="create-prompt-content"
-                  value={createForm.content}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, content: e.target.value }))}
-                  disabled={isCreating}
-                  className="font-mono"
-                  rows={10}
-                />
-              </FormField>
+              <DialogFooter>
+                <Button variant="outline" onClick={closeCreate} disabled={isCreating}>
+                  Cancel
+                </Button>
+                <Button type="submit" form="create-prompt-form" disabled={isCreating}>
+                  {isCreating ? (
+                    <>
+                      <Spinner size="xs" className="mr-2" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-              <FormField
-                label="Variables schema (JSON)"
-                description="Leave empty for no variables."
-                htmlFor="create-prompt-variables"
-              >
-                <Textarea
-                  id="create-prompt-variables"
-                  value={createForm.variablesSchemaText}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
-                  disabled={isCreating}
-                  className="font-mono"
-                  rows={4}
-                />
-              </FormField>
-            </form>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={closeCreate} disabled={isCreating}>
-                Cancel
-              </Button>
-              <Button type="submit" form="create-prompt-form" disabled={isCreating}>
-                {isCreating ? (
-                  <>
-                    <Spinner size="xs" className="mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create"
+          {/* Detail Dialog */}
+          <Dialog
+            open={Boolean(selectedPromptId)}
+            onOpenChange={(open) => {
+              if (!open && !detailLoading && !isCloning && !isSaving && !isPublishing) {
+                closeDetail();
+              }
+            }}
+          >
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{selectedPrompt ? selectedPrompt.title : "Prompt"}</DialogTitle>
+                {selectedPrompt && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant={selectedPrompt.owner_id ? "secondary" : "default"}>
+                      {selectedPrompt.owner_id ? "Custom" : "Built-in"}
+                    </Badge>
+                    <Badge variant="outline">{selectedPrompt.visibility}</Badge>
+                    <Badge variant="outline">{formatCategory(selectedPrompt.category)}</Badge>
+                  </div>
                 )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </DialogHeader>
 
-        {/* Detail Dialog */}
-        <Dialog
-          open={Boolean(selectedPromptId)}
-          onOpenChange={(open) => {
-            if (!open && !detailLoading && !isCloning && !isSaving && !isPublishing) {
-              closeDetail();
-            }
-          }}
-        >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{selectedPrompt ? selectedPrompt.title : "Prompt"}</DialogTitle>
-              {selectedPrompt && (
-                <div className="flex items-center gap-2 mt-2">
-                  <Badge variant={selectedPrompt.owner_id ? "secondary" : "default"}>
-                    {selectedPrompt.owner_id ? "Custom" : "Built-in"}
-                  </Badge>
-                  <Badge variant="outline">{selectedPrompt.visibility}</Badge>
-                  <Badge variant="outline">{formatCategory(selectedPrompt.category)}</Badge>
-                </div>
+              {detailError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{detailError}</AlertDescription>
+                </Alert>
               )}
-            </DialogHeader>
 
-            {detailError && (
-              <Alert variant="destructive">
-                <AlertDescription>{detailError}</AlertDescription>
-              </Alert>
-            )}
+              {detailLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Spinner size="md" />
+                  <span className="ml-3 text-sm text-muted-foreground">Loading prompt...</span>
+                </div>
+              ) : !selectedPrompt ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">Prompt not available.</div>
+              ) : isEditing ? (
+                <>
+                  {editError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{editError}</AlertDescription>
+                    </Alert>
+                  )}
 
-            {detailLoading ? (
-              <div className="flex items-center justify-center py-10">
-                <Spinner size="md" />
-                <span className="ml-3 text-sm text-muted-foreground">Loading prompt...</span>
-              </div>
-            ) : !selectedPrompt ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Prompt not available.
-              </div>
-            ) : isEditing ? (
-              <>
-                {editError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{editError}</AlertDescription>
-                  </Alert>
-                )}
+                  <form id="edit-prompt-form" className="space-y-4" onSubmit={submitEdit}>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField label="Title" required htmlFor="edit-prompt-title">
+                        <Input
+                          id="edit-prompt-title"
+                          value={editForm.title}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                          disabled={isSaving}
+                        />
+                      </FormField>
 
-                <form id="edit-prompt-form" className="space-y-4" onSubmit={submitEdit}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="Title" required htmlFor="edit-prompt-title">
+                      <FormField label="Category">
+                        <div className="px-3 py-2 border rounded-md text-sm bg-muted">
+                          {formatCategory(selectedPrompt.category)}
+                        </div>
+                      </FormField>
+                    </div>
+
+                    <FormField label="Description" htmlFor="edit-prompt-description">
                       <Input
-                        id="edit-prompt-title"
-                        value={editForm.title}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                        id="edit-prompt-description"
+                        value={editForm.description}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
                         disabled={isSaving}
                       />
                     </FormField>
 
-                    <FormField label="Category">
-                      <div className="px-3 py-2 border rounded-md text-sm bg-muted">
-                        {formatCategory(selectedPrompt.category)}
-                      </div>
+                    <FormField label="Content" required htmlFor="edit-prompt-content">
+                      <Textarea
+                        id="edit-prompt-content"
+                        value={editForm.content}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
+                        disabled={isSaving}
+                        className="font-mono"
+                        rows={12}
+                      />
                     </FormField>
-                  </div>
 
-                  <FormField label="Description" htmlFor="edit-prompt-description">
-                    <Input
-                      id="edit-prompt-description"
-                      value={editForm.description}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
-                      disabled={isSaving}
-                    />
-                  </FormField>
+                    <FormField label="Variables schema (JSON)" htmlFor="edit-prompt-variables">
+                      <Textarea
+                        id="edit-prompt-variables"
+                        value={editForm.variablesSchemaText}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
+                        disabled={isSaving}
+                        className="font-mono"
+                        rows={6}
+                      />
+                    </FormField>
+                  </form>
 
-                  <FormField label="Content" required htmlFor="edit-prompt-content">
-                    <Textarea
-                      id="edit-prompt-content"
-                      value={editForm.content}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
-                      disabled={isSaving}
-                      className="font-mono"
-                      rows={12}
-                    />
-                  </FormField>
-
-                  <FormField label="Variables schema (JSON)" htmlFor="edit-prompt-variables">
-                    <Textarea
-                      id="edit-prompt-variables"
-                      value={editForm.variablesSchemaText}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
-                      disabled={isSaving}
-                      className="font-mono"
-                      rows={6}
-                    />
-                  </FormField>
-                </form>
-
-                <DialogFooter>
-                  <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" form="edit-prompt-form" disabled={isSaving}>
-                    {isSaving ? (
-                      <>
-                        <Spinner size="xs" className="mr-2" />
-                        Saving...
-                      </>
-                    ) : (
-                      "Save"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="bg-muted rounded-lg p-3">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Version</p>
-                      <p className="mt-1 text-sm">{selectedPrompt.version}</p>
-                    </div>
-                    <div className="bg-muted rounded-lg p-3">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">License</p>
-                      <p className="mt-1 text-sm">{selectedPrompt.license}</p>
-                    </div>
-                    <div className="bg-muted rounded-lg p-3">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Updated</p>
-                      <p className="mt-1 text-sm">{formatDateTime(selectedPrompt.updated_at)}</p>
-                    </div>
-                  </div>
-
-                  {selectedPrompt.description && (
-                    <>
-                      <Separator />
-                      <div>
-                        <h4 className="text-sm font-medium mb-2">Description</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedPrompt.description}
-                        </p>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" form="edit-prompt-form" disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Spinner size="xs" className="mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="bg-muted rounded-lg p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">Version</p>
+                        <p className="mt-1 text-sm">{selectedPrompt.version}</p>
                       </div>
-                    </>
-                  )}
+                      <div className="bg-muted rounded-lg p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">License</p>
+                        <p className="mt-1 text-sm">{selectedPrompt.license}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">Updated</p>
+                        <p className="mt-1 text-sm">{formatDateTime(selectedPrompt.updated_at)}</p>
+                      </div>
+                    </div>
 
-                  <Separator />
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">Content</h4>
-                    <pre className="p-4 bg-muted rounded-lg border border-border/50 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
-                      {selectedPrompt.content}
-                    </pre>
+                    {selectedPrompt.description && (
+                      <>
+                        <Separator />
+                        <div>
+                          <h4 className="text-sm font-medium mb-2">Description</h4>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedPrompt.description}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    <Separator />
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Content</h4>
+                      <pre className="p-4 bg-muted rounded-lg border border-border/50 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
+                        {selectedPrompt.content}
+                      </pre>
+                    </div>
+
+                    <Separator />
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Variables schema</h4>
+                      <pre className="p-4 bg-muted rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                        {JSON.stringify(selectedPrompt.variables_schema ?? {}, null, 2)}
+                      </pre>
+                    </div>
                   </div>
 
-                  <Separator />
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">Variables schema</h4>
-                    <pre className="p-4 bg-muted rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-                      {JSON.stringify(selectedPrompt.variables_schema ?? {}, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-
-                <DialogFooter className="flex-wrap gap-2">
-                  {canCloneSelected && (
-                    <Button onClick={() => void cloneSelected()} disabled={isCloning}>
-                      {isCloning ? (
-                        <>
-                          <Spinner size="xs" className="mr-2" />
-                          Cloning...
-                        </>
-                      ) : (
-                        "Clone"
-                      )}
-                    </Button>
-                  )}
-
-                  {canPublishSelected && (
-                    <Button
-                      variant="outline"
-                      onClick={() => void publishSelected()}
-                      disabled={isPublishing}
-                    >
-                      {isPublishing ? (
-                        <>
-                          <Spinner size="xs" className="mr-2" />
-                          Publishing...
-                        </>
-                      ) : (
-                        "Publish"
-                      )}
-                    </Button>
-                  )}
-
-                  {canEditSelected && (
-                    <>
-                      <Button variant="outline" onClick={startEditing}>
-                        Edit
+                  <DialogFooter className="flex-wrap gap-2">
+                    {canCloneSelected && (
+                      <Button onClick={() => void cloneSelected()} disabled={isCloning}>
+                        {isCloning ? (
+                          <>
+                            <Spinner size="xs" className="mr-2" />
+                            Cloning...
+                          </>
+                        ) : (
+                          "Clone"
+                        )}
                       </Button>
-                      <ConfirmButton
-                        variant="destructive"
-                        title={`Delete "${selectedPrompt.title}"`}
-                        description="This will permanently delete the prompt. This action cannot be undone."
-                        confirmText="Delete"
-                        onConfirm={() => handleDelete(selectedPrompt)}
-                      >
-                        Delete
-                      </ConfirmButton>
-                    </>
-                  )}
+                    )}
 
-                  <Button variant="outline" onClick={closeDetail}>
-                    Close
-                  </Button>
-                </DialogFooter>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
+                    {canPublishSelected && (
+                      <Button variant="outline" onClick={() => void publishSelected()} disabled={isPublishing}>
+                        {isPublishing ? (
+                          <>
+                            <Spinner size="xs" className="mr-2" />
+                            Publishing...
+                          </>
+                        ) : (
+                          "Publish"
+                        )}
+                      </Button>
+                    )}
+
+                    {canEditSelected && (
+                      <>
+                        <Button variant="outline" onClick={startEditing}>
+                          Edit
+                        </Button>
+                        <ConfirmButton
+                          variant="destructive"
+                          title={`Delete "${selectedPrompt.title}"`}
+                          description="This will permanently delete the prompt. This action cannot be undone."
+                          confirmText="Delete"
+                          onConfirm={() => handleDelete(selectedPrompt)}
+                        >
+                          Delete
+                        </ConfirmButton>
+                      </>
+                    )}
+
+                    <Button variant="outline" onClick={closeDetail}>
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, paginated_response
+from application.services.audit_log import describe_audit_log
 from application.services.rbac import has_min_role
 from application.services.redaction import redact_payload
 from application.services.tenancy import get_tenant_id_for_user
@@ -123,6 +124,12 @@ class AuditLogListView(APIView):
                     "action": entry.action,
                     "resource_type": entry.resource_type,
                     "resource_id": entry.resource_id,
+                    "description": describe_audit_log(
+                        action=entry.action,
+                        resource_type=entry.resource_type,
+                        resource_id=entry.resource_id,
+                        metadata=cast(dict[str, Any], redact_payload(entry.metadata)),
+                    ),
                     "metadata": redact_payload(entry.metadata),
                     "created_at": entry.created_at,
                 }

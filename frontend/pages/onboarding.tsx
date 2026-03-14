@@ -14,10 +14,7 @@ import {
   type GraphTemplate,
   type OnboardingMilestone,
 } from "../lib/api";
-import {
-  buildTemplatePreview,
-  buildTemplateQuickStarts,
-} from "../lib/template-quick-starts";
+import { buildTemplatePreview, buildTemplateQuickStarts } from "../lib/template-quick-starts";
 import {
   ONBOARDING_DOC_LINKS,
   buildCredentialRemediation,
@@ -115,10 +112,7 @@ export default function OnboardingPage() {
   );
 
   const filteredCredentials = useMemo(
-    () =>
-      credentials.filter(
-        (cred) => cred.provider === provider && cred.health_status !== "revoked",
-      ),
+    () => credentials.filter((cred) => cred.provider === provider && cred.health_status !== "revoked"),
     [credentials, provider],
   );
 
@@ -186,36 +180,28 @@ export default function OnboardingPage() {
   }, [milestones, hasTemplate, hasCredential]);
   const checklistProgress = useMemo(() => getOnboardingProgress(checklist), [checklist]);
 
-  const completeMilestone = useCallback(
-    async (milestone: string, metadata?: Record<string, unknown>) => {
-      try {
-        await onboardingApi.complete(milestone, metadata);
-      } catch (err) {
-        console.warn("Failed to update milestone", err);
-        return;
-      }
+  const completeMilestone = useCallback(async (milestone: string, metadata?: Record<string, unknown>) => {
+    try {
+      await onboardingApi.complete(milestone, metadata);
+    } catch (err) {
+      console.warn("Failed to update milestone", err);
+      return;
+    }
 
-      setMilestones((prev) => {
-        const now = new Date().toISOString();
-        const existing = prev.find((item) => item.key === milestone);
-        if (!existing) {
-          return [
-            ...prev,
-            { key: milestone, label: milestone, completed: true, completed_at: now },
-          ];
-        }
-        if (existing.completed) {
-          return prev;
-        }
-        return prev.map((item) =>
-          item.key === milestone
-            ? { ...item, completed: true, completed_at: item.completed_at ?? now }
-            : item,
-        );
-      });
-    },
-    [],
-  );
+    setMilestones((prev) => {
+      const now = new Date().toISOString();
+      const existing = prev.find((item) => item.key === milestone);
+      if (!existing) {
+        return [...prev, { key: milestone, label: milestone, completed: true, completed_at: now }];
+      }
+      if (existing.completed) {
+        return prev;
+      }
+      return prev.map((item) =>
+        item.key === milestone ? { ...item, completed: true, completed_at: item.completed_at ?? now } : item,
+      );
+    });
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -259,9 +245,7 @@ export default function OnboardingPage() {
       return;
     }
 
-    const selectedIsStillValid = filteredCredentials.some(
-      (credential) => credential.id === credentialId,
-    );
+    const selectedIsStillValid = filteredCredentials.some((credential) => credential.id === credentialId);
     if (!selectedIsStillValid) {
       setCredentialId(filteredCredentials[0].id);
     }
@@ -449,9 +433,7 @@ export default function OnboardingPage() {
               <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
                 Template → Credential → Live Run
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Get to a live, streaming run in under three minutes.
-              </p>
+              <p className="text-sm text-muted-foreground">Get to a live, streaming run in under three minutes.</p>
               <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
                 <span className="rounded-full border border-border/60 bg-background/60 px-2 py-0.5">
                   Tip: quick starts prefill provider + model
@@ -489,7 +471,10 @@ export default function OnboardingPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       1. Pick a template
                       {hasTemplate && (
-                        <Badge variant="outline" className="border-green-500/50 text-green-600 dark:text-green-400 text-xs">
+                        <Badge
+                          variant="outline"
+                          className="border-green-500/50 text-green-600 dark:text-green-400 text-xs"
+                        >
                           ✓
                         </Badge>
                       )}
@@ -630,9 +615,7 @@ export default function OnboardingPage() {
                     {filteredTemplates.length === 0 ? (
                       <div className="text-center py-6">
                         <p className="text-sm text-muted-foreground">
-                          {templates.length === 0
-                            ? "No templates available yet."
-                            : "No templates match your search."}
+                          {templates.length === 0 ? "No templates available yet." : "No templates match your search."}
                         </p>
                         {(searchQuery || selectedCategory) && (
                           <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2">
@@ -663,9 +646,7 @@ export default function OnboardingPage() {
                               </Badge>
                             </div>
                           </div>
-                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                            {template.description}
-                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{template.description}</p>
                           {(template.rating_count > 0 || template.usage_count > 0) && (
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                               {template.rating_count > 0 && (
@@ -712,10 +693,7 @@ export default function OnboardingPage() {
 
                   {selectedTemplate ? (
                     <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                      <span>
-                        Rate this template{" "}
-                        {ratedTemplateId === selectedTemplate.id ? "✓" : ""}
-                      </span>
+                      <span>Rate this template {ratedTemplateId === selectedTemplate.id ? "✓" : ""}</span>
                       <div className="flex items-center gap-1">
                         {[1, 2, 3, 4, 5].map((rating) => (
                           <button
@@ -741,7 +719,10 @@ export default function OnboardingPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       2. Attach credentials
                       {hasCredential && (
-                        <Badge variant="outline" className="border-green-500/50 text-green-600 dark:text-green-400 text-xs">
+                        <Badge
+                          variant="outline"
+                          className="border-green-500/50 text-green-600 dark:text-green-400 text-xs"
+                        >
                           ✓
                         </Badge>
                       )}
@@ -846,7 +827,7 @@ export default function OnboardingPage() {
                       )}
                     </div>
 
-                  {filteredCredentials.length > 0 ? (
+                    {filteredCredentials.length > 0 ? (
                       <Select value={credentialId} onValueChange={setCredentialId}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a credential" />
@@ -927,9 +908,36 @@ export default function OnboardingPage() {
                         />
                         <p className="text-[10px] text-muted-foreground mt-1">
                           Your {provider} API key from{" "}
-                          {provider === "openai" && <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">platform.openai.com</a>}
-                          {provider === "anthropic" && <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console.anthropic.com</a>}
-                          {provider === "google" && <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">aistudio.google.com</a>}
+                          {provider === "openai" && (
+                            <a
+                              href="https://platform.openai.com/api-keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              platform.openai.com
+                            </a>
+                          )}
+                          {provider === "anthropic" && (
+                            <a
+                              href="https://console.anthropic.com/settings/keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              console.anthropic.com
+                            </a>
+                          )}
+                          {provider === "google" && (
+                            <a
+                              href="https://aistudio.google.com/apikey"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              aistudio.google.com
+                            </a>
+                          )}
                         </p>
                       </div>
                       <Button
@@ -948,7 +956,9 @@ export default function OnboardingPage() {
               </Card>
 
               {/* Launch Card */}
-              <Card className={`border-border/50 bg-card/60 ${hasTemplate && hasCredential ? "border-primary/30" : ""}`}>
+              <Card
+                className={`border-border/50 bg-card/60 ${hasTemplate && hasCredential ? "border-primary/30" : ""}`}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">3. Launch the run</CardTitle>
@@ -995,11 +1005,7 @@ export default function OnboardingPage() {
                         text="This name is used for the cloned graph created from the selected template."
                       />
                     </div>
-                    <Input
-                      value={graphName}
-                      onChange={(e) => setGraphName(e.target.value)}
-                      placeholder="Demo graph"
-                    />
+                    <Input value={graphName} onChange={(e) => setGraphName(e.target.value)} placeholder="Demo graph" />
                   </div>
                   {selectedTemplate ? (
                     <div
@@ -1053,9 +1059,7 @@ export default function OnboardingPage() {
                                   key={`${selectedTemplate.id}-${requiredCredential.provider}`}
                                   className="flex items-center justify-between rounded-md border border-border/50 bg-background/60 px-2 py-1"
                                 >
-                                  <span className="font-medium text-foreground">
-                                    {requiredCredential.label}
-                                  </span>
+                                  <span className="font-medium text-foreground">{requiredCredential.label}</span>
                                   <span
                                     className={
                                       requiredCredential.connected
@@ -1120,7 +1124,7 @@ export default function OnboardingPage() {
                           <div className="text-[11px] text-muted-foreground">Custom input (JSON)</div>
                           <HelpTip
                             testId="custom-input-help-tip"
-                            text={"Input must be a valid JSON object. Example: {\"message\":\"hello\"}"}
+                            text={'Input must be a valid JSON object. Example: {"message":"hello"}'}
                           />
                         </div>
                         <Textarea
@@ -1132,11 +1136,7 @@ export default function OnboardingPage() {
                       </div>
                     )}
                   </div>
-                  <Button
-                    onClick={handleRun}
-                    disabled={!selectedTemplate || isRunning}
-                    className="w-full"
-                  >
+                  <Button onClick={handleRun} disabled={!selectedTemplate || isRunning} className="w-full">
                     {isRunning ? <Spinner size="xs" className="mr-2" /> : null}
                     Create & run
                   </Button>

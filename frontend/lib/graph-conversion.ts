@@ -57,9 +57,7 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
     .map((note, index) => ({
       id: note.id,
       type: NOTE_NODE_TYPE,
-      position:
-        positions[note.id] ??
-        { x: 450, y: 100 + index * 160 },
+      position: positions[note.id] ?? { x: 450, y: 100 + index * 160 },
       data: {
         label: note.label ?? "Note",
         text: note.text ?? "",
@@ -88,11 +86,9 @@ export function reactFlowToGraphJson(
   metadata: GraphMetadata,
   graphId?: string,
   versionId?: string,
-  viewport?: { x: number; y: number; zoom: number }
+  viewport?: { x: number; y: number; zoom: number },
 ): GraphJson {
-  const executableNodes = nodes.filter((node): node is Node & { type: NodeType } =>
-    isValidNodeType(node.type ?? "")
-  );
+  const executableNodes = nodes.filter((node): node is Node & { type: NodeType } => isValidNodeType(node.type ?? ""));
 
   const noteNodes = nodes.filter((node) => node.type === NOTE_NODE_TYPE);
 
@@ -120,10 +116,7 @@ export function reactFlowToGraphJson(
 
   const executableNodeIds = new Set(executableNodes.map((node) => node.id));
   const graphEdges: GraphEdge[] = edges
-    .filter(
-      (edge) =>
-        executableNodeIds.has(edge.source) && executableNodeIds.has(edge.target)
-    )
+    .filter((edge) => executableNodeIds.has(edge.source) && executableNodeIds.has(edge.target))
     .map((edge) => ({
       id: edge.id,
       from: edge.source,

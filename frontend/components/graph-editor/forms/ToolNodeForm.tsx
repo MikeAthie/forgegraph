@@ -60,37 +60,37 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   const [credentialsError, setCredentialsError] = useState<string | null>(null);
   const configuredCredential = useMemo(
     () => credentials.find((item) => item.id === toolConfig.credential_id),
-    [credentials, toolConfig.credential_id]
+    [credentials, toolConfig.credential_id],
   );
   const provider = toolConfig.provider || configuredCredential?.provider || "openai";
   const filteredCredentials = useMemo(
     () => credentials.filter((item) => item.provider === provider),
-    [credentials, provider]
+    [credentials, provider],
   );
   const selectedCredential = useMemo(
     () => filteredCredentials.find((item) => item.id === toolConfig.credential_id),
-    [filteredCredentials, toolConfig.credential_id]
+    [filteredCredentials, toolConfig.credential_id],
   );
 
   const handleChange = useCallback(
     <K extends keyof ToolConfig>(field: K, value: ToolConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleProviderChange = useCallback(
@@ -101,7 +101,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
       }
       onChange(nextConfig);
     },
-    [onChange, provider, toolConfig]
+    [onChange, provider, toolConfig],
   );
 
   useEffect(() => {
@@ -150,11 +150,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   return (
     <div className="space-y-6">
       {/* Agent Context */}
-      <AgentFields
-        config={toolConfig}
-        onChange={handleAgentChange}
-        showExamples={true}
-      />
+      <AgentFields config={toolConfig} onChange={handleAgentChange} showExamples={true} />
 
       <Separator />
 
@@ -162,11 +158,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
       <div className="space-y-4">
         <h3 className="text-sm font-medium">Tool Configuration</h3>
 
-        <FormField
-          label="Tool"
-          htmlFor="tool-name"
-          description="Select a built-in tool or create a custom one"
-        >
+        <FormField label="Tool" htmlFor="tool-name" description="Select a built-in tool or create a custom one">
           <select
             id="tool-name"
             value={toolConfig.tool_name || "custom"}
@@ -199,10 +191,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           </FormField>
         )}
 
-        <FormField
-          label="Parameters"
-          description="Map parameter names to values or state paths"
-        >
+        <FormField label="Parameters" description="Map parameter names to values or state paths">
           <KeyValueEditor
             value={toolConfig.parameters || {}}
             onChange={(params) => handleChange("parameters", params)}
@@ -256,8 +245,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
             )}
             {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 && (
               <div className="mt-2 text-xs text-muted-foreground">
-                No credentials found for this provider. Add one in the Credentials page.
-                {" "}
+                No credentials found for this provider. Add one in the Credentials page.{" "}
                 <Link
                   href={`/credentials?provider=${encodeURIComponent(provider)}`}
                   className="underline underline-offset-2"
@@ -276,9 +264,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
                 ? "Selected credential is expired."
                 : "Selected credential is expiring soon."}
             </p>
-            {selectedCredential.health_message && (
-              <p className="mt-1">{selectedCredential.health_message}</p>
-            )}
+            {selectedCredential.health_message && <p className="mt-1">{selectedCredential.health_message}</p>}
             {selectedCredential.requires_reauth && (
               <Link
                 href={`/credentials?provider=${encodeURIComponent(provider)}`}
@@ -314,11 +300,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           </FormField>
         )}
 
-        <FormField
-          label="Output Key"
-          htmlFor="output-key"
-          description="Key to store the tool result under in state"
-        >
+        <FormField label="Output Key" htmlFor="output-key" description="Key to store the tool result under in state">
           <Input
             id="output-key"
             value={toolConfig.output_key || ""}
@@ -332,7 +314,9 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           <p className="font-medium">Tool usage:</p>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
             <li>Tools are functions the agent can call to interact with external systems</li>
-            <li>Parameters can reference state: <code className="bg-muted px-1 rounded">node.prompt_1.output</code></li>
+            <li>
+              Parameters can reference state: <code className="bg-muted px-1 rounded">node.prompt_1.output</code>
+            </li>
             <li>Tool results are stored in state under the output key</li>
           </ul>
         </div>

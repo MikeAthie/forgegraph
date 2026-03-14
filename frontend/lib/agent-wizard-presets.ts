@@ -59,8 +59,7 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
       job_description: "Respond to Telegram user messages with concise, actionable help.",
       instructions:
         "Read the incoming Telegram message from workflow state, decide whether a reply is needed, and use telegram.send_message when you are ready to respond.",
-      system_prompt:
-        "You are a Telegram support assistant. Keep replies concise, friendly, and operationally safe.",
+      system_prompt: "You are a Telegram support assistant. Keep replies concise, friendly, and operationally safe.",
       provider: "openai",
       model: "gpt-4.1-mini",
       temperature: 0.4,
@@ -85,8 +84,7 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
       job_description: "Respond to WhatsApp users with short, practical answers.",
       instructions:
         "Read the incoming WhatsApp message from workflow state, prepare a concise answer, and call whatsapp.send_message to deliver it when appropriate.",
-      system_prompt:
-        "You are a WhatsApp assistant. Keep responses short, clear, and action-oriented.",
+      system_prompt: "You are a WhatsApp assistant. Keep responses short, clear, and action-oriented.",
       provider: "openai",
       model: "gpt-4.1-mini",
       temperature: 0.4,
@@ -99,8 +97,7 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
     id: "email-responder",
     name: "Email responder",
     description: "Draft and send professional responses for incoming emails.",
-    expectedOutcome:
-      "The agent reviews unread emails, drafts a response, and can send through Gmail tools.",
+    expectedOutcome: "The agent reviews unread emails, drafts a response, and can send through Gmail tools.",
     credentialHints: [
       "Gmail OAuth credential with readonly + send scopes",
       "Install or register gmail.list_unread and gmail.send_message tools before running this flow",
@@ -111,8 +108,7 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
       job_description: "Draft professional email responses and send them when they are ready.",
       instructions:
         "Use gmail.list_unread to review current inbound email context, draft a professional reply, and use gmail.send_message when you are confident the response is correct.",
-      system_prompt:
-        "You write concise, professional replies. Preserve user intent and include clear next steps.",
+      system_prompt: "You write concise, professional replies. Preserve user intent and include clear next steps.",
       provider: "openai",
       model: "gpt-4.1-mini",
       temperature: 0.3,
@@ -124,8 +120,7 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
   {
     id: "memory-first-assistant",
     name: "Jackie memory workflow",
-    description:
-      "Recall Jackie-specific curated memory before answering and save a new observation after.",
+    description: "Recall Jackie-specific curated memory before answering and save a new observation after.",
     expectedOutcome:
       "The workflow recalls Jackie context, answers with that context in view, saves a new observation, and returns the response.",
     credentialHints: [
@@ -135,8 +130,7 @@ export const AGENT_WIZARD_PRESETS: AgentWizardPreset[] = [
     seed: {
       agentLabel: "Jackie",
       role: "Jackie Relationship Assistant",
-      job_description:
-        "Answer using recalled customer context and the latest user request.",
+      job_description: "Answer using recalled customer context and the latest user request.",
       instructions:
         "Review the curated observation context before answering. Use remembered customer details when they are relevant, then return a direct final answer.",
       system_prompt:
@@ -156,9 +150,11 @@ export function getAgentWizardPreset(id: string): AgentWizardPreset | undefined 
   return AGENT_WIZARD_PRESETS.find((preset) => preset.id === id);
 }
 
-export function buildAgentWizardBlueprint(seed: AgentWizardPresetSeed & {
-  outputKey?: string;
-}): AgentWizardBlueprint {
+export function buildAgentWizardBlueprint(
+  seed: AgentWizardPresetSeed & {
+    outputKey?: string;
+  },
+): AgentWizardBlueprint {
   const nodes: AgentWizardBlueprintNode[] = [];
 
   if (seed.memoryMode === "persistent") {
@@ -166,8 +162,7 @@ export function buildAgentWizardBlueprint(seed: AgentWizardPresetSeed & {
       nodeType: NODE_TYPES.OBSERVATION_CONTEXT,
       label: "Recall Jackie Context",
       config: {
-        query_template:
-          "What should I remember about Jackie before answering this request?",
+        query_template: "What should I remember about Jackie before answering this request?",
         limit: 5,
       },
     });
@@ -189,9 +184,7 @@ export function buildAgentWizardBlueprint(seed: AgentWizardPresetSeed & {
       approval_required_tools: seed.approval_required_tools,
       ...(seed.memoryMode === "persistent"
         ? {
-            observation_context_paths: [
-              `node.${OBSERVATION_CONTEXT_PLACEHOLDER}.output`,
-            ],
+            observation_context_paths: [`node.${OBSERVATION_CONTEXT_PLACEHOLDER}.output`],
           }
         : {}),
       max_steps: 6,

@@ -1,8 +1,4 @@
-import {
-  getPresetById,
-  getIntegrationPresets,
-  searchPresets,
-} from "@/lib/quick-node-presets";
+import { getPresetById, getIntegrationPresets, searchPresets } from "@/lib/quick-node-presets";
 
 describe("quick-node-presets", () => {
   it("includes core P2 integration presets", () => {

@@ -36,11 +36,7 @@ interface MemoryObservationDetailPanelProps {
   observation: MemoryObservation | null;
 }
 
-export function MemoryObservationDetailPanel({
-  error,
-  loading,
-  observation,
-}: MemoryObservationDetailPanelProps) {
+export function MemoryObservationDetailPanel({ error, loading, observation }: MemoryObservationDetailPanelProps) {
   const timelineItems = observation
     ? [
         { label: "Recorded", value: observation.created_at },
@@ -56,9 +52,7 @@ export function MemoryObservationDetailPanel({
         <Badge variant="outline" className="w-fit border-amber-500/30 text-amber-700 dark:text-amber-300">
           Detail
         </Badge>
-        <CardTitle className="text-xl font-semibold tracking-tight">
-          Observation dossier
-        </CardTitle>
+        <CardTitle className="text-xl font-semibold tracking-tight">Observation dossier</CardTitle>
         <p className="max-w-lg text-sm text-muted-foreground">
           Inspect the full record, linked scope identifiers, and timeline of revisions that shaped this memory.
         </p>
@@ -106,14 +100,10 @@ export function MemoryObservationDetailPanel({
 
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {observation.topic_key ? (
-                  <span className="rounded-full border border-border/60 px-2 py-1">
-                    Topic {observation.topic_key}
-                  </span>
+                  <span className="rounded-full border border-border/60 px-2 py-1">Topic {observation.topic_key}</span>
                 ) : null}
                 {observation.tool_name ? (
-                  <span className="rounded-full border border-border/60 px-2 py-1">
-                    Tool {observation.tool_name}
-                  </span>
+                  <span className="rounded-full border border-border/60 px-2 py-1">Tool {observation.tool_name}</span>
                 ) : null}
                 <span className="rounded-full border border-border/60 px-2 py-1">
                   Revisions {observation.revision_count}
@@ -126,20 +116,14 @@ export function MemoryObservationDetailPanel({
               <Separator className="my-5" />
 
               <div className="rounded-2xl border border-border/50 bg-muted/20 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-                  Captured content
-                </p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">
-                  {observation.content}
-                </p>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Captured content</p>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">{observation.content}</p>
               </div>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
               <div className="space-y-3 rounded-3xl border border-border/50 bg-background/70 p-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-                  Linked scope
-                </p>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Linked scope</p>
                 <MetadataRow label="Observation ID" value={observation.id} />
                 <MetadataRow label="Graph" value={observation.graph_id} />
                 <MetadataRow label="Run" value={observation.run_id} />
@@ -149,17 +133,13 @@ export function MemoryObservationDetailPanel({
               </div>
 
               <div className="space-y-3 rounded-3xl border border-border/50 bg-background/70 p-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-                  Timeline
-                </p>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Timeline</p>
                 <div className="space-y-4">
                   {timelineItems.map((item, index) => (
                     <div key={`${item.label}-${item.value}`} className="flex gap-3">
                       <div className="flex flex-col items-center">
                         <span className="mt-1 h-2.5 w-2.5 rounded-full bg-sky-500" />
-                        {index < timelineItems.length - 1 ? (
-                          <span className="mt-2 h-full w-px bg-border" />
-                        ) : null}
+                        {index < timelineItems.length - 1 ? <span className="mt-2 h-full w-px bg-border" /> : null}
                       </div>
                       <div className="pb-5">
                         <p className="text-sm font-medium text-foreground">{item.label}</p>

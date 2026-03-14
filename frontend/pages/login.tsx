@@ -30,9 +30,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   const registeredParam = router.query.registered;
-  const registered = Array.isArray(registeredParam)
-    ? registeredParam[0]
-    : registeredParam;
+  const registered = Array.isArray(registeredParam) ? registeredParam[0] : registeredParam;
   const showRegisteredMessage = registered === "true" || registered === "1";
 
   useEffect(() => {
@@ -127,30 +125,20 @@ export default function LoginPage() {
         <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-            <CardDescription className="text-base mt-1">
-              Sign in to your account to continue
-            </CardDescription>
+            <CardDescription className="text-base mt-1">Sign in to your account to continue</CardDescription>
           </CardHeader>
 
           <CardContent className="pt-4">
             {showRegisteredMessage && (
               <Alert className="mb-4 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <AlertDescription>
-                  Registration successful! Please sign in with your new account.
-                </AlertDescription>
+                <AlertDescription>Registration successful! Please sign in with your new account.</AlertDescription>
               </Alert>
             )}
 
@@ -191,11 +179,7 @@ export default function LoginPage() {
                 />
               </FormField>
 
-              <Button
-                type="submit"
-                className="w-full h-11 text-base font-medium"
-                disabled={isSubmitting}
-              >
+              <Button type="submit" className="w-full h-11 text-base font-medium" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
@@ -208,9 +192,7 @@ export default function LoginPage() {
 
               <div className="flex items-center gap-3 py-2">
                 <div className="h-px flex-1 bg-border/60" />
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Or continue with SSO
-                </span>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Or continue with SSO</span>
                 <div className="h-px flex-1 bg-border/60" />
               </div>
 
@@ -235,10 +217,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <Link
-                  href="/register"
-                  className="font-medium text-primary hover:text-primary/80 transition-colors"
-                >
+                <Link href="/register" className="font-medium text-primary hover:text-primary/80 transition-colors">
                   Create one
                 </Link>
               </p>

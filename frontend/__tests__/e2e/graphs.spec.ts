@@ -51,7 +51,10 @@ test.describe("Graphs", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 
@@ -77,7 +80,10 @@ test.describe("Graphs", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/);
 

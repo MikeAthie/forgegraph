@@ -14,19 +14,12 @@ import {
   validateObservationSource,
 } from "./observation-form-utils";
 
-export function ObservationSearchNodeForm({
-  config,
-  onChange,
-  errors,
-  setErrors,
-}: NodeFormProps) {
+export function ObservationSearchNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const searchConfig = config as Record<string, unknown>;
 
   const computedErrors = {
     scope:
-      typeof searchConfig.scope === "string" && searchConfig.scope.trim().length > 0
-        ? undefined
-        : "Scope is required.",
+      typeof searchConfig.scope === "string" && searchConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
     query: validateObservationSource(
       searchConfig,
       "query",
@@ -78,9 +71,7 @@ export function ObservationSearchNodeForm({
       </div>
 
       <ObservationScopeField
-        value={
-          typeof searchConfig.scope === "string" ? searchConfig.scope : undefined
-        }
+        value={typeof searchConfig.scope === "string" ? searchConfig.scope : undefined}
         onChange={(scope) => handleFieldChange("scope", scope)}
       />
 
@@ -128,15 +119,7 @@ export function ObservationSearchNodeForm({
             type="number"
             min={1}
             value={String(searchConfig.limit ?? "")}
-            onChange={(event) =>
-              onChange(
-                updateObservationNumberField(
-                  searchConfig,
-                  "limit",
-                  event.target.value,
-                ),
-              )
-            }
+            onChange={(event) => onChange(updateObservationNumberField(searchConfig, "limit", event.target.value))}
             placeholder="5"
             className="text-sm"
           />
@@ -171,9 +154,7 @@ export function ObservationSearchNodeForm({
         <input
           type="checkbox"
           checked={Boolean(searchConfig.include_deleted)}
-          onChange={(event) =>
-            handleFieldChange("include_deleted", event.target.checked)
-          }
+          onChange={(event) => handleFieldChange("include_deleted", event.target.checked)}
           className="mt-0.5"
         />
         <span>

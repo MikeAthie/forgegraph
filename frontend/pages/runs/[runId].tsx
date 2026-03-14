@@ -24,7 +24,19 @@ import {
   NodeMemoryActivityPanel,
   RunMemoryActivityPanel,
 } from "../../components/runs/MemoryActivityPanel";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ConfirmButton, Input, Separator, Spinner, Textarea } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmButton,
+  Input,
+  Separator,
+  Spinner,
+  Textarea,
+} from "@/components/ui";
 
 const formatDateTime = (isoString: string) => {
   const date = new Date(isoString);
@@ -110,12 +122,7 @@ function StatusIcon({ status }: { status: string }) {
     case "error":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M15 9l-6 6M9 9l6 6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -126,24 +133,14 @@ function StatusIcon({ status }: { status: string }) {
     case "running":
       return (
         <svg viewBox="0 0 24 24" fill="none" className="animate-spin" aria-hidden="true">
-          <path
-            d="M12 2a10 10 0 1 0 10 10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M12 2a10 10 0 1 0 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
       );
     case "paused":
     case "waiting":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={status === "waiting" ? "animate-pulse" : ""}>
-          <path
-            d="M9 7v10M15 7v10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M9 7v10M15 7v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -154,12 +151,7 @@ function StatusIcon({ status }: { status: string }) {
     case "canceled":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M7 7l10 10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M7 7l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -170,12 +162,7 @@ function StatusIcon({ status }: { status: string }) {
     case "skipped":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M8 12h8"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -187,13 +174,7 @@ function StatusIcon({ status }: { status: string }) {
     default:
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M12 6v6l4 2"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -273,6 +254,13 @@ type RunsWsMessage =
   | { type: "node_stream.chunk"; run_id: string; node_stream: NodeStreamPayload }
   | { type: string; [key: string]: unknown };
 
+type RunDiagnostic = {
+  key: string;
+  tone: "warning" | "destructive";
+  title: string;
+  description: string;
+};
+
 const sortNodeRuns = (nodeRuns: NodeRunItem[]) => {
   return [...nodeRuns].sort((a, b) => {
     const aNull = !a.started_at;
@@ -294,6 +282,83 @@ const sortNodeRuns = (nodeRuns: NodeRunItem[]) => {
 
 const isTerminalRunStatus = (status: string) => {
   return status === "succeeded" || status === "failed" || status === "canceled";
+};
+
+const POLICY_DENIED_PATTERN = /policy denied:/i;
+const BUDGET_EXCEEDED_PATTERN = /budget exceeded/i;
+const QUOTA_EXCEEDED_PATTERN = /quota exceeded/i;
+const ENTITLEMENT_PATTERN = /entitlement exceeded|subscription is not active/i;
+
+const collectRunErrorText = (run: RunDetail | null) => {
+  if (!run) return "";
+  const texts: string[] = [];
+  if (run.error_message) {
+    texts.push(run.error_message);
+  }
+  for (const nodeRun of run.node_runs ?? []) {
+    if (nodeRun.error_json) {
+      texts.push(formatJsonForDisplay(nodeRun.error_json));
+    }
+  }
+  return texts.join("\n");
+};
+
+const deriveRunDiagnostics = (run: RunDetail | null): RunDiagnostic[] => {
+  if (!run) return [];
+
+  const diagnostics: RunDiagnostic[] = [];
+  const errorText = collectRunErrorText(run);
+  const memoryDegraded =
+    Boolean(run.memory_activity?.degraded) ||
+    (run.node_runs ?? []).some((nodeRun) => Boolean(nodeRun.memory_activity?.degraded));
+
+  if (POLICY_DENIED_PATTERN.test(errorText)) {
+    diagnostics.push({
+      key: "policy",
+      tone: "destructive",
+      title: "Policy denied execution",
+      description:
+        "A tenant policy blocked part of this run. Check provider/model allowlists, egress restrictions, or cloud exec-tool restrictions.",
+    });
+  }
+  if (BUDGET_EXCEEDED_PATTERN.test(errorText)) {
+    diagnostics.push({
+      key: "budget",
+      tone: "destructive",
+      title: "Budget limit hit",
+      description:
+        "This run was blocked by the tenant’s monthly spend budget. Raise the budget or wait for the next billing window.",
+    });
+  }
+  if (QUOTA_EXCEEDED_PATTERN.test(errorText)) {
+    diagnostics.push({
+      key: "quota",
+      tone: "destructive",
+      title: "Quota limit hit",
+      description:
+        "This run was blocked by a token or cost quota. Check the organization quota settings before retrying.",
+    });
+  }
+  if (ENTITLEMENT_PATTERN.test(errorText)) {
+    diagnostics.push({
+      key: "entitlement",
+      tone: "destructive",
+      title: "Plan entitlement blocked the run",
+      description:
+        "The active subscription plan does not allow the requested runtime volume. Upgrade or change the plan to continue.",
+    });
+  }
+  if (memoryDegraded) {
+    diagnostics.push({
+      key: "memory",
+      tone: "warning",
+      title: "Curated memory degraded during execution",
+      description:
+        "Memory retrieval fell back to a degraded path. Check observation indexing backlog, memory service health, or tenant memory configuration before relying on retrieval quality.",
+    });
+  }
+
+  return diagnostics;
 };
 
 const getNodeAttemptKey = (nodeId: string, attempt: number) => `${nodeId}:${attempt}`;
@@ -460,61 +525,67 @@ export default function RunDetailPage() {
     }
   }, [runId, router]);
 
-  const resumeRun = useCallback(async (approved: boolean) => {
-    if (!runId || !run?.paused_node_id) return;
+  const resumeRun = useCallback(
+    async (approved: boolean) => {
+      if (!runId || !run?.paused_node_id) return;
 
-    const requiredFields = run.pause_payload?.required_fields ?? [];
-    if (approved && requiredFields.length > 0) {
-      const missing = requiredFields.filter((field) => !String(approvalFields[field] ?? "").trim());
-      if (missing.length > 0) {
-        const message = `Missing required field${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`;
-        setError(message);
-        showError("Cannot approve yet", message);
-        return;
+      const requiredFields = run.pause_payload?.required_fields ?? [];
+      if (approved && requiredFields.length > 0) {
+        const missing = requiredFields.filter((field) => !String(approvalFields[field] ?? "").trim());
+        if (missing.length > 0) {
+          const message = `Missing required field${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`;
+          setError(message);
+          showError("Cannot approve yet", message);
+          return;
+        }
       }
-    }
 
-    if (approved) {
-      setIsApproving(true);
-    } else {
-      setIsRejecting(true);
-    }
-    setError(null);
-
-    try {
-      const input: ResumeRunInput = {
-        node_id: run.paused_node_id,
-        input_json: {
-          approved,
-          fields: approved ? approvalFields : undefined,
-          feedback: !approved ? approvalFeedback : undefined,
-        },
-      };
-      await runsApi.resume(runId, input);
       if (approved) {
-        showSuccess("Approved", "Run resumed and workflow continues.");
+        setIsApproving(true);
       } else {
-        showWarning("Rejected", "Run was rejected and will not continue.");
+        setIsRejecting(true);
       }
-      // Clear the form
-      setApprovalFields({});
-      setApprovalFeedback("");
-      // Refresh to get updated status
-      await fetchRun({ silent: true });
-    } catch (err: unknown) {
-      const message = getApiErrorMessage(err, approved ? "Failed to approve run." : "Failed to reject run.");
-      setError(message);
-      showError(approved ? "Approval failed" : "Rejection failed", message);
-    } finally {
-      setIsApproving(false);
-      setIsRejecting(false);
-    }
-  }, [runId, run, approvalFields, approvalFeedback, fetchRun]);
+      setError(null);
+
+      try {
+        const input: ResumeRunInput = {
+          node_id: run.paused_node_id,
+          input_json: {
+            approved,
+            fields: approved ? approvalFields : undefined,
+            feedback: !approved ? approvalFeedback : undefined,
+          },
+        };
+        await runsApi.resume(runId, input);
+        if (approved) {
+          showSuccess("Approved", "Run resumed and workflow continues.");
+        } else {
+          showWarning("Rejected", "Run was rejected and will not continue.");
+        }
+        // Clear the form
+        setApprovalFields({});
+        setApprovalFeedback("");
+        // Refresh to get updated status
+        await fetchRun({ silent: true });
+      } catch (err: unknown) {
+        const message = getApiErrorMessage(err, approved ? "Failed to approve run." : "Failed to reject run.");
+        setError(message);
+        showError(approved ? "Approval failed" : "Rejection failed", message);
+      } finally {
+        setIsApproving(false);
+        setIsRejecting(false);
+      }
+    },
+    [runId, run, approvalFields, approvalFeedback, fetchRun],
+  );
 
   const latestSucceededNodeRun = useMemo(() => {
     if (!run?.node_runs?.length) return null;
     const candidates = run.node_runs
-      .filter((nodeRun) => (String(nodeRun.status) === "succeeded" || String(nodeRun.status) === "success") && nodeRun.output_json)
+      .filter(
+        (nodeRun) =>
+          (String(nodeRun.status) === "succeeded" || String(nodeRun.status) === "success") && nodeRun.output_json,
+      )
       .filter((nodeRun) => String(nodeRun.node_id) !== String(run.paused_node_id));
     return candidates.length > 0 ? candidates[candidates.length - 1] : null;
   }, [run]);
@@ -523,6 +594,8 @@ export default function RunDetailPage() {
     if (!latestSucceededNodeRun?.output_json) return "";
     return formatJsonForDisplay(latestSucceededNodeRun.output_json);
   }, [latestSucceededNodeRun]);
+
+  const runDiagnostics = useMemo(() => deriveRunDiagnostics(run), [run]);
 
   const flushStreamUpdates = useCallback(() => {
     if (flushRafRef.current !== null) {
@@ -552,8 +625,7 @@ export default function RunDetailPage() {
             const existingByKey =
               existingById === -1
                 ? nodeRunList.findIndex(
-                    (nodeRun) =>
-                      nodeRun.node_id === update.node_id && nodeRun.attempt === update.attempt,
+                    (nodeRun) => nodeRun.node_id === update.node_id && nodeRun.attempt === update.attempt,
                   )
                 : existingById;
 
@@ -598,55 +670,60 @@ export default function RunDetailPage() {
     });
   }, []);
 
-  const handleStreamMessage = useCallback((message: RunsWsMessage | null) => {
-    if (!message) return;
+  const handleStreamMessage = useCallback(
+    (message: RunsWsMessage | null) => {
+      if (!message) return;
 
-    const messageTimestamp =
-      typeof (message as unknown as { timestamp?: string }).timestamp === "string"
-        ? (message as unknown as { timestamp: string }).timestamp
-        : null;
-    if (messageTimestamp) {
-      setLastStreamTimestamp(messageTimestamp);
-      lastStreamTimestampRef.current = messageTimestamp;
-    }
+      const messageTimestamp =
+        typeof (message as unknown as { timestamp?: string }).timestamp === "string"
+          ? (message as unknown as { timestamp: string }).timestamp
+          : null;
+      if (messageTimestamp) {
+        setLastStreamTimestamp(messageTimestamp);
+        lastStreamTimestampRef.current = messageTimestamp;
+      }
 
-    if (message.type === "connected") {
-      return;
-    }
+      if (message.type === "connected") {
+        return;
+      }
 
-    if (message.type === "run.updated" && "run" in message) {
-      const runDelta = (message as { run: RunDeltaPayload }).run;
-      pendingRunDeltaRef.current = runDelta;
-      flushStreamUpdates();
-      return;
-    }
+      if (message.type === "run.updated" && "run" in message) {
+        const runDelta = (message as { run: RunDeltaPayload }).run;
+        pendingRunDeltaRef.current = runDelta;
+        flushStreamUpdates();
+        return;
+      }
 
-    if (message.type === "node_run.updated" && "node_run" in message) {
-      const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
-      const key = updatedNodeRun.id || `${updatedNodeRun.node_id}:${updatedNodeRun.attempt}`;
-      pendingNodeRunsRef.current.set(key, updatedNodeRun);
-      flushStreamUpdates();
-      return;
-    }
+      if (message.type === "node_run.updated" && "node_run" in message) {
+        const updatedNodeRun = (message as { node_run: NodeRunItem }).node_run;
+        const key = updatedNodeRun.id || `${updatedNodeRun.node_id}:${updatedNodeRun.attempt}`;
+        pendingNodeRunsRef.current.set(key, updatedNodeRun);
+        flushStreamUpdates();
+        return;
+      }
 
-    if (message.type === "node_stream.chunk") {
-      const rawPayload = ("node_stream" in message
-        ? (message as { node_stream: unknown }).node_stream
-        : (message as { payload?: unknown }).payload) as Record<string, unknown> | undefined;
-      if (!rawPayload) return;
+      if (message.type === "node_stream.chunk") {
+        const rawPayload = (
+          "node_stream" in message
+            ? (message as { node_stream: unknown }).node_stream
+            : (message as { payload?: unknown }).payload
+        ) as Record<string, unknown> | undefined;
+        if (!rawPayload) return;
 
-      const nodeId = String(rawPayload.node_id ?? "");
-      const attempt = Number(rawPayload.attempt ?? 1);
-      const chunk = String(rawPayload.chunk ?? "");
-      if (!nodeId || !chunk) return;
+        const nodeId = String(rawPayload.node_id ?? "");
+        const attempt = Number(rawPayload.attempt ?? 1);
+        const chunk = String(rawPayload.chunk ?? "");
+        if (!nodeId || !chunk) return;
 
-      const streamKey = getNodeAttemptKey(nodeId, Number.isFinite(attempt) ? attempt : 1);
-      const pendingChunks = pendingNodeStreamChunksRef.current.get(streamKey) ?? [];
-      pendingChunks.push(chunk);
-      pendingNodeStreamChunksRef.current.set(streamKey, pendingChunks);
-      flushStreamUpdates();
-    }
-  }, [flushStreamUpdates]);
+        const streamKey = getNodeAttemptKey(nodeId, Number.isFinite(attempt) ? attempt : 1);
+        const pendingChunks = pendingNodeStreamChunksRef.current.get(streamKey) ?? [];
+        pendingChunks.push(chunk);
+        pendingNodeStreamChunksRef.current.set(streamKey, pendingChunks);
+        flushStreamUpdates();
+      }
+    },
+    [flushStreamUpdates],
+  );
 
   useEffect(() => {
     if (!run || String(run.status) !== "paused") {
@@ -947,15 +1024,7 @@ export default function RunDetailPage() {
       source?.close();
       setSseConnected(false);
     };
-  }, [
-    runId,
-    wsToken,
-    wsConnected,
-    sseConnected,
-    runStatus,
-    handleStreamMessage,
-    streamReconnectCount,
-  ]);
+  }, [runId, wsToken, wsConnected, sseConnected, runStatus, handleStreamMessage, streamReconnectCount]);
 
   useEffect(() => {
     if (!runId) return;
@@ -977,9 +1046,7 @@ export default function RunDetailPage() {
 
   const selectedNodeStreamText = useMemo(() => {
     if (!selectedNodeRun) return "";
-    return (
-      nodeStreamText[getNodeAttemptKey(selectedNodeRun.node_id, selectedNodeRun.attempt)] ?? ""
-    );
+    return nodeStreamText[getNodeAttemptKey(selectedNodeRun.node_id, selectedNodeRun.attempt)] ?? "";
   }, [selectedNodeRun, nodeStreamText]);
 
   const selectedNodeAgentTrace = useMemo(() => {
@@ -1154,15 +1221,11 @@ export default function RunDetailPage() {
                   <div className="grid gap-4 md:grid-cols-4">
                     <div className="bg-muted rounded-lg p-3">
                       <p className="text-xs font-medium text-muted-foreground uppercase">Started</p>
-                      <p className="mt-1 text-sm">
-                        {run.started_at ? formatDateTime(run.started_at) : "—"}
-                      </p>
+                      <p className="mt-1 text-sm">{run.started_at ? formatDateTime(run.started_at) : "—"}</p>
                     </div>
                     <div className="bg-muted rounded-lg p-3">
                       <p className="text-xs font-medium text-muted-foreground uppercase">Ended</p>
-                      <p className="mt-1 text-sm">
-                        {run.ended_at ? formatDateTime(run.ended_at) : "—"}
-                      </p>
+                      <p className="mt-1 text-sm">{run.ended_at ? formatDateTime(run.ended_at) : "—"}</p>
                     </div>
                     <div className="bg-muted rounded-lg p-3">
                       <p className="text-xs font-medium text-muted-foreground uppercase">Duration</p>
@@ -1180,12 +1243,8 @@ export default function RunDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase">Queue status</p>
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                         <span className="capitalize">{run.queue_status}</span>
-                        {typeof run.queue_attempts === "number" && (
-                          <span>Attempts: {run.queue_attempts}</span>
-                        )}
-                        {run.queue_available_at && (
-                          <span>Next check: {formatDateTime(run.queue_available_at)}</span>
-                        )}
+                        {typeof run.queue_attempts === "number" && <span>Attempts: {run.queue_attempts}</span>}
+                        {run.queue_available_at && <span>Next check: {formatDateTime(run.queue_available_at)}</span>}
                       </div>
                     </div>
                   )}
@@ -1194,6 +1253,35 @@ export default function RunDetailPage() {
                     <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
                       <p className="text-xs font-medium text-destructive uppercase">Run message</p>
                       <p className="mt-1 text-sm text-destructive whitespace-pre-wrap">{run.error_message}</p>
+                    </div>
+                  )}
+
+                  {runDiagnostics.length > 0 && (
+                    <div className="mt-4 space-y-3">
+                      <p className="text-xs font-medium uppercase text-muted-foreground">Run diagnostics</p>
+                      {runDiagnostics.map((diagnostic) => (
+                        <div
+                          key={diagnostic.key}
+                          className={[
+                            "rounded-lg border p-3",
+                            diagnostic.tone === "destructive"
+                              ? "border-destructive/20 bg-destructive/5"
+                              : "border-amber-500/20 bg-amber-500/5",
+                          ].join(" ")}
+                        >
+                          <p
+                            className={[
+                              "text-sm font-medium",
+                              diagnostic.tone === "destructive"
+                                ? "text-destructive"
+                                : "text-amber-800 dark:text-amber-200",
+                            ].join(" ")}
+                          >
+                            {diagnostic.title}
+                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">{diagnostic.description}</p>
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -1210,7 +1298,10 @@ export default function RunDetailPage() {
                         <StatusIcon status="paused" />
                         <span>Waiting for Approval</span>
                       </div>
-                      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                      >
                         Action required
                       </Badge>
                     </CardTitle>
@@ -1225,7 +1316,8 @@ export default function RunDetailPage() {
 
                     {/* Node info */}
                     <div className="text-sm text-muted-foreground">
-                      Paused at node: <span className="font-mono">{run.pause_payload?.node_name ?? run.paused_node_id}</span>
+                      Paused at node:{" "}
+                      <span className="font-mono">{run.pause_payload?.node_name ?? run.paused_node_id}</span>
                     </div>
 
                     {/* Context */}
@@ -1251,9 +1343,7 @@ export default function RunDetailPage() {
                         <p className="text-sm font-medium">Required fields</p>
                         {run.pause_payload.required_fields.map((field) => (
                           <div key={field}>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">
-                              {field}
-                            </label>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">{field}</label>
                             {/\b(draft|email|body|message|json|data|content|output)\b/i.test(field) ? (
                               <Textarea
                                 value={approvalFields[field] ?? ""}
@@ -1366,8 +1456,9 @@ export default function RunDetailPage() {
                           const nodeName = formatNodeLabel(nodeRun);
                           const nodeMemoryActivity = getNodeRunMemoryActivity(nodeRun);
                           const nodeMemoryLabel = getNodeMemoryLabel(nodeMemoryActivity);
-                          const showNodeStatusText =
-                            !(String(run.status) === "failed" && String(nodeRun.status) === "failed");
+                          const showNodeStatusText = !(
+                            String(run.status) === "failed" && String(nodeRun.status) === "failed"
+                          );
 
                           return (
                             <button
@@ -1383,9 +1474,7 @@ export default function RunDetailPage() {
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate">{nodeName}</p>
                                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                                    <p className="text-xs text-muted-foreground">
-                                      attempt {nodeRun.attempt}
-                                    </p>
+                                    <p className="text-xs text-muted-foreground">attempt {nodeRun.attempt}</p>
                                     {nodeMemoryLabel ? (
                                       <Badge
                                         variant="outline"
@@ -1397,10 +1486,7 @@ export default function RunDetailPage() {
                                   </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                  <Badge
-                                    variant="outline"
-                                    className={getStatusBadgeClass(String(nodeRun.status))}
-                                  >
+                                  <Badge variant="outline" className={getStatusBadgeClass(String(nodeRun.status))}>
                                     <StatusIcon status={String(nodeRun.status)} />
                                     {showNodeStatusText ? formatNodeStatusLabel(String(nodeRun.status)) : null}
                                   </Badge>

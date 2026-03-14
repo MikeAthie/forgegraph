@@ -181,3 +181,8 @@ Curated memory must land with:
 - engine tests for new node executors and failure behavior
 - browser E2E proving save -> later retrieval in a Jackie-style flow
 - performance checks for search/context latency and vector degradation
+
+## Operational References
+For the shipped P2 operator/admin layer, also see:
+- `docs/ops/p2-memory-governance-support.md`
+- `docs/ops/p2-team-admin-walkthrough.md`

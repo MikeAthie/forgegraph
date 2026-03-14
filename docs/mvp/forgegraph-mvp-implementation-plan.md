@@ -89,6 +89,10 @@ Primary workstreams:
 
 Reference:
 - `docs/mvp/mvp-tasks-p2.md`
+- `docs/mvp/p2-f01-implementation-tickets.md`
+- `docs/mvp/p2-f02-implementation-tickets.md`
+- `docs/mvp/p2-f03-implementation-tickets.md`
+- `docs/mvp/p2-f04-implementation-tickets.md`
 
 ## Locked Product Decisions
 These decisions should be treated as fixed for the MVP unless there is a deliberate roadmap change:
@@ -142,9 +146,9 @@ These decisions should be treated as fixed for the MVP unless there is a deliber
 - Avoid phase-wide mega-PRs.
 
 ## Immediate Next Steps
-1. Start `P1-F01` from `docs/mvp/p1-f01-implementation-tickets.md`.
-2. Continue into `P1-F02` and `P1-F03` using the new ticket docs instead of inventing PR boundaries during implementation.
-3. Define the Jackie-style memory-first workflow as the supported MVP proof for P1.
+1. Treat `P2` as closed and use `docs/mvp/mvp-tasks-p2.md` plus the `p2-f0x` ticket docs as the shipped record.
+2. Use `docs/ops/p2-memory-governance-support.md` and `docs/ops/p2-team-admin-walkthrough.md` for operator/support onboarding.
+3. Keep any post-P2 work additive; do not reopen the P2 governance/reporting/admin foundations casually.
 
 ## Linked Planning Docs
 - `docs/mvp/mvp-tasks-p0.md`
@@ -157,3 +161,9 @@ These decisions should be treated as fixed for the MVP unless there is a deliber
 - `docs/mvp/p1-f01-implementation-tickets.md`
 - `docs/mvp/p1-f02-implementation-tickets.md`
 - `docs/mvp/p1-f03-implementation-tickets.md`
+- `docs/mvp/p2-f01-implementation-tickets.md`
+- `docs/mvp/p2-f02-implementation-tickets.md`
+- `docs/mvp/p2-f03-implementation-tickets.md`
+- `docs/mvp/p2-f04-implementation-tickets.md`
+- `docs/ops/p2-memory-governance-support.md`
+- `docs/ops/p2-team-admin-walkthrough.md`

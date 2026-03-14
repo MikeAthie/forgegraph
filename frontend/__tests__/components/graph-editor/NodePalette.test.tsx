@@ -25,9 +25,7 @@ describe("NodePalette", () => {
     jest.clearAllMocks();
   });
 
-  const buildMarketplacePackage = (
-    overrides: Partial<MarketplacePackage> = {},
-  ): MarketplacePackage => ({
+  const buildMarketplacePackage = (overrides: Partial<MarketplacePackage> = {}): MarketplacePackage => ({
     id: "pkg-1",
     slug: "crm-lookup",
     name: "CRM Lookup",
@@ -101,10 +99,9 @@ describe("NodePalette", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       PHASE2_NODE_TYPES.forEach((nodeType) => {
-        expect(
-          screen.getAllByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") })
-            .length
-        ).toBeGreaterThan(0);
+        expect(screen.getAllByRole("button", { name: new RegExp(`^${nodeType.label}$`, "i") }).length).toBeGreaterThan(
+          0,
+        );
         expect(screen.getByText(nodeType.description)).toBeInTheDocument();
       });
     });
@@ -277,10 +274,7 @@ describe("NodePalette", () => {
       const button = screen.getByRole("button", { name: /^observation context$/i });
       await user.click(button);
 
-      expect(mockOnAddNode).toHaveBeenCalledWith(
-        NODE_TYPES.OBSERVATION_CONTEXT,
-        false,
-      );
+      expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.OBSERVATION_CONTEXT, false);
     });
 
     it("should call onAddNode when Human Gate button is clicked", async () => {
@@ -334,7 +328,7 @@ describe("NodePalette", () => {
 
       // Each node button should have a colored icon badge
       const iconBadges = container.querySelectorAll(
-        ".bg-violet-500, .bg-amber-500, .bg-blue-500, .bg-indigo-500, .bg-rose-500, .bg-emerald-500, .bg-orange-500"
+        ".bg-violet-500, .bg-amber-500, .bg-blue-500, .bg-indigo-500, .bg-rose-500, .bg-emerald-500, .bg-orange-500",
       );
       expect(iconBadges.length).toBeGreaterThan(0);
     });
@@ -383,7 +377,9 @@ describe("NodePalette", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       // Find elements with description text
-      const descriptions = screen.getAllByText(/Call an LLM|Make an HTTP|Transform data|Define the final|Conditional routing|Join parallel|Pause for/);
+      const descriptions = screen.getAllByText(
+        /Call an LLM|Make an HTTP|Transform data|Define the final|Conditional routing|Join parallel|Pause for/,
+      );
 
       descriptions.forEach((desc) => {
         expect(desc).toHaveClass("line-clamp-1");

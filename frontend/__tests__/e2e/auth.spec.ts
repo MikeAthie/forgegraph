@@ -81,7 +81,10 @@ test.describe("User Registration", () => {
   });
 
   test("should navigate to login page from sign in link", async ({ page }) => {
-    await page.getByRole("main").getByRole("link", { name: /^sign in$/i }).click();
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: /^sign in$/i })
+      .click();
     await expect(page).toHaveURL("/login");
   });
 });

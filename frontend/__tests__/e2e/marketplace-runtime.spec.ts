@@ -3,19 +3,17 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { getPlaywrightRuntimeFixtureUser, login } from "./helpers";
 
 const runtimeFixtureUser = getPlaywrightRuntimeFixtureUser();
-const API_BASE_URL = (process.env.PLAYWRIGHT_API_URL ??
+const API_BASE_URL = (
+  process.env.PLAYWRIGHT_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
-const packageName =
-  process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ?? "Playwright Runtime Health Check";
-const toolName =
-  process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
+const packageName = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ?? "Playwright Runtime Health Check";
+const toolName = process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
 
 const GRAPH_URL_PATTERN = /\/graphs\/[a-f0-9-]+/;
 
-const createGraphName = (prefix: string) =>
-  `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const createGraphName = (prefix: string) => `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 async function expectGraphEditorOpen(page: Page) {
   await expect(page).toHaveURL(GRAPH_URL_PATTERN, { timeout: 15_000 });
@@ -34,11 +32,7 @@ async function getAccessToken(request: APIRequestContext) {
   return body.access as string;
 }
 
-async function waitForRunTerminal(
-  request: APIRequestContext,
-  accessToken: string,
-  runId: string,
-) {
+async function waitForRunTerminal(request: APIRequestContext, accessToken: string, runId: string) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
@@ -67,10 +61,7 @@ async function addOutputNode(page: Page) {
 test.describe("Marketplace runtime E2E", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("installs a runtime package and executes it through the real engine path", async ({
-    page,
-    request,
-  }) => {
+  test("installs a runtime package and executes it through the real engine path", async ({ page, request }) => {
     test.setTimeout(90_000);
     const accessToken = await getAccessToken(request);
 
@@ -83,9 +74,11 @@ test.describe("Marketplace runtime E2E", () => {
     await expect(packageCard).toBeVisible();
     await packageCard.getByRole("button", { name: /install|reinstall|update/i }).click();
 
-    await expect.poll(async () => {
-      return page.getByText(toolName).count();
-    }).toBeGreaterThan(0);
+    await expect
+      .poll(async () => {
+        return page.getByText(toolName).count();
+      })
+      .toBeGreaterThan(0);
     await page.waitForTimeout(2500);
 
     const graphName = createGraphName("Marketplace Runtime");
@@ -93,7 +86,10 @@ test.describe("Marketplace runtime E2E", () => {
     await page.goto("/graphs");
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 

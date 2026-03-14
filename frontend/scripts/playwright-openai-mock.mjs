@@ -22,10 +22,7 @@ function extractAllowedTools(prompt) {
   const start = prompt.indexOf(marker);
   if (start === -1) return [];
   const end = prompt.indexOf(nextMarker, start);
-  const block = prompt.slice(
-    start + marker.length,
-    end === -1 ? undefined : end,
-  );
+  const block = prompt.slice(start + marker.length, end === -1 ? undefined : end);
   return block
     .split("\n")
     .map((line) => line.trim())
@@ -80,8 +77,7 @@ function handleAgentPrompt(prompt, model) {
   return buildChatCompletion(
     JSON.stringify({
       action: "final_answer",
-      final_answer:
-        "Jackie checked your workspace health and everything looks good. No urgent issues found.",
+      final_answer: "Jackie checked your workspace health and everything looks good. No urgent issues found.",
     }),
     model,
   );
@@ -107,24 +103,14 @@ const server = http.createServer(async (request, response) => {
 
     const payload = body ? JSON.parse(body) : {};
     const prompt = extractPrompt(payload.messages);
-    const model =
-      typeof payload.model === "string" && payload.model
-        ? payload.model
-        : "gpt-4.1-mini";
+    const model = typeof payload.model === "string" && payload.model ? payload.model : "gpt-4.1-mini";
 
     if (prompt.includes("You are executing inside a ForgeGraph agent node.")) {
       json(response, 200, handleAgentPrompt(prompt, model));
       return;
     }
 
-    json(
-      response,
-      200,
-      buildChatCompletion(
-        "Mock response from the Playwright OpenAI server.",
-        model,
-      ),
-    );
+    json(response, 200, buildChatCompletion("Mock response from the Playwright OpenAI server.", model));
     return;
   }
 

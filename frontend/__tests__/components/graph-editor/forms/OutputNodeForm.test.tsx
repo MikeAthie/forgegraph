@@ -17,10 +17,7 @@ jest.mock("@/components/graph-editor/forms/AgentFields", () => ({
 jest.mock("@/components/ui/key-value-editor", () => ({
   KeyValueEditor: ({ value, onChange }: any) => (
     <div data-testid="key-value-editor">
-      <button
-        data-testid="add-output-mapping"
-        onClick={() => onChange({ ...value, outputKey: "state.path" })}
-      >
+      <button data-testid="add-output-mapping" onClick={() => onChange({ ...value, outputKey: "state.path" })}>
         Add Output
       </button>
       <div data-testid="output-display">{JSON.stringify(value)}</div>
@@ -72,14 +69,8 @@ describe("OutputNodeForm", () => {
     it("should display helpful description", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(
-        screen.getByText(
-          /define what data to extract as the final output of your workflow/i
-        )
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/map output field names to state paths/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/define what data to extract as the final output of your workflow/i)).toBeInTheDocument();
+      expect(screen.getByText(/map output field names to state paths/i)).toBeInTheDocument();
     });
   });
 
@@ -103,7 +94,7 @@ describe("OutputNodeForm", () => {
             output_mapping: expect.objectContaining({
               outputKey: "state.path",
             }),
-          })
+          }),
         );
       });
     });
@@ -136,9 +127,7 @@ describe("OutputNodeForm", () => {
     it("should display description for output mapping", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(
-        screen.getByText(/map output keys to values from the workflow state/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/map output keys to values from the workflow state/i)).toBeInTheDocument();
     });
 
     it("should display state path examples section", () => {
@@ -251,7 +240,7 @@ describe("OutputNodeForm", () => {
               outputKey: "state.path",
             }),
             notes: "Some notes",
-          })
+          }),
         );
       });
     });
@@ -276,7 +265,7 @@ describe("OutputNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             output_mapping: expect.any(Object),
-          })
+          }),
         );
       });
     });
@@ -325,17 +314,13 @@ describe("OutputNodeForm", () => {
     it("should explain workflow output purpose", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(
-        screen.getByText(/define what data to extract as the final output/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/define what data to extract as the final output/i)).toBeInTheDocument();
     });
 
     it("should explain mapping functionality", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(
-        screen.getByText(/map output keys to values from the workflow state/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/map output keys to values from the workflow state/i)).toBeInTheDocument();
     });
   });
 

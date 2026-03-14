@@ -1,5 +1,15 @@
 import type { MemoryObservation } from "@/lib/api";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, SearchInput, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  SearchInput,
+  Spinner,
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 const SCOPE_OPTIONS = [
@@ -105,9 +115,7 @@ export function MemoryObservationList({
             <Badge variant="outline" className="border-sky-500/30 text-sky-700 dark:text-sky-300">
               {modeLabel}
             </Badge>
-            <CardTitle className="text-xl font-semibold tracking-tight">
-              Observation ledger
-            </CardTitle>
+            <CardTitle className="text-xl font-semibold tracking-tight">Observation ledger</CardTitle>
             <p className="max-w-xl text-sm text-muted-foreground">
               Search explicit memory records, inspect recency, and pivot across graph, run, or session scopes.
             </p>
@@ -193,9 +201,7 @@ export function MemoryObservationList({
                   className={cn(
                     "group w-full rounded-2xl border px-4 py-4 text-left transition-all",
                     "hover:border-sky-500/40 hover:bg-sky-500/5",
-                    isActive
-                      ? "border-sky-500/40 bg-sky-500/10 shadow-sm"
-                      : "border-border/50 bg-background/70",
+                    isActive ? "border-sky-500/40 bg-sky-500/10 shadow-sm" : "border-border/50 bg-background/70",
                   )}
                 >
                   <div className="flex flex-col gap-3">
@@ -210,15 +216,11 @@ export function MemoryObservationList({
                       </div>
                       <div className="flex flex-wrap justify-end gap-2">
                         <Badge variant="outline">{toLabelCase(observation.type)}</Badge>
-                        {observation.is_deleted ? (
-                          <Badge variant="destructive">Deleted</Badge>
-                        ) : null}
+                        {observation.is_deleted ? <Badge variant="destructive">Deleted</Badge> : null}
                       </div>
                     </div>
 
-                    <p className="text-sm leading-6 text-muted-foreground">
-                      {summarizeContent(observation.content)}
-                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground">{summarizeContent(observation.content)}</p>
 
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {observation.topic_key ? (

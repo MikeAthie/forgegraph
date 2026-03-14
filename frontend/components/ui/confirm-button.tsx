@@ -71,9 +71,7 @@ export function ConfirmButton({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description && (
-            <AlertDialogDescription>{description}</AlertDialogDescription>
-          )}
+          {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={handleCancel} disabled={isLoading}>
@@ -82,10 +80,7 @@ export function ConfirmButton({
           <AlertDialogAction
             onClick={handleConfirm}
             disabled={isLoading}
-            className={cn(
-              variant === "destructive" &&
-                buttonVariants({ variant: "destructive" })
-            )}
+            className={cn(variant === "destructive" && buttonVariants({ variant: "destructive" }))}
           >
             {isLoading ? (
               <>

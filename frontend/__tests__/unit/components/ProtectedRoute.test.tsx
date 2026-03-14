@@ -4,20 +4,20 @@
  * Tests route protection logic and redirects for unauthenticated users.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
-import { useRouter } from 'next/router';
+import { render, screen, waitFor } from "@testing-library/react";
+import { useRouter } from "next/router";
 
-import ProtectedRoute from '@/components/ProtectedRoute';
-import { useAuth } from '@/contexts/AuthContext';
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Mock dependencies
-jest.mock('@/contexts/AuthContext');
-jest.mock('next/router');
+jest.mock("@/contexts/AuthContext");
+jest.mock("next/router");
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
-describe('ProtectedRoute', () => {
+describe("ProtectedRoute", () => {
   const mockPush = jest.fn();
 
   beforeEach(() => {
@@ -26,13 +26,13 @@ describe('ProtectedRoute', () => {
       push: mockPush,
       replace: jest.fn(),
       prefetch: jest.fn(),
-      pathname: '/',
+      pathname: "/",
       query: {},
-      asPath: '/',
+      asPath: "/",
     } as any);
   });
 
-  describe('Loading State', () => {
+  describe("Loading State", () => {
     beforeEach(() => {
       mockUseAuth.mockReturnValue({
         user: null,
@@ -47,39 +47,39 @@ describe('ProtectedRoute', () => {
       });
     });
 
-    it('should display loading spinner when loading is true', () => {
+    it("should display loading spinner when loading is true", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
-      expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
+      expect(screen.queryByText("Protected Content")).not.toBeInTheDocument();
     });
 
-    it('should not redirect when loading', () => {
+    it("should not redirect when loading", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
       expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('should display spinner component when loading', () => {
+    it("should display spinner component when loading", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
     });
   });
 
-  describe('Unauthenticated State', () => {
+  describe("Unauthenticated State", () => {
     beforeEach(() => {
       mockUseAuth.mockReturnValue({
         user: null,
@@ -94,44 +94,44 @@ describe('ProtectedRoute', () => {
       });
     });
 
-    it('should redirect to login when not authenticated', async () => {
+    it("should redirect to login when not authenticated", async () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/login');
+        expect(mockPush).toHaveBeenCalledWith("/login");
       });
     });
 
-    it('should display redirecting message when not authenticated', () => {
+    it("should display redirecting message when not authenticated", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Redirecting to login...')).toBeInTheDocument();
-      expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+      expect(screen.getByText("Redirecting to login...")).toBeInTheDocument();
+      expect(screen.queryByText("Protected Content")).not.toBeInTheDocument();
     });
 
-    it('should not render children when not authenticated', () => {
+    it("should not render children when not authenticated", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+      expect(screen.queryByText("Protected Content")).not.toBeInTheDocument();
     });
   });
 
-  describe('Authenticated State', () => {
+  describe("Authenticated State", () => {
     beforeEach(() => {
       mockUseAuth.mockReturnValue({
-        user: { id: '1', email: 'user@example.com' },
+        user: { id: "1", email: "user@example.com" },
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -143,38 +143,38 @@ describe('ProtectedRoute', () => {
       });
     });
 
-    it('should render children when authenticated', () => {
+    it("should render children when authenticated", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Protected Content')).toBeInTheDocument();
+      expect(screen.getByText("Protected Content")).toBeInTheDocument();
     });
 
-    it('should not redirect when authenticated', () => {
+    it("should not redirect when authenticated", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
       expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('should not display loading or redirecting message', () => {
+    it("should not display loading or redirecting message", () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-      expect(screen.queryByText('Redirecting to login...')).not.toBeInTheDocument();
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+      expect(screen.queryByText("Redirecting to login...")).not.toBeInTheDocument();
     });
 
-    it('should render complex children', () => {
+    it("should render complex children", () => {
       render(
         <ProtectedRoute>
           <div>
@@ -182,17 +182,17 @@ describe('ProtectedRoute', () => {
             <p>Welcome back!</p>
             <button>Action</button>
           </div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
-      expect(screen.getByText('Welcome back!')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /action/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /dashboard/i })).toBeInTheDocument();
+      expect(screen.getByText("Welcome back!")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /action/i })).toBeInTheDocument();
     });
   });
 
-  describe('State Transitions', () => {
-    it('should handle transition from loading to authenticated', () => {
+  describe("State Transitions", () => {
+    it("should handle transition from loading to authenticated", () => {
       mockUseAuth.mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -208,14 +208,14 @@ describe('ProtectedRoute', () => {
       const { rerender } = render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
 
       // Transition to authenticated
       mockUseAuth.mockReturnValue({
-        user: { id: '1', email: 'user@example.com' },
+        user: { id: "1", email: "user@example.com" },
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -229,14 +229,14 @@ describe('ProtectedRoute', () => {
       rerender(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Protected Content')).toBeInTheDocument();
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+      expect(screen.getByText("Protected Content")).toBeInTheDocument();
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     });
 
-    it('should handle transition from loading to unauthenticated', async () => {
+    it("should handle transition from loading to unauthenticated", async () => {
       mockUseAuth.mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -252,10 +252,10 @@ describe('ProtectedRoute', () => {
       const { rerender } = render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
 
       // Transition to unauthenticated
       mockUseAuth.mockReturnValue({
@@ -273,21 +273,21 @@ describe('ProtectedRoute', () => {
       rerender(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/login');
+        expect(mockPush).toHaveBeenCalledWith("/login");
       });
 
-      expect(screen.getByText('Redirecting to login...')).toBeInTheDocument();
+      expect(screen.getByText("Redirecting to login...")).toBeInTheDocument();
     });
   });
 
-  describe('Edge Cases', () => {
-    it('should handle null children gracefully', () => {
+  describe("Edge Cases", () => {
+    it("should handle null children gracefully", () => {
       mockUseAuth.mockReturnValue({
-        user: { id: '1', email: 'user@example.com' },
+        user: { id: "1", email: "user@example.com" },
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -301,12 +301,12 @@ describe('ProtectedRoute', () => {
       render(<ProtectedRoute>{null}</ProtectedRoute>);
 
       // Should not crash
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     });
 
-    it('should handle multiple children', () => {
+    it("should handle multiple children", () => {
       mockUseAuth.mockReturnValue({
-        user: { id: '1', email: 'user@example.com' },
+        user: { id: "1", email: "user@example.com" },
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -322,17 +322,17 @@ describe('ProtectedRoute', () => {
           <div>Child 1</div>
           <div>Child 2</div>
           <div>Child 3</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
-      expect(screen.getByText('Child 1')).toBeInTheDocument();
-      expect(screen.getByText('Child 2')).toBeInTheDocument();
-      expect(screen.getByText('Child 3')).toBeInTheDocument();
+      expect(screen.getByText("Child 1")).toBeInTheDocument();
+      expect(screen.getByText("Child 2")).toBeInTheDocument();
+      expect(screen.getByText("Child 3")).toBeInTheDocument();
     });
   });
 
-  describe('Accessibility', () => {
-    it('should have accessible loading state', () => {
+  describe("Accessibility", () => {
+    it("should have accessible loading state", () => {
       mockUseAuth.mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -348,14 +348,14 @@ describe('ProtectedRoute', () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
       // Loading message should be visible and accessible
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
     });
 
-    it('should have accessible redirecting state', () => {
+    it("should have accessible redirecting state", () => {
       mockUseAuth.mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -371,11 +371,11 @@ describe('ProtectedRoute', () => {
       render(
         <ProtectedRoute>
           <div>Protected Content</div>
-        </ProtectedRoute>
+        </ProtectedRoute>,
       );
 
       // Redirecting message should be visible and accessible
-      expect(screen.getByText('Redirecting to login...')).toBeInTheDocument();
+      expect(screen.getByText("Redirecting to login...")).toBeInTheDocument();
     });
   });
 });

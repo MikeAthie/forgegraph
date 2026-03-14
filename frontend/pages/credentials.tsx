@@ -79,17 +79,13 @@ const MANUAL_PROVIDERS = PROVIDERS.filter((provider) => !OAUTH_PROVIDER_SET.has(
 type OAuthConnectionState = "ready" | "needs_reconnect" | "not_connected";
 
 const buildFallbackRedirectUri = () => {
-  const browserOrigin =
-    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const browserOrigin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
   const configuredBase = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
   const base = browserOrigin || configuredBase || "http://localhost:3000";
   return `${base}/oauth/callback`;
 };
 
-const OAUTH_PROVIDER_GUIDANCE: Record<
-  OAuthIntegrationProvider,
-  { scopeHint: string; docsUrl: string }
-> = {
+const OAUTH_PROVIDER_GUIDANCE: Record<OAuthIntegrationProvider, { scopeHint: string; docsUrl: string }> = {
   gmail: {
     scopeHint: "Use Gmail send + readonly scopes for most templates.",
     docsUrl: "https://developers.google.com/identity/protocols/oauth2",
@@ -120,8 +116,7 @@ const OAUTH_PROVIDER_GUIDANCE: Record<
   },
   hubspot: {
     scopeHint: "Add contact read/write scopes for CRM flows.",
-    docsUrl:
-      "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/authentication/oauth",
+    docsUrl: "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/authentication/oauth",
   },
   google_drive: {
     scopeHint: "Use Drive file + metadata scopes.",
@@ -163,8 +158,7 @@ const isOAuthProvider = (provider: string): provider is OAuthIntegrationProvider
 export default function CredentialsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const canManageCredentials =
-    user?.organization_role === "owner" || user?.organization_role === "admin";
+  const canManageCredentials = user?.organization_role === "owner" || user?.organization_role === "admin";
 
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [oauthProviders, setOauthProviders] = useState<CredentialOAuthProviderStatus[]>([]);
@@ -348,10 +342,7 @@ export default function CredentialsPage() {
     const map = new Map<OAuthIntegrationProvider, Credential>();
     for (const provider of OAUTH_PROVIDERS) {
       const latest = credentials
-        .filter(
-          (credential) =>
-            credential.provider === provider && credential.is_oauth_connection,
-        )
+        .filter((credential) => credential.provider === provider && credential.is_oauth_connection)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       if (latest) {
         map.set(provider, latest);
@@ -369,8 +360,7 @@ export default function CredentialsPage() {
         continue;
       }
 
-      const needsReconnect =
-        latest.health_status === "revoked" || latest.health_status === "expired";
+      const needsReconnect = latest.health_status === "revoked" || latest.health_status === "expired";
       map.set(provider, needsReconnect ? "needs_reconnect" : "ready");
     }
     return map;
@@ -386,8 +376,9 @@ export default function CredentialsPage() {
     ).length;
     const fallbackRedirectUri = buildFallbackRedirectUri();
     const configuredRedirectUri =
-      OAUTH_PROVIDERS.map((provider) => oauthProvidersByName.get(provider)?.redirect_uri)
-        .find((value): value is string => Boolean(value)) ?? fallbackRedirectUri;
+      OAUTH_PROVIDERS.map((provider) => oauthProvidersByName.get(provider)?.redirect_uri).find(
+        (value): value is string => Boolean(value),
+      ) ?? fallbackRedirectUri;
 
     return {
       total,
@@ -526,7 +517,9 @@ export default function CredentialsPage() {
                 </div>
                 <Separator className="my-3" />
                 <div className="space-y-2 text-xs text-muted-foreground">
-                  <p>1. Service OAuth config ready: {oauthChecklist.serviceConfiguredCount} / {oauthChecklist.total}.</p>
+                  <p>
+                    1. Service OAuth config ready: {oauthChecklist.serviceConfiguredCount} / {oauthChecklist.total}.
+                  </p>
                   <p>2. Connect account for each provider you plan to use in your graph.</p>
                   <p>
                     Redirect URI configured in service:
@@ -592,7 +585,9 @@ export default function CredentialsPage() {
                         {!status ? (
                           <p className="text-xs text-muted-foreground">Provider status unavailable.</p>
                         ) : !serviceConfigured ? (
-                          <p className="text-xs text-amber-700 dark:text-amber-400">{formatOAuthServiceMessage(status)}</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            {formatOAuthServiceMessage(status)}
+                          </p>
                         ) : connectionState === "ready" ? (
                           <p className="text-xs text-muted-foreground">
                             Account connected. Click Connect account again to rotate or reconnect.
@@ -602,16 +597,16 @@ export default function CredentialsPage() {
                             OAuth credential exists but requires reconnection.
                           </p>
                         ) : (
-                          <p className="text-xs text-muted-foreground">Service ready. Connect an account to use this provider.</p>
+                          <p className="text-xs text-muted-foreground">
+                            Service ready. Connect an account to use this provider.
+                          </p>
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <Button
                           size="sm"
                           onClick={() => void handleStartOAuth(provider)}
-                          disabled={
-                            oauthStartingProvider === provider || !serviceConfigured || !canManageCredentials
-                          }
+                          disabled={oauthStartingProvider === provider || !serviceConfigured || !canManageCredentials}
                         >
                           {oauthStartingProvider === provider ? (
                             <>
@@ -664,58 +659,50 @@ export default function CredentialsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {credentials.map((credential) => {
-                const oauthProvider = isOAuthProvider(credential.provider)
-                  ? credential.provider
-                  : null;
+                const oauthProvider = isOAuthProvider(credential.provider) ? credential.provider : null;
                 const isOAuthCredential = credential.is_oauth_connection;
                 const isActiveOAuthCredential =
-                  oauthProvider !== null &&
-                  latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
+                  oauthProvider !== null && latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
                 return (
-                <Card key={credential.id}>
-                  <CardHeader className="flex flex-row items-start justify-between">
-                    <div>
-                      <CardTitle className="text-base">{credential.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">{getProviderLabel(credential.provider)}</p>
-                    </div>
-                    {canManageCredentials ? (
-                      <ConfirmButton
-                        variant="destructive"
-                        size="sm"
-                        title="Delete credential?"
-                        description="This will remove the key and any runs using it will fail until replaced."
-                        onConfirm={() => handleDelete(credential.id)}
-                      >
-                        Delete
-                      </ConfirmButton>
-                    ) : (
-                      <Badge variant="outline">Read only</Badge>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {oauthProvider && !isOAuthCredential && (
-                      <Badge variant="outline">API key only (not OAuth)</Badge>
-                    )}
-                    {oauthProvider && isOAuthCredential && isActiveOAuthCredential && (
-                      <Badge variant="outline" className="text-emerald-600">
-                        Active OAuth credential
-                      </Badge>
-                    )}
-                    {oauthProvider && isOAuthCredential && !isActiveOAuthCredential && (
-                      <Badge variant="outline">Older OAuth credential</Badge>
-                    )}
-                    {credential.health_status !== "healthy" && (
-                      <Badge variant="outline">
-                        {credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}
-                      </Badge>
-                    )}
-                    {credential.health_message && (
-                      <div className="text-xs text-muted-foreground">{credential.health_message}</div>
-                    )}
-                    {credential.requires_reauth &&
-                      canManageCredentials &&
-                      oauthProvider &&
-                      isOAuthCredential && (
+                  <Card key={credential.id}>
+                    <CardHeader className="flex flex-row items-start justify-between">
+                      <div>
+                        <CardTitle className="text-base">{credential.name}</CardTitle>
+                        <p className="text-sm text-muted-foreground">{getProviderLabel(credential.provider)}</p>
+                      </div>
+                      {canManageCredentials ? (
+                        <ConfirmButton
+                          variant="destructive"
+                          size="sm"
+                          title="Delete credential?"
+                          description="This will remove the key and any runs using it will fail until replaced."
+                          onConfirm={() => handleDelete(credential.id)}
+                        >
+                          Delete
+                        </ConfirmButton>
+                      ) : (
+                        <Badge variant="outline">Read only</Badge>
+                      )}
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {oauthProvider && !isOAuthCredential && <Badge variant="outline">API key only (not OAuth)</Badge>}
+                      {oauthProvider && isOAuthCredential && isActiveOAuthCredential && (
+                        <Badge variant="outline" className="text-emerald-600">
+                          Active OAuth credential
+                        </Badge>
+                      )}
+                      {oauthProvider && isOAuthCredential && !isActiveOAuthCredential && (
+                        <Badge variant="outline">Older OAuth credential</Badge>
+                      )}
+                      {credential.health_status !== "healthy" && (
+                        <Badge variant="outline">
+                          {credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}
+                        </Badge>
+                      )}
+                      {credential.health_message && (
+                        <div className="text-xs text-muted-foreground">{credential.health_message}</div>
+                      )}
+                      {credential.requires_reauth && canManageCredentials && oauthProvider && isOAuthCredential && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -732,16 +719,18 @@ export default function CredentialsPage() {
                           )}
                         </Button>
                       )}
-                    <div className="text-sm text-muted-foreground">Key hint</div>
-                    <div className="font-mono text-sm">{credential.key_hint}</div>
-                    {credential.token_expires_at && (
+                      <div className="text-sm text-muted-foreground">Key hint</div>
+                      <div className="font-mono text-sm">{credential.key_hint}</div>
+                      {credential.token_expires_at && (
+                        <div className="text-xs text-muted-foreground">
+                          Expires {formatDateTime(credential.token_expires_at)}
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground">
-                        Expires {formatDateTime(credential.token_expires_at)}
+                        Created {formatDateTime(credential.created_at)}
                       </div>
-                    )}
-                    <div className="text-xs text-muted-foreground">Created {formatDateTime(credential.created_at)}</div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>

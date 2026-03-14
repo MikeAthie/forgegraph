@@ -44,7 +44,7 @@ describe("BranchNodeForm", () => {
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
-    options: { errors?: NodeFormProps["errors"] } = {}
+    options: { errors?: NodeFormProps["errors"] } = {},
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
@@ -84,9 +84,7 @@ describe("BranchNodeForm", () => {
     it("should show empty state message when no conditions", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/no conditions defined. add a condition to create branches/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/no conditions defined. add a condition to create branches/i)).toBeInTheDocument();
     });
 
     it("should render with populated conditions", () => {
@@ -148,7 +146,7 @@ describe("BranchNodeForm", () => {
                 expression: "",
               }),
             ]),
-          })
+          }),
         );
       });
     });
@@ -170,7 +168,7 @@ describe("BranchNodeForm", () => {
               expect.objectContaining({ name: "Branch 1" }),
               expect.objectContaining({ name: "Branch 2" }),
             ]),
-          })
+          }),
         );
       });
     });
@@ -213,10 +211,8 @@ describe("BranchNodeForm", () => {
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
-            conditions: expect.arrayContaining([
-              expect.objectContaining({ name: "Condition 2" }),
-            ]),
-          })
+            conditions: expect.arrayContaining([expect.objectContaining({ name: "Condition 2" })]),
+          }),
         );
       });
     });
@@ -269,7 +265,7 @@ describe("BranchNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             conditions: [],
-          })
+          }),
         );
       });
     });
@@ -371,7 +367,7 @@ describe("BranchNodeForm", () => {
         expect(mockSetErrors).toHaveBeenCalledWith(
           expect.objectContaining({
             condition_0_expression: "Unbalanced brackets in expression",
-          })
+          }),
         );
       });
     });
@@ -428,17 +424,15 @@ describe("BranchNodeForm", () => {
 
       expect(
         screen.getByText(
-          /define conditions to route data to different branches. conditions are evaluated in order, first matching condition wins/i
-        )
+          /define conditions to route data to different branches. conditions are evaluated in order, first matching condition wins/i,
+        ),
       ).toBeInTheDocument();
     });
 
     it("should display description for default branch", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/branch to use when no conditions match/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/branch to use when no conditions match/i)).toBeInTheDocument();
     });
 
     it("should display expression examples", () => {

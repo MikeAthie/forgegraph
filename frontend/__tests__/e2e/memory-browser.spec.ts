@@ -1,18 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  createObservationViaApi,
-  createTestUser,
-  ensureUserRegistered,
-  getAccessToken,
-  login,
-} from "./helpers";
+import { createObservationViaApi, createTestUser, ensureUserRegistered, getAccessToken, login } from "./helpers";
 
 test.describe("Memory Browser", () => {
-  test("shows curated observations seeded through the API", async ({
-    page,
-    request,
-  }, testInfo) => {
+  test("shows curated observations seeded through the API", async ({ page, request }, testInfo) => {
     test.setTimeout(60_000);
 
     const user = createTestUser(testInfo, "memory-browser");
@@ -43,9 +34,7 @@ test.describe("Memory Browser", () => {
 
     await page.getByRole("button", { name: /Jackie Memory Dossier/i }).click();
     await expect(page.getByText(/Observation dossier/i)).toBeVisible();
-    await expect(
-      page.getByText(/concise planning updates and values concrete next steps/i).first(),
-    ).toBeVisible();
+    await expect(page.getByText(/concise planning updates and values concrete next steps/i).first()).toBeVisible();
     await expect(page.getByText(/Topic jackie-memory/i).nth(1)).toBeVisible();
   });
 });

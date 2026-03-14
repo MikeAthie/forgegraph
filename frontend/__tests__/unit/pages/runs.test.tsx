@@ -18,8 +18,7 @@ const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
 const actClick = (element: HTMLElement) => act(async () => userEvent.click(element));
-const actSelect = (element: HTMLElement, value: string) =>
-  act(async () => userEvent.selectOptions(element, value));
+const actSelect = (element: HTMLElement, value: string) => act(async () => userEvent.selectOptions(element, value));
 
 describe("Runs List Page", () => {
   beforeEach(() => {
@@ -48,7 +47,7 @@ describe("Runs List Page", () => {
   describe("Loading and Empty States", () => {
     it("renders loading state initially", async () => {
       jest.spyOn(api.runsApi, "list").mockImplementation(
-        () => new Promise(() => {}) // Never resolves
+        () => new Promise(() => {}), // Never resolves
       );
 
       render(<RunsPage />);
@@ -362,11 +361,9 @@ describe("Run Detail Page", () => {
   describe("Loading and Error States", () => {
     it("renders loading state initially", async () => {
       jest.spyOn(api.runsApi, "get").mockImplementation(
-        () => new Promise(() => {}) // Never resolves
+        () => new Promise(() => {}), // Never resolves
       );
-      jest.spyOn(api.graphsApi, "getVersion").mockImplementation(
-        () => new Promise(() => {})
-      );
+      jest.spyOn(api.graphsApi, "getVersion").mockImplementation(() => new Promise(() => {}));
 
       render(<RunDetailPage />);
 
@@ -470,6 +467,49 @@ describe("Run Detail Page", () => {
       });
     });
 
+    it("derives run diagnostics for policy-denied and degraded-memory runs", async () => {
+      jest.spyOn(api.runsApi, "get").mockResolvedValue({
+        id: runId,
+        owner_id: "u1",
+        graph_id: "g1",
+        graph_name: "My Graph",
+        graph_version_id: "v1",
+        graph_version: 1,
+        status: "failed",
+        started_at: "2024-01-15T10:00:00Z",
+        ended_at: "2024-01-15T10:01:00Z",
+        duration_ms: 60000,
+        input_json: {},
+        output_json: null,
+        error_message: "policy denied: exec tools are disabled in cloud mode",
+        memory_activity: {
+          has_activity: true,
+          save_node_count: 0,
+          saved_observation_count: 0,
+          retrieval_node_count: 1,
+          retrieved_observation_count: 1,
+          influenced_node_count: 0,
+          influenced_observation_count: 0,
+          degraded: true,
+          operations: [],
+        },
+        node_runs: [],
+      } as any);
+
+      jest.spyOn(api.graphsApi, "getVersion").mockResolvedValue({
+        graph_json: { nodes: [], edges: [] },
+      } as any);
+
+      render(<RunDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/run diagnostics/i)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/policy denied execution/i)).toBeInTheDocument();
+      expect(screen.getByText(/curated memory degraded during execution/i)).toBeInTheDocument();
+    });
+
     it("displays live-updating duration for running runs", async () => {
       jest.useFakeTimers();
 
@@ -497,7 +537,9 @@ describe("Run Detail Page", () => {
       const initialDuration = screen.getByText(/\d+[ms|s]/);
       expect(initialDuration).toBeInTheDocument();
 
-      act(() => { jest.advanceTimersByTime(1000); });
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
 
       // Duration should have changed
       await waitFor(() => {
@@ -689,16 +731,16 @@ describe("Run Detail Page", () => {
 
       await waitFor(() => {
         const nodeButtons = screen.getAllByRole("button");
-        const startButton = nodeButtons.find(btn => btn.textContent?.includes("Start"));
-        const apiButton = nodeButtons.find(btn => btn.textContent?.includes("API Call"));
+        const startButton = nodeButtons.find((btn) => btn.textContent?.includes("Start"));
+        const apiButton = nodeButtons.find((btn) => btn.textContent?.includes("API Call"));
 
         expect(startButton).toBeInTheDocument();
         expect(apiButton).toBeInTheDocument();
 
         // Verify order
         const buttonsArray = screen.getAllByRole("button");
-        const startIndex = buttonsArray.findIndex(btn => btn.textContent?.includes("Start"));
-        const apiIndex = buttonsArray.findIndex(btn => btn.textContent?.includes("API Call"));
+        const startIndex = buttonsArray.findIndex((btn) => btn.textContent?.includes("Start"));
+        const apiIndex = buttonsArray.findIndex((btn) => btn.textContent?.includes("API Call"));
         expect(startIndex).toBeLessThan(apiIndex);
       });
     });
@@ -1138,9 +1180,7 @@ describe("Run Detail Page", () => {
       expect(screen.getAllByText(/Context sources/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/node\.obs_context\.output/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Snack preference/i).length).toBeGreaterThan(0);
-      expect(
-        screen.getAllByText(/Customer prefers sweet snacks during meetings\./i).length
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Customer prefers sweet snacks during meetings\./i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Response/i).length).toBeGreaterThan(0);
     });
   });
@@ -1192,7 +1232,8 @@ describe("Run Detail Page", () => {
     it("polls for updates on running runs", async () => {
       jest.useFakeTimers();
 
-      const getSpy = jest.spyOn(api.runsApi, "get")
+      const getSpy = jest
+        .spyOn(api.runsApi, "get")
         .mockResolvedValueOnce({
           id: runId,
           graph_id: "g1",
@@ -1220,7 +1261,9 @@ describe("Run Detail Page", () => {
         expect(getSpy).toHaveBeenCalledTimes(1);
       });
 
-      act(() => { jest.advanceTimersByTime(3000); });
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
@@ -1232,7 +1275,8 @@ describe("Run Detail Page", () => {
     it("stops polling on terminal status (succeeded)", async () => {
       jest.useFakeTimers();
 
-      const getSpy = jest.spyOn(api.runsApi, "get")
+      const getSpy = jest
+        .spyOn(api.runsApi, "get")
         .mockResolvedValueOnce({
           id: runId,
           graph_id: "g1",
@@ -1260,14 +1304,18 @@ describe("Run Detail Page", () => {
         expect(getSpy).toHaveBeenCalledTimes(1);
       });
 
-      act(() => { jest.advanceTimersByTime(3000); });
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
       });
 
       // Should not poll again after succeeded
-      act(() => { jest.advanceTimersByTime(10000); });
+      act(() => {
+        jest.advanceTimersByTime(10000);
+      });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
@@ -1300,7 +1348,9 @@ describe("Run Detail Page", () => {
       });
 
       // Should not poll again after failed
-      act(() => { jest.advanceTimersByTime(10000); });
+      act(() => {
+        jest.advanceTimersByTime(10000);
+      });
 
       expect(getSpy).toHaveBeenCalledTimes(1);
 
@@ -1331,7 +1381,9 @@ describe("Run Detail Page", () => {
       });
 
       // Should not poll again after canceled
-      act(() => { jest.advanceTimersByTime(10000); });
+      act(() => {
+        jest.advanceTimersByTime(10000);
+      });
 
       expect(getSpy).toHaveBeenCalledTimes(1);
 
@@ -1341,7 +1393,8 @@ describe("Run Detail Page", () => {
     it("handles polling failures gracefully", async () => {
       jest.useFakeTimers();
 
-      const getSpy = jest.spyOn(api.runsApi, "get")
+      const getSpy = jest
+        .spyOn(api.runsApi, "get")
         .mockResolvedValueOnce({
           id: runId,
           graph_id: "g1",
@@ -1371,14 +1424,18 @@ describe("Run Detail Page", () => {
       });
 
       // First poll fails
-      act(() => { jest.advanceTimersByTime(3000); });
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(2);
       });
 
       // Should continue polling after error
-      act(() => { jest.advanceTimersByTime(3000); });
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
 
       await waitFor(() => {
         expect(getSpy).toHaveBeenCalledTimes(3);

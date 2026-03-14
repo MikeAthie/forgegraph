@@ -8,6 +8,7 @@ import {
   getApiErrorMessage,
   type LLMBudgetStatus,
   type LLMAnalyticsCosts,
+  type LLMQuotaStatus,
   type LLMAnalyticsUsage,
 } from "../../lib/api";
 import { showError, showSuccess } from "../../lib/toast";
@@ -93,11 +94,21 @@ function Sparkline({ values, className }: { values: number[]; className?: string
   );
 }
 
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
 export default function LLMAnalyticsPage() {
   const [period, setPeriod] = useState("30d");
   const [usage, setUsage] = useState<LLMAnalyticsUsage | null>(null);
   const [costs, setCosts] = useState<LLMAnalyticsCosts | null>(null);
   const [budget, setBudget] = useState<LLMBudgetStatus | null>(null);
+  const [quota, setQuota] = useState<LLMQuotaStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,15 +121,17 @@ export default function LLMAnalyticsPage() {
     setError(null);
 
     try {
-      const [usageData, costsData, budgetData] = await Promise.all([
+      const [usageData, costsData, budgetData, quotaData] = await Promise.all([
         analyticsApi.getLLMUsage(periodValue),
         analyticsApi.getLLMCosts(periodValue),
         analyticsApi.getLLMBudget(),
+        analyticsApi.getLLMQuota(),
       ]);
 
       setUsage(usageData);
       setCosts(costsData);
       setBudget(budgetData);
+      setQuota(quotaData);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Failed to load LLM analytics."));
     } finally {
@@ -139,10 +152,7 @@ export default function LLMAnalyticsPage() {
     }
   }, [budget]);
 
-  const costSparklineValues = useMemo(
-    () => costs?.series.map((entry) => entry.cost_usd ?? 0) ?? [],
-    [costs],
-  );
+  const costSparklineValues = useMemo(() => costs?.series.map((entry) => entry.cost_usd ?? 0) ?? [], [costs]);
 
   const budgetUsed = budget?.usage.month_cost_usd ?? 0;
   const budgetLimitValue = budget?.budget?.monthly_limit_usd ?? null;
@@ -164,6 +174,18 @@ export default function LLMAnalyticsPage() {
       setIsSavingBudget(false);
     }
   };
+
+  const handleExport = useCallback(
+    async (dataset: "usage" | "costs" | "budget" | "quota", format: "json" | "csv") => {
+      try {
+        const blob = await analyticsApi.exportLLMReport({ dataset, format, period });
+        downloadBlob(blob, `llm-${dataset}-${period}.${format}`);
+      } catch (err: unknown) {
+        showError("Export failed", getApiErrorMessage(err, ERROR_FALLBACKS.analytics.load));
+      }
+    },
+    [period],
+  );
 
   return (
     <ProtectedRoute>
@@ -207,6 +229,12 @@ export default function LLMAnalyticsPage() {
                 </Button>
                 <Button variant="outline" asChild>
                   <Link href="/analytics/memory">Memory Analytics</Link>
+                </Button>
+                <Button variant="outline" onClick={() => void handleExport("usage", "csv")}>
+                  Export usage CSV
+                </Button>
+                <Button variant="outline" onClick={() => void handleExport("costs", "json")}>
+                  Export cost JSON
                 </Button>
               </div>
             </div>
@@ -321,11 +349,7 @@ export default function LLMAnalyticsPage() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <label className="text-xs text-muted-foreground">Monthly limit (USD)</label>
-                        <Input
-                          value={budgetLimit}
-                          onChange={(e) => setBudgetLimit(e.target.value)}
-                          placeholder="200"
-                        />
+                        <Input value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} placeholder="200" />
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground">Warning threshold (%)</label>
@@ -345,7 +369,7 @@ export default function LLMAnalyticsPage() {
 
                 <Card className="border-border/50 bg-card/60">
                   <CardHeader>
-                    <CardTitle>Usage Totals</CardTitle>
+                    <CardTitle>Usage and Quota</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
@@ -359,6 +383,28 @@ export default function LLMAnalyticsPage() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Total tokens</span>
                       <span className="font-semibold">{formatNumber(usage?.totals.total_tokens)}</span>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-border/40 bg-muted/30 px-3 py-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Monthly token quota</span>
+                        <span className="font-semibold">
+                          {quota?.quota?.monthly_token_limit != null
+                            ? formatNumber(quota.quota.monthly_token_limit)
+                            : "Not set"}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Monthly cost quota</span>
+                        <span className="font-semibold">
+                          {quota?.quota?.monthly_cost_limit_usd != null
+                            ? formatCurrency(quota.quota.monthly_cost_limit_usd)
+                            : "Not set"}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Usage this month</span>
+                        <span className="font-semibold">{formatNumber(quota?.usage.month_total_tokens)} tokens</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

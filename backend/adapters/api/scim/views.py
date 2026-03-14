@@ -22,6 +22,23 @@ SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"
 SCIM_LIST_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 
 
+def _scim_status_payload(token: SCIMToken | None) -> dict[str, str]:
+    if token is None:
+        return {
+            "state": "unavailable",
+            "message": "No SCIM token has been issued for this organization yet.",
+        }
+    if token.last_used_at is None:
+        return {
+            "state": "partial",
+            "message": "A SCIM token exists, but provisioning has not been observed yet.",
+        }
+    return {
+        "state": "configured",
+        "message": "SCIM provisioning token is active and has been used.",
+    }
+
+
 def _scim_user_resource(user: User) -> dict[str, Any]:
     return {
         "schemas": [SCIM_USER_SCHEMA],
@@ -287,7 +304,13 @@ class ScimTokenView(APIView):
         token = SCIMToken.objects.filter(tenant_id=tenant_id).first()
         if not token:
             return Response(
-                {"token_last4": None, "created_at": None, "last_used_at": None, "rotated_at": None}
+                {
+                    "token_last4": None,
+                    "created_at": None,
+                    "last_used_at": None,
+                    "rotated_at": None,
+                    "status": _scim_status_payload(None),
+                }
             )
 
         return Response(
@@ -296,6 +319,7 @@ class ScimTokenView(APIView):
                 "created_at": token.created_at,
                 "last_used_at": token.last_used_at,
                 "rotated_at": token.rotated_at,
+                "status": _scim_status_payload(token),
             }
         )
 

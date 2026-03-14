@@ -859,6 +859,8 @@ class TestRunStart:
 
         assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
         assert response.data["error"]["code"] == "QUOTA_EXCEEDED"
+        assert response.data["error"]["details"][0]["reason"] == "quota"
+        assert response.data["error"]["details"][0]["scope"] == "tenant_monthly_tokens"
         assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
 
     @override_settings(

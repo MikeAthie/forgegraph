@@ -64,8 +64,7 @@ describe("MemoryConfigDialog", () => {
       click: (element: HTMLElement) => act(async () => user.click(element)),
       type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
       clear: (element: HTMLElement) => act(async () => user.clear(element)),
-      select: (element: HTMLElement, value: string) =>
-        act(async () => user.selectOptions(element, value)),
+      select: (element: HTMLElement, value: string) => act(async () => user.selectOptions(element, value)),
     };
   };
 

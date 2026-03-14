@@ -45,19 +45,19 @@ jest.mock("lucide-react", () => ({
 }));
 
 describe("NodeConfigDialog", () => {
-const mockOnClose = jest.fn();
-const mockOnSave = jest.fn();
+  const mockOnClose = jest.fn();
+  const mockOnSave = jest.fn();
 
-const setupUser = () => {
-  const user = userEvent.setup();
-  return {
-    ...user,
-    click: (element: HTMLElement) => act(async () => user.click(element)),
-    type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
-    clear: (element: HTMLElement) => act(async () => user.clear(element)),
-    keyboard: (text: string) => act(async () => user.keyboard(text)),
+  const setupUser = () => {
+    const user = userEvent.setup();
+    return {
+      ...user,
+      click: (element: HTMLElement) => act(async () => user.click(element)),
+      type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
+      clear: (element: HTMLElement) => act(async () => user.clear(element)),
+      keyboard: (text: string) => act(async () => user.keyboard(text)),
+    };
   };
-};
 
   // Use stable config objects to avoid infinite loops in component's useEffect
   const emptyConfig = {};
@@ -71,12 +71,7 @@ const setupUser = () => {
   describe("Dialog Open/Close Behavior", () => {
     it("should not render when isOpen is false", () => {
       render(
-        <NodeConfigDialog
-          isOpen={false}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={false} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       const dialogs = screen.getAllByTestId("dialog");
@@ -84,14 +79,7 @@ const setupUser = () => {
     });
 
     it("should render when isOpen is true", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const dialogs = screen.getAllByTestId("dialog");
       expect(dialogs.some((dialog) => dialog.getAttribute("data-open") === "true")).toBe(true);
@@ -99,28 +87,14 @@ const setupUser = () => {
     });
 
     it("should not render when nodeType is null", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={null}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={null} onSave={mockOnSave} />);
 
       expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
     });
 
     it("should call onClose when Cancel button is clicked", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
       await user.click(cancelButton);
@@ -130,14 +104,7 @@ const setupUser = () => {
 
     it("should call onClose when backdrop is clicked without changes", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const backdrop = screen.getByTestId("dialog-backdrop");
       await user.click(backdrop);
@@ -148,130 +115,66 @@ const setupUser = () => {
 
   describe("Node Type Info Display", () => {
     it("should display correct label for Prompt node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Prompt Node");
     });
 
     it("should display correct label for HTTP node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.HTTP}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure HTTP Node");
     });
 
     it("should display correct label for Transform node", () => {
       render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.TRANSFORM}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Transform Node");
     });
 
     it("should display correct label for Output node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.OUTPUT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.OUTPUT} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Output Node");
     });
 
     it("should display correct label for Branch node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.BRANCH}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.BRANCH} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Branch Node");
     });
 
     it("should display correct label for Merge node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.MERGE}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.MERGE} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Merge Node");
     });
 
     it("should display correct label for Human Gate node", () => {
       render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.HUMAN_GATE}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HUMAN_GATE} onSave={mockOnSave} />,
       );
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Human Gate Node");
     });
 
     it("should display correct label for Memory node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.MEMORY}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.MEMORY} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Memory Node");
     });
 
     it("should display correct label for Tool node", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.TOOL}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TOOL} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Tool Node");
     });
 
     it("should display correct label for Subgraph node", () => {
       render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.SUBGRAPH}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.SUBGRAPH} onSave={mockOnSave} />,
       );
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Subgraph Node");
@@ -279,12 +182,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for Prompt node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-violet-500");
@@ -294,12 +192,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for HTTP node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.HTTP}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-blue-500");
@@ -309,12 +202,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for Transform node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.TRANSFORM}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-amber-500");
@@ -324,12 +212,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for Output node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.OUTPUT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.OUTPUT} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-emerald-500");
@@ -339,12 +222,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for Branch node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.BRANCH}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.BRANCH} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-orange-500");
@@ -354,12 +232,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for Merge node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.MERGE}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.MERGE} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-cyan-500");
@@ -369,12 +242,7 @@ const setupUser = () => {
 
     it("should display correct icon badge with color for Human Gate node", () => {
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.HUMAN_GATE}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HUMAN_GATE} onSave={mockOnSave} />,
       );
 
       const badge = container.querySelector(".bg-rose-500");
@@ -383,31 +251,17 @@ const setupUser = () => {
     });
 
     it("should display dialog description", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-description")).toHaveTextContent(
-        "Set up the node configuration before adding it to your workflow."
+        "Set up the node configuration before adding it to your workflow.",
       );
     });
   });
 
   describe("Node Label Input", () => {
     it("should initialize label with node type label", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       expect(labelInput).toHaveValue("Prompt");
@@ -415,14 +269,7 @@ const setupUser = () => {
 
     it("should allow editing node label", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.HTTP}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.clear(labelInput);
@@ -433,14 +280,7 @@ const setupUser = () => {
 
     it("should mark dialog as dirty when label is edited", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.type(labelInput, " Extra");
@@ -455,12 +295,7 @@ const setupUser = () => {
 
     it("should use placeholder text from node type", () => {
       render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.TRANSFORM}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
       const labelInput = screen.getByLabelText(/node label/i);
@@ -469,14 +304,7 @@ const setupUser = () => {
 
     it("should trim whitespace from label on save", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.clear(labelInput);
@@ -490,14 +318,7 @@ const setupUser = () => {
 
     it("should use default label when label is empty on save", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.HTTP}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.clear(labelInput);
@@ -511,18 +332,9 @@ const setupUser = () => {
 
   describe("FormComponent Rendering", () => {
     it("should render DefaultNodeForm when no FormComponent is provided", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      expect(
-        screen.getByText("Configure this node using the inspector panel after creation.")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Configure this node using the inspector panel after creation.")).toBeInTheDocument();
     });
 
     it("should render DefaultNodeForm with config preview", () => {
@@ -533,7 +345,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           initialConfig={promptConfig}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       expect(screen.getByText(/"prompt_id"/)).toBeInTheDocument();
@@ -559,20 +371,18 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       expect(screen.getByLabelText("Custom Field")).toBeInTheDocument();
       expect(
-        screen.queryByText("Configure this node using the inspector panel after creation.")
+        screen.queryByText("Configure this node using the inspector panel after creation."),
       ).not.toBeInTheDocument();
     });
 
     it("should pass config to FormComponent", () => {
       const testConfig = { testField: "test-value" };
-      const CustomForm = ({ config }: NodeFormProps) => (
-        <div data-testid="custom-form">{JSON.stringify(config)}</div>
-      );
+      const CustomForm = ({ config }: NodeFormProps) => <div data-testid="custom-form">{JSON.stringify(config)}</div>;
 
       render(
         <NodeConfigDialog
@@ -582,7 +392,7 @@ const setupUser = () => {
           initialConfig={testConfig}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       expect(screen.getByTestId("custom-form")).toHaveTextContent('"testField":"test-value"');
@@ -601,7 +411,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const updateButton = screen.getByRole("button", { name: /update config/i });
@@ -628,7 +438,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       expect(screen.getByTestId("errors")).toHaveTextContent("{}");
@@ -638,14 +448,7 @@ const setupUser = () => {
 
   describe("Error State and Save Button", () => {
     it("should not show error summary when no errors", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       expect(screen.queryByTestId("alert-icon")).not.toBeInTheDocument();
       expect(screen.queryByText("Please fix the following errors:")).not.toBeInTheDocument();
@@ -664,7 +467,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.HTTP}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const addErrorButton = screen.getByRole("button", { name: /add error/i });
@@ -698,7 +501,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.HTTP}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const addErrorsButton = screen.getByRole("button", { name: /add errors/i });
@@ -722,7 +525,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const saveButton = screen.getByRole("button", { name: /add node/i });
@@ -750,7 +553,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const saveButton = screen.getByRole("button", { name: /add node/i });
@@ -778,7 +581,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const saveButton = screen.getByRole("button", { name: /add node/i });
@@ -796,14 +599,7 @@ const setupUser = () => {
   describe("Unsaved Changes Confirmation", () => {
     it("should not show confirmation dialog when closing without changes", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
       await user.click(cancelButton);
@@ -814,14 +610,7 @@ const setupUser = () => {
 
     it("should show confirmation dialog when closing with unsaved label changes", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.type(labelInput, " Modified");
@@ -847,7 +636,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const updateButton = screen.getByRole("button", { name: /update/i });
@@ -861,14 +650,7 @@ const setupUser = () => {
 
     it("should close dialog when Keep Editing is clicked", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.type(labelInput, " Modified");
@@ -885,14 +667,7 @@ const setupUser = () => {
 
     it("should call onClose when Discard is clicked", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.type(labelInput, " Modified");
@@ -908,14 +683,7 @@ const setupUser = () => {
 
     it("should show confirmation when closing via backdrop with changes", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.type(labelInput, " Modified");
@@ -931,14 +699,7 @@ const setupUser = () => {
   describe("Escape Key Handling", () => {
     it("should close dialog when Escape is pressed without changes", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       await user.keyboard("{Escape}");
 
@@ -947,14 +708,7 @@ const setupUser = () => {
 
     it("should show confirmation when Escape is pressed with changes", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const labelInput = screen.getByLabelText(/node label/i);
       await user.type(labelInput, " Modified");
@@ -968,12 +722,7 @@ const setupUser = () => {
     it("should not respond to Escape when dialog is closed", async () => {
       const user = setupUser();
       render(
-        <NodeConfigDialog
-          isOpen={false}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={false} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       await user.keyboard("{Escape}");
@@ -985,14 +734,7 @@ const setupUser = () => {
   describe("onSave Callback", () => {
     it("should call onSave with config and label when save button is clicked", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const saveButton = screen.getByRole("button", { name: /add node/i });
       await user.click(saveButton);
@@ -1004,9 +746,7 @@ const setupUser = () => {
     it("should call onSave with updated config", async () => {
       const user = setupUser();
       const CustomForm = ({ onChange, config }: NodeFormProps) => (
-        <button onClick={() => onChange({ ...config, url: "https://api.example.com" })}>
-          Set URL
-        </button>
+        <button onClick={() => onChange({ ...config, url: "https://api.example.com" })}>Set URL</button>
       );
 
       render(
@@ -1016,7 +756,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.HTTP}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const setUrlButton = screen.getByRole("button", { name: /set url/i });
@@ -1025,21 +765,13 @@ const setupUser = () => {
       const saveButton = screen.getByRole("button", { name: /add node/i });
       await user.click(saveButton);
 
-      expect(mockOnSave).toHaveBeenCalledWith(
-        { url: "https://api.example.com" },
-        "HTTP"
-      );
+      expect(mockOnSave).toHaveBeenCalledWith({ url: "https://api.example.com" }, "HTTP");
     });
 
     it("should call onSave with custom label", async () => {
       const user = setupUser();
       render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.TRANSFORM}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
       const labelInput = screen.getByLabelText(/node label/i);
@@ -1062,7 +794,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           initialConfig={promptConfig}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       const saveButton = screen.getByRole("button", { name: /add node/i });
@@ -1073,14 +805,7 @@ const setupUser = () => {
 
     it("should call onClose after successful save", async () => {
       const user = setupUser();
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       const saveButton = screen.getByRole("button", { name: /add node/i });
       await user.click(saveButton);
@@ -1113,7 +838,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.HTTP}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const setConfigButton = screen.getByRole("button", { name: /set complex config/i });
@@ -1129,7 +854,7 @@ const setupUser = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ key: "value" }),
         },
-        "HTTP"
+        "HTTP",
       );
     });
   });
@@ -1137,21 +862,11 @@ const setupUser = () => {
   describe("State Reset on Dialog Open", () => {
     it("should reset state when dialog is opened with new node type", () => {
       const { rerender } = render(
-        <NodeConfigDialog
-          isOpen={false}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={false} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       rerender(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       const labelInput = screen.getByLabelText(/node label/i);
@@ -1174,7 +889,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const modifyButton = screen.getByRole("button", { name: /modify/i });
@@ -1190,7 +905,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       rerender(
@@ -1200,7 +915,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       expect(screen.getByTestId("config-display")).not.toHaveTextContent("modified");
@@ -1219,7 +934,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       const addErrorButton = screen.getByRole("button", { name: /add error/i });
@@ -1235,7 +950,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       rerender(
@@ -1245,7 +960,7 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           onSave={mockOnSave}
           FormComponent={CustomForm}
-        />
+        />,
       );
 
       expect(screen.queryByText("Please fix the following errors:")).not.toBeInTheDocument();
@@ -1254,12 +969,7 @@ const setupUser = () => {
     it("should reset isDirty flag when dialog is reopened", async () => {
       const user = setupUser();
       const { rerender } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       const labelInput = screen.getByLabelText(/node label/i);
@@ -1277,21 +987,11 @@ const setupUser = () => {
 
       // Reopen
       rerender(
-        <NodeConfigDialog
-          isOpen={false}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={false} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       rerender(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       // Should close without confirmation now
@@ -1306,12 +1006,7 @@ const setupUser = () => {
     it("should handle missing node type info gracefully", () => {
       // Use a node type that doesn't exist in NODE_TYPE_INFO
       const { container } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={"unknown_type" as any}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={"unknown_type" as any} onSave={mockOnSave} />,
       );
 
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure unknown_type Node");
@@ -1323,18 +1018,9 @@ const setupUser = () => {
     });
 
     it("should handle undefined initialConfig", () => {
-      render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
-      );
+      render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      expect(
-        screen.getByText("Configure this node using the inspector panel after creation.")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Configure this node using the inspector panel after creation.")).toBeInTheDocument();
     });
 
     it("should handle empty initialConfig object", () => {
@@ -1345,40 +1031,23 @@ const setupUser = () => {
           nodeType={NODE_TYPES.PROMPT}
           initialConfig={emptyConfig}
           onSave={mockOnSave}
-        />
+        />,
       );
 
-      expect(
-        screen.getByText("Configure this node using the inspector panel after creation.")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Configure this node using the inspector panel after creation.")).toBeInTheDocument();
     });
 
     it("should handle rapid open/close cycles", () => {
       const { rerender } = render(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       rerender(
-        <NodeConfigDialog
-          isOpen={false}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={false} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       rerender(
-        <NodeConfigDialog
-          isOpen={true}
-          onClose={mockOnClose}
-          nodeType={NODE_TYPES.PROMPT}
-          onSave={mockOnSave}
-        />
+        <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
       expect(screen.getByTestId("dialog-content")).toBeInTheDocument();

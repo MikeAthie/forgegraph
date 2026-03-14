@@ -1,22 +1,8 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  useEffect,
-  useRef,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useState, useEffect, useRef, type ReactNode } from "react";
 import type { Node, Edge } from "@xyflow/react";
-import {
-  validateGraph,
-  type ValidationResult,
-  type ValidationError,
-  ValidationErrorCode,
-} from "@/lib/graph-validator";
+import { validateGraph, type ValidationResult, type ValidationError, ValidationErrorCode } from "@/lib/graph-validator";
 
 /**
  * Validation context state
@@ -50,19 +36,14 @@ const emptyResult: ValidationResult = {
   hasEndNode: false,
 };
 
-const ValidationContext = createContext<ValidationContextValue | undefined>(
-  undefined
-);
+const ValidationContext = createContext<ValidationContextValue | undefined>(undefined);
 
 interface ValidationProviderProps {
   children: ReactNode;
   debounceMs?: number;
 }
 
-export function ValidationProvider({
-  children,
-  debounceMs = 300,
-}: ValidationProviderProps) {
+export function ValidationProvider({ children, debounceMs = 300 }: ValidationProviderProps) {
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isStatusBarExpanded, setStatusBarExpanded] = useState(false);
   const [focusedErrorId, setFocusedErrorId] = useState<string | null>(null);
@@ -82,7 +63,7 @@ export function ValidationProvider({
         setResult(validationResult);
       }, debounceMs);
     },
-    [debounceMs]
+    [debounceMs],
   );
 
   const clearValidation = useCallback(() => {
@@ -120,19 +101,9 @@ export function ValidationProvider({
       focusedErrorId,
       setFocusedErrorId,
     };
-  }, [
-    result,
-    validate,
-    clearValidation,
-    isStatusBarExpanded,
-    focusedErrorId,
-  ]);
+  }, [result, validate, clearValidation, isStatusBarExpanded, focusedErrorId]);
 
-  return (
-    <ValidationContext.Provider value={value}>
-      {children}
-    </ValidationContext.Provider>
-  );
+  return <ValidationContext.Provider value={value}>{children}</ValidationContext.Provider>;
 }
 
 export function useValidation(): ValidationContextValue {

@@ -27,7 +27,7 @@
 body {
   color: var(--color-foreground);
   background: var(--color-background);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
 }
 
 @layer base {
@@ -274,7 +274,8 @@ body {
     box-shadow: 0 0 20px oklch(0.585 0.233 277 / 0.3);
   }
   50% {
-    box-shadow: 0 0 40px oklch(0.585 0.233 277 / 0.6),
+    box-shadow:
+      0 0 40px oklch(0.585 0.233 277 / 0.6),
       0 0 60px oklch(0.585 0.233 277 / 0.3);
   }
 }
