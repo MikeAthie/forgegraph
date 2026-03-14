@@ -20,6 +20,7 @@ export type AgentWorkflowOptions = {
   provider?: string;
   model?: string;
   approvalRequiredTools?: string[];
+  observationContextPaths?: string[];
 };
 
 export type GraphVersionResponse = {
@@ -47,6 +48,19 @@ export type GraphVersionResponse = {
 export type RunDetailResponse = {
   status: string;
   error_message?: string | null;
+};
+
+export type MemoryObservationSeed = {
+  type: string;
+  content: string;
+  scope: "graph" | "run" | "session";
+  title?: string;
+  graph_id?: string;
+  run_id?: string;
+  session_id?: string;
+  topic_key?: string;
+  dedupe?: boolean;
+  update_topic?: boolean;
 };
 
 const TEST_PASSWORD = "ForgeGraphTest!12345";
@@ -156,7 +170,7 @@ export async function createGraph(
   graphName: string,
   description?: string,
 ): Promise<string> {
-  await page.goto("/graphs");
+  await gotoWithRetry(page, "/graphs");
   await page.getByRole("button", { name: /^new graph$/i }).click();
   await page.locator("#create-graph-name").fill(graphName);
   if (description) {
@@ -224,6 +238,7 @@ export async function addOutputNode(
   }
   await dialog.getByRole("button", { name: /^add node$/i }).click();
   await expect(dialog).toBeHidden();
+  await fitGraphView(page);
   const canvasNode = getGraphNodeByLabel(page, label);
   const inspectorName = page.getByRole("textbox", { name: /node name/i });
   const createdOnCanvas = await canvasNode.isVisible().catch(() => false);
@@ -254,6 +269,12 @@ export async function addAgentNode(
 
   await dialog.locator("#agent-tools").fill(options.toolNames.join("\n"));
 
+  if (options.observationContextPaths?.length) {
+    await dialog
+      .locator("#agent-observation-context-paths")
+      .fill(options.observationContextPaths.join("\n"));
+  }
+
   if (options.approvalRequiredTools?.length) {
     await dialog
       .locator("#agent-approval-tools")
@@ -265,6 +286,82 @@ export async function addAgentNode(
   await expect(
     getGraphNodeByLabel(page, options.agentLabel ?? "Jackie"),
   ).toBeVisible();
+}
+
+export async function addObservationContextNode(
+  page: Page,
+  label = "Observation Context",
+  options?: {
+    query?: string;
+    limit?: number;
+  },
+): Promise<void> {
+  await addPaletteItem(page, "observation_context");
+  const dialog = page.getByRole("dialog", {
+    name: /configure observation context node/i,
+  });
+  await expect(dialog).toBeVisible();
+  if (label !== "Observation Context") {
+    await dialog.locator("#node-label").fill(label);
+  }
+  if (options?.query) {
+    await dialog.locator("#query-value").fill(options.query);
+  }
+  if (options?.limit) {
+    await dialog
+      .locator("#observation-context-limit")
+      .fill(String(options.limit));
+  }
+  await dialog.getByRole("button", { name: /^add node$/i }).click();
+  await expect(dialog).toBeHidden();
+  await expect(getGraphNodeByLabel(page, label)).toBeVisible();
+}
+
+export async function addObservationSaveNode(
+  page: Page,
+  label = "Observation Save",
+  options?: {
+    type?: string;
+    scope?: "graph" | "run" | "session";
+    content?: string;
+    title?: string;
+    topicKey?: string;
+  },
+): Promise<void> {
+  await addPaletteItem(page, "observation_save");
+  const dialog = page.getByRole("dialog", {
+    name: /configure observation save node/i,
+  });
+  await expect(dialog).toBeVisible();
+  if (label !== "Observation Save") {
+    await dialog.locator("#node-label").fill(label);
+  }
+  await dialog
+    .locator("#observation-type")
+    .fill(options?.type ?? "customer_memory");
+  await dialog
+    .locator("#observation-scope")
+    .selectOption(options?.scope ?? "graph");
+  await dialog
+    .locator("#content-value")
+    .fill(options?.content ?? "Jackie prefers concise planning updates.");
+  if (options?.title) {
+    await dialog.locator("#title-value").fill(options.title);
+  }
+  if (options?.topicKey) {
+    await dialog.locator("#topic_key-value").fill(options.topicKey);
+  }
+  await dialog.getByRole("button", { name: /^add node$/i }).click();
+  await expect(dialog).toBeHidden();
+  await fitGraphView(page);
+  const canvasNode = getGraphNodeByLabel(page, label);
+  const inspectorName = page.getByRole("textbox", { name: /node name/i });
+  const createdOnCanvas = await canvasNode.isVisible().catch(() => false);
+  if (!createdOnCanvas) {
+    await expect(inspectorName).toHaveValue(label);
+    return;
+  }
+  await expect(canvasNode).toBeVisible();
 }
 
 export async function addMemoryNode(
@@ -342,6 +439,12 @@ export async function clearGraphSelection(page: Page): Promise<void> {
     throw new Error("Could not determine graph canvas bounds");
   }
   await page.mouse.click(box.x + 24, box.y + 24);
+}
+
+export async function fitGraphView(page: Page): Promise<void> {
+  const fitViewButton = page.getByRole("button", { name: /^fit view$/i });
+  await expect(fitViewButton).toBeVisible();
+  await fitViewButton.click();
 }
 
 export async function saveGraph(page: Page): Promise<void> {
@@ -442,6 +545,20 @@ export async function waitForRunTerminal(
   throw new Error(
     `Timed out waiting for run ${runId} to reach a terminal state.`,
   );
+}
+
+export async function createObservationViaApi(
+  request: APIRequestContext,
+  accessToken: string,
+  observation: MemoryObservationSeed,
+): Promise<{ id: string }> {
+  const response = await request.post(`${API_BASE_URL}/api/memory/observations`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: observation,
+  });
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { data: { id: string } };
+  return body.data;
 }
 
 export async function authorAgentWorkflow(

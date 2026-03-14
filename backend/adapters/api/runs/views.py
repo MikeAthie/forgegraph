@@ -30,6 +30,10 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
 from adapters.api.responses import error_response, success_response
+from adapters.api.runs.memory_activity import (
+    derive_node_memory_activity,
+    summarize_run_memory_activity,
+)
 from adapters.api.runs.serializers import (
     EngineExecutionEventSerializer,
     RunDetailWithNodeRunsSerializer,
@@ -382,6 +386,36 @@ def _derive_agent_trace(
     return trace
 
 
+def _serialize_node_run_for_detail(
+    *,
+    node_run: NodeRun,
+    agent_events_by_node: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "id": node_run.id,
+        "node_id": node_run.node_id,
+        "node_type": node_run.node_type,
+        "status": node_run.status,
+        "attempt": node_run.attempt,
+        "started_at": node_run.started_at,
+        "ended_at": node_run.ended_at,
+        "duration_ms": node_run.duration_ms,
+        "input_json": redact_payload(node_run.input_json),
+        "output_json": redact_payload(node_run.output_json),
+        "error_json": redact_payload(node_run.error_json),
+        "memory_activity": derive_node_memory_activity(
+            node_type=str(node_run.node_type),
+            output_json=node_run.output_json,
+        ),
+    }
+    if agent_events_by_node is not None:
+        payload["agent_trace"] = _derive_agent_trace(
+            node_run=node_run,
+            agent_events_by_node=agent_events_by_node,
+        )
+    return payload
+
+
 def _extract_llm_usage_payload(*, node_type: str, output_json: Any) -> dict[str, Any] | None:
     if not isinstance(output_json, dict):
         return None
@@ -642,6 +676,23 @@ class RunListView(APIView):
             end = None if limit is None else offset + limit
             runs = runs[offset:end]
 
+        runs = runs.prefetch_related(
+            Prefetch(
+                "node_runs",
+                queryset=NodeRun.objects.only(
+                    "id",
+                    "run_id",
+                    "node_id",
+                    "node_type",
+                    "status",
+                    "attempt",
+                    "started_at",
+                    "ended_at",
+                    "output_json",
+                ).order_by("started_at", "attempt"),
+            )
+        )
+
         result = []
         for run in runs:
             graph_version = run.graph_version
@@ -660,6 +711,10 @@ class RunListView(APIView):
                     "started_at": run.started_at,
                     "ended_at": run.ended_at,
                     "duration_ms": run.duration_ms,
+                    "memory_activity": summarize_run_memory_activity(
+                        list(run.node_runs.all()),
+                        include_operations=False,
+                    ),
                 }
             )
 
@@ -765,24 +820,12 @@ class RunDetailView(APIView):
             "pause_payload": redact_payload(pause_payload),
             "node_outcomes": node_outcomes,
             "agent_events": agent_events,
+            "memory_activity": summarize_run_memory_activity(node_runs, include_operations=True),
             "node_runs": [
-                {
-                    "id": node_run.id,
-                    "node_id": node_run.node_id,
-                    "node_type": node_run.node_type,
-                    "status": node_run.status,
-                    "attempt": node_run.attempt,
-                    "started_at": node_run.started_at,
-                    "ended_at": node_run.ended_at,
-                    "duration_ms": node_run.duration_ms,
-                    "input_json": redact_payload(node_run.input_json),
-                    "output_json": redact_payload(node_run.output_json),
-                    "error_json": redact_payload(node_run.error_json),
-                    "agent_trace": _derive_agent_trace(
-                        node_run=node_run,
-                        agent_events_by_node=agent_events_by_node,
-                    ),
-                }
+                _serialize_node_run_for_detail(
+                    node_run=node_run,
+                    agent_events_by_node=agent_events_by_node,
+                )
                 for node_run in node_runs
             ],
         }
@@ -1660,6 +1703,7 @@ class RunCancelView(APIView):
 
         graph_version = run.graph_version
         graph = graph_version.graph
+        node_runs = list(run.node_runs.all())
 
         run_data = {
             "id": run.id,
@@ -1677,21 +1721,9 @@ class RunCancelView(APIView):
             "output_json": redact_payload(run.output_json),
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
+            "memory_activity": summarize_run_memory_activity(node_runs, include_operations=True),
             "node_runs": [
-                {
-                    "id": node_run.id,
-                    "node_id": node_run.node_id,
-                    "node_type": node_run.node_type,
-                    "status": node_run.status,
-                    "attempt": node_run.attempt,
-                    "started_at": node_run.started_at,
-                    "ended_at": node_run.ended_at,
-                    "duration_ms": node_run.duration_ms,
-                    "input_json": redact_payload(node_run.input_json),
-                    "output_json": redact_payload(node_run.output_json),
-                    "error_json": redact_payload(node_run.error_json),
-                }
-                for node_run in run.node_runs.all()
+                _serialize_node_run_for_detail(node_run=node_run) for node_run in node_runs
             ],
         }
 

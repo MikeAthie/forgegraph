@@ -27,6 +27,7 @@ interface AgentFormConfig extends AdvancedConfig {
   max_tokens?: number;
   temperature?: number;
   stop_condition?: "final_answer";
+  observation_context_paths?: string[];
 }
 
 const AVAILABLE_MODELS = [
@@ -62,6 +63,9 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   const [toolsText, setToolsText] = useState(() => serializeToolList(agentConfig.tools));
   const [approvalToolsText, setApprovalToolsText] = useState(() =>
     serializeToolList(agentConfig.approval_required_tools)
+  );
+  const [observationContextText, setObservationContextText] = useState(() =>
+    serializeToolList(agentConfig.observation_context_paths)
   );
 
   const handleChange = useCallback(
@@ -133,6 +137,12 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   useEffect(() => {
     setApprovalToolsText(serializeToolList(agentConfig.approval_required_tools));
   }, [agentConfig.approval_required_tools]);
+
+  useEffect(() => {
+    setObservationContextText(
+      serializeToolList(agentConfig.observation_context_paths),
+    );
+  }, [agentConfig.observation_context_paths]);
 
   useEffect(() => {
     const nextErrors: Record<string, string> = {};
@@ -252,6 +262,25 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
             value={agentConfig.system_prompt || ""}
             onChange={(event) => handleChange("system_prompt", event.target.value)}
             placeholder="You are a reliable ops assistant. Be concise and verify before acting."
+            rows={3}
+            className="text-sm resize-none font-mono"
+          />
+        </FormField>
+
+        <FormField
+          label="Curated Context Paths"
+          htmlFor="agent-observation-context-paths"
+          description="Optional observation_context output paths to prepend before the agent answers."
+        >
+          <Textarea
+            id="agent-observation-context-paths"
+            value={observationContextText}
+            onChange={(event) => {
+              const nextText = event.target.value;
+              setObservationContextText(nextText);
+              handleChange("observation_context_paths", parseToolList(nextText));
+            }}
+            placeholder={"node.recall_jackie_context.output"}
             rows={3}
             className="text-sm resize-none font-mono"
           />

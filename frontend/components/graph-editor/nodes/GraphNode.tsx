@@ -48,6 +48,22 @@ const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
     strip: "bg-teal-500",
     pill: "bg-teal-500/15 text-teal-800 dark:text-teal-300",
   },
+  [NODE_TYPES.OBSERVATION_SAVE]: {
+    strip: "bg-teal-700",
+    pill: "bg-teal-700/15 text-teal-900 dark:text-teal-200",
+  },
+  [NODE_TYPES.OBSERVATION_SEARCH]: {
+    strip: "bg-sky-700",
+    pill: "bg-sky-700/15 text-sky-900 dark:text-sky-200",
+  },
+  [NODE_TYPES.OBSERVATION_CONTEXT]: {
+    strip: "bg-blue-700",
+    pill: "bg-blue-700/15 text-blue-900 dark:text-blue-200",
+  },
+  [NODE_TYPES.OBSERVATION_TIMELINE]: {
+    strip: "bg-violet-700",
+    pill: "bg-violet-700/15 text-violet-900 dark:text-violet-200",
+  },
   [NODE_TYPES.TOOL]: {
     strip: "bg-cyan-500",
     pill: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300",
@@ -68,6 +84,10 @@ const nodeTypeLabels: Record<string, string> = {
   [NODE_TYPES.MERGE]: "Merge",
   [NODE_TYPES.HUMAN_GATE]: "Human Gate",
   [NODE_TYPES.MEMORY]: "Memory",
+  [NODE_TYPES.OBSERVATION_SAVE]: "Observation Save",
+  [NODE_TYPES.OBSERVATION_SEARCH]: "Observation Search",
+  [NODE_TYPES.OBSERVATION_CONTEXT]: "Observation Context",
+  [NODE_TYPES.OBSERVATION_TIMELINE]: "Observation Timeline",
   [NODE_TYPES.TOOL]: "Tool",
   [NODE_TYPES.SUBGRAPH]: "Subgraph",
 };
@@ -429,6 +449,41 @@ function getConfigPreview(
         return `${action.toUpperCase()} ${key}`.slice(0, 32);
       }
       return "Memory action";
+    }
+    case NODE_TYPES.OBSERVATION_SAVE: {
+      const scope = (config.scope as string) ?? "graph";
+      const type = (config.type as string) ?? "";
+      if (type) {
+        return `${scope} save · ${type}`.slice(0, 32);
+      }
+      return "Save observation";
+    }
+    case NODE_TYPES.OBSERVATION_SEARCH: {
+      const query =
+        (config.query as string) ??
+        (config.query_path as string) ??
+        (config.query_template as string) ??
+        "";
+      if (query) {
+        return `Search · ${String(query).slice(0, 24)}...`;
+      }
+      return "Search observations";
+    }
+    case NODE_TYPES.OBSERVATION_CONTEXT: {
+      const query =
+        (config.query as string) ??
+        (config.query_path as string) ??
+        (config.query_template as string) ??
+        "";
+      if (query) {
+        return `Context · ${String(query).slice(0, 23)}...`;
+      }
+      return "Assemble context";
+    }
+    case NODE_TYPES.OBSERVATION_TIMELINE: {
+      const scope = (config.scope as string) ?? "graph";
+      const limit = typeof config.limit === "number" ? config.limit : null;
+      return limit ? `${scope} timeline · ${limit} items` : `${scope} timeline`;
     }
     case NODE_TYPES.TOOL: {
       const toolName = (config.tool as string) ?? (config.name as string) ?? "";

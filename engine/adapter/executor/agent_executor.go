@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
@@ -107,6 +109,10 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	if validation := validateLLMPolicy(runCtx, provider, model); validation != nil {
 		return port.NewErrorResult(validation), nil
 	}
+	curatedContext, err := resolveCuratedContext(node, state)
+	if err != nil {
+		return port.NewErrorResult(err), nil
+	}
 
 	maxSteps := getConfigInt(node.Config["max_steps"])
 	if maxSteps <= 0 {
@@ -137,6 +143,39 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	}
 
 	stateSnapshot := state.SnapshotNested()
+	var vectorMemories []port.MemoryChunk
+	if curatedContext != nil && runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
+		tenantID := port.TenantIDFrom(ctx)
+		query := buildAgentContextQuery(node, stateSnapshot)
+		if tenantID != "" && query != "" {
+			req := port.MemoryRetrieveRequest{
+				TenantID:       tenantID,
+				Query:          query,
+				TopK:           runCtx.MemoryConfig.Tier3.TopK,
+				Threshold:      runCtx.MemoryConfig.Tier3.Threshold,
+				RecencyWeight:  runCtx.MemoryConfig.Tier3.RecencyWeight,
+				EmbeddingModel: runCtx.MemoryConfig.Tier3.EmbeddingModel,
+			}
+			retrieveCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			response, err := runCtx.MemoryRetriever.Retrieve(retrieveCtx, req)
+			cancel()
+			if err != nil {
+				log.Printf("memory_retrieve_failed: %v", err)
+			} else {
+				vectorMemories = response.Chunks
+			}
+		}
+	}
+	var buffer *entity.MessageBuffer
+	var summary *entity.Summary
+	if curatedContext != nil && runCtx != nil {
+		summary = runCtx.CurrentSummary
+		if runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend {
+			buffer = runCtx.MemoryBuffer
+		}
+	}
+	memoryContextBlock := buildAgentMemoryBlock(curatedContext, buffer, summary, vectorMemories)
+	memoryContextTrace := buildMemoryContextTrace(curatedContext, buffer, summary, vectorMemories)
 	steps := make([]map[string]any, 0, maxSteps)
 	toolCallCount := 0
 	var usageTotals *LLMUsage
@@ -175,7 +214,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 		})
 
 		request := &LLMRequest{
-			Prompt:       buildAgentPrompt(node, stateSnapshot, allowedTools, steps),
+			Prompt:       buildAgentPrompt(node, stateSnapshot, allowedTools, steps, memoryContextBlock),
 			Provider:     provider,
 			Model:        model,
 			Temperature:  temperature,
@@ -226,7 +265,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 				"action":      decision.Action,
 				"stop_reason": agentStopReasonFinal,
 			})
-			output := buildAgentOutput(node, provider, model, decision.FinalAnswer, agentStopReasonFinal, stepIndex, toolCallCount, steps, usageTotals)
+			output := buildAgentOutput(node, provider, model, decision.FinalAnswer, agentStopReasonFinal, stepIndex, toolCallCount, steps, usageTotals, memoryContextTrace)
 			emitAgentStreamEvent(ctx, map[string]any{
 				"event":       agentStreamEventFinish,
 				"step_index":  stepIndex,
@@ -260,6 +299,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 					toolCallCount,
 					steps,
 					usageTotals,
+					memoryContextTrace,
 				)
 				agentTrace["approval_pending"] = true
 				emitAgentStreamEvent(ctx, map[string]any{
@@ -291,7 +331,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 					"tool":        toolName,
 					"stop_reason": agentStopReasonToolDeny,
 				})
-				return port.NewSuccessResult(buildAgentOutput(node, provider, model, "", agentStopReasonToolDeny, stepIndex, toolCallCount, steps, usageTotals)), nil
+				return port.NewSuccessResult(buildAgentOutput(node, provider, model, "", agentStopReasonToolDeny, stepIndex, toolCallCount, steps, usageTotals, memoryContextTrace)), nil
 			}
 
 			if toolCallCount >= maxToolCalls {
@@ -304,7 +344,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 					"tool":        toolName,
 					"stop_reason": agentStopReasonMaxTools,
 				})
-				return port.NewSuccessResult(buildAgentOutput(node, provider, model, "", agentStopReasonMaxTools, stepIndex, toolCallCount, steps, usageTotals)), nil
+				return port.NewSuccessResult(buildAgentOutput(node, provider, model, "", agentStopReasonMaxTools, stepIndex, toolCallCount, steps, usageTotals, memoryContextTrace)), nil
 			}
 
 			if e.toolInvoker == nil {
@@ -353,7 +393,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 		}
 	}
 
-	output := buildAgentOutput(node, provider, model, "", agentStopReasonMaxSteps, maxSteps, toolCallCount, steps, usageTotals)
+	output := buildAgentOutput(node, provider, model, "", agentStopReasonMaxSteps, maxSteps, toolCallCount, steps, usageTotals, memoryContextTrace)
 	emitAgentStreamEvent(ctx, map[string]any{
 		"event":       agentStreamEventFinish,
 		"step_index":  maxSteps,
@@ -362,7 +402,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	return port.NewSuccessResult(output), nil
 }
 
-func buildAgentPrompt(node *entity.Node, stateSnapshot map[string]any, allowedTools []string, steps []map[string]any) string {
+func buildAgentPrompt(node *entity.Node, stateSnapshot map[string]any, allowedTools []string, steps []map[string]any, memoryContextBlock string) string {
 	var builder strings.Builder
 	builder.WriteString("You are executing inside a ForgeGraph agent node.\n")
 	builder.WriteString("You must return a single JSON object with one of these shapes:\n")
@@ -377,6 +417,9 @@ func buildAgentPrompt(node *entity.Node, stateSnapshot map[string]any, allowedTo
 		builder.WriteString("Task instructions:\n")
 		builder.WriteString(SubstituteTemplate(instructions, entity.NewStateFromSnapshot(flattenNestedState(stateSnapshot))))
 		builder.WriteString("\n\n")
+	}
+	if strings.TrimSpace(memoryContextBlock) != "" {
+		builder.WriteString(memoryContextBlock)
 	}
 
 	builder.WriteString("Allowed tools:\n")
@@ -396,7 +439,7 @@ func buildAgentPrompt(node *entity.Node, stateSnapshot map[string]any, allowedTo
 	return builder.String()
 }
 
-func buildAgentOutput(node *entity.Node, provider string, model string, finalOutput string, stopReason string, stepCount int, toolCallCount int, steps []map[string]any, usage *LLMUsage) map[string]any {
+func buildAgentOutput(node *entity.Node, provider string, model string, finalOutput string, stopReason string, stepCount int, toolCallCount int, steps []map[string]any, usage *LLMUsage, memoryContext map[string]any) map[string]any {
 	output := map[string]any{
 		"final_output":    finalOutput,
 		"stop_reason":     stopReason,
@@ -412,7 +455,17 @@ func buildAgentOutput(node *entity.Node, provider string, model string, finalOut
 	if usage != nil {
 		output["usage"] = usageMap(usage)
 	}
+	if memoryContext != nil {
+		output["memory_context"] = memoryContext
+	}
 	return output
+}
+
+func buildAgentContextQuery(node *entity.Node, stateSnapshot map[string]any) string {
+	if instructions := strings.TrimSpace(node.GetConfigString("instructions")); instructions != "" {
+		return SubstituteTemplate(instructions, entity.NewStateFromSnapshot(flattenNestedState(stateSnapshot)))
+	}
+	return mustJSON(stateSnapshot)
 }
 
 func parseAgentDecision(raw string) (*agentDecision, error) {

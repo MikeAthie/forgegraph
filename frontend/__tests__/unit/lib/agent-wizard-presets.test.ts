@@ -1,5 +1,7 @@
 import {
   AGENT_WIZARD_PRESETS,
+  AGENT_OUTPUT_PLACEHOLDER,
+  OBSERVATION_CONTEXT_PLACEHOLDER,
   buildAgentWizardBlueprint,
   getAgentWizardPreset,
 } from "@/lib/agent-wizard-presets";
@@ -32,16 +34,35 @@ describe("agent-wizard-presets", () => {
     expect(email?.credentialHints.length).toBeGreaterThan(0);
   });
 
-  it("builds memory-first preset with a real agent flow and memory wrappers", () => {
+  it("builds the Jackie memory preset with curated observation nodes", () => {
     const preset = getAgentWizardPreset("memory-first-assistant");
     expect(preset).toBeDefined();
 
     const blueprint = buildAgentWizardBlueprint(preset!.seed);
     const nodeTypes = blueprint.nodes.map((node) => node.nodeType);
 
-    expect(nodeTypes).toContain(NODE_TYPES.MEMORY);
+    expect(nodeTypes).toEqual([
+      NODE_TYPES.OBSERVATION_CONTEXT,
+      NODE_TYPES.AGENT,
+      NODE_TYPES.OBSERVATION_SAVE,
+      NODE_TYPES.OUTPUT,
+    ]);
     expect(nodeTypes).toContain(NODE_TYPES.AGENT);
     expect(nodeTypes).toContain(NODE_TYPES.OUTPUT);
+
+    expect(blueprint.nodes[1]?.config).toEqual(
+      expect.objectContaining({
+        observation_context_paths: [
+          `node.${OBSERVATION_CONTEXT_PLACEHOLDER}.output`,
+        ],
+      }),
+    );
+    expect(blueprint.nodes[2]?.config).toEqual(
+      expect.objectContaining({
+        content_template: expect.stringContaining(AGENT_OUTPUT_PLACEHOLDER),
+        topic_key: "jackie-memory",
+      }),
+    );
   });
 
   it("stores tool-first agent seeds for integration presets", () => {

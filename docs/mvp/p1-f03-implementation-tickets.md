@@ -9,6 +9,13 @@ Convert `P1-F03` into reviewable implementation slices with explicit file target
 - run/debugger surfaces need to explain curated-memory usage clearly
 - the Jackie-style journey must become a real, browser-proven MVP story
 
+## Status
+`P1-F03` is complete as of March 13, 2026.
+
+Close-out references:
+- `docs/mvp/p1-memory-qa-matrix.md`
+- `docs/mvp/p1-memory-narrative.md`
+
 ## Dependency
 `P1-F01` and the runtime/read-model parts of `P1-F02` should be merged or stable first.
 
@@ -67,10 +74,10 @@ Create the first product-level curated-memory surface: a Memory Browser that let
 - `backend/adapters/api/memory/views.py`
 
 ### Acceptance Criteria
-- [ ] Users can search observations from product UI.
-- [ ] Users can inspect observation detail and timeline.
-- [ ] Scope, recency, and observation type are visible.
-- [ ] Empty, loading, and no-results states are handled cleanly.
+- [x] Users can search observations from product UI.
+- [x] Users can inspect observation detail and timeline.
+- [x] Scope, recency, and observation type are visible.
+- [x] Empty, loading, and no-results states are handled cleanly.
 
 ### Tests
 - frontend unit tests for page states and API consumption
@@ -108,10 +115,10 @@ Allow users to add and configure curated-memory node types directly from the edi
 - `frontend/__tests__/components/graph-editor/*`
 
 ### Acceptance Criteria
-- [ ] All curated-memory node types can be added from the editor.
-- [ ] Users can configure required node fields without raw JSON editing.
-- [ ] Validation and empty-state guidance are clear.
-- [ ] Node labels and inspector views make curated-memory nodes understandable.
+- [x] All curated-memory node types can be added from the editor.
+- [x] Users can configure required node fields without raw JSON editing.
+- [x] Validation and empty-state guidance are clear.
+- [x] Node labels and inspector views make curated-memory nodes understandable.
 
 ### Tests
 - graph editor interaction tests
@@ -148,10 +155,10 @@ Make run pages and debugger surfaces explain what memory was saved, what was reu
 - `backend/adapters/api/runs/views.py`
 
 ### Acceptance Criteria
-- [ ] Run pages show memory saves, searches, and context use in readable groups.
-- [ ] Users can tell which memory items influenced a prompt/agent step.
-- [ ] Raw payloads remain drill-down, not the default UX.
-- [ ] Non-memory runs do not regress.
+- [x] Run pages show memory saves, searches, and context use in readable groups.
+- [x] Users can tell which memory items influenced a prompt/agent step.
+- [x] Raw payloads remain drill-down, not the default UX.
+- [x] Non-memory runs do not regress.
 
 ### Tests
 - run-page rendering tests
@@ -186,13 +193,13 @@ Package one supported memory-first workflow that demonstrates the MVP story clea
 - seed or template endpoints only if the supported workflow is server-seeded
 
 ### Acceptance Criteria
-- [ ] One supported Jackie-style workflow exists and is documented.
-- [ ] The workflow demonstrates:
+- [x] One supported Jackie-style workflow exists and is documented.
+- [x] The workflow demonstrates:
   - explicit observation save
   - later retrieval through context
   - final agent answer using that context
-- [ ] Required integrations are narrow and clearly documented.
-- [ ] The product story is memory-first, not a generic template gallery.
+- [x] Required integrations are narrow and clearly documented.
+- [x] The product story is memory-first, not a generic template gallery.
 
 ### Tests
 - template metadata tests if applicable
@@ -229,10 +236,10 @@ Prove the supported memory-first journey in Playwright and formalize the QA matr
 - `docs/mvp/p1-f03-implementation-tickets.md`
 
 ### Acceptance Criteria
-- [ ] Browser-level proof exists for the supported memory journey.
-- [ ] The proof covers authoring, run execution, and visible memory influence.
-- [ ] Known limitations are documented explicitly.
-- [ ] P1 has a usable QA matrix instead of ad hoc demo steps.
+- [x] Browser-level proof exists for the supported memory journey.
+- [x] The proof covers authoring, run execution, and visible memory influence.
+- [x] Known limitations are documented explicitly.
+- [x] P1 has a usable QA matrix instead of ad hoc demo steps.
 
 ### Tests
 - Playwright specs for the supported journey
@@ -252,8 +259,8 @@ Prove the supported memory-first journey in Playwright and formalize the QA matr
 5. PR-5
 
 ## Final Ticket-Level Definition of Done
-- [ ] Users can browse curated memory from the product UI
-- [ ] Builders can author curated-memory nodes in the graph editor
-- [ ] Run/debugger surfaces explain memory usage clearly
-- [ ] One Jackie-style workflow demonstrates the full memory-first story
-- [ ] Browser-level proof exists for the supported P1 journey
+- [x] Users can browse curated memory from the product UI
+- [x] Builders can author curated-memory nodes in the graph editor
+- [x] Run/debugger surfaces explain memory usage clearly
+- [x] One Jackie-style workflow demonstrates the full memory-first story
+- [x] Browser-level proof exists for the supported P1 journey

@@ -10,6 +10,10 @@ import { KeyValueEditor } from "@/components/ui/key-value-editor";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { getNodeVisual } from "./nodes/nodeShapes";
+import { ObservationContextNodeForm } from "./forms/ObservationContextNodeForm";
+import { ObservationSaveNodeForm } from "./forms/ObservationSaveNodeForm";
+import { ObservationSearchNodeForm } from "./forms/ObservationSearchNodeForm";
+import { ObservationTimelineNodeForm } from "./forms/ObservationTimelineNodeForm";
 
 /** Reusable collapsible section with chevron toggle */
 function CollapsibleSection({
@@ -576,6 +580,42 @@ export function NodeInspector({
           />
         )}
 
+        {nodeType === NODE_TYPES.OBSERVATION_SAVE && (
+          <ObservationSaveNodeForm
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+            errors={{}}
+            setErrors={() => {}}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.OBSERVATION_SEARCH && (
+          <ObservationSearchNodeForm
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+            errors={{}}
+            setErrors={() => {}}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.OBSERVATION_CONTEXT && (
+          <ObservationContextNodeForm
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+            errors={{}}
+            setErrors={() => {}}
+          />
+        )}
+
+        {nodeType === NODE_TYPES.OBSERVATION_TIMELINE && (
+          <ObservationTimelineNodeForm
+            config={(nodeData.config as Record<string, unknown>) ?? {}}
+            onChange={(config) => onUpdateNode(selectedNode.id, { config })}
+            errors={{}}
+            setErrors={() => {}}
+          />
+        )}
+
         {nodeType === NODE_TYPES.TOOL && (
           <ToolNodeConfig
             config={(nodeData.config as Record<string, unknown>) ?? {}}
@@ -648,6 +688,9 @@ function AgentNodeConfig({
   const tools = Array.isArray(config.tools) ? (config.tools as string[]) : [];
   const approvalRequiredTools = Array.isArray(config.approval_required_tools)
     ? (config.approval_required_tools as string[])
+    : [];
+  const observationContextPaths = Array.isArray(config.observation_context_paths)
+    ? (config.observation_context_paths as string[])
     : [];
 
   return (
@@ -792,6 +835,30 @@ function AgentNodeConfig({
           className="text-sm font-mono"
         />
       </div>
+
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Curated Context Paths
+        </label>
+        <Textarea
+          value={observationContextPaths.join("\n")}
+          onChange={(e) =>
+            onChange({
+              ...config,
+              observation_context_paths: e.target.value
+                .split(/[\n,]/)
+                .map((item) => item.trim())
+                .filter(Boolean),
+            })
+          }
+          placeholder={"node.recall_jackie.output\nnode.observation_context.output"}
+          rows={3}
+          className="text-sm font-mono"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Optional observation context outputs to prepend before the agent answers.
+        </p>
+      </div>
     </div>
   );
 }
@@ -806,6 +873,9 @@ function PromptNodeConfig({
 }) {
   const [loadingPrompt, setLoadingPrompt] = useState(false);
   const [promptLoadError, setPromptLoadError] = useState<string | null>(null);
+  const observationContextPaths = Array.isArray(config.observation_context_paths)
+    ? (config.observation_context_paths as string[])
+    : [];
 
   const loadPromptFromId = async () => {
     const promptId = String(config.prompt_id ?? "").trim();
@@ -952,6 +1022,29 @@ function PromptNodeConfig({
         />
         <p className="mt-1 text-xs text-muted-foreground">
           Map variable names to state paths for template substitution.
+        </p>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          Curated Context Paths
+        </label>
+        <Textarea
+          value={observationContextPaths.join("\n")}
+          onChange={(e) =>
+            onChange({
+              ...config,
+              observation_context_paths: e.target.value
+                .split(/[\n,]/)
+                .map((item) => item.trim())
+                .filter(Boolean),
+            })
+          }
+          placeholder={"node.recall_context.output\nnode.observation_context.output"}
+          rows={3}
+          className="text-sm font-mono"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Optional observation context outputs to prepend before prompt execution.
         </p>
       </div>
     </CollapsibleSection>

@@ -25,6 +25,11 @@ AGENT_NODE_SCHEMA = {
     "max_tool_calls": {"type": "integer", "min": 1, "required": False},
     "max_tokens": {"type": "integer", "min": 1, "required": False},
     "temperature": {"type": "number", "min": 0, "max": 2, "required": False},
+    "observation_context_paths": {
+        "type": "array",
+        "required": False,
+        "items_type": "string",
+    },
     "approval_required_tools": {
         "type": "array",
         "required": False,
@@ -42,6 +47,11 @@ PROMPT_NODE_SCHEMA = {
     "model": {"type": "string", "required": False},
     "temperature": {"type": "number", "min": 0, "max": 2, "required": False},
     "max_tokens": {"type": "integer", "min": 1, "required": False},
+    "observation_context_paths": {
+        "type": "array",
+        "required": False,
+        "items_type": "string",
+    },
     # Agent fields
     "role": {"type": "string", "required": False},
     "job_description": {"type": "string", "required": False},

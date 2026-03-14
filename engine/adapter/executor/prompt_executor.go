@@ -140,6 +140,10 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	// Substitute variables in prompt
 	basePrompt := SubstituteTemplate(promptTemplate, state)
 	prompt := basePrompt
+	curatedContext, err := resolveCuratedContext(node, state)
+	if err != nil {
+		return port.NewErrorResult(err), nil
+	}
 
 	var vectorMemories []port.MemoryChunk
 	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
@@ -164,7 +168,7 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		}
 	}
 
-	shouldAugment := (runCtx != nil &&
+	shouldAugment := curatedContext != nil || (runCtx != nil &&
 		runCtx.MemoryConfig != nil &&
 		runCtx.MemoryConfig.Tier1.AutoPrepend &&
 		runCtx.MemoryBuffer != nil) || len(vectorMemories) > 0
@@ -172,10 +176,12 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		var buffer *entity.MessageBuffer
 		var summary *entity.Summary
 		if runCtx != nil {
-			buffer = runCtx.MemoryBuffer
 			summary = runCtx.CurrentSummary
+			if runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend {
+				buffer = runCtx.MemoryBuffer
+			}
 		}
-		prompt = buildPromptWithMemory(basePrompt, buffer, summary, vectorMemories)
+		prompt = buildPromptWithMemory(basePrompt, curatedContext, buffer, summary, vectorMemories)
 	}
 
 	// Get optional system prompt
@@ -344,6 +350,22 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	if response.FinishReason != "" {
 		output["finish_reason"] = response.FinishReason
 	}
+	if curatedContext != nil {
+		var buffer *entity.MessageBuffer
+		var summary *entity.Summary
+		if runCtx != nil {
+			summary = runCtx.CurrentSummary
+			if runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend {
+				buffer = runCtx.MemoryBuffer
+			}
+		}
+		output["memory_context"] = buildMemoryContextTrace(
+			curatedContext,
+			buffer,
+			summary,
+			vectorMemories,
+		)
+	}
 
 	if schemaRaw, ok := node.Config["output_schema"].(map[string]any); ok {
 		mode := strings.ToLower(node.GetConfigString("schema_mode"))
@@ -443,64 +465,4 @@ func buildPromptCacheKey(request *LLMRequest) string {
 	raw, _ := json.Marshal(payload)
 	sum := sha256.Sum256(raw)
 	return fmt.Sprintf("%x", sum[:])
-}
-
-func buildPromptWithMemory(
-	basePrompt string,
-	buffer *entity.MessageBuffer,
-	summary *entity.Summary,
-	vectorMemories []port.MemoryChunk,
-) string {
-	if buffer == nil && summary == nil {
-		if len(vectorMemories) == 0 {
-			return basePrompt
-		}
-	}
-
-	var messages []entity.Message
-	if buffer != nil {
-		messages = buffer.GetAll()
-	}
-	if len(messages) == 0 && (summary == nil || strings.TrimSpace(summary.Content) == "") && len(vectorMemories) == 0 {
-		return basePrompt
-	}
-
-	var sb strings.Builder
-	if summary != nil && strings.TrimSpace(summary.Content) != "" {
-		sb.WriteString("Summary of earlier conversation:\n")
-		sb.WriteString(strings.TrimSpace(summary.Content))
-		sb.WriteString("\n\n")
-		if len(summary.FactsExtracted) > 0 {
-			sb.WriteString("Key facts:\n")
-			for _, fact := range summary.FactsExtracted {
-				if fact.Key == "" && fact.Value == "" {
-					continue
-				}
-				sb.WriteString(fmt.Sprintf("- %s: %s\n", fact.Key, fact.Value))
-			}
-			sb.WriteString("\n")
-		}
-	}
-	if len(messages) > 0 {
-		sb.WriteString("Recent messages:\n")
-		for _, msg := range messages {
-			role := strings.Title(msg.Role)
-			sb.WriteString(fmt.Sprintf("%s: %s\n", role, msg.Content))
-		}
-		sb.WriteString("\n")
-	}
-	if len(vectorMemories) > 0 {
-		sb.WriteString("Relevant memories:\n")
-		for _, memory := range vectorMemories {
-			content := strings.TrimSpace(memory.Content)
-			if content == "" {
-				continue
-			}
-			sb.WriteString(fmt.Sprintf("- %s\n", content))
-		}
-		sb.WriteString("\n")
-	}
-	sb.WriteString("Current input:\n")
-	sb.WriteString(basePrompt)
-	return sb.String()
 }

@@ -81,6 +81,7 @@ class RunListSerializer(serializers.Serializer[Any]):
     started_at = serializers.DateTimeField(read_only=True, allow_null=True)
     ended_at = serializers.DateTimeField(read_only=True, allow_null=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
+    memory_activity = serializers.JSONField(read_only=True, allow_null=True)
 
 
 class RunDetailSerializer(serializers.Serializer[Any]):
@@ -109,6 +110,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
     node_outcomes = serializers.JSONField(read_only=True, allow_null=True)
     agent_events = serializers.JSONField(read_only=True, allow_null=True)
+    memory_activity = serializers.JSONField(read_only=True, allow_null=True)
 
 
 class NodeRunSerializer(serializers.Serializer[Any]):
@@ -125,6 +127,7 @@ class NodeRunSerializer(serializers.Serializer[Any]):
     input_json = serializers.JSONField(read_only=True)
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_json = serializers.JSONField(read_only=True, allow_null=True)
+    memory_activity = serializers.JSONField(read_only=True, allow_null=True)
 
 
 class RunDetailNodeRunSerializer(NodeRunSerializer):

@@ -52,6 +52,7 @@ class TestPromptNodeSchema:
             "model": "gpt-4",
             "temperature": 0.7,
             "max_tokens": 1000,
+            "observation_context_paths": ["node.obs_context.output"],
             "role": "assistant",
             "job_description": "Help users",
         }
@@ -157,6 +158,7 @@ class TestAgentNodeSchema:
                 "max_steps": 6,
                 "max_tool_calls": 4,
                 "temperature": 0.2,
+                "observation_context_paths": ["node.obs_context.output"],
                 "approval_required_tools": ["send_email"],
                 "stop_condition": "final_answer",
             },

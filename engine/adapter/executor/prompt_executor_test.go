@@ -345,6 +345,100 @@ func TestPromptExecutor_Execute_WithSummaryAndFacts(t *testing.T) {
 	}
 }
 
+func TestPromptExecutor_Execute_WithExplicitCuratedContextOrdersSections(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{Content: "response", Model: "gpt-4"},
+	}
+	retriever := &testMemoryRetriever{
+		response: port.MemoryRetrieveResponse{
+			Chunks: []port.MemoryChunk{
+				{Content: "Semantic memory about the contract"},
+			},
+		},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+	state.SetNodeOutput("obs_ctx", map[string]any{
+		"observations": []any{
+			map[string]any{
+				"id":      "obs-1",
+				"type":    "fact",
+				"title":   "Contract note",
+				"content": "Customer signed the agreement yesterday.",
+				"scope":   "session",
+			},
+		},
+		"degraded":   true,
+		"strategies": []any{"fts", "vector_unavailable"},
+	})
+
+	buffer := entity.NewMessageBuffer(5)
+	buffer.Push(entity.Message{Role: "user", Content: "Earlier question"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "Earlier answer"})
+
+	runCtx := &port.RunContext{
+		MemoryBuffer: buffer,
+		MemoryConfig: &entity.MemoryConfig{
+			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: true},
+			Tier3: entity.Tier3Config{Enabled: true, TopK: 5, Threshold: 0.7, RecencyWeight: 0.2},
+		},
+		CurrentSummary: &entity.Summary{
+			Content: "We discussed the contract timeline.",
+			FactsExtracted: []entity.Fact{
+				{Key: "owner", Value: "Ada"},
+			},
+		},
+		MemoryRetriever: retriever,
+	}
+
+	ctx := port.WithRunContext(context.Background(), runCtx)
+	ctx = port.WithTenantID(ctx, "tenant-1")
+
+	node := &entity.Node{
+		ID:   "prompt_1",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template":           "What should I know before replying?",
+			"observation_context_paths": []any{"node.obs_ctx.output"},
+		},
+	}
+
+	result, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	prompt := mockClient.received.Prompt
+	curatedIndex := strings.Index(prompt, "Curated observations:")
+	summaryIndex := strings.Index(prompt, "Summary of earlier conversation:")
+	vectorIndex := strings.Index(prompt, "Relevant memories:")
+	bufferIndex := strings.Index(prompt, "Recent messages:")
+	currentIndex := strings.Index(prompt, "Current input:")
+
+	if curatedIndex < 0 || summaryIndex < 0 || vectorIndex < 0 || bufferIndex < 0 || currentIndex < 0 {
+		t.Fatalf("expected all memory sections in prompt, got: %s", prompt)
+	}
+	if !(curatedIndex < summaryIndex && summaryIndex < vectorIndex && vectorIndex < bufferIndex && bufferIndex < currentIndex) {
+		t.Fatalf("unexpected section order in prompt: %s", prompt)
+	}
+
+	output := result.Output.(map[string]any)
+	memoryContext, ok := output["memory_context"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected memory_context output, got %T", output["memory_context"])
+	}
+	if memoryContext["curated_observation_count"] != 1 {
+		t.Fatalf("curated_observation_count = %v, want 1", memoryContext["curated_observation_count"])
+	}
+	if memoryContext["curated_degraded"] != true {
+		t.Fatalf("curated_degraded = %v, want true", memoryContext["curated_degraded"])
+	}
+}
+
 func TestPromptExecutor_Execute_MissingTemplate(t *testing.T) {
 	mockClient := &testMockLLMClient{
 		response: &LLMResponse{Content: "response"},

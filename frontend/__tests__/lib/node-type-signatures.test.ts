@@ -18,9 +18,9 @@ describe("node-type-signatures", () => {
       });
     });
 
-    it("should have exactly 11 node type signatures", () => {
+    it("should have a signature entry for every registered node type", () => {
       const signatures = Object.keys(NODE_SIGNATURES);
-      expect(signatures.length).toBe(11);
+      expect(signatures.length).toBe(Object.values(NODE_TYPES).length);
     });
 
     it("should have inputs and outputs arrays for each signature", () => {
@@ -197,6 +197,74 @@ describe("node-type-signatures", () => {
           expect(signature.outputs.length).toBe(1);
           expect(signature.outputs[0].name).toBe("retrieved");
           expect(signature.outputs[0].type).toBe(DataType.ANY);
+        });
+      });
+
+      describe("OBSERVATION_SAVE node", () => {
+        it("should have correct input signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_SAVE];
+          expect(signature.inputs.length).toBe(1);
+          expect(signature.inputs[0].name).toBe("context");
+          expect(signature.inputs[0].type).toBe(DataType.ANY);
+          expect(signature.inputs[0].required).toBe(false);
+        });
+
+        it("should have correct output signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_SAVE];
+          expect(signature.outputs.length).toBe(1);
+          expect(signature.outputs[0].name).toBe("output");
+          expect(signature.outputs[0].type).toBe(DataType.JSON);
+        });
+      });
+
+      describe("OBSERVATION_SEARCH node", () => {
+        it("should have correct input signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_SEARCH];
+          expect(signature.inputs.length).toBe(1);
+          expect(signature.inputs[0].name).toBe("context");
+          expect(signature.inputs[0].type).toBe(DataType.ANY);
+          expect(signature.inputs[0].required).toBe(false);
+        });
+
+        it("should have correct output signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_SEARCH];
+          expect(signature.outputs.length).toBe(1);
+          expect(signature.outputs[0].name).toBe("output");
+          expect(signature.outputs[0].type).toBe(DataType.JSON);
+        });
+      });
+
+      describe("OBSERVATION_CONTEXT node", () => {
+        it("should have correct input signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_CONTEXT];
+          expect(signature.inputs.length).toBe(1);
+          expect(signature.inputs[0].name).toBe("context");
+          expect(signature.inputs[0].type).toBe(DataType.ANY);
+          expect(signature.inputs[0].required).toBe(false);
+        });
+
+        it("should have correct output signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_CONTEXT];
+          expect(signature.outputs.length).toBe(1);
+          expect(signature.outputs[0].name).toBe("output");
+          expect(signature.outputs[0].type).toBe(DataType.JSON);
+        });
+      });
+
+      describe("OBSERVATION_TIMELINE node", () => {
+        it("should have correct input signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_TIMELINE];
+          expect(signature.inputs.length).toBe(1);
+          expect(signature.inputs[0].name).toBe("context");
+          expect(signature.inputs[0].type).toBe(DataType.ANY);
+          expect(signature.inputs[0].required).toBe(false);
+        });
+
+        it("should have correct output signature", () => {
+          const signature = NODE_SIGNATURES[NODE_TYPES.OBSERVATION_TIMELINE];
+          expect(signature.outputs.length).toBe(1);
+          expect(signature.outputs[0].name).toBe("output");
+          expect(signature.outputs[0].type).toBe(DataType.JSON);
         });
       });
 

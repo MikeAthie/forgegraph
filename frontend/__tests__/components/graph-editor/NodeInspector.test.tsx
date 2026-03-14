@@ -524,6 +524,29 @@ describe("NodeInspector", () => {
     });
   });
 
+  describe("Observation Node Configuration", () => {
+    const observationNode: Node = {
+      id: "obs-context",
+      type: NODE_TYPES.OBSERVATION_CONTEXT,
+      position: { x: 0, y: 0 },
+      data: {
+        label: "Recall Jackie Context",
+        nodeType: NODE_TYPES.OBSERVATION_CONTEXT,
+        config: {
+          query: "What should I remember about Jackie?",
+          limit: 3,
+        },
+      },
+    };
+
+    it("renders the observation context form", () => {
+      render(<NodeInspector {...defaultProps} selectedNode={observationNode} />);
+
+      expect(screen.getByText("Observation Context")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("What should I remember about Jackie?")).toBeInTheDocument();
+    });
+  });
+
   describe("Node Cache Configuration", () => {
     const cacheNode: Node = {
       id: "cache-node",

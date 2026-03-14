@@ -21,6 +21,10 @@ export const NODE_TYPES = {
   MERGE: "merge",
   HUMAN_GATE: "human_gate",
   MEMORY: "memory",
+  OBSERVATION_SAVE: "observation_save",
+  OBSERVATION_SEARCH: "observation_search",
+  OBSERVATION_CONTEXT: "observation_context",
+  OBSERVATION_TIMELINE: "observation_timeline",
   TOOL: "tool",
   SUBGRAPH: "subgraph",
   OUTPUT: "output",
@@ -143,6 +147,57 @@ export interface MemoryNodeConfig extends BaseNodeConfig {
   value_path?: string;
   value_template?: string;
   ttl_seconds?: number;
+}
+
+export interface ObservationSaveNodeConfig extends BaseNodeConfig {
+  observation_id?: string;
+  type?: string;
+  scope?: "graph" | "run" | "session";
+  title?: string;
+  title_path?: string;
+  title_template?: string;
+  content?: string;
+  content_path?: string;
+  content_template?: string;
+  topic_key?: string;
+  topic_key_path?: string;
+  tool_name?: string;
+  tool_name_path?: string;
+  agent_id?: string;
+  agent_id_path?: string;
+  dedupe?: boolean;
+  update_topic?: boolean;
+}
+
+export interface ObservationSearchNodeConfig extends BaseNodeConfig {
+  scope?: "graph" | "run" | "session";
+  query?: string;
+  query_path?: string;
+  query_template?: string;
+  type?: string;
+  topic_key?: string;
+  topic_key_path?: string;
+  agent_id?: string;
+  agent_id_path?: string;
+  limit?: number;
+  include_deleted?: boolean;
+}
+
+export interface ObservationContextNodeConfig extends BaseNodeConfig {
+  query?: string;
+  query_path?: string;
+  query_template?: string;
+  agent_id?: string;
+  agent_id_path?: string;
+  limit?: number;
+}
+
+export interface ObservationTimelineNodeConfig extends BaseNodeConfig {
+  scope?: "graph" | "run" | "session";
+  agent_id?: string;
+  agent_id_path?: string;
+  limit?: number;
+  include_deleted?: boolean;
 }
 
 /**
@@ -395,6 +450,30 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
     type: NODE_TYPES.MEMORY,
     label: "Memory",
     description: "Store or retrieve shared memory values",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.OBSERVATION_SAVE,
+    label: "Observation Save",
+    description: "Persist a curated observation for later runs",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.OBSERVATION_SEARCH,
+    label: "Observation Search",
+    description: "Search curated observations by query or topic",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.OBSERVATION_CONTEXT,
+    label: "Observation Context",
+    description: "Assemble the best curated context for a prompt or agent",
+    enabled: true,
+  },
+  {
+    type: NODE_TYPES.OBSERVATION_TIMELINE,
+    label: "Observation Timeline",
+    description: "Browse recent curated observations in scope order",
     enabled: true,
   },
   {

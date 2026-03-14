@@ -270,6 +270,19 @@ describe("NodePalette", () => {
       expect(mockOnAddNode).toHaveBeenCalledWith(NODE_TYPES.PROMPT, true);
     });
 
+    it("should call onAddNode when Observation Context is clicked", async () => {
+      const user = setupUser();
+      render(<NodePalette onAddNode={mockOnAddNode} />);
+
+      const button = screen.getByRole("button", { name: /^observation context$/i });
+      await user.click(button);
+
+      expect(mockOnAddNode).toHaveBeenCalledWith(
+        NODE_TYPES.OBSERVATION_CONTEXT,
+        false,
+      );
+    });
+
     it("should call onAddNode when Human Gate button is clicked", async () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);

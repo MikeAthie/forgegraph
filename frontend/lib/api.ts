@@ -156,6 +156,13 @@ const API_PATHS = {
     llmCosts: "/api/analytics/llm/costs",
     llmBudget: "/api/analytics/llm/budget",
   },
+  memory: {
+    listCreate: "/api/memory/observations",
+    search: "/api/memory/observations/search",
+    timeline: "/api/memory/observations/timeline",
+    context: "/api/memory/observations/context",
+    detail: (observationId: string) => `/api/memory/observations/${observationId}`,
+  },
   templates: {
     list: "/api/templates/",
     clone: (templateId: string) => `/api/templates/${templateId}/clone`,
@@ -1104,6 +1111,115 @@ export interface RunListItem {
   started_at: string | null;
   ended_at: string | null;
   duration_ms: number | null;
+  memory_activity?: RunMemoryActivitySummary | null;
+}
+
+export interface MemoryObservationPreview {
+  id?: string;
+  type?: string;
+  title?: string;
+  scope?: string;
+  topic_key?: string;
+  tool_name?: string;
+  content_preview?: string;
+}
+
+export interface NodeMemoryActivity {
+  category?: "save" | "retrieval" | "influence" | string;
+  operation?: "save" | "search" | "context" | "timeline" | "context_use" | string;
+  scope?: string;
+  query?: string;
+  count?: number;
+  degraded?: boolean;
+  strategies?: string[];
+  saved?: boolean;
+  saved_observation_count?: number;
+  observation?: MemoryObservationPreview | null;
+  observations?: MemoryObservationPreview[];
+  observation_count?: number;
+  curated_context_paths?: string[];
+}
+
+export interface RunMemoryOperation extends NodeMemoryActivity {
+  node_id: string;
+  node_type: string;
+  status: NodeRunStatus;
+  attempt: number;
+  duration_ms?: number | null;
+}
+
+export interface RunMemoryActivitySummary {
+  has_activity: boolean;
+  save_node_count: number;
+  saved_observation_count: number;
+  retrieval_node_count: number;
+  retrieved_observation_count: number;
+  influenced_node_count: number;
+  influenced_observation_count: number;
+  degraded: boolean;
+  operations?: RunMemoryOperation[];
+}
+
+export interface MemoryObservation {
+  id: string;
+  tenant_id: string;
+  graph_id: string | null;
+  run_id: string | null;
+  session_id: string | null;
+  agent_id: string | null;
+  memory_chunk_id: string | null;
+  type: string;
+  title: string;
+  content: string;
+  scope: string;
+  topic_key: string;
+  tool_name: string;
+  revision_count: number;
+  duplicate_count: number;
+  last_seen_at: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  is_deleted: boolean;
+}
+
+export interface MemoryObservationSearchParams {
+  query?: string;
+  graph_id?: string;
+  run_id?: string;
+  session_id?: string;
+  agent_id?: string;
+  scope?: string;
+  type?: string;
+  topic_key?: string;
+  limit?: number;
+  include_deleted?: boolean;
+}
+
+export interface MemoryObservationTimelineParams {
+  graph_id?: string;
+  run_id?: string;
+  session_id?: string;
+  agent_id?: string;
+  scope?: string;
+  limit?: number;
+  include_deleted?: boolean;
+}
+
+export interface MemoryObservationContextParams {
+  query?: string;
+  graph_id?: string;
+  run_id?: string;
+  session_id?: string;
+  agent_id?: string;
+  limit?: number;
+}
+
+export interface ObservationContextResponse {
+  observations: MemoryObservation[];
+  degraded: boolean;
+  strategies: string[];
+  limit: number;
 }
 
 export interface NodeRunItem {
@@ -1119,6 +1235,7 @@ export interface NodeRunItem {
   output_json: Record<string, unknown> | null;
   error_json: Record<string, unknown> | null;
   agent_trace?: AgentTrace | null;
+  memory_activity?: NodeMemoryActivity | null;
 }
 
 export interface AgentEventItem {
@@ -1191,6 +1308,7 @@ export interface RunDetail {
   duration_ms: number | null;
   node_runs: NodeRunItem[];
   agent_events?: AgentEventItem[] | null;
+  memory_activity?: RunMemoryActivitySummary | null;
   // Human Gate pause fields
   paused_node_id?: string | null;
   pause_payload?: {
@@ -1276,6 +1394,37 @@ export const runsApi = {
       API_PATHS.runs.replay(runId),
       input ?? {},
     );
+    return response.data.data;
+  },
+};
+
+export const memoryApi = {
+  search: async (params?: MemoryObservationSearchParams): Promise<MemoryObservation[]> => {
+    const response = await api.get<ApiSuccessResponse<MemoryObservation[]>>(API_PATHS.memory.search, {
+      params,
+    });
+    return response.data.data;
+  },
+
+  timeline: async (params?: MemoryObservationTimelineParams): Promise<MemoryObservation[]> => {
+    const response = await api.get<ApiSuccessResponse<MemoryObservation[]>>(API_PATHS.memory.timeline, {
+      params,
+    });
+    return response.data.data;
+  },
+
+  get: async (observationId: string, params?: { include_deleted?: boolean }): Promise<MemoryObservation> => {
+    const response = await api.get<ApiSuccessResponse<MemoryObservation>>(
+      API_PATHS.memory.detail(observationId),
+      { params },
+    );
+    return response.data.data;
+  },
+
+  getContext: async (params?: MemoryObservationContextParams): Promise<ObservationContextResponse> => {
+    const response = await api.get<ApiSuccessResponse<ObservationContextResponse>>(API_PATHS.memory.context, {
+      params,
+    });
     return response.data.data;
   },
 };

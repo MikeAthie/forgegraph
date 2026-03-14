@@ -209,6 +209,82 @@ export const NODE_SIGNATURES: Record<NodeType, NodeSignature> = {
     description: "Stores or retrieves data from memory",
   },
 
+  [NODE_TYPES.OBSERVATION_SAVE]: {
+    inputs: [
+      {
+        name: "context",
+        type: DataType.ANY,
+        required: false,
+        description: "Structured state available for resolving content or template inputs",
+      },
+    ],
+    outputs: [
+      {
+        name: "output",
+        type: DataType.JSON,
+        description: "Saved observation payload",
+      },
+    ],
+    description: "Saves a curated observation to durable memory",
+  },
+
+  [NODE_TYPES.OBSERVATION_SEARCH]: {
+    inputs: [
+      {
+        name: "context",
+        type: DataType.ANY,
+        required: false,
+        description: "Structured state available for resolving search inputs",
+      },
+    ],
+    outputs: [
+      {
+        name: "output",
+        type: DataType.JSON,
+        description: "List of matching observations",
+      },
+    ],
+    description: "Searches curated observations with explicit filters",
+  },
+
+  [NODE_TYPES.OBSERVATION_CONTEXT]: {
+    inputs: [
+      {
+        name: "context",
+        type: DataType.ANY,
+        required: false,
+        description: "Structured state available for context assembly",
+      },
+    ],
+    outputs: [
+      {
+        name: "output",
+        type: DataType.JSON,
+        description: "Curated observation context pack",
+      },
+    ],
+    description: "Assembles memory-backed context for prompts and agents",
+  },
+
+  [NODE_TYPES.OBSERVATION_TIMELINE]: {
+    inputs: [
+      {
+        name: "context",
+        type: DataType.ANY,
+        required: false,
+        description: "Structured state available for runtime filters",
+      },
+    ],
+    outputs: [
+      {
+        name: "output",
+        type: DataType.JSON,
+        description: "Ordered timeline of observations",
+      },
+    ],
+    description: "Retrieves recent curated observations in timeline order",
+  },
+
   [NODE_TYPES.TOOL]: {
     inputs: [
       {
