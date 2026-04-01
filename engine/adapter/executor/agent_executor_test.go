@@ -168,6 +168,73 @@ func TestAgentExecutor_Execute_ToolCallThenFinalAnswer(t *testing.T) {
 	}
 }
 
+func TestAgentExecutor_Execute_ContinuesWhenTokenBudgetNotYetUsed(t *testing.T) {
+	client := &sequenceLLMClient{
+		responses: []*LLMResponse{
+			{
+				Content: `{"action":"final_answer","final_answer":"Draft answer."}`,
+				Model:   "gpt-4.1-mini",
+				Usage: &LLMUsage{
+					PromptTokens:     60,
+					CompletionTokens: 40,
+					TotalTokens:      100,
+				},
+			},
+			{
+				Content: `{"action":"final_answer","final_answer":"Expanded answer after using more budget."}`,
+				Model:   "gpt-4.1-mini",
+				Usage: &LLMUsage{
+					PromptTokens:     450,
+					CompletionTokens: 450,
+					TotalTokens:      900,
+				},
+			},
+		},
+	}
+	executor := NewAgentExecutorWithToolInvoker(client, &mockAgentToolInvoker{})
+	node := &entity.Node{
+		ID:   "agent_budget",
+		Type: string(value.NodeTypeAgent),
+		Config: map[string]any{
+			"model":        "gpt-4.1-mini",
+			"provider":     "openai",
+			"tools":        []any{"crm_lookup"},
+			"token_budget": 1000,
+			"max_steps":    4,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewStateWithInput(map[string]any{"ticket": "T-123"}))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if client.calls != 2 {
+		t.Fatalf("client calls = %d, want 2", client.calls)
+	}
+
+	output := result.Output.(map[string]any)
+	if output["final_output"] != "Expanded answer after using more budget." {
+		t.Fatalf("final_output = %v", output["final_output"])
+	}
+	completion, ok := output["token_budget_completion"].(map[string]any)
+	if !ok {
+		t.Fatalf("token_budget_completion = %T, want map[string]any", output["token_budget_completion"])
+	}
+	if completion["continuation_count"] != 1 {
+		t.Fatalf("continuation_count = %v, want 1", completion["continuation_count"])
+	}
+	steps := output["steps"].([]map[string]any)
+	if len(steps) != 2 {
+		t.Fatalf("steps len = %d, want 2", len(steps))
+	}
+	if steps[0]["continuation_nudge"] == nil {
+		t.Fatal("expected first step to record continuation nudge")
+	}
+}
+
 func TestAgentExecutor_Execute_StopsOnMaxSteps(t *testing.T) {
 	client := &sequenceLLMClient{
 		responses: []*LLMResponse{

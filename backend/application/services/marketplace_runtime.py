@@ -79,6 +79,8 @@ def build_runtime_delivery_state(
         }
 
     manifest_kind = str(manifest.get("kind") or "").strip().lower()
+    input_schema = manifest.get("input_schema")
+    output_schema = manifest.get("output_schema")
     if (
         package_kind == "runtime_tool"
         and manifest_kind == "exec"
@@ -103,6 +105,26 @@ def build_runtime_delivery_state(
             "reason": "unsupported_runtime_tool_kind",
             "package_kind": package_kind,
             "cloud_allowed": True,
+            "manifest_version": release.manifest_version,
+            "checksum": _checksum(manifest),
+        }
+
+    if package_kind == "runtime_tool" and not isinstance(input_schema, dict):
+        return {
+            "state": "invalid",
+            "reason": "missing_input_schema",
+            "package_kind": package_kind,
+            "cloud_allowed": bool(release.cloud_allowed),
+            "manifest_version": release.manifest_version,
+            "checksum": _checksum(manifest),
+        }
+
+    if output_schema is not None and not isinstance(output_schema, dict):
+        return {
+            "state": "invalid",
+            "reason": "invalid_output_schema",
+            "package_kind": package_kind,
+            "cloud_allowed": bool(release.cloud_allowed),
             "manifest_version": release.manifest_version,
             "checksum": _checksum(manifest),
         }

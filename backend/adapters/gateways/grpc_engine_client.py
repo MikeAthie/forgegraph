@@ -106,6 +106,8 @@ class GrpcEngineClient(IEngineClient):
         memory_config_json: str | None = None,
         tenant_id: str | None = None,
         session_id: str | None = None,
+        traceparent: str | None = None,
+        tracestate: str | None = None,
     ) -> None:
         """
         Start a workflow run on the engine.
@@ -129,6 +131,8 @@ class GrpcEngineClient(IEngineClient):
                 memory_config_json=memory_config_json or "",
                 tenant_id=tenant_id or "",
                 session_id=session_id or "",
+                traceparent=traceparent or "",
+                tracestate=tracestate or "",
             )
 
             logger.info(f"Starting run {run_id} on engine")
@@ -177,6 +181,8 @@ class GrpcEngineClient(IEngineClient):
         run_id: UUID,
         node_id: str,
         input_json: dict[str, Any],
+        traceparent: str | None = None,
+        tracestate: str | None = None,
     ) -> None:
         """
         Resume a paused workflow (e.g., after human gate approval).
@@ -196,6 +202,8 @@ class GrpcEngineClient(IEngineClient):
                 run_id=str(run_id),
                 node_id=node_id,
                 input_json=json.dumps(input_json) if input_json else "{}",
+                traceparent=traceparent or "",
+                tracestate=tracestate or "",
             )
 
             logger.info(f"Resuming run {run_id} from node {node_id}")
@@ -275,6 +283,8 @@ class MockEngineClient(IEngineClient):
         memory_config_json: str | None = None,
         tenant_id: str | None = None,
         session_id: str | None = None,
+        traceparent: str | None = None,
+        tracestate: str | None = None,
     ) -> None:
         self.calls.append(
             (
@@ -286,6 +296,8 @@ class MockEngineClient(IEngineClient):
                     "memory_config_json": memory_config_json,
                     "tenant_id": tenant_id,
                     "session_id": session_id,
+                    "traceparent": traceparent,
+                    "tracestate": tracestate,
                 },
             )
         )
@@ -302,11 +314,19 @@ class MockEngineClient(IEngineClient):
         run_id: UUID,
         node_id: str,
         input_json: dict[str, Any],
+        traceparent: str | None = None,
+        tracestate: str | None = None,
     ) -> None:
         self.calls.append(
             (
                 "resume_run",
-                {"run_id": run_id, "node_id": node_id, "input_json": input_json},
+                {
+                    "run_id": run_id,
+                    "node_id": node_id,
+                    "input_json": input_json,
+                    "traceparent": traceparent,
+                    "tracestate": tracestate,
+                },
             )
         )
         if self.resume_run_error:

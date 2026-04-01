@@ -594,3 +594,61 @@ func TestToolExecutor_ExecToolBlockedInCloudMode(t *testing.T) {
 		t.Fatalf("unexpected error message: %v", result.Error)
 	}
 }
+
+func TestToolExecutor_TruncatesOversizedToolResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = fmt.Fprint(w, strings.Repeat("A", 80))
+	}))
+	defer server.Close()
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:          "test.http.large-result",
+		Version:       "1.0.0",
+		Kind:          "http",
+		MaxResultSize: 20,
+		HTTP: &tool.HTTPToolConfig{
+			URL:    server.URL,
+			Method: http.MethodGet,
+		},
+	})
+
+	executor := NewToolExecutor(registry)
+	node := &entity.Node{
+		ID:   "tool_large_result",
+		Type: string(value.NodeTypeTool),
+		Config: map[string]any{
+			"tool": "test.http.large-result",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("expected output map, got %T", result.Output)
+	}
+	if truncated, ok := output["result_truncated"].(bool); !ok || !truncated {
+		t.Fatalf("expected result_truncated metadata, got %#v", output)
+	}
+	preview, ok := output["result"].(string)
+	if !ok {
+		t.Fatalf("expected truncated preview string, got %T", output["result"])
+	}
+	if !strings.Contains(preview, "[truncated]") {
+		t.Fatalf("expected truncated preview marker, got %q", preview)
+	}
+	if got := getConfigInt(output["result_original_chars"]); got != 80 {
+		t.Fatalf("result_original_chars = %d, want 80", got)
+	}
+	if got := getConfigInt(output["result_limit_chars"]); got != 20 {
+		t.Fatalf("result_limit_chars = %d, want 20", got)
+	}
+}

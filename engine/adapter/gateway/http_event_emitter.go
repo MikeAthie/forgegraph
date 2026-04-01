@@ -225,7 +225,7 @@ func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.Execut
 
 // send makes the actual HTTP POST request
 func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent) error {
-	body, err := json.Marshal(event)
+	body, err := json.Marshal(toCloudEventEnvelope(event))
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
@@ -241,6 +241,12 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 		signature := signPayload(e.secret, timestamp, body)
 		req.Header.Set("X-Forgegraph-Timestamp", timestamp)
 		req.Header.Set("X-Forgegraph-Signature", signature)
+	}
+	if event.Traceparent != "" {
+		req.Header.Set("traceparent", event.Traceparent)
+	}
+	if event.Tracestate != "" {
+		req.Header.Set("tracestate", event.Tracestate)
 	}
 
 	resp, err := e.client.Do(req)
@@ -261,6 +267,47 @@ func signPayload(secret string, timestamp string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(message)
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func toCloudEventEnvelope(event *port.ExecutionEvent) map[string]any {
+	if event == nil {
+		return map[string]any{}
+	}
+	eventType := map[string]string{
+		"run_started":           "forgegraph.run.started",
+		"run_completed":         "forgegraph.run.completed",
+		"run_failed":            "forgegraph.run.failed",
+		"run_paused":            "forgegraph.run.paused",
+		"run_resumed":           "forgegraph.run.resumed",
+		"run_canceled":          "forgegraph.run.canceled",
+		"run.schema_validation": "forgegraph.run.schema_validation",
+		"node_started":          "forgegraph.node.started",
+		"node_completed":        "forgegraph.node.completed",
+		"node_failed":           "forgegraph.node.failed",
+		"node_skipped":          "forgegraph.node.skipped",
+		"node_retrying":         "forgegraph.node.retrying",
+		"node_stream_chunk":     "forgegraph.node.stream_chunk",
+	}[event.Type.String()]
+	if eventType == "" {
+		eventType = event.Type.String()
+	}
+	envelope := map[string]any{
+		"specversion":     "1.0",
+		"id":              event.EventID,
+		"source":          "forgegraph-engine",
+		"type":            eventType,
+		"subject":         event.RunID,
+		"time":            time.UnixMilli(event.Timestamp).UTC().Format(time.RFC3339Nano),
+		"datacontenttype": "application/json",
+		"data":            event,
+	}
+	if event.Traceparent != "" {
+		envelope["traceparent"] = event.Traceparent
+	}
+	if event.Tracestate != "" {
+		envelope["tracestate"] = event.Tracestate
+	}
+	return envelope
 }
 
 func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) {

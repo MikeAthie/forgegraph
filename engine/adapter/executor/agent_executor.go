@@ -19,6 +19,7 @@ const (
 	defaultAgentMaxSteps     = 6
 	defaultAgentTemperature  = 0.2
 	defaultAgentMaxTokens    = 800
+	defaultAgentTokenBudget  = 0
 	agentStopReasonFinal     = "final_answer"
 	agentStopReasonMaxSteps  = "max_steps_reached"
 	agentStopReasonMaxTools  = "max_tool_calls_reached"
@@ -55,6 +56,7 @@ type agentDecision struct {
 type AgentExecutor struct {
 	client      LLMClient
 	toolInvoker agentToolInvoker
+	registry    *tool.Registry
 }
 
 // NewAgentExecutor creates an agent executor using the shared tool registry.
@@ -64,7 +66,12 @@ func NewAgentExecutor(client LLMClient, registry *tool.Registry, resolver Creden
 
 // NewAgentExecutorWithRuntimeMode creates an agent executor using the shared tool registry and runtime mode.
 func NewAgentExecutorWithRuntimeMode(client LLMClient, registry *tool.Registry, resolver CredentialResolver, runtimeMode string) *AgentExecutor {
-	return NewAgentExecutorWithToolInvoker(client, NewToolExecutorWithResolverAndRuntimeMode(registry, resolver, runtimeMode))
+	agent := NewAgentExecutorWithToolInvoker(
+		client,
+		NewToolExecutorWithResolverAndRuntimeMode(registry, resolver, runtimeMode),
+	)
+	agent.registry = registry
+	return agent
 }
 
 // NewAgentExecutorWithToolInvoker creates an agent executor with a custom tool invoker.
@@ -104,6 +111,15 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	if provider == "" {
 		provider = "openai"
 	}
+	var toolSpecs []ToolSpec
+	if provider == "openai" && e.registry != nil {
+		specs, err := e.buildToolSpecs(allowedTools)
+		if err != nil {
+			log.Printf("agent executor: falling back to legacy tool planning for provider %s: %v", provider, err)
+		} else {
+			toolSpecs = specs
+		}
+	}
 
 	runCtx := port.RunContextFrom(ctx)
 	if validation := validateLLMPolicy(runCtx, provider, model); validation != nil {
@@ -134,6 +150,10 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	maxTokens := getConfigInt(node.Config["max_tokens"])
 	if maxTokens <= 0 {
 		maxTokens = defaultAgentMaxTokens
+	}
+	tokenBudget := getConfigInt(node.Config["token_budget"])
+	if tokenBudget < 0 {
+		tokenBudget = defaultAgentTokenBudget
 	}
 
 	systemPrompt := SubstituteTemplate(node.GetConfigString("system_prompt"), state)
@@ -179,6 +199,8 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	steps := make([]map[string]any, 0, maxSteps)
 	toolCallCount := 0
 	var usageTotals *LLMUsage
+	var budgetCompletion *tokenBudgetCompletion
+	budgetTracker := newBudgetTracker(time.Now())
 	startStepIndex := 1
 
 	if resumeState, ok := loadAgentResumeState(state, node.ID); ok {
@@ -223,6 +245,15 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 			CredentialID: credentialID,
 			TenantID:     port.TenantIDFrom(ctx),
 		}
+		if runCtx != nil && runCtx.TrackLLMCall != nil {
+			if err := runCtx.TrackLLMCall(); err != nil {
+				return port.NewErrorResult(err), nil
+			}
+		}
+		if provider == "openai" && len(toolSpecs) > 0 {
+			request.Tools = toolSpecs
+			request.ToolChoice = "auto"
+		}
 
 		response, err := e.client.Complete(ctx, request)
 		if err != nil {
@@ -236,7 +267,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 		}
 		accumulateUsage(&usageTotals, response.Usage)
 
-		decision, err := parseAgentDecision(response.Content)
+		decision, err := deriveAgentDecision(provider, response)
 		if err != nil {
 			return port.NewErrorResult(domain.NewValidationError("agent_response", err.Error())), nil
 		}
@@ -258,6 +289,40 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 		switch decision.Action {
 		case "final_answer":
 			step["final_answer"] = decision.FinalAnswer
+			if tokenBudget > 0 {
+				action, nudgeMessage, completion := budgetTracker.check(tokenBudget, usageTotalTokens(usageTotals), time.Now())
+				if action == "continue" {
+					step["budget"] = map[string]any{
+						"action":             "continue",
+						"continuation_count": budgetTracker.ContinuationCount,
+						"turn_tokens":        usageTotalTokens(usageTotals),
+						"budget":             tokenBudget,
+					}
+					step["draft_final_answer"] = decision.FinalAnswer
+					step["continuation_nudge"] = nudgeMessage
+					steps = append(steps, step)
+					emitAgentStreamEvent(ctx, map[string]any{
+						"event":              agentStreamEventDecision,
+						"step_index":         stepIndex,
+						"action":             "continue_budget",
+						"continuation_count": budgetTracker.ContinuationCount,
+					})
+					stateSnapshot = state.SnapshotNested()
+					continue
+				}
+				if completion != nil {
+					budgetCompletion = completion
+					step["budget"] = map[string]any{
+						"action":              "stop",
+						"continuation_count":  completion.ContinuationCount,
+						"pct":                 completion.Pct,
+						"turn_tokens":         completion.TurnTokens,
+						"budget":              completion.Budget,
+						"diminishing_returns": completion.DiminishingReturns,
+						"duration_ms":         completion.DurationMs,
+					}
+				}
+			}
 			steps = append(steps, step)
 			emitAgentStreamEvent(ctx, map[string]any{
 				"event":       agentStreamEventDecision,
@@ -266,6 +331,9 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 				"stop_reason": agentStopReasonFinal,
 			})
 			output := buildAgentOutput(node, provider, model, decision.FinalAnswer, agentStopReasonFinal, stepIndex, toolCallCount, steps, usageTotals, memoryContextTrace)
+			if budgetCompletion != nil {
+				output["token_budget_completion"] = tokenBudgetCompletionMap(budgetCompletion)
+			}
 			emitAgentStreamEvent(ctx, map[string]any{
 				"event":       agentStreamEventFinish,
 				"step_index":  stepIndex,
@@ -412,6 +480,7 @@ func buildAgentPrompt(node *entity.Node, stateSnapshot map[string]any, allowedTo
 	builder.WriteString("- Do not use markdown or code fences.\n")
 	builder.WriteString("- Only call tools from the allowed list.\n")
 	builder.WriteString("- Prefer final_answer once the task is complete.\n\n")
+	builder.WriteString("- If a prior step contains continuation_nudge, keep working instead of stopping yet.\n\n")
 
 	if instructions := strings.TrimSpace(node.GetConfigString("instructions")); instructions != "" {
 		builder.WriteString("Task instructions:\n")
@@ -501,6 +570,37 @@ func parseAgentDecision(raw string) (*agentDecision, error) {
 	return nil, fmt.Errorf("agent response must be valid JSON action object")
 }
 
+func deriveAgentDecision(provider string, response *LLMResponse) (*agentDecision, error) {
+	if response == nil {
+		return nil, fmt.Errorf("agent returned empty response")
+	}
+	if provider == "openai" && len(response.ToolCalls) > 0 {
+		call := response.ToolCalls[0]
+		if strings.TrimSpace(call.Name) == "" {
+			return nil, fmt.Errorf("tool call missing function name")
+		}
+		return &agentDecision{
+			Action:    "tool_call",
+			Tool:      call.Name,
+			ToolInput: call.Arguments,
+		}, nil
+	}
+	if provider == "openai" {
+		if parsed, err := parseAgentDecision(response.Content); err == nil {
+			return parsed, nil
+		}
+		finalAnswer := strings.TrimSpace(response.Content)
+		if finalAnswer == "" {
+			return nil, fmt.Errorf("agent returned empty response")
+		}
+		return &agentDecision{
+			Action:      "final_answer",
+			FinalAnswer: finalAnswer,
+		}, nil
+	}
+	return parseAgentDecision(response.Content)
+}
+
 func normalizeAgentDecision(decision *agentDecision) (*agentDecision, error) {
 	decision.Action = strings.TrimSpace(strings.ToLower(decision.Action))
 	decision.Tool = strings.TrimSpace(decision.Tool)
@@ -557,6 +657,33 @@ func containsTool(allowedTools []string, toolName string) bool {
 		}
 	}
 	return false
+}
+
+func (e *AgentExecutor) buildToolSpecs(allowedTools []string) ([]ToolSpec, error) {
+	if len(allowedTools) == 0 {
+		return nil, nil
+	}
+	if e.registry == nil {
+		return nil, fmt.Errorf("agent executor requires tool registry for native tool calling")
+	}
+	specs := make([]ToolSpec, 0, len(allowedTools))
+	for _, toolName := range allowedTools {
+		def, ok := e.registry.Resolve(toolName, "")
+		if !ok {
+			return nil, fmt.Errorf("tool not found: %s", toolName)
+		}
+		if len(def.InputSchema) == 0 {
+			return nil, fmt.Errorf("tool %s requires input_schema for agent autonomy", toolName)
+		}
+		specs = append(specs, ToolSpec{
+			Name:         def.Name,
+			Description:  def.Description,
+			InputSchema:  def.InputSchema,
+			OutputSchema: def.OutputSchema,
+			Strict:       true,
+		})
+	}
+	return specs, nil
 }
 
 func (e *AgentExecutor) executeApprovedToolCall(
@@ -729,6 +856,27 @@ func usageMap(usage *LLMUsage) map[string]any {
 		"prompt_tokens":     usage.PromptTokens,
 		"completion_tokens": usage.CompletionTokens,
 		"total_tokens":      usage.TotalTokens,
+	}
+}
+
+func usageTotalTokens(usage *LLMUsage) int {
+	if usage == nil {
+		return 0
+	}
+	return usage.TotalTokens
+}
+
+func tokenBudgetCompletionMap(completion *tokenBudgetCompletion) map[string]any {
+	if completion == nil {
+		return nil
+	}
+	return map[string]any{
+		"continuation_count":  completion.ContinuationCount,
+		"pct":                 completion.Pct,
+		"turn_tokens":         completion.TurnTokens,
+		"budget":              completion.Budget,
+		"diminishing_returns": completion.DiminishingReturns,
+		"duration_ms":         completion.DurationMs,
 	}
 }
 

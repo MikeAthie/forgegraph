@@ -5,6 +5,9 @@
       "version": "1.0.0",
       "description": "Fetch unread Gmail messages",
       "kind": "http",
+      "input_schema": {
+        "type": "object"
+      },
       "default_config": {
         "provider": "gmail",
         "max_results": 10,
@@ -24,6 +27,9 @@
       "version": "1.0.0",
       "description": "List Google Calendar events",
       "kind": "http",
+      "input_schema": {
+        "type": "object"
+      },
       "default_config": {
         "provider": "google_calendar",
         "max_results": 10
@@ -42,6 +48,9 @@
       "version": "1.0.0",
       "description": "List tasks from Google Tasks default list",
       "kind": "http",
+      "input_schema": {
+        "type": "object"
+      },
       "default_config": {
         "provider": "google_tasks",
         "max_results": 20,

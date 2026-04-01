@@ -12,6 +12,7 @@ type Run struct {
 	InputJSON      map[string]any `json:"input_json,omitempty"`
 	OutputJSON     map[string]any `json:"output_json,omitempty"`
 	ErrorMessage   string         `json:"error_message,omitempty"`
+	TraceID        string         `json:"trace_id,omitempty"`
 }
 
 // NodeRun represents a single node's execution trace
@@ -28,6 +29,8 @@ type NodeRun struct {
 	InputJSON  map[string]any `json:"input_json,omitempty"`
 	OutputJSON map[string]any `json:"output_json,omitempty"`
 	ErrorJSON  map[string]any `json:"error_json,omitempty"`
+	TraceID    string         `json:"trace_id,omitempty"`
+	SpanID     string         `json:"span_id,omitempty"`
 }
 
 // SetEnded marks the node run as ended and calculates duration

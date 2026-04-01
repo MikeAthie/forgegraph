@@ -98,6 +98,12 @@ type ExecutionEvent struct {
 
 	// Duration is the execution time in milliseconds (for completed events)
 	DurationMs int64 `json:"duration_ms,omitempty"`
+
+	// Trace context used for correlation across services.
+	Traceparent string `json:"traceparent,omitempty"`
+	Tracestate  string `json:"tracestate,omitempty"`
+	TraceID     string `json:"trace_id,omitempty"`
+	SpanID      string `json:"span_id,omitempty"`
 }
 
 // NewEvent creates a new execution event with the current timestamp
@@ -152,6 +158,15 @@ func (e *ExecutionEvent) WithDuration(durationMs int64) *ExecutionEvent {
 // WithTenantID adds tenant information to the event
 func (e *ExecutionEvent) WithTenantID(tenantID string) *ExecutionEvent {
 	e.TenantID = tenantID
+	return e
+}
+
+// WithTrace adds trace correlation information to the event.
+func (e *ExecutionEvent) WithTrace(traceparent string, tracestate string, traceID string, spanID string) *ExecutionEvent {
+	e.Traceparent = traceparent
+	e.Tracestate = tracestate
+	e.TraceID = traceID
+	e.SpanID = spanID
 	return e
 }
 

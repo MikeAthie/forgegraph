@@ -36,6 +36,8 @@ from application.services.schema_validation import (
     extract_schema_metadata,
     validate_json_schema,
 )
+from application.services.telemetry import start_backend_span
+from application.services.trace_context import ensure_trace_context
 from infrastructure.orm.models import GraphVersion, Run, User
 
 logger = logging.getLogger(__name__)
@@ -103,6 +105,7 @@ def _run_payload(run: Run, graph_version: GraphVersion) -> dict[str, Any]:
         "output_json": run.output_json,
         "error_message": run.error_message,
         "duration_ms": run.duration_ms,
+        "trace_id": run.trace_id,
         "node_runs": [],
     }
 
@@ -197,9 +200,24 @@ class GenericWebhookView(APIView):
                 )
 
         try:
-            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, owner)
+            prepared_graph = prepare_graph_for_engine(
+                graph_version.graph_json,
+                owner,
+                traceparent=request.headers.get("traceparent"),
+                tracestate=request.headers.get("tracestate"),
+            )
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return run_views._run_preparation_error_response(exc)
+        trace_metadata = ensure_trace_context(
+            traceparent=str(
+                prepared_graph.get("metadata", {}).get("trace", {}).get("traceparent", "")
+            ).strip()
+            or None,
+            tracestate=str(
+                prepared_graph.get("metadata", {}).get("trace", {}).get("tracestate", "")
+            ).strip()
+            or None,
+        )
 
         credential_errors = validate_prompt_credentials(prepared_graph, owner)
         if credential_errors:
@@ -231,6 +249,7 @@ class GenericWebhookView(APIView):
             input_json=input_json,
             output_json=None,
             error_message="",
+            trace_id=trace_metadata["trace_id"],
         )
         broadcast_run_updated(run)
         record_audit_log(
@@ -271,19 +290,31 @@ class GenericWebhookView(APIView):
             session_id=session_id,
         )
         try:
-            with run_views.get_engine_client(callback_url) as engine:
-                engine.start_run(
-                    run_id=run.id,
-                    graph_json=prepared_graph,
-                    input_json=input_json,
-                    memory_config_json=memory_config_json,
-                    tenant_id=tenant_id,
-                    session_id=session_id,
-                )
-                run.status = "running"
-                run.save(update_fields=["status"])
-                record_run_started()
-                broadcast_run_updated(run)
+            with start_backend_span(
+                "integrations.webhook.start",
+                traceparent=trace_metadata["traceparent"],
+                tracestate=trace_metadata["tracestate"],
+                attributes={
+                    "forgegraph.run_id": str(run.id),
+                    "forgegraph.graph_version_id": str(graph_version.id),
+                    "forgegraph.channel": "webhook",
+                },
+            ):
+                with run_views.get_engine_client(callback_url) as engine:
+                    engine.start_run(
+                        run_id=run.id,
+                        graph_json=prepared_graph,
+                        input_json=input_json,
+                        memory_config_json=memory_config_json,
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        traceparent=trace_metadata["traceparent"],
+                        tracestate=trace_metadata["tracestate"],
+                    )
+                    run.status = "running"
+                    run.save(update_fields=["status"])
+                    record_run_started()
+                    broadcast_run_updated(run)
         except EngineConnectionError as exc:
             logger.error("Engine connection failed for webhook run %s: %s", run.id, exc)
             run.status = "failed"

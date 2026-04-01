@@ -306,6 +306,11 @@ RUN_INVOKE_RATE_LIMIT_PER_MIN = int(os.environ.get("RUN_INVOKE_RATE_LIMIT_PER_MI
 RUN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RUN_RATE_LIMIT_WINDOW_SECONDS", "60"))
 RUN_MAX_ACTIVE_PER_TENANT = int(os.environ.get("RUN_MAX_ACTIVE_PER_TENANT", "25"))
 RUN_INPUT_MAX_BYTES = int(os.environ.get("RUN_INPUT_MAX_BYTES", str(256 * 1024)))
+RUN_RUNTIME_LIMIT_MAX_DURATION_MS = int(
+    os.environ.get("RUN_RUNTIME_LIMIT_MAX_DURATION_MS", "300000")
+)
+RUN_RUNTIME_LIMIT_MAX_TOOL_CALLS = int(os.environ.get("RUN_RUNTIME_LIMIT_MAX_TOOL_CALLS", "32"))
+RUN_RUNTIME_LIMIT_MAX_LLM_CALLS = int(os.environ.get("RUN_RUNTIME_LIMIT_MAX_LLM_CALLS", "24"))
 
 # Run queue configuration
 RUN_QUEUE_ENABLED = os.environ.get("RUN_QUEUE_ENABLED", "false").lower() in {"1", "true", "yes"}

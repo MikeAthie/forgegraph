@@ -82,6 +82,7 @@ class RunListSerializer(serializers.Serializer[Any]):
     ended_at = serializers.DateTimeField(read_only=True, allow_null=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
     memory_activity = serializers.JSONField(read_only=True, allow_null=True)
+    trace_id = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class RunDetailSerializer(serializers.Serializer[Any]):
@@ -105,6 +106,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_message = serializers.CharField(read_only=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
+    trace_id = serializers.CharField(read_only=True, allow_blank=True)
     # Human Gate pause fields
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
@@ -128,6 +130,8 @@ class NodeRunSerializer(serializers.Serializer[Any]):
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_json = serializers.JSONField(read_only=True, allow_null=True)
     memory_activity = serializers.JSONField(read_only=True, allow_null=True)
+    trace_id = serializers.CharField(read_only=True, allow_blank=True)
+    span_id = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class RunDetailNodeRunSerializer(NodeRunSerializer):
@@ -225,6 +229,8 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
     error = serializers.CharField(required=False, allow_blank=True)
     timestamp = serializers.IntegerField(required=False)
     duration_ms = serializers.IntegerField(required=False)
+    traceparent = serializers.CharField(required=False, allow_blank=True)
+    tracestate = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         event_type = attrs["type"]

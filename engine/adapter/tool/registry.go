@@ -16,8 +16,11 @@ type Definition struct {
 	Version       string          `json:"version"`
 	Description   string          `json:"description,omitempty"`
 	Kind          string          `json:"kind"` // "http" or "exec"
+	InputSchema   map[string]any  `json:"input_schema,omitempty"`
+	OutputSchema  map[string]any  `json:"output_schema,omitempty"`
 	ConfigSchema  map[string]any  `json:"config_schema,omitempty"`
 	DefaultConfig map[string]any  `json:"default_config,omitempty"`
+	MaxResultSize int             `json:"max_result_size_chars,omitempty"`
 	HTTP          *HTTPToolConfig `json:"http,omitempty"`
 	Exec          *ExecToolConfig `json:"exec,omitempty"`
 }
@@ -192,6 +195,17 @@ func ValidateDefinitionForRuntimeMode(def Definition, runtimeMode string) error 
 	}
 	if strings.TrimSpace(def.Version) == "" {
 		return fmt.Errorf("tool definition %s requires version", def.Name)
+	}
+	if def.InputSchema == nil {
+		return fmt.Errorf("tool definition %s requires input_schema", def.Name)
+	}
+	if def.OutputSchema != nil {
+		if _, ok := def.OutputSchema["type"]; !ok && len(def.OutputSchema) > 0 {
+			return fmt.Errorf("tool definition %s output_schema must be a JSON Schema object", def.Name)
+		}
+	}
+	if def.MaxResultSize < 0 {
+		return fmt.Errorf("tool definition %s max_result_size_chars must be >= 0", def.Name)
 	}
 
 	switch strings.ToLower(strings.TrimSpace(def.Kind)) {

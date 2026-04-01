@@ -69,9 +69,10 @@ func TestRegistryLoadManifestsValidatesDefinitions(t *testing.T) {
 
 func TestValidateDefinitionForRuntimeMode_BlocksExecInCloud(t *testing.T) {
 	err := ValidateDefinitionForRuntimeMode(Definition{
-		Name:    "danger.exec",
-		Version: "1.0.0",
-		Kind:    "exec",
+		Name:        "danger.exec",
+		Version:     "1.0.0",
+		Kind:        "exec",
+		InputSchema: map[string]any{"type": "object"},
 		Exec: &ExecToolConfig{
 			Command: "python",
 		},
@@ -83,14 +84,31 @@ func TestValidateDefinitionForRuntimeMode_BlocksExecInCloud(t *testing.T) {
 
 func TestValidateDefinitionForRuntimeMode_AllowsExecInSelfHosted(t *testing.T) {
 	err := ValidateDefinitionForRuntimeMode(Definition{
-		Name:    "danger.exec",
-		Version: "1.0.0",
-		Kind:    "exec",
+		Name:        "danger.exec",
+		Version:     "1.0.0",
+		Kind:        "exec",
+		InputSchema: map[string]any{"type": "object"},
 		Exec: &ExecToolConfig{
 			Command: "python",
 		},
 	}, RuntimeModeSelfHosted)
 	if err != nil {
 		t.Fatalf("expected exec definition to be allowed in self-hosted mode, got %v", err)
+	}
+}
+
+func TestValidateDefinitionForRuntimeMode_RejectsNegativeMaxResultSize(t *testing.T) {
+	err := ValidateDefinitionForRuntimeMode(Definition{
+		Name:          "large.result.tool",
+		Version:       "1.0.0",
+		Kind:          "http",
+		InputSchema:   map[string]any{"type": "object"},
+		MaxResultSize: -1,
+		HTTP: &HTTPToolConfig{
+			URL: "https://example.com/tool",
+		},
+	}, RuntimeModeSelfHosted)
+	if err == nil {
+		t.Fatal("expected negative max_result_size_chars to fail validation")
 	}
 }

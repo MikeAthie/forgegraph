@@ -55,3 +55,6 @@ tmpclaude-*
 
 # Local notes
 tasks-*.md
+
+# Local reference dump
+/src/

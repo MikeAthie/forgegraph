@@ -77,6 +77,11 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	if e.registry == nil {
 		return port.NewErrorResult(domain.NewValidationError("tool", "tool registry not configured")), nil
 	}
+	if runCtx := port.RunContextFrom(ctx); runCtx != nil && runCtx.TrackToolCall != nil {
+		if err := runCtx.TrackToolCall(); err != nil {
+			return port.NewErrorResult(err), nil
+		}
+	}
 
 	toolName := strings.TrimSpace(node.GetConfigString("tool"))
 	if toolName == "" {
@@ -98,6 +103,22 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 	input, err := resolveToolInput(node, state)
 	if err != nil {
 		return port.NewErrorResult(err), nil
+	}
+	if def.InputSchema != nil {
+		validator, err := service.CompileSchema(def.InputSchema)
+		if err != nil {
+			return port.NewErrorResult(domain.NewValidationError("input_schema", err.Error())), nil
+		}
+		if issues, err := validator.Validate(input); err != nil {
+			return port.NewErrorResult(domain.NewValidationError("input_schema", err.Error())), nil
+		} else if len(issues) > 0 {
+			return port.NewErrorResult(
+				domain.NewValidationError(
+					"input",
+					fmt.Sprintf("tool input invalid: %v", issues[0]["message"]),
+				),
+			), nil
+		}
 	}
 
 	toolConfig := map[string]any{}
@@ -145,16 +166,43 @@ func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *en
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
-		return port.NewSuccessResult(result), nil
+		if err := validateToolOutput(def, result); err != nil {
+			return port.NewErrorResult(err), nil
+		}
+		return port.NewSuccessResult(applyToolResultLimits(def, result)), nil
 	case "exec":
 		result, err := e.executeExecTool(ctx, def, payload, node, toolConfig)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
-		return port.NewSuccessResult(result), nil
+		if err := validateToolOutput(def, result); err != nil {
+			return port.NewErrorResult(err), nil
+		}
+		return port.NewSuccessResult(applyToolResultLimits(def, result)), nil
 	default:
 		return port.NewErrorResult(domain.NewValidationError("kind", "unsupported tool kind")), nil
 	}
+}
+
+func validateToolOutput(def *tool.Definition, result map[string]any) error {
+	if def == nil || def.OutputSchema == nil {
+		return nil
+	}
+	validator, err := service.CompileSchema(def.OutputSchema)
+	if err != nil {
+		return domain.NewValidationError("output_schema", err.Error())
+	}
+	issues, err := validator.Validate(result)
+	if err != nil {
+		return domain.NewValidationError("output_schema", err.Error())
+	}
+	if len(issues) > 0 {
+		return domain.NewValidationError(
+			"output_schema",
+			fmt.Sprintf("tool output invalid: %v", issues[0]["message"]),
+		)
+	}
+	return nil
 }
 
 func (e *ToolExecutor) executeHTTPTool(

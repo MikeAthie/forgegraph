@@ -154,6 +154,17 @@ class MarketplaceReleaseCreateSerializer(serializers.Serializer[Any]):
                 {"runtime_manifest": ["runtime_manifest.version must match the release version."]}
             )
 
+        input_schema = runtime_manifest.get("input_schema")
+        if not isinstance(input_schema, dict):
+            raise serializers.ValidationError(
+                {"runtime_manifest": ["Runtime tool manifests require input_schema."]}
+            )
+        output_schema = runtime_manifest.get("output_schema")
+        if output_schema is not None and not isinstance(output_schema, dict):
+            raise serializers.ValidationError(
+                {"runtime_manifest": ["runtime_manifest.output_schema must be an object."]}
+            )
+
         if kind == "http":
             http_config = runtime_manifest.get("http")
             if not isinstance(http_config, dict):

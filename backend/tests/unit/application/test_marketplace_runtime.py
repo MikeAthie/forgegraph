@@ -62,6 +62,7 @@ def test_build_runtime_manifest_payload_includes_only_ready_runtime_tools(user):
             "name": "crm_lookup",
             "version": "1.2.0",
             "kind": "http",
+            "input_schema": {"type": "object"},
             "http": {"url": "https://example.com/crm", "method": "POST"},
         },
     )
@@ -90,6 +91,7 @@ def test_build_runtime_manifest_payload_includes_only_ready_runtime_tools(user):
             "name": "blocked_exec",
             "version": "1.0.0",
             "kind": "exec",
+            "input_schema": {"type": "object"},
             "exec": {"command": "python"},
         },
     )
@@ -155,6 +157,7 @@ def test_build_runtime_manifest_payload_is_tenant_scoped(user):
             "name": "tenant_only",
             "version": "1.0.0",
             "kind": "http",
+            "input_schema": {"type": "object"},
             "http": {"url": "https://example.com/tool", "method": "POST"},
         },
     )
@@ -190,6 +193,7 @@ def test_build_runtime_delivery_state_allows_exec_in_self_hosted(user):
             "name": "self_hosted_exec",
             "version": "1.0.0",
             "kind": "exec",
+            "input_schema": {"type": "object"},
             "exec": {"command": "python"},
         },
     )
@@ -219,6 +223,7 @@ def test_is_release_installable_in_runtime_mode_blocks_exec_in_cloud(user):
             "name": "blocked_exec",
             "version": "1.0.0",
             "kind": "exec",
+            "input_schema": {"type": "object"},
             "exec": {"command": "python"},
         },
     )

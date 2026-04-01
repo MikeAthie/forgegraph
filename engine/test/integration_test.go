@@ -636,7 +636,7 @@ func TestRuntimeBackedToolCanExecuteAfterRemoteLoad(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(
 			w,
-			`{"data":{"tenant_id":"tenant-1","manifest_version":1,"checksum":"manifest-1","generated_at":"2026-03-12T00:00:00Z","tools":[{"name":"crm_lookup","version":"1.0.0","kind":"http","http":{"url":"%s","method":"POST"}}],"packages":[]}}`,
+			`{"data":{"tenant_id":"tenant-1","manifest_version":1,"checksum":"manifest-1","generated_at":"2026-03-12T00:00:00Z","tools":[{"name":"crm_lookup","version":"1.0.0","kind":"http","input_schema":{"type":"object"},"http":{"url":"%s","method":"POST"}}],"packages":[]}}`,
 			toolServer.URL,
 		)
 	}))
@@ -796,9 +796,10 @@ func TestToolNode_HTTPCallIntegration(t *testing.T) {
 
 	toolRegistry := tool.NewRegistry()
 	toolRegistry.Register(tool.Definition{
-		Name:    "test.http.integration",
-		Version: "1.0.0",
-		Kind:    "http",
+		Name:        "test.http.integration",
+		Version:     "1.0.0",
+		Kind:        "http",
+		InputSchema: map[string]any{"type": "object"},
 		HTTP: &tool.HTTPToolConfig{
 			URL:    server.URL,
 			Method: "POST",

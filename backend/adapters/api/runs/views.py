@@ -29,6 +29,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
+from adapters.api.problem_details import problem_response
 from adapters.api.responses import error_response, success_response
 from adapters.api.runs.memory_activity import (
     derive_node_memory_activity,
@@ -56,6 +57,7 @@ from adapters.ws.runs.broadcast import (
     broadcast_run_updated,
 )
 from application.services.audit_log import record_audit_log
+from application.services.cloudevents import unwrap_engine_event
 from application.services.llm_pricing import calculate_cost
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
@@ -75,7 +77,9 @@ from application.services.schema_validation import (
     extract_schema_metadata,
     validate_json_schema,
 )
+from application.services.telemetry import start_backend_span
 from application.services.tenancy import get_tenant_id_for_user as resolve_tenant_id_for_user
+from application.services.trace_context import ensure_trace_context
 from infrastructure.orm.models import (
     ApprovalTask,
     GraphVersion,
@@ -115,6 +119,24 @@ def get_tenant_id_for_user(user: User) -> str:
 
 def get_tenant_id_for_run(run: Run) -> str:
     return get_tenant_id_for_user(run.owner)
+
+
+def _request_trace_headers(request: Request) -> tuple[str | None, str | None]:
+    return request.headers.get("traceparent"), request.headers.get("tracestate")
+
+
+def _trace_metadata_from_graph(graph_json: dict[str, Any]) -> dict[str, str]:
+    metadata = graph_json.get("metadata")
+    if not isinstance(metadata, dict):
+        return ensure_trace_context()
+    trace = metadata.get("trace")
+    if not isinstance(trace, dict):
+        return ensure_trace_context()
+    return ensure_trace_context(
+        traceparent=str(trace.get("traceparent") or "").strip() or None,
+        tracestate=str(trace.get("tracestate") or "").strip() or None,
+        trace_id=str(trace.get("trace_id") or "").strip() or None,
+    )
 
 
 def run_queryset_for_user(user: User) -> models.QuerySet[Run]:
@@ -462,6 +484,8 @@ def _serialize_node_run_for_detail(
         "input_json": redact_payload(node_run.input_json),
         "output_json": redact_payload(node_run.output_json),
         "error_json": redact_payload(node_run.error_json),
+        "trace_id": node_run.trace_id,
+        "span_id": node_run.span_id,
         "memory_activity": derive_node_memory_activity(
             node_type=str(node_run.node_type),
             output_json=node_run.output_json,
@@ -986,9 +1010,16 @@ class RunStartView(APIView):
 
         # Prepare graph for engine (inline subgraphs, enforce memory namespace)
         try:
-            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
+            traceparent, tracestate = _request_trace_headers(request)
+            prepared_graph = prepare_graph_for_engine(
+                graph_version.graph_json,
+                user,
+                traceparent=traceparent,
+                tracestate=tracestate,
+            )
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
+        trace_metadata = _trace_metadata_from_graph(prepared_graph)
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:
@@ -1009,6 +1040,7 @@ class RunStartView(APIView):
             input_json=input_json,
             output_json=None,
             error_message="",
+            trace_id=trace_metadata["trace_id"],
         )
         broadcast_run_updated(run)
         record_audit_log(
@@ -1048,6 +1080,7 @@ class RunStartView(APIView):
                 "output_json": redact_payload(run.output_json),
                 "error_message": redact_payload(run.error_message),
                 "duration_ms": run.duration_ms,
+                "trace_id": run.trace_id,
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
@@ -1062,20 +1095,32 @@ class RunStartView(APIView):
         )
         tenant_id = get_tenant_id(request)
         try:
-            with get_engine_client(callback_url) as engine:
-                engine.start_run(
-                    run_id=run.id,
-                    graph_json=prepared_graph,
-                    input_json=input_json,
-                    memory_config_json=memory_config_json,
-                    tenant_id=tenant_id,
-                    session_id=session_id,
-                )
-                # Update status to running once engine accepts
-                run.status = "running"
-                run.save(update_fields=["status"])
-                record_run_started()
-                broadcast_run_updated(run)
+            with start_backend_span(
+                "runs.start",
+                traceparent=trace_metadata["traceparent"],
+                tracestate=trace_metadata["tracestate"],
+                attributes={
+                    "forgegraph.run_id": str(run.id),
+                    "forgegraph.graph_version_id": str(graph_version.id),
+                    "forgegraph.trigger": "start",
+                },
+            ):
+                with get_engine_client(callback_url) as engine:
+                    engine.start_run(
+                        run_id=run.id,
+                        graph_json=prepared_graph,
+                        input_json=input_json,
+                        memory_config_json=memory_config_json,
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        traceparent=trace_metadata["traceparent"],
+                        tracestate=trace_metadata["tracestate"],
+                    )
+                    # Update status to running once engine accepts
+                    run.status = "running"
+                    run.save(update_fields=["status"])
+                    record_run_started()
+                    broadcast_run_updated(run)
 
         except EngineConnectionError as e:
             logger.error(f"Engine connection failed for run {run.id}: {e}")
@@ -1242,9 +1287,16 @@ class RunInvokeView(APIView):
 
         graph_version = latest_run.graph_version
         try:
-            graph_json = prepare_graph_for_engine(graph_version.graph_json, user)
+            traceparent, tracestate = _request_trace_headers(request)
+            graph_json = prepare_graph_for_engine(
+                graph_version.graph_json,
+                user,
+                traceparent=traceparent,
+                tracestate=tracestate,
+            )
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
+        trace_metadata = _trace_metadata_from_graph(graph_json)
 
         credential_errors = validate_prompt_credentials(graph_json, user)
         if credential_errors:
@@ -1292,6 +1344,7 @@ class RunInvokeView(APIView):
                 input_json=input_json,
                 output_json=None,
                 error_message="",
+                trace_id=trace_metadata["trace_id"],
             )
 
             RunCheckpoint.objects.create(
@@ -1342,6 +1395,7 @@ class RunInvokeView(APIView):
                 "output_json": redact_payload(run.output_json),
                 "error_message": redact_payload(run.error_message),
                 "duration_ms": run.duration_ms,
+                "trace_id": run.trace_id,
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
@@ -1355,19 +1409,31 @@ class RunInvokeView(APIView):
         )
         tenant_id = get_tenant_id(request)
         try:
-            with get_engine_client(callback_url) as engine:
-                engine.start_run(
-                    run_id=run.id,
-                    graph_json=graph_json,
-                    input_json=input_json,
-                    memory_config_json=memory_config_json,
-                    tenant_id=tenant_id,
-                    session_id=session_id,
-                )
-                run.status = "running"
-                run.save(update_fields=["status"])
-                record_run_started()
-                broadcast_run_updated(run)
+            with start_backend_span(
+                "runs.invoke",
+                traceparent=trace_metadata["traceparent"],
+                tracestate=trace_metadata["tracestate"],
+                attributes={
+                    "forgegraph.run_id": str(run.id),
+                    "forgegraph.graph_version_id": str(graph_version.id),
+                    "forgegraph.trigger": "invoke",
+                },
+            ):
+                with get_engine_client(callback_url) as engine:
+                    engine.start_run(
+                        run_id=run.id,
+                        graph_json=graph_json,
+                        input_json=input_json,
+                        memory_config_json=memory_config_json,
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        traceparent=trace_metadata["traceparent"],
+                        tracestate=trace_metadata["tracestate"],
+                    )
+                    run.status = "running"
+                    run.save(update_fields=["status"])
+                    record_run_started()
+                    broadcast_run_updated(run)
 
         except EngineConnectionError as e:
             logger.error(f"Engine connection failed for run {run.id}: {e}")
@@ -1500,9 +1566,16 @@ class RunReplayView(APIView):
 
         graph_version = run.graph_version
         try:
-            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
+            traceparent, tracestate = _request_trace_headers(request)
+            prepared_graph = prepare_graph_for_engine(
+                graph_version.graph_json,
+                user,
+                traceparent=traceparent,
+                tracestate=tracestate,
+            )
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
+        trace_metadata = _trace_metadata_from_graph(prepared_graph)
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:
@@ -1549,6 +1622,7 @@ class RunReplayView(APIView):
                 input_json=input_json,
                 output_json=None,
                 error_message="",
+                trace_id=trace_metadata["trace_id"],
             )
 
             RunCheckpoint.objects.create(
@@ -1569,6 +1643,8 @@ class RunReplayView(APIView):
                     "from_node_id": node_id or None,
                     "checkpoint_step": checkpoint.step_index,
                 },
+                trace_id=trace_metadata["trace_id"],
+                span_id=trace_metadata["span_id"],
             )
 
         broadcast_run_updated(replay_run)
@@ -1611,6 +1687,7 @@ class RunReplayView(APIView):
                 "output_json": redact_payload(replay_run.output_json),
                 "error_message": redact_payload(replay_run.error_message),
                 "duration_ms": replay_run.duration_ms,
+                "trace_id": replay_run.trace_id,
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
@@ -1624,19 +1701,31 @@ class RunReplayView(APIView):
         )
         tenant_id = get_tenant_id(request)
         try:
-            with get_engine_client(callback_url) as engine:
-                engine.start_run(
-                    run_id=replay_run.id,
-                    graph_json=prepared_graph,
-                    input_json=input_json,
-                    memory_config_json=memory_config_json,
-                    tenant_id=tenant_id,
-                    session_id=session_id,
-                )
-                replay_run.status = "running"
-                replay_run.save(update_fields=["status"])
-                record_run_started()
-                broadcast_run_updated(replay_run)
+            with start_backend_span(
+                "runs.replay",
+                traceparent=trace_metadata["traceparent"],
+                tracestate=trace_metadata["tracestate"],
+                attributes={
+                    "forgegraph.run_id": str(replay_run.id),
+                    "forgegraph.graph_version_id": str(graph_version.id),
+                    "forgegraph.trigger": "replay",
+                },
+            ):
+                with get_engine_client(callback_url) as engine:
+                    engine.start_run(
+                        run_id=replay_run.id,
+                        graph_json=prepared_graph,
+                        input_json=input_json,
+                        memory_config_json=memory_config_json,
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        traceparent=trace_metadata["traceparent"],
+                        tracestate=trace_metadata["tracestate"],
+                    )
+                    replay_run.status = "running"
+                    replay_run.save(update_fields=["status"])
+                    record_run_started()
+                    broadcast_run_updated(replay_run)
 
         except EngineConnectionError as e:
             logger.error(f"Engine connection failed for replay {replay_run.id}: {e}")
@@ -1847,8 +1936,33 @@ class RunResumeView(APIView):
 
         # Call engine ResumeRun
         try:
-            with get_engine_client() as engine:
-                engine.resume_run(run_id=run.id, node_id=node_id, input_json=input_json)
+            traceparent, tracestate = _request_trace_headers(request)
+            trace_context = ensure_trace_context(
+                traceparent=traceparent,
+                tracestate=tracestate,
+                trace_id=run.trace_id or None,
+            )
+            if not run.trace_id:
+                run.trace_id = trace_context["trace_id"]
+                run.save(update_fields=["trace_id"])
+            with start_backend_span(
+                "runs.resume",
+                traceparent=trace_context["traceparent"],
+                tracestate=trace_context["tracestate"],
+                attributes={
+                    "forgegraph.run_id": str(run.id),
+                    "forgegraph.node_id": node_id,
+                    "forgegraph.trigger": "resume",
+                },
+            ):
+                with get_engine_client() as engine:
+                    engine.resume_run(
+                        run_id=run.id,
+                        node_id=node_id,
+                        input_json=input_json,
+                        traceparent=trace_context["traceparent"],
+                        tracestate=trace_context["tracestate"],
+                    )
         except EngineConnectionError as e:
             logger.error(f"Engine connection failed when resuming run {run.id}: {e}")
             return error_response(
@@ -1902,20 +2016,27 @@ class EngineRunEventsView(APIView):
             body=request.body or b"",
         )
         if not ok:
-            return Response(
-                {"detail": "Unauthorized", "reason": reason}, status=status.HTTP_401_UNAUTHORIZED
+            return problem_response(
+                type_uri="https://forgegraph.dev/problems/engine-callback-unauthorized",
+                title="Unauthorized",
+                status=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Engine callback verification failed: {reason}",
             )
 
-        serializer = EngineExecutionEventSerializer(data=request.data)
+        incoming_payload = unwrap_engine_event(request.data)
+        serializer = EngineExecutionEventSerializer(data=incoming_payload)
         if not serializer.is_valid():
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="The request contains invalid fields",
+            return problem_response(
+                type_uri="https://forgegraph.dev/problems/engine-callback-validation",
+                title="Invalid engine callback payload",
                 status=status.HTTP_400_BAD_REQUEST,
-                details=[
-                    {"field": field, "issue": ", ".join(errors)}
-                    for field, errors in serializer.errors.items()
-                ],
+                detail="The request contains invalid fields.",
+                extensions={
+                    "errors": [
+                        {"field": field, "issue": ", ".join(errors)}
+                        for field, errors in serializer.errors.items()
+                    ]
+                },
             )
 
         event = serializer.validated_data
@@ -1923,19 +2044,41 @@ class EngineRunEventsView(APIView):
         try:
             run = Run.objects.get(id=run_id)
         except Run.DoesNotExist:
-            return error_response(
-                code="NOT_FOUND",
-                message=f"Run with id '{run_id}' not found",
+            return problem_response(
+                type_uri="https://forgegraph.dev/problems/run-not-found",
+                title="Run not found",
                 status=status.HTTP_404_NOT_FOUND,
+                detail=f"Run with id '{run_id}' not found.",
             )
+        trace_context = ensure_trace_context(
+            traceparent=str(
+                event.get("traceparent")
+                or request.headers.get("traceparent")
+                or request.headers.get("Traceparent")
+                or ""
+            ).strip()
+            or None,
+            tracestate=str(
+                event.get("tracestate")
+                or request.headers.get("tracestate")
+                or request.headers.get("Tracestate")
+                or ""
+            ).strip()
+            or None,
+            trace_id=run.trace_id or None,
+        )
+        if not run.trace_id:
+            run.trace_id = trace_context["trace_id"]
+            run.save(update_fields=["trace_id"])
 
         tenant_id = str(event.get("tenant_id"))
         expected_tenant_id = get_tenant_id_for_run(run)
         if tenant_id != expected_tenant_id:
-            return error_response(
-                code="FORBIDDEN",
-                message="Tenant mismatch for run event",
+            return problem_response(
+                type_uri="https://forgegraph.dev/problems/tenant-mismatch",
+                title="Tenant mismatch",
                 status=status.HTTP_403_FORBIDDEN,
+                detail="Tenant mismatch for run event.",
             )
 
         event_id = event.get("event_id")
@@ -1958,6 +2101,8 @@ class EngineRunEventsView(APIView):
                     event_type=event_type_name,
                     payload=payload,
                     external_id=None if derived else event_id,
+                    trace_id=trace_context["trace_id"],
+                    span_id=trace_context["span_id"],
                 )
             except IntegrityError:
                 logger.info(
@@ -2095,6 +2240,8 @@ class EngineRunEventsView(APIView):
                 update_fields.append("pause_state_json")
 
             if update_fields:
+                run.trace_id = trace_context["trace_id"]
+                update_fields.append("trace_id")
                 run.save(update_fields=sorted(set(update_fields)))
 
             if event_type == "run_started" and previous_status != "running":
@@ -2124,11 +2271,12 @@ class EngineRunEventsView(APIView):
             node_id = event.get("node_id") or ""
             node_type = event.get("node_type") or ""
             attempt = int(event.get("attempt") or 1)
-
             node_payload: dict[str, Any] = {
                 "node_id": node_id,
                 "node_type": node_type,
                 "attempt": attempt,
+                "trace_id": trace_context["trace_id"],
+                "span_id": trace_context["span_id"],
             }
 
             if event_type == "node_started":
@@ -2194,6 +2342,9 @@ class EngineRunEventsView(APIView):
                 if "error_json" in node_payload:
                     node_run.error_json = node_payload["error_json"]
                     node_update_fields.append("error_json")
+                node_run.trace_id = trace_context["trace_id"]
+                node_run.span_id = trace_context["span_id"]
+                node_update_fields.extend(["trace_id", "span_id"])
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
                 if event_type == "node_failed" and _payload_contains_policy_denied(
@@ -2245,10 +2396,11 @@ class EngineRunEventsView(APIView):
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)
 
-        return error_response(
-            code="VALIDATION_ERROR",
-            message="Unknown event type",
+        return problem_response(
+            type_uri="https://forgegraph.dev/problems/unknown-engine-event",
+            title="Unknown engine event",
             status=status.HTTP_400_BAD_REQUEST,
+            detail="Unknown event type.",
         )
 
 

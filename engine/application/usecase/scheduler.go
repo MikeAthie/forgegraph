@@ -21,6 +21,8 @@ import (
 	"github.com/forgegraph/engine/domain/service"
 	"github.com/forgegraph/engine/domain/value"
 	"github.com/forgegraph/engine/infrastructure/metrics"
+	"github.com/forgegraph/engine/infrastructure/tracing"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // CheckpointMode controls durable checkpoint behavior.
@@ -146,6 +148,8 @@ type runContext struct {
 	runID                string
 	ctx                  context.Context
 	cancel               context.CancelFunc
+	runSpan              oteltrace.Span
+	startedAt            time.Time
 	plan                 *service.ExecutionPlan
 	allowCycles          bool
 	defaultMaxVisits     int
@@ -156,6 +160,9 @@ type runContext struct {
 	initialNodes         []string
 	tenantID             string
 	sessionID            string
+	traceID              string
+	traceparent          string
+	tracestate           string
 	messageBuffer        *entity.MessageBuffer
 	memoryConfig         *entity.MemoryConfig
 	currentSummary       *entity.Summary
@@ -188,12 +195,32 @@ type runContext struct {
 	checkpointSeq    int64
 	lastCheckpointAt time.Time
 
-	stateSchema *service.SchemaValidator
-	schemaMode  string
+	stateSchema   *service.SchemaValidator
+	schemaMode    string
+	runtimeLimits runtimeLimits
+	llmCallCount  atomic.Int64
+	toolCallCount atomic.Int64
+}
+
+type runtimeLimits struct {
+	MaxRunDurationMs int64
+	MaxToolCalls     int64
+	MaxLLMCalls      int64
 }
 
 func (rc *runContext) newEvent(eventType port.EventType) *port.ExecutionEvent {
-	return port.NewEvent(eventType, rc.runID).WithTenantID(rc.tenantID)
+	return port.NewEvent(eventType, rc.runID).
+		WithTenantID(rc.tenantID).
+		WithTrace(rc.traceparent, rc.tracestate, rc.traceID, "")
+}
+
+func (rc *runContext) newEventFromContext(ctx context.Context, eventType port.EventType) *port.ExecutionEvent {
+	event := rc.newEvent(eventType)
+	traceCtx := tracing.FromContext(ctx)
+	if traceCtx.TraceID != "" {
+		event.WithTrace(traceCtx.Traceparent, traceCtx.Tracestate, traceCtx.TraceID, traceCtx.SpanID)
+	}
+	return event
 }
 
 func (s *Scheduler) flushEmitter(reason string) {
@@ -217,6 +244,41 @@ func (rc *runContext) trackMessages(count int) {
 			rc.cooldownRemaining = 0
 		}
 	}
+}
+
+func (rc *runContext) trackLLMCall() error {
+	if rc.runtimeLimits.MaxLLMCalls <= 0 {
+		return nil
+	}
+	count := rc.llmCallCount.Add(1)
+	if count > rc.runtimeLimits.MaxLLMCalls {
+		return domain.NewValidationError("runtime_limits", "run exceeded max_llm_calls_total")
+	}
+	return nil
+}
+
+func (rc *runContext) trackToolCall() error {
+	if rc.runtimeLimits.MaxToolCalls <= 0 {
+		return nil
+	}
+	count := rc.toolCallCount.Add(1)
+	if count > rc.runtimeLimits.MaxToolCalls {
+		return domain.NewValidationError("runtime_limits", "run exceeded max_tool_calls_total")
+	}
+	return nil
+}
+
+func (rc *runContext) validateRuntimeBudget() error {
+	if rc.runtimeLimits.MaxRunDurationMs <= 0 {
+		return nil
+	}
+	if rc.startedAt.IsZero() {
+		return nil
+	}
+	if time.Since(rc.startedAt).Milliseconds() > rc.runtimeLimits.MaxRunDurationMs {
+		return domain.NewValidationError("runtime_limits", "run exceeded max_run_duration_ms")
+	}
+	return nil
 }
 
 func (rc *runContext) canSummarize(cfg entity.SummarizationConfig) bool {
@@ -254,7 +316,25 @@ func (rc *runContext) clearSummaryInFlight() {
 }
 
 // StartRun begins executing a workflow
-func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string, inputJSON string, callbackURL string, memoryConfigJSON string, tenantID string, sessionID string) error {
+func (s *Scheduler) StartRun(
+	ctx context.Context,
+	runID string,
+	graphJSON string,
+	inputJSON string,
+	callbackURL string,
+	memoryConfigJSON string,
+	tenantID string,
+	sessionID string,
+	traceContext ...string,
+) error {
+	traceparent := ""
+	tracestate := ""
+	if len(traceContext) > 0 {
+		traceparent = traceContext[0]
+	}
+	if len(traceContext) > 1 {
+		tracestate = traceContext[1]
+	}
 	type checkpointData struct {
 		nodeID          string
 		stepIndex       int
@@ -304,6 +384,15 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		return fmt.Errorf("invalid graph JSON: %w", err)
 	}
 	hydrateGraphIdentifiers(graphJSON, &graph)
+	engineContractVersion := ""
+	if graph.Metadata != nil {
+		if rawVersion, ok := graph.Metadata["engine_contract_version"].(string); ok {
+			engineContractVersion = strings.TrimSpace(rawVersion)
+		}
+	}
+	if engineContractVersion != "" && engineContractVersion != "2" {
+		return fmt.Errorf("unsupported engine_contract_version: %s", engineContractVersion)
+	}
 
 	// Parse input JSON when starting fresh
 	var input map[string]any
@@ -355,6 +444,7 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 	if checkpoint != nil && checkpoint.memoryConfig != nil {
 		parsedMemoryConfig = checkpoint.memoryConfig
 	}
+	runtimeLimits := extractRuntimeLimits(graph.Metadata)
 
 	// Initialize buffer with configured size
 	var messageBuffer *entity.MessageBuffer
@@ -384,11 +474,20 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 
 	// Create a detached run context.
 	// Do not derive from request-scoped gRPC context, which is canceled as soon as StartRun returns.
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, runSpan, traceCtx := tracing.StartSpan(
+		context.Background(),
+		"forgegraph-engine",
+		"forgegraph.run",
+		traceparent,
+		tracestate,
+	)
+	runCtx, cancel := context.WithCancel(runCtx)
 	rc := &runContext{
 		runID:            runID,
 		ctx:              runCtx,
 		cancel:           cancel,
+		runSpan:          runSpan,
+		startedAt:        time.Now(),
 		plan:             plan,
 		allowCycles:      allowCycles,
 		defaultMaxVisits: defaultMaxVisits,
@@ -398,6 +497,9 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 		graphJSON:        graphJSON,
 		tenantID:         tenantID,
 		sessionID:        sessionID,
+		traceID:          traceCtx.TraceID,
+		traceparent:      traceCtx.Traceparent,
+		tracestate:       traceCtx.Tracestate,
 		messageBuffer:    messageBuffer,
 		memoryConfig:     parsedMemoryConfig,
 		currentSummary: func() *entity.Summary {
@@ -406,24 +508,30 @@ func (s *Scheduler) StartRun(ctx context.Context, runID string, graphJSON string
 			}
 			return nil
 		}(),
-		stateSchema: stateSchema,
-		schemaMode:  schemaMode,
-		pending:     s.initializePending(plan, backEdges),
-		completed:   make(map[string]bool),
-		skipped:     make(map[string]bool),
-		running:     make(map[string]bool),
-		visitCounts: make(map[string]int),
-		workChan:    make(chan string, len(plan.NodeMap)),
+		stateSchema:   stateSchema,
+		schemaMode:    schemaMode,
+		runtimeLimits: runtimeLimits,
+		pending:       s.initializePending(plan, backEdges),
+		completed:     make(map[string]bool),
+		skipped:       make(map[string]bool),
+		running:       make(map[string]bool),
+		visitCounts:   make(map[string]int),
+		workChan:      make(chan string, len(plan.NodeMap)),
 	}
 	rc.memoryCtx = &port.RunContext{
 		TenantID:          rc.tenantID,
 		GraphID:           graph.ID,
 		RunID:             rc.runID,
 		SessionID:         rc.sessionID,
+		TraceID:           rc.traceID,
+		Traceparent:       rc.traceparent,
+		Tracestate:        rc.tracestate,
 		MemoryBuffer:      rc.messageBuffer,
 		MemoryConfig:      rc.memoryConfig,
 		CurrentSummary:    rc.currentSummary,
 		TrackMessage:      rc.trackMessages,
+		TrackLLMCall:      rc.trackLLMCall,
+		TrackToolCall:     rc.trackToolCall,
 		MemoryRetriever:   s.memoryRetriever,
 		ObservationClient: s.observationClient,
 		Policy:            entity.PolicyFromMetadata(graph.Metadata),
@@ -492,6 +600,9 @@ func (s *Scheduler) executeRun(rc *runContext) {
 	defer func() {
 		// Cleanup
 		s.activeRuns.Delete(rc.runID)
+		if rc.runSpan != nil {
+			rc.runSpan.End()
+		}
 		rc.cancel()
 		close(rc.workChan)
 	}()
@@ -602,6 +713,19 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	// Inject metadata for branch and merge nodes
 	s.injectNodeMetadata(rc, node)
 
+	if err := rc.validateRuntimeBudget(); err != nil {
+		s.setError(rc, err)
+		return
+	}
+	nodeCtx, nodeSpan, nodeTrace := tracing.StartSpan(
+		rc.ctx,
+		"forgegraph-engine",
+		"forgegraph.node",
+		"",
+		"",
+	)
+	defer nodeSpan.End()
+
 	// Create node run record
 	nodeRun := &entity.NodeRun{
 		ID:        fmt.Sprintf("%s-%s", rc.runID, nodeID),
@@ -612,14 +736,16 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		Attempt:   1,
 		StartedAt: time.Now(),
 		InputJSON: rc.state.Snapshot(),
+		TraceID:   nodeTrace.TraceID,
+		SpanID:    nodeTrace.SpanID,
 	}
-	if err := s.repository.CreateNodeRun(rc.ctx, nodeRun); err != nil {
+	if err := s.repository.CreateNodeRun(nodeCtx, nodeRun); err != nil {
 		log.Printf("Failed to create node run: %v", err)
 	}
 
 	// Emit node started
 	s.emitter.EmitAsync(
-		rc.newEvent(port.EventTypeNodeStarted).
+		rc.newEventFromContext(nodeCtx, port.EventTypeNodeStarted).
 			WithNode(nodeID, node.Type, node.Name).
 			WithAttempt(1),
 	)
@@ -633,11 +759,11 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			log.Printf("Failed to compute cache key for node %s: %v", nodeID, err)
 		} else {
 			cacheKey = key
-			if cachedOutput, found, err := s.repository.GetCachedNodeResult(rc.ctx, cacheKey); err != nil {
+			if cachedOutput, found, err := s.repository.GetCachedNodeResult(nodeCtx, cacheKey); err != nil {
 				log.Printf("Failed to read cache for node %s: %v", nodeID, err)
 			} else if found {
 				result := &port.NodeExecutionResult{Output: cachedOutput}
-				s.handleNodeSuccess(rc, node, nodeRun, result, 0)
+				s.handleNodeSuccess(nodeCtx, rc, node, nodeRun, result, 0)
 				return
 			}
 		}
@@ -645,7 +771,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 
 	// Execute with timeout and retries
 	startTime := time.Now()
-	result, err := s.executeWithRetries(rc, node, executor, nodeRun)
+	result, err := s.executeWithRetries(nodeCtx, rc, node, executor, nodeRun)
 	duration := time.Since(startTime).Milliseconds()
 
 	// Mark as no longer running
@@ -660,7 +786,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			return
 		}
 
-		if s.handleNodeFailure(rc, node, nodeRun, err, duration) {
+		if s.handleNodeFailure(nodeCtx, rc, node, nodeRun, err, duration) {
 			return
 		}
 		s.setError(rc, domain.NewNodeError(nodeID, node.Type, err))
@@ -674,7 +800,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		if result.Output != nil {
 			nodeRun.OutputJSON = map[string]any{"pause_payload": result.Output}
 		}
-		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+		s.repository.UpdateNodeRun(nodeCtx, nodeRun)
 
 		// Save state snapshot for durable resume
 		stateSnapshot := rc.state.Snapshot()
@@ -702,7 +828,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
 
 		// Emit pause event with the pause payload
-		pauseEvent := rc.newEvent(port.EventTypeRunPaused).
+		pauseEvent := rc.newEventFromContext(nodeCtx, port.EventTypeRunPaused).
 			WithNode(nodeID, node.Type, node.Name)
 		if result.Output != nil {
 			pauseEvent = pauseEvent.WithOutput(map[string]any{"pause_payload": result.Output})
@@ -714,7 +840,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		return
 	}
 
-	s.handleNodeSuccess(rc, node, nodeRun, result, duration)
+	s.handleNodeSuccess(nodeCtx, rc, node, nodeRun, result, duration)
 
 	if cacheEnabled && cacheKey != "" && result.Output != nil {
 		if err := s.repository.SaveCachedNodeResult(context.Background(), cacheKey, result.Output, cacheTTLSeconds); err != nil {
@@ -724,7 +850,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 }
 
 // executeWithRetries handles retry logic
-func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, executor port.NodeExecutor, nodeRun *entity.NodeRun) (*port.NodeExecutionResult, error) {
+func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node *entity.Node, executor port.NodeExecutor, nodeRun *entity.NodeRun) (*port.NodeExecutionResult, error) {
 	policy := s.resolveRetryPolicy(node)
 
 	timeout := node.TimeoutMs
@@ -737,7 +863,7 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 		nodeRun.Attempt = attempt
 
 		// Create timeout context
-		execCtx, cancel := context.WithTimeout(rc.ctx, time.Duration(timeout)*time.Millisecond)
+		execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
 		if node.Type == string(value.NodeTypePrompt) || node.Type == string(value.NodeTypeAgent) {
 			var chunkIndex int64
 			execCtx = port.WithStreamChunkEmitter(execCtx, func(chunk string) {
@@ -746,7 +872,7 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 				}
 				index := atomic.AddInt64(&chunkIndex, 1)
 				s.emitter.EmitAsync(
-					rc.newEvent(port.EventTypeNodeStreamChunk).
+					rc.newEventFromContext(execCtx, port.EventTypeNodeStreamChunk).
 						WithNode(node.ID, node.Type, node.Name).
 						WithAttempt(attempt).
 						WithOutput(
@@ -781,7 +907,7 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 		// Emit retry event
 		if attempt < policy.MaxAttempts {
 			s.emitter.EmitAsync(
-				rc.newEvent(port.EventTypeNodeRetrying).
+				rc.newEventFromContext(execCtx, port.EventTypeNodeRetrying).
 					WithNode(node.ID, node.Type, node.Name).
 					WithAttempt(attempt + 1).
 					WithError(err.Error()),
@@ -803,7 +929,7 @@ func (s *Scheduler) executeWithRetries(rc *runContext, node *entity.Node, execut
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
-func (s *Scheduler) handleNodeFailure(rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, err error, durationMs int64) bool {
+func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, err error, durationMs int64) bool {
 	onError := parseOnErrorPolicy(node)
 	retryPolicy := s.resolveRetryPolicy(node)
 
@@ -817,9 +943,9 @@ func (s *Scheduler) handleNodeFailure(rc *runContext, node *entity.Node, nodeRun
 	nodeRun.Status = string(value.NodeRunStatusFailed)
 	nodeRun.SetEnded(time.Now())
 	nodeRun.ErrorJSON = errorPayload
-	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+	s.repository.UpdateNodeRun(ctx, nodeRun)
 
-	failedEvent := rc.newEvent(port.EventTypeNodeFailed).
+	failedEvent := rc.newEventFromContext(ctx, port.EventTypeNodeFailed).
 		WithNode(node.ID, node.Type, node.Name).
 		WithAttempt(nodeRun.Attempt).
 		WithError(err.Error()).
@@ -988,7 +1114,7 @@ func extractNextNodesFromOutput(output any) ([]string, bool, error) {
 	}
 }
 
-func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, result *port.NodeExecutionResult, durationMs int64) {
+func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, result *port.NodeExecutionResult, durationMs int64) {
 	nodeID := node.ID
 
 	// Allow any node to emit routing directives via output.next_nodes / output.next_node
@@ -999,10 +1125,10 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 			nodeRun.Status = string(value.NodeRunStatusFailed)
 			nodeRun.SetEnded(time.Now())
 			nodeRun.ErrorJSON = map[string]any{"error": directiveErr.Error()}
-			s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+			s.repository.UpdateNodeRun(ctx, nodeRun)
 
 			s.emitter.EmitAsync(
-				rc.newEvent(port.EventTypeNodeFailed).
+				rc.newEventFromContext(ctx, port.EventTypeNodeFailed).
 					WithNode(nodeID, node.Type, node.Name).
 					WithError(directiveErr.Error()).
 					WithDuration(durationMs),
@@ -1024,7 +1150,7 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 		rc.state.SetNodeOutput(nodeID, result.Output)
 	}
 
-	if !s.validateStateSchema(rc, node, nodeRun, durationMs) {
+	if !s.validateStateSchema(ctx, rc, node, nodeRun, durationMs) {
 		return
 	}
 
@@ -1051,10 +1177,10 @@ func (s *Scheduler) handleNodeSuccess(rc *runContext, node *entity.Node, nodeRun
 	if len(nodeOutput) > 0 {
 		nodeRun.OutputJSON = nodeOutput
 	}
-	s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+	s.repository.UpdateNodeRun(ctx, nodeRun)
 
 	// Emit node completed
-	completedEvent := rc.newEvent(port.EventTypeNodeCompleted).
+	completedEvent := rc.newEventFromContext(ctx, port.EventTypeNodeCompleted).
 		WithNode(nodeID, node.Type, node.Name).
 		WithAttempt(nodeRun.Attempt).
 		WithDuration(durationMs)
@@ -1878,6 +2004,14 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 	// Create skipped node run record
 	node := rc.plan.GetNode(nodeID)
 	if node != nil {
+		nodeCtx, span, nodeTrace := tracing.StartSpan(
+			rc.ctx,
+			"scheduler.node",
+			fmt.Sprintf("node.%s.skip", node.Type),
+			rc.traceparent,
+			rc.tracestate,
+		)
+		defer span.End()
 		nodeRun := &entity.NodeRun{
 			ID:        fmt.Sprintf("%s-%s", rc.runID, nodeID),
 			RunID:     rc.runID,
@@ -1885,12 +2019,14 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 			NodeType:  node.Type,
 			Status:    string(value.NodeRunStatusSkipped),
 			StartedAt: time.Now(),
+			TraceID:   nodeTrace.TraceID,
+			SpanID:    nodeTrace.SpanID,
 		}
 		nodeRun.SetEnded(time.Now())
-		s.repository.CreateNodeRun(rc.ctx, nodeRun)
+		s.repository.CreateNodeRun(nodeCtx, nodeRun)
 
 		// Emit skipped event
-		skippedEvent := rc.newEvent(port.EventTypeNodeSkipped).
+		skippedEvent := rc.newEventFromContext(nodeCtx, port.EventTypeNodeSkipped).
 			WithNode(nodeID, node.Type, node.Name)
 		if diagnostics := s.buildLoopDiagnostics(rc, nodeID, "skipped", nil); len(diagnostics) > 0 {
 			skippedEvent = skippedEvent.WithOutput(map[string]any{"loop": diagnostics})
@@ -2068,7 +2204,15 @@ func (s *Scheduler) CancelRun(runID string) error {
 }
 
 // ResumeRun resumes a paused run after human gate approval/rejection
-func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string) error {
+func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string, traceContext ...string) error {
+	traceparent := ""
+	tracestate := ""
+	if len(traceContext) > 0 {
+		traceparent = traceContext[0]
+	}
+	if len(traceContext) > 1 {
+		tracestate = traceContext[1]
+	}
 	// Load pause state
 	pausedNodeID, stateSnapshot, completedNodes, skippedNodes, graphJSON, tenantID, err := s.repository.LoadPauseState(ctx, runID)
 	if err != nil {
@@ -2125,6 +2269,15 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		return fmt.Errorf("invalid stored graph JSON: %w", err)
 	}
 	hydrateGraphIdentifiers(graphJSON, &graph)
+	engineContractVersion := ""
+	if graph.Metadata != nil {
+		if rawVersion, ok := graph.Metadata["engine_contract_version"].(string); ok {
+			engineContractVersion = strings.TrimSpace(rawVersion)
+		}
+	}
+	if engineContractVersion != "" && engineContractVersion != "2" {
+		return fmt.Errorf("unsupported engine_contract_version: %s", engineContractVersion)
+	}
 
 	stateSchemaRaw, schemaMode := extractStateSchemaMetadata(graph.Metadata)
 	stateSchema, err := service.CompileSchema(stateSchemaRaw)
@@ -2137,6 +2290,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	plan := planner.Plan(&graph)
 	allowCycles, defaultMaxVisits := extractLoopMetadata(graph.Metadata)
 	backEdges := s.detectBackEdges(plan, allowCycles)
+	runtimeLimits := extractRuntimeLimits(graph.Metadata)
 
 	// Restore state from snapshot
 	state := entity.NewStateFromSnapshot(stateSnapshot)
@@ -2172,7 +2326,14 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 
 	// Create a detached run context for resumed execution.
 	// Resume RPC context is request-scoped and must not control background workers.
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, runSpan, traceCtx := tracing.StartSpan(
+		context.Background(),
+		"forgegraph-engine",
+		"forgegraph.run.resume",
+		traceparent,
+		tracestate,
+	)
+	runCtx, cancel := context.WithCancel(runCtx)
 	resumeMemoryConfig := defaultMemoryConfig()
 	var resumeBuffer *entity.MessageBuffer
 	if resumeMemoryConfig.Tier1.Enabled {
@@ -2182,6 +2343,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		runID:            runID,
 		ctx:              runCtx,
 		cancel:           cancel,
+		runSpan:          runSpan,
+		startedAt:        time.Now(),
 		plan:             plan,
 		allowCycles:      allowCycles,
 		defaultMaxVisits: defaultMaxVisits,
@@ -2189,10 +2352,14 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		state:            state,
 		graphJSON:        graphJSON,
 		tenantID:         tenantID,
+		traceID:          traceCtx.TraceID,
+		traceparent:      traceCtx.Traceparent,
+		tracestate:       traceCtx.Tracestate,
 		messageBuffer:    resumeBuffer,
 		memoryConfig:     resumeMemoryConfig,
 		stateSchema:      stateSchema,
 		schemaMode:       schemaMode,
+		runtimeLimits:    runtimeLimits,
 		pending:          s.initializePending(plan, backEdges),
 		completed:        make(map[string]bool),
 		skipped:          make(map[string]bool),
@@ -2205,10 +2372,15 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		GraphID:           graph.ID,
 		RunID:             rc.runID,
 		SessionID:         rc.sessionID,
+		TraceID:           rc.traceID,
+		Traceparent:       rc.traceparent,
+		Tracestate:        rc.tracestate,
 		MemoryBuffer:      rc.messageBuffer,
 		MemoryConfig:      rc.memoryConfig,
 		CurrentSummary:    rc.currentSummary,
 		TrackMessage:      rc.trackMessages,
+		TrackLLMCall:      rc.trackLLMCall,
+		TrackToolCall:     rc.trackToolCall,
 		MemoryRetriever:   s.memoryRetriever,
 		ObservationClient: s.observationClient,
 	}
@@ -2271,6 +2443,9 @@ func (s *Scheduler) executeResumedRun(rc *runContext, startNodes []string) {
 	defer func() {
 		// Cleanup
 		s.activeRuns.Delete(rc.runID)
+		if rc.runSpan != nil {
+			rc.runSpan.End()
+		}
 		rc.cancel()
 		close(rc.workChan)
 	}()
@@ -2384,7 +2559,7 @@ func (s *Scheduler) evaluateEdgeConditions(rc *runContext, edges []*entity.Edge)
 	return next, skipped, true, nil
 }
 
-func (s *Scheduler) validateStateSchema(rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, durationMs int64) bool {
+func (s *Scheduler) validateStateSchema(ctx context.Context, rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, durationMs int64) bool {
 	if rc.stateSchema == nil {
 		return true
 	}
@@ -2416,10 +2591,10 @@ func (s *Scheduler) validateStateSchema(rc *runContext, node *entity.Node, nodeR
 			"error":  errMsg,
 			"issues": issues,
 		}
-		s.repository.UpdateNodeRun(rc.ctx, nodeRun)
+		s.repository.UpdateNodeRun(ctx, nodeRun)
 
 		s.emitter.EmitAsync(
-			rc.newEvent(port.EventTypeNodeFailed).
+			rc.newEventFromContext(ctx, port.EventTypeNodeFailed).
 				WithNode(node.ID, node.Type, node.Name).
 				WithError(errMsg).
 				WithDuration(durationMs),
@@ -2447,6 +2622,38 @@ func extractStateSchemaMetadata(metadata map[string]any) (map[string]any, string
 		return rawSchema, mode
 	}
 	return nil, mode
+}
+
+func extractRuntimeLimits(metadata map[string]any) runtimeLimits {
+	limits := runtimeLimits{}
+	if metadata == nil {
+		return limits
+	}
+	raw, ok := metadata["runtime_limits"].(map[string]any)
+	if !ok {
+		return limits
+	}
+	limits.MaxRunDurationMs = int64(getRuntimeLimitInt(raw["max_run_duration_ms"]))
+	limits.MaxToolCalls = int64(getRuntimeLimitInt(raw["max_tool_calls_total"]))
+	limits.MaxLLMCalls = int64(getRuntimeLimitInt(raw["max_llm_calls_total"]))
+	return limits
+}
+
+func getRuntimeLimitInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float32:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
 }
 
 func hydrateGraphIdentifiers(graphJSON string, graph *entity.Graph) {

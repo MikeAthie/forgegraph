@@ -60,6 +60,15 @@ type LLMRequest struct {
 
 	// APIKey is an optional direct key override (rare; prefer CredentialID)
 	APIKey string
+
+	// Tools exposes provider-native tool calling when supported.
+	Tools []ToolSpec
+
+	// ToolChoice controls provider-native tool selection policy.
+	ToolChoice string
+
+	// StructuredOutput requests provider-native JSON schema output.
+	StructuredOutput *StructuredOutputSpec
 }
 
 // LLMMessage represents a single message in a chat conversation
@@ -81,6 +90,33 @@ type LLMResponse struct {
 
 	// FinishReason indicates why generation stopped
 	FinishReason string
+
+	// ToolCalls contains provider-native tool calls, if any.
+	ToolCalls []ToolCall
+
+	// StructuredData contains parsed structured output when requested.
+	StructuredData any
+}
+
+type ToolSpec struct {
+	Name         string
+	Description  string
+	InputSchema  map[string]any
+	OutputSchema map[string]any
+	Strict       bool
+}
+
+type ToolCall struct {
+	ID           string
+	Name         string
+	Arguments    map[string]any
+	RawArguments string
+}
+
+type StructuredOutputSpec struct {
+	Name   string
+	Schema map[string]any
+	Strict bool
 }
 
 // LLMUsage tracks token usage
@@ -130,6 +166,11 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	runCtx := port.RunContextFrom(ctx)
+	if runCtx != nil && runCtx.TrackLLMCall != nil {
+		if err := runCtx.TrackLLMCall(); err != nil {
+			return port.NewErrorResult(err), nil
+		}
+	}
 
 	// Get prompt template (required)
 	promptTemplate, ok := node.Config["prompt_template"].(string)
@@ -242,6 +283,15 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		CredentialID: credentialID,
 		TenantID:     port.TenantIDFrom(ctx),
 	}
+	if provider == "openai" {
+		if schemaRaw, ok := node.Config["output_schema"].(map[string]any); ok && len(schemaRaw) > 0 {
+			request.StructuredOutput = &StructuredOutputSpec{
+				Name:   fmt.Sprintf("%s_output", node.ID),
+				Schema: schemaRaw,
+				Strict: true,
+			}
+		}
+	}
 
 	cacheEnabled := getConfigBool(node.Config["cache_enabled"])
 	cacheTTLSeconds := getConfigInt(node.Config["cache_ttl_seconds"])
@@ -330,10 +380,14 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 
 	// Build output
 	output := map[string]any{
-		"prompt":   prompt,
-		"response": response.Content,
-		"model":    response.Model,
-		"provider": provider,
+		"prompt":       prompt,
+		"response":     response.Content,
+		"raw_response": response.Content,
+		"model":        response.Model,
+		"provider":     provider,
+	}
+	if response.StructuredData != nil {
+		output["structured_response"] = response.StructuredData
 	}
 	if cached {
 		output["cached"] = true
@@ -382,7 +436,11 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 			targetMode = "response"
 		}
 		if targetMode == "response" {
-			target = response.Content
+			if response.StructuredData != nil {
+				target = response.StructuredData
+			} else {
+				target = response.Content
+			}
 			if schemaType, ok := schemaRaw["type"].(string); ok && (schemaType == "object" || schemaType == "array") {
 				trimmed := strings.TrimSpace(response.Content)
 				if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
@@ -406,9 +464,12 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		if len(issues) > 0 {
 			if mode == "warn" {
 				output["schema_errors"] = issues
+				output["schema_validation"] = map[string]any{"valid": false, "errors": issues}
 			} else {
 				return port.NewErrorResult(domain.NewValidationError("output_schema", fmt.Sprintf("prompt output invalid: %v", issues[0]["message"]))), nil
 			}
+		} else {
+			output["schema_validation"] = map[string]any{"valid": true, "errors": []any{}}
 		}
 	}
 

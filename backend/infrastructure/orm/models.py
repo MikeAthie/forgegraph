@@ -858,6 +858,7 @@ class Run(models.Model):
     input_json = models.JSONField(default=dict, blank=True)
     output_json = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
+    trace_id = models.CharField(max_length=32, blank=True, default="")
 
     # Human Gate pause state (for durable resume)
     pause_state_json = models.JSONField(null=True, blank=True)
@@ -870,6 +871,7 @@ class Run(models.Model):
             models.Index(fields=["owner", "started_at"], name="runs_owner_started_idx"),
             models.Index(fields=["owner", "status"], name="runs_owner_status_idx"),
             models.Index(fields=["owner", "thread_id"], name="runs_owner_thread_idx"),
+            models.Index(fields=["trace_id"], name="runs_trace_id_idx"),
         ]
 
     def __str__(self) -> str:
@@ -941,6 +943,8 @@ class RunEvent(models.Model):
     )
     event_type = models.CharField(max_length=64)
     payload = models.JSONField(default=dict)
+    trace_id = models.CharField(max_length=32, blank=True, default="")
+    span_id = models.CharField(max_length=16, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -949,6 +953,7 @@ class RunEvent(models.Model):
         indexes = [
             models.Index(fields=["run", "created_at"], name="run_events_run_time_idx"),
             models.Index(fields=["run", "external_id"], name="run_events_run_external_idx"),
+            models.Index(fields=["trace_id"], name="run_events_trace_id_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -1484,12 +1489,15 @@ class NodeRun(models.Model):
     input_json = models.JSONField(default=dict, blank=True)
     output_json = models.JSONField(null=True, blank=True)
     error_json = models.JSONField(null=True, blank=True)
+    trace_id = models.CharField(max_length=32, blank=True, default="")
+    span_id = models.CharField(max_length=16, blank=True, default="")
 
     class Meta:
         db_table = "node_runs"
         ordering = ["started_at"]
         indexes = [
             models.Index(fields=["run", "started_at", "attempt"], name="node_runs_run_time_idx"),
+            models.Index(fields=["trace_id"], name="node_runs_trace_id_idx"),
         ]
 
     def __str__(self) -> str:

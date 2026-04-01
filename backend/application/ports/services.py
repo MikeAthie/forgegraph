@@ -41,6 +41,8 @@ class IEngineClient(ABC):
         memory_config_json: str | None = None,
         tenant_id: str | None = None,
         session_id: str | None = None,
+        traceparent: str | None = None,
+        tracestate: str | None = None,
     ) -> None:
         """Start a workflow run on the engine."""
         ...
@@ -56,6 +58,8 @@ class IEngineClient(ABC):
         run_id: UUID,
         node_id: str,
         input_json: dict[str, Any],
+        traceparent: str | None = None,
+        tracestate: str | None = None,
     ) -> None:
         """Resume a paused workflow (e.g., after human gate approval)."""
         ...

@@ -256,3 +256,33 @@ def test_prepare_graph_for_engine_ignores_non_oauth_keys_for_oauth_tool_provider
     config = prepared["nodes"][0]["config"]
     assert config["provider"] == "gmail"
     assert config["credential_id"] == str(oauth_credential.id)
+
+
+def test_prepare_graph_for_engine_injects_runtime_contract_metadata() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "prompt-1",
+                "type": "prompt",
+                "name": "Prompt",
+                "config": {"prompt_template": "Hello"},
+            }
+        ],
+        "edges": [],
+    }
+
+    prepared = prepare_graph_for_engine(
+        graph_json,
+        owner,
+        traceparent="00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+        tracestate="vendor=test",
+    )
+
+    metadata = prepared["metadata"]
+    assert metadata["engine_contract_version"] == "2"
+    assert "dispatch_transformations" in metadata
+    assert "trace" in metadata
+    assert metadata["trace"]["trace_id"] == "0123456789abcdef0123456789abcdef"
+    assert metadata["trace"]["tracestate"] == "vendor=test"
+    assert metadata["runtime_limits"]["max_run_duration_ms"] > 0

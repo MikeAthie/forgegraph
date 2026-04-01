@@ -21,6 +21,7 @@ from application.services.credential_state import (
     is_oauth_provider,
 )
 from application.services.tenancy import get_tenant_id_for_user
+from application.services.trace_context import default_runtime_limits, ensure_trace_context
 from infrastructure.orm.models import (
     APIKey,
     GraphVersion,
@@ -372,17 +373,34 @@ def _resolve_prompt_templates_in_place(graph_json: dict[str, Any], owner: User) 
         config["prompt_template"] = content
 
 
-def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
+def prepare_graph_for_engine(
+    graph_json: dict[str, Any],
+    owner: User,
+    *,
+    traceparent: str | None = None,
+    tracestate: str | None = None,
+) -> dict[str, Any]:
     """Prepare graph JSON for engine execution (strip sentinels, expand subgraphs, enforce memory isolation)."""
     cleaned = strip_sentinel_edges(graph_json)
     expanded = expand_subgraphs(cleaned, owner)
     namespaced = apply_memory_namespace_prefix(expanded, owner.id)
     resolved = resolve_prompt_templates(namespaced, owner)
     prepared = apply_tool_runtime_credentials(resolved, owner)
+    metadata_raw = prepared.get("metadata")
+    metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
+    transformations = [
+        "strip_sentinel_edges",
+        "expand_subgraphs",
+        "namespace_memory",
+        "resolve_prompt_templates",
+        "apply_tool_runtime_credentials",
+    ]
+    metadata["engine_contract_version"] = "2"
+    metadata["dispatch_transformations"] = transformations
+    metadata["trace"] = ensure_trace_context(traceparent=traceparent, tracestate=tracestate)
+    metadata["runtime_limits"] = default_runtime_limits(settings)
     policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(owner)).first()
     if policy:
-        metadata_raw = prepared.get("metadata")
-        metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
         metadata["policy"] = {
             "http": {
                 "allowlist": policy.http_allowlist,
@@ -394,7 +412,7 @@ def prepare_graph_for_engine(graph_json: dict[str, Any], owner: User) -> dict[st
                 "allowed_models": policy.allowed_models,
             },
         }
-        prepared["metadata"] = metadata
+    prepared["metadata"] = metadata
     return prepared
 
 
