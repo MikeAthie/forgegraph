@@ -32,6 +32,7 @@ from application.services.run_queue import (
     release_stale_entries,
 )
 from application.services.tenancy import get_tenant_id_for_user
+from application.services.trace_context import ensure_trace_context
 from infrastructure.orm.models import RunQueueEntry
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,10 @@ class Command(BaseCommand):
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
         )
+        trace_context = ensure_trace_context(trace_id=run.trace_id or None)
+        if not run.trace_id:
+            run.trace_id = trace_context["trace_id"]
+            run.save(update_fields=["trace_id"])
 
         try:
             with get_engine_client(callback_url) as engine:
@@ -128,6 +133,8 @@ class Command(BaseCommand):
                     memory_config_json=memory_config_json,
                     tenant_id=tenant_id,
                     session_id=session_id,
+                    traceparent=trace_context["traceparent"],
+                    tracestate=trace_context["tracestate"],
                 )
         except EngineConnectionError as exc:
             logger.error("Engine connection failed for run %s: %s", run.id, exc)

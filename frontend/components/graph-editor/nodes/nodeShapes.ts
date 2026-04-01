@@ -25,9 +25,9 @@ export type NodeShape = "pill" | "rectangle" | "diamond";
 export interface NodeVisualConfig {
   shape: NodeShape;
   icon: LucideIcon;
-  accentColor: string;     // Tailwind color stem e.g. "violet-500"
-  bgClass: string;         // Full bg class e.g. "bg-violet-500"
-  textClass: string;       // Text color for labels e.g. "text-violet-300"
+  accentColor: string; // Tailwind color stem e.g. "violet-500"
+  bgClass: string; // Full bg class e.g. "bg-violet-500"
+  textClass: string; // Text color for labels e.g. "text-violet-300"
 }
 
 export const NODE_VISUALS: Record<string, NodeVisualConfig> = {
@@ -153,11 +153,7 @@ export const END_VISUAL: NodeVisualConfig = {
  * Resolve the visual config for a node based on its type and flags.
  * Trigger/End flags take priority over the type's default shape.
  */
-export function getNodeVisual(
-  nodeType: string,
-  isTrigger?: boolean,
-  isEnd?: boolean,
-): NodeVisualConfig {
+export function getNodeVisual(nodeType: string, isTrigger?: boolean, isEnd?: boolean): NodeVisualConfig {
   if (isTrigger) return TRIGGER_VISUAL;
   if (isEnd) return END_VISUAL;
   return NODE_VISUALS[nodeType] ?? NODE_VISUALS[NODE_TYPES.PROMPT];

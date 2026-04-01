@@ -1,14 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  CheckCircle,
-  AlertCircle,
-  AlertTriangle,
-  ChevronUp,
-  ChevronDown,
-  ExternalLink,
-} from "lucide-react";
+import { CheckCircle, AlertCircle, AlertTriangle, ChevronUp, ChevronDown, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useValidation } from "@/contexts/ValidationContext";
 import { type ValidationError, getQuickFixesForError } from "@/lib/graph-validator";
@@ -24,19 +17,8 @@ export interface ValidationStatusBarProps {
 /**
  * Status bar showing validation status at the bottom of the graph editor
  */
-export function ValidationStatusBar({
-  onFocusNode,
-  onFocusEdge,
-  onQuickFix,
-  className,
-}: ValidationStatusBarProps) {
-  const {
-    isValid,
-    errors,
-    warnings,
-    isStatusBarExpanded,
-    setStatusBarExpanded,
-  } = useValidation();
+export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, className }: ValidationStatusBarProps) {
+  const { isValid, errors, warnings, isStatusBarExpanded, setStatusBarExpanded } = useValidation();
 
   const totalIssues = errors.length + warnings.length;
 
@@ -45,14 +27,12 @@ export function ValidationStatusBar({
       <div
         className={cn(
           "flex items-center justify-between px-4 py-2 bg-emerald-500/10 border-t border-emerald-500/30",
-          className
+          className,
         )}
       >
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-emerald-500" />
-          <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-            Graph Valid
-          </span>
+          <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Graph Valid</span>
         </div>
       </div>
     );
@@ -63,7 +43,7 @@ export function ValidationStatusBar({
       className={cn(
         "bg-background border-t",
         errors.length > 0 ? "border-destructive/50" : "border-amber-500/50",
-        className
+        className,
       )}
     >
       {/* Summary Bar */}
@@ -72,9 +52,7 @@ export function ValidationStatusBar({
         onClick={() => setStatusBarExpanded(!isStatusBarExpanded)}
         className={cn(
           "w-full flex items-center justify-between px-4 py-2 hover:bg-muted/50 transition-colors",
-          errors.length > 0
-            ? "bg-destructive/10"
-            : "bg-amber-500/10"
+          errors.length > 0 ? "bg-destructive/10" : "bg-amber-500/10",
         )}
       >
         <div className="flex items-center gap-3">
@@ -100,9 +78,7 @@ export function ValidationStatusBar({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {isStatusBarExpanded ? "Hide" : "Show"} details
-          </span>
+          <span className="text-xs text-muted-foreground">{isStatusBarExpanded ? "Hide" : "Show"} details</span>
           {isStatusBarExpanded ? (
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
           ) : (
@@ -147,12 +123,7 @@ interface ValidationErrorItemProps {
   onQuickFix?: (error: ValidationError, fixLabel: string) => void;
 }
 
-function ValidationErrorItem({
-  error,
-  onFocusNode,
-  onFocusEdge,
-  onQuickFix,
-}: ValidationErrorItemProps) {
+function ValidationErrorItem({ error, onFocusNode, onFocusEdge, onQuickFix }: ValidationErrorItemProps) {
   const isError = error.severity === "error";
   const quickFixes = getQuickFixesForError(error);
 
@@ -172,28 +143,14 @@ function ValidationErrorItem({
         <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
       )}
       <div className="flex-1 min-w-0">
-        <p
-          className={cn(
-            "text-sm font-medium",
-            isError ? "text-destructive" : "text-amber-600 dark:text-amber-400"
-          )}
-        >
+        <p className={cn("text-sm font-medium", isError ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
           {error.message}
         </p>
-        {error.suggestion && (
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {error.suggestion}
-          </p>
-        )}
+        {error.suggestion && <p className="text-xs text-muted-foreground mt-0.5">{error.suggestion}</p>}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {(error.nodeId || error.edgeId) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleGoTo}
-            className="h-7 px-2 text-xs"
-          >
+          <Button variant="ghost" size="sm" onClick={handleGoTo} className="h-7 px-2 text-xs">
             <ExternalLink className="w-3 h-3 mr-1" />
             Go to
           </Button>

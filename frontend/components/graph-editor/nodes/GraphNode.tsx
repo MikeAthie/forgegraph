@@ -6,10 +6,7 @@ import { cn } from "@/lib/utils";
 import { NODE_TYPES, type NodeType } from "../../../lib/graph-types";
 import { useNodeValidation } from "@/contexts/ValidationContext";
 import { DataTypeIndicator, NodeTypeBadge } from "../DataTypeIndicator";
-import {
-  getPrimaryInputType,
-  getPrimaryOutputType,
-} from "@/lib/type-inference";
+import { getPrimaryInputType, getPrimaryOutputType } from "@/lib/type-inference";
 
 const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
   [NODE_TYPES.AGENT]: {
@@ -106,10 +103,7 @@ interface GraphNodeData {
   timeout_ms?: number;
 }
 
-function getHandleTestId(
-  direction: "source" | "target",
-  handleId: string = "default",
-): string {
+function getHandleTestId(direction: "source" | "target", handleId: string = "default"): string {
   return `node-handle-${direction}-${handleId}`;
 }
 
@@ -125,9 +119,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
 
   // Validation state
   const { hasError, hasWarning, errors, warnings } = useNodeValidation(id);
-  const validationMessages = [...errors, ...warnings]
-    .map((e) => e.message)
-    .join(", ");
+  const validationMessages = [...errors, ...warnings].map((e) => e.message).join(", ");
 
   const executionDotClass: string | null =
     executionStatus === "succeeded"
@@ -148,10 +140,8 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
 
   const isSkipped = executionStatus === "skipped";
   const hasAdvancedConfig =
-    Boolean(
-      nodeData.retry_policy?.max_attempts &&
-      nodeData.retry_policy.max_attempts > 1,
-    ) || Boolean(nodeData.timeout_ms);
+    Boolean(nodeData.retry_policy?.max_attempts && nodeData.retry_policy.max_attempts > 1) ||
+    Boolean(nodeData.timeout_ms);
 
   // Get input/output types for this node
   const { inputType, outputType } = useMemo(() => {
@@ -170,9 +160,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setNodes((nodes) => nodes.filter((n) => n.id !== id));
-    setEdges((edges) =>
-      edges.filter((e) => e.source !== id && e.target !== id),
-    );
+    setEdges((edges) => edges.filter((e) => e.source !== id && e.target !== id));
   };
 
   return (
@@ -182,18 +170,12 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
       data-node-type={nodeType}
       className={cn(
         "group relative min-w-[200px] rounded-xl border border-border bg-card shadow-sm transition-all",
-        isDisabled &&
-          "opacity-50 grayscale border-dashed border-muted-foreground/40",
+        isDisabled && "opacity-50 grayscale border-dashed border-muted-foreground/40",
         isSkipped && "opacity-70",
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
         // Validation error/warning styles
-        hasError &&
-          !selected &&
-          "border-destructive/60 shadow-destructive/20 shadow-md",
-        hasWarning &&
-          !hasError &&
-          !selected &&
-          "border-amber-500/60 shadow-amber-500/20 shadow-md",
+        hasError && !selected && "border-destructive/60 shadow-destructive/20 shadow-md",
+        hasWarning && !hasError && !selected && "border-amber-500/60 shadow-amber-500/20 shadow-md",
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -203,11 +185,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
         data-testid="node-accent-strip"
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 h-1",
-          hasError
-            ? "bg-destructive"
-            : hasWarning
-              ? "bg-amber-500"
-              : styles.strip,
+          hasError ? "bg-destructive" : hasWarning ? "bg-amber-500" : styles.strip,
         )}
       />
 
@@ -220,11 +198,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
           )}
           title={validationMessages}
         >
-          {hasError ? (
-            <AlertCircle className="w-3 h-3 text-white" />
-          ) : (
-            <AlertTriangle className="w-3 h-3 text-white" />
-          )}
+          {hasError ? <AlertCircle className="w-3 h-3 text-white" /> : <AlertTriangle className="w-3 h-3 text-white" />}
         </div>
       )}
 
@@ -278,23 +252,13 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
         </div>
 
         {/* Node Name */}
-        <div
-          className={cn(
-            "text-sm font-semibold truncate text-foreground",
-            isDisabled && "line-through",
-          )}
-        >
-          <span data-testid="graph-node-label">
-            {nodeData.label || "Unnamed Node"}
-          </span>
+        <div className={cn("text-sm font-semibold truncate text-foreground", isDisabled && "line-through")}>
+          <span data-testid="graph-node-label">{nodeData.label || "Unnamed Node"}</span>
         </div>
 
         {/* Config Preview */}
         {nodeData.config && Object.keys(nodeData.config).length > 0 && (
-          <div
-            data-testid="node-config-preview"
-            className="mt-2 text-xs text-muted-foreground truncate"
-          >
+          <div data-testid="node-config-preview" className="mt-2 text-xs text-muted-foreground truncate">
             {getConfigPreview(nodeType, nodeData.config)}
           </div>
         )}
@@ -302,15 +266,14 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
         {/* Advanced Config Indicator */}
         {hasAdvancedConfig && (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            {nodeData.retry_policy?.max_attempts &&
-              nodeData.retry_policy.max_attempts > 1 && (
-                <span
-                  className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40"
-                  title={`Max ${nodeData.retry_policy.max_attempts} attempts`}
-                >
-                  {nodeData.retry_policy.max_attempts}x retry
-                </span>
-              )}
+            {nodeData.retry_policy?.max_attempts && nodeData.retry_policy.max_attempts > 1 && (
+              <span
+                className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40"
+                title={`Max ${nodeData.retry_policy.max_attempts} attempts`}
+              >
+                {nodeData.retry_policy.max_attempts}x retry
+              </span>
+            )}
             {nodeData.timeout_ms && (
               <span
                 className="px-1.5 py-0.5 rounded border border-border/50 bg-muted/40"
@@ -400,10 +363,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
   );
 }
 
-function getConfigPreview(
-  nodeType: string,
-  config: Record<string, unknown>,
-): string {
+function getConfigPreview(nodeType: string, config: Record<string, unknown>): string {
   switch (nodeType) {
     case NODE_TYPES.AGENT: {
       const model = (config.model as string) ?? "";
@@ -411,37 +371,25 @@ function getConfigPreview(
       if (model) {
         return `${model} · ${tools} tool${tools === 1 ? "" : "s"}`.slice(0, 32);
       }
-      return tools > 0
-        ? `${tools} tool${tools === 1 ? "" : "s"} configured`
-        : "Agent loop";
+      return tools > 0 ? `${tools} tool${tools === 1 ? "" : "s"} configured` : "Agent loop";
     }
     case NODE_TYPES.PROMPT:
       if (config.prompt_id) {
         return `Prompt: ${config.prompt_id}`;
       }
-      return config.prompt_template
-        ? `${String(config.prompt_template).slice(0, 30)}...`
-        : "No prompt configured";
+      return config.prompt_template ? `${String(config.prompt_template).slice(0, 30)}...` : "No prompt configured";
     case NODE_TYPES.HTTP:
-      return config.url
-        ? `${config.method ?? "GET"} ${String(config.url).slice(0, 30)}...`
-        : "No URL configured";
+      return config.url ? `${config.method ?? "GET"} ${String(config.url).slice(0, 30)}...` : "No URL configured";
     case NODE_TYPES.TRANSFORM:
-      return config.expression
-        ? `${String(config.expression).slice(0, 30)}...`
-        : "No expression";
+      return config.expression ? `${String(config.expression).slice(0, 30)}...` : "No expression";
     case NODE_TYPES.OUTPUT:
       return "Final output";
     case NODE_TYPES.BRANCH:
-      return config.condition
-        ? `If: ${String(config.condition).slice(0, 25)}...`
-        : "No condition set";
+      return config.condition ? `If: ${String(config.condition).slice(0, 25)}...` : "No condition set";
     case NODE_TYPES.MERGE:
       return `Strategy: ${(config.merge_strategy as string) ?? "namespaced"}`;
     case NODE_TYPES.HUMAN_GATE:
-      return config.prompt_message
-        ? `${String(config.prompt_message).slice(0, 30)}...`
-        : "Requires approval";
+      return config.prompt_message ? `${String(config.prompt_message).slice(0, 30)}...` : "Requires approval";
     case NODE_TYPES.MEMORY: {
       const action = (config.action as string) ?? "get";
       const key = (config.key as string) ?? "";
@@ -460,10 +408,7 @@ function getConfigPreview(
     }
     case NODE_TYPES.OBSERVATION_SEARCH: {
       const query =
-        (config.query as string) ??
-        (config.query_path as string) ??
-        (config.query_template as string) ??
-        "";
+        (config.query as string) ?? (config.query_path as string) ?? (config.query_template as string) ?? "";
       if (query) {
         return `Search · ${String(query).slice(0, 24)}...`;
       }
@@ -471,10 +416,7 @@ function getConfigPreview(
     }
     case NODE_TYPES.OBSERVATION_CONTEXT: {
       const query =
-        (config.query as string) ??
-        (config.query_path as string) ??
-        (config.query_template as string) ??
-        "";
+        (config.query as string) ?? (config.query_path as string) ?? (config.query_template as string) ?? "";
       if (query) {
         return `Context · ${String(query).slice(0, 23)}...`;
       }
@@ -489,9 +431,7 @@ function getConfigPreview(
       const toolName = (config.tool as string) ?? (config.name as string) ?? "";
       const version = (config.version as string) ?? "";
       if (toolName) {
-        return version
-          ? `${toolName}@${version}`.slice(0, 32)
-          : toolName.slice(0, 32);
+        return version ? `${toolName}@${version}`.slice(0, 32) : toolName.slice(0, 32);
       }
       return "Tool call";
     }
@@ -499,9 +439,7 @@ function getConfigPreview(
       const graphId = (config.graph_id as string) ?? "";
       const graphVersion = config.graph_version as number | undefined;
       if (graphId) {
-        return graphVersion
-          ? `Graph ${graphId} v${graphVersion}`.slice(0, 32)
-          : `Graph ${graphId}`.slice(0, 32);
+        return graphVersion ? `Graph ${graphId} v${graphVersion}`.slice(0, 32) : `Graph ${graphId}`.slice(0, 32);
       }
       return "Subgraph";
     }

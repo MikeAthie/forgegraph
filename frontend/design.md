@@ -24,60 +24,61 @@ ForgeGraph uses **OKLch color space** for perceptually uniform colors that work 
 
 ### Semantic Colors
 
-| Token | Light Mode | Dark Mode | Usage |
-|-------|------------|-----------|-------|
-| `--background` | `oklch(1 0 0)` | `oklch(0.145 0 0)` | Page/container backgrounds |
-| `--foreground` | `oklch(0.145 0 0)` | `oklch(0.985 0 0)` | Primary text |
-| `--primary` | `oklch(0.585 0.233 277)` | `oklch(0.685 0.233 277)` | Brand color, CTAs, links |
-| `--primary-foreground` | `oklch(0.985 0 0)` | `oklch(0.985 0 0)` | Text on primary background |
-| `--secondary` | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` | Secondary buttons, subtle backgrounds |
-| `--muted` | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` | Muted backgrounds, disabled states |
-| `--muted-foreground` | `oklch(0.556 0 0)` | `oklch(0.708 0 0)` | Secondary text, placeholders |
-| `--accent` | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` | Hover states, highlights |
-| `--destructive` | `oklch(0.577 0.245 27.325)` | `oklch(0.704 0.191 22.216)` | Errors, dangerous actions |
-| `--border` | `oklch(0.922 0 0)` | `oklch(1 0 0 / 10%)` | Borders, dividers |
-| `--input` | `oklch(0.922 0 0)` | `oklch(1 0 0 / 15%)` | Input field borders |
-| `--ring` | `oklch(0.585 0.233 277)` | `oklch(0.685 0.233 277)` | Focus rings |
+| Token                  | Light Mode                  | Dark Mode                   | Usage                                 |
+| ---------------------- | --------------------------- | --------------------------- | ------------------------------------- |
+| `--background`         | `oklch(1 0 0)`              | `oklch(0.145 0 0)`          | Page/container backgrounds            |
+| `--foreground`         | `oklch(0.145 0 0)`          | `oklch(0.985 0 0)`          | Primary text                          |
+| `--primary`            | `oklch(0.585 0.233 277)`    | `oklch(0.685 0.233 277)`    | Brand color, CTAs, links              |
+| `--primary-foreground` | `oklch(0.985 0 0)`          | `oklch(0.985 0 0)`          | Text on primary background            |
+| `--secondary`          | `oklch(0.97 0 0)`           | `oklch(0.269 0 0)`          | Secondary buttons, subtle backgrounds |
+| `--muted`              | `oklch(0.97 0 0)`           | `oklch(0.269 0 0)`          | Muted backgrounds, disabled states    |
+| `--muted-foreground`   | `oklch(0.556 0 0)`          | `oklch(0.708 0 0)`          | Secondary text, placeholders          |
+| `--accent`             | `oklch(0.97 0 0)`           | `oklch(0.269 0 0)`          | Hover states, highlights              |
+| `--destructive`        | `oklch(0.577 0.245 27.325)` | `oklch(0.704 0.191 22.216)` | Errors, dangerous actions             |
+| `--border`             | `oklch(0.922 0 0)`          | `oklch(1 0 0 / 10%)`        | Borders, dividers                     |
+| `--input`              | `oklch(0.922 0 0)`          | `oklch(1 0 0 / 15%)`        | Input field borders                   |
+| `--ring`               | `oklch(0.585 0.233 277)`    | `oklch(0.685 0.233 277)`    | Focus rings                           |
 
 ### Brand Color: Indigo
 
 The primary brand color is **indigo** (hue 277 in OKLch), chosen for:
+
 - Professional yet modern appearance
 - Excellent contrast in both light and dark modes
 - Strong association with technology and innovation
 
 ```css
 /* Primary indigo variants */
---primary: oklch(0.585 0.233 277);        /* Base */
---primary-hover: oklch(0.525 0.233 277);  /* Darker for hover */
---primary-light: oklch(0.685 0.233 277);  /* Lighter for dark mode */
+--primary: oklch(0.585 0.233 277); /* Base */
+--primary-hover: oklch(0.525 0.233 277); /* Darker for hover */
+--primary-light: oklch(0.685 0.233 277); /* Lighter for dark mode */
 ```
 
 ### Chart Colors
 
 Five distinct colors for data visualization:
 
-| Token | Light Mode | Dark Mode |
-|-------|------------|-----------|
+| Token       | Light Mode                  | Dark Mode                    |
+| ----------- | --------------------------- | ---------------------------- |
 | `--chart-1` | `oklch(0.646 0.222 41.116)` | `oklch(0.488 0.243 264.376)` |
-| `--chart-2` | `oklch(0.6 0.118 184.704)` | `oklch(0.696 0.17 162.48)` |
-| `--chart-3` | `oklch(0.398 0.07 227.392)` | `oklch(0.769 0.188 70.08)` |
-| `--chart-4` | `oklch(0.828 0.189 84.429)` | `oklch(0.627 0.265 303.9)` |
-| `--chart-5` | `oklch(0.769 0.188 70.08)` | `oklch(0.645 0.246 16.439)` |
+| `--chart-2` | `oklch(0.6 0.118 184.704)`  | `oklch(0.696 0.17 162.48)`   |
+| `--chart-3` | `oklch(0.398 0.07 227.392)` | `oklch(0.769 0.188 70.08)`   |
+| `--chart-4` | `oklch(0.828 0.189 84.429)` | `oklch(0.627 0.265 303.9)`   |
+| `--chart-5` | `oklch(0.769 0.188 70.08)`  | `oklch(0.645 0.246 16.439)`  |
 
 ### Node Type Colors
 
 Graph editor nodes use semantic colors:
 
-| Node Type | Color | Hex |
-|-----------|-------|-----|
-| Prompt | Violet | `#8b5cf6` |
-| Tool (HTTP) | Amber | `#f59e0b` |
-| Transform | Blue | `#3b82f6` |
-| Branch | Rose | `#f43f5e` |
-| Merge | Emerald | `#10b981` |
-| Output | Indigo | `#6366f1` |
-| Human Gate | Orange | `#f97316` |
+| Node Type   | Color   | Hex       |
+| ----------- | ------- | --------- |
+| Prompt      | Violet  | `#8b5cf6` |
+| Tool (HTTP) | Amber   | `#f59e0b` |
+| Transform   | Blue    | `#3b82f6` |
+| Branch      | Rose    | `#f43f5e` |
+| Merge       | Emerald | `#10b981` |
+| Output      | Indigo  | `#6366f1` |
+| Human Gate  | Orange  | `#f97316` |
 
 ---
 
@@ -88,22 +89,22 @@ Graph editor nodes use semantic colors:
 ForgeGraph uses a system font stack for optimal performance and native feel:
 
 ```css
-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
 ```
 
 ### Type Scale
 
-| Class | Size | Weight | Usage |
-|-------|------|--------|-------|
-| `text-xs` | 12px | 400 | Captions, labels |
-| `text-sm` | 14px | 400 | Body text, UI elements |
-| `text-base` | 16px | 400 | Default body |
-| `text-lg` | 18px | 500 | Lead paragraphs |
-| `text-xl` | 20px | 600 | Section headings |
-| `text-2xl` | 24px | 700 | Page headings |
-| `text-3xl` | 30px | 700 | Hero text |
-| `text-4xl` | 36px | 800 | Display text |
-| `text-5xl` | 48px | 800 | Large display |
+| Class       | Size | Weight | Usage                  |
+| ----------- | ---- | ------ | ---------------------- |
+| `text-xs`   | 12px | 400    | Captions, labels       |
+| `text-sm`   | 14px | 400    | Body text, UI elements |
+| `text-base` | 16px | 400    | Default body           |
+| `text-lg`   | 18px | 500    | Lead paragraphs        |
+| `text-xl`   | 20px | 600    | Section headings       |
+| `text-2xl`  | 24px | 700    | Page headings          |
+| `text-3xl`  | 30px | 700    | Hero text              |
+| `text-4xl`  | 36px | 800    | Display text           |
+| `text-5xl`  | 48px | 800    | Large display          |
 
 ### Font Weights
 
@@ -121,40 +122,40 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubun
 
 Based on a 4px grid system:
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `space-1` | 4px | Tight gaps, icon padding |
-| `space-2` | 8px | Default element spacing |
-| `space-3` | 12px | Form field gaps |
-| `space-4` | 16px | Card padding |
-| `space-6` | 24px | Section spacing |
-| `space-8` | 32px | Large gaps |
-| `space-12` | 48px | Section margins |
-| `space-16` | 64px | Page sections |
-| `space-24` | 96px | Hero sections |
+| Token      | Value | Usage                    |
+| ---------- | ----- | ------------------------ |
+| `space-1`  | 4px   | Tight gaps, icon padding |
+| `space-2`  | 8px   | Default element spacing  |
+| `space-3`  | 12px  | Form field gaps          |
+| `space-4`  | 16px  | Card padding             |
+| `space-6`  | 24px  | Section spacing          |
+| `space-8`  | 32px  | Large gaps               |
+| `space-12` | 48px  | Section margins          |
+| `space-16` | 64px  | Page sections            |
+| `space-24` | 96px  | Hero sections            |
 
 ### Border Radius
 
 A consistent radius system creates visual harmony:
 
 ```css
---radius: 0.625rem;              /* 10px - base */
---radius-sm: calc(var(--radius) - 4px);   /* 6px */
---radius-md: calc(var(--radius) - 2px);   /* 8px */
---radius-lg: var(--radius);               /* 10px */
---radius-xl: calc(var(--radius) + 4px);   /* 14px */
---radius-2xl: calc(var(--radius) + 8px);  /* 18px */
+--radius: 0.625rem; /* 10px - base */
+--radius-sm: calc(var(--radius) - 4px); /* 6px */
+--radius-md: calc(var(--radius) - 2px); /* 8px */
+--radius-lg: var(--radius); /* 10px */
+--radius-xl: calc(var(--radius) + 4px); /* 14px */
+--radius-2xl: calc(var(--radius) + 8px); /* 18px */
 ```
 
 ### Breakpoints
 
-| Breakpoint | Width | Usage |
-|------------|-------|-------|
-| `sm` | 640px | Large phones |
-| `md` | 768px | Tablets |
-| `lg` | 1024px | Laptops |
-| `xl` | 1280px | Desktops |
-| `2xl` | 1536px | Large screens |
+| Breakpoint | Width  | Usage         |
+| ---------- | ------ | ------------- |
+| `sm`       | 640px  | Large phones  |
+| `md`       | 768px  | Tablets       |
+| `lg`       | 1024px | Laptops       |
+| `xl`       | 1280px | Desktops      |
+| `2xl`      | 1536px | Large screens |
 
 ---
 
@@ -165,6 +166,7 @@ A consistent radius system creates visual harmony:
 Buttons use Class Variance Authority (CVA) for type-safe variants:
 
 **Variants:**
+
 - `default` - Primary actions (indigo background)
 - `destructive` - Dangerous actions (red background)
 - `outline` - Secondary actions (bordered)
@@ -173,6 +175,7 @@ Buttons use Class Variance Authority (CVA) for type-safe variants:
 - `link` - Text-only links
 
 **Sizes:**
+
 - `sm` - Height 32px, compact UI
 - `default` - Height 36px, standard
 - `lg` - Height 40px, CTAs
@@ -194,9 +197,7 @@ Cards use a compound component pattern:
     <CardTitle>Title</CardTitle>
     <CardDescription>Description text</CardDescription>
   </CardHeader>
-  <CardContent>
-    {/* Content */}
-  </CardContent>
+  <CardContent>{/* Content */}</CardContent>
   <CardFooter>
     <Button>Action</Button>
   </CardFooter>
@@ -208,17 +209,8 @@ Cards use a compound component pattern:
 Form fields should always include labels and error states:
 
 ```tsx
-<FormField
-  id="email"
-  label="Email"
-  description="We'll never share your email."
-  error={errors.email}
->
-  <Input
-    type="email"
-    placeholder="you@example.com"
-    aria-invalid={!!errors.email}
-  />
+<FormField id="email" label="Email" description="We'll never share your email." error={errors.email}>
+  <Input type="email" placeholder="you@example.com" aria-invalid={!!errors.email} />
 </FormField>
 ```
 
@@ -245,9 +237,7 @@ Modal dialogs for confirmations and forms:
   <DialogContent>
     <DialogHeader>
       <DialogTitle>Confirm Action</DialogTitle>
-      <DialogDescription>
-        This action cannot be undone.
-      </DialogDescription>
+      <DialogDescription>This action cannot be undone.</DialogDescription>
     </DialogHeader>
     {/* Content */}
     <DialogFooter>
@@ -271,13 +261,13 @@ Modal dialogs for confirmations and forms:
 
 ### Duration Scale
 
-| Duration | Usage |
-|----------|-------|
-| `75ms` | Micro-interactions (hover states) |
-| `150ms` | Quick transitions (buttons, toggles) |
-| `200ms` | Default UI transitions |
-| `300ms` | Modal enter/exit |
-| `500ms` | Page transitions |
+| Duration | Usage                                |
+| -------- | ------------------------------------ |
+| `75ms`   | Micro-interactions (hover states)    |
+| `150ms`  | Quick transitions (buttons, toggles) |
+| `200ms`  | Default UI transitions               |
+| `300ms`  | Modal enter/exit                     |
+| `500ms`  | Page transitions                     |
 
 ### Easing Functions
 
@@ -294,24 +284,34 @@ transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
 
 ### Built-in Animations
 
-| Animation | Usage |
-|-----------|-------|
-| `animate-spin` | Loading spinners |
-| `animate-pulse` | Skeleton loaders |
-| `animate-bounce` | Attention indicators |
-| `animate-ping` | Active state indicators |
+| Animation        | Usage                   |
+| ---------------- | ----------------------- |
+| `animate-spin`   | Loading spinners        |
+| `animate-pulse`  | Skeleton loaders        |
+| `animate-bounce` | Attention indicators    |
+| `animate-ping`   | Active state indicators |
 
 ### Custom Animations
 
 ```css
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 ```
 
@@ -360,7 +360,7 @@ import { ThemeProvider } from "next-themes";
 
 <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
   {children}
-</ThemeProvider>
+</ThemeProvider>;
 ```
 
 ### CSS Variables

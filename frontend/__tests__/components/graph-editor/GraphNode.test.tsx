@@ -43,24 +43,25 @@ describe("GraphNode", () => {
     nodeType: string,
     label: string,
     config: Record<string, unknown> = {},
-    selected: boolean = false
-  ): NodeProps => ({
-    id: "test-node",
-    type: nodeType,
-    data: {
-      label,
-      nodeType,
-      config,
-    },
-    selected,
-    dragging: false,
-    isConnectable: true,
-    zIndex: 0,
-    xPos: 0,
-    yPos: 0,
-    xPosOrigin: 0,
-    yPosOrigin: 0,
-  } as NodeProps);
+    selected: boolean = false,
+  ): NodeProps =>
+    ({
+      id: "test-node",
+      type: nodeType,
+      data: {
+        label,
+        nodeType,
+        config,
+      },
+      selected,
+      dragging: false,
+      isConnectable: true,
+      zIndex: 0,
+      xPos: 0,
+      yPos: 0,
+      xPosOrigin: 0,
+      yPosOrigin: 0,
+    }) as NodeProps;
 
   describe("Basic Rendering", () => {
     it("should render node with label", () => {
@@ -196,9 +197,7 @@ describe("GraphNode", () => {
       });
       render(<GraphNode {...props} />);
 
-      expect(screen.getByTestId("node-config-preview")).toHaveTextContent(
-        /POST https:\/\/api\.example\.com\/endpoi/,
-      );
+      expect(screen.getByTestId("node-config-preview")).toHaveTextContent(/POST https:\/\/api\.example\.com\/endpoi/);
     });
 
     it("should default to GET method when not specified", () => {
@@ -379,9 +378,7 @@ describe("GraphNode", () => {
       });
       render(<GraphNode {...props} />);
 
-      expect(screen.getByTestId("node-config-preview")).toHaveTextContent(
-        "Context",
-      );
+      expect(screen.getByTestId("node-config-preview")).toHaveTextContent("Context");
     });
   });
 
@@ -431,9 +428,7 @@ describe("GraphNode", () => {
 
   describe("Multiple Nodes", () => {
     it("should render multiple node types correctly", () => {
-      const { rerender } = render(
-        <GraphNode {...createNodeProps(NODE_TYPES.PROMPT, "Prompt Node")} />
-      );
+      const { rerender } = render(<GraphNode {...createNodeProps(NODE_TYPES.PROMPT, "Prompt Node")} />);
       expect(screen.getByText("Prompt Node")).toBeInTheDocument();
 
       rerender(<GraphNode {...createNodeProps(NODE_TYPES.HTTP, "HTTP Node")} />);

@@ -94,10 +94,7 @@ export const getApiErrorMessage = (err: unknown, fallback: string): string => {
   return fallback;
 };
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const API_PATHS = {
   auth: {
     login: "/api/auth/login",
@@ -114,8 +111,7 @@ const API_PATHS = {
     detail: (graphId: string) => `/api/graphs/${graphId}`,
     versions: (graphId: string) => `/api/graphs/${graphId}/versions`,
     latestVersion: (graphId: string) => `/api/graphs/${graphId}/versions/latest`,
-    versionDetail: (graphId: string, versionId: string) =>
-      `/api/graphs/${graphId}/versions/${versionId}`,
+    versionDetail: (graphId: string, versionId: string) => `/api/graphs/${graphId}/versions/${versionId}`,
     memoryConfig: (graphId: string) => `/api/graphs/${graphId}/memory-config`,
   },
   prompts: {
@@ -150,11 +146,14 @@ const API_PATHS = {
   },
   analytics: {
     memoryUsage: "/api/analytics/memory/usage",
+    memoryExport: "/api/analytics/memory/export",
     memoryCosts: "/api/analytics/memory/costs",
     memoryPerformance: "/api/analytics/memory/performance",
     llmUsage: "/api/analytics/llm/usage",
+    llmExport: "/api/analytics/llm/export",
     llmCosts: "/api/analytics/llm/costs",
     llmBudget: "/api/analytics/llm/budget",
+    llmQuota: "/api/analytics/llm/quota",
   },
   memory: {
     listCreate: "/api/memory/observations",
@@ -183,10 +182,24 @@ const API_PATHS = {
   auditLogs: {
     list: "/api/audit-logs/",
   },
+  policies: {
+    guardrails: "/api/policies/guardrails",
+  },
+  retention: {
+    policy: "/api/retention/",
+    cleanup: "/api/retention/cleanup",
+    export: "/api/retention/export",
+  },
   orgs: {
     me: "/api/orgs/me",
     members: "/api/orgs/members",
     memberDetail: (userId: string) => `/api/orgs/members/${userId}`,
+  },
+  health: {
+    memory: "/api/health/memory",
+  },
+  metrics: {
+    summary: "/api/metrics/summary",
   },
   scim: {
     token: "/api/scim/token",
@@ -423,9 +436,141 @@ export interface OrganizationMember {
   joined_at: string;
 }
 
+export type OrganizationRoleCapabilities = {
+  can_view_observations: boolean;
+  can_delete_observations: boolean;
+  can_manage_retention: boolean;
+  can_export_memory_data: boolean;
+  can_manage_members: boolean;
+};
+
 export type OrganizationMeResponse = {
   organization: Organization;
   role: OrganizationMember["role"];
+  governance: {
+    current_role_capabilities: OrganizationRoleCapabilities;
+    role_capabilities: Record<OrganizationMember["role"], OrganizationRoleCapabilities>;
+  };
+};
+
+export type TenantGuardrailPolicy = {
+  http_allowlist: string[];
+  http_denylist: string[];
+  http_default_deny: boolean;
+  allowed_providers: string[];
+  allowed_models: string[];
+  summary: {
+    runtime_mode: "cloud" | "self_hosted" | string;
+    http_access_mode: "open" | "allowlist_first" | "default_deny" | string;
+    egress_allowlist_count: number;
+    egress_denylist_count: number;
+    provider_allowlist_count: number;
+    model_allowlist_count: number;
+    exec_tools_policy: "restricted_in_cloud" | "package_and_policy_controlled" | string;
+    curated_memory_enabled: boolean;
+    curated_memory_vector_indexing_enabled: boolean;
+  };
+};
+
+export type TenantRetentionPolicyResponse = {
+  runs_retention_days: number | null;
+  run_logs_retention_days: number | null;
+  audit_logs_retention_days: number | null;
+  usage_retention_days: number | null;
+};
+
+export type RetentionCleanupPreview = {
+  tenant_id: string;
+  dry_run: boolean;
+  retention_days: {
+    runs: number | null;
+    run_logs: number | null;
+    audit_logs: number | null;
+    usage: number | null;
+  };
+  runs_deleted: number;
+  run_logs_deleted: number;
+  run_events_deleted: number;
+  node_runs_deleted: number;
+  run_checkpoints_deleted: number;
+  approval_tasks_deleted: number;
+  audit_logs_deleted: number;
+  llm_usage_deleted: number;
+  memory_usage_deleted: number;
+  total_deleted: number;
+  errors: string[];
+};
+
+export type RetentionExportType = "runs" | "run_events" | "node_runs" | "audit_logs" | "usage" | "memory_usage";
+
+export type MemoryHealthResponse = {
+  redis: {
+    healthy: boolean;
+    latency_ms: number;
+    error?: string;
+  };
+  grpc?: {
+    configured: boolean;
+    healthy?: boolean;
+    error?: string;
+  };
+  metrics?: {
+    memory_gc_deleted_retention_total: number;
+    memory_gc_deleted_tenant_total: number;
+    memory_gc_deleted_missing_users_total: number;
+    memory_gc_last_run_at: string | null;
+    memory_gc_last_reindex: string | null;
+    memory_grpc_requests_total: number;
+    memory_grpc_errors_total: number;
+    memory_observation_index_jobs_total: number;
+    memory_observation_index_success_total: number;
+    memory_observation_index_delete_total: number;
+    memory_observation_index_enqueue_errors_total: number;
+    memory_observation_delete_enqueue_errors_total: number;
+  };
+};
+
+export type MetricsSummary = {
+  runs: {
+    started_total: number;
+    completed_total: number;
+    failed_total: number;
+    canceled_total: number;
+    success_rate: number | null;
+    failure_rate: number | null;
+    latency_ms_p50: number | null;
+    latency_ms_p95: number | null;
+    window_size: number;
+    active_total: number;
+  };
+  queue: {
+    pending: number;
+    processing: number;
+    total_depth: number;
+    oldest_pending_age_seconds: number | null;
+    by_tenant: Array<{
+      tenant_id: string;
+      pending: number;
+      processing: number;
+      total: number;
+    }>;
+  };
+  slo: {
+    run_success_rate_target: number;
+    run_p95_latency_ms_target: number;
+    queue_max_depth_target: number;
+  };
+  guardrails: {
+    run_max_active_per_tenant: number;
+    run_input_max_bytes: number;
+    queue_max_concurrency_per_tenant: number;
+  };
+  violations: {
+    run_success_rate: boolean;
+    run_p95_latency: boolean;
+    queue_depth: boolean;
+  };
+  generated_at: string;
 };
 
 export interface GraphDetail {
@@ -488,10 +633,7 @@ export const graphsApi = {
   },
 
   update: async (graphId: string, input: GraphUpdateInput): Promise<GraphListItem> => {
-    const response = await api.patch<ApiSuccessResponse<GraphListItem>>(
-      API_PATHS.graphs.detail(graphId),
-      input,
-    );
+    const response = await api.patch<ApiSuccessResponse<GraphListItem>>(API_PATHS.graphs.detail(graphId), input);
     return response.data.data;
   },
 
@@ -500,17 +642,13 @@ export const graphsApi = {
   },
 
   listVersions: async (graphId: string): Promise<GraphVersionSummary[]> => {
-    const response = await api.get<ApiSuccessResponse<GraphVersionSummary[]>>(
-      API_PATHS.graphs.versions(graphId),
-    );
+    const response = await api.get<ApiSuccessResponse<GraphVersionSummary[]>>(API_PATHS.graphs.versions(graphId));
     return response.data.data;
   },
 
   getLatestVersion: async (graphId: string): Promise<GraphVersion | null> => {
     try {
-      const response = await api.get<ApiSuccessResponse<GraphVersion>>(
-        API_PATHS.graphs.latestVersion(graphId),
-      );
+      const response = await api.get<ApiSuccessResponse<GraphVersion>>(API_PATHS.graphs.latestVersion(graphId));
       return response.data.data;
     } catch (error) {
       // 404 means no versions exist yet
@@ -529,39 +667,22 @@ export const graphsApi = {
   },
 
   createVersion: async (graphId: string, input: CreateGraphVersionInput): Promise<GraphVersion> => {
-    const response = await api.post<ApiSuccessResponse<GraphVersion>>(
-      API_PATHS.graphs.versions(graphId),
-      input,
-    );
+    const response = await api.post<ApiSuccessResponse<GraphVersion>>(API_PATHS.graphs.versions(graphId), input);
     return response.data.data;
   },
 
   getMemoryConfig: async (graphId: string): Promise<MemoryConfig> => {
-    const response = await api.get<ApiSuccessResponse<MemoryConfig>>(
-      API_PATHS.graphs.memoryConfig(graphId),
-    );
+    const response = await api.get<ApiSuccessResponse<MemoryConfig>>(API_PATHS.graphs.memoryConfig(graphId));
     return response.data.data;
   },
 
-  updateMemoryConfig: async (
-    graphId: string,
-    input: Partial<MemoryConfig>,
-  ): Promise<MemoryConfig> => {
-    const response = await api.patch<ApiSuccessResponse<MemoryConfig>>(
-      API_PATHS.graphs.memoryConfig(graphId),
-      input,
-    );
+  updateMemoryConfig: async (graphId: string, input: Partial<MemoryConfig>): Promise<MemoryConfig> => {
+    const response = await api.patch<ApiSuccessResponse<MemoryConfig>>(API_PATHS.graphs.memoryConfig(graphId), input);
     return response.data.data;
   },
 };
 
-export type PromptCategory =
-  | "research"
-  | "summarization"
-  | "email"
-  | "extraction"
-  | "reasoning"
-  | "other";
+export type PromptCategory = "research" | "summarization" | "email" | "extraction" | "reasoning" | "other";
 
 export type PromptVisibility = "private" | "public";
 
@@ -713,12 +834,7 @@ export type MarketplaceRelease = {
   version: string;
   changelog: string;
   status: "draft" | "pending_review" | "approved" | "rejected" | string;
-  package_kind:
-    | "template_http"
-    | "template_prompt"
-    | "runtime_tool"
-    | "runtime_transform"
-    | string;
+  package_kind: "template_http" | "template_prompt" | "runtime_tool" | "runtime_transform" | string;
   execution_node_type: "http" | "prompt" | "tool" | "transform" | string;
   ui_schema: Record<string, unknown>;
   config_schema: Record<string, unknown>;
@@ -789,12 +905,7 @@ export type MarketplaceReleaseSummary = {
   package_name: string;
   version: string;
   status: "draft" | "pending_review" | "approved" | "rejected" | string;
-  package_kind:
-    | "template_http"
-    | "template_prompt"
-    | "runtime_tool"
-    | "runtime_transform"
-    | string;
+  package_kind: "template_http" | "template_prompt" | "runtime_tool" | "runtime_transform" | string;
   execution_node_type: "http" | "prompt" | "tool" | "transform" | string;
   cloud_allowed: boolean;
   created_at: string;
@@ -837,13 +948,9 @@ export const promptsApi = {
   },
 
   publish: async (promptId: string, input?: { license?: string }): Promise<PromptDetail> => {
-    const response = await api.post<ApiSuccessResponse<PromptDetail>>(
-      API_PATHS.prompts.publish(promptId),
-      input ?? {},
-    );
+    const response = await api.post<ApiSuccessResponse<PromptDetail>>(API_PATHS.prompts.publish(promptId), input ?? {});
     return response.data.data;
   },
-
 };
 
 export interface BillingPlan {
@@ -879,17 +986,13 @@ export const billingApi = {
     return response.data.data.subscription;
   },
   createCheckout: async (planId: string): Promise<string> => {
-    const response = await api.post<ApiSuccessResponse<{ checkout_url: string }>>(
-      API_PATHS.billing.checkout,
-      { plan_id: planId },
-    );
+    const response = await api.post<ApiSuccessResponse<{ checkout_url: string }>>(API_PATHS.billing.checkout, {
+      plan_id: planId,
+    });
     return response.data.data.checkout_url;
   },
   createPortal: async (): Promise<string> => {
-    const response = await api.post<ApiSuccessResponse<{ portal_url: string }>>(
-      API_PATHS.billing.portal,
-      {},
-    );
+    const response = await api.post<ApiSuccessResponse<{ portal_url: string }>>(API_PATHS.billing.portal, {});
     return response.data.data.portal_url;
   },
 };
@@ -901,6 +1004,12 @@ export interface SsoProviderConfig {
   email_domains: string[];
   default_role: "owner" | "admin" | "member" | "viewer";
   enabled: boolean;
+  status: IdentityStatus;
+}
+
+export interface IdentityStatus {
+  state: "configured" | "partial" | "unavailable";
+  message: string;
 }
 
 export const ssoApi = {
@@ -919,6 +1028,7 @@ export interface ScimTokenInfo {
   created_at: string | null;
   last_used_at: string | null;
   rotated_at: string | null;
+  status: IdentityStatus;
 }
 
 export const scimApi = {
@@ -959,10 +1069,7 @@ export const credentialsApi = {
     >(API_PATHS.credentials.oauthStart, { provider, name });
     return response.data.data;
   },
-  completeOAuthCallback: async (input: {
-    code: string;
-    state: string;
-  }): Promise<Credential> => {
+  completeOAuthCallback: async (input: { code: string; state: string }): Promise<Credential> => {
     const response = await api.post<ApiSuccessResponse<Credential>>(API_PATHS.credentials.oauthCallback, input);
     return response.data.data;
   },
@@ -970,10 +1077,7 @@ export const credentialsApi = {
 
 export const integrationsApi = {
   runHttpNodeTest: async (input: HttpNodeTestInput): Promise<HttpNodeTestResult> => {
-    const response = await api.post<ApiSuccessResponse<HttpNodeTestResult>>(
-      API_PATHS.integrations.httpTest,
-      input,
-    );
+    const response = await api.post<ApiSuccessResponse<HttpNodeTestResult>>(API_PATHS.integrations.httpTest, input);
     return response.data.data;
   },
 };
@@ -984,9 +1088,7 @@ export const templatesApi = {
     return response.data.data;
   },
   listVersions: async (templateId: string): Promise<GraphTemplate[]> => {
-    const response = await api.get<ApiSuccessResponse<GraphTemplate[]>>(
-      API_PATHS.templates.versions(templateId),
-    );
+    const response = await api.get<ApiSuccessResponse<GraphTemplate[]>>(API_PATHS.templates.versions(templateId));
     return response.data.data;
   },
   clone: async (templateId: string, input: TemplateCloneInput): Promise<TemplateCloneResult> => {
@@ -1027,9 +1129,7 @@ export const marketplaceApi = {
     return response.data.data;
   },
   listReleases: async (): Promise<MarketplaceReleaseSummary[]> => {
-    const response = await api.get<ApiSuccessResponse<MarketplaceReleaseSummary[]>>(
-      API_PATHS.marketplace.releases,
-    );
+    const response = await api.get<ApiSuccessResponse<MarketplaceReleaseSummary[]>>(API_PATHS.marketplace.releases);
     return response.data.data;
   },
   createRelease: async (input: {
@@ -1056,9 +1156,10 @@ export const marketplaceApi = {
     return response.data.data;
   },
   reviewRelease: async (releaseId: string, decision: "approved" | "rejected") => {
-    const response = await api.patch<
-      ApiSuccessResponse<{ id: string; status: string; reviewed_at: string | null }>
-    >(API_PATHS.marketplace.reviewRelease(releaseId), { decision });
+    const response = await api.patch<ApiSuccessResponse<{ id: string; status: string; reviewed_at: string | null }>>(
+      API_PATHS.marketplace.reviewRelease(releaseId),
+      { decision },
+    );
     return response.data.data;
   },
 };
@@ -1073,27 +1174,18 @@ export type OnboardingMilestone = {
 
 export const onboardingApi = {
   list: async (): Promise<OnboardingMilestone[]> => {
-    const response = await api.get<ApiSuccessResponse<OnboardingMilestone[]>>(
-      API_PATHS.onboarding.milestones,
-    );
+    const response = await api.get<ApiSuccessResponse<OnboardingMilestone[]>>(API_PATHS.onboarding.milestones);
     return response.data.data;
   },
   complete: async (milestone: string, metadata?: Record<string, unknown>): Promise<void> => {
-    await api.post<ApiSuccessResponse<{ milestone: string }>>(
-      API_PATHS.onboarding.milestones,
-      { milestone, metadata: metadata ?? {} },
-    );
+    await api.post<ApiSuccessResponse<{ milestone: string }>>(API_PATHS.onboarding.milestones, {
+      milestone,
+      metadata: metadata ?? {},
+    });
   },
 };
 
-export type RunStatus =
-  | "pending"
-  | "running"
-  | "paused"
-  | "succeeded"
-  | "failed"
-  | "canceled"
-  | string;
+export type RunStatus = "pending" | "running" | "paused" | "succeeded" | "failed" | "canceled" | string;
 
 export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | string;
 
@@ -1382,18 +1474,12 @@ export const runsApi = {
   },
 
   resume: async (runId: string, input: ResumeRunInput): Promise<{ resumed: boolean }> => {
-    const response = await api.post<ApiSuccessResponse<{ resumed: boolean }>>(
-      API_PATHS.runs.resume(runId),
-      input,
-    );
+    const response = await api.post<ApiSuccessResponse<{ resumed: boolean }>>(API_PATHS.runs.resume(runId), input);
     return response.data.data;
   },
 
   replay: async (runId: string, input?: ReplayRunInput): Promise<RunDetail> => {
-    const response = await api.post<ApiSuccessResponse<RunDetail>>(
-      API_PATHS.runs.replay(runId),
-      input ?? {},
-    );
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.replay(runId), input ?? {});
     return response.data.data;
   },
 };
@@ -1414,10 +1500,9 @@ export const memoryApi = {
   },
 
   get: async (observationId: string, params?: { include_deleted?: boolean }): Promise<MemoryObservation> => {
-    const response = await api.get<ApiSuccessResponse<MemoryObservation>>(
-      API_PATHS.memory.detail(observationId),
-      { params },
-    );
+    const response = await api.get<ApiSuccessResponse<MemoryObservation>>(API_PATHS.memory.detail(observationId), {
+      params,
+    });
     return response.data.data;
   },
 
@@ -1450,8 +1535,13 @@ export const approvalsApi = {
 export const auditLogsApi = {
   list: async (params?: {
     action?: string;
+    action_prefix?: string;
     resource_type?: string;
+    resource_id?: string;
     actor_email?: string;
+    created_from?: string;
+    created_to?: string;
+    q?: string;
     tenant_id?: string;
     limit?: number;
     offset?: number;
@@ -1479,10 +1569,7 @@ export const organizationsApi = {
     return response.data.data;
   },
 
-  updateMember: async (
-    userId: string,
-    input: { role: OrganizationMember["role"] },
-  ): Promise<OrganizationMember> => {
+  updateMember: async (userId: string, input: { role: OrganizationMember["role"] }): Promise<OrganizationMember> => {
     const response = await api.patch<ApiSuccessResponse<OrganizationMember>>(
       API_PATHS.orgs.memberDetail(userId),
       input,
@@ -1491,9 +1578,60 @@ export const organizationsApi = {
   },
 
   removeMember: async (userId: string): Promise<{ deleted: boolean }> => {
-    const response = await api.delete<ApiSuccessResponse<{ deleted: boolean }>>(
-      API_PATHS.orgs.memberDetail(userId),
-    );
+    const response = await api.delete<ApiSuccessResponse<{ deleted: boolean }>>(API_PATHS.orgs.memberDetail(userId));
+    return response.data.data;
+  },
+};
+
+export const policiesApi = {
+  getGuardrails: async (): Promise<TenantGuardrailPolicy> => {
+    const response = await api.get<ApiSuccessResponse<TenantGuardrailPolicy>>(API_PATHS.policies.guardrails);
+    return response.data.data;
+  },
+};
+
+export const retentionApi = {
+  getPolicy: async (): Promise<TenantRetentionPolicyResponse> => {
+    const response = await api.get<ApiSuccessResponse<TenantRetentionPolicyResponse>>(API_PATHS.retention.policy);
+    return response.data.data;
+  },
+  previewCleanup: async (): Promise<RetentionCleanupPreview> => {
+    const response = await api.post<ApiSuccessResponse<RetentionCleanupPreview>>(API_PATHS.retention.cleanup, {
+      dry_run: true,
+    });
+    return response.data.data;
+  },
+  exportData: async (input: {
+    type: RetentionExportType;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Blob> => {
+    const response = await api.get(API_PATHS.retention.export, {
+      params: {
+        type: input.type,
+        start_date: input.startDate,
+        end_date: input.endDate,
+        limit: input.limit,
+        offset: input.offset,
+      },
+      responseType: "blob",
+    });
+    return response.data as Blob;
+  },
+};
+
+export const healthApi = {
+  getMemory: async (): Promise<MemoryHealthResponse> => {
+    const response = await api.get<MemoryHealthResponse>(API_PATHS.health.memory);
+    return response.data;
+  },
+};
+
+export const metricsApi = {
+  getSummary: async (): Promise<MetricsSummary> => {
+    const response = await api.get<ApiSuccessResponse<MetricsSummary>>(API_PATHS.metrics.summary);
     return response.data.data;
   },
 };
@@ -1517,6 +1655,29 @@ export type MemoryAnalyticsUsage = {
     embeddings_generated: number;
     search_queries: number;
     avg_search_latency_ms: number | null;
+  };
+  curated_memory: {
+    observations_total: number;
+    observations_created_in_period: number;
+    deleted_observations_total: number;
+    indexed_observations_total: number;
+    pending_index_total: number;
+    graph_scope_total: number;
+    run_scope_total: number;
+    session_scope_total: number;
+    retrieval_runs_in_period: number;
+  };
+  retention: {
+    policy_configured: boolean;
+    runs_retention_days: number | null;
+    run_logs_retention_days: number | null;
+    audit_logs_retention_days: number | null;
+    usage_retention_days: number | null;
+    observations_retention_days: number | null;
+    memory_chunks_retention_days: number | null;
+    observations_retention_mode: string;
+    memory_chunks_retention_mode: string;
+    summary: string;
   };
   costs: {
     summarization_usd: number;
@@ -1561,6 +1722,7 @@ export type AuditLogEntry = {
   action: string;
   resource_type: string;
   resource_id: string;
+  description: string;
   metadata: Record<string, unknown>;
   created_at: string;
 };
@@ -1585,6 +1747,15 @@ export type MemoryAnalyticsPerformance = {
   maintenance: {
     memory_gc_last_run_at: string | null;
     memory_gc_last_reindex: string | null;
+  };
+  indexing: {
+    jobs_total: number;
+    success_total: number;
+    delete_total: number;
+    enqueue_errors_total: number;
+    delete_enqueue_errors_total: number;
+    pending_observations_total: number;
+    indexed_observations_total: number;
   };
 };
 
@@ -1645,6 +1816,17 @@ export type LLMBudgetStatus = {
   over_budget: boolean;
 };
 
+export type LLMQuotaStatus = {
+  quota: {
+    monthly_token_limit: number | null;
+    monthly_cost_limit_usd: number | null;
+  } | null;
+  usage: {
+    month_total_tokens: number;
+    month_cost_usd: number;
+  };
+};
+
 export const analyticsApi = {
   getMemoryUsage: async (period: string): Promise<MemoryAnalyticsUsage> => {
     const response = await api.get<ApiSuccessResponse<MemoryAnalyticsUsage>>(API_PATHS.analytics.memoryUsage, {
@@ -1687,6 +1869,30 @@ export const analyticsApi = {
   }): Promise<LLMBudgetStatus> => {
     const response = await api.put<ApiSuccessResponse<LLMBudgetStatus>>(API_PATHS.analytics.llmBudget, input);
     return response.data.data;
+  },
+  getLLMQuota: async (): Promise<LLMQuotaStatus> => {
+    const response = await api.get<ApiSuccessResponse<LLMQuotaStatus>>(API_PATHS.analytics.llmQuota);
+    return response.data.data;
+  },
+  exportLLMReport: async (input: {
+    dataset: "usage" | "costs" | "budget" | "quota";
+    format: "json" | "csv";
+    period?: string;
+  }): Promise<Blob> => {
+    const { format, ...rest } = input;
+    const response = await api.get(API_PATHS.analytics.llmExport, {
+      params: { ...rest, export_format: format },
+      responseType: "blob",
+    });
+    return response.data as Blob;
+  },
+  exportMemoryReport: async (input: { dataset?: "report"; format: "json" | "csv"; period?: string }): Promise<Blob> => {
+    const { format, ...rest } = input;
+    const response = await api.get(API_PATHS.analytics.memoryExport, {
+      params: { dataset: "report", ...rest, export_format: format },
+      responseType: "blob",
+    });
+    return response.data as Blob;
   },
 };
 

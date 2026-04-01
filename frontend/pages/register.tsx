@@ -114,9 +114,7 @@ export default function RegisterPage() {
         <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-2xl font-bold">Create account</CardTitle>
-            <CardDescription className="text-base mt-1">
-              Get started with ForgeGraph for free
-            </CardDescription>
+            <CardDescription className="text-base mt-1">Get started with ForgeGraph for free</CardDescription>
           </CardHeader>
 
           <CardContent className="pt-4">
@@ -174,11 +172,7 @@ export default function RegisterPage() {
                 />
               </FormField>
 
-              <Button
-                type="submit"
-                className="w-full h-11 text-base font-medium"
-                disabled={isSubmitting}
-              >
+              <Button type="submit" className="w-full h-11 text-base font-medium" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
@@ -193,10 +187,7 @@ export default function RegisterPage() {
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Already have an account?{" "}
-                <Link
-                  href="/login"
-                  className="font-medium text-primary hover:text-primary/80 transition-colors"
-                >
+                <Link href="/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
                   Sign in
                 </Link>
               </p>

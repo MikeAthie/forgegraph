@@ -15,13 +15,7 @@ import {
   type AgentWizardPreset,
   type AgentWizardPresetSeed,
 } from "@/lib/agent-wizard-presets";
-import {
-  CheckCircle,
-  Sparkles,
-  Brain,
-  FileOutput,
-  Bot,
-} from "lucide-react";
+import { CheckCircle, Sparkles, Brain, FileOutput, Bot } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -66,10 +60,7 @@ function formatListInput(items?: string[]): string {
   return Array.isArray(items) ? items.join("\n") : "";
 }
 
-function applyPresetDefaults(
-  preset: AgentWizardPreset,
-  setStepData: (stepId: string, data: unknown) => void
-) {
+function applyPresetDefaults(preset: AgentWizardPreset, setStepData: (stepId: string, data: unknown) => void) {
   setStepData("start", { selectedPresetId: preset.id });
   setStepData("role", {
     agentLabel: preset.seed.agentLabel,
@@ -117,9 +108,7 @@ function buildBlueprintFromState(stepData: Record<string, unknown>): AgentWizard
 
 function StartNodeStep() {
   const { setCanProceed, setStepData, state } = useWizard();
-  const selectedPresetId = (
-    state.stepData.start as { selectedPresetId?: string } | undefined
-  )?.selectedPresetId;
+  const selectedPresetId = (state.stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
 
   useEffect(() => {
     setCanProceed(true);
@@ -129,8 +118,8 @@ function StartNodeStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Choose a starter if you want seeded tools and instructions, or continue with a blank agent
-        setup and define the flow step by step.
+        Choose a starter if you want seeded tools and instructions, or continue with a blank agent setup and define the
+        flow step by step.
       </p>
 
       <div className="space-y-2">
@@ -150,18 +139,14 @@ function StartNodeStep() {
       <div
         className={cn(
           "p-4 border rounded-lg flex items-center gap-3",
-          selectedPresetId
-            ? "border-emerald-500/50 bg-emerald-500/10"
-            : "border-border bg-muted/30"
+          selectedPresetId ? "border-emerald-500/50 bg-emerald-500/10" : "border-border bg-muted/30",
         )}
       >
         {selectedPresetId ? (
           <>
             <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
             <div>
-              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                Preset applied
-              </p>
+              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Preset applied</p>
               <p className="text-xs text-muted-foreground">
                 The next steps are prefilled. You can still change everything before finishing.
               </p>
@@ -198,7 +183,7 @@ function PresetButton({
       onClick={onSelect}
       className={cn(
         "w-full rounded-lg border p-3 text-left transition-colors",
-        selected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+        selected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -263,8 +248,8 @@ function RoleStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Define the actual runtime behavior for the new agent node. These values become the node
-        config the engine executes.
+        Define the actual runtime behavior for the new agent node. These values become the node config the engine
+        executes.
       </p>
 
       <div className="space-y-4">
@@ -448,9 +433,7 @@ function ToolsStep() {
           rows={5}
           className="mt-1 resize-none font-mono text-sm"
         />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Use one tool name per line, or separate them with commas.
-        </p>
+        <p className="mt-2 text-xs text-muted-foreground">Use one tool name per line, or separate them with commas.</p>
       </div>
 
       <div>
@@ -482,8 +465,7 @@ function ToolsStep() {
 function MemoryStep() {
   const { setCanProceed, setStepData, state } = useWizard();
   const [selectedMemory, setSelectedMemory] = useState<AgentMemoryMode>(
-    ((state.stepData.memory as WizardMemoryData | undefined)?.type as AgentMemoryMode | undefined) ||
-      "none"
+    ((state.stepData.memory as WizardMemoryData | undefined)?.type as AgentMemoryMode | undefined) || "none",
   );
 
   useEffect(() => {
@@ -515,8 +497,8 @@ function MemoryStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Choose whether the wizard should wrap the agent with memory nodes. Persistent mode adds
-        explicit memory read/write steps to the graph.
+        Choose whether the wizard should wrap the agent with memory nodes. Persistent mode adds explicit memory
+        read/write steps to the graph.
       </p>
 
       <div className="space-y-2">
@@ -529,13 +511,13 @@ function MemoryStep() {
               onClick={() => setSelectedMemory(option.id)}
               className={cn(
                 "w-full p-3 border rounded-lg text-left transition-colors flex items-start gap-3",
-                selectedMemory === option.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                selectedMemory === option.id ? "border-primary bg-primary/5" : "hover:bg-muted/50",
               )}
             >
               <Icon
                 className={cn(
                   "w-5 h-5 mt-0.5 shrink-0",
-                  selectedMemory === option.id ? "text-primary" : "text-muted-foreground"
+                  selectedMemory === option.id ? "text-primary" : "text-muted-foreground",
                 )}
               />
               <div>
@@ -553,7 +535,7 @@ function MemoryStep() {
 function OutputStep() {
   const { setCanProceed, setStepData, state } = useWizard();
   const [outputKey, setOutputKey] = useState(
-    (state.stepData.output as WizardOutputData | undefined)?.outputKey || "response"
+    (state.stepData.output as WizardOutputData | undefined)?.outputKey || "response",
   );
 
   useEffect(() => {
@@ -565,8 +547,7 @@ function OutputStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Define the key exposed by the final output node. The wizard will map the agent final answer
-        into this field.
+        Define the key exposed by the final output node. The wizard will map the agent final answer into this field.
       </p>
 
       <div className="p-4 border rounded-lg flex items-center gap-3 border-emerald-500/50 bg-emerald-500/10">
@@ -575,9 +556,7 @@ function OutputStep() {
           <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
             Output node will be created automatically
           </p>
-          <p className="text-xs text-muted-foreground">
-            You do not need to add an Output node manually anymore.
-          </p>
+          <p className="text-xs text-muted-foreground">You do not need to add an Output node manually anymore.</p>
         </div>
       </div>
 
@@ -600,9 +579,7 @@ function OutputStep() {
 
 function ReviewStep() {
   const { setCanProceed, state } = useWizard();
-  const selectedPresetId = (
-    state.stepData.start as { selectedPresetId?: string } | undefined
-  )?.selectedPresetId;
+  const selectedPresetId = (state.stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
   const preset = selectedPresetId ? getAgentWizardPreset(selectedPresetId) : undefined;
   const roleData = (state.stepData.role as WizardRoleData | undefined) ?? {};
   const toolsData = (state.stepData.tools as WizardToolsData | undefined) ?? {};
@@ -675,12 +652,8 @@ function ReviewStep() {
         <div className="flex items-center gap-2 p-3 border border-emerald-500/50 bg-emerald-500/10 rounded-lg">
           <Sparkles className="w-5 h-5 text-emerald-500" />
           <div>
-            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              Agent flow ready
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Finish to add a real agent workflow to the canvas.
-            </p>
+            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Agent flow ready</p>
+            <p className="text-xs text-muted-foreground">Finish to add a real agent workflow to the canvas.</p>
           </div>
         </div>
       )}
@@ -716,7 +689,7 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
       });
       exitWizard();
     },
-    [blueprint, exitWizard, onComplete]
+    [blueprint, exitWizard, onComplete],
   );
 
   const handleExit = useCallback(() => {

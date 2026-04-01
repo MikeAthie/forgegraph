@@ -12,5 +12,6 @@ class AuditLogSerializer(serializers.Serializer[Any]):
     action = serializers.CharField(read_only=True)
     resource_type = serializers.CharField(read_only=True)
     resource_id = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
     metadata = serializers.JSONField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)

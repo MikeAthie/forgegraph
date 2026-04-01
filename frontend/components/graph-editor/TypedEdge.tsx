@@ -1,12 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import {
-  EdgeProps,
-  getSmoothStepPath,
-  EdgeLabelRenderer,
-  BaseEdge,
-} from "@xyflow/react";
+import { EdgeProps, getSmoothStepPath, EdgeLabelRenderer, BaseEdge } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 import { DataType, getDataTypeInfo, areTypesCompatible } from "@/lib/data-types";
 import { AlertTriangle, Plus } from "lucide-react";
@@ -46,10 +41,7 @@ function TypedEdgeComponent({
   const routeLane = Number(edgeData?.routeLane ?? 0);
 
   // Check type compatibility
-  const compatibility = useMemo(
-    () => areTypesCompatible(sourceType, targetType),
-    [sourceType, targetType]
-  );
+  const compatibility = useMemo(() => areTypesCompatible(sourceType, targetType), [sourceType, targetType]);
 
   const isTypeMismatch = !compatibility.compatible;
 
@@ -132,12 +124,7 @@ function TypedEdgeComponent({
         onMouseLeave={() => setIsHovered(false)}
       />
 
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        style={edgeStyle}
-        markerEnd={markerEnd}
-      />
+      <BaseEdge id={id} path={edgePath} style={edgeStyle} markerEnd={markerEnd} />
 
       <EdgeLabelRenderer>
         <div
@@ -157,7 +144,7 @@ function TypedEdgeComponent({
                 "flex items-center justify-center cursor-help",
                 "w-5 h-5 rounded-full",
                 "bg-amber-500/20 border border-amber-500/50",
-                "text-amber-600 dark:text-amber-400"
+                "text-amber-600 dark:text-amber-400",
               )}
               title={mismatchTooltip}
             >
@@ -185,9 +172,7 @@ function TypedEdgeComponent({
               className={cn(
                 "px-2 py-0.5 rounded text-xs font-medium",
                 "bg-background/90 border shadow-sm",
-                selected
-                  ? "border-primary"
-                  : "border-border"
+                selected ? "border-primary" : "border-border",
               )}
             >
               {displayLabel}

@@ -1,10 +1,4 @@
-import {
-  expect,
-  type APIRequestContext,
-  type Locator,
-  type Page,
-  type TestInfo,
-} from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 export type TestUser = {
   email: string;
@@ -86,17 +80,12 @@ export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {
 
 export function getPlaywrightRuntimeFixtureUser(): TestUser {
   return {
-    email:
-      process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL ??
-      "playwright-runtime@example.com",
+    email: process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL ?? "playwright-runtime@example.com",
     password: process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD ?? TEST_PASSWORD,
   };
 }
 
-export async function ensureUserRegistered(
-  request: APIRequestContext,
-  user: TestUser,
-): Promise<void> {
+export async function ensureUserRegistered(request: APIRequestContext, user: TestUser): Promise<void> {
   const response = await request.post(`${API_BASE_URL}/api/auth/register`, {
     data: { email: user.email, password: user.password },
   });
@@ -107,9 +96,7 @@ export async function ensureUserRegistered(
   if (response.status() === 400) return;
 
   const body = await response.text();
-  throw new Error(
-    `Failed to register test user (status ${response.status()}): ${body}`,
-  );
+  throw new Error(`Failed to register test user (status ${response.status()}): ${body}`);
 }
 
 export async function login(page: Page, user: TestUser): Promise<void> {
@@ -121,11 +108,7 @@ export async function login(page: Page, user: TestUser): Promise<void> {
   await page.waitForLoadState("networkidle");
 }
 
-export async function gotoWithRetry(
-  page: Page,
-  url: string,
-  attempts = 3,
-): Promise<void> {
+export async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -149,10 +132,7 @@ export function createGraphName(prefix: string): string {
   return `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export async function getAccessToken(
-  request: APIRequestContext,
-  user: TestUser,
-): Promise<string> {
+export async function getAccessToken(request: APIRequestContext, user: TestUser): Promise<string> {
   const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
     data: {
       email: user.email,
@@ -165,11 +145,7 @@ export async function getAccessToken(
   return body.access as string;
 }
 
-export async function createGraph(
-  page: Page,
-  graphName: string,
-  description?: string,
-): Promise<string> {
+export async function createGraph(page: Page, graphName: string, description?: string): Promise<string> {
   await gotoWithRetry(page, "/graphs");
   await page.getByRole("button", { name: /^new graph$/i }).click();
   await page.locator("#create-graph-name").fill(graphName);
@@ -206,10 +182,7 @@ export function getGraphNodeByLabel(page: Page, label: string): Locator {
     .first();
 }
 
-export async function addPaletteItem(
-  page: Page,
-  itemId: string,
-): Promise<void> {
+export async function addPaletteItem(page: Page, itemId: string): Promise<void> {
   await page.getByTestId(`palette-item-${itemId}`).click();
 }
 
@@ -226,10 +199,7 @@ export async function addNodeFromPalette(
   await expect(dialog).toBeHidden();
 }
 
-export async function addOutputNode(
-  page: Page,
-  label = "Output",
-): Promise<void> {
+export async function addOutputNode(page: Page, label = "Output"): Promise<void> {
   await addPaletteItem(page, "output");
   const dialog = page.getByRole("dialog", { name: /configure output node/i });
   await expect(dialog).toBeVisible();
@@ -249,10 +219,7 @@ export async function addOutputNode(
   }
 }
 
-export async function addAgentNode(
-  page: Page,
-  options: AgentWorkflowOptions,
-): Promise<void> {
+export async function addAgentNode(page: Page, options: AgentWorkflowOptions): Promise<void> {
   await addPaletteItem(page, "agent");
   const dialog = page.getByRole("dialog", { name: /configure agent node/i });
   await expect(dialog).toBeVisible();
@@ -270,22 +237,16 @@ export async function addAgentNode(
   await dialog.locator("#agent-tools").fill(options.toolNames.join("\n"));
 
   if (options.observationContextPaths?.length) {
-    await dialog
-      .locator("#agent-observation-context-paths")
-      .fill(options.observationContextPaths.join("\n"));
+    await dialog.locator("#agent-observation-context-paths").fill(options.observationContextPaths.join("\n"));
   }
 
   if (options.approvalRequiredTools?.length) {
-    await dialog
-      .locator("#agent-approval-tools")
-      .fill(options.approvalRequiredTools.join("\n"));
+    await dialog.locator("#agent-approval-tools").fill(options.approvalRequiredTools.join("\n"));
   }
 
   await dialog.getByRole("button", { name: /^add node$/i }).click();
   await expect(dialog).toBeHidden();
-  await expect(
-    getGraphNodeByLabel(page, options.agentLabel ?? "Jackie"),
-  ).toBeVisible();
+  await expect(getGraphNodeByLabel(page, options.agentLabel ?? "Jackie")).toBeVisible();
 }
 
 export async function addObservationContextNode(
@@ -308,9 +269,7 @@ export async function addObservationContextNode(
     await dialog.locator("#query-value").fill(options.query);
   }
   if (options?.limit) {
-    await dialog
-      .locator("#observation-context-limit")
-      .fill(String(options.limit));
+    await dialog.locator("#observation-context-limit").fill(String(options.limit));
   }
   await dialog.getByRole("button", { name: /^add node$/i }).click();
   await expect(dialog).toBeHidden();
@@ -336,15 +295,9 @@ export async function addObservationSaveNode(
   if (label !== "Observation Save") {
     await dialog.locator("#node-label").fill(label);
   }
-  await dialog
-    .locator("#observation-type")
-    .fill(options?.type ?? "customer_memory");
-  await dialog
-    .locator("#observation-scope")
-    .selectOption(options?.scope ?? "graph");
-  await dialog
-    .locator("#content-value")
-    .fill(options?.content ?? "Jackie prefers concise planning updates.");
+  await dialog.locator("#observation-type").fill(options?.type ?? "customer_memory");
+  await dialog.locator("#observation-scope").selectOption(options?.scope ?? "graph");
+  await dialog.locator("#content-value").fill(options?.content ?? "Jackie prefers concise planning updates.");
   if (options?.title) {
     await dialog.locator("#title-value").fill(options.title);
   }
@@ -364,20 +317,14 @@ export async function addObservationSaveNode(
   await expect(canvasNode).toBeVisible();
 }
 
-export async function addMemoryNode(
-  page: Page,
-  label = "Memory",
-  options?: { key?: string },
-): Promise<void> {
+export async function addMemoryNode(page: Page, label = "Memory", options?: { key?: string }): Promise<void> {
   await addPaletteItem(page, "memory");
   const dialog = page.getByRole("dialog", { name: /configure memory node/i });
   await expect(dialog).toBeVisible();
   if (label !== "Memory") {
     await dialog.locator("#node-label").fill(label);
   }
-  await dialog
-    .locator("#memory-key")
-    .fill(options?.key ?? "conversation_history");
+  await dialog.locator("#memory-key").fill(options?.key ?? "conversation_history");
   await dialog.getByRole("button", { name: /^add node$/i }).click();
   await expect(dialog).toBeHidden();
   await expect(getGraphNodeByLabel(page, label)).toBeVisible();
@@ -460,48 +407,28 @@ export async function fetchLatestGraphVersion(
   accessToken: string,
   graphId: string,
 ): Promise<GraphVersionResponse["data"]> {
-  const response = await request.get(
-    `${API_BASE_URL}/api/graphs/${graphId}/versions/latest`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
-  );
+  const response = await request.get(`${API_BASE_URL}/api/graphs/${graphId}/versions/latest`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as GraphVersionResponse;
   return body.data;
 }
 
-export async function installRuntimePackage(
-  page: Page,
-  packageName: string,
-  toolName?: string,
-): Promise<void> {
+export async function installRuntimePackage(page: Page, packageName: string, toolName?: string): Promise<void> {
   await page.goto("/admin/marketplace");
-  await expect(
-    page.getByRole("heading", { name: /^marketplace$/i }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^marketplace$/i })).toBeVisible();
 
-  const packageCard = page
-    .locator("div.rounded-lg.border")
-    .filter({ hasText: packageName })
-    .first();
+  const packageCard = page.locator("div.rounded-lg.border").filter({ hasText: packageName }).first();
   await expect(packageCard).toBeVisible();
-  await packageCard
-    .getByRole("button", { name: /install|reinstall|update/i })
-    .click();
+  await packageCard.getByRole("button", { name: /install|reinstall|update/i }).click();
 
   if (toolName) {
-    await expect
-      .poll(async () => page.getByText(toolName).count())
-      .toBeGreaterThan(0);
+    await expect.poll(async () => page.getByText(toolName).count()).toBeGreaterThan(0);
   }
 }
 
-export async function addMarketplaceToolNode(
-  page: Page,
-  packageSlug: string,
-  nodeLabel: string,
-): Promise<void> {
+export async function addMarketplaceToolNode(page: Page, packageSlug: string, nodeLabel: string): Promise<void> {
   await addPaletteItem(page, `marketplace:${packageSlug}`);
   const dialog = page.getByRole("dialog", { name: /configure tool node/i });
   await expect(dialog).toBeVisible();
@@ -542,9 +469,7 @@ export async function waitForRunTerminal(
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(
-    `Timed out waiting for run ${runId} to reach a terminal state.`,
-  );
+  throw new Error(`Timed out waiting for run ${runId} to reach a terminal state.`);
 }
 
 export async function createObservationViaApi(

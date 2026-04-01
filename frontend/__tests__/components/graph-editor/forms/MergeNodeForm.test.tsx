@@ -31,14 +31,11 @@ describe("MergeNodeForm", () => {
       click: (element: HTMLElement) => act(async () => user.click(element)),
       clear: (element: HTMLElement) => act(async () => user.clear(element)),
       type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
-      selectOptions: (element: HTMLElement, value: string) =>
-        act(async () => user.selectOptions(element, value)),
+      selectOptions: (element: HTMLElement, value: string) => act(async () => user.selectOptions(element, value)),
     };
   };
 
-  const renderWithConfig = (
-    initialConfig: NodeFormProps["config"] = {}
-  ) => {
+  const renderWithConfig = (initialConfig: NodeFormProps["config"] = {}) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
       const handleChange = (nextConfig: NodeFormProps["config"]) => {
@@ -46,14 +43,7 @@ describe("MergeNodeForm", () => {
         mockOnChange(nextConfig);
       };
 
-      return (
-        <MergeNodeForm
-          config={config}
-          onChange={handleChange}
-          errors={{}}
-          setErrors={mockSetErrors}
-        />
-      );
+      return <MergeNodeForm config={config} onChange={handleChange} errors={{}} setErrors={mockSetErrors} />;
     };
 
     return render(<Wrapper />);
@@ -86,18 +76,10 @@ describe("MergeNodeForm", () => {
     it("should display strategy descriptions", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/wait for all incoming branches before proceeding/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/proceed when first branch completes/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/use the most recent value from any branch/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/merge all branch outputs into an array/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/wait for all incoming branches before proceeding/i)).toBeInTheDocument();
+      expect(screen.getByText(/proceed when first branch completes/i)).toBeInTheDocument();
+      expect(screen.getByText(/use the most recent value from any branch/i)).toBeInTheDocument();
+      expect(screen.getByText(/merge all branch outputs into an array/i)).toBeInTheDocument();
     });
 
     it("should render with populated config", () => {
@@ -135,7 +117,7 @@ describe("MergeNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             merge_strategy: "first",
-          })
+          }),
         );
       });
     });
@@ -151,7 +133,7 @@ describe("MergeNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             merge_strategy: "latest",
-          })
+          }),
         );
       });
     });
@@ -167,7 +149,7 @@ describe("MergeNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             merge_strategy: "combine",
-          })
+          }),
         );
       });
     });
@@ -184,7 +166,7 @@ describe("MergeNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             merge_strategy: "all",
-          })
+          }),
         );
       });
     });
@@ -237,16 +219,14 @@ describe("MergeNodeForm", () => {
       renderWithConfig();
 
       expect(
-        screen.getByText(/configure how this node merges data from multiple incoming branches/i)
+        screen.getByText(/configure how this node merges data from multiple incoming branches/i),
       ).toBeInTheDocument();
     });
 
     it("should display description for output key", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/key to store the merged data under in state/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/key to store the merged data under in state/i)).toBeInTheDocument();
     });
 
     it("should display strategy behavior documentation", () => {
@@ -254,11 +234,9 @@ describe("MergeNodeForm", () => {
 
       expect(screen.getByText(/strategy behavior/i)).toBeInTheDocument();
       expect(
-        screen.getByText(/blocks until all branches complete, outputs object with all values/i)
+        screen.getByText(/blocks until all branches complete, outputs object with all values/i),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText(/proceeds immediately when any branch finishes/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/proceeds immediately when any branch finishes/i)).toBeInTheDocument();
     });
   });
 
@@ -280,9 +258,9 @@ describe("MergeNodeForm", () => {
     it("should render radio buttons as clickable labels", () => {
       renderWithConfig();
 
-      const labels = screen.getAllByRole("radio").map(r => r.closest("label"));
+      const labels = screen.getAllByRole("radio").map((r) => r.closest("label"));
       expect(labels.length).toBeGreaterThan(0);
-      labels.forEach(label => {
+      labels.forEach((label) => {
         expect(label).toHaveClass("cursor-pointer");
       });
     });
@@ -332,7 +310,7 @@ describe("MergeNodeForm", () => {
           expect.objectContaining({
             merge_strategy: "combine",
             output_key: expect.any(String),
-          })
+          }),
         );
       });
     });
@@ -353,7 +331,7 @@ describe("MergeNodeForm", () => {
           expect.objectContaining({
             merge_strategy: "latest",
             output_key: "existing_key",
-          })
+          }),
         );
       });
     });

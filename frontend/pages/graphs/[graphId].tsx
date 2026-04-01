@@ -6,26 +6,19 @@ import dynamic from "next/dynamic";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { Spinner } from "@/components/ui/spinner";
 import { showSuccess, showError } from "../../lib/toast";
-import {
-  getApiErrorMessage,
-  graphsApi,
-  type GraphDetail,
-} from "../../lib/api";
+import { getApiErrorMessage, graphsApi, type GraphDetail } from "../../lib/api";
 import { ERROR_FALLBACKS } from "../../lib/error-messages";
 import type { GraphJson, GraphVersion } from "../../lib/graph-types";
 
 // Dynamic import for the GraphEditor to avoid SSR issues with React Flow
-const GraphEditor = dynamic(
-  () => import("../../components/graph-editor/GraphEditor").then((mod) => mod.GraphEditor),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    ),
-  }
-);
+const GraphEditor = dynamic(() => import("../../components/graph-editor/GraphEditor").then((mod) => mod.GraphEditor), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center">
+      <Spinner size="lg" />
+    </div>
+  ),
+});
 
 export default function GraphDetailPage() {
   const router = useRouter();
@@ -50,10 +43,7 @@ export default function GraphDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [graphData, versionData] = await Promise.all([
-        graphsApi.get(graphId),
-        graphsApi.getLatestVersion(graphId),
-      ]);
+      const [graphData, versionData] = await Promise.all([graphsApi.get(graphId), graphsApi.getLatestVersion(graphId)]);
       setGraph(graphData);
       setActiveVersion(versionData);
     } catch (err: unknown) {
@@ -108,7 +98,7 @@ export default function GraphDetailPage() {
         setSaving(false);
       }
     },
-    [graphId]
+    [graphId],
   );
 
   const handleSelectVersion = useCallback(
@@ -126,7 +116,7 @@ export default function GraphDetailPage() {
         setLoadingVersion(false);
       }
     },
-    [graphId]
+    [graphId],
   );
 
   const handleUpdateMetadata = useCallback(
@@ -135,16 +125,14 @@ export default function GraphDetailPage() {
 
       try {
         const updated = await graphsApi.update(graphId, { name, description });
-        setGraph((prev) =>
-          prev ? { ...prev, name: updated.name, description: updated.description } : null
-        );
+        setGraph((prev) => (prev ? { ...prev, name: updated.name, description: updated.description } : null));
         showSuccess("Graph info updated");
       } catch (err: unknown) {
         showError("Update failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
         throw err;
       }
     },
-    [graphId]
+    [graphId],
   );
 
   if (loading) {
@@ -174,10 +162,7 @@ export default function GraphDetailPage() {
               <p className="mt-2 text-sm text-muted-foreground">
                 {error ?? "The graph may have been deleted or you may not have access."}
               </p>
-              <Link
-                href="/graphs"
-                className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90"
-              >
+              <Link href="/graphs" className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90">
                 Back to graphs
               </Link>
             </div>
@@ -199,10 +184,7 @@ export default function GraphDetailPage() {
             ← Back
           </Link>
           <div className="h-4 w-px bg-border" />
-          <h1
-            aria-label={graph.name}
-            className="text-sm font-semibold text-foreground truncate"
-          >
+          <h1 aria-label={graph.name} className="text-sm font-semibold text-foreground truncate">
             {graph.name}
           </h1>
           <span className="hidden sm:inline text-xs text-muted-foreground">Graph Editor</span>

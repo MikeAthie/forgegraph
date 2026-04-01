@@ -102,7 +102,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.23.0"
           cache: true
 
       - name: Go fmt (check)
@@ -141,6 +141,10 @@ jobs:
       - name: Install deps
         working-directory: frontend
         run: npm ci
+
+      - name: Format (check)
+        working-directory: frontend
+        run: npm run format:check
 
       - name: Lint
         working-directory: frontend
@@ -240,7 +244,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.23.0"
           cache: true
 
       - name: Launch QA - Engine Reliability
@@ -272,7 +276,7 @@ jobs:
       - name: Launch QA - Frontend UX
         working-directory: frontend
         run: >
-          npm test -- --runInBand
+          npx jest --runInBand
           __tests__/components/graph-editor/GraphEditor.test.tsx
           __tests__/components/graph-editor/wizard/AgentWizard.test.tsx
           __tests__/components/graph-editor/NodeConfigDialog.test.tsx
@@ -304,3 +308,38 @@ jobs:
         with:
           name: launch-qa-report
           path: launch-qa-report.md
+
+
+  required-checks:
+    name: required-checks
+    needs:
+      - backend
+      - engine
+      - frontend
+      - launch_qa_backend
+      - launch_qa_engine
+      - launch_qa_frontend
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Enforce required CI gates
+        run: |
+          echo "backend=${{ needs.backend.result }}"
+          echo "engine=${{ needs.engine.result }}"
+          echo "frontend=${{ needs.frontend.result }}"
+          echo "launch_qa_backend=${{ needs.launch_qa_backend.result }}"
+          echo "launch_qa_engine=${{ needs.launch_qa_engine.result }}"
+          echo "launch_qa_frontend=${{ needs.launch_qa_frontend.result }}"
+
+          if [ "${{ needs.backend.result }}" != "success" ] || \
+             [ "${{ needs.engine.result }}" != "success" ] || \
+             [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.launch_qa_backend.result }}" != "success" ] || \
+             [ "${{ needs.launch_qa_engine.result }}" != "success" ] || \
+             [ "${{ needs.launch_qa_frontend.result }}" != "success" ]; then
+            echo "One or more required CI checks failed."
+            exit 1
+          fi
+
+          echo "All required CI checks passed."

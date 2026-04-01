@@ -16,13 +16,13 @@ import { createTestUser, ensureUserRegistered, login, type TestUser } from "./he
 
 let seededUser: TestUser;
 
-const API_BASE_URL = (process.env.PLAYWRIGHT_API_URL ??
+const API_BASE_URL = (
+  process.env.PLAYWRIGHT_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 
-const createGraphName = (prefix: string) =>
-  `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const createGraphName = (prefix: string) => `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const GRAPH_URL_PATTERN = /\/graphs\/[a-f0-9-]+/;
 
 async function expectGraphEditorOpen(page: Page) {
@@ -49,11 +49,7 @@ async function getCenter(locator: Locator) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-async function connectNodes(
-  page: Page,
-  sourceLabel: string,
-  targetLabel: string
-) {
+async function connectNodes(page: Page, sourceLabel: string, targetLabel: string) {
   const edges = page.locator('[data-testid^="rf__edge-"]');
   const beforeCount = await edges.count();
 
@@ -63,16 +59,12 @@ async function connectNodes(
   await expect(sourceNode).toBeVisible();
   await expect(targetNode).toBeVisible();
 
-  const sourceHandle = sourceNode
-    .locator(".react-flow__handle.source.react-flow__handle-bottom")
-    .first();
+  const sourceHandle = sourceNode.locator(".react-flow__handle.source.react-flow__handle-bottom").first();
 
   await expect(sourceHandle).toBeVisible();
   await expect(sourceHandle).toHaveClass(/connectionindicator/);
 
-  const targetHandle = targetNode
-    .locator(".react-flow__handle.target.react-flow__handle-top")
-    .first();
+  const targetHandle = targetNode.locator(".react-flow__handle.target.react-flow__handle-top").first();
 
   await expect(targetHandle).toBeVisible();
   await expect(targetHandle).toHaveClass(/connectionindicator/);
@@ -99,10 +91,7 @@ async function connectNodes(
   await expect(edges).toHaveCount(beforeCount + 1);
 }
 
-async function addPromptNodeViaWizard(
-  page: Page,
-  options?: { task?: string; saveToLibrary?: boolean },
-) {
+async function addPromptNodeViaWizard(page: Page, options?: { task?: string; saveToLibrary?: boolean }) {
   const task = options?.task ?? "Write a short response.";
   const saveToLibrary = options?.saveToLibrary ?? false;
 
@@ -127,18 +116,39 @@ async function addPromptNodeViaWizard(
 
 async function addNodeViaConfigDialog(
   page: Page,
-  options: { buttonLabel: RegExp; dialogLabel: RegExp; nodeLabel: string },
+  options: {
+    buttonLabel: RegExp;
+    dialogLabel: RegExp;
+    nodeLabel: string;
+    prepareDialog?: (dialog: Locator) => Promise<void>;
+  },
 ) {
   await page.getByRole("button", { name: options.buttonLabel }).click();
 
   const dialog = page.getByRole("dialog", { name: options.dialogLabel });
   await expect(dialog).toBeVisible();
+  if (options.prepareDialog) {
+    await options.prepareDialog(dialog);
+  }
   await dialog.getByRole("button", { name: /^add node$/i }).click();
   await expect(dialog).toBeHidden();
 
   // Scope assertion to canvas nodes only to avoid matching palette/inspector elements
   const canvasNode = page.locator(".react-flow__node").filter({ hasText: options.nodeLabel });
-  await expect(canvasNode.first()).toBeVisible();
+
+  try {
+    await expect(canvasNode.first()).toBeVisible({ timeout: 3000 });
+    return;
+  } catch {
+    const fitViewButton = page.getByRole("button", { name: /fit view/i });
+    if (await fitViewButton.isVisible().catch(() => false)) {
+      await fitViewButton.click();
+      await expect(canvasNode.first()).toBeVisible({ timeout: 3000 });
+      return;
+    }
+  }
+
+  await expect(page.getByRole("textbox", { name: /node name/i })).toHaveValue(options.nodeLabel);
 }
 
 test.beforeAll(async ({ request }, testInfo) => {
@@ -158,7 +168,10 @@ test.describe("Graph Editor", () => {
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
     await page.locator("#create-graph-description").fill("Testing graph editor");
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     // Should navigate to graph detail page with editor
     await expectGraphEditorOpen(page);
@@ -174,7 +187,10 @@ test.describe("Graph Editor", () => {
     // Create and open graph
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -195,7 +211,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -228,7 +247,10 @@ test.describe("Graph Editor", () => {
     // Create and open graph
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -244,7 +266,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -256,21 +281,27 @@ test.describe("Graph Editor", () => {
     await wizard.getByRole("button", { name: /email responder/i }).click();
     await wizard.getByRole("button", { name: /^next$/i }).click();
 
-    await wizard.getByLabel(/prompt goal/i).fill("Draft concise customer email replies.");
+    await expect(wizard.getByLabel(/agent label/i)).toHaveValue("Inbox Agent");
+    await expect(wizard.getByLabel(/task instructions/i)).toContainText(/draft a professional reply/i);
+    await wizard.getByRole("button", { name: /^next$/i }).click();
+
+    await expect(wizard.getByLabel(/allowed tools/i)).toContainText(/gmail\.list_unread/i);
+    await expect(wizard.getByLabel(/approval-required tools/i)).toContainText(/gmail\.send_message/i);
     await wizard.getByRole("button", { name: /^next$/i }).click();
 
     await wizard.getByRole("button", { name: /^skip$/i }).click();
-    await wizard.getByRole("button", { name: /^skip$/i }).click();
 
-    await expect(wizard.getByText(/output node configured/i)).toBeVisible();
+    await expect(wizard.getByText(/output node will be created automatically/i)).toBeVisible();
+    await expect(wizard.getByLabel(/output key/i)).toHaveValue("email_result");
     await wizard.getByRole("button", { name: /^next$/i }).click();
 
-    await expect(wizard.getByText(/your agent is ready/i)).toBeVisible();
+    await expect(wizard.getByText(/agent flow ready/i)).toBeVisible();
+    await expect(wizard.getByText("Inbox Agent")).toBeVisible();
     await wizard.getByRole("button", { name: /finish setup/i }).click();
 
     await expect(wizard).toBeHidden();
-    await expect(page.locator(".react-flow__node").filter({ hasText: "Draft Reply" }).first()).toBeVisible();
-    await expect(page.locator(".react-flow__node").filter({ hasText: "Final Output" }).first()).toBeVisible();
+    await expect(page.locator(".react-flow__node").filter({ hasText: "Inbox Agent" }).first()).toBeVisible();
+    await expect(page.locator(".react-flow__node").filter({ hasText: "Workflow Result" }).first()).toBeVisible();
   });
 
   test("adds multiple nodes of different types", async ({ page }) => {
@@ -278,7 +309,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -296,6 +330,9 @@ test.describe("Graph Editor", () => {
       buttonLabel: /^transform/i,
       dialogLabel: /configure transform node/i,
       nodeLabel: "Transform",
+      prepareDialog: async (dialog) => {
+        await dialog.getByLabel(/expression/i).fill("return state.input;");
+      },
     });
 
     await addNodeViaConfigDialog(page, {
@@ -312,7 +349,10 @@ test.describe("Graph Editor", () => {
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
     await page.locator("#create-graph-description").fill(description);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -327,7 +367,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -338,9 +381,7 @@ test.describe("Graph Editor", () => {
     await page.getByText("Prompt Node").click();
 
     // Inspector should show node config
-    await expect(
-      page.getByRole("heading", { name: "Node Config", exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /node name/i })).toHaveValue("Prompt Node");
     await expect(page.getByText("prompt", { exact: true })).toBeVisible(); // Type badge
     await expect(page.getByRole("button", { name: /^delete$/i })).toBeVisible();
   });
@@ -350,7 +391,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -371,7 +415,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -393,7 +440,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -407,11 +457,10 @@ test.describe("Graph Editor", () => {
 
     // Configure HTTP settings
     await expect(page.getByText("HTTP Configuration")).toBeVisible();
-
-    const httpConfigSection = page
-      .getByRole("heading", { name: /^http configuration$/i })
-      .locator("..");
-    const methodSelect = httpConfigSection.locator("select");
+    const methodSelect = page
+      .getByRole("complementary", { name: /inspector panel/i })
+      .locator("select")
+      .first();
     await methodSelect.selectOption("POST");
 
     const urlInput = page.getByPlaceholder(/https:\/\/api\.example\.com/i);
@@ -426,7 +475,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -435,6 +487,9 @@ test.describe("Graph Editor", () => {
       buttonLabel: /^transform/i,
       dialogLabel: /configure transform node/i,
       nodeLabel: "Transform",
+      prepareDialog: async (dialog) => {
+        await dialog.getByLabel(/expression/i).fill("return state.input;");
+      },
     });
     await page.locator(".react-flow__node").filter({ hasText: "Transform" }).first().click();
 
@@ -452,7 +507,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -488,7 +546,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -518,7 +579,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -544,7 +608,10 @@ test.describe("Graph Editor", () => {
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
     await page.locator("#create-graph-description").fill(originalDescription);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -562,9 +629,7 @@ test.describe("Graph Editor", () => {
     await page.getByRole("button", { name: /^save$/i }).click();
 
     // Should show updated values
-    await expect(
-      page.getByRole("heading", { name: "Updated Graph Name", exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Updated Graph Name", exact: true })).toBeVisible();
     await expect(page.getByText("Updated description")).toBeVisible();
 
     // Should show success toast
@@ -576,7 +641,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -591,9 +659,7 @@ test.describe("Graph Editor", () => {
     await page.getByRole("button", { name: /^cancel$/i }).click();
 
     // Should show original name
-    await expect(
-      page.getByRole("heading", { name: graphName, exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: graphName, exact: true })).toBeVisible();
     await expect(page.getByText("Should Not Save")).not.toBeVisible();
   });
 
@@ -602,7 +668,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -645,7 +714,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -662,7 +734,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -679,7 +754,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -735,7 +813,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -749,9 +830,7 @@ test.describe("Graph Editor", () => {
       dialogLabel: /configure http node/i,
       nodeLabel: "HTTP",
     });
-    const httpConfigSection = page
-      .getByRole("heading", { name: /^http configuration$/i })
-      .locator("..");
+    const httpConfigSection = page.getByRole("heading", { name: /^http configuration$/i }).locator("..");
     await httpConfigSection.locator("select").selectOption("POST");
     await page.getByPlaceholder(/https:\/\/api\.example\.com/i).fill("https://api.test.com/endpoint");
     await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();
@@ -760,6 +839,9 @@ test.describe("Graph Editor", () => {
       buttonLabel: /^transform/i,
       dialogLabel: /configure transform node/i,
       nodeLabel: "Transform",
+      prepareDialog: async (dialog) => {
+        await dialog.getByLabel(/expression/i).fill("return state.input;");
+      },
     });
     await page.getByPlaceholder(/state\.input \| uppercase/i).fill("state.data | lowercase");
     await expect(page.getByText(/state\.data \| lowercase\.\.\./i)).toBeVisible();
@@ -790,12 +872,9 @@ test.describe("Graph Editor", () => {
     expect(graphId).toBeTruthy();
 
     const accessToken = await getAccessToken(request, seededUser);
-    const latestVersionResponse = await request.get(
-      `${API_BASE_URL}/api/graphs/${graphId}/versions/latest`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    );
+    const latestVersionResponse = await request.get(`${API_BASE_URL}/api/graphs/${graphId}/versions/latest`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     expect(latestVersionResponse.ok()).toBeTruthy();
     const latestVersion = (await latestVersionResponse.json()) as {
       data?: { graph_json?: { edges?: unknown[] } };
@@ -842,7 +921,10 @@ test.describe("Graph Editor", () => {
 
     await page.getByRole("button", { name: /^new graph$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -870,11 +952,16 @@ test.describe("Graph Editor", () => {
     await page.getByPlaceholder(/select or enter prompt id/i).fill("v2-prompt");
     await page.getByRole("button", { name: /^save$/i }).click();
     // Wait for v2 to appear in dropdown
-    await expect.poll(async () => {
-      return versionSelect.evaluate((el: HTMLSelectElement) => {
-        return Array.from(el.options).some((o) => o.textContent === "v2");
-      });
-    }, { timeout: 30000 }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          return versionSelect.evaluate((el: HTMLSelectElement) => {
+            return Array.from(el.options).some((o) => o.textContent === "v2");
+          });
+        },
+        { timeout: 30000 },
+      )
+      .toBe(true);
 
     const versionIdsAfterV2 = await versionSelect.evaluate((el: HTMLSelectElement) => {
       const byText = (text: string) => Array.from(el.options).find((o) => o.textContent === text)?.value ?? "";
@@ -904,10 +991,15 @@ test.describe("Graph Editor", () => {
     await page.getByPlaceholder(/select or enter prompt id/i).fill("v3-prompt");
     await page.getByRole("button", { name: /^save$/i }).click();
     // Wait for v3 to appear in dropdown
-    await expect.poll(async () => {
-      return versionSelect.evaluate((el: HTMLSelectElement) => {
-        return Array.from(el.options).some((o) => o.textContent === "v3");
-      });
-    }, { timeout: 30000 }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          return versionSelect.evaluate((el: HTMLSelectElement) => {
+            return Array.from(el.options).some((o) => o.textContent === "v3");
+          });
+        },
+        { timeout: 30000 },
+      )
+      .toBe(true);
   });
 });

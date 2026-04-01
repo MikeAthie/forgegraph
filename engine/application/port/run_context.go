@@ -12,10 +12,15 @@ type RunContext struct {
 	GraphID           string
 	RunID             string
 	SessionID         string
+	TraceID           string
+	Traceparent       string
+	Tracestate        string
 	MemoryBuffer      *entity.MessageBuffer
 	MemoryConfig      *entity.MemoryConfig
 	CurrentSummary    *entity.Summary
 	TrackMessage      func(count int)
+	TrackLLMCall      func() error
+	TrackToolCall     func() error
 	MemoryRetriever   MemoryRetriever
 	ObservationClient ObservationMemoryClient
 	Policy            *entity.ExecutionPolicy

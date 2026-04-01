@@ -4,23 +4,23 @@
  * Tests authentication state management, login/logout flows, and token handling.
  */
 
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { useRouter } from 'next/router';
-import { ReactNode } from 'react';
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { useRouter } from "next/router";
+import { ReactNode } from "react";
 
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import * as api from '@/lib/api';
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import * as api from "@/lib/api";
 
 // Mock dependencies
-jest.mock('next/router');
-jest.mock('@/lib/api');
+jest.mock("next/router");
+jest.mock("@/lib/api");
 
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 const mockAuthApi = api.authApi as jest.Mocked<typeof api.authApi>;
 const mockGetAccessToken = api.getAccessToken as jest.MockedFunction<typeof api.getAccessToken>;
 const mockClearTokens = api.clearTokens as jest.MockedFunction<typeof api.clearTokens>;
 
-describe('AuthContext', () => {
+describe("AuthContext", () => {
   const mockPush = jest.fn();
 
   beforeEach(() => {
@@ -29,32 +29,30 @@ describe('AuthContext', () => {
       push: mockPush,
       replace: jest.fn(),
       prefetch: jest.fn(),
-      pathname: '/',
+      pathname: "/",
       query: {},
-      asPath: '/',
+      asPath: "/",
     } as any);
   });
 
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <AuthProvider>{children}</AuthProvider>
-  );
+  const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
 
-  describe('useAuth Hook', () => {
-    it('should throw error when used outside AuthProvider', () => {
+  describe("useAuth Hook", () => {
+    it("should throw error when used outside AuthProvider", () => {
       // Suppress console.error for this test
-      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
 
       expect(() => {
         renderHook(() => useAuth());
-      }).toThrow('useAuth must be used within an AuthProvider');
+      }).toThrow("useAuth must be used within an AuthProvider");
 
       consoleError.mockRestore();
     });
 
-    it('should provide auth context when used within AuthProvider', () => {
+    it("should provide auth context when used within AuthProvider", () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -69,11 +67,11 @@ describe('AuthContext', () => {
     });
   });
 
-  describe('Initial State', () => {
-    it('should start with loading true and user null', () => {
+  describe("Initial State", () => {
+    it("should start with loading true and user null", () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -87,10 +85,10 @@ describe('AuthContext', () => {
       });
     });
 
-    it('should check authentication on mount', async () => {
+    it("should check authentication on mount", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
 
       renderHook(() => useAuth(), { wrapper });
 
@@ -100,12 +98,12 @@ describe('AuthContext', () => {
     });
   });
 
-  describe('Login Flow', () => {
-    it('should successfully login and set user', async () => {
+  describe("Login Flow", () => {
+    it("should successfully login and set user", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockResolvedValueOnce({ id: '1', email: 'test@example.com' });
-      mockAuthApi.login.mockResolvedValue({ access: 'token', refresh: 'refresh' });
+      mockAuthApi.getMe.mockResolvedValueOnce({ id: "1", email: "test@example.com" });
+      mockAuthApi.login.mockResolvedValue({ access: "token", refresh: "refresh" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -115,24 +113,24 @@ describe('AuthContext', () => {
 
       let loginResult: any;
       await act(async () => {
-        mockAuthApi.getMe.mockResolvedValueOnce({ id: '1', email: 'test@example.com' });
-        loginResult = await result.current.login('test@example.com', 'password123');
+        mockAuthApi.getMe.mockResolvedValueOnce({ id: "1", email: "test@example.com" });
+        loginResult = await result.current.login("test@example.com", "password123");
       });
 
       await waitFor(() => {
         expect(loginResult.success).toBe(true);
-        expect(result.current.user).toEqual({ id: '1', email: 'test@example.com' });
+        expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
         expect(result.current.isAuthenticated).toBe(true);
-        expect(mockPush).toHaveBeenCalledWith('/graphs');
+        expect(mockPush).toHaveBeenCalledWith("/graphs");
       });
     });
 
-    it('should handle login failure with error message', async () => {
+    it("should handle login failure with error message", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
       mockAuthApi.login.mockRejectedValue({
-        response: { data: { detail: 'Invalid credentials' } },
+        response: { data: { detail: "Invalid credentials" } },
       });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -143,20 +141,20 @@ describe('AuthContext', () => {
 
       let loginResult: any;
       await act(async () => {
-        loginResult = await result.current.login('test@example.com', 'wrongpassword');
+        loginResult = await result.current.login("test@example.com", "wrongpassword");
       });
 
       expect(loginResult.success).toBe(false);
-      expect(loginResult.error).toBe('Invalid credentials');
-      expect(result.current.error).toBe('Invalid credentials');
+      expect(loginResult.error).toBe("Invalid credentials");
+      expect(result.current.error).toBe("Invalid credentials");
       expect(result.current.user).toBeNull();
     });
 
-    it('should handle generic login error', async () => {
+    it("should handle generic login error", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
-      mockAuthApi.login.mockRejectedValue(new Error('Network error'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
+      mockAuthApi.login.mockRejectedValue(new Error("Network error"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -166,17 +164,17 @@ describe('AuthContext', () => {
 
       let loginResult: any;
       await act(async () => {
-        loginResult = await result.current.login('test@example.com', 'password123');
+        loginResult = await result.current.login("test@example.com", "password123");
       });
 
       expect(loginResult.success).toBe(false);
-      expect(loginResult.error).toContain('Login failed');
+      expect(loginResult.error).toContain("Login failed");
     });
 
-    it('should clear error before login attempt', async () => {
+    it("should clear error before login attempt", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -186,21 +184,21 @@ describe('AuthContext', () => {
 
       // First failed login
       mockAuthApi.login.mockRejectedValueOnce({
-        response: { data: { detail: 'First error' } },
+        response: { data: { detail: "First error" } },
       });
 
       await act(async () => {
-        await result.current.login('test@example.com', 'wrong');
+        await result.current.login("test@example.com", "wrong");
       });
 
-      expect(result.current.error).toBe('First error');
+      expect(result.current.error).toBe("First error");
 
       // Second login attempt should clear previous error
-      mockAuthApi.login.mockResolvedValue({ access: 'token', refresh: 'refresh' });
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
+      mockAuthApi.login.mockResolvedValue({ access: "token", refresh: "refresh" });
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
 
       await act(async () => {
-        await result.current.login('test@example.com', 'correct');
+        await result.current.login("test@example.com", "correct");
       });
 
       await waitFor(() => {
@@ -209,12 +207,12 @@ describe('AuthContext', () => {
     });
   });
 
-  describe('Registration Flow', () => {
-    it('should successfully register and redirect to login', async () => {
+  describe("Registration Flow", () => {
+    it("should successfully register and redirect to login", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
-      mockAuthApi.register.mockResolvedValue({ email: 'new@example.com' });
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
+      mockAuthApi.register.mockResolvedValue({ email: "new@example.com" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -224,19 +222,19 @@ describe('AuthContext', () => {
 
       let registerResult: any;
       await act(async () => {
-        registerResult = await result.current.register('new@example.com', 'password123');
+        registerResult = await result.current.register("new@example.com", "password123");
       });
 
       expect(registerResult.success).toBe(true);
-      expect(mockPush).toHaveBeenCalledWith('/login?registered=true');
+      expect(mockPush).toHaveBeenCalledWith("/login?registered=true");
     });
 
-    it('should handle registration failure with validation errors', async () => {
+    it("should handle registration failure with validation errors", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
       mockAuthApi.register.mockRejectedValue({
-        response: { data: { email: ['Email already exists'] } },
+        response: { data: { email: ["Email already exists"] } },
       });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -247,19 +245,19 @@ describe('AuthContext', () => {
 
       let registerResult: any;
       await act(async () => {
-        registerResult = await result.current.register('existing@example.com', 'password123');
+        registerResult = await result.current.register("existing@example.com", "password123");
       });
 
       expect(registerResult.success).toBe(false);
-      expect(registerResult.error).toBe('Email already exists');
-      expect(result.current.error).toBe('Email already exists');
+      expect(registerResult.error).toBe("Email already exists");
+      expect(result.current.error).toBe("Email already exists");
     });
 
-    it('should handle generic registration error', async () => {
+    it("should handle generic registration error", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
-      mockAuthApi.register.mockRejectedValue(new Error('Network error'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
+      mockAuthApi.register.mockRejectedValue(new Error("Network error"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -269,25 +267,25 @@ describe('AuthContext', () => {
 
       let registerResult: any;
       await act(async () => {
-        registerResult = await result.current.register('new@example.com', 'password123');
+        registerResult = await result.current.register("new@example.com", "password123");
       });
 
       expect(registerResult.success).toBe(false);
-      expect(registerResult.error).toContain('Registration failed');
+      expect(registerResult.error).toContain("Registration failed");
     });
   });
 
-  describe('Logout Flow', () => {
-    it('should successfully logout and redirect', async () => {
+  describe("Logout Flow", () => {
+    it("should successfully logout and redirect", async () => {
       // Start authenticated
-      mockGetAccessToken.mockReturnValue('token');
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
+      mockGetAccessToken.mockReturnValue("token");
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
       mockAuthApi.logout.mockResolvedValue();
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual({ id: '1', email: 'test@example.com' });
+        expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
       });
 
       await act(async () => {
@@ -297,21 +295,21 @@ describe('AuthContext', () => {
       expect(mockAuthApi.logout).toHaveBeenCalled();
       expect(result.current.user).toBeNull();
       expect(result.current.isAuthenticated).toBe(false);
-      expect(mockPush).toHaveBeenCalledWith('/login');
+      expect(mockPush).toHaveBeenCalledWith("/login");
     });
 
-    it('should handle logout API errors gracefully', async () => {
+    it("should handle logout API errors gracefully", async () => {
       // Start authenticated
-      mockGetAccessToken.mockReturnValue('token');
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
-      mockAuthApi.logout.mockRejectedValue(new Error('Network error'));
+      mockGetAccessToken.mockReturnValue("token");
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
+      mockAuthApi.logout.mockRejectedValue(new Error("Network error"));
 
-      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual({ id: '1', email: 'test@example.com' });
+        expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
       });
 
       await act(async () => {
@@ -320,44 +318,44 @@ describe('AuthContext', () => {
 
       // Should still clear user and redirect even if API call fails
       expect(result.current.user).toBeNull();
-      expect(mockPush).toHaveBeenCalledWith('/login');
-      expect(consoleError).toHaveBeenCalledWith('Logout error:', expect.any(Error));
+      expect(mockPush).toHaveBeenCalledWith("/login");
+      expect(consoleError).toHaveBeenCalledWith("Logout error:", expect.any(Error));
 
       consoleError.mockRestore();
     });
   });
 
-  describe('Token Refresh', () => {
-    it('should refresh token if no access token exists', async () => {
+  describe("Token Refresh", () => {
+    it("should refresh token if no access token exists", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
         expect(mockAuthApi.refreshToken).toHaveBeenCalled();
-        expect(result.current.user).toEqual({ id: '1', email: 'test@example.com' });
+        expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
         expect(result.current.loading).toBe(false);
       });
     });
 
-    it('should skip refresh if access token exists', async () => {
-      mockGetAccessToken.mockReturnValue('existing-token');
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
+    it("should skip refresh if access token exists", async () => {
+      mockGetAccessToken.mockReturnValue("existing-token");
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
         expect(mockAuthApi.refreshToken).not.toHaveBeenCalled();
-        expect(result.current.user).toEqual({ id: '1', email: 'test@example.com' });
+        expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
       });
     });
 
-    it('should clear tokens on authentication failure', async () => {
+    it("should clear tokens on authentication failure", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Unauthorized'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Unauthorized"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -369,11 +367,11 @@ describe('AuthContext', () => {
     });
   });
 
-  describe('Check Auth', () => {
-    it('should allow manual auth check', async () => {
+  describe("Check Auth", () => {
+    it("should allow manual auth check", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -382,26 +380,26 @@ describe('AuthContext', () => {
       });
 
       // Now simulate token being available
-      mockGetAccessToken.mockReturnValue('new-token');
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
+      mockGetAccessToken.mockReturnValue("new-token");
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
 
       await act(async () => {
         await result.current.checkAuth();
       });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual({ id: '1', email: 'test@example.com' });
+        expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
       });
     });
   });
 
-  describe('Error Management', () => {
-    it('should provide clearError function', async () => {
+  describe("Error Management", () => {
+    it("should provide clearError function", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
       mockAuthApi.login.mockRejectedValue({
-        response: { data: { detail: 'Login error' } },
+        response: { data: { detail: "Login error" } },
       });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -412,10 +410,10 @@ describe('AuthContext', () => {
 
       // Create an error
       await act(async () => {
-        await result.current.login('test@example.com', 'wrong');
+        await result.current.login("test@example.com", "wrong");
       });
 
-      expect(result.current.error).toBe('Login error');
+      expect(result.current.error).toBe("Login error");
 
       // Clear the error
       act(() => {
@@ -426,11 +424,11 @@ describe('AuthContext', () => {
     });
   });
 
-  describe('isAuthenticated Derived State', () => {
-    it('should be false when user is null', async () => {
+  describe("isAuthenticated Derived State", () => {
+    it("should be false when user is null", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
-      mockAuthApi.getMe.mockRejectedValue(new Error('Not authenticated'));
+      mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -439,9 +437,9 @@ describe('AuthContext', () => {
       });
     });
 
-    it('should be true when user exists', async () => {
-      mockGetAccessToken.mockReturnValue('token');
-      mockAuthApi.getMe.mockResolvedValue({ id: '1', email: 'test@example.com' });
+    it("should be true when user exists", async () => {
+      mockGetAccessToken.mockReturnValue("token");
+      mockAuthApi.getMe.mockResolvedValue({ id: "1", email: "test@example.com" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 

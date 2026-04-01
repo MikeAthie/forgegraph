@@ -65,47 +65,45 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   const effectiveMethod = httpConfig.method ?? "GET";
   const configuredCredential = useMemo(
     () => credentials.find((item) => item.id === httpConfig.credential_id),
-    [credentials, httpConfig.credential_id]
+    [credentials, httpConfig.credential_id],
   );
   const provider = httpConfig.provider || configuredCredential?.provider || "openai";
   const filteredCredentials = useMemo(
     () => credentials.filter((item) => item.provider === provider),
-    [credentials, provider]
+    [credentials, provider],
   );
   const selectedCredential = useMemo(
     () => filteredCredentials.find((item) => item.id === httpConfig.credential_id),
-    [filteredCredentials, httpConfig.credential_id]
+    [filteredCredentials, httpConfig.credential_id],
   );
   const contentTypeHeader = useMemo(() => {
     const headers = httpConfig.headers || {};
-    const contentTypeEntry = Object.entries(headers).find(
-      ([key]) => key.trim().toLowerCase() === "content-type"
-    );
+    const contentTypeEntry = Object.entries(headers).find(([key]) => key.trim().toLowerCase() === "content-type");
     return (contentTypeEntry?.[1] || "").toString().toLowerCase();
   }, [httpConfig.headers]);
-  const shouldValidateJsonBody = effectiveMethod !== "GET" && (
-    contentTypeHeader.includes("application/json") || contentTypeHeader.trim().length === 0
-  );
+  const shouldValidateJsonBody =
+    effectiveMethod !== "GET" &&
+    (contentTypeHeader.includes("application/json") || contentTypeHeader.trim().length === 0);
 
   const handleChange = useCallback(
     <K extends keyof HttpConfig>(field: K, value: HttpConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleProviderChange = useCallback(
@@ -116,7 +114,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
       }
       onChange(nextConfig);
     },
-    [httpConfig, onChange, provider]
+    [httpConfig, onChange, provider],
   );
 
   useEffect(() => {
@@ -267,12 +265,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for HTTP */}
-      <AgentFields
-        config={httpConfig}
-        onChange={handleAgentChange}
-        showRole={false}
-        showExamples={false}
-      />
+      <AgentFields config={httpConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
 
       <Separator />
 
@@ -285,9 +278,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
             <select
               id="method"
               value={effectiveMethod}
-              onChange={(e) =>
-                handleChange("method", e.target.value as HttpConfig["method"])
-              }
+              onChange={(e) => handleChange("method", e.target.value as HttpConfig["method"])}
               className="w-full px-3 py-2 border rounded-md bg-background text-sm"
             >
               {HTTP_METHODS.map((method) => (
@@ -298,13 +289,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
             </select>
           </FormField>
 
-          <FormField
-            label="URL"
-            htmlFor="url"
-            className="flex-1"
-            required
-            error={errors.url}
-          >
+          <FormField label="URL" htmlFor="url" className="flex-1" required error={errors.url}>
             <Input
               id="url"
               value={httpConfig.url || ""}
@@ -315,10 +300,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           </FormField>
         </div>
 
-        <FormField
-          label="Headers"
-          description="HTTP headers to include with the request"
-        >
+        <FormField label="Headers" description="HTTP headers to include with the request">
           <KeyValueEditor
             value={httpConfig.headers || {}}
             onChange={(headers) => handleChange("headers", headers)}
@@ -372,8 +354,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
             )}
             {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 && (
               <div className="mt-2 text-xs text-muted-foreground">
-                No credentials found for this provider. Add one in the Credentials page.
-                {" "}
+                No credentials found for this provider. Add one in the Credentials page.{" "}
                 <Link
                   href={`/credentials?provider=${encodeURIComponent(provider)}`}
                   className="underline underline-offset-2"
@@ -392,9 +373,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
                 ? "Selected credential is expired."
                 : "Selected credential is expiring soon."}
             </p>
-            {selectedCredential.health_message && (
-              <p className="mt-1">{selectedCredential.health_message}</p>
-            )}
+            {selectedCredential.health_message && <p className="mt-1">{selectedCredential.health_message}</p>}
             {selectedCredential.requires_reauth && (
               <Link
                 href={`/credentials?provider=${encodeURIComponent(provider)}`}
@@ -428,11 +407,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           </FormField>
         )}
 
-        <FormField
-          label="Output Key"
-          htmlFor="output-key"
-          description="Key to store the response under in state"
-        >
+        <FormField label="Output Key" htmlFor="output-key" description="Key to store the response under in state">
           <Input
             id="output-key"
             value={httpConfig.output_key || ""}

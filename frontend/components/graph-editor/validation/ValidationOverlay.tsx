@@ -15,29 +15,19 @@ export interface ValidationOverlayProps {
  * Validation overlay that shows indicators for missing start/end nodes
  * Positioned on the canvas to guide users to fix validation issues
  */
-export function ValidationOverlay({
-  onAddStartNode,
-  onAddOutputNode,
-  className,
-}: ValidationOverlayProps) {
+export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }: ValidationOverlayProps) {
   const { hasStartNode, hasOutputNode, errors } = useValidation();
 
-  const showStartIndicator =
-    !hasStartNode &&
-    errors.some((e) => e.code === ValidationErrorCode.NO_START_NODE);
+  const showStartIndicator = !hasStartNode && errors.some((e) => e.code === ValidationErrorCode.NO_START_NODE);
 
-  const showOutputIndicator =
-    !hasOutputNode &&
-    errors.some((e) => e.code === ValidationErrorCode.NO_OUTPUT_NODE);
+  const showOutputIndicator = !hasOutputNode && errors.some((e) => e.code === ValidationErrorCode.NO_OUTPUT_NODE);
 
   if (!showStartIndicator && !showOutputIndicator) {
     return null;
   }
 
   return (
-    <div
-      className={cn("pointer-events-none absolute inset-0 z-10", className)}
-    >
+    <div className={cn("pointer-events-none absolute inset-0 z-10", className)}>
       {/* Missing Start Node Indicator */}
       {showStartIndicator && (
         <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-auto">
@@ -50,12 +40,8 @@ export function ValidationOverlay({
               <AlertCircle className="w-6 h-6 text-amber-500" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                Add Start Node
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Click to add entry point
-              </p>
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Add Start Node</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Click to add entry point</p>
             </div>
             <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-amber-500/50 group-hover:border-amber-500 transition-colors">
               <Plus className="w-4 h-4 text-amber-500" />
@@ -76,12 +62,8 @@ export function ValidationOverlay({
               <AlertCircle className="w-6 h-6 text-rose-500" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
-                Add Output Node
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Click to define result
-              </p>
+              <p className="text-sm font-medium text-rose-600 dark:text-rose-400">Add Output Node</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Click to define result</p>
             </div>
             <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-rose-500/50 group-hover:border-rose-500 transition-colors">
               <Plus className="w-4 h-4 text-rose-500" />

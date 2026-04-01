@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -8,6 +10,7 @@ import {
   organizationsApi,
   type Organization,
   type OrganizationMember,
+  type OrganizationRoleCapabilities,
 } from "../../lib/api";
 import { showError, showSuccess } from "../../lib/toast";
 import {
@@ -43,10 +46,33 @@ const formatDateTime = (value: string) => {
   return date.toLocaleString();
 };
 
+const ROLE_MATRIX: Array<{
+  role: OrganizationMember["role"];
+  label: string;
+  description: string;
+}> = [
+  { role: "owner", label: "Owner", description: "Full tenant governance, including retention and exports." },
+  { role: "admin", label: "Admin", description: "Operational control without ownership transfer." },
+  { role: "member", label: "Member", description: "Can work with curated memory, but not govern the tenant." },
+  { role: "viewer", label: "Viewer", description: "Read-only access to memory and runtime context." },
+];
+
+const capabilityLabel: Record<keyof OrganizationRoleCapabilities, string> = {
+  can_view_observations: "View observations",
+  can_delete_observations: "Delete observations",
+  can_manage_retention: "Manage retention",
+  can_export_memory_data: "Export memory data",
+  can_manage_members: "Manage members",
+};
+
 export default function OrganizationPage() {
   const { user } = useAuth();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [role, setRole] = useState<OrganizationMember["role"] | null>(null);
+  const [governance, setGovernance] = useState<{
+    current_role_capabilities: OrganizationRoleCapabilities;
+    role_capabilities: Record<OrganizationMember["role"], OrganizationRoleCapabilities>;
+  } | null>(null);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -61,7 +87,11 @@ export default function OrganizationPage() {
   });
 
   const canManageMembers = useMemo(
-    () => role === "owner" || role === "admin" || user?.organization_role === "owner" || user?.organization_role === "admin",
+    () =>
+      role === "owner" ||
+      role === "admin" ||
+      user?.organization_role === "owner" ||
+      user?.organization_role === "admin",
     [role, user?.organization_role],
   );
 
@@ -72,6 +102,7 @@ export default function OrganizationPage() {
       const response = await organizationsApi.me();
       setOrganization(response.organization);
       setRole(response.role);
+      setGovernance(response.governance);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Failed to load organization details."));
     } finally {
@@ -164,9 +195,7 @@ export default function OrganizationPage() {
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
             <h1 className="text-2xl sm:text-3xl font-semibold">Organization</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage your organization profile and member access.
-            </p>
+            <p className="text-sm text-muted-foreground">Manage your organization profile and member access.</p>
           </div>
 
           {error && (
@@ -181,26 +210,91 @@ export default function OrganizationPage() {
               Loading organization...
             </div>
           ) : organization ? (
-            <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Organization details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase">Name</p>
-                  <p className="mt-1 text-sm font-semibold">{organization.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase">Organization ID</p>
-                  <p className="mt-1 text-xs font-mono text-muted-foreground">{organization.id}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase">Your role</p>
-                  <p className="mt-1 text-sm capitalize">{role ?? user?.organization_role ?? "member"}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+              <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">Organization details</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Name</p>
+                    <p className="mt-1 text-sm font-semibold">{organization.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Organization ID</p>
+                    <p className="mt-1 text-xs font-mono text-muted-foreground">{organization.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Your role</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Badge variant="outline" className="capitalize">
+                        {role ?? user?.organization_role ?? "member"}
+                      </Badge>
+                      {governance && (
+                        <span className="text-xs text-muted-foreground">
+                          {governance.current_role_capabilities.can_manage_retention
+                            ? "Can govern memory retention and exports."
+                            : "Can inspect memory, but governance stays with admins."}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">Memory governance by role</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {ROLE_MATRIX.map((roleEntry) => {
+                    const capabilities = governance?.role_capabilities[roleEntry.role];
+                    const enabledCapabilities = capabilities
+                      ? (Object.entries(capabilities) as Array<[keyof OrganizationRoleCapabilities, boolean]>)
+                          .filter(([, enabled]) => enabled)
+                          .map(([key]) => capabilityLabel[key])
+                      : [];
+
+                    return (
+                      <div key={roleEntry.role} className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-foreground">{roleEntry.label}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{roleEntry.description}</p>
+                          </div>
+                          <Badge variant={roleEntry.role === role ? "secondary" : "outline"} className="capitalize">
+                            {roleEntry.role === role ? "Current role" : roleEntry.label}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {enabledCapabilities.map((label) => (
+                            <Badge key={label} variant="outline">
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            </div>
           ) : null}
+
+          {governance && (
+            <Alert className="border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-100">
+              <ShieldCheck className="h-4 w-4" />
+              <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Memory retention changes and exported memory reporting are restricted to owner and admin roles.
+                </span>
+                <Link href="/admin/operations" className="inline-flex items-center gap-1 text-sm font-medium">
+                  Review policies and retention
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -212,9 +306,7 @@ export default function OrganizationPage() {
             <CardContent className="space-y-6">
               {!canManageMembers && (
                 <Alert>
-                  <AlertDescription>
-                    You have read-only access. Ask an admin to manage members.
-                  </AlertDescription>
+                  <AlertDescription>You have read-only access. Ask an admin to manage members.</AlertDescription>
                 </Alert>
               )}
 
@@ -293,16 +385,12 @@ export default function OrganizationPage() {
                             <p className="text-sm font-medium">{member.email}</p>
                             {member.is_default && <Badge variant="outline">Default</Badge>}
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            Joined {formatDateTime(member.joined_at)}
-                          </p>
+                          <p className="text-xs text-muted-foreground">Joined {formatDateTime(member.joined_at)}</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Select
                             value={member.role}
-                            onValueChange={(value) =>
-                              handleRoleChange(member, value as OrganizationMember["role"])
-                            }
+                            onValueChange={(value) => handleRoleChange(member, value as OrganizationMember["role"])}
                             disabled={updatingMemberId === member.user_id}
                           >
                             <SelectTrigger className="w-[140px]">

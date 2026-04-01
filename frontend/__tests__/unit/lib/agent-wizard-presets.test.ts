@@ -12,12 +12,7 @@ describe("agent-wizard-presets", () => {
     const presetIds = AGENT_WIZARD_PRESETS.map((preset) => preset.id);
 
     expect(presetIds).toEqual(
-      expect.arrayContaining([
-        "telegram-bot",
-        "whatsapp-bot",
-        "email-responder",
-        "memory-first-assistant",
-      ]),
+      expect.arrayContaining(["telegram-bot", "whatsapp-bot", "email-responder", "memory-first-assistant"]),
     );
   });
 
@@ -52,9 +47,7 @@ describe("agent-wizard-presets", () => {
 
     expect(blueprint.nodes[1]?.config).toEqual(
       expect.objectContaining({
-        observation_context_paths: [
-          `node.${OBSERVATION_CONTEXT_PLACEHOLDER}.output`,
-        ],
+        observation_context_paths: [`node.${OBSERVATION_CONTEXT_PLACEHOLDER}.output`],
       }),
     );
     expect(blueprint.nodes[2]?.config).toEqual(
@@ -67,9 +60,7 @@ describe("agent-wizard-presets", () => {
 
   it("stores tool-first agent seeds for integration presets", () => {
     const email = getAgentWizardPreset("email-responder");
-    expect(email?.seed.tools).toEqual(
-      expect.arrayContaining(["gmail.list_unread", "gmail.send_message"]),
-    );
+    expect(email?.seed.tools).toEqual(expect.arrayContaining(["gmail.list_unread", "gmail.send_message"]));
     expect(email?.seed.approval_required_tools).toEqual(["gmail.send_message"]);
   });
 });

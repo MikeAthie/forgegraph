@@ -98,10 +98,7 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 jest.mock("@/components/ui/key-value-editor", () => ({
   KeyValueEditor: ({ value, onChange }: any) => (
     <div data-testid="key-value-editor">
-      <button
-        data-testid="add-header"
-        onClick={() => onChange({ ...value, "X-Custom-Header": "value" })}
-      >
+      <button data-testid="add-header" onClick={() => onChange({ ...value, "X-Custom-Header": "value" })}>
         Add Header
       </button>
       <div data-testid="headers-display">{JSON.stringify(value)}</div>
@@ -120,14 +117,13 @@ describe("HttpNodeForm", () => {
       click: (element: HTMLElement) => act(async () => user.click(element)),
       clear: (element: HTMLElement) => act(async () => user.clear(element)),
       type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
-      selectOptions: (element: HTMLElement, value: string) =>
-        act(async () => user.selectOptions(element, value)),
+      selectOptions: (element: HTMLElement, value: string) => act(async () => user.selectOptions(element, value)),
     };
   };
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
-    options: { errors?: NodeFormProps["errors"] } = {}
+    options: { errors?: NodeFormProps["errors"] } = {},
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
@@ -137,12 +133,7 @@ describe("HttpNodeForm", () => {
       };
 
       return (
-        <HttpNodeForm
-          config={config}
-          onChange={handleChange}
-          errors={options.errors ?? {}}
-          setErrors={mockSetErrors}
-        />
+        <HttpNodeForm config={config} onChange={handleChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
       );
     };
 
@@ -285,7 +276,7 @@ describe("HttpNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             method: "POST",
-          })
+          }),
         );
       });
     });
@@ -343,7 +334,7 @@ describe("HttpNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             headers: expect.objectContaining({ "X-Custom-Header": "value" }),
-          })
+          }),
         );
       });
     });
@@ -358,7 +349,7 @@ describe("HttpNodeForm", () => {
         expect(mockSetErrors).toHaveBeenCalledWith(
           expect.objectContaining({
             url: "Invalid URL format",
-          })
+          }),
         );
       });
     });
@@ -406,7 +397,7 @@ describe("HttpNodeForm", () => {
         expect(mockSetErrors).toHaveBeenCalledWith(
           expect.objectContaining({
             body: "Invalid JSON format",
-          })
+          }),
         );
       });
     });
@@ -469,7 +460,7 @@ describe("HttpNodeForm", () => {
 
     it("should display existing headers", () => {
       const config = {
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer token" },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer token" },
       };
       renderWithConfig(config);
 
@@ -505,7 +496,7 @@ describe("HttpNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             role: expect.stringContaining("API Client"),
-          })
+          }),
         );
       });
     });
@@ -527,7 +518,7 @@ describe("HttpNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             cache_enabled: true,
-          })
+          }),
         );
       });
     });
@@ -623,7 +614,7 @@ describe("HttpNodeForm", () => {
         method: "POST",
         url: "https://api.example.com/endpoint",
         headers: { "Content-Type": "application/json" },
-        body: "{\"hello\":\"world\"}",
+        body: '{"hello":"world"}',
       });
 
       await user.click(screen.getByRole("button", { name: /run test/i }));
@@ -667,7 +658,7 @@ describe("HttpNodeForm", () => {
       renderWithConfig({
         method: "POST",
         url: "https://api.example.com/test",
-        body: "{\"hello\":\"world\"}",
+        body: '{"hello":"world"}',
       });
 
       await user.click(screen.getByRole("button", { name: /run test/i }));

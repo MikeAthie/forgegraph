@@ -73,13 +73,7 @@ const buildSparkline = (values: number[], width = 180, height = 48) => {
     .join(" ");
 };
 
-function Sparkline({
-  values,
-  className,
-}: {
-  values: number[];
-  className?: string;
-}) {
+function Sparkline({ values, className }: { values: number[]; className?: string }) {
   const points = buildSparkline(values);
   return (
     <svg viewBox="0 0 180 48" className={className} aria-hidden="true">
@@ -93,11 +87,7 @@ function Sparkline({
             strokeLinejoin="round"
             strokeLinecap="round"
           />
-          <polyline
-            points={`0,48 ${points} 180,48`}
-            fill="currentColor"
-            opacity="0.15"
-          />
+          <polyline points={`0,48 ${points} 180,48`} fill="currentColor" opacity="0.15" />
         </>
       ) : (
         <rect width="180" height="48" fill="currentColor" opacity="0.08" />
@@ -105,6 +95,15 @@ function Sparkline({
     </svg>
   );
 }
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
 
 export default function MemoryAnalyticsPage() {
   const [period, setPeriod] = useState("30d");
@@ -149,23 +148,17 @@ export default function MemoryAnalyticsPage() {
     [usage],
   );
 
-  const handleExport = useCallback(() => {
-    if (!usage || !costs || !performance) return;
-    const payload = {
-      period,
-      exported_at: new Date().toISOString(),
-      usage,
-      costs,
-      performance,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `memory-analytics-${period}-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }, [costs, performance, period, usage]);
+  const handleExport = useCallback(
+    async (format: "json" | "csv") => {
+      try {
+        const blob = await analyticsApi.exportMemoryReport({ format, period });
+        downloadBlob(blob, `memory-analytics-${period}.${format}`);
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, "Failed to export memory analytics."));
+      }
+    },
+    [period],
+  );
 
   return (
     <ProtectedRoute>
@@ -188,7 +181,8 @@ export default function MemoryAnalyticsPage() {
                   Signal, not noise.
                 </h1>
                 <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  Monitor how memory tiers perform across runs, costs, and storage saturation. Snapshot refreshed on demand.
+                  Monitor how memory tiers perform across runs, costs, and storage saturation. Snapshot refreshed on
+                  demand.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -204,18 +198,25 @@ export default function MemoryAnalyticsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  variant="outline"
-                  onClick={() => void fetchAnalytics(period)}
-                  disabled={loading}
-                >
+                <Button variant="outline" onClick={() => void fetchAnalytics(period)} disabled={loading}>
                   {loading ? <Spinner size="xs" /> : "Refresh"}
                 </Button>
                 <Button variant="outline" asChild>
                   <Link href="/analytics/llm">LLM Analytics</Link>
                 </Button>
-                <Button variant="outline" onClick={handleExport} disabled={!usage || !costs || !performance}>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleExport("json")}
+                  disabled={!usage || !costs || !performance}
+                >
                   Export JSON
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleExport("csv")}
+                  disabled={!usage || !costs || !performance}
+                >
+                  Export CSV
                 </Button>
               </div>
             </div>
@@ -228,7 +229,7 @@ export default function MemoryAnalyticsPage() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 lg:grid-cols-3">
+              <div className="grid gap-4 lg:grid-cols-4">
                 <Card className="border-border/50 bg-card/60">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base font-semibold">Tier 1 Buffer</CardTitle>
@@ -292,7 +293,40 @@ export default function MemoryAnalyticsPage() {
                         {usage?.tier3.avg_search_latency_ms ? `${usage.tier3.avg_search_latency_ms} ms` : "—"}
                       </span>
                     </div>
-                    <Sparkline values={usage?.usage_series.map((entry) => entry.summarization_cost_usd ?? 0) ?? []} className="text-amber-500" />
+                    <Sparkline
+                      values={usage?.usage_series.map((entry) => entry.summarization_cost_usd ?? 0) ?? []}
+                      className="text-amber-500"
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border/50 bg-card/60">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold">Curated Memory</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Observations</span>
+                      <span className="text-xl font-semibold">
+                        {formatNumber(usage?.curated_memory.observations_total)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Indexed</span>
+                      <span className="font-medium">
+                        {formatNumber(usage?.curated_memory.indexed_observations_total)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Pending index</span>
+                      <span className="font-medium">{formatNumber(usage?.curated_memory.pending_index_total)}</span>
+                    </div>
+                    <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                      Retrieval runs this period: {formatNumber(usage?.curated_memory.retrieval_runs_in_period)}
+                    </div>
+                    <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                      Search queries this period: {formatNumber(performance?.vector.search_queries)}
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -325,7 +359,10 @@ export default function MemoryAnalyticsPage() {
                         <Sparkline values={costSparklineValues} className="h-16 w-full text-cyan-600" />
                         <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
                           {costs?.series.slice(-5).map((entry) => (
-                            <div key={entry.date} className="rounded-full border border-border/40 bg-background/70 px-3 py-1">
+                            <div
+                              key={entry.date}
+                              className="rounded-full border border-border/40 bg-background/70 px-3 py-1"
+                            >
                               {formatDate(entry.date)} · {formatCurrency(entry.summarization_cost_usd)}
                             </div>
                           ))}
@@ -378,7 +415,9 @@ export default function MemoryAnalyticsPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Avg latency</span>
                         <span className="font-semibold">
-                          {performance?.vector.avg_search_latency_ms ? `${performance.vector.avg_search_latency_ms} ms` : "—"}
+                          {performance?.vector.avg_search_latency_ms
+                            ? `${performance.vector.avg_search_latency_ms} ms`
+                            : "—"}
                         </span>
                       </div>
                     </div>
@@ -396,11 +435,82 @@ export default function MemoryAnalyticsPage() {
                         <span className="font-semibold">{formatNumber(performance?.grpc.errors_total)}</span>
                       </div>
                       <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Index queue errors</span>
+                        <span className="font-semibold">
+                          {formatNumber(performance?.indexing.enqueue_errors_total)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Pending observations</span>
+                        <span className="font-semibold">
+                          {formatNumber(performance?.indexing.pending_observations_total)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">GC last run</span>
                         <span className="font-semibold">
                           {performance?.maintenance.memory_gc_last_run_at
                             ? formatDate(performance.maintenance.memory_gc_last_run_at)
                             : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/50 bg-card/60">
+                <CardHeader>
+                  <CardTitle>Retention posture</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-[1.1fr_1fr]">
+                  <div className="rounded-2xl border border-border/40 bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Policy summary</p>
+                    <p className="mt-3 text-sm text-foreground">
+                      {usage?.retention.summary ?? "No retention summary available."}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <span className="rounded-full border border-border/40 bg-background/70 px-3 py-1">
+                        Observations: {usage?.retention.observations_retention_mode ?? "manual"}
+                      </span>
+                      <span className="rounded-full border border-border/40 bg-background/70 px-3 py-1">
+                        Chunks: {usage?.retention.memory_chunks_retention_mode ?? "manual"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border/40 bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Configured windows</p>
+                    <div className="mt-2 space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Runs</span>
+                        <span className="font-semibold">
+                          {usage?.retention.runs_retention_days != null
+                            ? `${usage.retention.runs_retention_days} days`
+                            : "Not set"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Run logs</span>
+                        <span className="font-semibold">
+                          {usage?.retention.run_logs_retention_days != null
+                            ? `${usage.retention.run_logs_retention_days} days`
+                            : "Not set"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Usage data</span>
+                        <span className="font-semibold">
+                          {usage?.retention.usage_retention_days != null
+                            ? `${usage.retention.usage_retention_days} days`
+                            : "Not set"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Audit logs</span>
+                        <span className="font-semibold">
+                          {usage?.retention.audit_logs_retention_days != null
+                            ? `${usage.retention.audit_logs_retention_days} days`
+                            : "Not set"}
                         </span>
                       </div>
                     </div>

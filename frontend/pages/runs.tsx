@@ -78,12 +78,7 @@ function StatusIcon({ status }: { status: string }) {
     case "error":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M15 9l-6 6M9 9l6 6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -94,23 +89,13 @@ function StatusIcon({ status }: { status: string }) {
     case "running":
       return (
         <svg viewBox="0 0 24 24" fill="none" className="animate-spin" aria-hidden="true">
-          <path
-            d="M12 2a10 10 0 1 0 10 10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M12 2a10 10 0 1 0 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
       );
     case "paused":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M9 7v10M15 7v10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M9 7v10M15 7v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -121,12 +106,7 @@ function StatusIcon({ status }: { status: string }) {
     case "canceled":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M7 7l10 10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
+          <path d="M7 7l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -138,13 +118,7 @@ function StatusIcon({ status }: { status: string }) {
     default:
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M12 6v6l4 2"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           <path
             d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
             stroke="currentColor"
@@ -213,9 +187,7 @@ export default function RunsPage() {
         map.set(run.graph_id, run.graph_name);
       }
     }
-    return [...map.entries()]
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [runs]);
 
   const filteredRuns = useMemo(() => {
@@ -335,9 +307,7 @@ export default function RunsPage() {
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Duration
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
-                          Run
-                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Run</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -350,31 +320,22 @@ export default function RunsPage() {
                           <td className="px-4 py-3 text-sm font-medium text-foreground">
                             <div className="flex flex-col">
                               <span className="truncate max-w-[340px]">{run.graph_name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                v{run.graph_version}
-                              </span>
+                              <span className="text-xs text-muted-foreground">v{run.graph_version}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            <Badge
-                              variant="outline"
-                              className={getStatusBadgeClass(String(run.status))}
-                            >
+                            <Badge variant="outline" className={getStatusBadgeClass(String(run.status))}>
                               <StatusIcon status={String(run.status)} />
                               {getRunStatusLabel(run)}
                             </Badge>
                             {String(run.status) === "pending" && run.queue_status && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Queue: {run.queue_status}
-                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">Queue: {run.queue_status}</p>
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">
                             {run.started_at ? formatDateTime(run.started_at) : "—"}
                           </td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">
-                            {formatDuration(run.duration_ms)}
-                          </td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{formatDuration(run.duration_ms)}</td>
                           <td className="px-4 py-3 text-sm">
                             <Button variant="outline" size="sm" asChild>
                               <Link

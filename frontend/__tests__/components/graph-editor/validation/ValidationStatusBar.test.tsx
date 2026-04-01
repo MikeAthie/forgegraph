@@ -79,11 +79,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Graph Valid")).toBeInTheDocument();
@@ -99,11 +95,7 @@ describe("ValidationStatusBar", () => {
       });
 
       const { container } = render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const statusBar = container.firstChild;
@@ -120,11 +112,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.queryByText("Show details")).not.toBeInTheDocument();
@@ -156,11 +144,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("2 errors")).toBeInTheDocument();
@@ -184,11 +168,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("1 error")).toBeInTheDocument();
@@ -212,11 +192,7 @@ describe("ValidationStatusBar", () => {
       });
 
       const { container } = render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(container.querySelector(".border-destructive\\/50")).toBeInTheDocument();
@@ -256,11 +232,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("1 error")).toBeInTheDocument();
@@ -288,11 +260,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("1 warning")).toBeInTheDocument();
@@ -323,11 +291,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("2 warnings")).toBeInTheDocument();
@@ -352,11 +316,7 @@ describe("ValidationStatusBar", () => {
       });
 
       const { container } = render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(container.querySelector(".border-amber-500\\/50")).toBeInTheDocument();
@@ -383,11 +343,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Show details")).toBeInTheDocument();
@@ -411,11 +367,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Hide details")).toBeInTheDocument();
@@ -440,11 +392,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const button = screen.getByRole("button", { name: /1 error.*Show details/i });
@@ -473,11 +421,7 @@ describe("ValidationStatusBar", () => {
       });
 
       const { rerender } = render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const button = screen.getByRole("button", { name: /1 error.*Show details/i });
@@ -495,11 +439,7 @@ describe("ValidationStatusBar", () => {
       });
 
       rerender(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const expandedButton = screen.getByRole("button", { name: /1 error.*Hide details/i });
@@ -535,11 +475,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Graph needs a start node")).toBeInTheDocument();
@@ -564,11 +500,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.queryByText("Graph needs a start node")).not.toBeInTheDocument();
@@ -592,11 +524,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Graph contains a cycle")).toBeInTheDocument();
@@ -621,11 +549,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Mark a node as the entry point")).toBeInTheDocument();
@@ -658,11 +582,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Error message")).toBeInTheDocument();
@@ -687,11 +607,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const errorText = screen.getByText("Graph contains a cycle");
@@ -717,11 +633,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const warningText = screen.getByText("Node is disconnected");
@@ -749,11 +661,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Go to")).toBeInTheDocument();
@@ -778,11 +686,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Go to")).toBeInTheDocument();
@@ -806,11 +710,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.queryByText("Go to")).not.toBeInTheDocument();
@@ -836,11 +736,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const goToButton = screen.getByText("Go to");
@@ -870,11 +766,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const goToButton = screen.getByText("Go to");
@@ -905,11 +797,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const goToButton = screen.getByText("Go to");
@@ -939,11 +827,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Add Start")).toBeInTheDocument();
@@ -968,11 +852,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Connect")).toBeInTheDocument();
@@ -998,11 +878,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const quickFixButton = screen.getByText("Add Output");
@@ -1030,11 +906,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       // Should only have "Go to" button if nodeId/edgeId present, no quick fix buttons
@@ -1055,11 +927,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Graph Valid")).toBeInTheDocument();
@@ -1105,11 +973,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("Graph contains a cycle")).toBeInTheDocument();
@@ -1132,11 +996,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(screen.getByText("10 errors")).toBeInTheDocument();
@@ -1170,7 +1030,7 @@ describe("ValidationStatusBar", () => {
           onFocusEdge={mockOnFocusEdge}
           onQuickFix={mockOnQuickFix}
           className="custom-status-bar"
-        />
+        />,
       );
 
       expect(container.firstChild).toHaveClass("custom-status-bar");
@@ -1194,11 +1054,7 @@ describe("ValidationStatusBar", () => {
       });
 
       const { container } = render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const errorList = container.querySelector(".max-h-48");
@@ -1224,11 +1080,7 @@ describe("ValidationStatusBar", () => {
       });
 
       const { container } = render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       expect(container.firstChild).toHaveClass("border-t");
@@ -1254,11 +1106,7 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const button = screen.getByRole("button", { name: /1 error.*Show details/i });
@@ -1283,18 +1131,11 @@ describe("ValidationStatusBar", () => {
       });
 
       render(
-        <ValidationStatusBar
-          onFocusNode={mockOnFocusNode}
-          onFocusEdge={mockOnFocusEdge}
-          onQuickFix={mockOnQuickFix}
-        />
+        <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
       const quickFixButton = screen.getByText("Add Start");
-      expect(quickFixButton.closest("button")).toHaveAttribute(
-        "title",
-        "Mark the first node as the entry point"
-      );
+      expect(quickFixButton.closest("button")).toHaveAttribute("title", "Mark the first node as the entry point");
     });
   });
 });

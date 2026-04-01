@@ -23,11 +23,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                   stroke="currentColor"
                   strokeWidth={2}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
               <span className="text-xl font-bold">ForgeGraph</span>
@@ -62,9 +58,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       </div>
 
       {/* Main content */}
-      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 min-h-screen flex items-center justify-center">
-        {children}
-      </main>
+      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 min-h-screen flex items-center justify-center">{children}</main>
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 py-4 px-4 text-center text-sm text-muted-foreground">

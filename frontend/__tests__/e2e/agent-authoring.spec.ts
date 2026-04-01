@@ -19,22 +19,14 @@ import {
 } from "./helpers";
 
 const runtimeFixtureUser = getPlaywrightRuntimeFixtureUser();
-const packageName =
-  process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ??
-  "Playwright Runtime Health Check";
-const packageSlug =
-  process.env.PLAYWRIGHT_RUNTIME_PACKAGE_SLUG ??
-  "playwright-runtime-health-check";
-const toolName =
-  process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
+const packageName = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ?? "Playwright Runtime Health Check";
+const packageSlug = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_SLUG ?? "playwright-runtime-health-check";
+const toolName = process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
 
 test.describe("Manual workflow authoring", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("manually authors and saves an agent workflow from the canvas UI", async ({
-    page,
-    request,
-  }) => {
+  test("manually authors and saves an agent workflow from the canvas UI", async ({ page, request }) => {
     test.setTimeout(90_000);
 
     const accessToken = await getAccessToken(request, runtimeFixtureUser);
@@ -59,17 +51,11 @@ test.describe("Manual workflow authoring", () => {
     await expect(getGraphNodeByLabel(page, agentLabel)).toBeVisible();
     await expect(getGraphNodeByLabel(page, outputLabel)).toBeVisible();
 
-    const latestVersion = await fetchLatestGraphVersion(
-      request,
-      accessToken,
-      graphId,
-    );
+    const latestVersion = await fetchLatestGraphVersion(request, accessToken, graphId);
     expect(latestVersion.graph_json.nodes).toHaveLength(2);
     expect(latestVersion.graph_json.edges).toHaveLength(3);
 
-    const agentNode = latestVersion.graph_json.nodes.find(
-      (node) => node.type === "agent",
-    );
+    const agentNode = latestVersion.graph_json.nodes.find((node) => node.type === "agent");
     expect(agentNode).toBeTruthy();
     expect(agentNode?.name).toBe(agentLabel);
     expect(agentNode?.config?.provider).toBe("openai");
@@ -77,9 +63,7 @@ test.describe("Manual workflow authoring", () => {
     expect(agentNode?.config?.instructions).toContain("Jackie");
     expect(agentNode?.config?.tools).toEqual([toolName]);
 
-    const outputNode = latestVersion.graph_json.nodes.find(
-      (node) => node.type === "output",
-    );
+    const outputNode = latestVersion.graph_json.nodes.find((node) => node.type === "output");
     expect(outputNode).toBeTruthy();
     expect(outputNode?.name).toBe(outputLabel);
 
@@ -89,10 +73,7 @@ test.describe("Manual workflow authoring", () => {
     expect(agentToOutputEdge).toBeTruthy();
   });
 
-  test("manually builds a runtime tool workflow and executes it", async ({
-    page,
-    request,
-  }) => {
+  test("manually builds a runtime tool workflow and executes it", async ({ page, request }) => {
     test.setTimeout(90_000);
 
     const accessToken = await getAccessToken(request, runtimeFixtureUser);
@@ -124,15 +105,11 @@ test.describe("Manual workflow authoring", () => {
     await expect(page.getByText(graphName)).toBeVisible();
     await expect(page.getByText(/succeeded/i).first()).toBeVisible();
 
-    const toolRunButton = page
-      .getByRole("button", { name: /health check tool/i })
-      .first();
+    const toolRunButton = page.getByRole("button", { name: /health check tool/i }).first();
     await expect(toolRunButton).toBeVisible();
     await toolRunButton.click();
 
-    await expect(
-      page.getByText(new RegExp(`"tool":\\s*"${toolName}"`, "i")).first(),
-    ).toBeVisible();
+    await expect(page.getByText(new RegExp(`"tool":\\s*"${toolName}"`, "i")).first()).toBeVisible();
     await expect(page.getByText(/"status":\s*200/i).first()).toBeVisible();
     await expect(page.getByText(/"status":\s*"ok"/i).first()).toBeVisible();
   });

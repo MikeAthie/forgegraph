@@ -1,0 +1,5 @@
+.next
+coverage
+playwright-report
+test-results
+e2e-report.json

@@ -87,12 +87,7 @@ describe("QuickToolBar", () => {
     ];
     const onSelectPackage = jest.fn();
 
-    render(
-      <QuickToolBar
-        marketplaceNodes={packages}
-        onSelectPackage={onSelectPackage}
-      />,
-    );
+    render(<QuickToolBar marketplaceNodes={packages} onSelectPackage={onSelectPackage} />);
 
     // Tiles render package names as labels below icons
     expect(screen.getByText("Slack Alerts")).toBeInTheDocument();
@@ -106,20 +101,13 @@ describe("QuickToolBar", () => {
     const packages = [buildPackage({ slug: "slack-alerts", name: "Slack Alerts" })];
     const onSelectPackage = jest.fn();
 
-    render(
-      <QuickToolBar
-        marketplaceNodes={packages}
-        onSelectPackage={onSelectPackage}
-      />,
-    );
+    render(<QuickToolBar marketplaceNodes={packages} onSelectPackage={onSelectPackage} />);
 
     // Tile buttons use the package name as their title and visible label
     await user.click(screen.getByRole("button", { name: /slack alerts/i }));
 
     expect(onSelectPackage).toHaveBeenCalledTimes(1);
-    expect(onSelectPackage).toHaveBeenCalledWith(
-      expect.objectContaining({ slug: "slack-alerts" }),
-    );
+    expect(onSelectPackage).toHaveBeenCalledWith(expect.objectContaining({ slug: "slack-alerts" }));
   });
 
   it("supports browse dialog search and selection", async () => {
@@ -130,21 +118,14 @@ describe("QuickToolBar", () => {
     ];
     const onSelectPackage = jest.fn();
 
-    render(
-      <QuickToolBar
-        marketplaceNodes={packages}
-        onSelectPackage={onSelectPackage}
-      />,
-    );
+    render(<QuickToolBar marketplaceNodes={packages} onSelectPackage={onSelectPackage} />);
 
     await user.click(screen.getByRole("button", { name: /browse integration tools/i }));
     const search = screen.getByRole("textbox", { name: /search integration tools/i });
     await user.type(search, "gmail");
     await user.click(screen.getByRole("button", { name: /gmail send email/i }));
 
-    expect(onSelectPackage).toHaveBeenCalledWith(
-      expect.objectContaining({ slug: "gmail-send-email" }),
-    );
+    expect(onSelectPackage).toHaveBeenCalledWith(expect.objectContaining({ slug: "gmail-send-email" }));
   });
 
   it("hides template-only packages from quick add", () => {

@@ -1,10 +1,4 @@
-import {
-  DataType,
-  DATA_TYPE_INFO,
-  areTypesCompatible,
-  getDataTypeInfo,
-  parseDataType,
-} from "@/lib/data-types";
+import { DataType, DATA_TYPE_INFO, areTypesCompatible, getDataTypeInfo, parseDataType } from "@/lib/data-types";
 
 describe("data-types", () => {
   describe("DataType enum", () => {

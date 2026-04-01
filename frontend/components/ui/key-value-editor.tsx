@@ -101,14 +101,7 @@ function KeyValueEditor({
           </div>
         ))
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleAdd}
-        disabled={disabled}
-        className="w-full"
-      >
+      <Button type="button" variant="outline" size="sm" onClick={handleAdd} disabled={disabled} className="w-full">
         <Plus className="h-4 w-4 mr-1" />
         Add {keyPlaceholder.toLowerCase()}
       </Button>

@@ -78,9 +78,7 @@ export interface NodeConfigDialogProps {
 function DefaultNodeForm({ config, onChange }: NodeFormProps) {
   return (
     <div className="py-4">
-      <p className="text-sm text-muted-foreground">
-        Configure this node using the inspector panel after creation.
-      </p>
+      <p className="text-sm text-muted-foreground">Configure this node using the inspector panel after creation.</p>
       <pre className="mt-4 p-3 bg-muted rounded-md text-xs overflow-auto max-h-48">
         {JSON.stringify(config, null, 2)}
       </pre>
@@ -178,7 +176,7 @@ export function NodeConfigDialog({
               <div
                 className={cn(
                   "w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm",
-                  typeInfo.color
+                  typeInfo.color,
                 )}
               >
                 {typeInfo.icon}
@@ -213,12 +211,7 @@ export function NodeConfigDialog({
 
           {/* Form Content - Scrollable */}
           <div className="flex-1 overflow-y-auto px-1 py-2 min-h-0">
-            <Form
-              config={config}
-              onChange={handleConfigChange}
-              errors={errors}
-              setErrors={setErrors}
-            />
+            <Form config={config} onChange={handleConfigChange} errors={errors} setErrors={setErrors} />
           </div>
 
           {/* Error Summary */}

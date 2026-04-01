@@ -57,9 +57,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
   const memoryConfig = config as MemoryConfig;
   const resolvedKey = memoryConfig.key ?? memoryConfig.memory_key ?? "";
   const selectedDepth =
-    MEMORY_DEPTH_OPTIONS.find(
-      (option) => option.bufferSize === memoryConfig.max_messages,
-    )?.value || "custom";
+    MEMORY_DEPTH_OPTIONS.find((option) => option.bufferSize === memoryConfig.max_messages)?.value || "custom";
 
   const handleChange = useCallback(
     <K extends keyof MemoryConfig>(field: K, value: MemoryConfig[K]) => {
@@ -89,12 +87,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Memory */}
-      <AgentFields
-        config={memoryConfig}
-        onChange={handleAgentChange}
-        showRole={false}
-        showExamples={false}
-      />
+      <AgentFields config={memoryConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
 
       <Separator />
 
@@ -103,24 +96,14 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         <h3 className="text-sm font-medium">Memory Configuration</h3>
 
         <p className="text-sm text-muted-foreground">
-          Configure how the agent stores and retrieves information across
-          interactions.
+          Configure how the agent stores and retrieves information across interactions.
         </p>
 
-        <FormField
-          label="Memory Type"
-          htmlFor="memory-type"
-          description="Strategy for storing and managing memory"
-        >
+        <FormField label="Memory Type" htmlFor="memory-type" description="Strategy for storing and managing memory">
           <select
             id="memory-type"
             value={memoryConfig.memory_type || "conversation"}
-            onChange={(e) =>
-              handleChange(
-                "memory_type",
-                e.target.value as MemoryConfig["memory_type"],
-              )
-            }
+            onChange={(e) => handleChange("memory_type", e.target.value as MemoryConfig["memory_type"])}
             className="w-full px-3 py-2 border rounded-md bg-background text-sm"
           >
             {MEMORY_TYPES.map((type) => (
@@ -132,18 +115,10 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         </FormField>
 
         <div className="p-3 bg-muted/50 rounded-md text-xs">
-          {
-            MEMORY_TYPES.find(
-              (t) => t.value === (memoryConfig.memory_type || "conversation"),
-            )?.description
-          }
+          {MEMORY_TYPES.find((t) => t.value === (memoryConfig.memory_type || "conversation"))?.description}
         </div>
 
-        <FormField
-          label="Memory Key"
-          htmlFor="memory-key"
-          description="State key to store/retrieve memory from"
-        >
+        <FormField label="Memory Key" htmlFor="memory-key" description="State key to store/retrieve memory from">
           <Input
             id="memory-key"
             value={resolvedKey}
@@ -164,9 +139,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
                 id="memory-depth"
                 value={selectedDepth}
                 onChange={(e) => {
-                  const option = MEMORY_DEPTH_OPTIONS.find(
-                    (o) => o.value === e.target.value,
-                  );
+                  const option = MEMORY_DEPTH_OPTIONS.find((o) => o.value === e.target.value);
                   if (!option) return;
                   if (option.bufferSize) {
                     handleChange("max_messages", option.bufferSize);
@@ -197,10 +170,7 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
                   max={1000}
                   value={memoryConfig.max_messages || ""}
                   onChange={(e) =>
-                    handleChange(
-                      "max_messages",
-                      e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
+                    handleChange("max_messages", e.target.value ? parseInt(e.target.value, 10) : undefined)
                   }
                   placeholder="100"
                   className="text-sm"
@@ -211,23 +181,14 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
         )}
 
         {showSummaryOptions && (
-          <FormField
-            label="Max Tokens"
-            htmlFor="max-tokens"
-            description="Token limit before triggering summarization"
-          >
+          <FormField label="Max Tokens" htmlFor="max-tokens" description="Token limit before triggering summarization">
             <Input
               id="max-tokens"
               type="number"
               min={100}
               max={100000}
               value={memoryConfig.max_tokens || ""}
-              onChange={(e) =>
-                handleChange(
-                  "max_tokens",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
+              onChange={(e) => handleChange("max_tokens", e.target.value ? parseInt(e.target.value, 10) : undefined)}
               placeholder="4000"
               className="text-sm"
             />
@@ -244,32 +205,21 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
               <Textarea
                 id="retrieval-query"
                 value={memoryConfig.retrieval_query || ""}
-                onChange={(e) =>
-                  handleChange("retrieval_query", e.target.value)
-                }
+                onChange={(e) => handleChange("retrieval_query", e.target.value)}
                 placeholder="{{input.question}}"
                 rows={2}
                 className="text-sm resize-none font-mono"
               />
             </FormField>
 
-            <FormField
-              label="Top K Results"
-              htmlFor="top-k"
-              description="Number of similar memories to retrieve"
-            >
+            <FormField label="Top K Results" htmlFor="top-k" description="Number of similar memories to retrieve">
               <Input
                 id="top-k"
                 type="number"
                 min={1}
                 max={100}
                 value={memoryConfig.top_k || ""}
-                onChange={(e) =>
-                  handleChange(
-                    "top_k",
-                    e.target.value ? parseInt(e.target.value, 10) : undefined,
-                  )
-                }
+                onChange={(e) => handleChange("top_k", e.target.value ? parseInt(e.target.value, 10) : undefined)}
                 placeholder="5"
                 className="text-sm"
               />

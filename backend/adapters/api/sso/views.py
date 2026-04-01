@@ -67,6 +67,39 @@ def _get_sso_callback_url() -> str:
     return f"{_get_frontend_url()}/sso/callback"
 
 
+def _provider_status_payload(provider: OIDCProvider | None) -> dict[str, str]:
+    if provider is None:
+        return {
+            "state": "unavailable",
+            "message": "No SSO provider is configured for this organization yet.",
+        }
+
+    missing_fields: list[str] = []
+    if not provider.issuer_url:
+        missing_fields.append("issuer_url")
+    if not provider.client_id:
+        missing_fields.append("client_id")
+    if not provider.encrypted_client_secret:
+        missing_fields.append("client_secret")
+
+    if missing_fields:
+        return {
+            "state": "partial",
+            "message": f"SSO configuration is incomplete. Missing: {', '.join(missing_fields)}.",
+        }
+
+    if not provider.enabled:
+        return {
+            "state": "partial",
+            "message": "SSO configuration exists, but sign-in is currently disabled for this organization.",
+        }
+
+    return {
+        "state": "configured",
+        "message": "SSO is configured and enabled for this organization.",
+    }
+
+
 class OIDCProviderView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -87,6 +120,7 @@ class OIDCProviderView(APIView):
                     "email_domains": [],
                     "default_role": "member",
                     "enabled": False,
+                    "status": _provider_status_payload(None),
                 }
             )
 
@@ -98,6 +132,7 @@ class OIDCProviderView(APIView):
                 "email_domains": provider.email_domains,
                 "default_role": provider.default_role,
                 "enabled": provider.enabled,
+                "status": _provider_status_payload(provider),
             }
         )
 
@@ -164,6 +199,7 @@ class OIDCProviderView(APIView):
                 "email_domains": provider.email_domains,
                 "default_role": provider.default_role,
                 "enabled": provider.enabled,
+                "status": _provider_status_payload(provider),
             }
         )
 

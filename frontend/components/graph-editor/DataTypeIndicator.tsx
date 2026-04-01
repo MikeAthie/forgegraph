@@ -1,18 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  Type,
-  Braces,
-  List,
-  Hash,
-  ToggleLeft,
-  Image,
-  File,
-  Asterisk,
-  Circle,
-  AlertCircle,
-} from "lucide-react";
+import { Type, Braces, List, Hash, ToggleLeft, Image, File, Asterisk, Circle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataType, DATA_TYPE_INFO, getDataTypeInfo } from "@/lib/data-types";
 
@@ -73,19 +62,13 @@ export function DataTypeIndicator({
         typeInfo.bgColor,
         sizeClasses[size],
         showLabel ? "px-2 py-0.5" : "p-1",
-        className
+        className,
       )}
       title={tooltipText}
     >
       <IconComponent className={cn(typeInfo.color, iconSizeClasses[size])} />
-      {showLabel && (
-        <span className={cn("font-medium", typeInfo.color)}>
-          {typeInfo.label}
-        </span>
-      )}
-      {isInferred && (
-        <span className="text-gray-400 text-[8px]">?</span>
-      )}
+      {showLabel && <span className={cn("font-medium", typeInfo.color)}>{typeInfo.label}</span>}
+      {isInferred && <span className="text-gray-400 text-[8px]">?</span>}
     </div>
   );
 }
@@ -99,26 +82,16 @@ interface TypeBadgeProps {
 /**
  * Combined input/output type badge for a node
  */
-export function NodeTypeBadge({
-  inputType,
-  outputType,
-  className,
-}: TypeBadgeProps) {
+export function NodeTypeBadge({ inputType, outputType, className }: TypeBadgeProps) {
   if (!inputType && !outputType) {
     return null;
   }
 
   return (
     <div className={cn("flex items-center gap-1", className)}>
-      {inputType && inputType !== DataType.VOID && (
-        <DataTypeIndicator type={inputType} size="sm" />
-      )}
-      {inputType && outputType && (
-        <span className="text-muted-foreground text-[10px]">→</span>
-      )}
-      {outputType && outputType !== DataType.VOID && (
-        <DataTypeIndicator type={outputType} size="sm" />
-      )}
+      {inputType && inputType !== DataType.VOID && <DataTypeIndicator type={inputType} size="sm" />}
+      {inputType && outputType && <span className="text-muted-foreground text-[10px]">→</span>}
+      {outputType && outputType !== DataType.VOID && <DataTypeIndicator type={outputType} size="sm" />}
     </div>
   );
 }
@@ -133,12 +106,7 @@ interface TypeMismatchWarningProps {
 /**
  * Warning indicator for type mismatches
  */
-export function TypeMismatchWarning({
-  sourceType,
-  targetType,
-  suggestion,
-  className,
-}: TypeMismatchWarningProps) {
+export function TypeMismatchWarning({ sourceType, targetType, suggestion, className }: TypeMismatchWarningProps) {
   const sourceInfo = getDataTypeInfo(sourceType);
   const targetInfo = getDataTypeInfo(targetType);
 
@@ -150,7 +118,7 @@ export function TypeMismatchWarning({
         "inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-help",
         "bg-amber-500/15 text-amber-600 dark:text-amber-400",
         "border border-amber-500/30",
-        className
+        className,
       )}
       title={tooltipText}
     >
@@ -188,7 +156,7 @@ export function PortTypeIndicator({
         typeInfo.bgColor,
         isRequired ? "border-current" : "border-transparent",
         typeInfo.color,
-        className
+        className,
       )}
       title={tooltipText}
     />

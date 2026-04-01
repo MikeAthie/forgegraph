@@ -23,6 +23,7 @@ AGENT_NODE_SCHEMA = {
     "tools": {"type": "array", "required": True, "min_items": 1, "items_type": "string"},
     "max_steps": {"type": "integer", "min": 1, "required": False},
     "max_tool_calls": {"type": "integer", "min": 1, "required": False},
+    "token_budget": {"type": "integer", "min": 1, "required": False},
     "max_tokens": {"type": "integer", "min": 1, "required": False},
     "temperature": {"type": "number", "min": 0, "max": 2, "required": False},
     "observation_context_paths": {

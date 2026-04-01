@@ -27,31 +27,27 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
     <K extends keyof SubgraphConfig>(field: K, value: SubgraphConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   return (
     <div className="space-y-6">
       {/* Agent Context */}
-      <AgentFields
-        config={subgraphConfig}
-        onChange={handleAgentChange}
-        showExamples={false}
-      />
+      <AgentFields config={subgraphConfig} onChange={handleAgentChange} showExamples={false} />
 
       <Separator />
 
@@ -60,17 +56,11 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
         <h3 className="text-sm font-medium">Subgraph Reference</h3>
 
         <p className="text-sm text-muted-foreground">
-          Execute another graph as a node within this workflow. This enables
-          modular, reusable agent components.
+          Execute another graph as a node within this workflow. This enables modular, reusable agent components.
         </p>
 
         <div className="grid grid-cols-2 gap-4">
-          <FormField
-            label="Graph ID"
-            htmlFor="graph-id"
-            description="ID of the graph to execute"
-            required
-          >
+          <FormField label="Graph ID" htmlFor="graph-id" description="ID of the graph to execute" required>
             <div className="flex gap-2">
               <Input
                 id="graph-id"
@@ -92,11 +82,7 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
             </div>
           </FormField>
 
-          <FormField
-            label="Version"
-            htmlFor="graph-version"
-            description="Specific version (blank = latest)"
-          >
+          <FormField label="Version" htmlFor="graph-version" description="Specific version (blank = latest)">
             <Input
               id="graph-version"
               value={subgraphConfig.graph_version || ""}
@@ -111,10 +97,7 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
 
         <h4 className="text-sm font-medium">Data Mapping</h4>
 
-        <FormField
-          label="Input Mapping"
-          description="Map values from parent state to subgraph inputs"
-        >
+        <FormField label="Input Mapping" description="Map values from parent state to subgraph inputs">
           <KeyValueEditor
             value={subgraphConfig.input_mapping || {}}
             onChange={(mapping) => handleChange("input_mapping", mapping)}
@@ -123,10 +106,7 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
           />
         </FormField>
 
-        <FormField
-          label="Output Mapping"
-          description="Map subgraph outputs back to parent state"
-        >
+        <FormField label="Output Mapping" description="Map subgraph outputs back to parent state">
           <KeyValueEditor
             value={subgraphConfig.output_mapping || {}}
             onChange={(mapping) => handleChange("output_mapping", mapping)}
@@ -138,16 +118,22 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
         <div className="p-3 bg-muted/50 rounded-md text-xs space-y-2">
           <p className="font-medium">Mapping examples:</p>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>Input: <code className="bg-muted px-1 rounded">query</code> ← <code className="bg-muted px-1 rounded">node.prompt_1.output</code></li>
-            <li>Output: <code className="bg-muted px-1 rounded">sub_result</code> ← <code className="bg-muted px-1 rounded">output.final</code></li>
+            <li>
+              Input: <code className="bg-muted px-1 rounded">query</code> ←{" "}
+              <code className="bg-muted px-1 rounded">node.prompt_1.output</code>
+            </li>
+            <li>
+              Output: <code className="bg-muted px-1 rounded">sub_result</code> ←{" "}
+              <code className="bg-muted px-1 rounded">output.final</code>
+            </li>
           </ul>
         </div>
 
         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-600 dark:text-amber-400">
           <p className="font-medium">Version pinning recommended</p>
           <p className="mt-1">
-            Pin to a specific version for production workflows to ensure
-            consistent behavior when the referenced graph is updated.
+            Pin to a specific version for production workflows to ensure consistent behavior when the referenced graph
+            is updated.
           </p>
         </div>
       </div>

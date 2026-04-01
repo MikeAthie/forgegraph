@@ -71,10 +71,7 @@ jest.mock("@/components/graph-editor/forms/AdvancedSettings", () => ({
 jest.mock("@/components/ui/key-value-editor", () => ({
   KeyValueEditor: ({ value, onChange }: any) => (
     <div data-testid="key-value-editor">
-      <button
-        data-testid="add-parameter"
-        onClick={() => onChange({ ...value, param1: "value1" })}
-      >
+      <button data-testid="add-parameter" onClick={() => onChange({ ...value, param1: "value1" })}>
         Add Parameter
       </button>
       <div data-testid="parameters-display">{JSON.stringify(value)}</div>
@@ -100,7 +97,7 @@ describe("ToolNodeForm", () => {
 
   const renderWithConfig = (
     initialConfig: NodeFormProps["config"] = {},
-    options: { errors?: NodeFormProps["errors"] } = {}
+    options: { errors?: NodeFormProps["errors"] } = {},
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
@@ -110,12 +107,7 @@ describe("ToolNodeForm", () => {
       };
 
       return (
-        <ToolNodeForm
-          config={config}
-          onChange={handleChange}
-          errors={options.errors ?? {}}
-          setErrors={mockSetErrors}
-        />
+        <ToolNodeForm config={config} onChange={handleChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
       );
     };
 
@@ -184,7 +176,7 @@ describe("ToolNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             tool_name: "web_search",
-          })
+          }),
         );
       });
     });
@@ -200,7 +192,7 @@ describe("ToolNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             tool_name: "code_interpreter",
-          })
+          }),
         );
       });
     });
@@ -293,7 +285,7 @@ describe("ToolNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             parameters: expect.objectContaining({ param1: "value1" }),
-          })
+          }),
         );
       });
     });
@@ -335,7 +327,7 @@ describe("ToolNodeForm", () => {
         expect(mockSetErrors).toHaveBeenCalledWith(
           expect.objectContaining({
             input_schema: "Invalid JSON format",
-          })
+          }),
         );
       });
     });
@@ -414,26 +406,20 @@ describe("ToolNodeForm", () => {
     it("should display helpful description for tool selection", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/select a built-in tool or create a custom one/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/select a built-in tool or create a custom one/i)).toBeInTheDocument();
     });
 
     it("should display description for tool description field", () => {
       const config = { tool_name: "custom" };
       renderWithConfig(config);
 
-      expect(
-        screen.getByText(/describe what this tool does \(helps llm decide when to use it\)/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/describe what this tool does \(helps llm decide when to use it\)/i)).toBeInTheDocument();
     });
 
     it("should display description for parameters", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/map parameter names to values or state paths/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/map parameter names to values or state paths/i)).toBeInTheDocument();
     });
 
     it("should display tool usage documentation", () => {
@@ -441,7 +427,7 @@ describe("ToolNodeForm", () => {
 
       expect(screen.getByText(/tool usage/i)).toBeInTheDocument();
       expect(
-        screen.getByText(/tools are functions the agent can call to interact with external systems/i)
+        screen.getByText(/tools are functions the agent can call to interact with external systems/i),
       ).toBeInTheDocument();
     });
   });
@@ -540,7 +526,7 @@ describe("ToolNodeForm", () => {
           expect.objectContaining({
             tool_name: "web_search",
             parameters: { key: "value" },
-          })
+          }),
         );
       });
     });

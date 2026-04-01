@@ -13,12 +13,7 @@ import {
   validateObservationSource,
 } from "./observation-form-utils";
 
-export function ObservationSaveNodeForm({
-  config,
-  onChange,
-  errors,
-  setErrors,
-}: NodeFormProps) {
+export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const saveConfig = config as Record<string, unknown>;
 
   const computedErrors = {
@@ -27,9 +22,7 @@ export function ObservationSaveNodeForm({
         ? undefined
         : "Observation type is required.",
     scope:
-      typeof saveConfig.scope === "string" && saveConfig.scope.trim().length > 0
-        ? undefined
-        : "Scope is required.",
+      typeof saveConfig.scope === "string" && saveConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
     content: validateObservationSource(
       saveConfig,
       "content",
@@ -69,9 +62,7 @@ export function ObservationSaveNodeForm({
       { required: false },
     ),
     update_topic:
-      saveConfig.update_topic &&
-      !saveConfig.topic_key &&
-      !saveConfig.topic_key_path
+      saveConfig.update_topic && !saveConfig.topic_key && !saveConfig.topic_key_path
         ? "Update topic requires a topic key source."
         : undefined,
   };
@@ -127,9 +118,7 @@ export function ObservationSaveNodeForm({
           <Input
             id="observation-id"
             value={String(saveConfig.observation_id ?? "")}
-            onChange={(event) =>
-              handleFieldChange("observation_id", event.target.value)
-            }
+            onChange={(event) => handleFieldChange("observation_id", event.target.value)}
             placeholder="obs_jackie_profile"
             className="text-sm"
           />
@@ -232,9 +221,7 @@ export function ObservationSaveNodeForm({
           <input
             type="checkbox"
             checked={Boolean(saveConfig.update_topic)}
-            onChange={(event) =>
-              handleFieldChange("update_topic", event.target.checked)
-            }
+            onChange={(event) => handleFieldChange("update_topic", event.target.checked)}
             className="mt-0.5"
           />
           <span>

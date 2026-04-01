@@ -37,9 +37,7 @@ describe("node-palette-catalog", () => {
     const catalog = buildNodePaletteCatalog();
     const recommended = getRecommendedPaletteItems(catalog);
 
-    expect(recommended.map((item) => item.id)).toEqual(
-      expect.arrayContaining(["prompt", "http", "output"]),
-    );
+    expect(recommended.map((item) => item.id)).toEqual(expect.arrayContaining(["prompt", "http", "output"]));
   });
 
   it("updates recent ids with recency ordering and dedupe", () => {

@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type RefObject } from "react";
 import { Link } from "lucide-react";
 
 import { type NodeType } from "../../lib/graph-types";
@@ -26,10 +19,7 @@ import {
 interface NodePaletteProps {
   onAddNode: (nodeType: NodeType, connectToSelected?: boolean) => void;
   onAddNote?: () => void;
-  onAddMarketplaceNode?: (
-    pkg: MarketplacePackage,
-    connectToSelected?: boolean,
-  ) => void;
+  onAddMarketplaceNode?: (pkg: MarketplacePackage, connectToSelected?: boolean) => void;
   marketplaceNodes?: MarketplacePackage[];
   hasSelectedNode?: boolean;
   searchInputRef?: RefObject<HTMLInputElement | null>;
@@ -85,9 +75,7 @@ export function NodePalette({
   searchInputRef,
 }: NodePaletteProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [recentItemIds, setRecentItemIds] = useState<string[]>(() =>
-    loadRecentPaletteIds(),
-  );
+  const [recentItemIds, setRecentItemIds] = useState<string[]>(() => loadRecentPaletteIds());
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
 
   useEffect(() => {
@@ -107,33 +95,21 @@ export function NodePalette({
   }, [paletteItems]);
 
   const recentItems = useMemo(() => {
-    return getRecentPaletteItems(
-      paletteItems,
-      recentItemIds,
-      RECENT_ITEM_LIMIT,
-    );
+    return getRecentPaletteItems(paletteItems, recentItemIds, RECENT_ITEM_LIMIT);
   }, [paletteItems, recentItemIds]);
 
-  const searchNavigableItems = useMemo(
-    () => filteredItems.filter((item) => item.enabled),
-    [filteredItems],
-  );
+  const searchNavigableItems = useMemo(() => filteredItems.filter((item) => item.enabled), [filteredItems]);
 
   const groupedItems = useMemo(() => {
     if (searchQuery.trim()) {
-      return [
-        ["Search results", filteredItems] as [string, PaletteCatalogItem[]],
-      ];
+      return [["Search results", filteredItems] as [string, PaletteCatalogItem[]]];
     }
     return groupPaletteItems(paletteItems);
   }, [paletteItems, filteredItems, searchQuery]);
 
   const resolvedActiveSearchIndex =
-    searchNavigableItems.length === 0
-      ? 0
-      : Math.min(activeSearchIndex, searchNavigableItems.length - 1);
-  const activeSearchItemId =
-    searchNavigableItems[resolvedActiveSearchIndex]?.id ?? null;
+    searchNavigableItems.length === 0 ? 0 : Math.min(activeSearchIndex, searchNavigableItems.length - 1);
+  const activeSearchItemId = searchNavigableItems[resolvedActiveSearchIndex]?.id ?? null;
 
   const addPaletteItem = useCallback(
     (item: PaletteCatalogItem) => {
@@ -161,19 +137,13 @@ export function NodePalette({
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveSearchIndex(
-        (current) => (current + 1) % searchNavigableItems.length,
-      );
+      setActiveSearchIndex((current) => (current + 1) % searchNavigableItems.length);
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveSearchIndex(
-        (current) =>
-          (current - 1 + searchNavigableItems.length) %
-          searchNavigableItems.length,
-      );
+      setActiveSearchIndex((current) => (current - 1 + searchNavigableItems.length) % searchNavigableItems.length);
       return;
     }
 
@@ -208,9 +178,7 @@ export function NodePalette({
         {searchQuery.trim() && searchNavigableItems.length > 0 && (
           <p className="mt-2 text-[11px] text-muted-foreground">
             Press{" "}
-            <kbd className="px-1 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Enter
-            </kbd>{" "}
+            <kbd className="px-1 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">Enter</kbd>{" "}
             to add{" "}
             <span className="font-medium text-foreground">
               {searchNavigableItems[resolvedActiveSearchIndex]?.label}
@@ -220,16 +188,12 @@ export function NodePalette({
       </div>
 
       <p className="text-xs text-muted-foreground mb-4">
-        {hasSelectedNode
-          ? "Click to add connected to selected node"
-          : "Click to add a node to the canvas"}
+        {hasSelectedNode ? "Click to add connected to selected node" : "Click to add a node to the canvas"}
       </p>
 
       <div className="space-y-4">
         {filteredItems.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No nodes match &quot;{searchQuery}&quot;
-          </p>
+          <p className="text-sm text-muted-foreground text-center py-4">No nodes match &quot;{searchQuery}&quot;</p>
         ) : null}
 
         {!searchQuery.trim() && (
@@ -307,9 +271,7 @@ export function NodePalette({
                   <div
                     aria-hidden="true"
                     className={`w-8 h-8 rounded-md flex items-center justify-center text-white text-sm font-bold shadow-xs ${
-                      item.kind === "marketplace"
-                        ? "bg-cyan-500"
-                        : (nodeTypeColors[item.type] ?? "bg-gray-500")
+                      item.kind === "marketplace" ? "bg-cyan-500" : (nodeTypeColors[item.type] ?? "bg-gray-500")
                     }`}
                   >
                     {item.kind === "marketplace"
@@ -321,28 +283,17 @@ export function NodePalette({
                       {item.label}
                       {!item.enabled && (
                         <span className="ml-2 text-xs text-muted-foreground">
-                          {item.kind === "marketplace"
-                            ? "(Unavailable)"
-                            : "(Coming soon)"}
+                          {item.kind === "marketplace" ? "(Unavailable)" : "(Coming soon)"}
                         </span>
                       )}
-                      {item.kind !== "note" &&
-                        hasSelectedNode &&
-                        item.enabled && (
-                          <Link className="w-3 h-3 text-primary ml-1" />
-                        )}
+                      {item.kind !== "note" && hasSelectedNode && item.enabled && (
+                        <Link className="w-3 h-3 text-primary ml-1" />
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground line-clamp-1">
-                      {item.description}
-                    </div>
+                    <div className="text-xs text-muted-foreground line-clamp-1">{item.description}</div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {(item.requiresCredential
-                        ? ["Credential", ...item.badges]
-                        : item.badges
-                      )
-                        .filter(
-                          (badge, index, all) => all.indexOf(badge) === index,
-                        )
+                      {(item.requiresCredential ? ["Credential", ...item.badges] : item.badges)
+                        .filter((badge, index, all) => all.indexOf(badge) === index)
                         .slice(0, 3)
                         .map((badge) => (
                           <span
@@ -362,9 +313,7 @@ export function NodePalette({
       </div>
 
       <div className="mt-6 pt-4 border-t border-border">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-          Keyboard Shortcuts
-        </h4>
+        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Keyboard Shortcuts</h4>
         <div className="space-y-1 text-xs text-muted-foreground">
           <div className="flex justify-between">
             <span>Open wizard</span>
@@ -428,9 +377,7 @@ export function NodePalette({
           </div>
           <div className="flex justify-between">
             <span>Close dialog/wizard</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Esc
-            </kbd>
+            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">Esc</kbd>
           </div>
         </div>
       </div>

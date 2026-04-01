@@ -8,6 +8,10 @@ func BuiltinTools() []Definition {
 			Version:     "1.0.0",
 			Description: "Vector database search (HTTP)",
 			Kind:        "http",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"additionalProperties": true,
+			},
 			HTTP: &HTTPToolConfig{
 				URL:    "${VECTOR_SEARCH_URL}",
 				Method: "POST",
@@ -18,6 +22,10 @@ func BuiltinTools() []Definition {
 			Version:     "1.0.0",
 			Description: "Web search API (HTTP)",
 			Kind:        "http",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"additionalProperties": true,
+			},
 			HTTP: &HTTPToolConfig{
 				URL:    "${WEB_SEARCH_URL}",
 				Method: "POST",
@@ -28,6 +36,10 @@ func BuiltinTools() []Definition {
 			Version:     "1.0.0",
 			Description: "Internal service adapter (HTTP)",
 			Kind:        "http",
+			InputSchema: map[string]any{
+				"type":                 "object",
+				"additionalProperties": true,
+			},
 			HTTP: &HTTPToolConfig{
 				URL:    "${INTERNAL_SERVICE_URL}",
 				Method: "POST",

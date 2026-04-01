@@ -26,23 +26,12 @@ import {
   getMarketplacePackageBadges,
   getMarketplacePackageDescription,
 } from "@/lib/marketplace-runtime";
-import {
-  Badge,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Input,
-} from "@/components/ui";
+import { Badge, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from "@/components/ui";
 
 /**
  * Icon mapping for integration tools
  */
-const INTEGRATION_ICONS: Record<
-  string,
-  { icon: ComponentType<{ className?: string }>; color: string; dot: string }
-> = {
+const INTEGRATION_ICONS: Record<string, { icon: ComponentType<{ className?: string }>; color: string; dot: string }> = {
   Send: { icon: Send, color: "bg-blue-500", dot: "text-blue-500" },
   BookOpen: { icon: BookOpen, color: "bg-stone-700", dot: "text-stone-600" },
   Hash: { icon: Hash, color: "bg-violet-500", dot: "text-violet-500" },
@@ -104,9 +93,7 @@ const ICON_BY_KEY: Record<string, keyof typeof INTEGRATION_ICONS> = {
   salesforce: "Database",
 };
 
-const pickIconKey = (
-  pkg: MarketplacePackage,
-): keyof typeof INTEGRATION_ICONS => {
+const pickIconKey = (pkg: MarketplacePackage): keyof typeof INTEGRATION_ICONS => {
   const icon = String(pkg.icon || "")
     .toLowerCase()
     .trim();
@@ -146,10 +133,7 @@ export function QuickToolBar({
       return a.name.localeCompare(b.name);
     });
   }, [runtimeReadyPackages]);
-  const featured = useMemo(
-    () => integrations.slice(0, FEATURED_TOOL_COUNT),
-    [integrations],
-  );
+  const featured = useMemo(() => integrations.slice(0, FEATURED_TOOL_COUNT), [integrations]);
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return integrations;
@@ -187,9 +171,7 @@ export function QuickToolBar({
           <div className="leading-none">
             <p className="text-xs font-semibold text-foreground">Quick Tools</p>
             <p className="text-[10px] text-muted-foreground">
-              {hasSelectedNode
-                ? "Adds and links from selected node"
-                : "Adds standalone node"}
+              {hasSelectedNode ? "Adds and links from selected node" : "Adds standalone node"}
             </p>
           </div>
         </div>
@@ -222,20 +204,12 @@ export function QuickToolBar({
                 className="group flex shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-transparent bg-background/70 px-2 py-1.5 text-xs font-medium text-foreground transition-colors transition-transform transition-shadow hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <span
-                  className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-md text-white",
-                    iconConfig.color,
-                  )}
+                  className={cn("flex h-5 w-5 items-center justify-center rounded-md text-white", iconConfig.color)}
                 >
                   <IconComponent className="h-3.5 w-3.5" aria-hidden="true" />
                 </span>
                 <span className="hidden sm:inline">{pkg.name}</span>
-                {hasSelectedNode && (
-                  <Link2
-                    className={cn("h-3 w-3", iconConfig.dot)}
-                    aria-hidden="true"
-                  />
-                )}
+                {hasSelectedNode && <Link2 className={cn("h-3 w-3", iconConfig.dot)} aria-hidden="true" />}
               </button>
             );
           })}
@@ -263,8 +237,7 @@ export function QuickToolBar({
           <DialogHeader>
             <DialogTitle>Integration Tools</DialogTitle>
             <DialogDescription>
-              Add installed runtime-ready marketplace tools to your graph with
-              one click.
+              Add installed runtime-ready marketplace tools to your graph with one click.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -318,9 +291,7 @@ export function QuickToolBar({
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {pkg.name}
-                          </p>
+                          <p className="truncate text-sm font-medium text-foreground">{pkg.name}</p>
                           {getMarketplacePackageBadges(pkg)
                             .slice(0, 2)
                             .map((badge) => (
@@ -337,10 +308,7 @@ export function QuickToolBar({
                           {getMarketplacePackageDescription(pkg)}
                         </p>
                       </div>
-                      <CheckCircle2
-                        className="mt-1 h-4 w-4 text-emerald-500"
-                        aria-hidden="true"
-                      />
+                      <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500" aria-hidden="true" />
                     </button>
                   );
                 })
@@ -348,9 +316,8 @@ export function QuickToolBar({
             </div>
             {marketplaceNodes.length > runtimeReadyPackages.length && (
               <p className="text-xs text-muted-foreground">
-                {marketplaceNodes.length - runtimeReadyPackages.length}{" "}
-                installed package(s) are hidden here because they are
-                template-only or blocked for runtime execution.
+                {marketplaceNodes.length - runtimeReadyPackages.length} installed package(s) are hidden here because
+                they are template-only or blocked for runtime execution.
               </p>
             )}
           </div>

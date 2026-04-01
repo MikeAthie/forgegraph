@@ -71,8 +71,16 @@ const PACKAGE_KIND_TO_EXECUTION_TYPE = {
 const PACKAGE_KIND_OPTIONS = [
   { value: "template_http", label: "Template HTTP", help: "Editor preset only. Adds a configured HTTP node." },
   { value: "template_prompt", label: "Template Prompt", help: "Editor preset only. Adds a configured prompt node." },
-  { value: "runtime_tool", label: "Runtime Tool", help: "Executable tool. Delivered to the engine when runtime-ready." },
-  { value: "runtime_transform", label: "Runtime Transform", help: "Reserved contract. Stored now, Cloud execution still blocked." },
+  {
+    value: "runtime_tool",
+    label: "Runtime Tool",
+    help: "Executable tool. Delivered to the engine when runtime-ready.",
+  },
+  {
+    value: "runtime_transform",
+    label: "Runtime Transform",
+    help: "Reserved contract. Stored now, Cloud execution still blocked.",
+  },
 ] as const;
 
 function buildRuntimeManifest(form: ReleaseFormState): Record<string, unknown> | null {
@@ -152,10 +160,7 @@ export default function MarketplaceAdminPage() {
     return map;
   }, [installed]);
 
-  const pendingReleases = useMemo(
-    () => releases.filter((release) => release.status === "pending_review"),
-    [releases],
-  );
+  const pendingReleases = useMemo(() => releases.filter((release) => release.status === "pending_review"), [releases]);
 
   const installedStats = useMemo(() => {
     return installed.reduce(
@@ -237,10 +242,7 @@ export default function MarketplaceAdminPage() {
           category: "integration",
         },
         config_schema: { type: "object" },
-        config_defaults:
-          releaseForm.package_kind === "runtime_tool"
-            ? { tool: toolName }
-            : {},
+        config_defaults: releaseForm.package_kind === "runtime_tool" ? { tool: toolName } : {},
         runtime_manifest: runtimeManifest,
         cloud_allowed: releaseForm.cloud_allowed,
       });
@@ -338,7 +340,8 @@ export default function MarketplaceAdminPage() {
             <CardHeader>
               <CardTitle>Approved packages</CardTitle>
               <CardDescription>
-                Template packages stay addable as editor presets. Only runtime-ready packages are delivered to the engine.
+                Template packages stay addable as editor presets. Only runtime-ready packages are delivered to the
+                engine.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -376,9 +379,7 @@ export default function MarketplaceAdminPage() {
                           ))}
                           <Badge variant="outline">latest {latestVersion}</Badge>
                           {installedVersion && (
-                            <Badge variant={upToDate ? "default" : "outline"}>
-                              installed {installedVersion}
-                            </Badge>
+                            <Badge variant={upToDate ? "default" : "outline"}>installed {installedVersion}</Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -386,11 +387,7 @@ export default function MarketplaceAdminPage() {
                           {reason ? ` · ${reason}` : ""}
                         </p>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => void handleInstall(pkg)}
-                        disabled={installingSlug === pkg.slug}
-                      >
+                      <Button size="sm" onClick={() => void handleInstall(pkg)} disabled={installingSlug === pkg.slug}>
                         {installingSlug === pkg.slug
                           ? "Installing..."
                           : installedVersion
@@ -421,7 +418,9 @@ export default function MarketplaceAdminPage() {
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-lg border border-border p-3">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Manifest checksum</p>
-                      <p className="mt-1 break-all font-mono text-xs text-foreground">{runtimePreview.checksum || "-"}</p>
+                      <p className="mt-1 break-all font-mono text-xs text-foreground">
+                        {runtimePreview.checksum || "-"}
+                      </p>
                     </div>
                     <div className="rounded-lg border border-border p-3">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Runtime tools</p>
@@ -436,7 +435,9 @@ export default function MarketplaceAdminPage() {
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium">Delivery status by installed package</h3>
                     {runtimePreview.packages.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No installed packages are currently part of the preview payload.</p>
+                      <p className="text-sm text-muted-foreground">
+                        No installed packages are currently part of the preview payload.
+                      </p>
                     ) : (
                       runtimePreview.packages.map((entry) => (
                         <div
@@ -491,9 +492,7 @@ export default function MarketplaceAdminPage() {
                   <Input
                     id="packageSlug"
                     value={releaseForm.package_slug}
-                    onChange={(event) =>
-                      setReleaseForm((prev) => ({ ...prev, package_slug: event.target.value }))
-                    }
+                    onChange={(event) => setReleaseForm((prev) => ({ ...prev, package_slug: event.target.value }))}
                     placeholder="slack-alerts"
                   />
                 </div>
@@ -502,9 +501,7 @@ export default function MarketplaceAdminPage() {
                   <Input
                     id="packageName"
                     value={releaseForm.package_name}
-                    onChange={(event) =>
-                      setReleaseForm((prev) => ({ ...prev, package_name: event.target.value }))
-                    }
+                    onChange={(event) => setReleaseForm((prev) => ({ ...prev, package_name: event.target.value }))}
                     placeholder="Slack Alerts"
                   />
                 </div>
@@ -513,9 +510,7 @@ export default function MarketplaceAdminPage() {
                   <Input
                     id="releaseVersion"
                     value={releaseForm.version}
-                    onChange={(event) =>
-                      setReleaseForm((prev) => ({ ...prev, version: event.target.value }))
-                    }
+                    onChange={(event) => setReleaseForm((prev) => ({ ...prev, version: event.target.value }))}
                     placeholder="1.0.0"
                   />
                 </div>
@@ -542,10 +537,7 @@ export default function MarketplaceAdminPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {
-                      PACKAGE_KIND_OPTIONS.find((option) => option.value === releaseForm.package_kind)
-                        ?.help
-                    }
+                    {PACKAGE_KIND_OPTIONS.find((option) => option.value === releaseForm.package_kind)?.help}
                   </p>
                 </div>
               </div>
@@ -608,9 +600,7 @@ export default function MarketplaceAdminPage() {
                   </div>
                   <Switch
                     checked={releaseForm.cloud_allowed}
-                    onCheckedChange={(checked) =>
-                      setReleaseForm((prev) => ({ ...prev, cloud_allowed: checked }))
-                    }
+                    onCheckedChange={(checked) => setReleaseForm((prev) => ({ ...prev, cloud_allowed: checked }))}
                     aria-label="Cloud allowed"
                   />
                 </div>
@@ -625,9 +615,7 @@ export default function MarketplaceAdminPage() {
           <Card>
             <CardHeader>
               <CardTitle>Release review queue</CardTitle>
-              <CardDescription>
-                Pending release approvals. Owner role required for approval decisions.
-              </CardDescription>
+              <CardDescription>Pending release approvals. Owner role required for approval decisions.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {pendingReleases.length === 0 ? (
@@ -643,7 +631,8 @@ export default function MarketplaceAdminPage() {
                         {release.package_name} v{release.version}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {release.package_slug} · {getMarketplaceReleaseLabel(release.package_kind)} · {release.execution_node_type}
+                        {release.package_slug} · {getMarketplaceReleaseLabel(release.package_kind)} ·{" "}
+                        {release.execution_node_type}
                         {release.cloud_allowed ? " · cloud-allowed" : " · self-host only"}
                       </p>
                     </div>

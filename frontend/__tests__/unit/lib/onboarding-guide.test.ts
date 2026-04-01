@@ -1,8 +1,4 @@
-import {
-  buildCredentialRemediation,
-  buildRunRemediation,
-  getOnboardingProgress,
-} from "@/lib/onboarding-guide";
+import { buildCredentialRemediation, buildRunRemediation, getOnboardingProgress } from "@/lib/onboarding-guide";
 import type { OnboardingMilestone } from "@/lib/api";
 
 describe("onboarding-guide helpers", () => {

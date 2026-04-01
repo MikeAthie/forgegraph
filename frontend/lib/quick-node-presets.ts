@@ -10,13 +10,7 @@ import { NODE_TYPES, type NodeType } from "./graph-types";
 /**
  * Categories for organizing presets
  */
-export type PresetCategory =
-  | "ai"
-  | "communication"
-  | "data"
-  | "logic"
-  | "utility"
-  | "integrations";
+export type PresetCategory = "ai" | "communication" | "data" | "logic" | "utility" | "integrations";
 
 /**
  * Quick Node Preset definition
@@ -38,10 +32,7 @@ export interface QuickNodePreset {
 /**
  * Category metadata for display
  */
-export const PRESET_CATEGORIES: Record<
-  PresetCategory,
-  { label: string; description: string }
-> = {
+export const PRESET_CATEGORIES: Record<PresetCategory, { label: string; description: string }> = {
   ai: {
     label: "AI & LLM",
     description: "Language model prompts and AI processing",
@@ -83,8 +74,7 @@ export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
     defaultConfig: {
       role: "Helpful AI Assistant",
       job_description: "Engage in helpful, natural conversation with the user",
-      system_prompt:
-        "You are a helpful AI assistant. Respond naturally and helpfully to user messages.",
+      system_prompt: "You are a helpful AI assistant. Respond naturally and helpfully to user messages.",
       model: "gpt-4",
       temperature: 0.7,
     },
@@ -102,8 +92,7 @@ export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
       job_description: "Summarize text into concise, clear bullet points",
       system_prompt:
         "You are an expert at summarizing content. Extract the key points and present them as a bulleted list.",
-      prompt_template:
-        "Please summarize the following text:\n\n{{input.text}}\n\nProvide 3-5 key bullet points.",
+      prompt_template: "Please summarize the following text:\n\n{{input.text}}\n\nProvide 3-5 key bullet points.",
       model: "gpt-4",
       temperature: 0.3,
     },
@@ -119,8 +108,7 @@ export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
     defaultConfig: {
       role: "Intent Classifier",
       job_description: "Classify user messages into predefined categories",
-      system_prompt:
-        "You are an intent classifier. Analyze the user message and respond with ONLY the category name.",
+      system_prompt: "You are an intent classifier. Analyze the user message and respond with ONLY the category name.",
       prompt_template:
         'Classify the following message into one of these categories: [question, request, complaint, feedback, other]\n\nMessage: "{{input.message}}"\n\nCategory:',
       model: "gpt-4",
@@ -140,8 +128,7 @@ export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
       job_description: "Accurately translate text while preserving meaning",
       system_prompt:
         "You are a professional translator. Translate the provided text accurately while maintaining the original tone and meaning.",
-      prompt_template:
-        "Translate the following text to {{input.target_language}}:\n\n{{input.text}}",
+      prompt_template: "Translate the following text to {{input.target_language}}:\n\n{{input.text}}",
       model: "gpt-4",
       temperature: 0.3,
     },
@@ -159,8 +146,7 @@ export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
     defaultConfig: {
       role: "Email Assistant",
       job_description: "Draft professional email responses",
-      system_prompt:
-        "You are a professional email writer. Draft clear, concise, and appropriate email responses.",
+      system_prompt: "You are a professional email writer. Draft clear, concise, and appropriate email responses.",
       prompt_template:
         "Draft a response to the following email:\n\nFrom: {{input.sender}}\nSubject: {{input.subject}}\n\n{{input.body}}\n\nTone: {{input.tone || 'professional'}}",
       model: "gpt-4",
@@ -374,8 +360,7 @@ return {
     },
     tags: ["telegram", "messaging", "bot", "chat"],
     requiredCredentialProvider: "telegram",
-    setupHint:
-      "Connect a Telegram bot token from @BotFather, then set chat_id + text payload fields.",
+    setupHint: "Connect a Telegram bot token from @BotFather, then set chat_id + text payload fields.",
     validationBadge: "Credential required",
   },
   {
@@ -397,8 +382,7 @@ return {
     },
     tags: ["whatsapp", "twilio", "messaging", "chatbot"],
     requiredCredentialProvider: "twilio",
-    setupHint:
-      "Provide Twilio credential and Account SID, then map To/From/Body placeholders.",
+    setupHint: "Provide Twilio credential and Account SID, then map To/From/Body placeholders.",
     validationBadge: "Credential required",
   },
   {
@@ -417,8 +401,7 @@ return {
     },
     tags: ["gmail", "email", "inbox", "unread"],
     requiredCredentialProvider: "gmail",
-    setupHint:
-      "Use Gmail OAuth credential with readonly scope and adjust query/maxResults as needed.",
+    setupHint: "Use Gmail OAuth credential with readonly scope and adjust query/maxResults as needed.",
     validationBadge: "OAuth required",
   },
   {
@@ -446,8 +429,7 @@ return {
     },
     tags: ["gmail", "email", "send", "reply"],
     requiredCredentialProvider: "gmail",
-    setupHint:
-      "Use Gmail OAuth credential and provide RFC2822 message encoded as base64url raw payload.",
+    setupHint: "Use Gmail OAuth credential and provide RFC2822 message encoded as base64url raw payload.",
     validationBadge: "OAuth required",
   },
   {
@@ -466,8 +448,7 @@ return {
     },
     tags: ["google", "calendar", "events", "schedule"],
     requiredCredentialProvider: "google_calendar",
-    setupHint:
-      "Set ISO8601 time_min/time_max input values and connect Google Calendar OAuth credential.",
+    setupHint: "Set ISO8601 time_min/time_max input values and connect Google Calendar OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -489,8 +470,7 @@ return {
     },
     tags: ["google", "calendar", "create", "event"],
     requiredCredentialProvider: "google_calendar",
-    setupHint:
-      "Pass event_json with summary/start/end fields and a Google Calendar OAuth credential.",
+    setupHint: "Pass event_json with summary/start/end fields and a Google Calendar OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -509,8 +489,7 @@ return {
     },
     tags: ["google", "tasks", "todo", "list"],
     requiredCredentialProvider: "google_tasks",
-    setupHint:
-      "Provide task_list_id input and connect Google Tasks OAuth credential.",
+    setupHint: "Provide task_list_id input and connect Google Tasks OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -532,8 +511,7 @@ return {
     },
     tags: ["google", "tasks", "create", "todo"],
     requiredCredentialProvider: "google_tasks",
-    setupHint:
-      "Provide task_list_id + task_json and connect Google Tasks OAuth credential.",
+    setupHint: "Provide task_list_id + task_json and connect Google Tasks OAuth credential.",
     validationBadge: "OAuth required",
   },
   {
@@ -560,8 +538,7 @@ return {
       output_key: "webhook_response",
     },
     tags: ["webhook", "http", "integration", "fallback"],
-    setupHint:
-      "Use this fallback when no native connector exists and validate endpoint/auth with Run test.",
+    setupHint: "Use this fallback when no native connector exists and validate endpoint/auth with Run test.",
     validationBadge: "Run test recommended",
   },
   {
@@ -732,9 +709,7 @@ return {
 /**
  * Get presets by category
  */
-export function getPresetsByCategory(
-  category: PresetCategory,
-): QuickNodePreset[] {
+export function getPresetsByCategory(category: PresetCategory): QuickNodePreset[] {
   return QUICK_NODE_PRESETS.filter((preset) => preset.category === category);
 }
 
@@ -781,7 +756,5 @@ export function getPopularPresets(limit = 6): QuickNodePreset[] {
  * Get integration presets for quick tool bar
  */
 export function getIntegrationPresets(): QuickNodePreset[] {
-  return QUICK_NODE_PRESETS.filter(
-    (preset) => preset.category === "integrations",
-  );
+  return QUICK_NODE_PRESETS.filter((preset) => preset.category === "integrations");
 }

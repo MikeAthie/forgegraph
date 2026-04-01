@@ -49,9 +49,7 @@ const renderStepBody = (step: AgentTraceStep) => {
         ) : null}
         {step.tool_input !== undefined ? (
           <details open>
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-              Tool input
-            </summary>
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Tool input</summary>
             <pre className="mt-1 max-h-36 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] font-mono whitespace-pre-wrap">
               {formatJsonForDisplay(step.tool_input)}
             </pre>
@@ -59,9 +57,7 @@ const renderStepBody = (step: AgentTraceStep) => {
         ) : null}
         {step.tool_output !== undefined ? (
           <details open>
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-              Tool output
-            </summary>
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Tool output</summary>
             <pre className="mt-1 max-h-36 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] font-mono whitespace-pre-wrap">
               {formatJsonForDisplay(step.tool_output)}
             </pre>
@@ -93,11 +89,7 @@ type AgentTracePanelProps = {
   showApprovalHint?: boolean;
 };
 
-export function AgentTracePanel({
-  trace,
-  compact = false,
-  showApprovalHint = false,
-}: AgentTracePanelProps) {
+export function AgentTracePanel({ trace, compact = false, showApprovalHint = false }: AgentTracePanelProps) {
   const steps = Array.isArray(trace.steps) ? trace.steps : [];
   const events = Array.isArray(trace.events) ? trace.events : [];
   const usageLabel = formatUsageLabel(trace.usage);
@@ -137,9 +129,7 @@ export function AgentTracePanel({
 
       {trace.final_output ? (
         <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-          <p className="text-[11px] font-medium uppercase text-emerald-700 dark:text-emerald-300">
-            Final output
-          </p>
+          <p className="text-[11px] font-medium uppercase text-emerald-700 dark:text-emerald-300">Final output</p>
           <p className="mt-1 text-sm whitespace-pre-wrap text-foreground">{trace.final_output}</p>
         </div>
       ) : null}
@@ -183,14 +173,10 @@ export function AgentTracePanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{getEventLabel(event)}</Badge>
                     {typeof event.step_index === "number" ? (
-                      <span className="text-xs text-muted-foreground">
-                        step {event.step_index}
-                      </span>
+                      <span className="text-xs text-muted-foreground">step {event.step_index}</span>
                     ) : null}
                     {typeof event.tool === "string" && event.tool ? (
-                      <span className="text-xs text-muted-foreground">
-                        tool {event.tool}
-                      </span>
+                      <span className="text-xs text-muted-foreground">tool {event.tool}</span>
                     ) : null}
                   </div>
                   <pre className="mt-2 max-h-36 overflow-auto rounded border border-border/50 bg-background/70 p-2 text-[11px] font-mono whitespace-pre-wrap">

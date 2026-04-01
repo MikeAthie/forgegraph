@@ -53,7 +53,7 @@ export function AgentFields({
     <K extends keyof AgentConfig>(field: K, value: AgentConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAddExample = useCallback(() => {
@@ -72,7 +72,7 @@ export function AgentFields({
         examples: examples.filter((_, i) => i !== index),
       });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleExampleChange = useCallback(
@@ -81,7 +81,7 @@ export function AgentFields({
       examples[index] = { ...examples[index], [field]: value };
       onChange({ ...config, examples });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   return (
@@ -97,7 +97,7 @@ export function AgentFields({
         <FormField
           label="Role / Persona"
           htmlFor="agent-role"
-          description="Define the agent&apos;s role or persona (e.g., &apos;Customer Support Agent at Acme Corp&apos;)"
+          description="Define the agent's role or persona (e.g., 'Customer Support Agent at Acme Corp')"
         >
           <Input
             id="agent-role"
@@ -125,9 +125,7 @@ export function AgentFields({
             className="text-sm resize-none"
           />
           <div className="flex justify-end">
-            <span className="text-xs text-muted-foreground">
-              {(config.jobDescription || "").length} characters
-            </span>
+            <span className="text-xs text-muted-foreground">{(config.jobDescription || "").length} characters</span>
           </div>
         </FormField>
       )}
@@ -140,9 +138,7 @@ export function AgentFields({
               Examples
               <span className="text-muted-foreground font-normal ml-1">(optional)</span>
             </label>
-            <span className="text-xs text-muted-foreground">
-              {(config.examples || []).length} example(s)
-            </span>
+            <span className="text-xs text-muted-foreground">{(config.examples || []).length} example(s)</span>
           </div>
           <p className="text-xs text-muted-foreground -mt-1">
             Provide input/output examples to guide the agent&apos;s behavior
@@ -151,14 +147,9 @@ export function AgentFields({
           {/* Example List */}
           <div className="space-y-3">
             {(config.examples || []).map((example, index) => (
-              <div
-                key={index}
-                className="relative p-3 border rounded-lg bg-muted/30 space-y-2"
-              >
+              <div key={index} className="relative p-3 border rounded-lg bg-muted/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Example {index + 1}
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">Example {index + 1}</span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -195,13 +186,7 @@ export function AgentFields({
             ))}
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAddExample}
-            className="w-full"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={handleAddExample} className="w-full">
             <Plus className="w-4 h-4 mr-1" />
             Add Example
           </Button>

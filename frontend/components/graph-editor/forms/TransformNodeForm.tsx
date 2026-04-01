@@ -25,21 +25,21 @@ export function TransformNodeForm({ config, onChange, errors, setErrors }: NodeF
     <K extends keyof TransformConfig>(field: K, value: TransformConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   // Validate expression on change
@@ -47,10 +47,7 @@ export function TransformNodeForm({ config, onChange, errors, setErrors }: NodeF
     const newErrors: Record<string, string> = {};
 
     if (transformConfig.expression) {
-      const expressionError = validateExpression(
-        transformConfig.expression,
-        "Expression"
-      );
+      const expressionError = validateExpression(transformConfig.expression, "Expression");
       if (expressionError) {
         newErrors.expression = expressionError.message;
       }
@@ -62,12 +59,7 @@ export function TransformNodeForm({ config, onChange, errors, setErrors }: NodeF
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Transform */}
-      <AgentFields
-        config={transformConfig}
-        onChange={handleAgentChange}
-        showRole={false}
-        showExamples={false}
-      />
+      <AgentFields config={transformConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
 
       <Separator />
 
@@ -99,9 +91,15 @@ return {
         <div className="p-3 bg-muted/50 rounded-md text-xs space-y-2">
           <p className="font-medium">Available variables:</p>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li><code className="bg-muted px-1 rounded">state</code> - Current workflow state</li>
-            <li><code className="bg-muted px-1 rounded">input</code> - Graph input data</li>
-            <li><code className="bg-muted px-1 rounded">node.&lt;id&gt;.output</code> - Output from specific node</li>
+            <li>
+              <code className="bg-muted px-1 rounded">state</code> - Current workflow state
+            </li>
+            <li>
+              <code className="bg-muted px-1 rounded">input</code> - Graph input data
+            </li>
+            <li>
+              <code className="bg-muted px-1 rounded">node.&lt;id&gt;.output</code> - Output from specific node
+            </li>
           </ul>
         </div>
 

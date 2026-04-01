@@ -44,14 +44,7 @@ describe("MemoryNodeForm", () => {
         mockOnChange(nextConfig);
       };
 
-      return (
-        <MemoryNodeForm
-          config={config}
-          onChange={handleChange}
-          errors={{}}
-          setErrors={mockSetErrors}
-        />
-      );
+      return <MemoryNodeForm config={config} onChange={handleChange} errors={{}} setErrors={mockSetErrors} />;
     };
 
     return render(<Wrapper />);
@@ -116,7 +109,7 @@ describe("MemoryNodeForm", () => {
         expect(mockOnChange).toHaveBeenCalledWith(
           expect.objectContaining({
             memory_type: "buffer",
-          })
+          }),
         );
       });
     });
@@ -125,9 +118,7 @@ describe("MemoryNodeForm", () => {
       const config = { memory_type: "vector" as const };
       renderWithConfig(config);
 
-      expect(
-        screen.getByText(/semantic search over stored memories/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/semantic search over stored memories/i)).toBeInTheDocument();
     });
   });
 
@@ -301,35 +292,27 @@ describe("MemoryNodeForm", () => {
     it("should display helpful description for memory type", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/strategy for storing and managing memory/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/strategy for storing and managing memory/i)).toBeInTheDocument();
     });
 
     it("should display description for memory key", () => {
       renderWithConfig();
 
-      expect(
-        screen.getByText(/state key to store\/retrieve memory from/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/state key to store\/retrieve memory from/i)).toBeInTheDocument();
     });
 
     it("should display description for max messages", () => {
       const config = { memory_type: "buffer" as const };
       renderWithConfig(config);
 
-      expect(
-        screen.getByText(/maximum number of messages to keep in buffer/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/maximum number of messages to keep in buffer/i)).toBeInTheDocument();
     });
 
     it("should display description for max tokens", () => {
       const config = { memory_type: "summary" as const };
       renderWithConfig(config);
 
-      expect(
-        screen.getByText(/token limit before triggering summarization/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/token limit before triggering summarization/i)).toBeInTheDocument();
     });
   });
 
@@ -390,9 +373,7 @@ describe("MemoryNodeForm", () => {
       renderWithConfig();
 
       expect(
-        screen.getByText(
-          /configure how the agent stores and retrieves information across interactions/i
-        )
+        screen.getByText(/configure how the agent stores and retrieves information across interactions/i),
       ).toBeInTheDocument();
     });
   });

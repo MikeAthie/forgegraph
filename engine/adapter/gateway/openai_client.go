@@ -27,12 +27,15 @@ type OpenAIClient struct {
 
 // OpenAI API request/response structures
 type openAIRequest struct {
-	Model         string               `json:"model"`
-	Messages      []openAIMessage      `json:"messages"`
-	Temperature   float64              `json:"temperature,omitempty"`
-	MaxTokens     int                  `json:"max_tokens,omitempty"`
-	Stream        bool                 `json:"stream,omitempty"`
-	StreamOptions *openAIStreamOptions `json:"stream_options,omitempty"`
+	Model          string                `json:"model"`
+	Messages       []openAIMessage       `json:"messages"`
+	Temperature    float64               `json:"temperature,omitempty"`
+	MaxTokens      int                   `json:"max_tokens,omitempty"`
+	Stream         bool                  `json:"stream,omitempty"`
+	StreamOptions  *openAIStreamOptions  `json:"stream_options,omitempty"`
+	Tools          []openAITool          `json:"tools,omitempty"`
+	ToolChoice     any                   `json:"tool_choice,omitempty"`
+	ResponseFormat *openAIResponseFormat `json:"response_format,omitempty"`
 }
 
 type openAIStreamOptions struct {
@@ -44,15 +47,54 @@ type openAIMessage struct {
 	Content string `json:"content"`
 }
 
+type openAIResponseMessage struct {
+	Content   string           `json:"content"`
+	ToolCalls []openAIToolCall `json:"tool_calls,omitempty"`
+}
+
+type openAITool struct {
+	Type     string             `json:"type"`
+	Function openAIFunctionTool `json:"function"`
+}
+
+type openAIFunctionTool struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters"`
+	Strict      bool           `json:"strict,omitempty"`
+}
+
+type openAIToolCall struct {
+	ID       string                `json:"id"`
+	Type     string                `json:"type"`
+	Function openAIToolCallDetails `json:"function"`
+}
+
+type openAIToolCallDetails struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type openAIResponseFormat struct {
+	Type       string                    `json:"type"`
+	JSONSchema *openAIResponseJSONSchema `json:"json_schema,omitempty"`
+}
+
+type openAIResponseJSONSchema struct {
+	Name   string         `json:"name"`
+	Schema map[string]any `json:"schema"`
+	Strict bool           `json:"strict,omitempty"`
+}
+
 type openAIResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	Created int64  `json:"created"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index        int           `json:"index"`
-		Message      openAIMessage `json:"message"`
-		FinishReason string        `json:"finish_reason"`
+		Index        int                   `json:"index"`
+		Message      openAIResponseMessage `json:"message"`
+		FinishReason string                `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -165,6 +207,24 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 		Messages:    messages,
 		Temperature: request.Temperature,
 		MaxTokens:   request.MaxTokens,
+	}
+	if len(request.Tools) > 0 {
+		apiReq.Tools = buildOpenAITools(request.Tools)
+		if toolChoice := strings.TrimSpace(request.ToolChoice); toolChoice != "" {
+			if toolChoice == "required" || toolChoice == "auto" || toolChoice == "none" {
+				apiReq.ToolChoice = toolChoice
+			}
+		}
+	}
+	if request.StructuredOutput != nil && len(request.StructuredOutput.Schema) > 0 {
+		apiReq.ResponseFormat = &openAIResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &openAIResponseJSONSchema{
+				Name:   request.StructuredOutput.Name,
+				Schema: request.StructuredOutput.Schema,
+				Strict: request.StructuredOutput.Strict,
+			},
+		}
 	}
 
 	// Serialize request body
@@ -313,6 +373,11 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			TotalTokens:      apiResp.Usage.TotalTokens,
 		},
 		FinishReason: choice.FinishReason,
+		ToolCalls:    parseOpenAIToolCalls(choice.Message.ToolCalls),
+		StructuredData: parseStructuredResponse(
+			choice.Message.Content,
+			request.StructuredOutput != nil,
+		),
 	}, nil
 }
 
@@ -349,12 +414,19 @@ func (c *OpenAIClient) StreamComplete(
 	}
 
 	apiReq := openAIRequest{
-		Model:         model,
-		Messages:      messages,
-		Temperature:   request.Temperature,
-		MaxTokens:     request.MaxTokens,
-		Stream:        true,
-		StreamOptions: &openAIStreamOptions{IncludeUsage: true},
+		Model:          model,
+		Messages:       messages,
+		Temperature:    request.Temperature,
+		MaxTokens:      request.MaxTokens,
+		Stream:         true,
+		StreamOptions:  &openAIStreamOptions{IncludeUsage: true},
+		ResponseFormat: nil,
+	}
+	if len(request.Tools) > 0 {
+		apiReq.Tools = buildOpenAITools(request.Tools)
+		if toolChoice := strings.TrimSpace(request.ToolChoice); toolChoice != "" {
+			apiReq.ToolChoice = toolChoice
+		}
 	}
 
 	reqBody, err := json.Marshal(apiReq)
@@ -497,6 +569,60 @@ func (c *OpenAIClient) StreamComplete(
 		Usage:        usage,
 		FinishReason: finishReason,
 	}, nil
+}
+
+func buildOpenAITools(specs []executor.ToolSpec) []openAITool {
+	tools := make([]openAITool, 0, len(specs))
+	for _, spec := range specs {
+		if strings.TrimSpace(spec.Name) == "" || len(spec.InputSchema) == 0 {
+			continue
+		}
+		tools = append(tools, openAITool{
+			Type: "function",
+			Function: openAIFunctionTool{
+				Name:        spec.Name,
+				Description: spec.Description,
+				Parameters:  spec.InputSchema,
+				Strict:      spec.Strict,
+			},
+		})
+	}
+	return tools
+}
+
+func parseOpenAIToolCalls(calls []openAIToolCall) []executor.ToolCall {
+	if len(calls) == 0 {
+		return nil
+	}
+	parsed := make([]executor.ToolCall, 0, len(calls))
+	for _, call := range calls {
+		args := map[string]any{}
+		if strings.TrimSpace(call.Function.Arguments) != "" {
+			_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
+		}
+		parsed = append(parsed, executor.ToolCall{
+			ID:           call.ID,
+			Name:         call.Function.Name,
+			Arguments:    args,
+			RawArguments: call.Function.Arguments,
+		})
+	}
+	return parsed
+}
+
+func parseStructuredResponse(content string, requested bool) any {
+	if !requested {
+		return nil
+	}
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return nil
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return nil
+	}
+	return parsed
 }
 
 func parseRetryAfterMs(headerValue string, now time.Time) int {

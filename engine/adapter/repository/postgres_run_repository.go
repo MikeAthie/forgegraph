@@ -26,7 +26,7 @@ func NewPostgresRunRepository(db *sql.DB) *PostgresRunRepository {
 // GetRun retrieves a run by ID
 func (r *PostgresRunRepository) GetRun(ctx context.Context, runID string) (*entity.Run, error) {
 	query := `
-		SELECT id, graph_version_id, status, input_json, output_json, error_message,
+		SELECT id, graph_version_id, status, input_json, output_json, error_message, trace_id,
 		       started_at, ended_at
 		FROM runs
 		WHERE id = $1
@@ -44,6 +44,7 @@ func (r *PostgresRunRepository) GetRun(ctx context.Context, runID string) (*enti
 		&inputJSON,
 		&outputJSON,
 		&errorMessage,
+		&run.TraceID,
 		&run.StartedAt,
 		&endedAt,
 	)
@@ -196,8 +197,8 @@ func (r *PostgresRunRepository) CreateNodeRun(ctx context.Context, nodeRun *enti
 
 	query := `
 		INSERT INTO node_runs (id, run_id, node_id, node_type, status, attempt,
-		                       input_json, started_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		                       input_json, started_at, trace_id, span_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err = r.db.ExecContext(ctx, query,
@@ -209,6 +210,8 @@ func (r *PostgresRunRepository) CreateNodeRun(ctx context.Context, nodeRun *enti
 		nodeRun.Attempt,
 		string(inputBytes),
 		nodeRun.StartedAt,
+		nodeRun.TraceID,
+		nodeRun.SpanID,
 	)
 
 	if err != nil {
@@ -243,8 +246,8 @@ func (r *PostgresRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *enti
 	query := `
 		UPDATE node_runs
 		SET status = $1, attempt = $2, output_json = $3, error_json = $4,
-		    ended_at = $5
-		WHERE id = $6
+		    ended_at = $5, trace_id = $6, span_id = $7
+		WHERE id = $8
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
@@ -253,6 +256,8 @@ func (r *PostgresRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *enti
 		outputStr,
 		errorStr,
 		nodeRun.EndedAt,
+		nodeRun.TraceID,
+		nodeRun.SpanID,
 		nodeRun.ID,
 	)
 
@@ -275,7 +280,7 @@ func (r *PostgresRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *enti
 func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID string) (*entity.NodeRun, error) {
 	query := `
 		SELECT id, run_id, node_id, node_type, status, attempt,
-		       input_json, output_json, error_json, started_at, ended_at
+		       input_json, output_json, error_json, started_at, ended_at, trace_id, span_id
 		FROM node_runs
 		WHERE run_id = $1 AND node_id = $2
 	`
@@ -296,6 +301,8 @@ func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID st
 		&errorJSON,
 		&nodeRun.StartedAt,
 		&endedAt,
+		&nodeRun.TraceID,
+		&nodeRun.SpanID,
 	)
 
 	if err == sql.ErrNoRows {
@@ -332,7 +339,7 @@ func (r *PostgresRunRepository) GetNodeRun(ctx context.Context, runID, nodeID st
 func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID string) ([]*entity.NodeRun, error) {
 	query := `
 		SELECT id, run_id, node_id, node_type, status, attempt,
-		       input_json, output_json, error_json, started_at, ended_at
+		       input_json, output_json, error_json, started_at, ended_at, trace_id, span_id
 		FROM node_runs
 		WHERE run_id = $1
 		ORDER BY started_at ASC
@@ -362,6 +369,8 @@ func (r *PostgresRunRepository) GetNodeRunsByRunID(ctx context.Context, runID st
 			&errorJSON,
 			&nodeRun.StartedAt,
 			&endedAt,
+			&nodeRun.TraceID,
+			&nodeRun.SpanID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan node run: %w", err)

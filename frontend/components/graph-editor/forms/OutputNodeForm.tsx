@@ -21,14 +21,14 @@ export function OutputNodeForm({ config, onChange }: NodeFormProps) {
     <K extends keyof OutputConfig>(field: K, value: OutputConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   return (
@@ -49,14 +49,10 @@ export function OutputNodeForm({ config, onChange }: NodeFormProps) {
         <h3 className="text-sm font-medium">Output Configuration</h3>
 
         <p className="text-sm text-muted-foreground">
-          Define what data to extract as the final output of your workflow.
-          Map output field names to state paths.
+          Define what data to extract as the final output of your workflow. Map output field names to state paths.
         </p>
 
-        <FormField
-          label="Output Mapping"
-          description="Map output keys to values from the workflow state"
-        >
+        <FormField label="Output Mapping" description="Map output keys to values from the workflow state">
           <KeyValueEditor
             value={outputConfig.output_mapping || {}}
             onChange={(mapping) => handleChange("output_mapping", mapping)}
@@ -68,9 +64,15 @@ export function OutputNodeForm({ config, onChange }: NodeFormProps) {
         <div className="p-3 bg-muted/50 rounded-md text-xs space-y-2">
           <p className="font-medium">State path examples:</p>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li><code className="bg-muted px-1 rounded">node.prompt_1.output</code> - Output from a prompt node</li>
-            <li><code className="bg-muted px-1 rounded">node.http_1.output.data</code> - Nested data from HTTP response</li>
-            <li><code className="bg-muted px-1 rounded">input.userId</code> - Original graph input</li>
+            <li>
+              <code className="bg-muted px-1 rounded">node.prompt_1.output</code> - Output from a prompt node
+            </li>
+            <li>
+              <code className="bg-muted px-1 rounded">node.http_1.output.data</code> - Nested data from HTTP response
+            </li>
+            <li>
+              <code className="bg-muted px-1 rounded">input.userId</code> - Original graph input
+            </li>
           </ul>
         </div>
       </div>

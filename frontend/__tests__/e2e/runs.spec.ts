@@ -80,15 +80,11 @@ test.describe("Runs", () => {
     const graphVersionId = createdVersion.data.id;
 
     const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync(
-      "python",
-      ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"],
-      {
-        cwd: backendDir,
-        env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-        stdio: "inherit",
-      },
-    );
+    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
+      cwd: backendDir,
+      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
+      stdio: "inherit",
+    });
 
     const runId = await waitForRunId(request, accessToken, graphVersionId);
 
@@ -486,15 +482,11 @@ test.describe("Runs", () => {
 
     // Seed a run (avoid depending on the Go engine for this UI-only assertion)
     const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync(
-      "python",
-      ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"],
-      {
-        cwd: backendDir,
-        env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-        stdio: "inherit",
-      },
-    );
+    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
+      cwd: backendDir,
+      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
+      stdio: "inherit",
+    });
 
     const runId = await waitForRunId(request, accessToken, graphVersionId);
 
@@ -541,12 +533,8 @@ test.describe("Runs", () => {
     await expect(page.getByText(graphName).first()).toBeVisible({ timeout: 10_000 });
 
     // Should show both attempts
-    await expect(
-      page.getByRole("button", { name: /Retrying Node.*attempt 1/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /Retrying Node.*attempt 2/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Retrying Node.*attempt 1/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Retrying Node.*attempt 2/i })).toBeVisible();
   });
 
   test("handles 404 for non-existent run", async ({ page }) => {

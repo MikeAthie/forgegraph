@@ -409,13 +409,7 @@ describe("Graph Conversion Utilities", () => {
     });
 
     it("should include graph_id and version_id when provided", () => {
-      const result = reactFlowToGraphJson(
-        [],
-        [],
-        {},
-        "graph-123",
-        "version-456"
-      );
+      const result = reactFlowToGraphJson([], [], {}, "graph-123", "version-456");
 
       expect(result.graph_id).toBe("graph-123");
       expect(result.version_id).toBe("version-456");
@@ -519,7 +513,7 @@ describe("Graph Conversion Utilities", () => {
         rfEdges,
         originalGraph.metadata ?? {},
         originalGraph.graph_id,
-        originalGraph.version_id
+        originalGraph.version_id,
       );
 
       // Verify all critical data is preserved
@@ -555,9 +549,7 @@ describe("Graph Conversion Utilities", () => {
       }
 
       // Check positions are preserved
-      expect(convertedGraph.editor_state?.nodePositions).toEqual(
-        originalGraph.editor_state?.nodePositions
-      );
+      expect(convertedGraph.editor_state?.nodePositions).toEqual(originalGraph.editor_state?.nodePositions);
     });
 
     it("should handle graphs with no edges", () => {

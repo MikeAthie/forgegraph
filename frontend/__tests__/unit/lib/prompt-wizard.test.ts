@@ -87,4 +87,3 @@ describe("prompt-wizard", () => {
     });
   });
 });
-

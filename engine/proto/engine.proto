@@ -83,6 +83,10 @@ message StartRunRequest {
 
   // Session identifier for cross-run memory sharing
   string session_id = 7;
+
+  // W3C trace context propagated from the control plane.
+  string traceparent = 8;
+  string tracestate = 9;
 }
 
 // StartRunResponse confirms run acceptance
@@ -140,6 +144,10 @@ message ResumeRunRequest {
 
   // Human-provided input as JSON string
   string input_json = 3;
+
+  // W3C trace context propagated from the control plane.
+  string traceparent = 4;
+  string tracestate = 5;
 }
 
 // ResumeRunResponse confirms resumption

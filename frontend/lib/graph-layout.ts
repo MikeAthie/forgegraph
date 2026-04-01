@@ -13,7 +13,7 @@ export interface LayoutOptions {
 export function getLayoutedElements(
   nodes: Node[],
   edges: Edge[],
-  options: LayoutOptions = {}
+  options: LayoutOptions = {},
 ): { nodes: Node[]; edges: Edge[] } {
   const { direction = "TB", nodeSpacing = 50, rankSpacing = 100 } = options;
 

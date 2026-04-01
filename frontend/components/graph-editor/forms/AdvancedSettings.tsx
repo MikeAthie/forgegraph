@@ -36,25 +36,14 @@ export interface AdvancedSettingsProps {
  * Collapsible advanced settings section for node configuration.
  * Includes caching, timeout, and retry policy settings.
  */
-export function AdvancedSettings({
-  config,
-  onChange,
-  defaultExpanded = false,
-  className,
-}: AdvancedSettingsProps) {
+export function AdvancedSettings({ config, onChange, defaultExpanded = false, className }: AdvancedSettingsProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  const handleChange = <K extends keyof AdvancedConfig>(
-    field: K,
-    value: AdvancedConfig[K]
-  ) => {
+  const handleChange = <K extends keyof AdvancedConfig>(field: K, value: AdvancedConfig[K]) => {
     onChange({ ...config, [field]: value });
   };
 
-  const handleRetryChange = <K extends keyof RetryPolicy>(
-    field: K,
-    value: RetryPolicy[K]
-  ) => {
+  const handleRetryChange = <K extends keyof RetryPolicy>(field: K, value: RetryPolicy[K]) => {
     onChange({
       ...config,
       retry_policy: { ...config.retry_policy, [field]: value },
@@ -70,11 +59,7 @@ export function AdvancedSettings({
         className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors rounded-lg"
       >
         <span>Advanced Settings</span>
-        {isExpanded ? (
-          <ChevronDown className="w-4 h-4" />
-        ) : (
-          <ChevronRight className="w-4 h-4" />
-        )}
+        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
       </button>
 
       {/* Content */}
@@ -108,10 +93,7 @@ export function AdvancedSettings({
                     min={0}
                     value={config.cache_ttl_ms || ""}
                     onChange={(e) =>
-                      handleChange(
-                        "cache_ttl_ms",
-                        e.target.value ? parseInt(e.target.value, 10) : undefined
-                      )
+                      handleChange("cache_ttl_ms", e.target.value ? parseInt(e.target.value, 10) : undefined)
                     }
                     placeholder="60000"
                     className="text-sm"
@@ -131,12 +113,7 @@ export function AdvancedSettings({
                 type="number"
                 min={0}
                 value={config.timeout_ms || ""}
-                onChange={(e) =>
-                  handleChange(
-                    "timeout_ms",
-                    e.target.value ? parseInt(e.target.value, 10) : undefined
-                  )
-                }
+                onChange={(e) => handleChange("timeout_ms", e.target.value ? parseInt(e.target.value, 10) : undefined)}
                 placeholder="30000"
                 className="text-sm"
               />
@@ -155,10 +132,7 @@ export function AdvancedSettings({
                     max={10}
                     value={config.retry_policy?.max_attempts || ""}
                     onChange={(e) =>
-                      handleRetryChange(
-                        "max_attempts",
-                        e.target.value ? parseInt(e.target.value, 10) : undefined
-                      )
+                      handleRetryChange("max_attempts", e.target.value ? parseInt(e.target.value, 10) : undefined)
                     }
                     placeholder="3"
                     className="text-sm"
@@ -172,10 +146,7 @@ export function AdvancedSettings({
                     min={0}
                     value={config.retry_policy?.backoff_ms || ""}
                     onChange={(e) =>
-                      handleRetryChange(
-                        "backoff_ms",
-                        e.target.value ? parseInt(e.target.value, 10) : undefined
-                      )
+                      handleRetryChange("backoff_ms", e.target.value ? parseInt(e.target.value, 10) : undefined)
                     }
                     placeholder="1000"
                     className="text-sm"
@@ -187,12 +158,7 @@ export function AdvancedSettings({
                 <select
                   id="retry-strategy"
                   value={config.retry_policy?.backoff_strategy || "exponential"}
-                  onChange={(e) =>
-                    handleRetryChange(
-                      "backoff_strategy",
-                      e.target.value as "fixed" | "exponential"
-                    )
-                  }
+                  onChange={(e) => handleRetryChange("backoff_strategy", e.target.value as "fixed" | "exponential")}
                   className="w-full px-3 py-2 border rounded-md bg-background text-sm"
                 >
                   <option value="exponential">Exponential</option>

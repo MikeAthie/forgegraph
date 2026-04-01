@@ -37,9 +37,7 @@ describe("template-quick-starts", () => {
       tags: ["email", "telegram"],
     });
 
-    expect(inferTemplateProviders(template)).toEqual(
-      expect.arrayContaining(["openai", "gmail", "telegram"]),
-    );
+    expect(inferTemplateProviders(template)).toEqual(expect.arrayContaining(["openai", "gmail", "telegram"]));
   });
 
   it("extracts sample input placeholders", () => {
@@ -50,10 +48,7 @@ describe("template-quick-starts", () => {
       },
     });
 
-    expect(getTemplatePlaceholders(template)).toEqual([
-      "{{input.message}}",
-      "{{input.user_name}}",
-    ]);
+    expect(getTemplatePlaceholders(template)).toEqual(["{{input.message}}", "{{input.user_name}}"]);
   });
 
   it("builds quick-start aliases for known templates", () => {
@@ -72,12 +67,7 @@ describe("template-quick-starts", () => {
     const quickStarts = buildTemplateQuickStarts(templates);
     const titles = quickStarts.map((quickStart) => quickStart.title);
 
-    expect(titles).toEqual(
-      expect.arrayContaining([
-        "Personal Assistant (Telegram + Gmail)",
-        "WhatsApp Chatbot",
-      ]),
-    );
+    expect(titles).toEqual(expect.arrayContaining(["Personal Assistant (Telegram + Gmail)", "WhatsApp Chatbot"]));
   });
 
   it("builds preview with credential coverage and version metadata", () => {
@@ -103,11 +93,7 @@ describe("template-quick-starts", () => {
       },
     ];
 
-    const preview = buildTemplatePreview(
-      template,
-      credentials,
-      "Personal Assistant (Telegram + Gmail)",
-    );
+    const preview = buildTemplatePreview(template, credentials, "Personal Assistant (Telegram + Gmail)");
 
     expect(preview.versionLabel).toBe("v3");
     expect(preview.versionNote).toBe("Added calendar context.");

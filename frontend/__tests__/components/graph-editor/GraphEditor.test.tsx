@@ -18,15 +18,7 @@ jest.mock("@xyflow/react", () => {
 
   return {
     __esModule: true,
-    ReactFlow: ({
-      nodes = [],
-      edges = [],
-      onConnect,
-      onNodeClick,
-      onEdgeClick,
-      onPaneClick,
-      children,
-    }: any) => (
+    ReactFlow: ({ nodes = [], edges = [], onConnect, onNodeClick, onEdgeClick, onPaneClick, children }: any) => (
       <div
         data-testid="reactflow"
         onClick={() => {
@@ -138,14 +130,11 @@ function renderGraphEditor() {
       onSave={jest.fn().mockResolvedValue(undefined)}
       onUpdateMetadata={jest.fn().mockResolvedValue(undefined)}
       saving={false}
-    />
+    />,
   );
 }
 
-async function addPromptNodeViaWizard(
-  user: ReturnType<typeof userEvent.setup>,
-  task = "Write a short response."
-) {
+async function addPromptNodeViaWizard(user: ReturnType<typeof userEvent.setup>, task = "Write a short response.") {
   // Scope to the node palette panel to avoid matching QuickToolBar buttons
   const palette = screen.getByRole("complementary", { name: /node palette panel/i });
   await actClick(user, within(palette).getByRole("button", { name: /^prompt$/i }));
@@ -160,10 +149,7 @@ async function addPromptNodeViaWizard(
   });
 }
 
-async function addNodeViaConfigDialog(
-  user: ReturnType<typeof userEvent.setup>,
-  label: RegExp
-) {
+async function addNodeViaConfigDialog(user: ReturnType<typeof userEvent.setup>, label: RegExp) {
   // Scope to the node palette panel to avoid matching QuickToolBar buttons
   const palette = screen.getByRole("complementary", { name: /node palette panel/i });
   await actClick(user, within(palette).getByRole("button", { name: label }));
@@ -204,9 +190,7 @@ describe("GraphEditor", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     lastOnConnect = undefined;
-    jest.spyOn(api.marketplaceApi, "listInstalled").mockImplementation(
-      () => new Promise(() => {})
-    );
+    jest.spyOn(api.marketplaceApi, "listInstalled").mockImplementation(() => new Promise(() => {}));
     mockUseRouter.mockReturnValue({
       push: jest.fn(),
       replace: jest.fn(),
@@ -342,7 +326,7 @@ describe("GraphEditor", () => {
         onSave={jest.fn().mockResolvedValue(undefined)}
         onUpdateMetadata={jest.fn().mockResolvedValue(undefined)}
         saving={false}
-      />
+      />,
     );
 
     await waitFor(() => {

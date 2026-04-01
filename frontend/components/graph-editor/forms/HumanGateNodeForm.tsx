@@ -31,21 +31,21 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
     <K extends keyof HumanGateConfig>(field: K, value: HumanGateConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
       onChange({ ...config, ...agentConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
       onChange({ ...config, ...advancedConfig });
     },
-    [config, onChange]
+    [config, onChange],
   );
 
   const handleEmailsChange = useCallback(
@@ -56,18 +56,13 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
         .filter(Boolean);
       handleChange("notify_emails", emails);
     },
-    [handleChange]
+    [handleChange],
   );
 
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Human Gate */}
-      <AgentFields
-        config={gateConfig}
-        onChange={handleAgentChange}
-        showRole={false}
-        showExamples={false}
-      />
+      <AgentFields config={gateConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
 
       <Separator />
 
@@ -76,8 +71,8 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
         <h3 className="text-sm font-medium">Approval Configuration</h3>
 
         <p className="text-sm text-muted-foreground">
-          Pause the workflow and wait for human approval before proceeding.
-          The reviewer can approve, reject, or modify the data.
+          Pause the workflow and wait for human approval before proceeding. The reviewer can approve, reject, or modify
+          the data.
         </p>
 
         <FormField
@@ -96,11 +91,7 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
           />
         </FormField>
 
-        <FormField
-          label="Instructions"
-          htmlFor="instructions"
-          description="Detailed instructions for the reviewer"
-        >
+        <FormField label="Instructions" htmlFor="instructions" description="Detailed instructions for the reviewer">
           <Textarea
             id="instructions"
             value={gateConfig.instructions || ""}
@@ -116,33 +107,20 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
         <h4 className="text-sm font-medium">Timeout & Notifications</h4>
 
         <div className="grid grid-cols-2 gap-4">
-          <FormField
-            label="Timeout (hours)"
-            htmlFor="timeout-hours"
-            description="Max wait time before timeout action"
-          >
+          <FormField label="Timeout (hours)" htmlFor="timeout-hours" description="Max wait time before timeout action">
             <Input
               id="timeout-hours"
               type="number"
               min={0}
               max={720}
               value={gateConfig.timeout_hours || ""}
-              onChange={(e) =>
-                handleChange(
-                  "timeout_hours",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined
-                )
-              }
+              onChange={(e) => handleChange("timeout_hours", e.target.value ? parseInt(e.target.value, 10) : undefined)}
               placeholder="24"
               className="text-sm"
             />
           </FormField>
 
-          <FormField
-            label="Notify Emails"
-            htmlFor="notify-emails"
-            description="Comma-separated email addresses"
-          >
+          <FormField label="Notify Emails" htmlFor="notify-emails" description="Comma-separated email addresses">
             <Input
               id="notify-emails"
               value={(gateConfig.notify_emails || []).join(", ")}
@@ -161,45 +139,33 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium">Auto-approve on timeout</div>
-              <div className="text-xs text-muted-foreground">
-                Automatically approve if no response within timeout
-              </div>
+              <div className="text-xs text-muted-foreground">Automatically approve if no response within timeout</div>
             </div>
             <Switch
               checked={gateConfig.auto_approve_after_timeout || false}
-              onCheckedChange={(checked) =>
-                handleChange("auto_approve_after_timeout", checked)
-              }
+              onCheckedChange={(checked) => handleChange("auto_approve_after_timeout", checked)}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium">Require comment</div>
-              <div className="text-xs text-muted-foreground">
-                Reviewer must provide a comment with their decision
-              </div>
+              <div className="text-xs text-muted-foreground">Reviewer must provide a comment with their decision</div>
             </div>
             <Switch
               checked={gateConfig.require_comment || false}
-              onCheckedChange={(checked) =>
-                handleChange("require_comment", checked)
-              }
+              onCheckedChange={(checked) => handleChange("require_comment", checked)}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium">Show context</div>
-              <div className="text-xs text-muted-foreground">
-                Display upstream node outputs to the reviewer
-              </div>
+              <div className="text-xs text-muted-foreground">Display upstream node outputs to the reviewer</div>
             </div>
             <Switch
               checked={gateConfig.show_context ?? true}
-              onCheckedChange={(checked) =>
-                handleChange("show_context", checked)
-              }
+              onCheckedChange={(checked) => handleChange("show_context", checked)}
             />
           </div>
         </div>
@@ -210,9 +176,8 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
             <div>
               <p className="font-medium">Auto-approval warning</p>
               <p className="mt-1">
-                The workflow will continue automatically if not reviewed within{" "}
-                {gateConfig.timeout_hours || 24} hours. Ensure this is acceptable
-                for your use case.
+                The workflow will continue automatically if not reviewed within {gateConfig.timeout_hours || 24} hours.
+                Ensure this is acceptable for your use case.
               </p>
             </div>
           </div>

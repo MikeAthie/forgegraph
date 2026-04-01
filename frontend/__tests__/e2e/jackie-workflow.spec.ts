@@ -18,11 +18,8 @@ import {
 } from "./helpers";
 
 const runtimeFixtureUser = getPlaywrightRuntimeFixtureUser();
-const packageName =
-  process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ??
-  "Playwright Runtime Health Check";
-const toolName =
-  process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
+const packageName = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ?? "Playwright Runtime Health Check";
+const toolName = process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
 
 test.describe("Jackie workflow", () => {
   test.describe.configure({ mode: "serial" });
@@ -44,10 +41,7 @@ test.describe("Jackie workflow", () => {
       query: "What should I remember about Jackie before answering?",
       limit: 3,
     });
-    const contextNodeId = await getGraphNodeByLabel(
-      page,
-      "Recall Jackie Context",
-    ).getAttribute("data-node-id");
+    const contextNodeId = await getGraphNodeByLabel(page, "Recall Jackie Context").getAttribute("data-node-id");
     expect(contextNodeId).toBeTruthy();
 
     await addAgentNode(page, {
@@ -72,13 +66,9 @@ test.describe("Jackie workflow", () => {
     await addOutputNode(page, "Telegram Reply");
     await saveGraph(page);
 
-    await expect(
-      getGraphNodeByLabel(page, "Recall Jackie Context"),
-    ).toBeVisible();
+    await expect(getGraphNodeByLabel(page, "Recall Jackie Context")).toBeVisible();
     await expect(getGraphNodeByLabel(page, "Jackie")).toBeVisible();
-    await expect(
-      getGraphNodeByLabel(page, "Save Jackie Observation"),
-    ).toBeVisible();
+    await expect(getGraphNodeByLabel(page, "Save Jackie Observation")).toBeVisible();
     await expect(page.locator('[data-testid^="rf__edge-"]')).toHaveCount(3);
 
     const firstRunId = await startRunFromEditor(page);
@@ -98,23 +88,17 @@ test.describe("Jackie workflow", () => {
     await expect(page.getByText(/used curated memory/i).first()).toBeVisible();
     await expect(page.getByText(/jackie preference/i).first()).toBeVisible();
 
-    const jackieNodeButton = page
-      .getByRole("button", { name: /jackie attempt 1/i })
-      .first();
+    const jackieNodeButton = page.getByRole("button", { name: /jackie attempt 1/i }).first();
     await expect(jackieNodeButton).toBeVisible();
     await jackieNodeButton.click();
 
     await expect(page.getByText(/Final answer/i).first()).toBeVisible();
     await expect(page.getByText(/Tool calls/i).first()).toBeVisible();
     await expect(page.getByText(/curated memory activity/i).first()).toBeVisible();
-    await expect(
-      page.getByText(new RegExp(toolName, "i")).first(),
-    ).toBeVisible();
+    await expect(page.getByText(new RegExp(toolName, "i")).first()).toBeVisible();
     await expect(
       page
-        .getByText(
-          /Jackie checked your workspace health and everything looks good\. No urgent issues found\./i,
-        )
+        .getByText(/Jackie checked your workspace health and everything looks good\. No urgent issues found\./i)
         .first(),
     ).toBeVisible();
   });

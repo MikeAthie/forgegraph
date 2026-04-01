@@ -39,8 +39,7 @@ describe("NodeInspector", () => {
       click: (element: HTMLElement) => act(async () => user.click(element)),
       clear: (element: HTMLElement) => act(async () => user.clear(element)),
       type: (element: HTMLElement, text: string) => act(async () => user.type(element, text)),
-      select: (element: HTMLElement, value: string) =>
-        act(async () => user.selectOptions(element, value)),
+      select: (element: HTMLElement, value: string) => act(async () => user.selectOptions(element, value)),
     };
   };
 
@@ -84,9 +83,7 @@ describe("NodeInspector", () => {
     it("should display helper text about selecting nodes", () => {
       render(<NodeInspector {...defaultProps} />);
 
-      expect(
-        screen.getByText("Select a node on the canvas to view and edit its configuration.")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Select a node on the canvas to view and edit its configuration.")).toBeInTheDocument();
     });
   });
 

@@ -11,15 +11,7 @@ interface FormFieldProps {
   children: React.ReactNode;
 }
 
-export function FormField({
-  label,
-  htmlFor,
-  error,
-  description,
-  required,
-  className,
-  children,
-}: FormFieldProps) {
+export function FormField({ label, htmlFor, error, description, required, className, children }: FormFieldProps) {
   return (
     <div className={cn("space-y-2", className)}>
       <Label htmlFor={htmlFor} className={cn(error && "text-destructive")}>
@@ -27,12 +19,8 @@ export function FormField({
         {required && <span className="text-destructive ml-1">*</span>}
       </Label>
       {children}
-      {description && !error && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
+      {description && !error && <p className="text-xs text-muted-foreground">{description}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

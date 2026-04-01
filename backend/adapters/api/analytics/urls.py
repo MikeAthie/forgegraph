@@ -12,6 +12,7 @@ from adapters.api.analytics.llm_analytics import (
     LLMUsageExportView,
 )
 from adapters.api.analytics.memory_analytics import (
+    MemoryAnalyticsExportView,
     MemoryCostsAnalyticsView,
     MemoryPerformanceAnalyticsView,
     MemoryUsageAnalyticsView,
@@ -19,6 +20,7 @@ from adapters.api.analytics.memory_analytics import (
 
 urlpatterns = [
     path("memory/usage", MemoryUsageAnalyticsView.as_view(), name="memory-analytics-usage"),
+    path("memory/export", MemoryAnalyticsExportView.as_view(), name="memory-analytics-export"),
     path("memory/costs", MemoryCostsAnalyticsView.as_view(), name="memory-analytics-costs"),
     path(
         "memory/performance",

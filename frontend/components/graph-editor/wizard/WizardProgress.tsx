@@ -21,9 +21,7 @@ export function WizardProgress() {
               <div
                 className={cn(
                   "w-8 h-0.5 mx-1",
-                  isCompleted || index <= state.currentStep
-                    ? "bg-primary"
-                    : "bg-muted-foreground/30"
+                  isCompleted || index <= state.currentStep ? "bg-primary" : "bg-muted-foreground/30",
                 )}
               />
             )}
@@ -39,7 +37,7 @@ export function WizardProgress() {
                 isSkipped && !isActive && "bg-muted text-muted-foreground",
                 !isActive && !isCompleted && !isSkipped && "bg-muted/50 text-muted-foreground",
                 canNavigate && !isActive && "cursor-pointer",
-                !canNavigate && "cursor-not-allowed opacity-50"
+                !canNavigate && "cursor-not-allowed opacity-50",
               )}
               title={step.title}
             >
@@ -47,14 +45,10 @@ export function WizardProgress() {
                 className={cn(
                   "flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold",
                   isActive && "bg-primary-foreground/20",
-                  isCompleted && !isActive && "bg-primary text-primary-foreground"
+                  isCompleted && !isActive && "bg-primary text-primary-foreground",
                 )}
               >
-                {isCompleted ? (
-                  <CheckIcon className="w-3 h-3" />
-                ) : (
-                  index + 1
-                )}
+                {isCompleted ? <CheckIcon className="w-3 h-3" /> : index + 1}
               </span>
               <span className="hidden sm:inline">{step.title}</span>
             </button>

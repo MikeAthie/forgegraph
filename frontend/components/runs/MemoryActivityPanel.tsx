@@ -192,9 +192,7 @@ function ObservationPreviewList({ observations }: { observations: MemoryObservat
             </p>
           ) : null}
           {observation.content_preview ? (
-            <p className="mt-2 text-sm text-foreground/90 whitespace-pre-wrap">
-              {observation.content_preview}
-            </p>
+            <p className="mt-2 text-sm text-foreground/90 whitespace-pre-wrap">{observation.content_preview}</p>
           ) : null}
         </div>
       ))}
@@ -231,9 +229,7 @@ function MemoryActivityBody({ activity }: { activity: NodeMemoryActivity }) {
 
       {activity.query ? (
         <div className="rounded-lg border border-border/50 bg-background/70 px-3 py-2">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Query
-          </p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Query</p>
           <p className="mt-1 text-sm text-foreground">{activity.query}</p>
         </div>
       ) : null}
@@ -258,9 +254,7 @@ function MemoryActivityBody({ activity }: { activity: NodeMemoryActivity }) {
       Array.isArray(activity.curated_context_paths) &&
       activity.curated_context_paths.length > 0 ? (
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Context sources
-          </p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Context sources</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {activity.curated_context_paths.map((path) => (
               <Badge
@@ -284,11 +278,7 @@ type RunMemoryActivityPanelProps = {
   onSelectNode?: (nodeId: string, attempt: number) => void;
 };
 
-export function RunMemoryActivityPanel({
-  summary,
-  getNodeLabel,
-  onSelectNode,
-}: RunMemoryActivityPanelProps) {
+export function RunMemoryActivityPanel({ summary, getNodeLabel, onSelectNode }: RunMemoryActivityPanelProps) {
   if (!summary?.has_activity) {
     return null;
   }
@@ -311,27 +301,21 @@ export function RunMemoryActivityPanel({
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-border/50 bg-background/70 p-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Saved</p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">
-              {summary.saved_observation_count}
-            </p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{summary.saved_observation_count}</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {summary.save_node_count} node{summary.save_node_count === 1 ? "" : "s"}
             </p>
           </div>
           <div className="rounded-lg border border-border/50 bg-background/70 p-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Retrieved</p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">
-              {summary.retrieved_observation_count}
-            </p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{summary.retrieved_observation_count}</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {summary.retrieval_node_count} operation{summary.retrieval_node_count === 1 ? "" : "s"}
             </p>
           </div>
           <div className="rounded-lg border border-border/50 bg-background/70 p-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Influenced</p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">
-              {summary.influenced_observation_count}
-            </p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{summary.influenced_observation_count}</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {summary.influenced_node_count} node{summary.influenced_node_count === 1 ? "" : "s"}
             </p>
@@ -339,9 +323,7 @@ export function RunMemoryActivityPanel({
           <div className="rounded-lg border border-border/50 bg-background/70 p-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Operations</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{operations.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              save, retrieval, and influence events
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">save, retrieval, and influence events</p>
           </div>
         </div>
 
@@ -361,14 +343,10 @@ export function RunMemoryActivityPanel({
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">
-                            {getOperationLabel(operation)}
-                          </p>
+                          <p className="text-sm font-semibold text-foreground">{getOperationLabel(operation)}</p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {label} · attempt {operation.attempt}
-                            {typeof operation.duration_ms === "number"
-                              ? ` · ${operation.duration_ms}ms`
-                              : ""}
+                            {typeof operation.duration_ms === "number" ? ` · ${operation.duration_ms}ms` : ""}
                           </p>
                         </div>
                         <div className="flex flex-wrap justify-end gap-2">
@@ -387,9 +365,7 @@ export function RunMemoryActivityPanel({
                   );
 
                   if (!onSelectNode) {
-                    return (
-                      <div key={`${operation.node_id}:${operation.attempt}`}>{cardBody}</div>
-                    );
+                    return <div key={`${operation.node_id}:${operation.attempt}`}>{cardBody}</div>;
                   }
 
                   return (
@@ -422,9 +398,7 @@ export function NodeMemoryActivityPanel({ activity }: { activity: NodeMemoryActi
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-foreground">Curated memory activity</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            This node recorded explicit curated-memory behavior.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">This node recorded explicit curated-memory behavior.</p>
         </div>
         <Badge variant="outline" className={getCategoryBadgeClass(activity.category)}>
           {getOperationLabel(activity)}

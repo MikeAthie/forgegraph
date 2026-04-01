@@ -14,12 +14,10 @@ export interface OnboardingRemediation {
 }
 
 export const ONBOARDING_DOC_LINKS = {
-  templates:
-    "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/template-library.md",
+  templates: "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/template-library.md",
   credentials:
     "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/v2-launch-quickstart.md#3-credentials-and-provider-setup",
-  troubleshooting:
-    "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/agent-wizard.md",
+  troubleshooting: "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/agent-wizard.md",
 } as const;
 
 function withFallbackSteps(steps: string[]): string[] {
@@ -83,14 +81,9 @@ export function buildRunRemediation(input: {
   };
 }
 
-export function buildCredentialRemediation(input: {
-  message: string;
-  provider: string;
-}): OnboardingRemediation {
+export function buildCredentialRemediation(input: { message: string; provider: string }): OnboardingRemediation {
   const normalized = input.message.toLowerCase();
-  const steps: string[] = [
-    `Verify the ${input.provider} key format and try saving again.`,
-  ];
+  const steps: string[] = [`Verify the ${input.provider} key format and try saving again.`];
 
   if (normalized.includes("encryption_key")) {
     steps.unshift("Backend encryption key is missing. Configure ENCRYPTION_KEY and retry.");

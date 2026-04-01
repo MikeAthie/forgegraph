@@ -24,6 +24,8 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -194,7 +196,18 @@ func (s *EngineServer) StartRun(ctx context.Context, req *StartRunRequest) (*Sta
 	}
 
 	// Start the run
-	err := s.scheduler.StartRun(ctx, req.RunId, req.GraphJson, req.InputJson, req.CallbackUrl, req.MemoryConfigJson, req.TenantId, req.SessionId)
+	err := s.scheduler.StartRun(
+		ctx,
+		req.RunId,
+		req.GraphJson,
+		req.InputJson,
+		req.CallbackUrl,
+		req.MemoryConfigJson,
+		req.TenantId,
+		req.SessionId,
+		req.Traceparent,
+		req.Tracestate,
+	)
 	if err != nil {
 		s.logger.Error("start_run_failed", "run_id", req.RunId, "error", err.Error())
 		return &StartRunResponse{
@@ -283,7 +296,14 @@ func (s *EngineServer) ResumeRun(ctx context.Context, req *ResumeRunRequest) (*R
 	}
 
 	// Resume the run via scheduler
-	err := s.scheduler.ResumeRun(ctx, req.RunId, req.NodeId, req.InputJson)
+	err := s.scheduler.ResumeRun(
+		ctx,
+		req.RunId,
+		req.NodeId,
+		req.InputJson,
+		req.Traceparent,
+		req.Tracestate,
+	)
 	if err != nil {
 		s.logger.Error("resume_run_failed", "run_id", req.RunId, "error", err.Error())
 		return &ResumeRunResponse{
@@ -302,6 +322,7 @@ func main() {
 	// Initialize structured logger
 	logCfg := logger.ConfigFromEnv()
 	log := logger.New(logCfg)
+	otel.SetTracerProvider(sdktrace.NewTracerProvider())
 
 	log.Info("engine_starting", "version", "0.1.0")
 

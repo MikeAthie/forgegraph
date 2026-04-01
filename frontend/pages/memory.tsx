@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BrainCircuit, DatabaseZap, Layers3 } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, BrainCircuit, DatabaseZap, Layers3, ShieldCheck } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { useAuth } from "../contexts/AuthContext";
 import { MemoryObservationDetailPanel } from "../components/memory/MemoryObservationDetailPanel";
 import { MemoryObservationList } from "../components/memory/MemoryObservationList";
 import {
   getApiErrorMessage,
   memoryApi,
   type MemoryObservation,
+  organizationsApi,
+  type OrganizationRoleCapabilities,
 } from "../lib/api";
 import { Alert, AlertDescription, Badge, Card, CardContent } from "@/components/ui";
 
@@ -37,6 +41,7 @@ const formatRelativeDate = (value: string | null) => {
 };
 
 export default function MemoryBrowserPage() {
+  const { user } = useAuth();
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
   const [scopeFilter, setScopeFilter] = useState("all");
@@ -50,6 +55,9 @@ export default function MemoryBrowserPage() {
   const [selectedObservation, setSelectedObservation] = useState<MemoryObservation | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [governance, setGovernance] = useState<{
+    current_role_capabilities: OrganizationRoleCapabilities;
+  } | null>(null);
 
   const hasQuery = query.trim().length > 0;
   const hasTypeFilter = typeFilter !== "all";
@@ -100,6 +108,29 @@ export default function MemoryBrowserPage() {
   useEffect(() => {
     void refreshObservations();
   }, [refreshObservations]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGovernance = async () => {
+      try {
+        const response = await organizationsApi.me();
+        if (!cancelled) {
+          setGovernance({ current_role_capabilities: response.governance.current_role_capabilities });
+        }
+      } catch {
+        if (!cancelled) {
+          setGovernance(null);
+        }
+      }
+    };
+
+    void loadGovernance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedObservationId) {
@@ -182,6 +213,14 @@ export default function MemoryBrowserPage() {
   }, []);
 
   const modeLabel = isSearchMode ? "Search results" : "Timeline";
+  const currentRole = user?.organization_role ?? "member";
+  const canDeleteObservations =
+    governance?.current_role_capabilities.can_delete_observations ?? currentRole !== "viewer";
+  const canManageRetention =
+    governance?.current_role_capabilities.can_manage_retention ?? (currentRole === "owner" || currentRole === "admin");
+  const canExportMemoryData =
+    governance?.current_role_capabilities.can_export_memory_data ??
+    (currentRole === "owner" || currentRole === "admin");
 
   return (
     <ProtectedRoute>
@@ -244,6 +283,25 @@ export default function MemoryBrowserPage() {
               </div>
             </div>
           </section>
+
+          <Alert className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-100">
+            <ShieldCheck className="h-4 w-4" />
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium capitalize">{currentRole} memory access</p>
+                <p className="text-sm">
+                  You can view curated observations.{" "}
+                  {canDeleteObservations ? "You can delete observations." : "You cannot delete observations."}{" "}
+                  {canManageRetention ? "You can manage retention." : "Retention is limited to owner and admin."}{" "}
+                  {canExportMemoryData ? "You can export memory reporting." : "Exports are limited to owner and admin."}
+                </p>
+              </div>
+              <Link href="/admin/organization" className="inline-flex items-center gap-1 text-sm font-medium">
+                Review role matrix
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </AlertDescription>
+          </Alert>
 
           {listError ? (
             <Alert variant="destructive">

@@ -28,19 +28,23 @@ P2 should improve coherence, governance, exportability, and operational clarity 
 
 ## P2 Exit State
 P2 is complete only when all of the following are true:
-- [ ] Usage, cost, and memory data are exportable and understandable for operators.
-- [ ] Governance and team controls are surfaced in a usable way.
-- [ ] Curated memory retention, supportability, and auditability are visible and measurable.
-- [ ] Admin workflows feel intentional instead of scattered.
-- [ ] The product is easier to justify to a paying team, not just a technical evaluator.
+- [x] Usage, cost, and memory data are exportable and understandable for operators.
+- [x] Governance and team controls are surfaced in a usable way.
+- [x] Curated memory retention, supportability, and auditability are visible and measurable.
+- [x] Admin workflows feel intentional instead of scattered.
+- [x] The product is easier to justify to a paying team, not just a technical evaluator.
 
 ## Implementation Readiness
-This file is ready to drive implementation once P0 and the core P1 curated-memory journey are stable.
+This file now records the shipped P2 scope and the docs that prove the final operator/admin story.
 
 Use these docs as the execution entry point:
 - `docs/mvp/forgegraph-mvp-implementation-plan.md`
 - `docs/mvp/mvp-tasks-p2.md`
 - `docs/architecture/curated-memory.md`
+- `docs/mvp/p2-f01-implementation-tickets.md`
+- `docs/mvp/p2-f02-implementation-tickets.md`
+- `docs/mvp/p2-f03-implementation-tickets.md`
+- `docs/mvp/p2-f04-implementation-tickets.md`
 
 Implementation order for P2:
 1. `P2-F01`
@@ -48,7 +52,7 @@ Implementation order for P2:
 3. `P2-F03`
 4. `P2-F04`
 
-Start work immediately with these first PRs:
+P2 started from these initial entry points:
 - `P2-F01`: inventory current usage/export surfaces and add curated-memory-aware reporting/export requirements
 - `P2-F02`: extend governance/admin IA so memory ownership, access, and auditability have a clear home
 - `P2-F03`: surface curated-memory retention, redaction, and support exports before broader admin polish
@@ -81,33 +85,33 @@ Turn the existing cost, budget, quota, and analytics foundations into buyer-grad
 ### Detailed Tasks
 
 #### F01-T01: Audit current reporting surfaces
-- [ ] Inventory current analytics, budget, quota, subscription, and memory-analytics endpoints.
-- [ ] Identify missing views, weak copy, and places where users cannot reconcile what the system is doing.
-- [ ] Consolidate overlapping usage language across runtime and memory features.
+- [x] Inventory current analytics, budget, quota, subscription, and memory-analytics endpoints.
+- [x] Identify missing views, weak copy, and places where users cannot reconcile what the system is doing.
+- [x] Consolidate overlapping usage language across runtime and memory features.
 
 #### F01-T02: Add export workflows
-- [ ] Add or improve CSV/JSON exports for:
+- [x] Add or improve CSV/JSON exports for:
   - LLM usage
   - cost by provider/model
   - budget status
   - quota status
   - curated memory volume and indexing status
-- [ ] Add pagination and rate limits where needed.
-- [ ] Add date-range filtering and organization scoping.
+- [x] Add pagination and rate limits where needed.
+- [x] Add date-range filtering and organization scoping.
 
 #### F01-T03: Improve admin reporting UX
-- [ ] Add an admin-friendly usage summary view.
-- [ ] Make budget/quota state easy to interpret.
-- [ ] Add curated-memory reporting for:
+- [x] Add an admin-friendly usage summary view.
+- [x] Make budget/quota state easy to interpret.
+- [x] Add curated-memory reporting for:
   - observation counts
   - indexing backlog/failures
   - retention posture
   - search volume
 
 #### F01-T04: Tie reporting to plan and entitlement behavior
-- [ ] Make subscription/plan entitlements visible in admin screens.
-- [ ] Show how entitlements relate to budget/quota behavior.
-- [ ] Ensure blocked runs explain whether the cause is:
+- [x] Make subscription/plan entitlements visible in admin screens.
+- [x] Show how entitlements relate to budget/quota behavior.
+- [x] Ensure blocked runs explain whether the cause is:
   - budget
   - quota
   - plan entitlement
@@ -115,9 +119,9 @@ Turn the existing cost, budget, quota, and analytics foundations into buyer-grad
   - memory configuration limits
 
 ### Success Criteria
-- [ ] Admins can export meaningful usage and memory data without querying the database directly.
-- [ ] Budget, quota, entitlement, and memory-related states are visible and distinguishable.
-- [ ] Over-limit or blocked states produce actionable messaging.
+- [x] Admins can export meaningful usage and memory data without querying the database directly.
+- [x] Budget, quota, entitlement, and memory-related states are visible and distinguishable.
+- [x] Over-limit or blocked states produce actionable messaging.
 
 ### Proof / Demo Feat
 Show a tenant's runtime and curated-memory usage for a date range, export it, and explain a blocked or degraded run using only the product UI and exported data.
@@ -146,47 +150,47 @@ Turn the existing RBAC, audit, OIDC, SCIM, and org foundations into a clearer te
 ### Detailed Tasks
 
 #### F02-T01: Clarify the admin model
-- [ ] Audit current admin pages and org settings flows.
-- [ ] Group admin capabilities into clear sections:
+- [x] Audit current admin pages and org settings flows.
+- [x] Group admin capabilities into clear sections:
   - organization
   - identity
   - billing
   - audit
   - policies
   - memory
-- [ ] Reduce duplication and navigation ambiguity.
+- [x] Reduce duplication and navigation ambiguity.
 
 #### F02-T02: Improve audit log usability
-- [ ] Audit current audit events for curated-memory coverage gaps.
-- [ ] Add missing audit events for high-value memory actions if needed.
-- [ ] Improve audit log filtering by:
+- [x] Audit current audit events for curated-memory coverage gaps.
+- [x] Add missing audit events for high-value memory actions if needed.
+- [x] Improve audit log filtering by:
   - actor
   - action
   - resource
   - date range
-- [ ] Add human-readable event descriptions.
+- [x] Add human-readable event descriptions.
 
 #### F02-T03: Harden team-role workflows
-- [ ] Review org membership and role flows.
-- [ ] Clarify who can:
+- [x] Review org membership and role flows.
+- [x] Clarify who can:
   - view observations
   - delete observations
   - manage memory retention settings
   - export memory-related data
-- [ ] Add UI affordances that make role implications clear.
+- [x] Add UI affordances that make role implications clear.
 
 #### F02-T04: Clarify identity feature status
-- [ ] Review OIDC, SSO, and SCIM UX against actual backend capability.
-- [ ] Add docs or UI status indicators for:
+- [x] Review OIDC, SSO, and SCIM UX against actual backend capability.
+- [x] Add docs or UI status indicators for:
   - configured
   - partially configured
   - unavailable
-- [ ] Ensure unsupported states are explained instead of silently failing.
+- [x] Ensure unsupported states are explained instead of silently failing.
 
 ### Success Criteria
-- [ ] Team admins can understand governance features and memory ownership from the product UI without reading backend code.
-- [ ] Audit history is searchable and useful for support/governance workflows.
-- [ ] Identity features clearly communicate configuration state and limits.
+- [x] Team admins can understand governance features and memory ownership from the product UI without reading backend code.
+- [x] Audit history is searchable and useful for support/governance workflows.
+- [x] Identity features clearly communicate configuration state and limits.
 
 ### Proof / Demo Feat
 Inspect a curated-memory action trail, explain who had permission to perform it, and review identity configuration state from the admin UI alone.
@@ -215,48 +219,48 @@ Package the existing policy and retention foundations into a visible operational
 ### Detailed Tasks
 
 #### F03-T01: Consolidate policy visibility
-- [ ] Audit how tenant policies are set, surfaced, and enforced.
-- [ ] Add admin-facing summaries for:
+- [x] Audit how tenant policies are set, surfaced, and enforced.
+- [x] Add admin-facing summaries for:
   - egress policy
   - model/provider allowlists
   - runtime mode restrictions
   - curated-memory feature flags and limits
-- [ ] Make policy-denied states visible outside raw run errors.
+- [x] Make policy-denied states visible outside raw run errors.
 
 #### F03-T02: Improve retention UX and operator clarity
-- [ ] Review retention settings and current UI.
-- [ ] Explain data lifecycle in the admin surface for:
+- [x] Review retention settings and current UI.
+- [x] Explain data lifecycle in the admin surface for:
   - runs
   - logs
   - audit logs
   - usage data
   - curated memory observations
   - vector-indexed memory chunks
-- [ ] Add safer copy around deletion/retention implications.
+- [x] Add safer copy around deletion/retention implications.
 
 #### F03-T03: Supportability features
-- [ ] Add or improve support-safe exports for:
+- [x] Add or improve support-safe exports for:
   - run traces
   - policy denial summaries
   - package/runtime state
   - curated-memory observation state
   - indexing failures and backlog state
-- [ ] Ensure exports and support surfaces respect redaction and tenant boundaries.
-- [ ] Add internal troubleshooting notes or docs for memory-related failure classes.
+- [x] Ensure exports and support surfaces respect redaction and tenant boundaries.
+- [x] Add internal troubleshooting notes or docs for memory-related failure classes.
 
 #### F03-T04: Operational documentation
-- [ ] Update ops docs with:
+- [x] Update ops docs with:
   - Cloud vs self-host differences
   - curated-memory behavior and limits
   - runtime package restrictions
   - data retention expectations
   - incident triage starting points
-- [ ] Link product admin screens to the relevant docs where helpful.
+- [x] Link product admin screens to the relevant docs where helpful.
 
 ### Success Criteria
-- [ ] Operators can understand active guardrails and curated-memory retention behavior without reading models or migrations.
-- [ ] Policy denials, indexing failures, and retention behavior are visible and supportable.
-- [ ] Support-facing exports and docs reduce ad hoc debugging.
+- [x] Operators can understand active guardrails and curated-memory retention behavior without reading models or migrations.
+- [x] Policy denials, indexing failures, and retention behavior are visible and supportable.
+- [x] Support-facing exports and docs reduce ad hoc debugging.
 
 ### Proof / Demo Feat
 Take a degraded memory-backed run, identify the governing policy or indexing issue, inspect retention expectations, and export support-safe trace data for diagnosis without database access.
@@ -285,15 +289,15 @@ Bring the scattered admin and operational surfaces together into a more coherent
 ### Detailed Tasks
 
 #### F04-T01: Audit admin IA and page consistency
-- [ ] Review all admin pages for:
+- [x] Review all admin pages for:
   - naming consistency
   - information hierarchy
   - navigation gaps
   - contradictory terminology
-- [ ] Define a cleaner admin information architecture that includes memory surfaces explicitly.
+- [x] Define a cleaner admin information architecture that includes memory surfaces explicitly.
 
 #### F04-T02: Normalize admin language
-- [ ] Standardize product language across:
+- [x] Standardize product language across:
   - organization
   - tenant
   - policy
@@ -304,18 +308,18 @@ Bring the scattered admin and operational surfaces together into a more coherent
   - memory
   - observation
   - session
-- [ ] Remove internal-only phrasing from user-visible admin surfaces.
+- [x] Remove internal-only phrasing from user-visible admin surfaces.
 
 #### F04-T03: Improve page-level affordances
-- [ ] Add empty states where needed.
-- [ ] Add health/status chips where useful.
-- [ ] Add contextual help text for risky or advanced controls.
-- [ ] Make unsupported states explicit instead of ambiguous.
+- [x] Add empty states where needed.
+- [x] Add health/status chips where useful.
+- [x] Add contextual help text for risky or advanced controls.
+- [x] Make unsupported states explicit instead of ambiguous.
 
 ### Success Criteria
-- [ ] Admin users can navigate governance, billing, identity, policy, and memory areas without confusion.
-- [ ] The admin surface feels intentionally designed rather than accumulated.
-- [ ] Terminology is consistent across pages and docs.
+- [x] Admin users can navigate governance, billing, identity, policy, and memory areas without confusion.
+- [x] The admin surface feels intentionally designed rather than accumulated.
+- [x] Terminology is consistent across pages and docs.
 
 ### Proof / Demo Feat
 Walk through billing, policy, identity, audit, and memory admin areas in one pass without needing to explain contradictory terms or hidden assumptions.
@@ -325,15 +329,15 @@ Walk through billing, policy, identity, audit, and memory admin areas in one pas
 ## Cross-Cutting P2 Tasks
 
 ### P2-X01: Commercial and Ops Review
-- [ ] Review P2 features with both product and engineering stakeholders.
-- [ ] Confirm that buyer-facing claims about memory, governance, and operations match real behavior.
+- [x] Review P2 features with both product and engineering stakeholders.
+- [x] Confirm that buyer-facing claims about memory, governance, and operations match real behavior.
 
 ### P2-X02: Documentation Sync
-- [ ] Ensure admin/product docs reflect the final state of P2 features.
-- [ ] Remove outdated implementation-plan statements that conflict with shipped behavior.
+- [x] Ensure admin/product docs reflect the final state of P2 features.
+- [x] Remove outdated implementation-plan statements that conflict with shipped behavior.
 
 ### P2-X03: Support Readiness
-- [ ] Produce a short internal support guide for:
+- [x] Produce a short internal support guide for:
   - blocked runs
   - over-limit states
   - policy denials
@@ -362,9 +366,9 @@ Walk through billing, policy, identity, audit, and memory admin areas in one pas
 - final doc and admin UX polish
 
 ## Final Definition of Done
-- [ ] P2-F01 complete
-- [ ] P2-F02 complete
-- [ ] P2-F03 complete
-- [ ] P2-F04 complete
-- [ ] Operators can explain runtime and curated-memory behavior from the UI and docs, not just from code
-- [ ] Paying teams have a clearer reason to trust adoption, administration, and memory governance workflows
+- [x] P2-F01 complete
+- [x] P2-F02 complete
+- [x] P2-F03 complete
+- [x] P2-F04 complete
+- [x] Operators can explain runtime and curated-memory behavior from the UI and docs, not just from code
+- [x] Paying teams have a clearer reason to trust adoption, administration, and memory governance workflows

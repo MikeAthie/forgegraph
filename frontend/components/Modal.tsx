@@ -40,11 +40,7 @@ export default function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/30"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
 
       <div
         className={`relative w-full ${maxWidthClassName} bg-background rounded-lg shadow-lg border border-border`}
@@ -74,11 +70,7 @@ export default function Modal({
 
         <div className="p-4">{children}</div>
 
-        {footer && (
-          <div className="p-4 border-t border-border flex items-center justify-end gap-2">
-            {footer}
-          </div>
-        )}
+        {footer && <div className="p-4 border-t border-border flex items-center justify-end gap-2">{footer}</div>}
       </div>
     </div>
   );

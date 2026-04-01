@@ -141,10 +141,7 @@ export default function ApprovalsPage() {
               <CardTitle className="flex flex-wrap items-center justify-between gap-3">
                 <span>{titleLabel}</span>
                 <div className="flex items-center gap-2">
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}
-                  >
+                  <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
                     <SelectTrigger className="w-[170px]">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
@@ -184,9 +181,7 @@ export default function ApprovalsPage() {
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                           Created
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
-                          Run
-                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Run</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -209,18 +204,14 @@ export default function ApprovalsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">
-                            <span className="truncate max-w-[260px] inline-block align-bottom">
-                              {task.node_name}
-                            </span>
+                            <span className="truncate max-w-[260px] inline-block align-bottom">{task.node_name}</span>
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <Badge variant="outline" className={getStatusBadgeClass(task.status)}>
                               {task.status}
                             </Badge>
                           </td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">
-                            {formatDateTime(task.created_at)}
-                          </td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{formatDateTime(task.created_at)}</td>
                           <td className="px-4 py-3 text-sm">
                             <Button variant="outline" size="sm" asChild>
                               <Link
