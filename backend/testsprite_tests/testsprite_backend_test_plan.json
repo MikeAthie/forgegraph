@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "post api auth register user registration",
+    "description": "Test POST /api/auth/register with a unique email and valid password. Expect 201 Created and a top-level user payload containing id and email, with no token payload. Invalid or duplicate data should return 400 validation errors."
+  },
+  {
+    "id": "TC002",
+    "title": "post api auth login user authentication",
+    "description": "Test POST /api/auth/login after creating a user. Expect 200 OK with an access token in the JSON body and the refresh token set only as an HttpOnly cookie, not in the JSON body. Invalid credentials should return 401."
+  },
+  {
+    "id": "TC003",
+    "title": "post api auth logout invalidate session",
+    "description": "Test POST /api/auth/logout with a valid Bearer access token after login. The refresh token should come from the login cookie. Expect 204 No Content, and treat logout as idempotent if the refresh cookie is absent."
+  },
+  {
+    "id": "TC004",
+    "title": "post api auth refresh token refresh",
+    "description": "Test POST /api/auth/refresh after login. Prefer the refresh cookie from the login response; the endpoint may also accept a JSON field named refresh. Expect 200 OK with a new access token in the JSON body and a rotated refresh cookie. Reusing an old or invalid refresh token should return 400 or 401."
+  },
+  {
+    "id": "TC005",
+    "title": "get api auth me get authenticated user profile",
+    "description": "Test GET /api/auth/me with a valid Bearer access token from login. Expect 200 OK with a top-level user payload including email and id. A request without authorization should return 401."
+  },
+  {
+    "id": "TC006",
+    "title": "get api auth sso provider get sso metadata",
+    "description": "Test GET /api/auth/sso/provider with an authenticated default-organization owner or admin user. Expect 200 OK and a top-level payload containing status. When no provider is configured, status.state should be unavailable. Unauthenticated requests should return 401."
+  },
+  {
+    "id": "TC007",
+    "title": "post api graphs validate graph payload validation",
+    "description": "Test POST /api/graphs/validate with Bearer auth. The payload shape is { graph_json: {...}, strict?: boolean }. A valid graph should return 200 with data.valid=true. Structurally invalid but well-formed graph_json may still return 200 with data.valid=false and errors. Missing graph_json should return 400."
+  },
+  {
+    "id": "TC008",
+    "title": "post api graphs create new workflow graph",
+    "description": "Test POST /api/graphs with Bearer auth. This endpoint creates graph metadata only, not graph versions, so send { name, description? }. Expect 201 Created and a data wrapper containing id, name, version_count=0, and latest_version=null. Missing name should return 400."
+  },
+  {
+    "id": "TC009",
+    "title": "post api runs start start graph run",
+    "description": "Test POST /api/runs/start with Bearer auth. First create a graph, then create a graph version via POST /api/graphs/{graph_id}/versions using a valid graph_json. Start the run with { graph_version_id, input_json? }. Expect 201 Created with a data wrapper containing the run id, graph_version_id, status, and input_json. A nonexistent graph_version_id should return 404."
+  },
+  {
+    "id": "TC010",
+    "title": "post api runs engine events receive engine callback",
+    "description": "Test POST /api/runs/engine-events as a server-to-server callback, not as a user-authenticated endpoint. Use JSON body plus X-ForgeGraph-Timestamp and X-ForgeGraph-Signature headers computed as HMAC-SHA256 over `${timestamp}.` plus the raw body using the shared secret `dev_shared_secret` in local Docker. Expect 200 OK for a valid signed event and 401 or 403 for an invalid signature."
+  }
+]

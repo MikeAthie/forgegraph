@@ -3,8 +3,6 @@ import { expect, test } from "@playwright/test";
 import {
   addMarketplaceToolNode,
   authorAgentWorkflow,
-  clearGraphSelection,
-  connectGraphNodes,
   createGraph,
   createGraphName,
   fetchLatestGraphVersion,
@@ -84,7 +82,7 @@ test.describe("Manual workflow authoring", () => {
     await createGraph(page, graphName);
 
     await addMarketplaceToolNode(page, packageSlug, "Health Check Tool");
-    await clearGraphSelection(page);
+    await getGraphNodeByLabel(page, "Health Check Tool").click();
     await page.getByTestId("palette-item-output").click();
     const outputDialog = page.getByRole("dialog", {
       name: /configure output node/i,
@@ -93,8 +91,7 @@ test.describe("Manual workflow authoring", () => {
     await outputDialog.locator("#node-label").fill("Tool Result");
     await outputDialog.getByRole("button", { name: /^add node$/i }).click();
     await expect(outputDialog).toBeHidden();
-
-    await connectGraphNodes(page, "Health Check Tool", "Tool Result");
+    await expect(page.locator('[data-testid^="rf__edge-"]')).toHaveCount(1);
     await saveGraph(page);
 
     const runId = await startRunFromEditor(page);

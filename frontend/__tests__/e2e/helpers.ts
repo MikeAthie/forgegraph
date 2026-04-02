@@ -100,11 +100,37 @@ export async function ensureUserRegistered(request: APIRequestContext, user: Tes
 }
 
 export async function login(page: Page, user: TestUser): Promise<void> {
-  await page.goto("/login");
-  await page.locator("#email").fill(user.email);
-  await page.locator("#password").fill(user.password);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await page.waitForURL(/\/graphs(?:\?.*)?$/, { timeout: 20_000 });
+  await page.context().clearCookies();
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.sessionStorage.removeItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__");
+    delete (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__;
+  });
+
+  const response = await page.context().request.post(`${API_BASE_URL}/api/auth/login`, {
+    data: {
+      email: user.email,
+      password: user.password,
+    },
+  });
+
+  if (!response.ok()) {
+    const body = await response.text();
+    throw new Error(`Failed to bootstrap authenticated session (status ${response.status()}): ${body}`);
+  }
+
+  const body = (await response.json()) as { access?: string };
+  if (!body.access) {
+    throw new Error("Login response did not include an access token.");
+  }
+
+  await page.evaluate((token) => {
+    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
+    (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
+  }, body.access);
+
+  await page.goto("/overview");
+  await page.waitForURL(/\/overview(?:\?.*)?$/, { timeout: 20_000 });
   await page.waitForLoadState("networkidle");
 }
 
@@ -147,7 +173,7 @@ export async function getAccessToken(request: APIRequestContext, user: TestUser)
 
 export async function createGraph(page: Page, graphName: string, description?: string): Promise<string> {
   await gotoWithRetry(page, "/graphs");
-  await page.getByRole("button", { name: /^new graph$/i }).click();
+  await page.getByRole("button", { name: /^new workflow$/i }).click();
   await page.locator("#create-graph-name").fill(graphName);
   if (description) {
     await page.locator("#create-graph-description").fill(description);
@@ -161,12 +187,12 @@ export async function createGraph(page: Page, graphName: string, description?: s
 }
 
 export async function expectGraphEditorOpen(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/(?:graphs|workflows)\/[a-f0-9-]+/, { timeout: 15_000 });
   await expect(page.getByTestId("graph-canvas-panel")).toBeVisible();
 }
 
 export function getGraphIdFromUrl(page: Page): string {
-  const graphId = page.url().match(/\/graphs\/([a-f0-9-]+)/)?.[1];
+  const graphId = page.url().match(/\/(?:graphs|workflows)\/([a-f0-9-]+)/)?.[1];
   if (!graphId) {
     throw new Error(`Could not determine graph id from URL: ${page.url()}`);
   }
@@ -416,7 +442,7 @@ export async function fetchLatestGraphVersion(
 }
 
 export async function installRuntimePackage(page: Page, packageName: string, toolName?: string): Promise<void> {
-  await page.goto("/admin/marketplace");
+  await gotoWithRetry(page, "/admin/marketplace");
   await expect(page.getByRole("heading", { name: /^marketplace$/i })).toBeVisible();
 
   const packageCard = page.locator("div.rounded-lg.border").filter({ hasText: packageName }).first();

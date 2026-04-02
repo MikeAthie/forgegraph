@@ -1,0 +1,165 @@
+version: "2"
+type: backend
+tech_stack:
+  - Go 1.23
+  - gRPC
+  - Prometheus
+  - PostgreSQL
+  - Redis
+  - OpenTelemetry
+features:
+  - name: Engine gRPC Run Control
+    description: Core gRPC interface for health, run startup, run status lookup, and cancellation.
+    files:
+      - main.go
+      - proto/engine.proto
+      - engine_grpc.pb.go
+    endpoints:
+      - method: POST
+        path: /grpc/EngineService/Ping
+        description: Health-style ping endpoint returning pong.
+        auth_required: false
+        response_schema:
+          "200": PingResponse
+      - method: POST
+        path: /grpc/EngineService/StartRun
+        description: Start executing a workflow graph from graph JSON and input payloads.
+        auth_required: true
+        request_schema:
+          body:
+            run_id: string
+            graph_json: string
+            input_json: string
+            callback_url: string
+        response_schema:
+          "200": StartRunResponse
+      - method: POST
+        path: /grpc/EngineService/GetRunStatus
+        description: Return current status, current node, or persisted completion state for a run.
+        auth_required: true
+        request_schema:
+          body:
+            run_id: string
+        response_schema:
+          "200": GetRunStatusResponse
+          "404": Run not found
+      - method: POST
+        path: /grpc/EngineService/CancelRun
+        description: Cancel an active run.
+        auth_required: true
+        request_schema:
+          body:
+            run_id: string
+        response_schema:
+          "200": CancelRunResponse
+    depends_on:
+      - Scheduler use case
+      - Run repository
+      - gRPC server
+  - name: Graph Validation and Execution Planning
+    description: Domain services validate workflow graphs, evaluate conditions, count tokens, and compute execution plans.
+    files:
+      - domain/service/graph_validator.go
+      - domain/service/execution_planner.go
+      - domain/service/condition_evaluator.go
+      - domain/service/token_counter.go
+    endpoints:
+      - method: POST
+        path: /grpc/EngineService/StartRun
+        description: Validates and plans a run before execution starts.
+        auth_required: true
+        response_schema:
+          "200": Accepted or rejected run start
+          "400": Invalid graph payload
+    depends_on:
+      - Graph domain entities
+      - JSON schema validation
+      - Token counting
+  - name: Node Execution Runtime
+    description: Executors implement runtime behavior for prompt, tool, transform, branch, merge, output, subgraph, human-gate, and observation nodes.
+    files:
+      - adapter/executor/prompt_executor.go
+      - adapter/executor/tool_executor.go
+      - adapter/executor/transform_executor.go
+      - adapter/executor/branch_executor.go
+      - adapter/executor/merge_executor.go
+      - adapter/executor/output_executor.go
+      - adapter/executor/subgraph_executor.go
+      - adapter/executor/human_gate_executor.go
+      - adapter/executor/observation_context_executor.go
+      - adapter/executor/observation_save_executor.go
+      - adapter/executor/observation_search_executor.go
+      - adapter/executor/observation_timeline_executor.go
+    endpoints:
+      - method: POST
+        path: /grpc/EngineService/StartRun
+        description: Executes workflow nodes according to the graph plan and runtime policies.
+        auth_required: true
+        response_schema:
+          "200": Run accepted and executed asynchronously
+    depends_on:
+      - Scheduler
+      - Tool registry
+      - LLM gateways
+      - Memory store
+  - name: Persistence, Memory, and Tooling Adapters
+    description: Runtime adapters provide run repositories, Redis and PostgreSQL memory stores, credential resolution, gateway integrations, and tool manifest loading.
+    files:
+      - adapter/store/redis_memory_store.go
+      - adapter/store/postgres_memory_store.go
+      - adapter/repository/postgres_run_repository.go
+      - adapter/repository/memory_run_repository.go
+      - adapter/gateway/credential_resolver.go
+      - adapter/gateway/marketplace_manifest_client.go
+      - adapter/tool/registry.go
+    endpoints:
+      - method: POST
+        path: /grpc/EngineService/StartRun
+        description: Resolves runtime dependencies needed for execution and storage.
+        auth_required: true
+        response_schema:
+          "200": Runtime dependencies attached to run execution
+      - method: GET
+        path: /metrics
+        description: Export Prometheus metrics for engine health and runtime behavior.
+        auth_required: false
+        response_schema:
+          "200": Prometheus metrics text
+    depends_on:
+      - PostgreSQL
+      - Redis
+      - Backend control plane
+  - name: Callbacks, Observability, and Summarization
+    description: The engine emits run events back to the backend, tracks metrics and traces, and supports summarization workers and cost tracking.
+    files:
+      - adapter/gateway/http_event_emitter.go
+      - infrastructure/metrics/metrics.go
+      - infrastructure/tracing/tracing.go
+      - adapter/summarizer/llm_summarizer.go
+      - adapter/summarizer/cost_tracker.go
+      - application/usecase/summarization_worker.go
+    endpoints:
+      - method: POST
+        path: /grpc/EngineService/StartRun
+        description: Produces callbacks and execution telemetry during asynchronous run processing.
+        auth_required: true
+        response_schema:
+          "200": Run accepted and callback pipeline activated
+      - method: GET
+        path: /metrics
+        description: Expose operational metrics for scraping.
+        auth_required: false
+        response_schema:
+          "200": Metrics output
+    depends_on:
+      - Backend callback URL
+      - Callback secret
+      - OpenTelemetry
+      - Prometheus
+known_limitations:
+  - issue: Most externally visible behavior is mediated through gRPC calls and asynchronous callbacks rather than a broad HTTP API.
+    location: main.go and proto/engine.proto
+    impact: Test tooling that assumes REST-style endpoints must adapt to gRPC semantics or use the metrics endpoint for HTTP checks.
+  - issue: Full execution paths can depend on external databases, Redis, callback endpoints, and model/provider integrations.
+    location: adapter/store/, adapter/gateway/, and adapter/summarizer/
+    impact: Integration tests need mocks or supporting services to cover production-like behavior reliably.

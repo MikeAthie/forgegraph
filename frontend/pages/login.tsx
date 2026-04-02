@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push("/graphs");
+      router.push("/overview");
     }
   }, [loading, isAuthenticated, router]);
 

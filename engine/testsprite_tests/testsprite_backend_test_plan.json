@@ -1,0 +1,42 @@
+[
+  {
+    "id": "TC001",
+    "title": "test_ping_endpoint_returns_pong",
+    "description": "Verify that the POST /grpc/EngineService/Ping endpoint returns a 200 status with a PingResponse containing pong, confirming the health check functionality."
+  },
+  {
+    "id": "TC002",
+    "title": "test_start_run_with_valid_graph_accepts_run",
+    "description": "Test the POST /grpc/EngineService/StartRun endpoint with a valid run_id and graph_json to ensure it returns a 200 response with accepted=true and initiates execution."
+  },
+  {
+    "id": "TC003",
+    "title": "test_start_run_with_invalid_graph_rejects_run",
+    "description": "Test the POST /grpc/EngineService/StartRun endpoint with an invalid graph_json to verify it returns a 200 response with accepted=false and an appropriate validation error message."
+  },
+  {
+    "id": "TC004",
+    "title": "test_start_run_with_missing_required_fields_rejects_run",
+    "description": "Verify that POST /grpc/EngineService/StartRun with missing run_id or graph_json returns a 200 response with accepted=false and an error message indicating missing required fields."
+  },
+  {
+    "id": "TC005",
+    "title": "test_get_run_status_returns_current_status",
+    "description": "Test the POST /grpc/EngineService/GetRunStatus endpoint with a valid run_id to ensure it returns a 200 response with the current run status and current node information."
+  },
+  {
+    "id": "TC006",
+    "title": "test_get_run_status_for_nonexistent_run_returns_404",
+    "description": "Verify that POST /grpc/EngineService/GetRunStatus with a non-existent run_id returns a 404 response indicating the run was not found."
+  },
+  {
+    "id": "TC007",
+    "title": "test_cancel_run_successful_cancellation",
+    "description": "Test the POST /grpc/EngineService/CancelRun endpoint with a valid run_id to confirm it returns a 200 response indicating successful cancellation of the active run."
+  },
+  {
+    "id": "TC008",
+    "title": "test_metrics_endpoint_returns_prometheus_metrics",
+    "description": "Verify that the GET /metrics endpoint returns a 200 status with Prometheus metrics text representing engine health and runtime telemetry."
+  }
+]

@@ -29,9 +29,10 @@ describe("AuthContext", () => {
       push: mockPush,
       replace: jest.fn(),
       prefetch: jest.fn(),
-      pathname: "/",
+      pathname: "/overview",
       query: {},
-      asPath: "/",
+      asPath: "/overview",
+      isReady: true,
     } as any);
   });
 
@@ -85,7 +86,7 @@ describe("AuthContext", () => {
       });
     });
 
-    it("should check authentication on mount", async () => {
+    it("should check authentication on mount for protected routes", async () => {
       mockGetAccessToken.mockReturnValue(null);
       mockAuthApi.refreshToken.mockResolvedValue();
       mockAuthApi.getMe.mockRejectedValue(new Error("Not authenticated"));
@@ -95,6 +96,29 @@ describe("AuthContext", () => {
       await waitFor(() => {
         expect(mockAuthApi.refreshToken).toHaveBeenCalled();
       });
+    });
+
+    it("should skip refresh bootstrap on public routes without a token", async () => {
+      mockUseRouter.mockReturnValue({
+        push: mockPush,
+        replace: jest.fn(),
+        prefetch: jest.fn(),
+        pathname: "/login",
+        query: {},
+        asPath: "/login",
+        isReady: true,
+      } as any);
+      mockGetAccessToken.mockReturnValue(null);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(mockAuthApi.refreshToken).not.toHaveBeenCalled();
+      expect(mockAuthApi.getMe).not.toHaveBeenCalled();
+      expect(result.current.user).toBeNull();
     });
   });
 
@@ -121,7 +145,7 @@ describe("AuthContext", () => {
         expect(loginResult.success).toBe(true);
         expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
         expect(result.current.isAuthenticated).toBe(true);
-        expect(mockPush).toHaveBeenCalledWith("/graphs");
+        expect(mockPush).toHaveBeenCalledWith("/overview");
       });
     });
 

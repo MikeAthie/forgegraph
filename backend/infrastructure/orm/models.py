@@ -1577,6 +1577,376 @@ class ApprovalTask(models.Model):
         return f"ApprovalTask {self.id} - {self.status}"
 
 
+class AgentRegistryEntry(models.Model):
+    """Organization-scoped registry entry for a supervised agent."""
+
+    STATUS_CHOICES = [
+        ("idle", "Idle"),
+        ("active", "Active"),
+        ("attention", "Attention"),
+        ("offline", "Offline"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="agent_registry_entries",
+    )
+    slug = models.SlugField(max_length=160)
+    display_name = models.CharField(max_length=255)
+    source_workflow = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="agent_registry_entries",
+    )
+    source_workflow_revision = models.ForeignKey(
+        GraphVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_registry_entries",
+    )
+    source_node_id = models.CharField(max_length=255)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="idle")
+    policy_snapshot_json = models.JSONField(default=dict, blank=True)
+    capabilities_json = models.JSONField(default=dict, blank=True)
+    default_model = models.CharField(max_length=128, blank=True, default="")
+    last_execution = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_registry_last_seen",
+    )
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "agent_registry_entries"
+        ordering = ["display_name", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "source_workflow", "source_node_id"],
+                name="agent_registry_org_workflow_node_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "slug"],
+                name="agent_registry_org_slug_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="agent_registry_org_status_idx"),
+            models.Index(
+                fields=["organization", "source_workflow"],
+                name="agent_reg_org_wf_idx",
+            ),
+            models.Index(fields=["last_seen_at"], name="agent_registry_last_seen_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.display_name} ({self.organization.name})"
+
+
+class TaskRecord(models.Model):
+    """Projected unit of work attached to an execution and agent."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("waiting", "Waiting"),
+        ("succeeded", "Succeeded"),
+        ("failed", "Failed"),
+        ("canceled", "Canceled"),
+    ]
+
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("normal", "Normal"),
+        ("high", "High"),
+        ("urgent", "Urgent"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="task_records",
+    )
+    execution = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="task_records",
+    )
+    agent = models.ForeignKey(
+        "AgentRegistryEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_records",
+    )
+    source_node_id = models.CharField(max_length=255, blank=True, default="")
+    external_key = models.CharField(max_length=255)
+    title = models.CharField(max_length=255)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES, default="normal")
+    summary = models.TextField(blank=True, default="")
+    current_step = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_records",
+    )
+    current_decision = models.ForeignKey(
+        "DecisionRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="active_for_tasks",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "task_records"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "external_key"],
+                name="task_records_org_external_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="task_records_org_status_idx"),
+            models.Index(fields=["execution", "status"], name="task_rec_exec_stat_idx"),
+            models.Index(fields=["agent", "status"], name="task_records_agent_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class DecisionRecord(models.Model):
+    """Unified decision ledger for human and automated supervision decisions."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("resolved", "Resolved"),
+    ]
+
+    TYPE_CHOICES = [
+        ("human_approval", "Human Approval"),
+        ("policy_guardrail", "Policy Guardrail"),
+        ("marketplace_review", "Marketplace Review"),
+        ("operator_intervention", "Operator Intervention"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="decision_records",
+    )
+    execution = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decision_records",
+    )
+    task = models.ForeignKey(
+        "TaskRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decision_records",
+    )
+    agent = models.ForeignKey(
+        "AgentRegistryEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decision_records",
+    )
+    decision_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    source_approval_task = models.ForeignKey(
+        ApprovalTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decision_records",
+    )
+    external_key = models.CharField(max_length=255)
+    context_json = models.JSONField(default=dict, blank=True)
+    resolution_json = models.JSONField(default=dict, blank=True)
+    requested_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "decision_records"
+        ordering = ["-requested_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "external_key"],
+                name="decision_records_org_external_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="decision_rec_org_stat_idx"),
+            models.Index(fields=["decision_type", "status"], name="decision_rec_type_stat_idx"),
+            models.Index(fields=["execution", "status"], name="decision_rec_exec_stat_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.decision_type} ({self.status})"
+
+
+class CostLedgerEntry(models.Model):
+    """Append-only accounting fact table projected from runtime usage data."""
+
+    COST_TYPE_CHOICES = [
+        ("llm", "LLM"),
+        ("memory_summarization", "Memory Summarization"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="cost_ledger_entries",
+    )
+    execution = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_ledger_entries",
+    )
+    task = models.ForeignKey(
+        "TaskRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_ledger_entries",
+    )
+    agent = models.ForeignKey(
+        "AgentRegistryEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_ledger_entries",
+    )
+    workflow_revision = models.ForeignKey(
+        GraphVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_ledger_entries",
+    )
+    provider = models.CharField(max_length=64, blank=True, default="")
+    model = models.CharField(max_length=128, blank=True, default="")
+    cost_type = models.CharField(max_length=32, choices=COST_TYPE_CHOICES, default="llm")
+    quantity = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    unit_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    total_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    occurred_at = models.DateTimeField()
+    external_key = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "cost_ledger_entries"
+        ordering = ["-occurred_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "external_key"],
+                name="cost_ledger_org_external_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "occurred_at"], name="cost_ledger_org_time_idx"),
+            models.Index(fields=["cost_type", "occurred_at"], name="cost_ledger_type_time_idx"),
+            models.Index(fields=["agent", "occurred_at"], name="cost_ledger_agent_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.cost_type} ${self.total_cost_usd}"
+
+
+class CostAggregate(models.Model):
+    """Cached accounting aggregate for organization and operator views."""
+
+    GRAIN_CHOICES = [
+        ("hourly", "Hourly"),
+        ("daily", "Daily"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="cost_aggregates",
+    )
+    agent = models.ForeignKey(
+        "AgentRegistryEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_aggregates",
+    )
+    task = models.ForeignKey(
+        "TaskRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_aggregates",
+    )
+    workflow_revision = models.ForeignKey(
+        GraphVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_aggregates",
+    )
+    grain = models.CharField(max_length=16, choices=GRAIN_CHOICES)
+    period_start = models.DateTimeField()
+    period_end = models.DateTimeField()
+    provider = models.CharField(max_length=64, blank=True, default="")
+    model = models.CharField(max_length=128, blank=True, default="")
+    cost_type = models.CharField(max_length=32, blank=True, default="")
+    total_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    total_quantity = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    entry_count = models.PositiveIntegerField(default=0)
+    external_key = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cost_aggregates"
+        ordering = ["-period_start"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "external_key"],
+                name="cost_aggregates_org_external_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "grain", "period_start"], name="cost_aggs_org_grain_time_idx"),
+            models.Index(fields=["agent", "grain", "period_start"], name="cost_aggs_agent_grain_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization.name} {self.grain} {self.period_start.isoformat()}"
+
+
 class APIKey(models.Model):
     """APIKey model for storing encrypted user API keys for LLM providers."""
 

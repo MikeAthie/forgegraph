@@ -1,0 +1,20 @@
+{
+  "status": "commited",
+  "scope": "codebase",
+  "type": "backend",
+  "localEndpoint": "http://localhost:9090",
+  "executionArgs": {
+    "projectName": "engine",
+    "projectPath": "c:\\Users\\mathi\\projects\\forgegraph\\engine",
+    "testIds": [
+      "TC008"
+    ],
+    "additionalInstruction": "This service is primarily gRPC and should not be tested by inventing REST endpoints on port 50051. The only valid direct HTTP surface for TestSprite in local Docker is the Prometheus metrics endpoint at http://localhost:9090/metrics. Restrict execution to metrics-style HTTP validation only.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-hWk4MuvMmPrl2GavZF0Enz89KD16hzZUqCYYdrw3SaanJ32G5MGW9QmUY6PpexlrN20MwNFZZk_PVioncr1hJlpSL_-sgLsFa-6EBxi9zgLcuwIgc9vwO8Fv9y_-JzkEUgY"
+    }
+  },
+  "serverPort": 58674,
+  "proxy": "http://644acd64-a6cc-4c40-bf4d-63a5a82246c1:A1xpn7zH6l853xC1aJl4atcuoMqaBmd0@tun.testsprite.com:8080"
+}

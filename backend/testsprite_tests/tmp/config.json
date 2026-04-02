@@ -1,0 +1,19 @@
+{
+  "status": "commited",
+  "type": "backend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8000",
+  "backendAuthType": "public",
+  "executionArgs": {
+    "projectName": "backend",
+    "projectPath": "c:\\Users\\mathi\\projects\\forgegraph\\backend",
+    "testIds": [],
+    "additionalInstruction": "Use the real local Django API contract. Register users with POST /api/auth/register using a unique email per test and expect 201 with a top-level user payload only. Login with POST /api/auth/login and expect 200 with access in the JSON body plus refresh only in an HttpOnly cookie; do not expect refresh in the JSON body. Refresh with POST /api/auth/refresh using the refresh cookie from login or JSON field refresh, and accept 400 or 401 for invalid or reused refresh tokens. Logout with POST /api/auth/logout requires Bearer auth and returns 204. GET /api/auth/me returns a top-level user payload. GET /api/auth/sso/provider requires an authenticated default-organization owner or admin user. POST /api/graphs creates metadata only with {name, description?} and returns 201 under data. To create runnable content, create a version with POST /api/graphs/{graph_id}/versions using {graph_json}. POST /api/graphs/validate expects {graph_json, strict?}; invalid graph content may still return 200 with data.valid=false. POST /api/runs/start expects {graph_version_id, input_json?} and returns 201 under data. POST /api/runs/engine-events is server-to-server only: compute X-ForgeGraph-Timestamp and X-ForgeGraph-Signature using HMAC-SHA256 over `${timestamp}.` + raw body with shared secret dev_shared_secret. Use plain HTTP at http://localhost:8000 and do not assume HTTPS.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-hWk4MuvMmPrl2GavZF0Enz89KD16hzZUqCYYdrw3SaanJ32G5MGW9QmUY6PpexlrN20MwNFZZk_PVioncr1hJlpSL_-sgLsFa-6EBxi9zgLcuwIgc9vwO8Fv9y_-JzkEUgY"
+    }
+  },
+  "serverPort": 61604,
+  "proxy": "http://e2cf92d0-b41b-4371-8593-21a22504ed48:djY7DMDsoZxTNPpERtbADo7YIBL8rLB4@tun.testsprite.com:8080"
+}

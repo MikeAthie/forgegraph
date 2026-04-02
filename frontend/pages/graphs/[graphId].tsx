@@ -22,7 +22,7 @@ const GraphEditor = dynamic(() => import("../../components/graph-editor/GraphEdi
 
 export default function GraphDetailPage() {
   const router = useRouter();
-  const graphIdParam = router.query.graphId;
+  const graphIdParam = router.query.graphId ?? router.query.workflowId;
   const graphId = Array.isArray(graphIdParam) ? graphIdParam[0] : graphIdParam;
 
   const [graph, setGraph] = useState<GraphDetail | null>(null);
@@ -35,7 +35,7 @@ export default function GraphDetailPage() {
   const loadGraph = useCallback(async () => {
     if (!graphId) {
       setGraph(null);
-      setError("Missing graph id.");
+      setError("Missing workflow id.");
       setLoading(false);
       return;
     }
@@ -47,7 +47,7 @@ export default function GraphDetailPage() {
       setGraph(graphData);
       setActiveVersion(versionData);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load graph."));
+      setError(getApiErrorMessage(err, "Failed to load workflow."));
     } finally {
       setLoading(false);
     }
@@ -126,7 +126,7 @@ export default function GraphDetailPage() {
       try {
         const updated = await graphsApi.update(graphId, { name, description });
         setGraph((prev) => (prev ? { ...prev, name: updated.name, description: updated.description } : null));
-        showSuccess("Graph info updated");
+        showSuccess("Workflow info updated");
       } catch (err: unknown) {
         showError("Update failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
         throw err;
@@ -142,7 +142,7 @@ export default function GraphDetailPage() {
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center space-x-3 text-muted-foreground">
               <Spinner size="md" />
-              <span className="text-sm">Loading graph...</span>
+              <span className="text-sm">Loading workflow...</span>
             </div>
           </div>
         </div>
@@ -157,13 +157,13 @@ export default function GraphDetailPage() {
           <main className="flex-1 flex items-center justify-center">
             <div className="bg-card rounded-lg border border-border p-10 text-center max-w-md shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">
-                {error ? "Error Loading Graph" : "Graph Not Found"}
+                {error ? "Error Loading Workflow" : "Workflow Not Found"}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {error ?? "The graph may have been deleted or you may not have access."}
+                {error ?? "The workflow may have been deleted or you may not have access."}
               </p>
-              <Link href="/graphs" className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90">
-                Back to graphs
+              <Link href="/workflows" className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90">
+                Back to workflows
               </Link>
             </div>
           </main>
@@ -178,7 +178,7 @@ export default function GraphDetailPage() {
         {/* Header with back button */}
         <div className="bg-background/80 backdrop-blur-lg border-b border-border px-4 py-2 flex items-center gap-4">
           <Link
-            href="/graphs"
+            href="/workflows"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Back
@@ -187,7 +187,7 @@ export default function GraphDetailPage() {
           <h1 aria-label={graph.name} className="text-sm font-semibold text-foreground truncate">
             {graph.name}
           </h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground">Graph Editor</span>
+          <span className="hidden sm:inline text-xs text-muted-foreground">Workflow Editor</span>
         </div>
 
         {/* Editor */}

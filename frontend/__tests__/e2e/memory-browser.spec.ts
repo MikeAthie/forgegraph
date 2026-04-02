@@ -24,16 +24,14 @@ test.describe("Memory Browser", () => {
     await login(page, user);
     await page.goto("/memory");
 
-    await expect(
-      page.getByRole("heading", { name: /browse what the system decided was worth keeping/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /browse the knowledge layer/i })).toBeVisible();
     await expect(page.getByText(/Jackie Memory Dossier/i).first()).toBeVisible();
 
     await page.getByRole("searchbox", { name: /search observations/i }).fill("dossier");
     await expect(page.getByText(/Jackie Memory Dossier/i).first()).toBeVisible();
 
     await page.getByRole("button", { name: /Jackie Memory Dossier/i }).click();
-    await expect(page.getByText(/Observation dossier/i)).toBeVisible();
+    await expect(page.getByText(/Observation detail/i).first()).toBeVisible();
     await expect(page.getByText(/concise planning updates and values concrete next steps/i).first()).toBeVisible();
     await expect(page.getByText(/Topic jackie-memory/i).nth(1)).toBeVisible();
   });
