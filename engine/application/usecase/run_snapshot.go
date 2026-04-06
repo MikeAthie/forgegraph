@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/forgegraph/engine/domain"
+	"github.com/forgegraph/engine/domain/entity"
 )
 
 // RunSnapshot provides a deterministic inspection view of scheduler state for tests.
@@ -158,4 +159,33 @@ func cloneValue(value any) any {
 		}
 		return decoded
 	}
+}
+
+func cloneRunEntity(run *entity.Run) *entity.Run {
+	if run == nil {
+		return nil
+	}
+	clone := *run
+	if run.EndedAt != nil {
+		endedAt := *run.EndedAt
+		clone.EndedAt = &endedAt
+	}
+	clone.InputJSON = cloneMapAny(run.InputJSON)
+	clone.OutputJSON = cloneMapAny(run.OutputJSON)
+	return &clone
+}
+
+func cloneNodeRunEntity(nodeRun *entity.NodeRun) *entity.NodeRun {
+	if nodeRun == nil {
+		return nil
+	}
+	clone := *nodeRun
+	if nodeRun.EndedAt != nil {
+		endedAt := *nodeRun.EndedAt
+		clone.EndedAt = &endedAt
+	}
+	clone.InputJSON = cloneMapAny(nodeRun.InputJSON)
+	clone.OutputJSON = cloneMapAny(nodeRun.OutputJSON)
+	clone.ErrorJSON = cloneMapAny(nodeRun.ErrorJSON)
+	return &clone
 }

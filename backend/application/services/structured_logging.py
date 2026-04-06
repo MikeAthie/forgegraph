@@ -23,6 +23,10 @@ class JsonLogFormatter(logging.Formatter):
         "node_id",
         "node_type",
         "tenant_id",
+        "user_id",
+        "organization_id",
+        "connection_id",
+        "event_level",
     )
 
     def format(self, record: logging.LogRecord) -> str:

@@ -4,6 +4,7 @@ Lightweight in-memory metrics for API, worker, and queue visibility.
 
 from __future__ import annotations
 
+import time
 from collections import Counter, deque
 from dataclasses import dataclass
 from threading import Lock
@@ -24,9 +25,20 @@ class RunMetricsSnapshot:
     generated_at: str
 
 
+@dataclass(frozen=True)
+class WebSocketMetricsSnapshot:
+    active_connections: int
+    connection_failures_total: int
+    messages_sent_total: int
+    messages_dropped_total: int
+    message_rate_per_minute: float
+    generated_at: str
+
+
 _lock = Lock()
 _counters: Counter[str] = Counter()
 _latencies_ms: deque[int] = deque(maxlen=1000)
+_ws_message_timestamps: deque[float] = deque(maxlen=5000)
 
 
 def record_run_started() -> None:
@@ -43,6 +55,39 @@ def record_run_completed(status: str, duration_ms: int | None) -> None:
             _counters["run_canceled_total"] += 1
         if duration_ms is not None:
             _latencies_ms.append(duration_ms)
+
+
+def _prune_ws_message_timestamps(now_ts: float) -> None:
+    while _ws_message_timestamps and (now_ts - _ws_message_timestamps[0]) > 60:
+        _ws_message_timestamps.popleft()
+
+
+def record_ws_connected() -> None:
+    with _lock:
+        _counters["ws_active_connections"] += 1
+
+
+def record_ws_disconnected() -> None:
+    with _lock:
+        _counters["ws_active_connections"] = max(0, _counters["ws_active_connections"] - 1)
+
+
+def record_ws_connection_failure() -> None:
+    with _lock:
+        _counters["ws_connection_failures_total"] += 1
+
+
+def record_ws_message_sent() -> None:
+    now_ts = time.time()
+    with _lock:
+        _counters["ws_messages_sent_total"] += 1
+        _ws_message_timestamps.append(now_ts)
+        _prune_ws_message_timestamps(now_ts)
+
+
+def record_ws_message_dropped() -> None:
+    with _lock:
+        _counters["ws_messages_dropped_total"] += 1
 
 
 def _percentile(values: list[int], percentile: float) -> float | None:
@@ -80,5 +125,25 @@ def get_run_metrics_snapshot() -> RunMetricsSnapshot:
         run_latency_ms_p50=_percentile(latencies, 0.5),
         run_latency_ms_p95=_percentile(latencies, 0.95),
         window_size=len(latencies),
+        generated_at=timezone.now().isoformat(),
+    )
+
+
+def get_websocket_metrics_snapshot() -> WebSocketMetricsSnapshot:
+    now_ts = time.time()
+    with _lock:
+        _prune_ws_message_timestamps(now_ts)
+        active_connections = int(_counters.get("ws_active_connections", 0))
+        connection_failures = int(_counters.get("ws_connection_failures_total", 0))
+        messages_sent = int(_counters.get("ws_messages_sent_total", 0))
+        messages_dropped = int(_counters.get("ws_messages_dropped_total", 0))
+        recent_messages = len(_ws_message_timestamps)
+
+    return WebSocketMetricsSnapshot(
+        active_connections=active_connections,
+        connection_failures_total=connection_failures,
+        messages_sent_total=messages_sent,
+        messages_dropped_total=messages_dropped,
+        message_rate_per_minute=float(recent_messages),
         generated_at=timezone.now().isoformat(),
     )

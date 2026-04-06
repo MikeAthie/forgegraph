@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
-from application.services.metrics import get_run_metrics_snapshot
+from application.services.metrics import get_run_metrics_snapshot, get_websocket_metrics_snapshot
 from application.services.rbac import has_min_role
 from infrastructure.orm.models import Run, RunQueueEntry, User
 
@@ -33,6 +33,7 @@ class MetricsSummaryView(APIView):
             )
 
         run_metrics = get_run_metrics_snapshot()
+        websocket_metrics = get_websocket_metrics_snapshot()
         queue_pending = RunQueueEntry.objects.filter(status="pending").count()
         queue_processing = RunQueueEntry.objects.filter(status="processing").count()
         queue_total = queue_pending + queue_processing
@@ -87,6 +88,13 @@ class MetricsSummaryView(APIView):
                     }
                     for item in queue_by_tenant
                 ],
+            },
+            "websocket": {
+                "active_connections": websocket_metrics.active_connections,
+                "connection_failures_total": websocket_metrics.connection_failures_total,
+                "messages_sent_total": websocket_metrics.messages_sent_total,
+                "messages_dropped_total": websocket_metrics.messages_dropped_total,
+                "message_rate_per_minute": websocket_metrics.message_rate_per_minute,
             },
             "slo": {
                 "run_success_rate_target": getattr(settings, "SLO_RUN_SUCCESS_RATE", 0.99),

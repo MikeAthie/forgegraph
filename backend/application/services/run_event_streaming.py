@@ -9,20 +9,22 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-EVENT_LEVEL_CRITICAL = "critical"
-EVENT_LEVEL_IMPORTANT = "important"
+EVENT_LEVEL_MINIMAL = "minimal"
+EVENT_LEVEL_DEFAULT = "default"
 EVENT_LEVEL_VERBOSE = "verbose"
+EVENT_LEVEL_CRITICAL = EVENT_LEVEL_MINIMAL
+EVENT_LEVEL_IMPORTANT = EVENT_LEVEL_DEFAULT
 EVENT_LEVELS = (
-    EVENT_LEVEL_CRITICAL,
-    EVENT_LEVEL_IMPORTANT,
+    EVENT_LEVEL_MINIMAL,
+    EVENT_LEVEL_DEFAULT,
     EVENT_LEVEL_VERBOSE,
 )
-DEFAULT_EVENT_LEVEL = EVENT_LEVEL_IMPORTANT
+DEFAULT_EVENT_LEVEL = EVENT_LEVEL_DEFAULT
 STREAM_SUMMARY_EVENT_TYPE = "node_stream.summary"
 
 _EVENT_LEVEL_RANK = {
-    EVENT_LEVEL_CRITICAL: 0,
-    EVENT_LEVEL_IMPORTANT: 1,
+    EVENT_LEVEL_MINIMAL: 0,
+    EVENT_LEVEL_DEFAULT: 1,
     EVENT_LEVEL_VERBOSE: 2,
 }
 
@@ -32,6 +34,10 @@ def normalize_requested_event_level(raw_level: str | None) -> str:
         getattr(settings, "RUN_EVENT_STREAM_DEFAULT_LEVEL", DEFAULT_EVENT_LEVEL)
     ).strip()
     candidate = str(raw_level or configured_default or DEFAULT_EVENT_LEVEL).strip().lower()
+    if candidate == "critical":
+        candidate = EVENT_LEVEL_MINIMAL
+    elif candidate == "important":
+        candidate = EVENT_LEVEL_DEFAULT
     if candidate in _EVENT_LEVEL_RANK:
         return candidate
     return DEFAULT_EVENT_LEVEL
@@ -54,24 +60,34 @@ def classify_transport_event_level(
     normalized_type = str(event_type or "").strip()
     normalized_payload = payload if isinstance(payload, dict) else {}
 
-    if normalized_type == "run.updated":
-        return EVENT_LEVEL_CRITICAL
+    if normalized_type in {
+        "connection_established",
+        "heartbeat",
+        "run.updated",
+        "run_started",
+        "run_completed",
+        "run_failed",
+        "run_paused",
+        "run_resumed",
+        "run_canceled",
+    }:
+        return EVENT_LEVEL_MINIMAL
     if normalized_type == "run.schema_validation":
-        return EVENT_LEVEL_CRITICAL
-    if normalized_type == "node_run.updated":
+        return EVENT_LEVEL_MINIMAL
+    if normalized_type in {"node_run.updated", "node_started", "node_completed", "node_failed"}:
         status = str(normalized_payload.get("status") or "").strip().lower()
         if status in {"failed", "waiting"}:
-            return EVENT_LEVEL_CRITICAL
-        return EVENT_LEVEL_IMPORTANT
-    if normalized_type == STREAM_SUMMARY_EVENT_TYPE:
-        return EVENT_LEVEL_IMPORTANT
-    if normalized_type == "node_stream.chunk":
+            return EVENT_LEVEL_MINIMAL
+        return EVENT_LEVEL_DEFAULT
+    if normalized_type in {"decision_required", "decision_resolved", "error"}:
+        return EVENT_LEVEL_MINIMAL
+    if normalized_type in {STREAM_SUMMARY_EVENT_TYPE, "cost_update"}:
+        return EVENT_LEVEL_DEFAULT
+    if normalized_type in {"node_stream.chunk", "node_stream_chunk", "node_stream_end"}:
         return EVENT_LEVEL_VERBOSE
     if normalized_type.startswith("agent."):
         return EVENT_LEVEL_VERBOSE
-    if "error" in normalized_type or "decision" in normalized_type:
-        return EVENT_LEVEL_CRITICAL
-    return EVENT_LEVEL_IMPORTANT
+    return EVENT_LEVEL_DEFAULT
 
 
 def add_event_level(

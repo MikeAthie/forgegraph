@@ -1,5 +1,5 @@
 """
-+Redis-backed auth state helpers for token revocation and one-time WebSocket tickets.
+Redis-backed auth state helpers for token revocation and one-time WebSocket tickets.
 """
 
 from __future__ import annotations
@@ -13,8 +13,12 @@ from typing import Any, cast
 
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 from redis import Redis
 from rest_framework_simplejwt.tokens import AccessToken, Token
+
+from application.services.tenancy import get_default_membership
+from infrastructure.orm.models import User
 
 _REVOKED_ACCESS_PREFIX = "auth:revoked:access:"
 _WS_TICKET_PREFIX = "auth:ws-ticket:"
@@ -47,14 +51,46 @@ def _access_jti(token: Token) -> str:
     return str(token.get("jti") or "")
 
 
-def issue_ws_ticket(*, user_id: str, access_token: Token) -> tuple[str, int]:
+def _ws_permissions_for_user(user: User) -> list[str]:
+    membership = get_default_membership(user)
+    role = membership.role if membership is not None else "viewer"
+    permissions = {"runs:view"}
+    if role in {"member", "admin", "owner"}:
+        permissions.add("runs:operate")
+    if role in {"admin", "owner"}:
+        permissions.add("runs:admin")
+    return sorted(permissions)
+
+
+def issue_ws_ticket(
+    *,
+    access_token: Token,
+    user: User | None = None,
+    user_id: str | None = None,
+    org_id: str | None = None,
+    permissions: list[str] | None = None,
+) -> tuple[str, int]:
     ttl_seconds = int(getattr(settings, "AUTH_WS_TICKET_TTL_SECONDS", 45))
     ticket = secrets.token_urlsafe(32)
+    resolved_user_id = user_id or (str(user.id) if user is not None else "")
+    resolved_org_id = org_id or (
+        str(getattr(user, "default_organization_id", "") or "") if user is not None else ""
+    )
+    resolved_permissions = permissions or (
+        _ws_permissions_for_user(user) if user is not None else ["runs:view"]
+    )
+    expires_at = timezone.now() + timedelta(seconds=ttl_seconds)
     payload = {
-        "user_id": user_id,
+        "ticket": ticket,
+        "user_id": resolved_user_id,
+        "org_id": resolved_org_id,
+        "permissions": resolved_permissions,
+        "expires_at": expires_at.isoformat(),
+        "used": False,
         "access_jti": _access_jti(access_token),
         "issued_at": int(time.time()),
     }
+
     serialized = json.dumps(payload)
     key = f"{_WS_TICKET_PREFIX}{ticket}"
 
