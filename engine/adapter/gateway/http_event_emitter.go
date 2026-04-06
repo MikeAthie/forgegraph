@@ -138,6 +138,7 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 	}
 
 	// Start background worker for async events
+	emitter.wg.Add(2)
 	go emitter.worker()
 	go emitter.spoolWorker()
 
@@ -216,7 +217,6 @@ func (e *HTTPEventEmitter) Flush(ctx context.Context) error {
 
 // worker processes events from the async channel
 func (e *HTTPEventEmitter) worker() {
-	e.wg.Add(1)
 	defer e.wg.Done()
 
 	for event := range e.eventChan {
@@ -230,10 +230,17 @@ func (e *HTTPEventEmitter) worker() {
 }
 
 func (e *HTTPEventEmitter) spoolWorker() {
-	e.wg.Add(1)
 	defer e.wg.Done()
 
-	if _, err := e.flushSpool(context.Background()); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		<-e.stopCh
+		cancel()
+	}()
+
+	if _, err := e.flushSpool(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Printf("Warning: failed to flush event spool on startup: %v", err)
 	}
 
@@ -243,11 +250,11 @@ func (e *HTTPEventEmitter) spoolWorker() {
 	for {
 		select {
 		case <-ticker.C:
-			if _, err := e.flushSpool(context.Background()); err != nil {
+			if _, err := e.flushSpool(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Printf("Warning: failed to flush event spool: %v", err)
 			}
 		case <-e.spoolFlushCh:
-			if _, err := e.flushSpool(context.Background()); err != nil {
+			if _, err := e.flushSpool(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Printf("Warning: failed to flush event spool: %v", err)
 			}
 		case <-e.stopCh:
@@ -621,14 +628,6 @@ func (e *HTTPEventEmitter) Close(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	remaining, err := e.flushSpool(ctx)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-		return err
-	}
-	if remaining > 0 {
-		log.Printf("Warning: event emitter closed with %d durably queued events remaining in spool", remaining)
-	}
-
 	closeDone := make(chan struct{})
 	go func() {
 		e.wg.Wait()
@@ -637,10 +636,19 @@ func (e *HTTPEventEmitter) Close(ctx context.Context) error {
 
 	select {
 	case <-closeDone:
-		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+
+	remaining, err := e.flushSpool(ctx)
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	if remaining > 0 {
+		log.Printf("Warning: event emitter closed with %d durably queued events remaining in spool", remaining)
+	}
+
+	return nil
 }
 
 func defaultSpoolPath(callbackURL string) string {

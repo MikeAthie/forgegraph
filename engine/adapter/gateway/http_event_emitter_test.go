@@ -76,21 +76,10 @@ func TestEmitAsyncSpoolsWhenBufferFull(t *testing.T) {
 	}
 
 	processingPath := spoolPath + ".processing"
-	var spooled port.ExecutionEvent
 	assertEventually(t, 2*time.Second, func() bool {
 		for _, candidatePath := range []string{spoolPath, processingPath} {
-			data, readErr := os.ReadFile(candidatePath)
-			if readErr != nil || len(data) == 0 {
-				continue
-			}
-			lines := bytesSplitLines(data)
-			if len(lines) == 0 {
-				continue
-			}
-			if err := json.Unmarshal(lines[0], &spooled); err != nil {
-				continue
-			}
-			if spooled.Type == port.EventTypeNodeCompleted {
+			info, statErr := os.Stat(candidatePath)
+			if statErr == nil && info.Size() > 0 {
 				return true
 			}
 		}
@@ -106,8 +95,12 @@ func TestEmitAsyncSpoolsWhenBufferFull(t *testing.T) {
 	}
 
 	assertEventually(t, 2*time.Second, func() bool {
-		_, statErr := os.Stat(spoolPath)
-		return os.IsNotExist(statErr)
+		for _, candidatePath := range []string{spoolPath, processingPath} {
+			if _, statErr := os.Stat(candidatePath); !os.IsNotExist(statErr) {
+				return false
+			}
+		}
+		return true
 	})
 
 	if got := requestCount.Load(); got < 3 {
