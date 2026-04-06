@@ -371,7 +371,6 @@ describe("Runs pages", () => {
       expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?ticket=ws-ticket-123&event_level=default`);
       expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?token=test-token&event_level=important`);
 
-
       await act(async () => {
         MockWebSocket.instances[0]?.emit("open");
         MockWebSocket.instances[0]?.emit("message", {

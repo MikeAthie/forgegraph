@@ -420,11 +420,7 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
 
       markActivity();
       setRun((current) => applyRealtimeMessage(current, message));
-      if (
-        message.type === "run_completed" ||
-        message.type === "run_failed" ||
-        message.type === "run_canceled"
-      ) {
+      if (message.type === "run_completed" || message.type === "run_failed" || message.type === "run_canceled") {
         void refreshCanonicalState();
       }
     };
