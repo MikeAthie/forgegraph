@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -131,6 +132,34 @@ class LogoutView(APIView):
         return response
 
 
+<<<<<<< Updated upstream
+=======
+class WSTicketView(APIView):
+    """Issue a short-lived, single-use WebSocket ticket."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        access_token = getattr(request, "auth", None)
+        if access_token is None:
+            return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        ticket, expires_in = issue_ws_ticket(
+            access_token=cast(Any, access_token),
+            user=request.user,
+        )
+        return Response(
+            {
+                "ticket": ticket,
+                "expires_in_seconds": expires_in,
+                "expires_at": (timezone.now() + timedelta(seconds=expires_in)).isoformat(),
+                "org_id": str(getattr(request.user, "default_organization_id", "") or ""),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+>>>>>>> Stashed changes
 class MeView(APIView):
     """Get current user endpoint."""
 

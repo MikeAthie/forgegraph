@@ -51,6 +51,9 @@ from adapters.gateways.grpc_engine_client import (
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import (
+    broadcast_cost_update,
+    broadcast_decision_required,
+    broadcast_decision_resolved,
     broadcast_node_run_updated,
     broadcast_node_stream_chunk,
     broadcast_run_schema_validation,
@@ -2271,6 +2274,10 @@ class EngineRunEventsView(APIView):
             "run_canceled",
         }:
             previous_status = run.status
+            previous_paused_node_id = run.paused_node_id
+            previous_pause_state = (
+                dict(run.pause_state_json) if isinstance(run.pause_state_json, dict) else {}
+            )
             run_payload: dict[str, Any] = {}
             update_fields: list[str] = []
 
@@ -2377,6 +2384,35 @@ class EngineRunEventsView(APIView):
                 record_run_completed(run.status, run.duration_ms)
 
             _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
+<<<<<<< Updated upstream
+=======
+            for summary_payload in final_run_stream_summaries:
+                broadcast_node_stream_summary(run=run, payload=summary_payload)
+            if event_type == "run_paused" and node_id:
+                broadcast_decision_required(
+                    run=run,
+                    payload={
+                        "node_id": node_id,
+                        "node_type": str(event.get("node_type") or "human_gate"),
+                        "attempt": int(event.get("attempt") or 1),
+                        "status": "waiting",
+                        "prompt_message": str(pause_payload.get("prompt_message") or ""),
+                        "required_fields": list(pause_payload.get("required_fields") or []),
+                        "node_name": str(pause_payload.get("node_name") or ""),
+                    },
+                )
+            elif event_type == "run_resumed" and previous_paused_node_id:
+                broadcast_decision_resolved(
+                    run=run,
+                    payload={
+                        "node_id": previous_paused_node_id,
+                        "status": "resolved",
+                        "prompt_message": str(previous_pause_state.get("prompt_message") or ""),
+                        "required_fields": list(previous_pause_state.get("required_fields") or []),
+                        "resolution": redact_payload(event.get("output") or {}),
+                    },
+                )
+>>>>>>> Stashed changes
             message = broadcast_run_updated(run)
             return success_response(message)
 
@@ -2430,6 +2466,7 @@ class EngineRunEventsView(APIView):
             elif event_type == "node_retrying":
                 node_payload["status"] = "running"
 
+            cost_update_payload: dict[str, Any] | None = None
             with transaction.atomic():
                 node_run, created = NodeRun.objects.get_or_create(
                     run=run,
@@ -2511,7 +2548,31 @@ class EngineRunEventsView(APIView):
                             total_tokens=total_tokens,
                             cost_usd=cost,
                         )
+                        cost_update_payload = {
+                            "node_id": node_id,
+                            "node_type": node_type,
+                            "provider": provider,
+                            "model": model,
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": total_tokens,
+                            "cost_usd": float(cost),
+                        }
 
+<<<<<<< Updated upstream
+=======
+            if event_type in {"node_completed", "node_failed", "node_skipped"}:
+                summary_payload = flush_stream_summary(
+                    run_id=str(run.id),
+                    node_id=node_id,
+                    attempt=attempt,
+                    final_reason=event_type,
+                )
+                if summary_payload:
+                    broadcast_node_stream_summary(run=run, payload=summary_payload)
+            if cost_update_payload:
+                broadcast_cost_update(run=run, payload=cost_update_payload)
+>>>>>>> Stashed changes
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)
 

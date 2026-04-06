@@ -56,5 +56,9 @@ class JwtQueryStringAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
         if not user_id:
             return await super().__call__(scope, receive, send)
 
+        scope["ws_ticket"] = ticket_payload
+        scope["organization_id"] = str(ticket_payload.get("org_id") or "")
+        scope["permissions"] = list(ticket_payload.get("permissions") or [])
+        scope["access_jti"] = access_jti
         scope["user"] = await _get_user(str(user_id))
         return await super().__call__(scope, receive, send)

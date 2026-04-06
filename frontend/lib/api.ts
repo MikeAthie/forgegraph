@@ -15,6 +15,13 @@ export interface AccessTokenResponse {
   access: string;
 }
 
+export interface WebSocketTicketResponse {
+  ticket: string;
+  expires_in_seconds: number;
+  expires_at?: string;
+  org_id?: string;
+}
+
 export type ApiMeta = {
   requestId: string;
   timestamp: string;
@@ -96,6 +103,7 @@ export const getApiErrorMessage = (err: unknown, fallback: string): string => {
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const API_PATHS = {
+  wsTicket: "/api/ws-ticket",
   auth: {
     login: "/api/auth/login",
     register: "/api/auth/register",
@@ -458,6 +466,11 @@ export const authApi = {
   exchangeSsoCode: async (code: string, state: string): Promise<AccessTokenResponse> => {
     const response = await api.post<AccessTokenResponse>(API_PATHS.auth.ssoCallback, { code, state });
     setAccessToken(response.data.access);
+    return response.data;
+  },
+
+  issueWsTicket: async (): Promise<WebSocketTicketResponse> => {
+    const response = await api.post<WebSocketTicketResponse>(API_PATHS.wsTicket, {});
     return response.data;
   },
 };
