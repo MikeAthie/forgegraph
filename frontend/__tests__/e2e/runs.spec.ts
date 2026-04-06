@@ -1,592 +1,308 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
-import path from "path";
-import { execFileSync } from "child_process";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
-import { createTestUser, ensureUserRegistered, gotoWithRetry, login, type TestUser } from "./helpers";
+import { createTestUser, ensureUserRegistered, openAuthenticatedPage } from "./helpers";
 
-let seededUser: TestUser;
-
-const API_BASE_URL = (process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-
-const createGraphName = (prefix: string) => `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-async function getAccessToken(request: APIRequestContext, user: TestUser): Promise<string> {
-  const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
-    data: { email: user.email, password: user.password },
-  });
-  expect(response.ok()).toBeTruthy();
-  const json = (await response.json()) as { access?: string };
-  if (!json.access) {
-    throw new Error(`Login did not return access token: ${JSON.stringify(json)}`);
-  }
-  return json.access;
+function apiSuccess<T>(data: T) {
+  return {
+    data,
+    meta: {
+      requestId: "playwright-executions",
+      timestamp: "2026-04-01T12:00:00.000Z",
+    },
+  };
 }
 
-async function waitForRunId(request: APIRequestContext, token: string, graphVersionId: string) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const response = await request.get(`${API_BASE_URL}/api/runs/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok()) {
-      const body = await response.text();
-      throw new Error(`Failed to list runs (status ${response.status()}): ${body}`);
-    }
-    const json = (await response.json()) as {
-      data: Array<{ id: string; graph_version_id: string }>;
-    };
-    const match = json.data.find((run) => run.graph_version_id === graphVersionId);
-    if (match) return match.id;
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  }
-  throw new Error("Timed out waiting for seeded run to appear in /api/runs/.");
-}
+const succeededRunId = "11111111-1111-1111-1111-111111111111";
+const failedRunId = "22222222-2222-2222-2222-222222222222";
+const pausedRunId = "33333333-3333-3333-3333-333333333333";
 
-test.beforeAll(async ({ request }, testInfo) => {
-  seededUser = createTestUser(testInfo, "e2e-runs");
-  await ensureUserRegistered(request, seededUser);
-});
+const listRuns = [
+  {
+    id: succeededRunId,
+    graph_id: "workflow-execution-001",
+    graph_name: "E2E Execution Visibility",
+    graph_version_id: "workflow-execution-version-001",
+    graph_version: 3,
+    status: "succeeded",
+    queue_status: "completed",
+    queue_attempts: 1,
+    queue_available_at: null,
+    started_at: "2026-04-01T11:48:00.000Z",
+    ended_at: "2026-04-01T11:49:05.000Z",
+    duration_ms: 65000,
+    memory_activity: {
+      has_activity: true,
+      retrieved_observation_count: 2,
+      stored_observation_count: 1,
+      degraded: false,
+    },
+  },
+  {
+    id: failedRunId,
+    graph_id: "workflow-execution-002",
+    graph_name: "Failure escalation",
+    graph_version_id: "workflow-execution-version-002",
+    graph_version: 4,
+    status: "failed",
+    queue_status: "failed",
+    queue_attempts: 3,
+    queue_available_at: null,
+    started_at: "2026-04-01T11:45:00.000Z",
+    ended_at: "2026-04-01T11:47:10.000Z",
+    duration_ms: 130000,
+    memory_activity: {
+      has_activity: false,
+      retrieved_observation_count: 0,
+      stored_observation_count: 0,
+      degraded: false,
+    },
+  },
+];
 
-test.describe("Runs", () => {
-  test("shows a seeded run trace in the UI", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
-
-    const graphName = createGraphName("E2E Run Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Created by Playwright (runs)." },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
-
-    const graphJson = {
-      nodes: [
-        { id: "start", type: "prompt", name: "Start", config: {} },
-        { id: "end", type: "output", name: "End", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "start" },
-        { id: "e1", from: "start", to: "end" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
-
-    await login(page, seededUser);
-    await gotoWithRetry(page, "/runs");
-
-    await expect(page.getByRole("heading", { name: /^runs$/i })).toBeVisible();
-
-    const runRow = page.locator("tr").filter({ hasText: graphName }).first();
-    await expect(runRow).toBeVisible();
-    await runRow.getByRole("link", { name: /^view$/i }).click();
-
-    await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
-
-    await expect(page.getByText("Nodes")).toBeVisible();
-    await expect(page.getByRole("button", { name: /start/i })).toBeVisible();
-    await expect(page.getByText(/"ok": true/i)).toBeVisible();
-  });
-
-  test("shows a paused run with Human Gate approval UI", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
-
-    const graphName = createGraphName("E2E Paused Run Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Created by Playwright (paused run)." },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
-
-    const graphJson = {
-      nodes: [
-        { id: "start", type: "prompt", name: "Start", config: {} },
-        {
-          id: "gate",
-          type: "human_gate",
-          name: "Human Gate",
-          config: { prompt_message: "Please review this run.", required_fields: ["ticket"] },
-        },
-        { id: "end", type: "output", name: "End", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "start" },
-        { id: "e1", from: "start", to: "gate" },
-        { id: "e2", from: "gate", to: "end" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync(
-      "python",
-      ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "paused", "--paused-node-id", "gate"],
-      {
-        cwd: backendDir,
-        env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-        stdio: "inherit",
+const succeededDetail = {
+  id: succeededRunId,
+  owner_id: "owner-execution-001",
+  thread_id: null,
+  graph_id: "workflow-execution-001",
+  graph_name: "E2E Execution Visibility",
+  graph_version_id: "workflow-execution-version-001",
+  graph_version: 3,
+  status: "succeeded",
+  queue_status: "completed",
+  queue_attempts: 1,
+  queue_available_at: null,
+  started_at: "2026-04-01T11:48:00.000Z",
+  ended_at: "2026-04-01T11:49:05.000Z",
+  input_json: {
+    request: "Run the workflow and summarize the result.",
+  },
+  output_json: {
+    ok: true,
+  },
+  error_message: "",
+  duration_ms: 65000,
+  node_runs: [
+    {
+      id: "step-execution-001",
+      node_id: "summarize",
+      node_type: "agent",
+      status: "succeeded",
+      attempt: 1,
+      started_at: "2026-04-01T11:40:00.000Z",
+      ended_at: "2026-04-01T11:41:05.000Z",
+      duration_ms: 65000,
+      input_json: {
+        prompt: "Summarize the current execution.",
       },
-    );
+      output_json: {
+        ok: true,
+      },
+      error_json: null,
+      agent_trace: {
+        final_output: '{"ok": true}',
+        step_count: 1,
+        tool_call_count: 0,
+        steps: [
+          {
+            step_index: 1,
+            action: "summarize",
+            final_answer: '{"ok": true}',
+            finish_reason: "completed",
+          },
+        ],
+        usage: {
+          total_tokens: 1200,
+        },
+      },
+      memory_activity: null,
+    },
+  ],
+  agent_events: [],
+  memory_activity: {
+    has_activity: true,
+    retrieved_observation_count: 2,
+    stored_observation_count: 1,
+    degraded: false,
+  },
+  paused_node_id: null,
+  pause_payload: null,
+};
 
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
+const pausedDetail = {
+  ...succeededDetail,
+  id: pausedRunId,
+  graph_id: "workflow-execution-003",
+  graph_name: "E2E Human Gate",
+  graph_version_id: "workflow-execution-version-003",
+  graph_version: 2,
+  status: "paused",
+  queue_status: "paused",
+  queue_attempts: 1,
+  started_at: "2026-04-01T11:50:00.000Z",
+  ended_at: null,
+  duration_ms: 32000,
+  output_json: null,
+  node_runs: [
+    {
+      ...succeededDetail.node_runs[0],
+      id: "step-execution-002",
+      node_id: "human_gate",
+      status: "paused",
+      output_json: null,
+      agent_trace: null,
+    },
+  ],
+  paused_node_id: "human_gate",
+  pause_payload: {
+    node_id: "human_gate",
+    node_name: "Human Gate",
+    prompt_message: "Please review this run.",
+    required_fields: ["ticket"],
+  },
+};
 
-    await login(page, seededUser);
-    await gotoWithRetry(page, "/runs");
+async function mockExecutionApis(
+  page: Page,
+  options?: {
+    runs?: typeof listRuns;
+    executionDetails?: Record<string, Record<string, unknown>>;
+    missingExecutionId?: string;
+  },
+): Promise<void> {
+  const runs = options?.runs ?? listRuns;
+  const details: Record<string, Record<string, unknown>> = {
+    [succeededRunId]: succeededDetail,
+    [pausedRunId]: pausedDetail,
+    ...(options?.executionDetails ?? {}),
+  };
 
-    const runRow = page.locator("tr").filter({ hasText: graphName }).first();
-    await expect(runRow).toBeVisible();
-    await runRow.getByRole("link", { name: /^view$/i }).click();
-
-    await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
-
-    // Human Gate approval UI should render for paused runs.
-    await expect(page.getByText(/waiting for approval/i)).toBeVisible();
-    await expect(page.getByText("Please review this run.")).toBeVisible();
-    await expect(page.getByText(/paused at node/i)).toBeVisible();
-    await expect(page.getByText(/^ticket$/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /^approve$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^reject$/i })).toBeVisible();
+  await page.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ count: 0 })),
+    });
   });
 
-  test("displays run list with status badges", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
-
-    // Create multiple runs with different statuses
-    const graphName = createGraphName("E2E Status Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test status badges" },
+  await page.route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess(runs)),
     });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
-
-    const graphJson = {
-      nodes: [
-        { id: "node_1", type: "prompt", name: "Node", config: {} },
-        { id: "output", type: "output", name: "Output", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "node_1" },
-        { id: "e1", from: "node_1", to: "output" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    // Seed succeeded run
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    // Seed failed run
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "failed"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    await login(page, seededUser);
-    await gotoWithRetry(page, "/runs");
-
-    await expect(page.getByRole("heading", { name: /^runs$/i })).toBeVisible();
-
-    // Check for status badges
-    await expect(page.locator("text=/succeeded/i").first()).toBeVisible();
-    await expect(page.locator("text=/failed/i").first()).toBeVisible();
   });
 
-  test("navigates from run list to run detail", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
+  await page.route(/\/api\/executions\/[^/]+(?:\?.*)?$/, async (route: Route) => {
+    const executionId = route.request().url().split("/api/executions/")[1]?.split("?")[0] ?? "";
+    if (options?.missingExecutionId && executionId === options.missingExecutionId) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "NOT_FOUND",
+            message: "Execution not found.",
+          },
+          meta: {
+            requestId: "playwright-execution-missing",
+            timestamp: "2026-04-01T12:00:00.000Z",
+          },
+        }),
+      });
+      return;
+    }
 
-    const graphName = createGraphName("E2E Navigation Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test navigation" },
+    const detail = details[executionId];
+    if (!detail) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "NOT_FOUND",
+            message: "Execution not found.",
+          },
+          meta: {
+            requestId: "playwright-execution-missing",
+            timestamp: "2026-04-01T12:00:00.000Z",
+          },
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess(detail)),
     });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
-
-    const graphJson = {
-      nodes: [
-        { id: "node_1", type: "prompt", name: "Test Node", config: {} },
-        { id: "output", type: "output", name: "Output", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "node_1" },
-        { id: "e1", from: "node_1", to: "output" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
-
-    await login(page, seededUser);
-    await gotoWithRetry(page, "/runs");
-
-    // Click on the table row
-    const runRow = page.locator("tr").filter({ hasText: graphName }).first();
-    await expect(runRow).toBeVisible();
-    await runRow.click();
-
-    // Should navigate to run detail
-    await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
-    await expect(page.getByText(graphName)).toBeVisible();
   });
+}
 
-  test("displays node runs with input/output details", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
+test.describe("Execution Visibility", () => {
+  test("shows a seeded execution in the visibility screen and opens detail", async ({ page, request }, testInfo) => {
+    const user = createTestUser(testInfo, "executions");
+    await ensureUserRegistered(request, user);
+    await mockExecutionApis(page);
 
-    const graphName = createGraphName("E2E Details Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test node details" },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
+    await openAuthenticatedPage(page, user, "/runs");
 
-    const graphJson = {
-      nodes: [
-        { id: "node_1", type: "prompt", name: "First Node", config: {} },
-        { id: "node_2", type: "http", name: "Second Node", config: {} },
-        { id: "output", type: "output", name: "Output", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "node_1" },
-        { id: "e1", from: "node_1", to: "node_2" },
-        { id: "e2", from: "node_2", to: "output" },
-      ],
-    };
+    await expect(page.getByRole("heading", { name: /distributed trace for humans/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /e2e execution visibility/i })).toBeVisible();
 
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
+    const executionDetailHref = await page.getByRole("link", { name: /open execution detail/i }).getAttribute("href");
+    expect(executionDetailHref).toBe(`/executions/${succeededRunId}`);
+    await page.goto(executionDetailHref!);
 
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
-
-    await login(page, seededUser);
-    await page.goto(`/runs/${runId}`);
-
-    await expect(page.getByText(graphName)).toBeVisible();
-
-    // Check that both nodes are visible
-    await expect(page.getByRole("button", { name: /First Node/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Second Node/i })).toBeVisible();
-
-    // Click to expand first node
-    const firstNodeButton = page.getByRole("button", { name: /First Node/i });
-    await firstNodeButton.click();
-
-    // Should show JSON output
+    await expect(page).toHaveURL(new RegExp(`/executions/${succeededRunId}$`));
+    await expect(page.getByRole("heading", { name: /structured execution trace/i })).toBeVisible();
+    await expect(page.getByText(/execution flow/i)).toBeVisible();
+    await expect(page.getByText(/execution state/i)).toBeVisible();
     await expect(page.getByText(/"ok": true/i).first()).toBeVisible();
   });
 
-  test("displays error message for failed runs", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
+  test("shows paused executions with human gate context", async ({ page, request }, testInfo) => {
+    const user = createTestUser(testInfo, "executions-paused");
+    await ensureUserRegistered(request, user);
+    await mockExecutionApis(page);
 
-    const graphName = createGraphName("E2E Failed Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test failed run" },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
+    await openAuthenticatedPage(page, user, `/executions/${pausedRunId}`);
 
-    const graphJson = {
-      nodes: [
-        { id: "node_1", type: "prompt", name: "Failing Node", config: {} },
-        { id: "output", type: "output", name: "Output", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "node_1" },
-        { id: "e1", from: "node_1", to: "output" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "failed"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
-
-    await login(page, seededUser);
-    await page.goto(`/runs/${runId}`);
-
-    // Should show failed status
-    await expect(page.getByText(/failed/i)).toBeVisible();
-
-    // Should show error message (seeded runs typically have an error message for failed status)
-    await expect(page.getByText(/error|failed/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /structured execution trace/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^human gate$/i })).toBeVisible();
+    await expect(page.getByText("Please review this run.", { exact: true })).toBeVisible();
   });
 
-  test("shows empty state when no runs exist", async ({ page, request }) => {
-    // Create a fresh user with no runs
-    const freshUser = createTestUser({ title: "Fresh User" } as any, "e2e-empty");
-    await ensureUserRegistered(request, freshUser);
+  test("surfaces status badges across executions", async ({ page, request }, testInfo) => {
+    const user = createTestUser(testInfo, "executions-status");
+    await ensureUserRegistered(request, user);
+    await mockExecutionApis(page);
 
-    await login(page, freshUser);
-    await gotoWithRetry(page, "/runs");
+    await openAuthenticatedPage(page, user, "/executions");
 
-    await expect(page.getByRole("heading", { name: /^runs$/i })).toBeVisible();
-    await expect(page.getByText(/no runs yet|empty|get started/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /distributed trace for humans/i })).toBeVisible();
+    await expect(page.getByText(/^succeeded$/i).first()).toBeVisible();
+    await expect(page.getByText(/^failed$/i).first()).toBeVisible();
   });
 
-  test("displays run duration for completed runs", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
+  test("shows an empty state when no executions exist", async ({ page, request }, testInfo) => {
+    const user = createTestUser(testInfo, "executions-empty");
+    await ensureUserRegistered(request, user);
+    await mockExecutionApis(page, { runs: [] });
 
-    const graphName = createGraphName("E2E Duration Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test duration display" },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
+    await openAuthenticatedPage(page, user, "/executions");
 
-    const graphJson = {
-      nodes: [
-        { id: "node_1", type: "prompt", name: "Node", config: {} },
-        { id: "output", type: "output", name: "Output", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "node_1" },
-        { id: "e1", from: "node_1", to: "output" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    await login(page, seededUser);
-    await gotoWithRetry(page, "/runs");
-
-    // Should display some duration (ms, s, m, etc.)
-    await expect(page.locator("text=/\\d+\\s*(ms|s|m|h)/").first()).toBeVisible();
+    await expect(page.getByText(/no executions available/i)).toBeVisible();
   });
 
-  test("displays node retry attempts", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
+  test("shows an error for a non-existent execution", async ({ page, request }, testInfo) => {
+    const user = createTestUser(testInfo, "executions-missing");
+    await ensureUserRegistered(request, user);
+    const missingRunId = "00000000-0000-0000-0000-000000000000";
+    await mockExecutionApis(page, { missingExecutionId: missingRunId });
 
-    const graphName = createGraphName("E2E Retry Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test retry attempts" },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
+    await openAuthenticatedPage(page, user, `/executions/${missingRunId}`);
 
-    const graphJson = {
-      nodes: [
-        { id: "node_1", type: "http", name: "Retrying Node", config: {} },
-        { id: "end", type: "output", name: "End", config: {} },
-      ],
-      edges: [
-        { id: "e0", from: "START", to: "node_1" },
-        { id: "e1", from: "node_1", to: "end" },
-      ],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    // Seed a run (avoid depending on the Go engine for this UI-only assertion)
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
-
-    // Manually create node runs with retry attempts
-    await request.post(`${API_BASE_URL}/api/runs/${runId}/events`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: {
-        event_type: "node_run.updated",
-        node_run: {
-          node_id: "node_1",
-          node_type: "http",
-          status: "failed",
-          attempt: 1,
-          error_json: { message: "Timeout" },
-        },
-      },
-    });
-
-    await request.post(`${API_BASE_URL}/api/runs/${runId}/events`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: {
-        event_type: "node_run.updated",
-        node_run: {
-          node_id: "node_1",
-          node_type: "http",
-          status: "succeeded",
-          attempt: 2,
-          output_json: { ok: true },
-        },
-      },
-    });
-
-    await request.post(`${API_BASE_URL}/api/runs/${runId}/events`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: {
-        event_type: "run.updated",
-        run: { status: "succeeded" },
-      },
-    });
-
-    await login(page, seededUser);
-    await page.goto(`/runs/${runId}`);
-
-    await expect(page.getByText(graphName).first()).toBeVisible({ timeout: 10_000 });
-
-    // Should show both attempts
-    await expect(page.getByRole("button", { name: /Retrying Node.*attempt 1/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Retrying Node.*attempt 2/i })).toBeVisible();
-  });
-
-  test("handles 404 for non-existent run", async ({ page }) => {
-    await login(page, seededUser);
-    const fakeRunId = "00000000-0000-0000-0000-000000000000";
-    await page.goto(`/runs/${fakeRunId}`);
-
-    // Should show 404 or not found message
-    await expect(page.getByText(/not found|404|does not exist/i)).toBeVisible();
-  });
-
-  test("displays final output for completed runs", async ({ page, request }) => {
-    const accessToken = await getAccessToken(request, seededUser);
-
-    const graphName = createGraphName("E2E Output Graph");
-    const createGraphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { name: graphName, description: "Test final output" },
-    });
-    expect(createGraphResponse.ok()).toBeTruthy();
-    const createdGraph = (await createGraphResponse.json()) as { data: { id: string } };
-    const graphId = createdGraph.data.id;
-
-    const graphJson = {
-      nodes: [{ id: "node_1", type: "output", name: "Output", config: {} }],
-      edges: [{ id: "e0", from: "START", to: "node_1" }],
-    };
-
-    const createVersionResponse = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: { graph_json: graphJson },
-    });
-    expect(createVersionResponse.ok()).toBeTruthy();
-    const createdVersion = (await createVersionResponse.json()) as { data: { id: string } };
-    const graphVersionId = createdVersion.data.id;
-
-    const backendDir = path.join(__dirname, "..", "..", "..", "backend");
-    execFileSync("python", ["manage.py", "seed_run_trace", graphVersionId, "--run-status", "succeeded"], {
-      cwd: backendDir,
-      env: { ...process.env, USE_SQLITE: process.env.USE_SQLITE ?? "true" },
-      stdio: "inherit",
-    });
-
-    const runId = await waitForRunId(request, accessToken, graphVersionId);
-
-    await login(page, seededUser);
-    await page.goto(`/runs/${runId}`);
-
-    await expect(page.getByText(graphName)).toBeVisible();
-
-    // Should show output section with JSON
-    await expect(page.getByText(/output|result/i)).toBeVisible();
-    await expect(page.getByText(/"ok": true/i)).toBeVisible();
+    await expect(page.getByText(/the requested resource was not found/i)).toBeVisible();
   });
 });

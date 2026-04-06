@@ -1,0 +1,696 @@
+[
+  {
+    "id": "TC001",
+    "title": "Login grants access to protected graph listing",
+    "description": "Verifies a user can sign in and land in the authenticated app with access to the protected graphs page.",
+    "category": "Authentication and Session Flows",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the graphs page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the graphs list page is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Registration creates a new session and unlocks protected pages",
+    "description": "Verifies a visitor can register a new account and then access a protected page within the authenticated app.",
+    "category": "Authentication and Session Flows",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /register"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique email into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the graphs page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the graphs list page is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Approve or deny a pending approval and see it removed from the pending list",
+    "description": "Verifies an operator can open a pending approval, submit a decision, and observe the approval removed from the pending approvals list.",
+    "category": "Prompt, Credential, Approval, and Memory Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /approvals"
+      },
+      {
+        "type": "action",
+        "description": "Open the first pending approval from the list"
+      },
+      {
+        "type": "action",
+        "description": "Select an approval decision"
+      },
+      {
+        "type": "action",
+        "description": "Submit the approval decision"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the previously opened approval is no longer shown in the pending approvals list"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC004",
+    "title": "Edit a prompt and see it reflected in the prompt list",
+    "description": "Verifies an operator can edit a prompt from its detail view, submit changes, and observe the updated prompt reflected in the prompts list.",
+    "category": "Prompt, Credential, Approval, and Memory Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /prompts"
+      },
+      {
+        "type": "action",
+        "description": "Open the first prompt from the list"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Updated prompt content - TC001\" into the prompt content field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the prompt changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the prompts list shows a prompt with content \"Updated prompt content - TC001\""
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC005",
+    "title": "Update memory observation tags and see them reflected in the observation list",
+    "description": "Verifies an operator can edit tags or metadata for a memory observation and see the updated tags reflected in the memory observations list.",
+    "category": "Prompt, Credential, Approval, and Memory Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /memory"
+      },
+      {
+        "type": "action",
+        "description": "Open the first memory observation from the list"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"tc004-tag\" into the tags field"
+      },
+      {
+        "type": "action",
+        "description": "Save the observation changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the memory observations list shows an observation with tag \"tc004-tag\""
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC006",
+    "title": "Update credential metadata and see it reflected in the credential list",
+    "description": "Verifies an operator can update credential metadata from the credential detail view and see the updated metadata reflected in the credentials list.",
+    "category": "Prompt, Credential, Approval, and Memory Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /credentials"
+      },
+      {
+        "type": "action",
+        "description": "Open the first credential from the list"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"TC002 metadata update\" into a credential metadata field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the credential changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the credentials list shows a credential with metadata \"TC002 metadata update\""
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC007",
+    "title": "Complete an onboarding milestone and see progress update",
+    "description": "Verifies an authenticated user can complete an onboarding milestone and see the onboarding progress update on the page.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /onboarding"
+      },
+      {
+        "type": "action",
+        "description": "Open the first incomplete milestone"
+      },
+      {
+        "type": "action",
+        "description": "Complete the milestone using the provided control"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify onboarding progress reflects the completed milestone"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC008",
+    "title": "Access billing page from admin landing and view plan information",
+    "description": "Verifies an org admin can navigate from the admin landing page to billing and see billing or plan information rendered.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open billing"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify billing and plan information is displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC009",
+    "title": "View organization settings and members from admin area",
+    "description": "Verifies an org admin can navigate to the organization admin page and see organization settings and a members list rendered.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open organization settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify organization settings and members are displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC010",
+    "title": "Navigate between LLM analytics and memory analytics dashboards",
+    "description": "Verifies a user can view the LLM analytics dashboard, navigate to memory analytics, and see charts/metrics rendered on both pages.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /analytics/llm"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to view memory analytics"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify LLM usage metrics or charts are displayed and memory usage metrics or charts are displayed after navigation"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC011",
+    "title": "Prevent saving a memory observation with invalid tag input",
+    "description": "Verifies the memory observation editor blocks saving when tags or metadata input is invalid and shows a validation error.",
+    "category": "Prompt, Credential, Approval, and Memory Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /memory"
+      },
+      {
+        "type": "action",
+        "description": "Open the first memory observation from the list"
+      },
+      {
+        "type": "action",
+        "description": "Fill an invalid value into the tags or metadata field"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save the observation changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible and the changes are not saved"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC012",
+    "title": "Review audit logs entries from admin area",
+    "description": "Verifies an org admin can navigate to the audit logs page and see a table or list of audit entries rendered.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open audit logs"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify recent audit entries are displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC013",
+    "title": "Invalid login shows credential validation error",
+    "description": "Verifies submitting incorrect credentials does not authenticate the user and shows an invalid-credentials error state.",
+    "category": "Authentication and Session Flows",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill invalid-user@example.com into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill wrong-password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a login validation error is visible"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC014",
+    "title": "View empty-state handling for prompts when no items are available",
+    "description": "Verifies that the prompts page renders a clear empty state when there are no prompts to display.",
+    "category": "Prompt, Credential, Approval, and Memory Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /prompts"
+      },
+      {
+        "type": "action",
+        "description": "Apply available filters or search to restrict results to none"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state is displayed for the prompts list"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC015",
+    "title": "Inspect operations diagnostics page renders operational controls",
+    "description": "Verifies an org admin can open the operations page and see operational controls or diagnostics content rendered.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open operations"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify operational controls or diagnostics content is displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC016",
+    "title": "Inspect marketplace administration page renders packages and controls",
+    "description": "Verifies an org admin can open the marketplace admin page and see marketplace packages and administration controls rendered.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open marketplace"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify marketplace packages or administration controls are displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC017",
+    "title": "Inspect SSO settings page displays configuration status (without performing SSO login)",
+    "description": "Verifies an org admin can open the SSO admin page and view SSO configuration and status information.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open SSO settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify SSO configuration and status information is displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC018",
+    "title": "Open admin help resources page from admin area",
+    "description": "Verifies an org admin can navigate to the admin help page and see support/help resources rendered.",
+    "category": "Analytics, Onboarding, and Admin Surfaces",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to open admin help"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify admin support or help resources are displayed"
+      }
+    ],
+    "priority": "Low"
+  }
+]

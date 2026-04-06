@@ -30,7 +30,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push("/graphs");
+      router.push("/overview");
     }
   }, [loading, isAuthenticated, router]);
 

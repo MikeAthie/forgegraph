@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
@@ -457,7 +456,7 @@ func TestToolExecutor_ExecTimeoutRetryable(t *testing.T) {
 		Kind:    "exec",
 		Exec: &tool.ExecToolConfig{
 			Command: os.Args[0],
-			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "sleep"},
+			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "block"},
 		},
 	})
 
@@ -507,8 +506,15 @@ func TestToolExecutorHelperProcess(t *testing.T) {
 		_ = decoder.Decode(&payload)
 		_, _ = fmt.Fprint(os.Stdout, `{"message":"ok"}`)
 		os.Exit(0)
-	case "sleep":
-		time.Sleep(150 * time.Millisecond)
+	case "block":
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "pipe error: %v", err)
+			os.Exit(1)
+		}
+		defer writer.Close()
+		var buf [1]byte
+		_, _ = reader.Read(buf[:])
 		_, _ = fmt.Fprint(os.Stdout, `{"message":"late"}`)
 		os.Exit(0)
 	default:

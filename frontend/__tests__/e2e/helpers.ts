@@ -1,3 +1,6 @@
+import { execFileSync } from "child_process";
+import path from "path";
+
 import { expect, type APIRequestContext, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 export type TestUser = {
@@ -57,12 +60,40 @@ export type MemoryObservationSeed = {
   update_topic?: boolean;
 };
 
+export type FrontendControlPlaneFixture = {
+  organizationId: string;
+  agentIds: {
+    ops: string;
+    finance: string;
+  };
+  runIds: {
+    paused: string;
+    running: string;
+    failed: string;
+  };
+  approval: {
+    id: string;
+    runId: string;
+    nodeId: string;
+    nodeName: string;
+    graphName: string;
+    promptMessage: string;
+    createdAt: string;
+  };
+};
+
 const TEST_PASSWORD = "ForgeGraphTest!12345";
 const API_BASE_URL = (
   process.env.PLAYWRIGHT_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
+const backendDir = path.join(__dirname, "..", "..", "..", "backend");
+const managementEnv = {
+  ...process.env,
+  USE_SQLITE: process.env.USE_SQLITE ?? "false",
+  SQLITE_DB_PATH: process.env.SQLITE_DB_PATH,
+};
 
 export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -100,12 +131,147 @@ export async function ensureUserRegistered(request: APIRequestContext, user: Tes
 }
 
 export async function login(page: Page, user: TestUser): Promise<void> {
-  await page.goto("/login");
-  await page.locator("#email").fill(user.email);
-  await page.locator("#password").fill(user.password);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await page.waitForURL(/\/graphs(?:\?.*)?$/, { timeout: 20_000 });
+  await page.context().clearCookies();
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.sessionStorage.removeItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__");
+    delete (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__;
+  });
+
+  const response = await page.context().request.post(`${API_BASE_URL}/api/auth/login`, {
+    data: {
+      email: user.email,
+      password: user.password,
+    },
+  });
+
+  if (!response.ok()) {
+    const body = await response.text();
+    throw new Error(`Failed to bootstrap authenticated session (status ${response.status()}): ${body}`);
+  }
+
+  const body = (await response.json()) as { access?: string };
+  if (!body.access) {
+    throw new Error("Login response did not include an access token.");
+  }
+
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "00000000-0000-0000-0000-00000000e2e1",
+        email: user.email,
+        created_at: new Date().toISOString(),
+        is_active: true,
+        default_organization_id: null,
+        organization_role: "owner",
+      }),
+    });
+  });
+
+  await page.evaluate((token) => {
+    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
+    (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
+  }, body.access);
+
+  await page.goto("/overview");
+  await page.waitForURL(/\/overview(?:\?.*)?$/, { timeout: 20_000 });
   await page.waitForLoadState("networkidle");
+}
+
+export async function openAuthenticatedPage(
+  page: Page,
+  user: TestUser,
+  targetPath: string,
+  options?: {
+    organizationId?: string;
+    role?: "owner" | "admin" | "member" | "viewer";
+  },
+): Promise<void> {
+  await page.context().clearCookies();
+  const fakeToken = "playwright-e2e-access-token";
+
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "00000000-0000-0000-0000-00000000e2e9",
+        email: user.email,
+        created_at: new Date().toISOString(),
+        is_active: true,
+        default_organization_id: options?.organizationId ?? null,
+        organization_role: options?.role ?? "owner",
+      }),
+    });
+  });
+
+  await page.route("**/api/auth/refresh", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ access: fakeToken }),
+    });
+  });
+
+  await page.addInitScript((token) => {
+    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
+    (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
+  }, fakeToken);
+
+  await page.goto(targetPath);
+  await page.waitForLoadState("networkidle");
+}
+
+export async function openBackendAuthenticatedPage(
+  page: Page,
+  request: APIRequestContext,
+  user: TestUser,
+  targetPath: string,
+): Promise<void> {
+  await page.context().clearCookies();
+  await ensureUserRegistered(request, user);
+  const token = await getAccessToken(request, user);
+
+  await page.addInitScript((seededToken) => {
+    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", seededToken);
+    (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = seededToken;
+  }, token);
+
+  await page.goto(targetPath);
+  await page.waitForLoadState("networkidle");
+}
+
+export async function proxyBackendApi(
+  page: Page,
+  request: APIRequestContext,
+  user: TestUser,
+  patterns: RegExp[],
+): Promise<void> {
+  const token = await getAccessToken(request, user);
+
+  for (const pattern of patterns) {
+    await page.route(pattern, async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const backendUrl = `${API_BASE_URL}${requestUrl.pathname}${requestUrl.search}`;
+      const response = await request.fetch(backendUrl, {
+        method: route.request().method(),
+        headers: {
+          ...route.request().headers(),
+          Authorization: `Bearer ${token}`,
+        },
+        data: route.request().postDataBuffer() ?? route.request().postData() ?? undefined,
+        failOnStatusCode: false,
+      });
+
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body: await response.body(),
+      });
+    });
+  }
 }
 
 export async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
@@ -121,7 +287,7 @@ export async function gotoWithRetry(page: Page, url: string, attempts = 3): Prom
       if (!message.includes("interrupted by another navigation")) {
         throw error;
       }
-      await page.waitForTimeout(250);
+      await page.waitForLoadState("domcontentloaded").catch(() => undefined);
     }
   }
 
@@ -145,9 +311,23 @@ export async function getAccessToken(request: APIRequestContext, user: TestUser)
   return body.access as string;
 }
 
+export function seedFrontendControlPlaneFixture(user: TestUser): FrontendControlPlaneFixture {
+  const raw = execFileSync(
+    "python",
+    ["manage.py", "seed_frontend_control_plane_fixture", "--email", user.email, "--password", user.password, "--json"],
+    {
+      cwd: backendDir,
+      env: managementEnv,
+      encoding: "utf8",
+    },
+  ).trim();
+
+  return JSON.parse(raw) as FrontendControlPlaneFixture;
+}
+
 export async function createGraph(page: Page, graphName: string, description?: string): Promise<string> {
   await gotoWithRetry(page, "/graphs");
-  await page.getByRole("button", { name: /^new graph$/i }).click();
+  await page.getByRole("button", { name: /^new workflow$/i }).click();
   await page.locator("#create-graph-name").fill(graphName);
   if (description) {
     await page.locator("#create-graph-description").fill(description);
@@ -161,12 +341,12 @@ export async function createGraph(page: Page, graphName: string, description?: s
 }
 
 export async function expectGraphEditorOpen(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/\/graphs\/[a-f0-9-]+/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/(?:graphs|workflows)\/[a-f0-9-]+/, { timeout: 15_000 });
   await expect(page.getByTestId("graph-canvas-panel")).toBeVisible();
 }
 
 export function getGraphIdFromUrl(page: Page): string {
-  const graphId = page.url().match(/\/graphs\/([a-f0-9-]+)/)?.[1];
+  const graphId = page.url().match(/\/(?:graphs|workflows)\/([a-f0-9-]+)/)?.[1];
   if (!graphId) {
     throw new Error(`Could not determine graph id from URL: ${page.url()}`);
   }
@@ -416,7 +596,7 @@ export async function fetchLatestGraphVersion(
 }
 
 export async function installRuntimePackage(page: Page, packageName: string, toolName?: string): Promise<void> {
-  await page.goto("/admin/marketplace");
+  await gotoWithRetry(page, "/admin/marketplace");
   await expect(page.getByRole("heading", { name: /^marketplace$/i })).toBeVisible();
 
   const packageCard = page.locator("div.rounded-lg.border").filter({ hasText: packageName }).first();
@@ -457,19 +637,31 @@ export async function waitForRunTerminal(
   accessToken: string,
   runId: string,
 ): Promise<RunDetailResponse> {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    expect(response.ok()).toBeTruthy();
-    const body = (await response.json()) as { data: RunDetailResponse };
-    if (["succeeded", "failed", "canceled"].includes(body.data.status)) {
-      return body.data;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  let latestRun: RunDetailResponse | null = null;
+
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        expect(response.ok()).toBeTruthy();
+        const body = (await response.json()) as { data: RunDetailResponse };
+        latestRun = body.data;
+        return body.data.status;
+      },
+      {
+        timeout: 30_000,
+        message: `Timed out waiting for run ${runId} to reach a terminal state.`,
+      },
+    )
+    .toMatch(/^(succeeded|failed|canceled)$/);
+
+  if (!latestRun) {
+    throw new Error(`Run ${runId} did not return detail during polling.`);
   }
-  throw new Error(`Timed out waiting for run ${runId} to reach a terminal state.`);
+
+  return latestRun;
 }
 
 export async function createObservationViaApi(

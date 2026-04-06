@@ -15,7 +15,12 @@ jest.mock("next/link", () => ({
 }));
 jest.mock("@/components/DashboardLayout", () => ({
   __esModule: true,
-  default: ({ children }: { children: ReactNode }) => <div data-testid="dashboard-layout">{children}</div>,
+  default: ({ children, inspector }: { children: ReactNode; inspector?: ReactNode }) => (
+    <div data-testid="dashboard-layout">
+      <div>{children}</div>
+      {inspector ? <aside>{inspector}</aside> : null}
+    </div>
+  ),
 }));
 jest.mock("@/components/ProtectedRoute", () => ({
   __esModule: true,
@@ -48,16 +53,26 @@ describe("AdminIndexPage", () => {
 
     render(<AdminIndexPage />);
 
-    expect(screen.getByRole("heading", { name: /one home for how the tenant is governed/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open organization/i })).toHaveAttribute("href", "/admin/organization");
-    expect(screen.getByRole("link", { name: /open identity/i })).toHaveAttribute("href", "/admin/sso");
-    expect(screen.getByRole("link", { name: /open billing/i })).toHaveAttribute("href", "/admin/billing");
-    expect(screen.getByRole("link", { name: /open audit/i })).toHaveAttribute("href", "/admin/audit-logs");
-    expect(screen.getByRole("link", { name: /open policies & operations/i })).toHaveAttribute(
-      "href",
-      "/admin/operations",
+    expect(screen.getByRole("heading", { name: /govern the operating environment/i })).toBeInTheDocument();
+    expect(screen.getByText(/governance remains available as a legacy route/i)).toBeInTheDocument();
+    expect(screen.getByText("Workspace configuration")).toBeInTheDocument();
+    expect(screen.getByText("Governance controls")).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeInTheDocument();
+    expect(screen.getByText("Identity")).toBeInTheDocument();
+    expect(screen.getByText("Billing")).toBeInTheDocument();
+    expect(screen.getByText("Operations")).toBeInTheDocument();
+
+    const hrefs = screen.getAllByRole("link", { name: "Open" }).map((link) => link.getAttribute("href"));
+    expect(hrefs).toEqual(
+      expect.arrayContaining([
+        "/admin/organization",
+        "/admin/sso",
+        "/admin/billing",
+        "/admin/audit-logs",
+        "/admin/operations",
+        "/admin/marketplace",
+      ]),
     );
-    expect(screen.getByRole("link", { name: /open memory/i })).toHaveAttribute("href", "/memory");
   });
 
   it("shows the read-only governance notice for non-admin roles", () => {
@@ -79,6 +94,7 @@ describe("AdminIndexPage", () => {
 
     render(<AdminIndexPage />);
 
-    expect(screen.getByText(/some sections stay read-only unless you have owner or admin access/i)).toBeInTheDocument();
+    expect(screen.getByText(/read-only on governed surfaces/i)).toBeInTheDocument();
+    expect(screen.getByText(/access messaging is explicit/i)).toBeInTheDocument();
   });
 });

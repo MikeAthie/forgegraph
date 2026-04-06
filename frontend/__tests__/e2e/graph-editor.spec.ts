@@ -743,7 +743,7 @@ test.describe("Graph Editor", () => {
 
     // Check for keyboard shortcuts section
     await expect(page.getByText("Keyboard Shortcuts")).toBeVisible();
-    await expect(page.getByText("Save")).toBeVisible();
+    await expect(page.getByText("Save", { exact: true })).toBeVisible();
     await expect(page.getByText("Ctrl+S", { exact: true })).toBeVisible();
     await expect(page.getByText("Delete node")).toBeVisible();
     await expect(page.getByText("Delete", { exact: true })).toBeVisible();
@@ -830,7 +830,9 @@ test.describe("Graph Editor", () => {
       dialogLabel: /configure http node/i,
       nodeLabel: "HTTP",
     });
-    const httpConfigSection = page.getByRole("heading", { name: /^http configuration$/i }).locator("..");
+    const httpConfigSection = page
+      .getByRole("button", { name: /^http configuration$/i })
+      .locator("xpath=following-sibling::*[1]");
     await httpConfigSection.locator("select").selectOption("POST");
     await page.getByPlaceholder(/https:\/\/api\.example\.com/i).fill("https://api.test.com/endpoint");
     await expect(page.getByText(/POST https:\/\/api\.test\.com/i)).toBeVisible();

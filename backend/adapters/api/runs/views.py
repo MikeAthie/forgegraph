@@ -653,6 +653,82 @@ def _input_size_guardrail_response(input_json: dict[str, Any]) -> Response | Non
     )
 
 
+def _project_pause_state(
+    *,
+    run: Run,
+    node_id: str,
+    node_type: str,
+    attempt: int,
+    pause_payload: dict[str, Any],
+    trace_id: str,
+    span_id: str,
+    event_time: datetime | None,
+) -> None:
+    if not node_id:
+        return
+
+    normalized_node_type = node_type or "human_gate"
+    node_defaults: dict[str, Any] = {
+        "node_type": normalized_node_type,
+        "status": "waiting",
+    }
+    if event_time:
+        node_defaults["started_at"] = event_time
+    if pause_payload:
+        node_defaults["output_json"] = {"pause_payload": pause_payload}
+
+    with transaction.atomic():
+        node_run, created = NodeRun.objects.get_or_create(
+            run=run,
+            node_id=node_id,
+            attempt=attempt,
+            defaults=node_defaults,
+        )
+        node_update_fields: list[str] = []
+        if not created and node_run.node_type != normalized_node_type:
+            node_run.node_type = normalized_node_type
+            node_update_fields.append("node_type")
+        if node_run.status != "waiting":
+            node_run.status = "waiting"
+            node_update_fields.append("status")
+        if event_time and node_run.started_at != event_time:
+            node_run.started_at = event_time
+            node_update_fields.append("started_at")
+        if pause_payload:
+            output_json = (
+                dict(node_run.output_json) if isinstance(node_run.output_json, dict) else {}
+            )
+            output_json["pause_payload"] = pause_payload
+            if output_json != node_run.output_json:
+                node_run.output_json = output_json
+                node_update_fields.append("output_json")
+        if node_run.trace_id != trace_id:
+            node_run.trace_id = trace_id
+            node_update_fields.append("trace_id")
+        if node_run.span_id != span_id:
+            node_run.span_id = span_id
+            node_update_fields.append("span_id")
+        if node_update_fields:
+            node_run.save(update_fields=sorted(set(node_update_fields)))
+
+        approval_payload = {
+            "prompt_message": str(pause_payload.get("prompt_message") or ""),
+            "required_fields": list(pause_payload.get("required_fields") or []),
+        }
+        approval_task, created = ApprovalTask.objects.get_or_create(
+            run=run,
+            node_id=node_id,
+            status="pending",
+            defaults={
+                "assignee": run.owner,
+                "payload": approval_payload,
+            },
+        )
+        if not created and approval_task.payload != approval_payload:
+            approval_task.payload = approval_payload
+            approval_task.save(update_fields=["payload"])
+
+
 class RunListView(APIView):
     """List runs (stub)."""
 
@@ -1926,6 +2002,25 @@ class RunResumeView(APIView):
         node_id = serializer.validated_data["node_id"]
         input_json = serializer.validated_data.get("input_json", {})
 
+        pending_approval_task = run.approval_tasks.filter(node_id=node_id, status="pending").first()
+        if pending_approval_task is None:
+            resolved_task = (
+                run.approval_tasks.filter(node_id=node_id)
+                .exclude(status="pending")
+                .order_by("-resolved_at", "-created_at")
+                .first()
+            )
+            if resolved_task is not None:
+                if resolved_task.result == input_json:
+                    return success_response(
+                        {"resumed": True, "run_id": str(run.id), "duplicate": True}
+                    )
+                return error_response(
+                    code="DECISION_ALREADY_RESOLVED",
+                    message="Approval task for this node has already been resolved.",
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         # Verify node_id matches paused node
         if run.paused_node_id and run.paused_node_id != node_id:
             return error_response(
@@ -1933,6 +2028,18 @@ class RunResumeView(APIView):
                 message=f"Node '{node_id}' does not match paused node '{run.paused_node_id}'",
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        entitlement_response = check_entitlements(user)
+        if entitlement_response is not None:
+            return entitlement_response
+
+        quota_response = check_llm_quota(user)
+        if quota_response is not None:
+            return quota_response
+
+        budget_response = check_llm_budget(user)
+        if budget_response is not None:
+            return budget_response
 
         # Call engine ResumeRun
         try:
@@ -1979,7 +2086,7 @@ class RunResumeView(APIView):
             )
 
         # Update ApprovalTask
-        approval_task = run.approval_tasks.filter(node_id=node_id, status="pending").first()
+        approval_task = pending_approval_task
         if approval_task:
             approved = input_json.get("approved", True)
             approval_task.status = "approved" if approved else "rejected"
@@ -2243,6 +2350,18 @@ class EngineRunEventsView(APIView):
                 run.trace_id = trace_context["trace_id"]
                 update_fields.append("trace_id")
                 run.save(update_fields=sorted(set(update_fields)))
+
+            if event_type == "run_paused" and node_id:
+                _project_pause_state(
+                    run=run,
+                    node_id=node_id,
+                    node_type=str(event.get("node_type") or ""),
+                    attempt=int(event.get("attempt") or 1),
+                    pause_payload=pause_payload if isinstance(pause_payload, dict) else {},
+                    trace_id=trace_context["trace_id"],
+                    span_id=trace_context["span_id"],
+                    event_time=event_time,
+                )
 
             if event_type == "run_started" and previous_status != "running":
                 record_run_started()
@@ -2523,7 +2642,7 @@ class RunEventsView(APIView):
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=redact_payload(payload),
+                    payload=_serialize_event_payload(redact_payload(payload)),
                 )
             except Exception as exc:  # pragma: no cover - log and continue
                 logger.warning("Failed to persist run event: %s", exc)
@@ -2581,7 +2700,7 @@ class RunEventsView(APIView):
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=redact_payload(payload),
+                    payload=_serialize_event_payload(redact_payload(payload)),
                 )
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)

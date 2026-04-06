@@ -1,0 +1,20 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000",
+  "loginUser": "test@example.com",
+  "loginPassword": "WY3QGTJ7@q5eYq3",
+  "executionArgs": {
+    "projectName": "frontend",
+    "projectPath": "c:\\Users\\mathi\\projects\\forgegraph\\frontend",
+    "testIds": [],
+    "additionalInstruction": "Use the configured frontend login credentials from testsprite_tests/tmp/config.json for authenticated flows. The local stack runs over HTTP, not HTTPS. The backend, engine, and frontend are already running in Docker on localhost. If a test requires authentication, log in through the UI rather than injecting a bearer token. The backend fixture command seed_testsprite_frontend_fixture has already populated test@example.com with a newest editable prompt, one pending approval, one visible memory observation, and one visible credential card for deterministic browser coverage.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-hWk4MuvMmPrl2GavZF0Enz89KD16hzZUqCYYdrw3SaanJ32G5MGW9QmUY6PpexlrN20MwNFZZk_PVioncr1hJlpSL_-sgLsFa-6EBxi9zgLcuwIgc9vwO8Fv9y_-JzkEUgY"
+    }
+  },
+  "serverPort": 61602,
+  "proxy": "http://5eefad7b-8152-4ec1-a3c5-5d72bb199893:ajcRW1jHH7N8YTSdpsjP6bQaI40iddhx@tun.testsprite.com:8080"
+}

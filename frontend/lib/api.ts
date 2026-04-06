@@ -144,6 +144,43 @@ const API_PATHS = {
     count: "/api/approvals/count",
     detail: (approvalId: string) => `/api/approvals/${approvalId}`,
   },
+  workflows: {
+    listCreate: "/api/workflows/",
+    detail: (workflowId: string) => `/api/workflows/${workflowId}`,
+    versions: (workflowId: string) => `/api/workflows/${workflowId}/versions`,
+    latestVersion: (workflowId: string) => `/api/workflows/${workflowId}/versions/latest`,
+    versionDetail: (workflowId: string, versionId: string) => `/api/workflows/${workflowId}/versions/${versionId}`,
+    memoryConfig: (workflowId: string) => `/api/workflows/${workflowId}/memory-config`,
+  },
+  executions: {
+    list: "/api/executions/",
+    detail: (executionId: string) => `/api/executions/${executionId}`,
+    start: "/api/executions/start",
+    invoke: "/api/executions/invoke",
+    cancel: (executionId: string) => `/api/executions/${executionId}/cancel`,
+    resume: (executionId: string) => `/api/executions/${executionId}/resume`,
+    replay: (executionId: string) => `/api/executions/${executionId}/replay`,
+  },
+  decisions: {
+    list: "/api/decisions/",
+    count: "/api/decisions/count",
+    detail: (decisionId: string) => `/api/decisions/${decisionId}`,
+  },
+  agents: {
+    list: "/api/agents/",
+    detail: (agentId: string) => `/api/agents/${agentId}`,
+  },
+  tasks: {
+    list: "/api/tasks/",
+    detail: (taskId: string) => `/api/tasks/${taskId}`,
+  },
+  accounting: {
+    overview: "/api/accounting/",
+    ledger: "/api/accounting/ledger",
+  },
+  systemState: {
+    overview: "/api/system-state/overview",
+  },
   analytics: {
     memoryUsage: "/api/analytics/memory/usage",
     memoryExport: "/api/analytics/memory/export",
@@ -223,6 +260,7 @@ const api: AxiosInstance = axios.create({
 
 // Refresh token is stored in a HttpOnly cookie; keep access token in-memory.
 let accessToken: string | null = null;
+const E2E_ACCESS_TOKEN_KEY = "__FORGEGRAPH_E2E_ACCESS_TOKEN__";
 
 const authClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -233,15 +271,35 @@ const authClient: AxiosInstance = axios.create({
 });
 
 export const getAccessToken = (): string | null => {
+  if (!accessToken && typeof window !== "undefined") {
+    const seededToken =
+      (window as Window & { [E2E_ACCESS_TOKEN_KEY]?: string | null })[E2E_ACCESS_TOKEN_KEY] ??
+      window.sessionStorage.getItem(E2E_ACCESS_TOKEN_KEY);
+    if (typeof seededToken === "string" && seededToken.length > 0) {
+      accessToken = seededToken;
+    }
+  }
   return accessToken;
 };
 
 export const setAccessToken = (token: string | null): void => {
   accessToken = token;
+  if (typeof window !== "undefined") {
+    (window as Window & { [E2E_ACCESS_TOKEN_KEY]?: string | null })[E2E_ACCESS_TOKEN_KEY] = token;
+    if (token) {
+      window.sessionStorage.setItem(E2E_ACCESS_TOKEN_KEY, token);
+    } else {
+      window.sessionStorage.removeItem(E2E_ACCESS_TOKEN_KEY);
+    }
+  }
 };
 
 export const clearTokens = (): void => {
   accessToken = null;
+  if (typeof window !== "undefined") {
+    delete (window as Window & { [E2E_ACCESS_TOKEN_KEY]?: string | null })[E2E_ACCESS_TOKEN_KEY];
+    window.sessionStorage.removeItem(E2E_ACCESS_TOKEN_KEY);
+  }
 };
 
 api.interceptors.request.use(
@@ -317,7 +375,7 @@ api.interceptors.response.use(
         const response = await authClient.post<AccessTokenResponse>(API_PATHS.auth.refresh, {});
 
         const { access } = response.data;
-        accessToken = access;
+        setAccessToken(access);
         processQueue(null, access);
 
         (originalRequest.headers as Record<string, string>).Authorization = `Bearer ${access}`;
@@ -343,7 +401,7 @@ api.interceptors.response.use(
 export const authApi = {
   login: async (email: string, password: string): Promise<AccessTokenResponse> => {
     const response = await api.post<AccessTokenResponse>(API_PATHS.auth.login, { email, password });
-    accessToken = response.data.access;
+    setAccessToken(response.data.access);
     return response.data;
   },
 
@@ -378,8 +436,8 @@ export const authApi = {
 
     try {
       const response = await authClient.post<AccessTokenResponse>(API_PATHS.auth.refresh, {});
-      accessToken = response.data.access;
-      processQueue(null, accessToken);
+      setAccessToken(response.data.access);
+      processQueue(null, response.data.access);
       return response.data;
     } catch (refreshError: unknown) {
       processQueue(refreshError, null);
@@ -399,7 +457,7 @@ export const authApi = {
 
   exchangeSsoCode: async (code: string, state: string): Promise<AccessTokenResponse> => {
     const response = await api.post<AccessTokenResponse>(API_PATHS.auth.ssoCallback, { code, state });
-    accessToken = response.data.access;
+    setAccessToken(response.data.access);
     return response.data;
   },
 };
@@ -1429,6 +1487,148 @@ export interface ApprovalTask {
   resolved_at?: string | null;
 }
 
+export interface AgentRegistryEntry {
+  id: string;
+  organization_id: string;
+  slug: string;
+  display_name: string;
+  status: "idle" | "active" | "attention" | "offline" | string;
+  source_workflow_id: string;
+  source_workflow_revision_id: string | null;
+  source_node_id: string;
+  default_model: string;
+  last_execution_id: string | null;
+  last_seen_at: string | null;
+  policy_snapshot_json: Record<string, unknown>;
+  capabilities_json: Record<string, unknown>;
+  task_count: number;
+  pending_decisions: number;
+  total_cost_usd: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskRecord {
+  id: string;
+  organization_id: string;
+  execution_id: string;
+  agent_id: string | null;
+  title: string;
+  status: "pending" | "running" | "waiting" | "succeeded" | "failed" | "canceled" | string;
+  priority: "low" | "normal" | "high" | "urgent" | string;
+  summary: string;
+  source_node_id: string;
+  current_step_id: string | null;
+  current_decision_id: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DecisionRecord {
+  id: string;
+  organization_id: string;
+  execution_id: string | null;
+  task_id: string | null;
+  agent_id: string | null;
+  decision_type: "human_approval" | "policy_guardrail" | "marketplace_review" | "operator_intervention" | string;
+  status: "pending" | "approved" | "rejected" | "resolved" | string;
+  source_approval_task_id: string | null;
+  context_json: Record<string, unknown>;
+  resolution_json: Record<string, unknown>;
+  requested_at: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostLedgerEntry {
+  id: string;
+  organization_id: string;
+  execution_id: string | null;
+  task_id: string | null;
+  agent_id: string | null;
+  workflow_revision_id: string | null;
+  provider: string;
+  model: string;
+  cost_type: string;
+  quantity: number;
+  unit_cost_usd: number;
+  total_cost_usd: number;
+  occurred_at: string;
+}
+
+export interface CostAggregate {
+  id: string;
+  grain: "hourly" | "daily" | string;
+  period_start: string;
+  period_end: string;
+  provider: string;
+  model: string;
+  cost_type: string;
+  total_cost_usd: number;
+  total_quantity: number;
+  entry_count: number;
+}
+
+export interface AccountingOverview {
+  organization_id: string;
+  total_cost_usd: number;
+  cost_by_type: Array<{
+    cost_type: string;
+    total_cost_usd: number;
+    entry_count: number;
+  }>;
+  top_agents: Array<{
+    id: string;
+    display_name: string;
+    status: string;
+    total_cost_usd: number;
+  }>;
+  recent_aggregates: CostAggregate[];
+}
+
+export interface OrganizationStateSummary {
+  organization: {
+    id: string;
+    name: string;
+  };
+  summary: {
+    active_agent_count: number;
+    active_task_count: number;
+    pending_decision_count: number;
+    execution_count_24h: number;
+    memory_observation_count: number;
+    total_cost_usd: number;
+  };
+  active_agents: AgentRegistryEntry[];
+  active_tasks: TaskRecord[];
+  pending_decisions: DecisionRecord[];
+  recent_executions: Array<{
+    id: string;
+    workflow_id: string;
+    workflow_name: string;
+    workflow_revision_id: string;
+    status: string;
+    started_at: string | null;
+    ended_at: string | null;
+    duration_ms: number | null;
+  }>;
+  memory: {
+    active_observation_count: number;
+    recent_topics: string[];
+  };
+  policy: {
+    configured: boolean;
+    allowed_providers: string[];
+    allowed_models: string[];
+    http_default_deny: boolean;
+  };
+  accounting: AccountingOverview;
+  generated_at: string;
+}
+
 export interface ResumeRunInput {
   node_id: string;
   input_json: {
@@ -1528,6 +1728,113 @@ export const approvalsApi = {
 
   get: async (approvalId: string): Promise<ApprovalTask> => {
     const response = await api.get<ApiSuccessResponse<ApprovalTask>>(API_PATHS.approvals.detail(approvalId));
+    return response.data.data;
+  },
+};
+
+export const workflowsApi = {
+  list: async (): Promise<GraphListItem[]> => {
+    const response = await api.get<ApiSuccessResponse<GraphListItem[]>>(API_PATHS.workflows.listCreate);
+    return response.data.data;
+  },
+  create: async (input: GraphCreateInput): Promise<GraphListItem> => {
+    const response = await api.post<ApiSuccessResponse<GraphListItem>>(API_PATHS.workflows.listCreate, input);
+    return response.data.data;
+  },
+  get: async (workflowId: string): Promise<GraphDetail> => {
+    const response = await api.get<ApiSuccessResponse<GraphDetail>>(API_PATHS.workflows.detail(workflowId));
+    return response.data.data;
+  },
+  update: async (workflowId: string, input: GraphUpdateInput): Promise<GraphListItem> => {
+    const response = await api.patch<ApiSuccessResponse<GraphListItem>>(API_PATHS.workflows.detail(workflowId), input);
+    return response.data.data;
+  },
+  delete: async (workflowId: string): Promise<void> => {
+    await api.delete(API_PATHS.workflows.detail(workflowId));
+  },
+  listRevisions: async (workflowId: string): Promise<GraphVersionSummary[]> => {
+    const response = await api.get<ApiSuccessResponse<GraphVersionSummary[]>>(API_PATHS.workflows.versions(workflowId));
+    return response.data.data;
+  },
+  getLatestRevision: async (workflowId: string): Promise<GraphVersion | null> => {
+    try {
+      const response = await api.get<ApiSuccessResponse<GraphVersion>>(API_PATHS.workflows.latestVersion(workflowId));
+      return response.data.data;
+    } catch (error) {
+      if ((error as AxiosError)?.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+};
+
+export const executionsApi = {
+  list: async (): Promise<RunListItem[]> => {
+    const response = await api.get<ApiSuccessResponse<RunListItem[]>>(API_PATHS.executions.list);
+    return response.data.data;
+  },
+  get: async (executionId: string): Promise<RunDetail> => {
+    const response = await api.get<ApiSuccessResponse<RunDetail>>(API_PATHS.executions.detail(executionId));
+    return response.data.data;
+  },
+};
+
+export const agentsApi = {
+  list: async (): Promise<AgentRegistryEntry[]> => {
+    const response = await api.get<ApiSuccessResponse<AgentRegistryEntry[]>>(API_PATHS.agents.list);
+    return response.data.data;
+  },
+  get: async (agentId: string): Promise<AgentRegistryEntry> => {
+    const response = await api.get<ApiSuccessResponse<AgentRegistryEntry>>(API_PATHS.agents.detail(agentId));
+    return response.data.data;
+  },
+};
+
+export const tasksApi = {
+  list: async (status?: string): Promise<TaskRecord[]> => {
+    const response = await api.get<ApiSuccessResponse<TaskRecord[]>>(API_PATHS.tasks.list, {
+      params: status ? { status } : {},
+    });
+    return response.data.data;
+  },
+  get: async (taskId: string): Promise<TaskRecord> => {
+    const response = await api.get<ApiSuccessResponse<TaskRecord>>(API_PATHS.tasks.detail(taskId));
+    return response.data.data;
+  },
+};
+
+export const decisionsApi = {
+  list: async (status?: string): Promise<DecisionRecord[]> => {
+    const response = await api.get<ApiSuccessResponse<DecisionRecord[]>>(API_PATHS.decisions.list, {
+      params: status ? { status } : {},
+    });
+    return response.data.data;
+  },
+  count: async (): Promise<{ count: number }> => {
+    const response = await api.get<ApiSuccessResponse<{ count: number }>>(API_PATHS.decisions.count);
+    return response.data.data;
+  },
+  get: async (decisionId: string): Promise<DecisionRecord> => {
+    const response = await api.get<ApiSuccessResponse<DecisionRecord>>(API_PATHS.decisions.detail(decisionId));
+    return response.data.data;
+  },
+};
+
+export const accountingApi = {
+  getOverview: async (): Promise<AccountingOverview> => {
+    const response = await api.get<ApiSuccessResponse<AccountingOverview>>(API_PATHS.accounting.overview);
+    return response.data.data;
+  },
+  listLedger: async (): Promise<CostLedgerEntry[]> => {
+    const response = await api.get<ApiSuccessResponse<CostLedgerEntry[]>>(API_PATHS.accounting.ledger);
+    return response.data.data;
+  },
+};
+
+export const systemStateApi = {
+  getOverview: async (): Promise<OrganizationStateSummary> => {
+    const response = await api.get<ApiSuccessResponse<OrganizationStateSummary>>(API_PATHS.systemState.overview);
     return response.data.data;
   },
 };

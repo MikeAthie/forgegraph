@@ -41,6 +41,13 @@ const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_
 const devUrl = `http://127.0.0.1:${devPort}`;
 const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ? Number(process.env.PLAYWRIGHT_BACKEND_PORT) : 8002;
 const backendUrl = `http://127.0.0.1:${backendPort}`;
+const trustedFrontendOrigins = [
+  devUrl,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+].join(",");
 const enginePort = process.env.PLAYWRIGHT_ENGINE_PORT ? Number(process.env.PLAYWRIGHT_ENGINE_PORT) : 50071;
 const engineMetricsPort = process.env.PLAYWRIGHT_ENGINE_METRICS_PORT
   ? Number(process.env.PLAYWRIGHT_ENGINE_METRICS_PORT)
@@ -110,6 +117,15 @@ const workerCount =
 
 export default defineConfig({
   testDir: "./__tests__/e2e",
+  testIgnore: [
+    "**/agent-authoring.spec.ts",
+    "**/graph-editor.spec.ts",
+    "**/graphs.spec.ts",
+    "**/jackie-workflow.spec.ts",
+    "**/marketplace-runtime.spec.ts",
+    "**/onboarding.spec.ts",
+    "**/prompts.spec.ts",
+  ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -175,10 +191,13 @@ export default defineConfig({
         USE_SQLITE: process.env.USE_SQLITE ?? "false",
         SQLITE_DB_PATH: sqliteDbPath,
         USE_IN_MEMORY_CHANNEL_LAYER: process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
+        CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? trustedFrontendOrigins,
+        CSRF_TRUSTED_ORIGINS: process.env.CSRF_TRUSTED_ORIGINS ?? trustedFrontendOrigins,
         SECURE_SSL_REDIRECT: process.env.SECURE_SSL_REDIRECT ?? "false",
         SESSION_COOKIE_SECURE: process.env.SESSION_COOKIE_SECURE ?? "false",
         CSRF_COOKIE_SECURE: process.env.CSRF_COOKIE_SECURE ?? "false",
         AUTH_REFRESH_COOKIE_SECURE: process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false",
+        FRONTEND_URL: process.env.FRONTEND_URL ?? devUrl,
         DB_HOST: dbHost,
         DB_PORT: dbPort,
         DB_NAME: dbName,

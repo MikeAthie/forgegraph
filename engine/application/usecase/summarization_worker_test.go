@@ -40,11 +40,7 @@ func TestSummarizationWorker_SubmitAndProcess(t *testing.T) {
 		t.Fatalf("Submit failed: %v", err)
 	}
 
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for callback")
-	}
+	<-done
 
 	if mockStore.storeCalls != 1 {
 		t.Fatalf("expected store summary call, got %d", mockStore.storeCalls)

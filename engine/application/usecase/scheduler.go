@@ -86,11 +86,13 @@ type Scheduler struct {
 	registry          port.ExecutorRegistry
 	repository        port.RunRepository
 	emitter           port.EventEmitter
+	clock             schedulerClock
 	conditions        *service.ConditionEvaluator
 	summarizer        *SummarizationWorker
 	memoryRetriever   port.MemoryRetriever
 	observationClient port.ObservationMemoryClient
 	memoryStore       port.MemoryStore
+	hooks             schedulerHooks
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -123,6 +125,7 @@ func NewScheduler(
 		registry:    registry,
 		repository:  repository,
 		emitter:     emitter,
+		clock:       systemClock{},
 		conditions:  service.NewConditionEvaluator(),
 		memoryStore: memoryStore,
 	}
@@ -148,6 +151,7 @@ type runContext struct {
 	runID                string
 	ctx                  context.Context
 	cancel               context.CancelFunc
+	clock                schedulerClock
 	runSpan              oteltrace.Span
 	startedAt            time.Time
 	plan                 *service.ExecutionPlan
@@ -193,6 +197,7 @@ type runContext struct {
 	currentNodeID string
 
 	checkpointSeq    int64
+	checkpointMu     sync.Mutex
 	lastCheckpointAt time.Time
 
 	stateSchema   *service.SchemaValidator
@@ -209,7 +214,11 @@ type runtimeLimits struct {
 }
 
 func (rc *runContext) newEvent(eventType port.EventType) *port.ExecutionEvent {
-	return port.NewEvent(eventType, rc.runID).
+	event := port.NewEvent(eventType, rc.runID)
+	if rc.clock != nil {
+		event.Timestamp = rc.clock.Now().UnixMilli()
+	}
+	return event.
 		WithTenantID(rc.tenantID).
 		WithTrace(rc.traceparent, rc.tracestate, rc.traceID, "")
 }
@@ -275,7 +284,7 @@ func (rc *runContext) validateRuntimeBudget() error {
 	if rc.startedAt.IsZero() {
 		return nil
 	}
-	if time.Since(rc.startedAt).Milliseconds() > rc.runtimeLimits.MaxRunDurationMs {
+	if rc.clock.Now().Sub(rc.startedAt).Milliseconds() > rc.runtimeLimits.MaxRunDurationMs {
 		return domain.NewValidationError("runtime_limits", "run exceeded max_run_duration_ms")
 	}
 	return nil
@@ -486,8 +495,9 @@ func (s *Scheduler) StartRun(
 		runID:            runID,
 		ctx:              runCtx,
 		cancel:           cancel,
+		clock:            s.clock,
 		runSpan:          runSpan,
-		startedAt:        time.Now(),
+		startedAt:        s.clock.Now(),
 		plan:             plan,
 		allowCycles:      allowCycles,
 		defaultMaxVisits: defaultMaxVisits,
@@ -734,7 +744,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		NodeType:  node.Type,
 		Status:    string(value.NodeRunStatusRunning),
 		Attempt:   1,
-		StartedAt: time.Now(),
+		StartedAt: s.clock.Now(),
 		InputJSON: rc.state.Snapshot(),
 		TraceID:   nodeTrace.TraceID,
 		SpanID:    nodeTrace.SpanID,
@@ -770,9 +780,9 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	}
 
 	// Execute with timeout and retries
-	startTime := time.Now()
+	startTime := s.clock.Now()
 	result, err := s.executeWithRetries(nodeCtx, rc, node, executor, nodeRun)
-	duration := time.Since(startTime).Milliseconds()
+	duration := s.clock.Now().Sub(startTime).Milliseconds()
 
 	// Mark as no longer running
 	rc.pendingMu.Lock()
@@ -885,6 +895,7 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 			})
 		}
 
+		s.hooks.beforeNodeExecute(rc.runID, node.ID)
 		result, err := executor.Execute(execCtx, node, rc.state)
 		cancel()
 
@@ -921,7 +932,7 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 			select {
 			case <-rc.ctx.Done():
 				return nil, rc.ctx.Err()
-			case <-time.After(time.Duration(backoff) * time.Millisecond):
+			case <-s.clock.After(time.Duration(backoff) * time.Millisecond):
 			}
 		}
 	}
@@ -941,7 +952,7 @@ func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node 
 	errorPayload := s.buildNodeErrorPayload(err, nodeRun.Attempt, retryPolicy, onError, nextNodes, routeErr)
 
 	nodeRun.Status = string(value.NodeRunStatusFailed)
-	nodeRun.SetEnded(time.Now())
+	nodeRun.SetEnded(s.clock.Now())
 	nodeRun.ErrorJSON = errorPayload
 	s.repository.UpdateNodeRun(ctx, nodeRun)
 
@@ -1123,7 +1134,7 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 		if directiveErr != nil {
 			// Treat invalid routing directive as node failure
 			nodeRun.Status = string(value.NodeRunStatusFailed)
-			nodeRun.SetEnded(time.Now())
+			nodeRun.SetEnded(s.clock.Now())
 			nodeRun.ErrorJSON = map[string]any{"error": directiveErr.Error()}
 			s.repository.UpdateNodeRun(ctx, nodeRun)
 
@@ -1156,7 +1167,7 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 
 	// Update node run as completed
 	nodeRun.Status = string(value.NodeRunStatusSucceeded)
-	nodeRun.SetEnded(time.Now())
+	nodeRun.SetEnded(s.clock.Now())
 
 	// Mark completed
 	rc.pendingMu.Lock()
@@ -1326,7 +1337,9 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
 		return
 	}
-	rc.lastCheckpointAt = time.Now()
+	rc.checkpointMu.Lock()
+	rc.lastCheckpointAt = s.clock.Now()
+	rc.checkpointMu.Unlock()
 }
 
 func (s *Scheduler) shouldSaveBatchCheckpoint(rc *runContext, stepIndex int) bool {
@@ -1335,10 +1348,13 @@ func (s *Scheduler) shouldSaveBatchCheckpoint(rc *runContext, stepIndex int) boo
 	}
 
 	if s.config.CheckpointIntervalMs > 0 {
-		if rc.lastCheckpointAt.IsZero() {
+		rc.checkpointMu.Lock()
+		lastCheckpointAt := rc.lastCheckpointAt
+		rc.checkpointMu.Unlock()
+		if lastCheckpointAt.IsZero() {
 			return true
 		}
-		if time.Since(rc.lastCheckpointAt) >= time.Duration(s.config.CheckpointIntervalMs)*time.Millisecond {
+		if s.clock.Now().Sub(lastCheckpointAt) >= time.Duration(s.config.CheckpointIntervalMs)*time.Millisecond {
 			return true
 		}
 	}
@@ -2018,11 +2034,11 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 			NodeID:    nodeID,
 			NodeType:  node.Type,
 			Status:    string(value.NodeRunStatusSkipped),
-			StartedAt: time.Now(),
+			StartedAt: s.clock.Now(),
 			TraceID:   nodeTrace.TraceID,
 			SpanID:    nodeTrace.SpanID,
 		}
-		nodeRun.SetEnded(time.Now())
+		nodeRun.SetEnded(s.clock.Now())
 		s.repository.CreateNodeRun(nodeCtx, nodeRun)
 
 		// Emit skipped event
@@ -2249,7 +2265,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		// Update node run to failed
 		if nodeRun != nil {
 			nodeRun.Status = string(value.NodeRunStatusFailed)
-			now := time.Now()
+			now := s.clock.Now()
 			nodeRun.EndedAt = &now
 			nodeRun.ErrorJSON = map[string]any{"message": errorMsg, "rejected": true}
 			s.repository.UpdateNodeRun(ctx, nodeRun)
@@ -2300,7 +2316,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		"approved":   true,
 		"fields":     decision["fields"],
 		"feedback":   feedback,
-		"decided_at": time.Now().Format(time.RFC3339),
+		"decided_at": s.clock.Now().Format(time.RFC3339),
 	}
 	if isAgentPause {
 		state.Set("node."+nodeID+".approval_decision", humanDecision)
@@ -2317,7 +2333,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		// Update human gate node run to succeeded
 		if nodeRun != nil {
 			nodeRun.Status = string(value.NodeRunStatusSucceeded)
-			now := time.Now()
+			now := s.clock.Now()
 			nodeRun.EndedAt = &now
 			nodeRun.OutputJSON = map[string]any{"output": humanDecision}
 			s.repository.UpdateNodeRun(ctx, nodeRun)
@@ -2343,8 +2359,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		runID:            runID,
 		ctx:              runCtx,
 		cancel:           cancel,
+		clock:            s.clock,
 		runSpan:          runSpan,
-		startedAt:        time.Now(),
+		startedAt:        s.clock.Now(),
 		plan:             plan,
 		allowCycles:      allowCycles,
 		defaultMaxVisits: defaultMaxVisits,
@@ -2586,7 +2603,7 @@ func (s *Scheduler) validateStateSchema(ctx context.Context, rc *runContext, nod
 	if strings.ToLower(rc.schemaMode) == "strict" {
 		errMsg := fmt.Sprintf("state schema validation failed: %v", issues[0]["message"])
 		nodeRun.Status = string(value.NodeRunStatusFailed)
-		nodeRun.SetEnded(time.Now())
+		nodeRun.SetEnded(s.clock.Now())
 		nodeRun.ErrorJSON = map[string]any{
 			"error":  errMsg,
 			"issues": issues,
@@ -2875,7 +2892,7 @@ func (s *Scheduler) buildNodeErrorPayload(
 		"type":            classifyNodeError(err),
 		"retryable":       domain.IsRetryable(err),
 		"attempt":         attempt,
-		"failed_at":       time.Now().UTC().Format(time.RFC3339Nano),
+		"failed_at":       s.clock.Now().UTC().Format(time.RFC3339Nano),
 		"on_error_action": onError.Strategy,
 	}
 

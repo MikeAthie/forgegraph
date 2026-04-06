@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import { Plus, RefreshCw } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
+import { InspectorPanel, Panel, SectionHeader, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getApiErrorMessage, graphsApi, type GraphListItem, type GraphVersionSummary } from "../lib/api";
 import { showSuccess, showError } from "../lib/toast";
@@ -37,14 +38,6 @@ type GraphFormState = {
   description: string;
 };
 
-const formatDateTime = (isoString: string) => {
-  const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) {
-    return isoString;
-  }
-  return date.toLocaleString();
-};
-
 export default function GraphsPage() {
   const router = useRouter();
   const [graphs, setGraphs] = useState<GraphListItem[]>([]);
@@ -73,7 +66,7 @@ export default function GraphsPage() {
       const data = await graphsApi.list();
       setGraphs(data);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load graphs."));
+      setError(getApiErrorMessage(err, "Failed to load workflows."));
     } finally {
       setLoading(false);
     }
@@ -113,10 +106,10 @@ export default function GraphsPage() {
         name: createForm.name.trim(),
         description: createForm.description.trim(),
       });
-      showSuccess("Graph created");
-      await router.push(`/graphs/${created.id}`);
+      showSuccess("Workflow created");
+      await router.push(`/workflows/${created.id}`);
     } catch (err: unknown) {
-      setCreateError(getApiErrorMessage(err, "Failed to create graph."));
+      setCreateError(getApiErrorMessage(err, "Failed to create workflow."));
     } finally {
       setIsCreating(false);
     }
@@ -151,9 +144,9 @@ export default function GraphsPage() {
       });
       setGraphs((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
       setEditingGraph(null);
-      showSuccess("Graph updated", `"${updated.name}" has been saved.`);
+      showSuccess("Workflow updated", `"${updated.name}" has been saved.`);
     } catch (err: unknown) {
-      setEditError(getApiErrorMessage(err, "Failed to update graph."));
+      setEditError(getApiErrorMessage(err, "Failed to update workflow."));
     } finally {
       setIsSavingEdit(false);
     }
@@ -169,7 +162,7 @@ export default function GraphsPage() {
       const data = await graphsApi.listVersions(graph.id);
       setVersions(data);
     } catch (err: unknown) {
-      setVersionsError(getApiErrorMessage(err, "Failed to load versions."));
+      setVersionsError(getApiErrorMessage(err, "Failed to load revisions."));
     } finally {
       setVersionsLoading(false);
     }
@@ -184,7 +177,7 @@ export default function GraphsPage() {
     try {
       await graphsApi.delete(graph.id);
       setGraphs((prev) => prev.filter((g) => g.id !== graph.id));
-      showSuccess("Graph deleted", `"${graph.name}" has been removed.`);
+      showSuccess("Workflow deleted", `"${graph.name}" has been removed.`);
     } catch (err: unknown) {
       showError("Delete failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.delete));
     }
@@ -192,32 +185,51 @@ export default function GraphsPage() {
 
   return (
     <ProtectedRoute>
-      <DashboardLayout>
+      <DashboardLayout
+        inspector={
+          <InspectorPanel
+            title="Builder workspace"
+            subtitle="Workflow definitions remain fully supported, but they are intentionally secondary to the operating surfaces."
+            sections={[
+              {
+                title: "What lives here",
+                content: "Definitions, revisions, and editor entry points.",
+              },
+              {
+                title: "What does not",
+                content:
+                  "Runtime supervision, cost posture, approval handling, and memory inspection stay outside the builder workspace.",
+              },
+            ]}
+          />
+        }
+      >
         <div className="flex flex-col gap-6">
-          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
-            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
-                  Graphs
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">Manage your workflow graphs and their versions.</p>
-              </div>
+          <SectionHeader
+            eyebrow="Workflow definitions"
+            title="Manage definitions and revisions"
+            description="The builder workspace remains available for authoring and versioning, but it no longer defines the top-level product mental model."
+            action={
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" onClick={() => void refreshGraphs()} disabled={loading}>
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => void refreshGraphs()}
+                  disabled={loading}
+                >
                   <RefreshCw aria-hidden="true" />
                   Refresh
                 </Button>
-                <Button variant="outline" asChild>
+                <Button variant="outline" className="rounded-full" asChild>
                   <Link href="/onboarding">Use template</Link>
                 </Button>
-                <Button onClick={openCreate}>
+                <Button className="rounded-full" onClick={openCreate}>
                   <Plus aria-hidden="true" />
-                  New graph
+                  New workflow
                 </Button>
               </div>
-            </div>
-          </div>
+            }
+          />
 
           {error && (
             <Alert variant="destructive">
@@ -229,85 +241,94 @@ export default function GraphsPage() {
             <div className="flex items-center justify-center py-16">
               <div className="flex items-center space-x-3 text-muted-foreground">
                 <Spinner size="md" />
-                <span className="text-sm">Loading graphs...</span>
+                <span className="text-sm">Loading workflows...</span>
               </div>
             </div>
           ) : sortedGraphs.length === 0 ? (
-            <EmptyState
-              className="py-16"
-              title="No graphs yet"
-              description="Create your first graph to start building workflows."
-              action={
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={openCreate}>Create a graph</Button>
-                  <Button variant="outline" asChild>
-                    <Link href="/onboarding">Use template</Link>
-                  </Button>
-                </div>
-              }
-            />
+            <Panel title="Definitions" description="No workflow definitions exist yet.">
+              <EmptyState
+                className="py-16"
+                title="No workflows yet"
+                description="Create your first workflow definition to start building supervised automations."
+                action={
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={openCreate}>Create a workflow</Button>
+                    <Button variant="outline" asChild>
+                      <Link href="/onboarding">Use template</Link>
+                    </Button>
+                  </div>
+                }
+              />
+            </Panel>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {sortedGraphs.map((graph) => (
-                <Card
-                  key={graph.id}
-                  className="group relative overflow-hidden border-border/50 bg-card/60 backdrop-blur-sm transition-all hover:border-primary/30 hover:shadow-lg"
-                >
-                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-primary/60 via-violet-500/50 to-fuchsia-500/50 opacity-0 transition-opacity group-hover:opacity-100" />
-
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <Link href={`/graphs/${graph.id}`} className="hover:text-primary transition-colors">
-                        <CardTitle className="text-lg">{graph.name}</CardTitle>
-                      </Link>
-                      {graph.latest_version != null && <Badge variant="secondary">v{graph.latest_version}</Badge>}
-                    </div>
-                    <CardDescription className="line-clamp-2">
-                      {graph.description || <span className="italic">No description</span>}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
-                      <span>{formatDateTime(graph.updated_at)}</span>
-                      <span>
-                        {graph.version_count} {graph.version_count === 1 ? "version" : "versions"}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" className="flex-1 min-w-[6rem]" asChild>
-                        <Link href={`/graphs/${graph.id}`}>Open</Link>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 min-w-[6rem]"
-                        onClick={() => openEdit(graph)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 min-w-[6rem]"
-                        onClick={() => void openVersions(graph)}
-                      >
-                        Versions
-                      </Button>
-                      <ConfirmButton
-                        variant="destructive"
-                        size="sm"
-                        title={`Delete "${graph.name}"`}
-                        description="This will permanently delete the graph and all its versions. This action cannot be undone."
-                        confirmText="Delete"
-                        onConfirm={() => handleDelete(graph)}
-                      >
-                        Delete
-                      </ConfirmButton>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Panel title="Definitions" description="Current workflow definitions and revision counts.">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {sortedGraphs.map((graph) => (
+                  <Card
+                    key={graph.id}
+                    className="group rounded-[1.5rem] border-slate-900/8 bg-white/75 shadow-none transition-colors hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4"
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <Link
+                          href={`/workflows/${graph.id}`}
+                          className="transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                        >
+                          <CardTitle className="text-lg">{graph.name}</CardTitle>
+                        </Link>
+                        {graph.latest_version != null ? (
+                          <StatusBadge status="pending" label={`v${graph.latest_version}`} />
+                        ) : (
+                          <StatusBadge status="pending" label="draft" />
+                        )}
+                      </div>
+                      <CardDescription className="line-clamp-2">
+                        {graph.description || <span className="italic">No description</span>}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground">
+                        <span>{formatDateTime(graph.updated_at)}</span>
+                        <span>
+                          {graph.version_count} {graph.version_count === 1 ? "revision" : "revisions"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" className="flex-1 min-w-[6rem] rounded-full" asChild>
+                          <Link href={`/workflows/${graph.id}`}>Open</Link>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 min-w-[6rem] rounded-full"
+                          onClick={() => openEdit(graph)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 min-w-[6rem] rounded-full"
+                          onClick={() => void openVersions(graph)}
+                        >
+                          Versions
+                        </Button>
+                        <ConfirmButton
+                          variant="destructive"
+                          size="sm"
+                          title={`Delete "${graph.name}"`}
+                          description="This will permanently delete the workflow definition and all its revisions. This action cannot be undone."
+                          confirmText="Delete"
+                          onConfirm={() => handleDelete(graph)}
+                        >
+                          Delete
+                        </ConfirmButton>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </Panel>
           )}
         </div>
 
@@ -315,8 +336,8 @@ export default function GraphsPage() {
         <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create new graph</DialogTitle>
-              <DialogDescription>Give your graph a name and optional description.</DialogDescription>
+              <DialogTitle>Create workflow definition</DialogTitle>
+              <DialogDescription>Give the workflow a name and optional description.</DialogDescription>
             </DialogHeader>
 
             {createError && (
@@ -332,7 +353,7 @@ export default function GraphsPage() {
                   value={createForm.name}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
                   disabled={isCreating}
-                  placeholder="My first graph"
+                  placeholder="Customer support operating loop"
                 />
               </FormField>
 
@@ -342,7 +363,7 @@ export default function GraphsPage() {
                   value={createForm.description}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                   disabled={isCreating}
-                  placeholder="What is this graph for?"
+                  placeholder="What is this workflow responsible for?"
                   rows={3}
                 />
               </FormField>
@@ -370,8 +391,8 @@ export default function GraphsPage() {
         <Dialog open={Boolean(editingGraph)} onOpenChange={(open) => !isSavingEdit && !open && setEditingGraph(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit graph</DialogTitle>
-              <DialogDescription>Update the graph name and description.</DialogDescription>
+              <DialogTitle>Edit workflow definition</DialogTitle>
+              <DialogDescription>Update the workflow name and description.</DialogDescription>
             </DialogHeader>
 
             {editError && (
@@ -426,8 +447,8 @@ export default function GraphsPage() {
         >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Versions {versionsGraph && `— ${versionsGraph.name}`}</DialogTitle>
-              <DialogDescription>View all saved versions of this graph.</DialogDescription>
+              <DialogTitle>Revisions {versionsGraph && `— ${versionsGraph.name}`}</DialogTitle>
+              <DialogDescription>View saved revisions for this workflow definition.</DialogDescription>
             </DialogHeader>
 
             {versionsError && (
@@ -482,7 +503,7 @@ export default function GraphsPage() {
             <DialogFooter>
               {versionsGraph && (
                 <Button variant="outline" asChild>
-                  <Link href={`/graphs/${versionsGraph.id}`}>Open graph</Link>
+                  <Link href={`/workflows/${versionsGraph.id}`}>Open workflow</Link>
                 </Button>
               )}
               <Button onClick={closeVersions} disabled={versionsLoading}>

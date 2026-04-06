@@ -8,6 +8,13 @@ from django.urls import include, path
 
 urlpatterns = [
     path("auth/", include("adapters.api.auth.urls")),
+    path("system-state/", include("adapters.api.system_state.urls")),
+    path("agents/", include("adapters.api.agents.urls")),
+    path("tasks/", include("adapters.api.tasks.urls")),
+    path("decisions/", include("adapters.api.decisions.urls")),
+    path("accounting/", include("adapters.api.accounting.urls")),
+    path("workflows/", include("adapters.api.workflows.urls")),
+    path("executions/", include("adapters.api.executions.urls")),
     path("engine/", include("adapters.api.engine.urls")),
     path("credentials/", include("adapters.api.credentials.urls")),
     path("integrations/", include("adapters.api.integrations.urls")),

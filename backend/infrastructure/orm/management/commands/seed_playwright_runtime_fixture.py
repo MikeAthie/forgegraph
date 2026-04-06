@@ -122,6 +122,7 @@ class Command(BaseCommand):
                         "version": "1.0.0",
                         "kind": "http",
                         "description": "Calls the backend health endpoint for E2E proof.",
+                        "input_schema": {"type": "object"},
                         "http": {
                             "url": runtime_url,
                             "method": "GET",

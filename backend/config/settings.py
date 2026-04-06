@@ -75,6 +75,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "adapters.api.deprecation_middleware.ApiDeprecationMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -346,6 +347,12 @@ ALLOWED_LLM_PROVIDERS = [
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 FF_CURATED_MEMORY_ENABLED = _get_bool_env("FF_CURATED_MEMORY_ENABLED", True)
 FF_CURATED_MEMORY_VECTOR_INDEXING = _get_bool_env("FF_CURATED_MEMORY_VECTOR_INDEXING", True)
+FF_OS_SHELL = _get_bool_env("FF_OS_SHELL", True)
+FF_AGENT_REGISTRY = _get_bool_env("FF_AGENT_REGISTRY", True)
+FF_TASK_PROJECTIONS = _get_bool_env("FF_TASK_PROJECTIONS", True)
+FF_DECISION_CENTER = _get_bool_env("FF_DECISION_CENTER", True)
+FF_ACCOUNTING_AGGREGATES = _get_bool_env("FF_ACCOUNTING_AGGREGATES", True)
+FF_PUBLIC_API_ALIASES = _get_bool_env("FF_PUBLIC_API_ALIASES", True)
 CURATED_MEMORY_EMBEDDING_MODEL = os.environ.get(
     "CURATED_MEMORY_EMBEDDING_MODEL",
     "text-embedding-ada-002",

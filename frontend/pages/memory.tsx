@@ -1,26 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BrainCircuit, DatabaseZap, Layers3, ShieldCheck } from "lucide-react";
 
-import DashboardLayout from "../components/DashboardLayout";
-import ProtectedRoute from "../components/ProtectedRoute";
-import { useAuth } from "../contexts/AuthContext";
-import { MemoryObservationDetailPanel } from "../components/memory/MemoryObservationDetailPanel";
-import { MemoryObservationList } from "../components/memory/MemoryObservationList";
+import DashboardLayout from "@/components/DashboardLayout";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAuth } from "@/contexts/AuthContext";
+import { MemoryObservationDetailPanel } from "@/components/memory/MemoryObservationDetailPanel";
+import { MemoryObservationList } from "@/components/memory/MemoryObservationList";
+import { InspectorPanel, MetricCard, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
 import {
   getApiErrorMessage,
   memoryApi,
-  type MemoryObservation,
   organizationsApi,
+  type MemoryObservation,
   type OrganizationRoleCapabilities,
-} from "../lib/api";
-import { Alert, AlertDescription, Badge, Card, CardContent } from "@/components/ui";
+} from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui";
+import { BookCopy, BrainCircuit, DatabaseZap, ShieldCheck } from "lucide-react";
 
 const RESULT_LIMIT = 24;
 
 const formatRelativeDate = (value: string | null) => {
   if (!value) {
-    return "No observations yet";
+    return "No recent signal";
   }
 
   const date = new Date(value);
@@ -182,34 +183,21 @@ export default function MemoryBrowserPage() {
     return [...types].sort((left, right) => left.localeCompare(right));
   }, [observations, selectedObservation]);
 
-  const visibleScopes = useMemo(() => {
-    return new Set(observations.map((observation) => observation.scope)).size;
-  }, [observations]);
-
+  const visibleScopes = useMemo(
+    () => new Set(observations.map((observation) => observation.scope)).size,
+    [observations],
+  );
   const freshestSeenAt = observations[0]?.last_seen_at ?? selectedObservation?.last_seen_at ?? null;
 
   const handleQuerySearch = useCallback((value: string) => {
     const normalized = value.trim();
-    setQuery((currentValue) => {
-      if (currentValue === normalized) {
-        return currentValue;
-      }
-      return normalized;
-    });
+    setQuery((currentValue) => (currentValue === normalized ? currentValue : normalized));
   }, []);
 
   const handleSelectObservation = useCallback((observation: MemoryObservation) => {
     setSelectedObservation(observation);
     setDetailError(null);
     setSelectedObservationId(observation.id);
-  }, []);
-
-  const handleScopeChange = useCallback((value: string) => {
-    setScopeFilter(value);
-  }, []);
-
-  const handleTypeChange = useCallback((value: string) => {
-    setTypeFilter(value);
   }, []);
 
   const modeLabel = isSearchMode ? "Search results" : "Timeline";
@@ -224,67 +212,89 @@ export default function MemoryBrowserPage() {
 
   return (
     <ProtectedRoute>
-      <DashboardLayout>
-        <div className="flex flex-col gap-6">
-          <section className="relative overflow-hidden rounded-[2rem] border border-border/50 bg-card/80 p-6 shadow-lg backdrop-blur-sm sm:p-8">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-90"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.2), transparent 38%), radial-gradient(circle at 85% 20%, rgba(245, 158, 11, 0.18), transparent 34%), linear-gradient(135deg, rgba(15, 23, 42, 0.06), rgba(255, 255, 255, 0))",
-              }}
-            />
-            <div className="relative flex flex-col gap-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-3xl">
-                  <Badge variant="outline" className="mb-4 border-sky-500/30 text-sky-700 dark:text-sky-300">
-                    Curated Memory Browser
-                  </Badge>
-                  <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                    Browse what the system decided was worth keeping.
-                  </h1>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground sm:text-base">
-                    Move from raw run traces to a clean ledger of observations. Search by content, skim recent activity,
-                    and inspect how each record evolved over time.
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Card className="border-border/50 bg-background/80">
-                    <CardContent className="space-y-2 p-4">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <DatabaseZap className="h-4 w-4" aria-hidden="true" />
-                        <span className="text-xs uppercase tracking-[0.24em]">Visible</span>
-                      </div>
-                      <p className="text-2xl font-semibold text-foreground">{observations.length}</p>
-                      <p className="text-xs text-muted-foreground">Records in the current {modeLabel.toLowerCase()}.</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border/50 bg-background/80">
-                    <CardContent className="space-y-2 p-4">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Layers3 className="h-4 w-4" aria-hidden="true" />
-                        <span className="text-xs uppercase tracking-[0.24em]">Scopes</span>
-                      </div>
-                      <p className="text-2xl font-semibold text-foreground">{visibleScopes}</p>
-                      <p className="text-xs text-muted-foreground">Graph, run, and session slices currently visible.</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border/50 bg-background/80">
-                    <CardContent className="space-y-2 p-4">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <BrainCircuit className="h-4 w-4" aria-hidden="true" />
-                        <span className="text-xs uppercase tracking-[0.24em]">Freshest signal</span>
-                      </div>
-                      <p className="text-base font-semibold text-foreground">{formatRelativeDate(freshestSeenAt)}</p>
-                      <p className="text-xs text-muted-foreground">Based on the latest observation in view.</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </div>
-          </section>
+      <DashboardLayout
+        inspector={
+          <InspectorPanel
+            title="Memory posture"
+            subtitle="Memory is presented as an inspectable knowledge layer, not as hidden retrieval infrastructure."
+            sections={[
+              {
+                title: "Current role",
+                content: currentRole,
+              },
+              {
+                title: "Capabilities",
+                content: (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span>View records</span>
+                      <StatusBadge status="active" label="Allowed" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Delete records</span>
+                      <StatusBadge
+                        status={canDeleteObservations ? "active" : "pending"}
+                        label={canDeleteObservations ? "Allowed" : "Restricted"}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Retention</span>
+                      <StatusBadge
+                        status={canManageRetention ? "active" : "pending"}
+                        label={canManageRetention ? "Manageable" : "Restricted"}
+                      />
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                title: "Export posture",
+                content: canExportMemoryData
+                  ? "Memory exports are available from governed surfaces."
+                  : "Exports are restricted to owner and admin roles.",
+              },
+            ]}
+          />
+        }
+      >
+        <div className="space-y-6">
+          <SectionHeader
+            eyebrow="Memory inspection"
+            title="Browse the knowledge layer"
+            description="Move from raw traces to a governed ledger of observations. Search by content, filter by scope, and inspect how memory records evolved over time."
+          />
 
-          <Alert className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-100">
+          <div className="grid gap-4 xl:grid-cols-4">
+            <MetricCard
+              eyebrow="Visible records"
+              value={String(observations.length)}
+              delta={`In the current ${modeLabel.toLowerCase()}`}
+              icon={<DatabaseZap className="h-4 w-4" />}
+            />
+            <MetricCard
+              eyebrow="Scopes"
+              value={String(visibleScopes)}
+              delta="Workflow, execution, and session slices"
+              icon={<BookCopy className="h-4 w-4" />}
+            />
+            <MetricCard
+              eyebrow="Freshest signal"
+              value={formatRelativeDate(freshestSeenAt)}
+              delta="Based on last-seen timestamps"
+              icon={<BrainCircuit className="h-4 w-4" />}
+            />
+            <MetricCard
+              eyebrow="Governance"
+              value={currentRole}
+              delta={
+                canManageRetention ? "Retention and export controls available" : "Review-only on governed controls"
+              }
+              tone={canManageRetention ? "emerald" : "amber"}
+              icon={<ShieldCheck className="h-4 w-4" />}
+            />
+          </div>
+
+          <Alert className="border-slate-900/10 bg-white/70 text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-100">
             <ShieldCheck className="h-4 w-4" />
             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
@@ -292,13 +302,14 @@ export default function MemoryBrowserPage() {
                 <p className="text-sm">
                   You can view curated observations.{" "}
                   {canDeleteObservations ? "You can delete observations." : "You cannot delete observations."}{" "}
-                  {canManageRetention ? "You can manage retention." : "Retention is limited to owner and admin."}{" "}
+                  {canManageRetention
+                    ? "You can manage retention."
+                    : "Retention changes are limited to owner and admin."}{" "}
                   {canExportMemoryData ? "You can export memory reporting." : "Exports are limited to owner and admin."}
                 </p>
               </div>
-              <Link href="/admin/organization" className="inline-flex items-center gap-1 text-sm font-medium">
-                Review role matrix
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              <Link href="/settings" className="inline-flex items-center gap-1 text-sm font-medium">
+                Open settings
               </Link>
             </AlertDescription>
           </Alert>
@@ -309,29 +320,33 @@ export default function MemoryBrowserPage() {
             </Alert>
           ) : null}
 
-          <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-            <MemoryObservationList
-              availableTypes={availableTypes}
-              loading={listLoading}
-              modeLabel={modeLabel}
-              observations={observations}
-              queryDraft={queryDraft}
-              selectedObservationId={selectedObservationId}
-              scopeFilter={scopeFilter}
-              typeFilter={typeFilter}
-              onQueryDraftChange={setQueryDraft}
-              onQuerySearch={handleQuerySearch}
-              onRefresh={() => void refreshObservations()}
-              onScopeChange={handleScopeChange}
-              onSelectObservation={handleSelectObservation}
-              onTypeChange={handleTypeChange}
-            />
+          <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+            <Panel title="Observation ledger" description="Search and filter the records the system decided to keep.">
+              <MemoryObservationList
+                availableTypes={availableTypes}
+                loading={listLoading}
+                modeLabel={modeLabel}
+                observations={observations}
+                queryDraft={queryDraft}
+                selectedObservationId={selectedObservationId}
+                scopeFilter={scopeFilter}
+                typeFilter={typeFilter}
+                onQueryDraftChange={setQueryDraft}
+                onQuerySearch={handleQuerySearch}
+                onRefresh={() => void refreshObservations()}
+                onScopeChange={setScopeFilter}
+                onSelectObservation={handleSelectObservation}
+                onTypeChange={setTypeFilter}
+              />
+            </Panel>
 
-            <MemoryObservationDetailPanel
-              error={detailError}
-              loading={detailLoading}
-              observation={selectedObservation}
-            />
+            <Panel title="Observation detail" description="Deep inspection for the selected memory record.">
+              <MemoryObservationDetailPanel
+                error={detailError}
+                loading={detailLoading}
+                observation={selectedObservation}
+              />
+            </Panel>
           </div>
         </div>
       </DashboardLayout>

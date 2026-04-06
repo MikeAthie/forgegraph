@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
+import { BrainCircuit } from "lucide-react";
 
 import { Button, ThemeToggle } from "@/components/ui";
 
@@ -9,63 +10,53 @@ interface AuthLayoutProps {
 
 export default function AuthLayout({ children }: AuthLayoutProps) {
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <svg
-                  className="w-5 h-5 text-primary-foreground"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <span className="text-xl font-bold">ForgeGraph</span>
-            </Link>
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <Button variant="ghost" asChild>
-                <Link href="/login">Sign in</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/register">Get Started</Link>
-              </Button>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-20 border-b border-slate-900/8 bg-[color-mix(in_srgb,var(--background)_80%,transparent)] backdrop-blur-2xl dark:border-white/8">
+        <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950">
+              <BrainCircuit className="h-5 w-5" />
             </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">ForgeGraph</p>
+              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">AI Organization OS</p>
+            </div>
+          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" asChild className="rounded-full">
+              <Link href="/login">Sign in</Link>
+            </Button>
+            <Button asChild className="rounded-full">
+              <Link href="/register">Get started</Link>
+            </Button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Background */}
-      <div className="fixed inset-0 -z-10">
-        {/* Gradient orbs */}
-        <div className="absolute top-1/4 left-1/4 w-125 h-125 bg-primary/20 rounded-full blur-[100px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-100 h-100 bg-violet-500/15 rounded-full blur-[80px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-indigo-500/10 rounded-full blur-[120px]" />
+      <main className="px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-[calc(100vh-9rem)] w-full max-w-[1280px] items-center justify-center">
+          <div className="grid w-full gap-10 xl:grid-cols-[0.9fr_0.7fr] xl:items-center">
+            <section className="hidden xl:block">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                Authentication
+              </p>
+              <h1
+                className="mt-4 max-w-3xl text-5xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
+                style={{ fontFamily: "var(--font-serif)" }}
+              >
+                Sign in to supervise agents, decisions, memory, and cost from one operating surface.
+              </h1>
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
+                ForgeGraph opens on organizational state, not on builder chrome. Authentication should feel aligned with
+                that product posture.
+              </p>
+            </section>
 
-        {/* Grid overlay */}
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(99 102 241 / 0.3)'%3e%3cpath d='M0 .5H31.5V32'/%3e%3c/svg%3e")`,
-          }}
-        />
-      </div>
-
-      {/* Main content */}
-      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 min-h-screen flex items-center justify-center">{children}</main>
-
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 py-4 px-4 text-center text-sm text-muted-foreground">
-        <p>
-          Built with <span className="text-primary">indigo</span> vibes
-        </p>
-      </footer>
+            <div className="flex justify-center xl:justify-end">{children}</div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

@@ -21,6 +21,12 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const PUBLIC_AUTH_BOOTSTRAP_PATHS = new Set(["/", "/login", "/register"]);
+
+function shouldAttemptSilentRefresh(pathname: string): boolean {
+  return !PUBLIC_AUTH_BOOTSTRAP_PATHS.has(pathname);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
 
     try {
-      if (!getAccessToken()) {
+      const token = getAccessToken();
+      if (!token && !shouldAttemptSilentRefresh(router.pathname)) {
+        setUser(null);
+        setError(null);
+        return;
+      }
+
+      if (!token) {
         await authApi.refreshToken();
       }
       const userData = await authApi.getMe();
@@ -47,11 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router.pathname]);
 
   useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
     void checkAuth();
-  }, [checkAuth]);
+  }, [checkAuth, router.isReady]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
@@ -60,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await authApi.login(email, password);
         const userData = await authApi.getMe();
         setUser(userData);
-        router.push("/graphs");
+        router.push("/overview");
         return { success: true };
       } catch (err: unknown) {
         const message =
