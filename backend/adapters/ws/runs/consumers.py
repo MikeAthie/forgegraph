@@ -2,7 +2,7 @@
 WebSocket consumer for live Run updates.
 
 Clients subscribe to a specific run:
-  ws://<backend>/ws/runs/<run_id>/?token=<access_jwt>
+  ws://<backend>/ws/runs/<run_id>/?ticket=<single_use_ticket>
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+from urllib.parse import parse_qs
 from uuid import UUID
 from uuid import uuid4
 
@@ -18,8 +19,6 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 
-<<<<<<< Updated upstream
-=======
 from application.services.metrics import (
     record_ws_connected,
     record_ws_connection_failure,
@@ -34,7 +33,6 @@ from application.services.run_event_streaming import (
 )
 from application.services.run_ws_protocol import build_ws_public_message, normalize_ws_public_message
 from application.services.structured_logging import log_event
->>>>>>> Stashed changes
 from infrastructure.orm.models import Run
 
 logger = logging.getLogger(__name__)
@@ -87,10 +85,13 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             await self.close(code=4403)
             return
 
+        query_params = parse_qs(self.scope.get("query_string", b"").decode("utf-8"))
+        requested_level = normalize_requested_event_level(
+            next(iter(query_params.get("event_level", [])), None)
+        )
+
         self.run_id = run_id
-<<<<<<< Updated upstream
         self.group_name = f"run_{run_id}"
-=======
         self.organization_id = organization_id
         self.permissions = permissions
         self.connection_id = str(uuid4())
@@ -99,18 +100,18 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             run_event_group_name(run_id=run_id, level=level)
             for level in event_levels_for_subscription(requested_level)
         ]
->>>>>>> Stashed changes
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        for group_name in self.group_names:
+            await self.channel_layer.group_add(group_name, self.channel_name)
         await self.accept()
-<<<<<<< Updated upstream
 
         await self.send_json(
             {
                 "type": "connected",
                 "run_id": self.run_id,
+                "level": requested_level,
             }
-=======
+        )
         self._ws_connected = True
         record_ws_connected()
         log_event(
@@ -122,7 +123,6 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             tenant_id=self.organization_id,
             connection_id=self.connection_id,
             event_level=requested_level,
->>>>>>> Stashed changes
         )
         await self._send_public_message(
             build_ws_public_message(
@@ -154,16 +154,11 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         record_ws_message_sent()
 
     async def disconnect(self, code: int) -> None:
-<<<<<<< Updated upstream
-        group_name = getattr(self, "group_name", None)
-        if group_name:
-=======
         heartbeat_task = getattr(self, "heartbeat_task", None)
         if heartbeat_task is not None:
             heartbeat_task.cancel()
         group_names = getattr(self, "group_names", None) or []
         for group_name in group_names:
->>>>>>> Stashed changes
             await self.channel_layer.group_discard(group_name, self.channel_name)
         if getattr(self, "_ws_connected", False):
             record_ws_disconnected()

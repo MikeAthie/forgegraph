@@ -1,9 +1,17 @@
 import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from rest_framework import status
 
 pytestmark = pytest.mark.django_db
+
+LOC_MEM_CACHE = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "auth-tests",
+    }
+}
 
 
 def test_register_creates_user(api_client):
@@ -93,6 +101,7 @@ def test_refresh_rotates_and_blacklists_old_refresh(api_client, user):
     }
 
 
+@override_settings(CACHES=LOC_MEM_CACHE)
 def test_logout_blacklists_refresh_token(api_client, user):
     login_response = api_client.post(
         "/api/auth/login",
@@ -116,8 +125,6 @@ def test_logout_blacklists_refresh_token(api_client, user):
     }
 
 
-<<<<<<< Updated upstream
-=======
 @override_settings(CACHES=LOC_MEM_CACHE)
 def test_logout_revokes_current_access_token_for_rest(api_client, user):
     login_response = api_client.post(
@@ -138,6 +145,7 @@ def test_logout_revokes_current_access_token_for_rest(api_client, user):
 @override_settings(CACHES=LOC_MEM_CACHE)
 def test_ws_ticket_requires_authentication_and_returns_short_lived_ticket(api_client, user):
     response = api_client.post("/api/ws-ticket", {}, format="json")
+    response = api_client.post("/api/auth/ws-ticket", {}, format="json")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     login_response = api_client.post(
@@ -149,15 +157,18 @@ def test_ws_ticket_requires_authentication_and_returns_short_lived_ticket(api_cl
 
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
     response = api_client.post("/api/ws-ticket", {}, format="json")
+    response = api_client.post("/api/auth/ws-ticket", {}, format="json")
 
     assert response.status_code == status.HTTP_201_CREATED
     assert response.data["ticket"]
     assert response.data["expires_in_seconds"] == settings.AUTH_WS_TICKET_TTL_SECONDS
+
     assert response.data["org_id"] == str(user.default_organization_id)
 
 
 @override_settings(CACHES=LOC_MEM_CACHE)
->>>>>>> Stashed changes
+@override_settings(CACHES=LOC_MEM_CACHE)
+
 def test_logout_is_idempotent_without_refresh_cookie(api_client, user):
     login_response = api_client.post(
         "/api/auth/login",

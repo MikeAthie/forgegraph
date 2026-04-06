@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import grpc
+from django.conf import settings
 
 from application.ports.services import IEngineClient
 from infrastructure.grpc import (
@@ -44,7 +45,16 @@ class GrpcEngineClient(IEngineClient):
     Communicates with the Go execution engine to manage workflow runs.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 50051, callback_url: str = ""):
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 50051,
+        callback_url: str = "",
+        *,
+        tls_enabled: bool | None = None,
+        tls_ca_file: str = "",
+        tls_server_name: str = "",
+    ):
         """
         Initialize the gRPC engine client.
 
@@ -56,6 +66,11 @@ class GrpcEngineClient(IEngineClient):
         self.host = host
         self.port = port
         self.callback_url = callback_url
+        self.tls_enabled = (
+            settings.ENGINE_GRPC_TLS_ENABLED if tls_enabled is None else bool(tls_enabled)
+        )
+        self.tls_ca_file = tls_ca_file or settings.ENGINE_GRPC_TLS_CA_FILE
+        self.tls_server_name = tls_server_name or settings.ENGINE_GRPC_TLS_SERVER_NAME
         self._channel: grpc.Channel | None = None
         self._stub: EngineServiceStub | None = None
 
@@ -64,7 +79,18 @@ class GrpcEngineClient(IEngineClient):
         if self._channel is None:
             target = f"{self.host}:{self.port}"
             logger.info(f"Connecting to engine at {target}")
-            self._channel = grpc.insecure_channel(target)
+            if self.tls_enabled:
+                root_certificates = None
+                if self.tls_ca_file:
+                    with open(self.tls_ca_file, "rb") as fh:
+                        root_certificates = fh.read()
+                credentials = grpc.ssl_channel_credentials(root_certificates=root_certificates)
+                options: list[tuple[str, str]] = []
+                if self.tls_server_name:
+                    options.append(("grpc.ssl_target_name_override", self.tls_server_name))
+                self._channel = grpc.secure_channel(target, credentials, options=options)
+            else:
+                self._channel = grpc.insecure_channel(target)
             self._stub = EngineServiceStub(self._channel)  # type: ignore
         assert self._stub is not None
         return self._stub

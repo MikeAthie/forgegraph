@@ -231,7 +231,7 @@ if _get_bool_env("USE_SECURE_PROXY_SSL_HEADER", not IS_DEV_LIKE):
 # REST Framework Configuration
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "adapters.api.authentication.RevocableJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -288,6 +288,10 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
 }
+AUTH_WS_TICKET_TTL_SECONDS = int(os.environ.get("AUTH_WS_TICKET_TTL_SECONDS", "45"))
+ENGINE_GRPC_TLS_ENABLED = _get_bool_env("ENGINE_GRPC_TLS_ENABLED", False)
+ENGINE_GRPC_TLS_CA_FILE = os.environ.get("ENGINE_GRPC_TLS_CA_FILE", "")
+ENGINE_GRPC_TLS_SERVER_NAME = os.environ.get("ENGINE_GRPC_TLS_SERVER_NAME", "")
 
 # Refresh token cookie (recommended for SPAs)
 AUTH_REFRESH_COOKIE = os.environ.get("AUTH_REFRESH_COOKIE", "refresh_token")
@@ -357,6 +361,39 @@ CURATED_MEMORY_EMBEDDING_MODEL = os.environ.get(
     "CURATED_MEMORY_EMBEDDING_MODEL",
     "text-embedding-ada-002",
 )
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG" if IS_DEV_LIKE else "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "forgegraph_json": {
+            "()": "application.services.structured_logging.JsonLogFormatter",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "forgegraph_json",
+        }
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "forgegraph": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
 
 # Telegram Integration
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")

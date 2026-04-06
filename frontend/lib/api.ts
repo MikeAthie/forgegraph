@@ -1274,6 +1274,7 @@ export interface RunListItem {
   started_at: string | null;
   ended_at: string | null;
   duration_ms: number | null;
+  trace_id?: string;
   memory_activity?: RunMemoryActivitySummary | null;
 }
 
@@ -1469,8 +1470,25 @@ export interface RunDetail {
   output_json: Record<string, unknown> | null;
   error_message: string;
   duration_ms: number | null;
+  trace_id?: string;
   node_runs: NodeRunItem[];
   agent_events?: AgentEventItem[] | null;
+  timeline?: Array<{
+    id: string;
+    timestamp: string;
+    kind: "event" | "decision" | "cost" | "error" | string;
+    event_type: string;
+    trace_id?: string | null;
+    run_id: string;
+    node_id?: string | null;
+    status?: string | null;
+    duration_ms?: number | null;
+    cost_usd?: number | null;
+    decision_id?: string | null;
+    message?: string | null;
+    error_message?: string | null;
+    details?: Record<string, unknown> | null;
+  }> | null;
   memory_activity?: RunMemoryActivitySummary | null;
   // Human Gate pause fields
   paused_node_id?: string | null;

@@ -1,5 +1,6 @@
 """
 Redis-backed auth state helpers for token revocation and one-time WebSocket tickets.
++Redis-backed auth state helpers for token revocation and one-time WebSocket tickets.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ from rest_framework_simplejwt.tokens import AccessToken, Token
 
 from application.services.tenancy import get_default_membership
 from infrastructure.orm.models import User
+
+from redis import Redis
+from rest_framework_simplejwt.tokens import AccessToken, Token
 
 _REVOKED_ACCESS_PREFIX = "auth:revoked:access:"
 _WS_TICKET_PREFIX = "auth:ws-ticket:"
@@ -89,6 +93,14 @@ def issue_ws_ticket(
         "issued_at": int(time.time()),
     }
     payload["user_id"] = resolved_user_id
+def issue_ws_ticket(*, user_id: str, access_token: Token) -> tuple[str, int]:
+    ttl_seconds = int(getattr(settings, "AUTH_WS_TICKET_TTL_SECONDS", 45))
+    ticket = secrets.token_urlsafe(32)
+    payload = {
+        "user_id": user_id,
+        "access_jti": _access_jti(access_token),
+        "issued_at": int(time.time()),
+    }
     serialized = json.dumps(payload)
     key = f"{_WS_TICKET_PREFIX}{ticket}"
 

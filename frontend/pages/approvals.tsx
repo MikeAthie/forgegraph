@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/router";
+import { AlertTriangle, ArrowRight, HandCoins, ShieldCheck } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
   EmptyBlock,
   InspectorPanel,
+  MetricCard,
   Panel,
   SectionHeader,
   SelectionList,
@@ -19,16 +22,28 @@ import { showSuccess } from "@/lib/toast";
 
 const estimateImpact = (approval: ApprovalTask | null) => {
   if (!approval) {
-    return { cost: 0, systems: "Unavailable", risk: "low" };
+    return { cost: 0, systems: "Unavailable", risk: "low", consequence: "Unknown", blastRadius: "Unknown" };
   }
 
   const promptLength = approval.prompt_message?.length ?? 0;
-  const base = 0.14 + promptLength * 0.00045;
-  const risk = promptLength > 240 ? "high" : promptLength > 120 ? "medium" : "low";
+  const requiredFields = approval.payload?.required_fields?.length ?? 0;
+  const base = 0.18 + promptLength * 0.00045 + requiredFields * 0.06;
+  const risk = promptLength > 240 || requiredFields > 2 ? "high" : promptLength > 120 ? "medium" : "low";
+
   return {
     cost: Math.round(base * 100) / 100,
     systems: approval.graph_name,
     risk,
+    consequence:
+      risk === "high"
+        ? "This decision can materially change customer-facing or financial behavior."
+        : risk === "medium"
+          ? "This decision affects a meaningful workflow branch and should include operator guidance."
+          : "This is a contained decision with limited downstream impact.",
+    blastRadius:
+      requiredFields > 0
+        ? `${requiredFields} required field${requiredFields === 1 ? "" : "s"} will be carried into the resumed execution.`
+        : "The execution will resume immediately after the decision is recorded.",
   };
 };
 
@@ -71,6 +86,10 @@ export default function ApprovalsPage() {
   }, [selectedApproval?.id]);
 
   const impact = estimateImpact(selectedApproval);
+  const pendingCount = tasks.filter((task) => task.status === "pending").length;
+  const highRiskCount = tasks.filter(
+    (task) => estimateImpact(task).risk === "high" && task.status === "pending",
+  ).length;
 
   const handleDecision = async (approved: boolean) => {
     if (!selectedApproval) {
@@ -96,10 +115,10 @@ export default function ApprovalsPage() {
           : "Execution stayed paused after the rejection was recorded.",
       );
 
-      const nextItems = tasks.filter((task) => task.id !== selectedApproval.id);
+      const remaining = tasks.filter((task) => task.id !== selectedApproval.id);
       await loadApprovals();
-      if (nextItems[0]?.id) {
-        void router.replace({ pathname: "/inbox", query: { item: nextItems[0].id } }, undefined, { shallow: true });
+      if (remaining[0]?.id) {
+        void router.replace({ pathname: "/inbox", query: { item: remaining[0].id } }, undefined, { shallow: true });
       }
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Failed to submit the decision."));
@@ -110,8 +129,8 @@ export default function ApprovalsPage() {
 
   const inspector = selectedApproval ? (
     <InspectorPanel
-      title="Impact preview"
-      subtitle="Approvals should expose the operational consequence before the user makes a decision."
+      title="Decision impact"
+      subtitle="The operator should be able to decide from this panel without opening logs. It keeps risk, cost, and consequence visible at all times."
       sections={[
         {
           title: "Risk level",
@@ -123,16 +142,18 @@ export default function ApprovalsPage() {
           ),
         },
         {
-          title: "Estimated cost",
+          title: "Estimated cost implication",
           content: formatCurrency(impact.cost),
         },
         {
-          title: "Affected systems",
+          title: "Affected system",
           content: impact.systems,
         },
         {
-          title: "Execution linkage",
-          content: selectedApproval.run_id,
+          title: "Required inputs",
+          content: selectedApproval.payload?.required_fields?.length
+            ? selectedApproval.payload.required_fields.join(", ")
+            : "No additional structured fields required.",
         },
       ]}
     />
@@ -144,8 +165,8 @@ export default function ApprovalsPage() {
         <div className="space-y-6">
           <SectionHeader
             eyebrow="Human-in-the-loop inbox"
-            title="Review consequential agent decisions"
-            description="Operators should be able to see the proposed action, understand the reasoning summary, and decide with impact in view."
+            title="Decide with context, not with logs"
+            description="This is the primary review surface for consequential agent actions. The operator should understand the request, the cost, and the consequence before choosing approve or reject."
             action={
               <div className="flex flex-wrap items-center gap-2">
                 {(["pending", "approved", "rejected", "all"] as const).map((status) => (
@@ -162,6 +183,41 @@ export default function ApprovalsPage() {
             }
           />
 
+          <Panel
+            title="Inbox posture"
+            description="How much human review is waiting right now, and how critical it is."
+          >
+            <div className="grid gap-4 lg:grid-cols-4">
+              <MetricCard
+                eyebrow="Pending now"
+                value={String(pendingCount)}
+                delta="Items waiting on an operator decision"
+                icon={<ShieldCheck className="h-4 w-4" />}
+                tone={pendingCount > 0 ? "amber" : "emerald"}
+              />
+              <MetricCard
+                eyebrow="High-risk items"
+                value={String(highRiskCount)}
+                delta="Requests with higher blast radius or stronger consequence"
+                icon={<AlertTriangle className="h-4 w-4" />}
+                tone={highRiskCount > 0 ? "rose" : "slate"}
+              />
+              <MetricCard
+                eyebrow="Current request"
+                value={selectedApproval?.graph_name ?? "No item"}
+                delta={selectedApproval?.node_name ?? "Select a decision to review"}
+                icon={<ArrowRight className="h-4 w-4" />}
+              />
+              <MetricCard
+                eyebrow="Cost implication"
+                value={formatCurrency(impact.cost)}
+                delta="Estimated additional spend if the selected run resumes"
+                icon={<HandCoins className="h-4 w-4" />}
+                tone="rose"
+              />
+            </div>
+          </Panel>
+
           {error ? (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -175,8 +231,8 @@ export default function ApprovalsPage() {
           ) : !selectedApproval ? (
             <EmptyBlock title="Inbox is clear" description="No approval items match the current filter." />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[0.74fr_1.26fr]">
-              <Panel title="Pending items" description="List of reviewable actions with risk and timestamp.">
+            <div className="grid gap-6 xl:grid-cols-[0.72fr_1.28fr]">
+              <Panel title="Review queue" description="Every row should be understandable before it is opened.">
                 <SelectionList
                   items={tasks}
                   selectedId={selectedApproval.id}
@@ -189,19 +245,23 @@ export default function ApprovalsPage() {
                       <StatusBadge status={task.status} />
                     </div>
                   )}
-                  renderBody={(task) =>
-                    `${task.node_name}: ${task.prompt_message || "Approval required before execution resumes."}`
-                  }
-                  renderMeta={(task) => (
-                    <div className="text-right">
-                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                        {estimateImpact(task).risk}
+                  renderBody={(task) => {
+                    const taskImpact = estimateImpact(task);
+                    return `${task.node_name} · ${taskImpact.risk} risk · ${task.prompt_message || "Approval required before execution resumes."}`;
+                  }}
+                  renderMeta={(task) => {
+                    const taskImpact = estimateImpact(task);
+                    return (
+                      <div className="text-right">
+                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                          {taskImpact.risk}
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                          {formatDateTime(task.created_at)}
+                        </div>
                       </div>
-                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        {formatDateTime(task.created_at)}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  }}
                   empty={
                     <EmptyBlock
                       title="No items in this filter"
@@ -212,14 +272,25 @@ export default function ApprovalsPage() {
               </Panel>
 
               <div className="space-y-6">
-                <Panel title="Decision review" description="Context first, raw trace later.">
+                <Panel
+                  title="Decision brief"
+                  description="The operator context needed to decide without opening a trace view."
+                  action={
+                    <Button asChild variant="outline" className="rounded-full">
+                      <Link href={`/executions/${selectedApproval.run_id}`}>
+                        Open execution
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  }
+                >
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Input
+                        Decision context
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        {selectedApproval.prompt_message || "Input context was not captured on this approval task."}
+                        {selectedApproval.prompt_message || "Context was not captured on this approval task."}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -227,40 +298,89 @@ export default function ApprovalsPage() {
                         Proposed action
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        Resume the execution at <span className="font-medium">{selectedApproval.node_name}</span> once a
-                        decision is recorded.
+                        Resume <span className="font-medium">{selectedApproval.graph_name}</span> at{" "}
+                        <span className="font-medium">{selectedApproval.node_name}</span> after a human decision is
+                        recorded.
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Reasoning summary
+                        Why this needs you
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
                         {selectedApproval.payload?.prompt_message ??
-                          "The execution reached a human gate and paused because it needs an operator decision before it can continue."}
+                          "The run reached a human gate. An operator decision is required before the next step is allowed to execute."}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Expected outcome
+                        Required input
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        Approval resumes execution. Rejection records the decision and leaves the execution paused for
-                        follow-up.
+                        {selectedApproval.payload?.required_fields?.length
+                          ? selectedApproval.payload.required_fields.join(", ")
+                          : "No extra structured fields are required. Operator notes are optional."}
+                      </p>
+                    </div>
+                  </div>
+                </Panel>
+
+                <Panel title="Impact and consequence" description="What changes if you approve or reject this request.">
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Risk</p>
+                      <div className="mt-2">
+                        <StatusBadge
+                          status={impact.risk === "high" ? "failed" : impact.risk === "medium" ? "paused" : "active"}
+                          label={impact.risk}
+                        />
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{impact.consequence}</p>
+                    </div>
+                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Cost implication
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        {formatCurrency(impact.cost)}
+                      </p>
+                      <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
+                        Estimated incremental spend if the run resumes from this point.
+                      </p>
+                    </div>
+                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Blast radius
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">{impact.blastRadius}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-[1.2rem] border border-emerald-800/12 bg-emerald-50 px-4 py-4 text-emerald-950 dark:border-emerald-200/15 dark:bg-emerald-500/10 dark:text-emerald-100">
+                      <p className="text-[11px] uppercase tracking-[0.18em]">If approved</p>
+                      <p className="mt-2 text-sm leading-7">
+                        The execution resumes immediately at the paused node and carries any operator notes forward.
+                      </p>
+                    </div>
+                    <div className="rounded-[1.2rem] border border-rose-800/12 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
+                      <p className="text-[11px] uppercase tracking-[0.18em]">If rejected</p>
+                      <p className="mt-2 text-sm leading-7">
+                        The rejection is recorded and the run remains paused so a human can choose the next intervention
+                        path.
                       </p>
                     </div>
                   </div>
                 </Panel>
 
                 <Panel
-                  title="Edit before approving"
-                  description="Adjust operator feedback or constraints before resuming the execution."
+                  title="Operator response"
+                  description="Action should stay visible and immediate, not hidden behind logs."
                 >
                   <Textarea
                     rows={6}
                     value={editNotes}
                     onChange={(event) => setEditNotes(event.target.value)}
-                    placeholder="Add guidance, corrections, or operator feedback that should travel with the approval."
+                    placeholder="Add guidance, constraints, or corrections that should travel with this decision."
                     className="rounded-[1.25rem] border-slate-900/12 bg-white/75 dark:border-white/10 dark:bg-white/5"
                   />
                   <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -282,6 +402,9 @@ export default function ApprovalsPage() {
                     {selectedApproval.status !== "pending" ? (
                       <StatusBadge status={selectedApproval.status} label="Read only" />
                     ) : null}
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Requested {formatDateTime(selectedApproval.created_at)}
+                    </p>
                   </div>
                 </Panel>
               </div>

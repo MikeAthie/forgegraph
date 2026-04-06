@@ -292,7 +292,7 @@ describe("Runs pages", () => {
 
       render(<RunDetailPage />);
 
-      expect(screen.getByText("Structured execution trace")).toBeInTheDocument();
+      expect(screen.getByText("Execution trace")).toBeInTheDocument();
       expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
     });
 
@@ -324,8 +324,8 @@ describe("Runs pages", () => {
       await renderRunDetailPage();
 
       expect(api.runsApi.get).toHaveBeenCalledWith(runId);
-      expect(screen.getByText("Structured execution trace")).toBeInTheDocument();
-      expect(screen.getByText("Execution flow")).toBeInTheDocument();
+      expect(screen.getByText("Execution trace")).toBeInTheDocument();
+      expect(screen.getByText("Trace sequence")).toBeInTheDocument();
       expect(screen.getByText("Human gate")).toBeInTheDocument();
       expect(screen.getAllByText("Revenue triage").length).toBeGreaterThan(0);
       expect(screen.getAllByText("draft_reply").length).toBeGreaterThan(0);
@@ -367,11 +367,10 @@ describe("Runs pages", () => {
       await renderRunDetailPage();
 
       expect(MockWebSocket.instances).toHaveLength(1);
-<<<<<<< Updated upstream
       expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?token=test-token`);
-=======
       expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?ticket=ws-ticket-123&event_level=default`);
->>>>>>> Stashed changes
+      expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?token=test-token&event_level=important`);
+
 
       await act(async () => {
         MockWebSocket.instances[0]?.emit("open");

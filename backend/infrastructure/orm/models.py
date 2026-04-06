@@ -966,6 +966,98 @@ class RunEvent(models.Model):
         return f"RunEvent {self.run_id} - {self.event_type}"
 
 
+class RunEventProjection(models.Model):
+    """Event-derived shadow state for validating run reconstruction completeness."""
+
+    run = models.OneToOneField(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="event_projection",
+        primary_key=True,
+    )
+    status = models.CharField(max_length=16, choices=Run.STATUS_CHOICES, default="pending")
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    output_json = models.JSONField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    pause_state_json = models.JSONField(null=True, blank=True)
+    paused_node_id = models.CharField(max_length=64, null=True, blank=True)
+    trace_id = models.CharField(max_length=32, blank=True, default="")
+    last_event_id = models.CharField(max_length=64, blank=True, default="")
+    last_event_type = models.CharField(max_length=64, blank=True, default="")
+    last_event_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "run_event_projections"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["status", "updated_at"], name="run_evt_proj_status_idx"),
+            models.Index(fields=["trace_id"], name="run_evt_proj_trace_idx"),
+            models.Index(fields=["last_event_at"], name="run_evt_proj_event_at_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"RunEventProjection {self.run_id} - {self.status}"
+
+
+class NodeRunEventProjection(models.Model):
+    """Event-derived shadow state for validating node reconstruction completeness."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("waiting", "Waiting"),
+        ("succeeded", "Succeeded"),
+        ("failed", "Failed"),
+        ("skipped", "Skipped"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="node_event_projections",
+    )
+    node_id = models.CharField(max_length=255)
+    node_type = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    attempt = models.PositiveIntegerField(default=1)
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    output_json = models.JSONField(null=True, blank=True)
+    error_json = models.JSONField(null=True, blank=True)
+    trace_id = models.CharField(max_length=32, blank=True, default="")
+    span_id = models.CharField(max_length=16, blank=True, default="")
+    last_event_id = models.CharField(max_length=64, blank=True, default="")
+    last_event_type = models.CharField(max_length=64, blank=True, default="")
+    last_event_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "node_run_event_projections"
+        ordering = ["started_at", "attempt"]
+        indexes = [
+            models.Index(
+                fields=["run", "started_at", "attempt"],
+                name="node_evt_proj_run_time_idx",
+            ),
+            models.Index(fields=["trace_id"], name="node_evt_proj_trace_idx"),
+            models.Index(fields=["last_event_at"], name="node_evt_proj_event_at_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "node_id", "attempt"],
+                name="node_evt_proj_run_node_attempt_uniq",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"NodeRunEventProjection {self.run_id} {self.node_id}#{self.attempt} - {self.status}"
+
+
 class MemoryEntry(models.Model):
     """MemoryEntry stores key/value memory entries for memory nodes."""
 

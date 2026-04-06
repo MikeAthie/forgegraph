@@ -26,8 +26,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import AccessToken
 
 from adapters.api.problem_details import problem_response
 from adapters.api.responses import error_response, success_response
@@ -56,16 +54,28 @@ from adapters.ws.runs.broadcast import (
     broadcast_decision_resolved,
     broadcast_node_run_updated,
     broadcast_node_stream_chunk,
+    broadcast_node_stream_summary,
     broadcast_run_schema_validation,
     broadcast_run_updated,
 )
 from application.services.audit_log import record_audit_log
+from application.services.auth_state import validate_access_token
 from application.services.cloudevents import unwrap_engine_event
 from application.services.llm_pricing import calculate_cost
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
 from application.services.redaction import redact_payload
+from application.services.run_event_streaming import (
+    add_event_level,
+    event_levels_for_subscription,
+    flush_all_stream_summaries,
+    flush_stream_summary,
+    message_allowed_for_level,
+    normalize_requested_event_level,
+    run_event_group_name,
+    update_stream_summary,
+)
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     SubgraphResolutionError,
@@ -80,6 +90,7 @@ from application.services.schema_validation import (
     extract_schema_metadata,
     validate_json_schema,
 )
+from application.services.structured_logging import log_event
 from application.services.telemetry import start_backend_span
 from application.services.tenancy import get_tenant_id_for_user as resolve_tenant_id_for_user
 from application.services.trace_context import ensure_trace_context
@@ -90,15 +101,18 @@ from infrastructure.orm.models import (
     LLMQuota,
     LLMUsage,
     NodeRun,
+    NodeRunEventProjection,
     Run,
     RunCheckpoint,
     RunEvent,
+    RunEventProjection,
     TenantSubscription,
     User,
 )
 from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
+_UNSET = object()
 
 
 def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
@@ -107,6 +121,9 @@ def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
         host=settings.ENGINE_HOST,
         port=settings.ENGINE_PORT,
         callback_url=callback_url,
+        tls_enabled=settings.ENGINE_GRPC_TLS_ENABLED,
+        tls_ca_file=settings.ENGINE_GRPC_TLS_CA_FILE,
+        tls_server_name=settings.ENGINE_GRPC_TLS_SERVER_NAME,
     )
 
 
@@ -502,6 +519,206 @@ def _serialize_node_run_for_detail(
     return payload
 
 
+def _timeline_status_from_payload(event_type: str, payload: dict[str, Any]) -> str | None:
+    if isinstance(payload.get("status"), str):
+        return str(payload["status"])
+    run_payload = payload.get("run")
+    if isinstance(run_payload, dict) and isinstance(run_payload.get("status"), str):
+        return str(run_payload["status"])
+    node_payload = payload.get("node_run")
+    if isinstance(node_payload, dict) and isinstance(node_payload.get("status"), str):
+        return str(node_payload["status"])
+
+    if event_type.endswith("_failed"):
+        return "failed"
+    if event_type.endswith("_completed"):
+        return "succeeded"
+    if event_type.endswith("_started"):
+        return "running"
+    if event_type == "run_paused":
+        return "paused"
+    if event_type == "run_resumed":
+        return "running"
+    if event_type == "node_retrying":
+        return "retrying"
+    return None
+
+
+def _timeline_node_id_from_payload(payload: dict[str, Any]) -> str | None:
+    for key in ("node_id",):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    for key in ("node_run", "payload", "output"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            value = nested.get("node_id")
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _timeline_message_for_event(event_type: str, payload: dict[str, Any]) -> str:
+    node_id = _timeline_node_id_from_payload(payload)
+    if event_type == "run_started":
+        return "Run started."
+    if event_type == "run_completed":
+        return "Run completed successfully."
+    if event_type == "run_failed":
+        return str(payload.get("error") or payload.get("error_message") or "Run failed.")
+    if event_type == "run_paused":
+        return "Run paused for a decision boundary."
+    if event_type == "run_resumed":
+        return "Run resumed after a decision."
+    if event_type == "run_canceled":
+        return "Run canceled."
+    if event_type == "node_started" and node_id:
+        return f"{node_id} started."
+    if event_type == "node_completed" and node_id:
+        return f"{node_id} completed."
+    if event_type == "node_failed" and node_id:
+        return f"{node_id} failed."
+    if event_type == "node_retrying" and node_id:
+        return f"{node_id} is retrying."
+    if event_type == "node_skipped" and node_id:
+        return f"{node_id} was skipped."
+    if event_type == "run.schema_validation":
+        return "Run output schema validation reported issues."
+    return event_type.replace(".", " ").replace("_", " ")
+
+
+def _build_run_timeline(*, run: Run) -> list[dict[str, Any]]:
+    timeline: list[dict[str, Any]] = []
+    ignored_event_types = {"run.updated", "node_run.updated", "node_stream.chunk"}
+
+    event_rows = (
+        RunEvent.objects.filter(run=run)
+        .order_by("created_at", "id")
+        .only("id", "event_type", "payload", "created_at", "trace_id")
+    )
+    for event_row in event_rows:
+        if event_row.event_type in ignored_event_types or event_row.event_type.startswith("agent."):
+            continue
+
+        payload = redact_payload(event_row.payload or {})
+        status_value = _timeline_status_from_payload(event_row.event_type, payload)
+        node_id = _timeline_node_id_from_payload(payload)
+        error_message = (
+            payload.get("error") or payload.get("error_message") or payload.get("message")
+            if event_row.event_type in {"run_failed", "node_failed", "run.schema_validation"}
+            else None
+        )
+        duration_ms = payload.get("duration_ms")
+        timeline.append(
+            {
+                "id": f"event:{event_row.id}",
+                "timestamp": event_row.created_at.isoformat(),
+                "kind": "error"
+                if event_row.event_type in {"run_failed", "node_failed", "run.schema_validation"}
+                else "event",
+                "event_type": event_row.event_type,
+                "trace_id": event_row.trace_id or run.trace_id,
+                "run_id": str(run.id),
+                "node_id": node_id,
+                "status": status_value,
+                "duration_ms": duration_ms if isinstance(duration_ms, int) else None,
+                "cost_usd": None,
+                "decision_id": None,
+                "message": _timeline_message_for_event(event_row.event_type, payload),
+                "error_message": str(error_message) if error_message else None,
+                "details": payload,
+            }
+        )
+
+    approval_rows = ApprovalTask.objects.filter(run=run).order_by("created_at", "id")
+    for approval in approval_rows:
+        payload = redact_payload(approval.payload if isinstance(approval.payload, dict) else {})
+        timeline.append(
+            {
+                "id": f"decision:{approval.id}:required",
+                "timestamp": approval.created_at.isoformat(),
+                "kind": "decision",
+                "event_type": "decision_required",
+                "trace_id": run.trace_id,
+                "run_id": str(run.id),
+                "node_id": approval.node_id,
+                "status": "waiting",
+                "duration_ms": None,
+                "cost_usd": None,
+                "decision_id": str(approval.id),
+                "message": str(payload.get("prompt_message") or "Human decision required."),
+                "error_message": None,
+                "details": payload,
+            }
+        )
+        if approval.status != "pending" and approval.resolved_at:
+            resolution = redact_payload(
+                approval.result if isinstance(approval.result, dict) else {}
+            )
+            timeline.append(
+                {
+                    "id": f"decision:{approval.id}:resolved",
+                    "timestamp": approval.resolved_at.isoformat(),
+                    "kind": "decision",
+                    "event_type": "decision_resolved",
+                    "trace_id": run.trace_id,
+                    "run_id": str(run.id),
+                    "node_id": approval.node_id,
+                    "status": approval.status,
+                    "duration_ms": None,
+                    "cost_usd": None,
+                    "decision_id": str(approval.id),
+                    "message": f"Decision {approval.status}.",
+                    "error_message": None,
+                    "details": resolution,
+                }
+            )
+
+    usage_rows = (
+        LLMUsage.objects.filter(run=run)
+        .order_by("created_at", "id")
+        .only(
+            "id",
+            "node_id",
+            "provider",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "cost_usd",
+            "created_at",
+        )
+    )
+    for usage in usage_rows:
+        timeline.append(
+            {
+                "id": f"cost:{usage.id}",
+                "timestamp": usage.created_at.isoformat(),
+                "kind": "cost",
+                "event_type": "cost_updated",
+                "trace_id": run.trace_id,
+                "run_id": str(run.id),
+                "node_id": usage.node_id,
+                "status": None,
+                "duration_ms": None,
+                "cost_usd": float(usage.cost_usd),
+                "decision_id": None,
+                "message": f"{usage.provider} {usage.model} usage recorded.",
+                "error_message": None,
+                "details": {
+                    "provider": usage.provider,
+                    "model": usage.model,
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.total_tokens,
+                },
+            }
+        )
+
+    timeline.sort(key=lambda entry: (entry.get("timestamp") or "", str(entry.get("id") or "")))
+    return timeline
+
+
 def _extract_llm_usage_payload(*, node_type: str, output_json: Any) -> dict[str, Any] | None:
     if not isinstance(output_json, dict):
         return None
@@ -732,6 +949,147 @@ def _project_pause_state(
             approval_task.save(update_fields=["payload"])
 
 
+def _project_run_event_state(
+    *,
+    run: Run,
+    projection_status: str,
+    trace_id: str,
+    event_type: str,
+    event_id: str | None,
+    event_time: datetime | None,
+    started_at: datetime | object = _UNSET,
+    ended_at: datetime | object = _UNSET,
+    output_json: Any = _UNSET,
+    error_message: str | object = _UNSET,
+    pause_state_json: Any = _UNSET,
+    paused_node_id: str | None | object = _UNSET,
+) -> None:
+    projection, _ = RunEventProjection.objects.get_or_create(
+        run=run,
+        defaults={
+            "status": projection_status,
+            "trace_id": trace_id,
+            "last_event_type": event_type,
+            "last_event_id": event_id or "",
+            "last_event_at": event_time or timezone.now(),
+        },
+    )
+
+    update_fields: list[str] = []
+    if projection.status != projection_status:
+        projection.status = projection_status
+        update_fields.append("status")
+    if started_at is not _UNSET and projection.started_at != started_at:
+        projection.started_at = cast(datetime | None, started_at)
+        update_fields.append("started_at")
+    if ended_at is not _UNSET and projection.ended_at != ended_at:
+        projection.ended_at = cast(datetime | None, ended_at)
+        update_fields.append("ended_at")
+    if output_json is not _UNSET and projection.output_json != output_json:
+        projection.output_json = output_json
+        update_fields.append("output_json")
+    if error_message is not _UNSET and projection.error_message != error_message:
+        projection.error_message = cast(str, error_message)
+        update_fields.append("error_message")
+    if pause_state_json is not _UNSET and projection.pause_state_json != pause_state_json:
+        projection.pause_state_json = pause_state_json
+        update_fields.append("pause_state_json")
+    if paused_node_id is not _UNSET and projection.paused_node_id != paused_node_id:
+        projection.paused_node_id = cast(str | None, paused_node_id)
+        update_fields.append("paused_node_id")
+    if projection.trace_id != trace_id:
+        projection.trace_id = trace_id
+        update_fields.append("trace_id")
+    if projection.last_event_type != event_type:
+        projection.last_event_type = event_type
+        update_fields.append("last_event_type")
+    next_event_id = event_id or ""
+    if projection.last_event_id != next_event_id:
+        projection.last_event_id = next_event_id
+        update_fields.append("last_event_id")
+    effective_event_time = event_time or timezone.now()
+    if projection.last_event_at != effective_event_time:
+        projection.last_event_at = effective_event_time
+        update_fields.append("last_event_at")
+    if update_fields:
+        projection.save(update_fields=sorted(set(update_fields)))
+
+
+def _project_node_event_state(
+    *,
+    run: Run,
+    node_id: str,
+    node_type: str,
+    attempt: int,
+    projection_status: str,
+    trace_id: str,
+    span_id: str,
+    event_type: str,
+    event_id: str | None,
+    event_time: datetime | None,
+    started_at: datetime | object = _UNSET,
+    ended_at: datetime | object = _UNSET,
+    output_json: Any = _UNSET,
+    error_json: Any = _UNSET,
+) -> None:
+    if not node_id:
+        return
+
+    projection, _ = NodeRunEventProjection.objects.get_or_create(
+        run=run,
+        node_id=node_id,
+        attempt=attempt,
+        defaults={
+            "node_type": node_type,
+            "status": projection_status,
+            "trace_id": trace_id,
+            "span_id": span_id,
+            "last_event_type": event_type,
+            "last_event_id": event_id or "",
+            "last_event_at": event_time or timezone.now(),
+        },
+    )
+
+    update_fields: list[str] = []
+    if projection.node_type != node_type:
+        projection.node_type = node_type
+        update_fields.append("node_type")
+    if projection.status != projection_status:
+        projection.status = projection_status
+        update_fields.append("status")
+    if started_at is not _UNSET and projection.started_at != started_at:
+        projection.started_at = cast(datetime | None, started_at)
+        update_fields.append("started_at")
+    if ended_at is not _UNSET and projection.ended_at != ended_at:
+        projection.ended_at = cast(datetime | None, ended_at)
+        update_fields.append("ended_at")
+    if output_json is not _UNSET and projection.output_json != output_json:
+        projection.output_json = output_json
+        update_fields.append("output_json")
+    if error_json is not _UNSET and projection.error_json != error_json:
+        projection.error_json = error_json
+        update_fields.append("error_json")
+    if projection.trace_id != trace_id:
+        projection.trace_id = trace_id
+        update_fields.append("trace_id")
+    if projection.span_id != span_id:
+        projection.span_id = span_id
+        update_fields.append("span_id")
+    if projection.last_event_type != event_type:
+        projection.last_event_type = event_type
+        update_fields.append("last_event_type")
+    next_event_id = event_id or ""
+    if projection.last_event_id != next_event_id:
+        projection.last_event_id = next_event_id
+        update_fields.append("last_event_id")
+    effective_event_time = event_time or timezone.now()
+    if projection.last_event_at != effective_event_time:
+        projection.last_event_at = effective_event_time
+        update_fields.append("last_event_at")
+    if update_fields:
+        projection.save(update_fields=sorted(set(update_fields)))
+
+
 class RunListView(APIView):
     """List runs (stub)."""
 
@@ -873,6 +1231,7 @@ class RunListView(APIView):
                     "started_at": run.started_at,
                     "ended_at": run.ended_at,
                     "duration_ms": run.duration_ms,
+                    "trace_id": run.trace_id,
                     "memory_activity": summarize_run_memory_activity(
                         list(run.node_runs.all()),
                         include_operations=False,
@@ -978,10 +1337,12 @@ class RunDetailView(APIView):
             "output_json": redact_payload(run.output_json),
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
+            "trace_id": run.trace_id,
             "paused_node_id": run.paused_node_id,
             "pause_payload": redact_payload(pause_payload),
             "node_outcomes": node_outcomes,
             "agent_events": agent_events,
+            "timeline": _build_run_timeline(run=run),
             "memory_activity": summarize_run_memory_activity(node_runs, include_operations=True),
             "node_runs": [
                 _serialize_node_run_for_detail(
@@ -1202,7 +1563,14 @@ class RunStartView(APIView):
                     broadcast_run_updated(run)
 
         except EngineConnectionError as e:
-            logger.error(f"Engine connection failed for run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_connection_failed",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_metadata["trace_id"],
+                error_message=str(e),
+            )
             run.status = "failed"
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
@@ -1216,7 +1584,14 @@ class RunStartView(APIView):
             )
 
         except EngineExecutionError as e:
-            logger.error(f"Engine rejected run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_rejected_run",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_metadata["trace_id"],
+                error_message=str(e),
+            )
             run.status = "failed"
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
@@ -1515,7 +1890,14 @@ class RunInvokeView(APIView):
                     broadcast_run_updated(run)
 
         except EngineConnectionError as e:
-            logger.error(f"Engine connection failed for run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_connection_failed",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_metadata["trace_id"],
+                error_message=str(e),
+            )
             run.status = "failed"
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
@@ -1529,7 +1911,14 @@ class RunInvokeView(APIView):
             )
 
         except EngineExecutionError as e:
-            logger.error(f"Engine rejected run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_rejected_run",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_metadata["trace_id"],
+                error_message=str(e),
+            )
             run.status = "failed"
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
@@ -1807,7 +2196,14 @@ class RunReplayView(APIView):
                     broadcast_run_updated(replay_run)
 
         except EngineConnectionError as e:
-            logger.error(f"Engine connection failed for replay {replay_run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_connection_failed",
+                run_id=str(replay_run.id),
+                trace_id=replay_run.trace_id or trace_metadata["trace_id"],
+                error_message=str(e),
+            )
             replay_run.status = "failed"
             replay_run.ended_at = timezone.now()
             replay_run.error_message = f"Engine connection failed: {e}"
@@ -1821,7 +2217,14 @@ class RunReplayView(APIView):
             )
 
         except EngineExecutionError as e:
-            logger.error(f"Engine rejected replay {replay_run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_rejected_replay",
+                run_id=str(replay_run.id),
+                trace_id=replay_run.trace_id or trace_metadata["trace_id"],
+                error_message=str(e),
+            )
             replay_run.status = "failed"
             replay_run.ended_at = timezone.now()
             replay_run.error_message = f"Engine rejected run: {e}"
@@ -1909,11 +2312,25 @@ class RunCancelView(APIView):
                 engine.cancel_run(run_id=run.id)
 
         except EngineConnectionError as e:
-            logger.warning(f"Engine connection failed when canceling run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.WARNING,
+                "engine_cancel_connection_failed",
+                run_id=str(run.id),
+                trace_id=run.trace_id,
+                error_message=str(e),
+            )
             # Still proceed to mark as canceled in the control plane
 
         except EngineExecutionError as e:
-            logger.warning(f"Engine failed to cancel run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.WARNING,
+                "engine_cancel_failed",
+                run_id=str(run.id),
+                trace_id=run.trace_id,
+                error_message=str(e),
+            )
             # Still proceed to mark as canceled in the control plane
 
         if not run.started_at:
@@ -2074,14 +2491,28 @@ class RunResumeView(APIView):
                         tracestate=trace_context["tracestate"],
                     )
         except EngineConnectionError as e:
-            logger.error(f"Engine connection failed when resuming run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_resume_connection_failed",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_context["trace_id"],
+                error_message=str(e),
+            )
             return error_response(
                 code="ENGINE_UNAVAILABLE",
                 message="The execution engine is not available. Please try again later.",
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except EngineExecutionError as e:
-            logger.error(f"Engine failed to resume run {run.id}: {e}")
+            log_event(
+                logger,
+                logging.ERROR,
+                "engine_resume_failed",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_context["trace_id"],
+                error_message=str(e),
+            )
             return error_response(
                 code="ENGINE_ERROR",
                 message=str(e),
@@ -2215,13 +2646,14 @@ class EngineRunEventsView(APIView):
                     span_id=trace_context["span_id"],
                 )
             except IntegrityError:
-                logger.info(
-                    "Duplicate run event ignored",
-                    extra={
-                        "run_id": str(run.id),
-                        "event_id": event_id,
-                        "event_type": event_type_name,
-                    },
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "duplicate_run_event_ignored",
+                    run_id=str(run.id),
+                    trace_id=trace_context["trace_id"],
+                    event_id=event_id,
+                    message="Duplicate run event ignored",
                 )
 
         if event_type == "run.schema_validation":
@@ -2262,6 +2694,13 @@ class EngineRunEventsView(APIView):
                     cast(dict[str, Any], stream_payload["agent_event"]),
                     derived=True,
                 )
+            summary_payload = update_stream_summary(
+                run_id=str(run.id),
+                payload=stream_payload,
+                event_time=event_time,
+            )
+            if summary_payload:
+                broadcast_node_stream_summary(run=run, payload=summary_payload)
             message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
             return success_response(message)
 
@@ -2280,6 +2719,9 @@ class EngineRunEventsView(APIView):
             )
             run_payload: dict[str, Any] = {}
             update_fields: list[str] = []
+            pause_payload: dict[str, Any] = {}
+            node_id = ""
+            projection_kwargs: dict[str, Any] = {}
 
             if event_type == "run_started":
                 run_payload["status"] = "running"
@@ -2289,6 +2731,9 @@ class EngineRunEventsView(APIView):
                     run_payload["started_at"] = event_time
                     run.started_at = event_time
                     update_fields.append("started_at")
+                projection_kwargs = {
+                    "started_at": event_time,
+                }
 
             if event_type == "run_completed":
                 run_payload["status"] = "succeeded"
@@ -2303,6 +2748,10 @@ class EngineRunEventsView(APIView):
                     run_payload["output_json"] = redacted_output
                     run.output_json = redacted_output
                     update_fields.append("output_json")
+                projection_kwargs = {
+                    "ended_at": event_time,
+                    "output_json": run_payload.get("output_json", _UNSET),
+                }
 
             if event_type == "run_failed":
                 run_payload["status"] = "failed"
@@ -2316,6 +2765,10 @@ class EngineRunEventsView(APIView):
                 run_payload["error_message"] = error_message
                 run.error_message = error_message
                 update_fields.append("error_message")
+                projection_kwargs = {
+                    "ended_at": event_time,
+                    "error_message": error_message,
+                }
 
             if event_type == "run_canceled":
                 run_payload["status"] = "canceled"
@@ -2325,22 +2778,30 @@ class EngineRunEventsView(APIView):
                     run_payload["ended_at"] = event_time
                     run.ended_at = event_time
                     update_fields.append("ended_at")
+                projection_kwargs = {
+                    "ended_at": event_time,
+                }
 
             if event_type == "run_paused":
                 run_payload["status"] = "paused"
                 run.status = "paused"
                 update_fields.append("status")
-                node_id = event.get("node_id") or ""
+                node_id = str(event.get("node_id") or "")
                 if node_id:
                     run_payload["paused_node_id"] = node_id
                     run.paused_node_id = node_id
                     update_fields.append("paused_node_id")
-                pause_payload = redact_payload(event.get("output") or {})
+                raw_pause_payload = redact_payload(event.get("output") or {})
+                pause_payload = raw_pause_payload if isinstance(raw_pause_payload, dict) else {}
                 run_payload["pause_payload"] = pause_payload
                 if pause_payload:
                     run_payload["pause_state_json"] = pause_payload
                     run.pause_state_json = pause_payload
                     update_fields.append("pause_state_json")
+                projection_kwargs = {
+                    "paused_node_id": node_id or None,
+                    "pause_state_json": pause_payload if pause_payload else _UNSET,
+                }
 
             if event_type == "run_resumed":
                 run_payload["status"] = "running"
@@ -2352,11 +2813,32 @@ class EngineRunEventsView(APIView):
                 run_payload["pause_state_json"] = None
                 run.pause_state_json = None
                 update_fields.append("pause_state_json")
+                projection_kwargs = {
+                    "paused_node_id": None,
+                    "pause_state_json": None,
+                }
 
             if update_fields:
                 run.trace_id = trace_context["trace_id"]
                 update_fields.append("trace_id")
                 run.save(update_fields=sorted(set(update_fields)))
+
+            final_run_stream_summaries: list[dict[str, Any]] = []
+            if event_type in {"run_completed", "run_failed", "run_canceled", "run_paused"}:
+                final_run_stream_summaries = flush_all_stream_summaries(
+                    run_id=str(run.id),
+                    final_reason=event_type,
+                )
+
+            _project_run_event_state(
+                run=run,
+                projection_status=run.status,
+                trace_id=trace_context["trace_id"],
+                event_type=event_type,
+                event_id=event_id,
+                event_time=event_time,
+                **projection_kwargs,
+            )
 
             if event_type == "run_paused" and node_id:
                 _project_pause_state(
@@ -2368,6 +2850,20 @@ class EngineRunEventsView(APIView):
                     trace_id=trace_context["trace_id"],
                     span_id=trace_context["span_id"],
                     event_time=event_time,
+                )
+                _project_node_event_state(
+                    run=run,
+                    node_id=node_id,
+                    node_type=str(event.get("node_type") or "human_gate"),
+                    attempt=int(event.get("attempt") or 1),
+                    projection_status="waiting",
+                    trace_id=trace_context["trace_id"],
+                    span_id=trace_context["span_id"],
+                    event_type=event_type,
+                    event_id=event_id,
+                    event_time=event_time,
+                    started_at=event_time,
+                    output_json={"pause_payload": pause_payload} if pause_payload else _UNSET,
                 )
 
             if event_type == "run_started" and previous_status != "running":
@@ -2384,8 +2880,6 @@ class EngineRunEventsView(APIView):
                 record_run_completed(run.status, run.duration_ms)
 
             _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
-<<<<<<< Updated upstream
-=======
             for summary_payload in final_run_stream_summaries:
                 broadcast_node_stream_summary(run=run, payload=summary_payload)
             if event_type == "run_paused" and node_id:
@@ -2412,7 +2906,10 @@ class EngineRunEventsView(APIView):
                         "resolution": redact_payload(event.get("output") or {}),
                     },
                 )
->>>>>>> Stashed changes
+
+            for summary_payload in final_run_stream_summaries:
+                broadcast_node_stream_summary(run=run, payload=summary_payload)
+
             message = broadcast_run_updated(run)
             return success_response(message)
 
@@ -2520,6 +3017,22 @@ class EngineRunEventsView(APIView):
                             "error_json": redact_payload(node_payload.get("error_json") or {}),
                         },
                     )
+                _project_node_event_state(
+                    run=run,
+                    node_id=node_id,
+                    node_type=node_run.node_type,
+                    attempt=attempt,
+                    projection_status=str(node_payload["status"]),
+                    trace_id=trace_context["trace_id"],
+                    span_id=trace_context["span_id"],
+                    event_type=event_type,
+                    event_id=event_id,
+                    event_time=event_time,
+                    started_at=node_payload.get("started_at", _UNSET),
+                    ended_at=node_payload.get("ended_at", _UNSET),
+                    output_json=node_payload.get("output_json", _UNSET),
+                    error_json=node_payload.get("error_json", _UNSET),
+                )
                 _save_event(
                     "node_run.updated", _serialize_event_payload(redact_payload(node_payload))
                 )
@@ -2559,8 +3072,7 @@ class EngineRunEventsView(APIView):
                             "cost_usd": float(cost),
                         }
 
-<<<<<<< Updated upstream
-=======
+
             if event_type in {"node_completed", "node_failed", "node_skipped"}:
                 summary_payload = flush_stream_summary(
                     run_id=str(run.id),
@@ -2570,9 +3082,10 @@ class EngineRunEventsView(APIView):
                 )
                 if summary_payload:
                     broadcast_node_stream_summary(run=run, payload=summary_payload)
+
             if cost_update_payload:
                 broadcast_cost_update(run=run, payload=cost_update_payload)
->>>>>>> Stashed changes
+
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)
 
@@ -2678,7 +3191,14 @@ class RunEventsView(APIView):
                 try:
                     schema_errors = validate_json_schema(payload.get("output_json"), output_schema)
                 except SchemaError as exc:
-                    logger.warning("Invalid output schema for run %s: %s", run.id, exc)
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "run_output_schema_invalid",
+                        run_id=str(run.id),
+                        trace_id=run.trace_id,
+                        error_message=str(exc),
+                    )
 
             if schema_errors:
                 try:
@@ -2688,7 +3208,14 @@ class RunEventsView(APIView):
                         payload=redact_payload({"errors": schema_errors, "mode": schema_mode}),
                     )
                 except Exception as exc:  # pragma: no cover - log and continue
-                    logger.warning("Failed to persist schema validation event: %s", exc)
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "schema_validation_event_persist_failed",
+                        run_id=str(run.id),
+                        trace_id=run.trace_id,
+                        error_message=str(exc),
+                    )
 
                 if schema_mode == "strict":
                     run.status = "failed"
@@ -2706,7 +3233,14 @@ class RunEventsView(APIView):
                     payload=_serialize_event_payload(redact_payload(payload)),
                 )
             except Exception as exc:  # pragma: no cover - log and continue
-                logger.warning("Failed to persist run event: %s", exc)
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "run_event_persist_failed",
+                    run_id=str(run.id),
+                    trace_id=run.trace_id,
+                    error_message=str(exc),
+                )
 
             message = broadcast_run_updated(run)
             return success_response(message)
@@ -2776,7 +3310,14 @@ class RunEventsView(APIView):
                     payload=payload,
                 )
             except Exception as exc:  # pragma: no cover - log and continue
-                logger.warning("Failed to persist schema validation event: %s", exc)
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "schema_validation_event_persist_failed",
+                    run_id=str(run.id),
+                    trace_id=run.trace_id,
+                    error_message=str(exc),
+                )
 
             message = broadcast_run_schema_validation(run=run, payload=payload)
             return success_response(message)
@@ -2795,6 +3336,7 @@ def _build_stream_message(*, run: Run, event: RunEvent) -> dict[str, Any]:
         "timestamp": event.created_at.isoformat(),
         "type": event.event_type,
         "run_id": str(run.id),
+        "trace_id": event.trace_id or run.trace_id,
     }
     if event.event_type == "run.updated":
         message["run"] = payload
@@ -2804,7 +3346,7 @@ def _build_stream_message(*, run: Run, event: RunEvent) -> dict[str, Any]:
         message["node_stream"] = payload
     else:
         message["payload"] = payload
-    return message
+    return add_event_level(message, payload=payload)
 
 
 def _format_sse(message: dict[str, Any], event_name: str | None = None) -> str:
@@ -2844,9 +3386,8 @@ def _get_user_from_request(request: Request) -> User | None:
     if not token:
         return None
 
-    try:
-        access_token = AccessToken(cast(Any, token))
-    except TokenError:
+    access_token = validate_access_token(cast(Any, token))
+    if access_token is None:
         return None
 
     user_id_claim = getattr(settings, "SIMPLE_JWT", {}).get("USER_ID_CLAIM", "user_id")
@@ -2887,6 +3428,7 @@ class RunEventsStreamView(APIView):
 
         since_param = request.query_params.get("since")
         since = parse_datetime(since_param) if since_param else None
+        requested_level = normalize_requested_event_level(request.query_params.get("event_level"))
 
         def event_stream() -> Any:
             yield _format_sse(
@@ -2894,6 +3436,7 @@ class RunEventsStreamView(APIView):
                     "type": "connected",
                     "run_id": str(run.id),
                     "timestamp": timezone.now().isoformat(),
+                    "level": requested_level,
                 },
                 event_name="connected",
             )
@@ -2903,6 +3446,8 @@ class RunEventsStreamView(APIView):
                     "created_at"
                 ):
                     message = _build_stream_message(run=run, event=event)
+                    if not message_allowed_for_level(message, requested_level):
+                        continue
                     yield _format_sse(message, event_name=event.event_type)
 
             channel_layer = get_channel_layer()
@@ -2910,7 +3455,12 @@ class RunEventsStreamView(APIView):
                 return
 
             channel_name = async_to_sync(channel_layer.new_channel)()
-            async_to_sync(channel_layer.group_add)(f"run_{run.id}", channel_name)
+            group_names = [
+                run_event_group_name(run_id=str(run.id), level=level)
+                for level in event_levels_for_subscription(requested_level)
+            ]
+            for group_name in group_names:
+                async_to_sync(channel_layer.group_add)(group_name, channel_name)
 
             try:
                 while True:
@@ -2928,7 +3478,8 @@ class RunEventsStreamView(APIView):
             except GeneratorExit:
                 return
             finally:
-                async_to_sync(channel_layer.group_discard)(f"run_{run.id}", channel_name)
+                for group_name in group_names:
+                    async_to_sync(channel_layer.group_discard)(group_name, channel_name)
 
         response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
         response["Cache-Control"] = "no-cache"

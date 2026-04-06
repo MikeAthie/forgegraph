@@ -1,9 +1,4 @@
-"""
-JWT authentication middleware for Django Channels.
-
-The browser WebSocket API does not allow setting arbitrary headers, so the MVP
-uses `?token=<access_jwt>` query parameters.
-"""
+"""Single-use WebSocket ticket authentication middleware for Django Channels."""
 
 from __future__ import annotations
 
@@ -13,11 +8,10 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import AccessToken
+
+from application.services.auth_state import consume_ws_ticket, is_access_jti_revoked
 
 F = TypeVar("F", bound=Callable[..., Any])
 database_sync_to_async_typed = cast(Callable[[F], F], database_sync_to_async)
@@ -42,17 +36,19 @@ class JwtQueryStringAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
         scope["user"] = AnonymousUser()
 
         query_string = (scope.get("query_string") or b"").decode()
-        token = parse_qs(query_string).get("token", [None])[0]
-        if not token:
+        ticket = parse_qs(query_string).get("ticket", [None])[0]
+        if not ticket:
             return await super().__call__(scope, receive, send)
 
-        try:
-            access_token = AccessToken(token)
-        except TokenError:
+        ticket_payload = consume_ws_ticket(ticket)
+        if not ticket_payload:
             return await super().__call__(scope, receive, send)
 
-        user_id_claim = getattr(settings, "SIMPLE_JWT", {}).get("USER_ID_CLAIM", "user_id")
-        user_id = access_token.get(user_id_claim)
+        access_jti = str(ticket_payload.get("access_jti") or "")
+        if access_jti and is_access_jti_revoked(access_jti):
+            return await super().__call__(scope, receive, send)
+
+        user_id = ticket_payload.get("user_id")
         if not user_id:
             return await super().__call__(scope, receive, send)
 
