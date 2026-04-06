@@ -188,18 +188,36 @@ export function MemoryObservationList({
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold">{observation.title || "Untitled observation"}</p>
                         <StatusBadge status="pending" label={toLabelCase(observation.scope)} />
-                        <StatusBadge status={observation.is_deleted ? "failed" : "active"} label={toLabelCase(observation.type)} />
+                        <StatusBadge
+                          status={observation.is_deleted ? "failed" : "active"}
+                          label={toLabelCase(observation.type)}
+                        />
                       </div>
-                      <p className={cn("mt-2 text-sm leading-6", isActive ? "text-white/80 dark:text-slate-700" : "text-slate-600 dark:text-slate-300")}>
+                      <p
+                        className={cn(
+                          "mt-2 text-sm leading-6",
+                          isActive ? "text-white/80 dark:text-slate-700" : "text-slate-600 dark:text-slate-300",
+                        )}
+                      >
                         {summarizeContent(observation.content)}
                       </p>
                     </div>
-                    <p className={cn("text-xs", isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400")}>
+                    <p
+                      className={cn(
+                        "text-xs",
+                        isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400",
+                      )}
+                    >
                       {formatRelativeTime(observation.last_seen_at)}
                     </p>
                   </div>
 
-                  <div className={cn("flex flex-wrap gap-2 text-xs", isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400")}>
+                  <div
+                    className={cn(
+                      "flex flex-wrap gap-2 text-xs",
+                      isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400",
+                    )}
+                  >
                     {observation.topic_key ? <span>Topic {observation.topic_key}</span> : null}
                     {observation.tool_name ? <span>Tool {observation.tool_name}</span> : null}
                     <span>Recorded {formatDateTime(observation.created_at)}</span>

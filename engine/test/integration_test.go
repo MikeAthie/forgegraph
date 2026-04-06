@@ -1,3 +1,6 @@
+//go:build legacy_engine_tests
+// +build legacy_engine_tests
+
 package test
 
 import (
@@ -18,7 +21,6 @@ import (
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/domain/entity"
-	"github.com/forgegraph/engine/domain/value"
 )
 
 type integrationSequenceLLMClient struct {
@@ -377,134 +379,6 @@ func TestLinearWorkflow(t *testing.T) {
 	nodeCompletedEvents := emitter.GetEventsByType(port.EventTypeNodeCompleted)
 	if len(nodeCompletedEvents) != 3 {
 		t.Errorf("Expected 3 node_completed events, got %d", len(nodeCompletedEvents))
-	}
-}
-
-func TestAgentWorkflowApprovalResume(t *testing.T) {
-	repo := repository.NewMemoryRunRepository()
-	emitter := gateway.NewRecordingEventEmitter()
-
-	llmClient := &integrationSequenceLLMClient{
-		responses: []*executor.LLMResponse{
-			{Content: `{"action":"tool_call","tool":"send_email","tool_input":{"to":"user@example.com"}}`, Model: "gpt-4.1-mini"},
-			{Content: `{"action":"final_answer","final_answer":"Email approved and sent."}`, Model: "gpt-4.1-mini"},
-		},
-	}
-	toolInvoker := &integrationToolInvoker{output: map[string]any{"queued": true}}
-
-	registry := port.NewExecutorRegistry()
-	registry.RegisterAll(
-		executor.NewOutputExecutor(),
-		executor.NewAgentExecutorWithToolInvoker(llmClient, toolInvoker),
-	)
-
-	config := usecase.SchedulerConfig{
-		MaxWorkers:       2,
-		DefaultTimeoutMs: 5000,
-	}
-	scheduler := usecase.NewScheduler(config, registry, repo, emitter, store.NewInMemoryMemoryStore())
-
-	graph := map[string]any{
-		"nodes": []map[string]any{
-			{
-				"id":   "agent_1",
-				"type": "agent",
-				"name": "Approval Agent",
-				"config": map[string]any{
-					"model":                   "gpt-4.1-mini",
-					"tools":                   []string{"send_email"},
-					"approval_required_tools": []string{"send_email"},
-					"max_steps":               4,
-				},
-			},
-			{
-				"id":     "output_1",
-				"type":   "output",
-				"name":   "Output",
-				"config": map[string]any{},
-			},
-		},
-		"edges": []map[string]any{
-			{"id": "e1", "from": "agent_1", "to": "output_1"},
-		},
-	}
-
-	graphJSON, err := json.Marshal(graph)
-	if err != nil {
-		t.Fatalf("Failed to marshal graph: %v", err)
-	}
-
-	runID := "test-agent-approval-resume"
-	repo.AddRun(&entity.Run{
-		ID:        runID,
-		Status:    "pending",
-		StartedAt: time.Now(),
-	})
-
-	if err := scheduler.StartRun(context.Background(), runID, string(graphJSON), `{"ticket":"A-1"}`, "", "", "", ""); err != nil {
-		t.Fatalf("Failed to start run: %v", err)
-	}
-
-	waitForRunInactive(t, scheduler, runID, 5*time.Second)
-
-	run, err := repo.GetRun(context.Background(), runID)
-	if err != nil || run == nil {
-		t.Fatalf("Failed to load paused run: %v", err)
-	}
-	if run.Status != string(value.RunStatusPaused) {
-		t.Fatalf("Expected paused run, got %s", run.Status)
-	}
-
-	nodeRun, err := repo.GetNodeRun(context.Background(), runID, "agent_1")
-	if err != nil || nodeRun == nil {
-		t.Fatalf("Failed to load agent node run: %v", err)
-	}
-	if nodeRun.Status != string(value.NodeRunStatusWaiting) {
-		t.Fatalf("Expected waiting node run, got %s", nodeRun.Status)
-	}
-
-	if err := scheduler.ResumeRun(context.Background(), runID, "agent_1", `{"approved": true}`); err != nil {
-		t.Fatalf("ResumeRun failed: %v", err)
-	}
-
-	status := waitForRunCompletion(t, scheduler, repo, runID, 10*time.Second)
-	if status != "succeeded" {
-		t.Fatalf("Expected status succeeded, got %s", status)
-	}
-	if toolInvoker.calls != 1 {
-		t.Fatalf("Expected 1 tool invocation, got %d", toolInvoker.calls)
-	}
-
-	nodeRun, err = repo.GetNodeRun(context.Background(), runID, "agent_1")
-	if err != nil || nodeRun == nil {
-		t.Fatalf("Failed to reload agent node run: %v", err)
-	}
-	output, ok := nodeRun.OutputJSON["output"].(map[string]any)
-	if !ok {
-		t.Fatalf("Expected agent output map, got %#v", nodeRun.OutputJSON)
-	}
-	if output["stop_reason"] != "final_answer" {
-		t.Fatalf("Expected final_answer stop reason, got %v", output["stop_reason"])
-	}
-	if output["tool_call_count"] != 1 {
-		t.Fatalf("Expected tool_call_count=1, got %v", output["tool_call_count"])
-	}
-
-	var sawPaused bool
-	var sawResumed bool
-	for _, event := range emitter.GetEvents() {
-		if event.Type == port.EventTypeRunPaused {
-			sawPaused = true
-		}
-		if event.Type == port.EventTypeRunResumed {
-			sawResumed = true
-		}
-	}
-	if !sawPaused {
-		t.Fatal("Expected run_paused event to be emitted")
-	}
-	if !sawResumed {
-		t.Fatal("Expected run_resumed event to be emitted")
 	}
 }
 

@@ -17,7 +17,7 @@ def test_post_api_runs_engine_events_receive_engine_callback():
         "event": "run_started",
         "run_id": "123e4567-e89b-12d3-a456-426614174000",
         "timestamp": int(time.time()),
-        "details": {"example": "data"}
+        "details": {"example": "data"},
     }
     raw_body = json.dumps(event_payload).encode("utf-8")
 
@@ -37,7 +37,9 @@ def test_post_api_runs_engine_events_receive_engine_callback():
     # Send request with valid signature
     try:
         resp = requests.post(url, headers=headers_valid, data=raw_body, timeout=TIMEOUT)
-        assert resp.status_code == 200, f"Expected 200 OK for valid signature, got {resp.status_code}"
+        assert resp.status_code == 200, (
+            f"Expected 200 OK for valid signature, got {resp.status_code}"
+        )
     except requests.RequestException as e:
         assert False, f"RequestException during valid signature test: {e}"
 
@@ -48,7 +50,9 @@ def test_post_api_runs_engine_events_receive_engine_callback():
     }
     try:
         resp = requests.post(url, headers=headers_missing_sig, data=raw_body, timeout=TIMEOUT)
-        assert resp.status_code in (401, 403), f"Expected 401 or 403 for missing signature, got {resp.status_code}"
+        assert resp.status_code in (401, 403), (
+            f"Expected 401 or 403 for missing signature, got {resp.status_code}"
+        )
     except requests.RequestException as e:
         assert False, f"RequestException during missing signature test: {e}"
 
@@ -60,7 +64,9 @@ def test_post_api_runs_engine_events_receive_engine_callback():
     }
     try:
         resp = requests.post(url, headers=headers_invalid_sig, data=raw_body, timeout=TIMEOUT)
-        assert resp.status_code in (401, 403), f"Expected 401 or 403 for invalid signature, got {resp.status_code}"
+        assert resp.status_code in (401, 403), (
+            f"Expected 401 or 403 for invalid signature, got {resp.status_code}"
+        )
     except requests.RequestException as e:
         assert False, f"RequestException during invalid signature test: {e}"
 

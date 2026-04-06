@@ -26,7 +26,12 @@ class DecisionListView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter and status_filter != "all":
             decisions = decisions.filter(status=status_filter)
-        return success_response([decision_summary(decision) for decision in decisions.order_by("-requested_at", "-created_at")])
+        return success_response(
+            [
+                decision_summary(decision)
+                for decision in decisions.order_by("-requested_at", "-created_at")
+            ]
+        )
 
 
 class DecisionDetailView(APIView):
@@ -48,5 +53,7 @@ class DecisionCountView(APIView):
 
     def get(self, request: Request) -> Response:
         bundle = refresh_phase1_projections(cast(User, request.user))
-        count = DecisionRecord.objects.filter(organization=bundle.organization, status="pending").count()
+        count = DecisionRecord.objects.filter(
+            organization=bundle.organization, status="pending"
+        ).count()
         return success_response({"count": count})

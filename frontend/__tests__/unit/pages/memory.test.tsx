@@ -143,7 +143,9 @@ describe("Memory Browser Page", () => {
 
     render(<MemoryBrowserPage />);
 
-    expect(screen.getByText(/loading curated memory/i)).toBeInTheDocument();
+    expect(screen.getByText("Browse the knowledge layer")).toBeInTheDocument();
+    expect(screen.getAllByRole("status", { name: /loading/i }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/loading knowledge records/i)).toBeInTheDocument();
   });
 
   it("loads the default timeline and observation detail", async () => {
@@ -166,7 +168,7 @@ describe("Memory Browser Page", () => {
     expect(screen.getAllByText(/linked scope/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/timeline/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/member memory access/i)).toBeInTheDocument();
-    expect(screen.getByText(/retention is limited to owner and admin/i)).toBeInTheDocument();
+    expect(screen.getByText(/retention changes are limited to owner and admin/i)).toBeInTheDocument();
   });
 
   it("switches to search mode and shows a no-results state", async () => {
@@ -213,7 +215,7 @@ describe("Memory Browser Page", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /^graph$/i }));
+      await user.click(screen.getByRole("button", { name: /^workflow$/i }));
       await flushPromises();
     });
 

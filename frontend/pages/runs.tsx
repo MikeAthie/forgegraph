@@ -3,7 +3,17 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { EmptyBlock, InspectorPanel, KeyValueGrid, Panel, SectionHeader, SelectionList, StatusBadge, formatDateTime, formatDuration } from "@/components/os/operations-ui";
+import {
+  EmptyBlock,
+  InspectorPanel,
+  KeyValueGrid,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+  formatDateTime,
+  formatDuration,
+} from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { getApiErrorMessage, runsApi, type RunListItem } from "@/lib/api";
@@ -42,7 +52,11 @@ export default function RunsPage() {
   }, []);
 
   const selectedExecutionId =
-    typeof router.query.execution === "string" ? router.query.execution : runs.length > 0 ? runs[0]?.id ?? null : null;
+    typeof router.query.execution === "string"
+      ? router.query.execution
+      : runs.length > 0
+        ? (runs[0]?.id ?? null)
+        : null;
 
   const selectedExecution = useMemo(
     () => runs.find((run) => run.id === selectedExecutionId) ?? runs[0] ?? null,
@@ -93,7 +107,10 @@ export default function RunsPage() {
               <Spinner size="lg" />
             </div>
           ) : !selectedExecution ? (
-            <EmptyBlock title="No executions available" description="Execution history will appear here when workflows are run." />
+            <EmptyBlock
+              title="No executions available"
+              description="Execution history will appear here when workflows are run."
+            />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[0.76fr_1.24fr]">
               <Panel title="Execution list" description="Recent workflow executions with summary-first metadata.">
@@ -101,11 +118,9 @@ export default function RunsPage() {
                   items={runs}
                   selectedId={selectedExecution.id}
                   onSelect={(run) => {
-                    void router.replace(
-                      { pathname: "/executions", query: { execution: run.id } },
-                      undefined,
-                      { shallow: true },
-                    );
+                    void router.replace({ pathname: "/executions", query: { execution: run.id } }, undefined, {
+                      shallow: true,
+                    });
                   }}
                   renderTitle={(run) => (
                     <div className="flex items-center gap-3">
@@ -115,7 +130,12 @@ export default function RunsPage() {
                   )}
                   renderBody={(run) => `Version ${run.graph_version} · started ${formatDateTime(run.started_at)}`}
                   renderMeta={(run) => <span className="text-xs">{formatDuration(run.duration_ms)}</span>}
-                  empty={<EmptyBlock title="No execution history" description="Once the runtime starts processing work, executions will appear here." />}
+                  empty={
+                    <EmptyBlock
+                      title="No execution history"
+                      description="Once the runtime starts processing work, executions will appear here."
+                    />
+                  }
                 />
               </Panel>
 
@@ -146,7 +166,10 @@ export default function RunsPage() {
                     items={[
                       { label: "Queue status", value: selectedExecution.queue_status ?? "Not queued" },
                       { label: "Attempts", value: selectedExecution.queue_attempts ?? 0 },
-                      { label: "Memory activity", value: selectedExecution.memory_activity?.has_activity ? "Active" : "None" },
+                      {
+                        label: "Memory activity",
+                        value: selectedExecution.memory_activity?.has_activity ? "Active" : "None",
+                      },
                       {
                         label: "Retrieved observations",
                         value: selectedExecution.memory_activity?.retrieved_observation_count ?? 0,

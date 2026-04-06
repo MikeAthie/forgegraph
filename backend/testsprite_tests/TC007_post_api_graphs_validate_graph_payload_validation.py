@@ -55,9 +55,7 @@ def test_post_api_graphs_validate_graph_payload_validation():
             {"id": "n1", "type": "start"},
             {"id": "n2", "type": "end"},
         ],
-        "edges": [
-            {"source": "n1", "target": "n2"}
-        ]
+        "edges": [{"source": "n1", "target": "n2"}],
     }
     payload_valid = {"graph": valid_graph_json}
 
@@ -75,7 +73,9 @@ def test_post_api_graphs_validate_graph_payload_validation():
     }
     payload_invalid_structured = {"graph": invalid_graph_json}
 
-    resp2 = session.post(endpoint, json=payload_invalid_structured, headers=headers, timeout=TIMEOUT)
+    resp2 = session.post(
+        endpoint, json=payload_invalid_structured, headers=headers, timeout=TIMEOUT
+    )
     assert resp2.status_code == 200
     resp_json2 = resp2.json()
     assert "data" in resp_json2
@@ -88,7 +88,9 @@ def test_post_api_graphs_validate_graph_payload_validation():
     # 3) Missing graph key: expect 400 Bad Request
     payload_missing_graph_json = {}
 
-    resp3 = session.post(endpoint, json=payload_missing_graph_json, headers=headers, timeout=TIMEOUT)
+    resp3 = session.post(
+        endpoint, json=payload_missing_graph_json, headers=headers, timeout=TIMEOUT
+    )
     assert resp3.status_code == 400
 
 

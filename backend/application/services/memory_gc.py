@@ -6,15 +6,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import connection
 
 from adapters.repositories.memory_chunk_repository import MemoryChunkRepository
-from infrastructure.orm.models import Graph, MemoryChunk, MemoryEntry, Organization
+from infrastructure.orm.models import MemoryChunk, MemoryEntry, Organization
 
 logger = logging.getLogger(__name__)
-User = get_user_model()
 
 
 @dataclass
@@ -34,7 +32,7 @@ class MemoryGCService:
 
     Handles cleanup of:
     - Expired memory entries (TTL-based)
-    - Orphaned chunks (deleted users/graphs)
+    - Orphaned chunks (non-organization tenants from legacy data)
     - Old chunks beyond retention period
     """
 
@@ -52,30 +50,24 @@ class MemoryGCService:
 
     def get_valid_tenant_ids(self) -> set[UUID]:
         """
-        Get all valid tenant IDs from both users and graphs.
+        Get all valid canonical tenant IDs.
 
-        Tenant IDs can come from:
-        - User.id (user-scoped memory)
-        - Graph.id (graph-scoped memory)
+        Memory chunks are organization-scoped in the current architecture.
+        Older user- and graph-scoped chunk rows are treated as legacy data and
+        should be cleaned up as orphans.
         """
-        user_ids = set(User.objects.values_list("id", flat=True))
         organization_ids = set(Organization.objects.values_list("id", flat=True))
-        graph_ids = set(Graph.objects.values_list("id", flat=True))
-
-        valid_ids = user_ids | organization_ids | graph_ids
         logger.info(
             "Found valid tenant IDs",
             extra={
-                "user_count": len(user_ids),
                 "organization_count": len(organization_ids),
-                "graph_count": len(graph_ids),
-                "total": len(valid_ids),
+                "total": len(organization_ids),
             },
         )
-        return valid_ids
+        return organization_ids
 
     def find_orphaned_tenant_ids(self) -> list[UUID]:
-        """Find tenant IDs in memory that don't belong to any user or graph."""
+        """Find chunk tenant IDs that do not map to a real organization."""
         valid_ids = self.get_valid_tenant_ids()
 
         # Get unique tenant IDs from chunks
@@ -334,7 +326,8 @@ class MemoryGCService:
             _increment_metric("memory_gc_deleted_tenant_total", deleted)
 
         if prune_missing_users:
-            # Fixed: Now checks both user IDs AND graph IDs
+            # Compatibility path: prune any chunk rows that are not owned by
+            # a real organization tenant under the current architecture.
             valid_ids = self.get_valid_tenant_ids()
             deleted, _ = MemoryChunk.objects.exclude(tenant_id__in=valid_ids).delete()
             stats["deleted_missing_users"] = deleted

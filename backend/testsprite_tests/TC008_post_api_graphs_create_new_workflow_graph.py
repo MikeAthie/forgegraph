@@ -55,20 +55,31 @@ def test_post_api_graphs_create_new_workflow_graph():
         create_json = create_resp.json()
         assert "id" in create_json, "Graph response missing id"
         assert create_json["name"] == graph_payload["name"], "Graph name mismatch"
-        assert "version_count" in create_json and create_json["version_count"] == 0, "version_count should be 0"
-        assert "latest_version" in create_json and create_json["latest_version"] is None, "latest_version should be null"
+        assert "version_count" in create_json and create_json["version_count"] == 0, (
+            "version_count should be 0"
+        )
+        assert "latest_version" in create_json and create_json["latest_version"] is None, (
+            "latest_version should be null"
+        )
 
         created_graph_id = create_json["id"]
 
         # Graph creation with optional description
-        graph_payload_desc = {"name": "Test Workflow Graph with Desc", "description": "A description", "nodes": [], "edges": []}
+        graph_payload_desc = {
+            "name": "Test Workflow Graph with Desc",
+            "description": "A description",
+            "nodes": [],
+            "edges": [],
+        }
         create_desc_resp = session.post(
             f"{BASE_URL}/api/graphs",
             json=graph_payload_desc,
             headers=headers,
             timeout=TIMEOUT,
         )
-        assert create_desc_resp.status_code == 200, f"Graph creation with desc failed: {create_desc_resp.text}"
+        assert create_desc_resp.status_code == 200, (
+            f"Graph creation with desc failed: {create_desc_resp.text}"
+        )
         create_desc_json = create_desc_resp.json()
         assert create_desc_json and create_desc_json.get("name") == graph_payload_desc["name"]
         assert "version_count" in create_desc_json and create_desc_json["version_count"] == 0
@@ -88,7 +99,9 @@ def test_post_api_graphs_create_new_workflow_graph():
                 headers=headers,
                 timeout=TIMEOUT,
             )
-            assert resp.status_code == 400, f"Expected 400 for invalid payload, got {resp.status_code} for payload {payload}"
+            assert resp.status_code == 400, (
+                f"Expected 400 for invalid payload, got {resp.status_code} for payload {payload}"
+            )
 
     finally:
         # Logout user to invalidate session

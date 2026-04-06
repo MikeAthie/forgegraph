@@ -15,7 +15,9 @@ def unique_email() -> str:
     return f"testsprite-{uuid.uuid4().hex}@example.com"
 
 
-def register_user(session: requests.Session, password: str = "StrongPass!123") -> tuple[str, str, dict]:
+def register_user(
+    session: requests.Session, password: str = "StrongPass!123"
+) -> tuple[str, str, dict]:
     email = unique_email()
     response = session.post(
         f"{BASE_URL}/api/auth/register",

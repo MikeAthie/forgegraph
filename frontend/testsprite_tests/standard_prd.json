@@ -67,14 +67,7 @@
   "code_summary": {
     "version": "2",
     "type": "frontend",
-    "tech_stack": [
-      "TypeScript",
-      "Next.js 14",
-      "React 18",
-      "Radix UI",
-      "Jest",
-      "Playwright"
-    ],
+    "tech_stack": ["TypeScript", "Next.js 14", "React 18", "Radix UI", "Jest", "Playwright"],
     "routes": [
       {
         "path": "/",

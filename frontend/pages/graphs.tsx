@@ -197,7 +197,8 @@ export default function GraphsPage() {
               },
               {
                 title: "What does not",
-                content: "Runtime supervision, cost posture, approval handling, and memory inspection stay outside the builder workspace.",
+                content:
+                  "Runtime supervision, cost posture, approval handling, and memory inspection stay outside the builder workspace.",
               },
             ]}
           />
@@ -210,7 +211,12 @@ export default function GraphsPage() {
             description="The builder workspace remains available for authoring and versioning, but it no longer defines the top-level product mental model."
             action={
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" className="rounded-full" onClick={() => void refreshGraphs()} disabled={loading}>
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => void refreshGraphs()}
+                  disabled={loading}
+                >
                   <RefreshCw aria-hidden="true" />
                   Refresh
                 </Button>
@@ -264,7 +270,10 @@ export default function GraphsPage() {
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
-                        <Link href={`/workflows/${graph.id}`} className="transition-colors hover:text-slate-700 dark:hover:text-slate-200">
+                        <Link
+                          href={`/workflows/${graph.id}`}
+                          className="transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                        >
                           <CardTitle className="text-lg">{graph.name}</CardTitle>
                         </Link>
                         {graph.latest_version != null ? (

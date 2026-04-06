@@ -3,7 +3,19 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, BrainCircuit, HandCoins, ShieldCheck, Waypoints } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { EmptyBlock, InspectorPanel, KeyValueGrid, MetricCard, Panel, StatusBadge, TimelineList, formatCompactNumber, formatCurrency, formatDateTime, overviewIcons } from "@/components/os/operations-ui";
+import {
+  EmptyBlock,
+  InspectorPanel,
+  KeyValueGrid,
+  MetricCard,
+  Panel,
+  StatusBadge,
+  TimelineList,
+  formatCompactNumber,
+  formatCurrency,
+  formatDateTime,
+  overviewIcons,
+} from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { getApiErrorMessage, systemStateApi, type AgentRegistryEntry, type OrganizationStateSummary } from "@/lib/api";
@@ -232,7 +244,11 @@ export default function OverviewPage() {
               <MetricCard
                 eyebrow="Revenue today"
                 value={derived ? formatCurrency(derived.revenueToday) : "$0"}
-                delta={derived ? `${formatCurrency(derived.profitToday)} gross margin after infrastructure cost` : "Derived operating estimate"}
+                delta={
+                  derived
+                    ? `${formatCurrency(derived.profitToday)} gross margin after infrastructure cost`
+                    : "Derived operating estimate"
+                }
                 tone="emerald"
                 icon={overviewIcons.financial}
               />
@@ -282,7 +298,9 @@ export default function OverviewPage() {
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Cost</p>
+                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                              Cost
+                            </p>
                             <p className="mt-2 text-sm font-semibold">{formatCurrency(agent.total_cost_usd)}</p>
                           </div>
                         </Link>
@@ -311,12 +329,20 @@ export default function OverviewPage() {
                   {overview.pending_decisions.length ? (
                     <div className="space-y-3">
                       {overview.pending_decisions.slice(0, 5).map((decision) => (
-                        <div key={decision.id} className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <div
+                          key={decision.id}
+                          className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                        >
                           <div className="flex items-start justify-between gap-4">
                             <div>
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{decision.decision_type}</p>
+                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                {decision.decision_type}
+                              </p>
                               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                {String(decision.context_json?.summary ?? "Operator approval required before this execution continues.")}
+                                {String(
+                                  decision.context_json?.summary ??
+                                    "Operator approval required before this execution continues.",
+                                )}
                               </p>
                               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                 Requested {formatDateTime(decision.requested_at ?? decision.created_at)}
@@ -335,25 +361,42 @@ export default function OverviewPage() {
                       ))}
                     </div>
                   ) : (
-                    <EmptyBlock title="Inbox is clear" description="No decisions are currently waiting on a human operator." />
+                    <EmptyBlock
+                      title="Inbox is clear"
+                      description="No decisions are currently waiting on a human operator."
+                    />
                   )}
                 </Panel>
               </div>
 
               <div className="grid gap-6 2xl:grid-cols-[0.95fr_1.05fr]">
-                <Panel title="Alerts and issues" description="Operational anomalies, failed executions, and policy pressure.">
+                <Panel
+                  title="Alerts and issues"
+                  description="Operational anomalies, failed executions, and policy pressure."
+                >
                   {derived.alerts.length ? (
                     <div className="space-y-3">
                       {derived.alerts.map((alert) => (
-                        <div key={alert.id} className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <div
+                          key={alert.id}
+                          className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                        >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3">
                               <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-900/10 bg-white dark:border-white/10 dark:bg-white/5">
-                                {alert.tone === "rose" ? overviewIcons.attention : alert.tone === "amber" ? overviewIcons.paused : <AlertTriangle className="h-4 w-4" />}
+                                {alert.tone === "rose" ? (
+                                  overviewIcons.attention
+                                ) : alert.tone === "amber" ? (
+                                  overviewIcons.paused
+                                ) : (
+                                  <AlertTriangle className="h-4 w-4" />
+                                )}
                               </span>
                               <div>
                                 <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{alert.title}</p>
-                                <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{alert.detail}</p>
+                                <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                  {alert.detail}
+                                </p>
                               </div>
                             </div>
                             <StatusBadge status={alert.tone === "rose" ? "failed" : "paused"} label={alert.owner} />
@@ -369,12 +412,18 @@ export default function OverviewPage() {
                   )}
                 </Panel>
 
-                <Panel title="Recent activity feed" description="Short operational narrative for the last visible window.">
+                <Panel
+                  title="Recent activity feed"
+                  description="Short operational narrative for the last visible window."
+                >
                   <TimelineList items={derived.activity} />
                 </Panel>
               </div>
 
-              <Panel title="System state summary" description="A concise readout of health, memory, and economics for the current operating window.">
+              <Panel
+                title="System state summary"
+                description="A concise readout of health, memory, and economics for the current operating window."
+              >
                 <KeyValueGrid
                   columns={3}
                   items={[

@@ -7,6 +7,7 @@ The frontend service is the ForgeGraph user interface. It is a Next.js 14 applic
 Default local port: `3000`
 
 Primary entrypoints:
+
 - `frontend/pages/_app.tsx`
 - `frontend/pages/index.tsx`
 - `frontend/components/`
@@ -32,6 +33,7 @@ Primary entrypoints:
 ## Main Pages
 
 Core routes:
+
 - `/`
 - `/login`
 - `/register`
@@ -46,6 +48,7 @@ Core routes:
 - `/onboarding`
 
 Admin and analytics routes:
+
 - `/admin`
 - `/admin/audit-logs`
 - `/admin/billing`
@@ -58,6 +61,7 @@ Admin and analytics routes:
 - `/analytics/memory`
 
 Callback routes:
+
 - `/oauth/callback`
 - `/sso/callback`
 
@@ -82,6 +86,7 @@ Callback routes:
 - End-to-end Playwright tests under `frontend/__tests__/e2e/`
 
 Representative areas already covered:
+
 - Landing and admin pages
 - Graph editor components, forms, dialogs, validation, and wizard flows
 - Auth context and protected routes
@@ -109,6 +114,7 @@ npm run lint
 ## Playwright Environment Notes
 
 The existing Playwright setup can launch:
+
 - the frontend on a dev port, default `3001`
 - the backend on `8002`
 - the engine on `50071`

@@ -10,7 +10,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import success_response
-from application.services.os_projections import organization_state_summary, refresh_phase1_projections
+from application.services.os_projections import (
+    organization_state_summary,
+    refresh_phase1_projections,
+)
 from infrastructure.orm.models import User
 
 

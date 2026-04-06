@@ -56,6 +56,8 @@ line-length = 100
 extend-exclude = [
     "infrastructure/grpc/engine_pb2.py",
     "infrastructure/grpc/engine_pb2_grpc.py",
+    "infrastructure/orm/migrations",
+    "testsprite_tests",
 ]
 
 [tool.ruff.lint]
@@ -84,6 +86,7 @@ exclude = [
     "infrastructure/grpc/engine_pb2\\.py$",
     "infrastructure/grpc/engine_pb2_grpc\\.py$",
     "infrastructure/orm/migrations/.*\\.py$",
+    "testsprite_tests/.*\\.py$",
     "manage\\.py$",
 ]
 

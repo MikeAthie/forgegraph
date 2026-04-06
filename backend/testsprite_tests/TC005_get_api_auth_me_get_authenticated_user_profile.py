@@ -16,21 +16,19 @@ def test_tc005_get_api_auth_me_authenticated_user_profile():
     password = "TestPassword123!"
 
     # Register a new user
-    register_payload = {
-        "email": unique_email,
-        "password": password
-    }
+    register_payload = {"email": unique_email, "password": password}
     register_resp = requests.post(REGISTER_URL, json=register_payload, timeout=TIMEOUT)
-    assert register_resp.status_code == 201, f"Unexpected register status: {register_resp.status_code}"
+    assert register_resp.status_code == 201, (
+        f"Unexpected register status: {register_resp.status_code}"
+    )
     register_data = register_resp.json()
     # Validate user payload has id and email (top-level)
-    assert "id" in register_data and "email" in register_data, "Register response missing user id or email"
+    assert "id" in register_data and "email" in register_data, (
+        "Register response missing user id or email"
+    )
 
     # Login with the same user credentials
-    login_payload = {
-        "email": unique_email,
-        "password": password
-    }
+    login_payload = {"email": unique_email, "password": password}
     login_resp = requests.post(LOGIN_URL, json=login_payload, timeout=TIMEOUT)
     assert login_resp.status_code == 200, f"Unexpected login status: {login_resp.status_code}"
     login_json = login_resp.json()
@@ -42,20 +40,26 @@ def test_tc005_get_api_auth_me_authenticated_user_profile():
     access_token = login_json["access"]
 
     # Test GET /api/auth/me with valid Bearer token
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
+    headers = {"Authorization": f"Bearer {access_token}"}
     auth_me_resp = requests.get(AUTH_ME_URL, headers=headers, timeout=TIMEOUT)
-    assert auth_me_resp.status_code == 200, f"Expected 200 on /api/auth/me with auth, got {auth_me_resp.status_code}"
+    assert auth_me_resp.status_code == 200, (
+        f"Expected 200 on /api/auth/me with auth, got {auth_me_resp.status_code}"
+    )
     auth_me_json = auth_me_resp.json()
     # Validate top-level user payload includes id and email
-    assert "id" in auth_me_json and "email" in auth_me_json, "Authenticated user payload missing id or email"
+    assert "id" in auth_me_json and "email" in auth_me_json, (
+        "Authenticated user payload missing id or email"
+    )
     # Validate the email is the same as registered
-    assert auth_me_json["email"] == unique_email, "Authenticated user email does not match registered email"
+    assert auth_me_json["email"] == unique_email, (
+        "Authenticated user email does not match registered email"
+    )
 
     # Test GET /api/auth/me without Authorization header, expect 401 Unauthorized
     no_auth_resp = requests.get(AUTH_ME_URL, timeout=TIMEOUT)
-    assert no_auth_resp.status_code == 401, f"Expected 401 on /api/auth/me without auth, got {no_auth_resp.status_code}"
+    assert no_auth_resp.status_code == 401, (
+        f"Expected 401 on /api/auth/me without auth, got {no_auth_resp.status_code}"
+    )
 
 
 test_tc005_get_api_auth_me_authenticated_user_profile()

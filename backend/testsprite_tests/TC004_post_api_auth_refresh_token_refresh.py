@@ -6,16 +6,14 @@ REGISTER_URL = f"{BASE_URL}/api/auth/register"
 LOGIN_URL = f"{BASE_URL}/api/auth/login"
 REFRESH_URL = f"{BASE_URL}/api/auth/refresh"
 
+
 def test_post_api_auth_refresh_token_refresh():
     # Create unique email for registration
     unique_email = f"testuser_{uuid.uuid4()}@example.com"
     password = "TestPassword123!"
 
     # Register user
-    register_payload = {
-        "email": unique_email,
-        "password": password
-    }
+    register_payload = {"email": unique_email, "password": password}
     register_resp = requests.post(REGISTER_URL, json=register_payload, timeout=30)
     assert register_resp.status_code == 200, f"Registration failed: {register_resp.text}"
     register_json = register_resp.json()
@@ -24,10 +22,7 @@ def test_post_api_auth_refresh_token_refresh():
     assert register_json["email"] == unique_email
 
     # Login user
-    login_payload = {
-        "email": unique_email,
-        "password": password
-    }
+    login_payload = {"email": unique_email, "password": password}
     login_resp = requests.post(LOGIN_URL, json=login_payload, timeout=30)
     assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
     login_json = login_resp.json()
@@ -49,17 +44,23 @@ def test_post_api_auth_refresh_token_refresh():
     refresh_resp2 = requests.post(REFRESH_URL, json=refresh_payload2, timeout=30)
     assert refresh_resp2.status_code == 200, f"Second refresh failed: {refresh_resp2.text}"
     refresh_json2 = refresh_resp2.json()
-    assert "access" in refresh_json2, f"New access token missing on second refresh: {refresh_resp2.text}"
+    assert "access" in refresh_json2, (
+        f"New access token missing on second refresh: {refresh_resp2.text}"
+    )
 
     # --- Step 3: Attempt reuse of invalid refresh token (simulate by altering token) - expect 401 ---
     reuse_payload = {"refresh": "invalid_refresh_token_for_reuse_test"}
     reuse_resp = requests.post(REFRESH_URL, json=reuse_payload, timeout=30)
-    assert reuse_resp.status_code == 401, f"Invalid refresh token should fail with 401 but got {reuse_resp.status_code}"
+    assert reuse_resp.status_code == 401, (
+        f"Invalid refresh token should fail with 401 but got {reuse_resp.status_code}"
+    )
 
     # --- Step 4: Attempt refresh with invalid refresh token - expect 401 ---
     invalid_payload = {"refresh": "invalid_refresh_token_value"}
     invalid_resp = requests.post(REFRESH_URL, json=invalid_payload, timeout=30)
-    assert invalid_resp.status_code == 401, f"Invalid refresh token should fail with 401 but got {invalid_resp.status_code}"
+    assert invalid_resp.status_code == 401, (
+        f"Invalid refresh token should fail with 401 but got {invalid_resp.status_code}"
+    )
 
 
 test_post_api_auth_refresh_token_refresh()

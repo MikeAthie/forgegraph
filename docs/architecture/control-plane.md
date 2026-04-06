@@ -2,13 +2,17 @@
 
 The backend control plane owns:
 
-- identity and tenancy
+- canonical persisted business state
+- identity, JWT auth, tenancy, and query-boundary isolation
 - workflow definition persistence
-- execution APIs
-- decisions
-- memory APIs
-- accounting
+- execution command APIs and orchestration boundaries
+- decisions and human-in-the-loop state
+- canonical memory persistence and derivation
+- accounting, quotas, limits, and fast-path budget enforcement
 - marketplace governance
-- projections and summaries
+- projections, summaries, and operator-facing read models
+- idempotent event ingestion and snapshot-backed resume state
 
-It translates canonical runtime facts into operator-facing system state.
+It ingests engine events, materializes operator-facing system state, and exposes canonical state to the frontend over REST and WebSockets.
+
+Reference: [system-invariants.md](system-invariants.md)

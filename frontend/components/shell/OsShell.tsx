@@ -244,7 +244,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
           </div>
 
           <div className="mt-auto rounded-[1.75rem] border border-sidebar-border bg-[linear-gradient(180deg,rgba(24,38,62,0.96),rgba(24,38,62,0.88))] px-5 py-5 text-slate-100 dark:bg-[linear-gradient(180deg,rgba(237,241,245,0.14),rgba(237,241,245,0.08))]">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300 dark:text-slate-400">Operating posture</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300 dark:text-slate-400">
+              Operating posture
+            </p>
             <p className="mt-3 text-lg font-semibold" style={{ fontFamily: "var(--font-serif)" }}>
               Digital company, not chatbot.
             </p>
@@ -266,10 +268,16 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{meta.description}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="rounded-full border-slate-900/10 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5">
+                  <Badge
+                    variant="outline"
+                    className="rounded-full border-slate-900/10 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5"
+                  >
                     {user?.default_organization_id ? "Organization scope" : "Personal scope"}
                   </Badge>
-                  <Badge variant="outline" className="rounded-full border-slate-900/10 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5">
+                  <Badge
+                    variant="outline"
+                    className="rounded-full border-slate-900/10 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5"
+                  >
                     Last 24 hours
                   </Badge>
                   <ThemeToggle />

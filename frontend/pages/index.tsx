@@ -8,7 +8,8 @@ const surfaces = [
   {
     icon: BrainCircuit,
     title: "Agent supervision",
-    description: "Inspect autonomous behavior, pause work, and understand the last meaningful action taken by each agent.",
+    description:
+      "Inspect autonomous behavior, pause work, and understand the last meaningful action taken by each agent.",
   },
   {
     icon: Waypoints,
@@ -23,7 +24,8 @@ const surfaces = [
   {
     icon: HandCoins,
     title: "Accounting",
-    description: "Track spend, modeled revenue, and operational efficiency like financial software instead of a marketing dashboard.",
+    description:
+      "Track spend, modeled revenue, and operational efficiency like financial software instead of a marketing dashboard.",
   },
 ];
 
@@ -89,7 +91,10 @@ export default function Home() {
         <section className="px-4 pb-16 pt-16 sm:px-6 lg:px-8 lg:pb-24 lg:pt-24">
           <div className="mx-auto grid w-full max-w-[1380px] gap-12 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
             <div>
-              <Badge variant="outline" className="rounded-full border-slate-900/10 bg-white/70 px-4 py-1.5 text-[11px] uppercase tracking-[0.2em] dark:border-white/10 dark:bg-white/5">
+              <Badge
+                variant="outline"
+                className="rounded-full border-slate-900/10 bg-white/70 px-4 py-1.5 text-[11px] uppercase tracking-[0.2em] dark:border-white/10 dark:bg-white/5"
+              >
                 Operating system for AI-native organizations
               </Badge>
               <h1
@@ -121,9 +126,16 @@ export default function Home() {
             <div className="rounded-[2rem] border border-slate-900/10 bg-white/80 p-5 shadow-[0_40px_120px_-60px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60">
               <div className="grid gap-4 md:grid-cols-2">
                 {systemRows.map((row) => (
-                  <div key={row.label} className="rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{row.label}</p>
-                    <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{row.value}</p>
+                  <div
+                    key={row.label}
+                    className="rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      {row.label}
+                    </p>
+                    <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      {row.value}
+                    </p>
                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{row.note}</p>
                   </div>
                 ))}
@@ -135,7 +147,8 @@ export default function Home() {
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Pending decisions</p>
                     <p className="mt-2 text-xl font-semibold">6 approvals require human review</p>
                     <p className="mt-2 text-sm leading-6 text-slate-300">
-                      Customer Support Agent wants to refund 14 enterprise invoices. Finance policy requires operator approval.
+                      Customer Support Agent wants to refund 14 enterprise invoices. Finance policy requires operator
+                      approval.
                     </p>
                   </div>
                   <ShieldCheck className="mt-1 h-5 w-5 text-slate-300" />
@@ -144,7 +157,11 @@ export default function Home() {
                   <Button size="sm" className="rounded-full bg-white text-slate-950 hover:bg-slate-200">
                     Approve
                   </Button>
-                  <Button size="sm" variant="outline" className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10"
+                  >
                     Reject
                   </Button>
                 </div>
@@ -156,8 +173,13 @@ export default function Home() {
         <section className="px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
           <div className="mx-auto w-full max-w-[1380px]">
             <div className="max-w-3xl">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Core surfaces</p>
-              <h2 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50" style={{ fontFamily: "var(--font-serif)" }}>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                Core surfaces
+              </p>
+              <h2
+                className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
+                style={{ fontFamily: "var(--font-serif)" }}
+              >
                 A calm command center for an autonomous organization.
               </h2>
             </div>
@@ -165,7 +187,10 @@ export default function Home() {
               {surfaces.map((surface) => {
                 const Icon = surface.icon;
                 return (
-                  <div key={surface.title} className="rounded-[1.7rem] border border-slate-900/10 bg-white/78 px-5 py-5 shadow-[0_24px_80px_-60px_rgba(15,23,42,0.4)] dark:border-white/10 dark:bg-slate-950/55">
+                  <div
+                    key={surface.title}
+                    className="rounded-[1.7rem] border border-slate-900/10 bg-white/78 px-5 py-5 shadow-[0_24px_80px_-60px_rgba(15,23,42,0.4)] dark:border-white/10 dark:bg-slate-950/55"
+                  >
                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-900/10 bg-[var(--panel-muted)] dark:border-white/10">
                       <Icon className="h-5 w-5 text-slate-900 dark:text-slate-100" />
                     </div>
@@ -181,7 +206,9 @@ export default function Home() {
         <section className="px-4 pb-20 sm:px-6 lg:px-8">
           <div className="mx-auto grid w-full max-w-[1380px] gap-6 xl:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[1.9rem] border border-slate-900/10 bg-white/78 px-6 py-6 dark:border-white/10 dark:bg-slate-950/55">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">State-first design</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                State-first design
+              </p>
               <ul className="mt-4 space-y-4 text-sm leading-7 text-slate-700 dark:text-slate-200">
                 <li>Summaries first. Details on demand.</li>
                 <li>Agents, tasks, memory, decisions, and cost are treated as inspectable system state.</li>
@@ -196,8 +223,8 @@ export default function Home() {
                 Workflows still exist, but they no longer define the product.
               </h3>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
-                Builder tooling remains available for authoring and revisions. The default product surface is the organization dashboard,
-                followed by agents, tasks, inbox, memory, and accounting.
+                Builder tooling remains available for authoring and revisions. The default product surface is the
+                organization dashboard, followed by agents, tasks, inbox, memory, and accounting.
               </p>
             </div>
           </div>

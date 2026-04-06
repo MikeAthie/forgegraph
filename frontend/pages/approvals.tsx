@@ -2,7 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { EmptyBlock, InspectorPanel, Panel, SectionHeader, SelectionList, StatusBadge, formatCurrency, formatDateTime } from "@/components/os/operations-ui";
+import {
+  EmptyBlock,
+  InspectorPanel,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+  formatCurrency,
+  formatDateTime,
+} from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner, Textarea } from "@/components/ui";
 import { approvalsApi, getApiErrorMessage, runsApi, type ApprovalTask } from "@/lib/api";
@@ -50,7 +59,7 @@ export default function ApprovalsPage() {
   }, [loadApprovals]);
 
   const selectedApprovalId =
-    typeof router.query.item === "string" ? router.query.item : tasks.length > 0 ? tasks[0]?.id ?? null : null;
+    typeof router.query.item === "string" ? router.query.item : tasks.length > 0 ? (tasks[0]?.id ?? null) : null;
 
   const selectedApproval = useMemo(
     () => tasks.find((task) => task.id === selectedApprovalId) ?? tasks[0] ?? null,
@@ -90,11 +99,7 @@ export default function ApprovalsPage() {
       const nextItems = tasks.filter((task) => task.id !== selectedApproval.id);
       await loadApprovals();
       if (nextItems[0]?.id) {
-        void router.replace(
-          { pathname: "/inbox", query: { item: nextItems[0].id } },
-          undefined,
-          { shallow: true },
-        );
+        void router.replace({ pathname: "/inbox", query: { item: nextItems[0].id } }, undefined, { shallow: true });
       }
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Failed to submit the decision."));
@@ -110,7 +115,12 @@ export default function ApprovalsPage() {
       sections={[
         {
           title: "Risk level",
-          content: <StatusBadge status={impact.risk === "high" ? "failed" : impact.risk === "medium" ? "paused" : "active"} label={impact.risk} />,
+          content: (
+            <StatusBadge
+              status={impact.risk === "high" ? "failed" : impact.risk === "medium" ? "paused" : "active"}
+              label={impact.risk}
+            />
+          ),
         },
         {
           title: "Estimated cost",
@@ -171,11 +181,7 @@ export default function ApprovalsPage() {
                   items={tasks}
                   selectedId={selectedApproval.id}
                   onSelect={(task) => {
-                    void router.replace(
-                      { pathname: "/inbox", query: { item: task.id } },
-                      undefined,
-                      { shallow: true },
-                    );
+                    void router.replace({ pathname: "/inbox", query: { item: task.id } }, undefined, { shallow: true });
                   }}
                   renderTitle={(task) => (
                     <div className="flex items-center gap-3">
@@ -183,16 +189,25 @@ export default function ApprovalsPage() {
                       <StatusBadge status={task.status} />
                     </div>
                   )}
-                  renderBody={(task) => `${task.node_name}: ${task.prompt_message || "Approval required before execution resumes."}`}
+                  renderBody={(task) =>
+                    `${task.node_name}: ${task.prompt_message || "Approval required before execution resumes."}`
+                  }
                   renderMeta={(task) => (
                     <div className="text-right">
                       <div className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                         {estimateImpact(task).risk}
                       </div>
-                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(task.created_at)}</div>
+                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        {formatDateTime(task.created_at)}
+                      </div>
                     </div>
                   )}
-                  empty={<EmptyBlock title="No items in this filter" description="Try another inbox state to review earlier approvals." />}
+                  empty={
+                    <EmptyBlock
+                      title="No items in this filter"
+                      description="Try another inbox state to review earlier approvals."
+                    />
+                  }
                 />
               </Panel>
 
@@ -200,34 +215,47 @@ export default function ApprovalsPage() {
                 <Panel title="Decision review" description="Context first, raw trace later.">
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Input</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Input
+                      </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
                         {selectedApproval.prompt_message || "Input context was not captured on this approval task."}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Proposed action</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Proposed action
+                      </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        Resume the execution at <span className="font-medium">{selectedApproval.node_name}</span> once a decision is recorded.
+                        Resume the execution at <span className="font-medium">{selectedApproval.node_name}</span> once a
+                        decision is recorded.
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Reasoning summary</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Reasoning summary
+                      </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
                         {selectedApproval.payload?.prompt_message ??
                           "The execution reached a human gate and paused because it needs an operator decision before it can continue."}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Expected outcome</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Expected outcome
+                      </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        Approval resumes execution. Rejection records the decision and leaves the execution paused for follow-up.
+                        Approval resumes execution. Rejection records the decision and leaves the execution paused for
+                        follow-up.
                       </p>
                     </div>
                   </div>
                 </Panel>
 
-                <Panel title="Edit before approving" description="Adjust operator feedback or constraints before resuming the execution.">
+                <Panel
+                  title="Edit before approving"
+                  description="Adjust operator feedback or constraints before resuming the execution."
+                >
                   <Textarea
                     rows={6}
                     value={editNotes}
@@ -236,7 +264,11 @@ export default function ApprovalsPage() {
                     className="rounded-[1.25rem] border-slate-900/12 bg-white/75 dark:border-white/10 dark:bg-white/5"
                   />
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button className="rounded-full" disabled={submitting || selectedApproval.status !== "pending"} onClick={() => void handleDecision(true)}>
+                    <Button
+                      className="rounded-full"
+                      disabled={submitting || selectedApproval.status !== "pending"}
+                      onClick={() => void handleDecision(true)}
+                    >
                       {editNotes.trim() ? "Approve with notes" : "Approve"}
                     </Button>
                     <Button
@@ -247,7 +279,9 @@ export default function ApprovalsPage() {
                     >
                       Reject
                     </Button>
-                    {selectedApproval.status !== "pending" ? <StatusBadge status={selectedApproval.status} label="Read only" /> : null}
+                    {selectedApproval.status !== "pending" ? (
+                      <StatusBadge status={selectedApproval.status} label="Read only" />
+                    ) : null}
                   </div>
                 </Panel>
               </div>

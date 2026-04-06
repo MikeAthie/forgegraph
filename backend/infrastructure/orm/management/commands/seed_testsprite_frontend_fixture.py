@@ -104,9 +104,9 @@ class Command(BaseCommand):
                 user=user,
                 defaults={"role": "owner", "is_default": True},
             )
-            OrganizationMembership.objects.filter(user=user).exclude(organization=organization).update(
-                is_default=False
-            )
+            OrganizationMembership.objects.filter(user=user).exclude(
+                organization=organization
+            ).update(is_default=False)
 
             prompt_defaults = {
                 "owner": user,
@@ -119,7 +119,9 @@ class Command(BaseCommand):
                 "license": "MIT",
                 "visibility": "private",
             }
-            prompt, _ = PromptTemplate.objects.update_or_create(id=PROMPT_ID, defaults=prompt_defaults)
+            prompt, _ = PromptTemplate.objects.update_or_create(
+                id=PROMPT_ID, defaults=prompt_defaults
+            )
             PromptTemplate.objects.filter(id=prompt.id).update(
                 created_at=prompt_timestamp,
                 updated_at=prompt_timestamp,

@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from django.db import models, transaction
@@ -55,7 +55,10 @@ def _organization_for_user(user: User) -> Organization:
 
 
 def _workflow_queryset(organization: Organization) -> models.QuerySet[Graph]:
-    return Graph.objects.filter(owner__default_organization_id=organization.id)
+    return cast(
+        models.QuerySet[Graph],
+        Graph.objects.filter(owner__default_organization_id=organization.id),
+    )
 
 
 def _latest_version(graph: Graph) -> GraphVersion | None:
@@ -81,17 +84,15 @@ def _node_type(node: dict[str, Any]) -> str:
 
 def _is_agent_node(node: dict[str, Any]) -> bool:
     node_type = _node_type(node)
-    return node_type == "agent" or str(_node_data(node).get("kind") or "").strip().lower() == "agent"
+    return (
+        node_type == "agent" or str(_node_data(node).get("kind") or "").strip().lower() == "agent"
+    )
 
 
 def _node_name(node: dict[str, Any]) -> str:
     data = _node_data(node)
     return str(
-        node.get("name")
-        or data.get("label")
-        or data.get("name")
-        or node.get("id")
-        or "Agent"
+        node.get("name") or data.get("label") or data.get("name") or node.get("id") or "Agent"
     ).strip()
 
 
@@ -180,7 +181,9 @@ def sync_agent_registry_for_organization(organization: Organization) -> list[Age
                     "display_name": display_name,
                     "source_workflow_revision": latest_version,
                     "status": _derive_agent_status(latest_run, has_pending_decision),
-                    "policy_snapshot_json": policy_snapshot if isinstance(policy_snapshot, dict) else {},
+                    "policy_snapshot_json": policy_snapshot
+                    if isinstance(policy_snapshot, dict)
+                    else {},
                     "capabilities_json": capabilities,
                     "default_model": default_model,
                     "last_execution": latest_run.run if latest_run else None,
@@ -190,7 +193,9 @@ def sync_agent_registry_for_organization(organization: Organization) -> list[Age
             active_ids.append(entry.id)
 
     AgentRegistryEntry.objects.filter(organization=organization).exclude(id__in=active_ids).delete()
-    return list(AgentRegistryEntry.objects.filter(organization=organization).order_by("display_name"))
+    return list(
+        AgentRegistryEntry.objects.filter(organization=organization).order_by("display_name")
+    )
 
 
 def _task_status_from(node_run: NodeRun) -> str:
@@ -292,7 +297,9 @@ def sync_decision_records_for_organization(
     agents = agents or list(AgentRegistryEntry.objects.filter(organization=organization))
     tasks = tasks or list(TaskRecord.objects.filter(organization=organization))
     tasks_by_key = {(str(task.execution_id), task.source_node_id): task for task in tasks}
-    agents_by_key = {(str(agent.source_workflow_id), agent.source_node_id): agent for agent in agents}
+    agents_by_key = {
+        (str(agent.source_workflow_id), agent.source_node_id): agent for agent in agents
+    }
     active_ids: list[UUID] = []
 
     approvals = (
@@ -303,8 +310,10 @@ def sync_decision_records_for_organization(
     for approval in approvals:
         run = approval.run
         task = tasks_by_key.get((str(run.id), approval.node_id))
-        agent = task.agent if task and task.agent_id else agents_by_key.get(
-            (str(run.graph_version.graph_id), approval.node_id)
+        agent = (
+            task.agent
+            if task and task.agent_id
+            else agents_by_key.get((str(run.graph_version.graph_id), approval.node_id))
         )
         decision, _ = DecisionRecord.objects.update_or_create(
             organization=organization,
@@ -406,40 +415,42 @@ def sync_accounting_for_organization(
     tasks_by_run_node = {(str(task.execution_id), task.source_node_id): task for task in tasks}
     active_ids: list[UUID] = []
 
-    llm_entries = LLMUsage.objects.filter(tenant_id=organization.id).select_related("run__graph_version")
-    for usage in llm_entries:
-        task = tasks_by_run_node.get((str(usage.run_id), usage.node_id))
+    llm_entries = LLMUsage.objects.filter(tenant_id=organization.id).select_related(
+        "run__graph_version"
+    )
+    for llm_usage in llm_entries:
+        task = tasks_by_run_node.get((str(llm_usage.run_id), llm_usage.node_id))
         agent = task.agent if task else None
-        unit_cost = (usage.cost_usd / usage.total_tokens) if usage.total_tokens else DECIMAL_ZERO
+        unit_cost = (
+            llm_usage.cost_usd / llm_usage.total_tokens if llm_usage.total_tokens else DECIMAL_ZERO
+        )
         ledger, _ = CostLedgerEntry.objects.update_or_create(
             organization=organization,
-            external_key=f"llm:{usage.id}",
+            external_key=f"llm:{llm_usage.id}",
             defaults={
-                "execution": usage.run,
+                "execution": llm_usage.run,
                 "task": task,
                 "agent": agent,
-                "workflow_revision": usage.run.graph_version,
-                "provider": usage.provider,
-                "model": usage.model,
+                "workflow_revision": llm_usage.run.graph_version,
+                "provider": llm_usage.provider,
+                "model": llm_usage.model,
                 "cost_type": "llm",
-                "quantity": Decimal(usage.total_tokens),
+                "quantity": Decimal(llm_usage.total_tokens),
                 "unit_cost_usd": unit_cost,
-                "total_cost_usd": usage.cost_usd,
-                "occurred_at": usage.created_at,
+                "total_cost_usd": llm_usage.cost_usd,
+                "occurred_at": llm_usage.created_at,
             },
         )
         active_ids.append(ledger.id)
 
     memory_entries = MemoryUsage.objects.filter(tenant_id=organization.id)
-    for usage in memory_entries:
-        occurred_at = datetime.combine(usage.usage_date, datetime.min.time(), tzinfo=UTC)
-        quantity = Decimal(usage.summarization_total_tokens)
-        unit_cost = (
-            usage.summarization_cost_usd / quantity if quantity > 0 else DECIMAL_ZERO
-        )
+    for memory_usage in memory_entries:
+        occurred_at = datetime.combine(memory_usage.usage_date, datetime.min.time(), tzinfo=UTC)
+        quantity = Decimal(memory_usage.summarization_total_tokens)
+        unit_cost = memory_usage.summarization_cost_usd / quantity if quantity > 0 else DECIMAL_ZERO
         ledger, _ = CostLedgerEntry.objects.update_or_create(
             organization=organization,
-            external_key=f"memory:{usage.id}",
+            external_key=f"memory:{memory_usage.id}",
             defaults={
                 "execution": None,
                 "task": None,
@@ -450,7 +461,7 @@ def sync_accounting_for_organization(
                 "cost_type": "memory_summarization",
                 "quantity": quantity,
                 "unit_cost_usd": unit_cost,
-                "total_cost_usd": usage.summarization_cost_usd,
+                "total_cost_usd": memory_usage.summarization_cost_usd,
                 "occurred_at": occurred_at,
             },
         )
@@ -466,7 +477,7 @@ def sync_accounting_for_organization(
     return ledger_entries
 
 
-def _aggregate_key(entry: CostLedgerEntry, grain: str) -> tuple[str, str, str, str, datetime]:
+def _aggregate_key(entry: CostLedgerEntry, grain: str) -> tuple[str, str, str, str, str, datetime]:
     occurred_at = entry.occurred_at.astimezone(UTC)
     period_start = occurred_at.replace(minute=0, second=0, microsecond=0)
     if grain == "daily":
@@ -486,7 +497,9 @@ def _refresh_cost_aggregates(
     ledger_entries: list[CostLedgerEntry],
 ) -> None:
     active_ids: list[UUID] = []
-    buckets: dict[tuple[str, str, str, str, str, datetime], list[CostLedgerEntry]] = defaultdict(list)
+    buckets: dict[tuple[str, str, str, str, str, datetime], list[CostLedgerEntry]] = defaultdict(
+        list
+    )
     for entry in ledger_entries:
         buckets[_aggregate_key(entry, "hourly")].append(entry)
         buckets[_aggregate_key(entry, "daily")].append(entry)
@@ -496,7 +509,9 @@ def _refresh_cost_aggregates(
         period_end = period_start + (timedelta(hours=1) if grain == "hourly" else timedelta(days=1))
         total_cost = sum((entry.total_cost_usd for entry in entries), DECIMAL_ZERO)
         total_quantity = sum((entry.quantity for entry in entries), DECIMAL_ZERO)
-        workflow_revision_id = next((entry.workflow_revision_id for entry in entries if entry.workflow_revision_id), None)
+        workflow_revision_id = next(
+            (entry.workflow_revision_id for entry in entries if entry.workflow_revision_id), None
+        )
         aggregate, _ = CostAggregate.objects.update_or_create(
             organization=organization,
             external_key=f"{grain}:{agent_id}:{provider}:{model}:{cost_type}:{period_start.isoformat()}",
@@ -540,7 +555,9 @@ def agent_summary(agent: AgentRegistryEntry) -> dict[str, Any]:
     task_count = TaskRecord.objects.filter(agent=agent).count()
     pending_decisions = DecisionRecord.objects.filter(agent=agent, status="pending").count()
     total_cost = (
-        CostLedgerEntry.objects.filter(agent=agent).aggregate(total=models.Sum("total_cost_usd")).get("total")
+        CostLedgerEntry.objects.filter(agent=agent)
+        .aggregate(total=models.Sum("total_cost_usd"))
+        .get("total")
         or DECIMAL_ZERO
     )
     return {
@@ -550,7 +567,9 @@ def agent_summary(agent: AgentRegistryEntry) -> dict[str, Any]:
         "display_name": agent.display_name,
         "status": agent.status,
         "source_workflow_id": str(agent.source_workflow_id),
-        "source_workflow_revision_id": str(agent.source_workflow_revision_id) if agent.source_workflow_revision_id else None,
+        "source_workflow_revision_id": str(agent.source_workflow_revision_id)
+        if agent.source_workflow_revision_id
+        else None,
         "source_node_id": agent.source_node_id,
         "default_model": agent.default_model,
         "last_execution_id": str(agent.last_execution_id) if agent.last_execution_id else None,
@@ -594,7 +613,9 @@ def decision_summary(decision: DecisionRecord) -> dict[str, Any]:
         "agent_id": str(decision.agent_id) if decision.agent_id else None,
         "decision_type": decision.decision_type,
         "status": decision.status,
-        "source_approval_task_id": str(decision.source_approval_task_id) if decision.source_approval_task_id else None,
+        "source_approval_task_id": str(decision.source_approval_task_id)
+        if decision.source_approval_task_id
+        else None,
         "context_json": decision.context_json,
         "resolution_json": decision.resolution_json,
         "requested_at": decision.requested_at.isoformat() if decision.requested_at else None,
@@ -611,7 +632,9 @@ def cost_ledger_summary(entry: CostLedgerEntry) -> dict[str, Any]:
         "execution_id": str(entry.execution_id) if entry.execution_id else None,
         "task_id": str(entry.task_id) if entry.task_id else None,
         "agent_id": str(entry.agent_id) if entry.agent_id else None,
-        "workflow_revision_id": str(entry.workflow_revision_id) if entry.workflow_revision_id else None,
+        "workflow_revision_id": str(entry.workflow_revision_id)
+        if entry.workflow_revision_id
+        else None,
         "provider": entry.provider,
         "model": entry.model,
         "cost_type": entry.cost_type,
@@ -624,7 +647,9 @@ def cost_ledger_summary(entry: CostLedgerEntry) -> dict[str, Any]:
 
 def accounting_overview(organization: Organization) -> dict[str, Any]:
     ledger_qs = CostLedgerEntry.objects.filter(organization=organization)
-    total_cost = ledger_qs.aggregate(total=models.Sum("total_cost_usd")).get("total") or DECIMAL_ZERO
+    total_cost = (
+        ledger_qs.aggregate(total=models.Sum("total_cost_usd")).get("total") or DECIMAL_ZERO
+    )
     cost_by_type = list(
         ledger_qs.values("cost_type")
         .annotate(total_cost_usd=models.Sum("total_cost_usd"), entry_count=models.Count("id"))
@@ -636,7 +661,9 @@ def accounting_overview(organization: Organization) -> dict[str, Any]:
         .order_by("-total_cost_usd", "display_name")[:5]
     )
     recent_aggregates = list(
-        CostAggregate.objects.filter(organization=organization, grain="daily").order_by("-period_start")[:14]
+        CostAggregate.objects.filter(organization=organization, grain="daily").order_by(
+            "-period_start"
+        )[:14]
     )
     return {
         "organization_id": str(organization.id),
@@ -696,9 +723,13 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
         .order_by("-started_at")[:8]
     )
     policy = TenantPolicy.objects.filter(tenant_id=organization.id).first()
-    memory_count = MemoryObservation.objects.filter(tenant_id=organization.id, deleted_at__isnull=True).count()
+    memory_count = MemoryObservation.objects.filter(
+        tenant_id=organization.id, deleted_at__isnull=True
+    ).count()
     total_cost = (
-        CostLedgerEntry.objects.filter(organization=organization).aggregate(total=models.Sum("total_cost_usd")).get("total")
+        CostLedgerEntry.objects.filter(organization=organization)
+        .aggregate(total=models.Sum("total_cost_usd"))
+        .get("total")
         or DECIMAL_ZERO
     )
 
@@ -709,8 +740,12 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
         },
         "summary": {
             "active_agent_count": active_agents.count(),
-            "active_task_count": TaskRecord.objects.filter(organization=organization, status__in=TASK_ACTIVE_STATUSES).count(),
-            "pending_decision_count": DecisionRecord.objects.filter(organization=organization, status="pending").count(),
+            "active_task_count": TaskRecord.objects.filter(
+                organization=organization, status__in=TASK_ACTIVE_STATUSES
+            ).count(),
+            "pending_decision_count": DecisionRecord.objects.filter(
+                organization=organization, status="pending"
+            ).count(),
             "execution_count_24h": Run.objects.filter(
                 owner__default_organization_id=organization.id,
                 started_at__gte=now - timedelta(hours=24),

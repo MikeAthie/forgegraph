@@ -81,9 +81,11 @@ export const statusTone = (status: string) => {
 };
 
 const toneClasses: Record<string, string> = {
-  emerald: "border-emerald-800/15 bg-emerald-50 text-emerald-900 dark:border-emerald-200/20 dark:bg-emerald-500/10 dark:text-emerald-100",
+  emerald:
+    "border-emerald-800/15 bg-emerald-50 text-emerald-900 dark:border-emerald-200/20 dark:bg-emerald-500/10 dark:text-emerald-100",
   slate: "border-slate-900/10 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200",
-  amber: "border-amber-800/15 bg-amber-50 text-amber-900 dark:border-amber-200/20 dark:bg-amber-500/10 dark:text-amber-100",
+  amber:
+    "border-amber-800/15 bg-amber-50 text-amber-900 dark:border-amber-200/20 dark:bg-amber-500/10 dark:text-amber-100",
   rose: "border-rose-800/15 bg-rose-50 text-rose-900 dark:border-rose-200/20 dark:bg-rose-500/10 dark:text-rose-100",
   cyan: "border-cyan-800/15 bg-cyan-50 text-cyan-900 dark:border-cyan-200/20 dark:bg-cyan-500/10 dark:text-cyan-100",
 };
@@ -99,7 +101,10 @@ const toneDotClasses: Record<string, string> = {
 export function StatusBadge({ status, label }: { status: string; label?: string }) {
   const tone = statusTone(status);
   return (
-    <Badge variant="outline" className={cn("gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium", toneClasses[tone])}>
+    <Badge
+      variant="outline"
+      className={cn("gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium", toneClasses[tone])}
+    >
       <span className={cn("h-1.5 w-1.5 rounded-full", toneDotClasses[tone])} />
       {label ?? status}
     </Badge>
@@ -132,12 +137,7 @@ export function MetricCard({
             </p>
           ) : null}
         </div>
-        <div
-          className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-2xl border",
-            toneClasses[tone],
-          )}
-        >
+        <div className={cn("flex h-11 w-11 items-center justify-center rounded-2xl border", toneClasses[tone])}>
           {icon}
         </div>
       </CardContent>
@@ -145,11 +145,7 @@ export function MetricCard({
   );
 }
 
-export function Surface({
-  className,
-  children,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+export function Surface({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <section
       className={cn(
@@ -230,9 +226,14 @@ export function KeyValueGrid({
   columns?: 1 | 2 | 3;
 }) {
   return (
-    <div className={cn("grid gap-3", columns === 1 ? "grid-cols-1" : columns === 2 ? "md:grid-cols-2" : "md:grid-cols-3")}>
+    <div
+      className={cn("grid gap-3", columns === 1 ? "grid-cols-1" : columns === 2 ? "md:grid-cols-2" : "md:grid-cols-3")}
+    >
       {items.map((item) => (
-        <div key={item.label} className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8">
+        <div
+          key={item.label}
+          className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8"
+        >
           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{item.label}</p>
           <div className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">{item.value}</div>
         </div>
@@ -338,10 +339,21 @@ export function InspectorPanel({
 export function TimelineList({
   items,
 }: {
-  items: Array<{ id: string; title: string; detail: string; time?: string; tone?: "emerald" | "amber" | "rose" | "slate" | "cyan" }>;
+  items: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    time?: string;
+    tone?: "emerald" | "amber" | "rose" | "slate" | "cyan";
+  }>;
 }) {
   if (items.length === 0) {
-    return <EmptyBlock title="No recent activity" description="Events will appear here once work starts moving through the system." />;
+    return (
+      <EmptyBlock
+        title="No recent activity"
+        description="Events will appear here once work starts moving through the system."
+      />
+    );
   }
 
   return (
@@ -365,13 +377,7 @@ export function TimelineList({
   );
 }
 
-export function EmptyBlock({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
+export function EmptyBlock({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-[1.25rem] border border-dashed border-slate-900/12 bg-[var(--panel-muted)] px-5 py-8 text-center dark:border-white/12">
       <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</p>
@@ -408,15 +414,13 @@ export const overviewIcons = {
   separator: <Dot className="h-4 w-4" />,
 };
 
-export function SecondaryActionLink({
-  children,
-  href,
-}: {
-  children: ReactNode;
-  href: string;
-}) {
+export function SecondaryActionLink({ children, href }: { children: ReactNode; href: string }) {
   return (
-    <Button asChild variant="outline" className="rounded-full border-slate-900/12 bg-white/80 px-4 dark:border-white/10 dark:bg-white/5">
+    <Button
+      asChild
+      variant="outline"
+      className="rounded-full border-slate-900/12 bg-white/80 px-4 dark:border-white/10 dark:bg-white/5"
+    >
       <a href={href}>{children}</a>
     </Button>
   );

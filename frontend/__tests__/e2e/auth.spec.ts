@@ -64,7 +64,10 @@ test.describe("User Registration", () => {
   });
 
   test("navigates to login from the register screen", async ({ page }) => {
-    await page.getByRole("main").getByRole("link", { name: /sign in/i }).click();
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: /sign in/i })
+      .click();
     await expect(page).toHaveURL("/login");
   });
 });

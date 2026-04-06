@@ -34,4 +34,9 @@ class AccountingLedgerView(APIView):
         entries = CostLedgerEntry.objects.filter(organization=bundle.organization).select_related(
             "agent", "task", "execution", "workflow_revision"
         )
-        return success_response([cost_ledger_summary(entry) for entry in entries.order_by("-occurred_at", "-created_at")[:200]])
+        return success_response(
+            [
+                cost_ledger_summary(entry)
+                for entry in entries.order_by("-occurred_at", "-created_at")[:200]
+            ]
+        )

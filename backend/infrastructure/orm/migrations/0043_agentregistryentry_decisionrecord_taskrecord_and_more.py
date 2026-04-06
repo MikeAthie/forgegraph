@@ -6,217 +6,536 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orm', '0042_noderun_span_id_noderun_trace_id_run_trace_id_and_more'),
+        ("orm", "0042_noderun_span_id_noderun_trace_id_run_trace_id_and_more"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='AgentRegistryEntry',
+            name="AgentRegistryEntry",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('slug', models.SlugField(max_length=160)),
-                ('display_name', models.CharField(max_length=255)),
-                ('source_node_id', models.CharField(max_length=255)),
-                ('status', models.CharField(choices=[('idle', 'Idle'), ('active', 'Active'), ('attention', 'Attention'), ('offline', 'Offline')], default='idle', max_length=16)),
-                ('policy_snapshot_json', models.JSONField(blank=True, default=dict)),
-                ('capabilities_json', models.JSONField(blank=True, default=dict)),
-                ('default_model', models.CharField(blank=True, default='', max_length=128)),
-                ('last_seen_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('last_execution', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='agent_registry_last_seen', to='orm.run')),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='agent_registry_entries', to='orm.organization')),
-                ('source_workflow', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='agent_registry_entries', to='orm.graph')),
-                ('source_workflow_revision', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='agent_registry_entries', to='orm.graphversion')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                ("slug", models.SlugField(max_length=160)),
+                ("display_name", models.CharField(max_length=255)),
+                ("source_node_id", models.CharField(max_length=255)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("idle", "Idle"),
+                            ("active", "Active"),
+                            ("attention", "Attention"),
+                            ("offline", "Offline"),
+                        ],
+                        default="idle",
+                        max_length=16,
+                    ),
+                ),
+                ("policy_snapshot_json", models.JSONField(blank=True, default=dict)),
+                ("capabilities_json", models.JSONField(blank=True, default=dict)),
+                ("default_model", models.CharField(blank=True, default="", max_length=128)),
+                ("last_seen_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "last_execution",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="agent_registry_last_seen",
+                        to="orm.run",
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="agent_registry_entries",
+                        to="orm.organization",
+                    ),
+                ),
+                (
+                    "source_workflow",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="agent_registry_entries",
+                        to="orm.graph",
+                    ),
+                ),
+                (
+                    "source_workflow_revision",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="agent_registry_entries",
+                        to="orm.graphversion",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'agent_registry_entries',
-                'ordering': ['display_name', 'created_at'],
+                "db_table": "agent_registry_entries",
+                "ordering": ["display_name", "created_at"],
             },
         ),
         migrations.CreateModel(
-            name='DecisionRecord',
+            name="DecisionRecord",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('decision_type', models.CharField(choices=[('human_approval', 'Human Approval'), ('policy_guardrail', 'Policy Guardrail'), ('marketplace_review', 'Marketplace Review'), ('operator_intervention', 'Operator Intervention')], max_length=32)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('resolved', 'Resolved')], default='pending', max_length=16)),
-                ('external_key', models.CharField(max_length=255)),
-                ('context_json', models.JSONField(blank=True, default=dict)),
-                ('resolution_json', models.JSONField(blank=True, default=dict)),
-                ('requested_at', models.DateTimeField(blank=True, null=True)),
-                ('resolved_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('agent', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='decision_records', to='orm.agentregistryentry')),
-                ('execution', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='decision_records', to='orm.run')),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='decision_records', to='orm.organization')),
-                ('source_approval_task', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='decision_records', to='orm.approvaltask')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                (
+                    "decision_type",
+                    models.CharField(
+                        choices=[
+                            ("human_approval", "Human Approval"),
+                            ("policy_guardrail", "Policy Guardrail"),
+                            ("marketplace_review", "Marketplace Review"),
+                            ("operator_intervention", "Operator Intervention"),
+                        ],
+                        max_length=32,
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("approved", "Approved"),
+                            ("rejected", "Rejected"),
+                            ("resolved", "Resolved"),
+                        ],
+                        default="pending",
+                        max_length=16,
+                    ),
+                ),
+                ("external_key", models.CharField(max_length=255)),
+                ("context_json", models.JSONField(blank=True, default=dict)),
+                ("resolution_json", models.JSONField(blank=True, default=dict)),
+                ("requested_at", models.DateTimeField(blank=True, null=True)),
+                ("resolved_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="decision_records",
+                        to="orm.agentregistryentry",
+                    ),
+                ),
+                (
+                    "execution",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="decision_records",
+                        to="orm.run",
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="decision_records",
+                        to="orm.organization",
+                    ),
+                ),
+                (
+                    "source_approval_task",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="decision_records",
+                        to="orm.approvaltask",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'decision_records',
-                'ordering': ['-requested_at', '-created_at'],
+                "db_table": "decision_records",
+                "ordering": ["-requested_at", "-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='TaskRecord',
+            name="TaskRecord",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('source_node_id', models.CharField(blank=True, default='', max_length=255)),
-                ('external_key', models.CharField(max_length=255)),
-                ('title', models.CharField(max_length=255)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('running', 'Running'), ('waiting', 'Waiting'), ('succeeded', 'Succeeded'), ('failed', 'Failed'), ('canceled', 'Canceled')], default='pending', max_length=16)),
-                ('priority', models.CharField(choices=[('low', 'Low'), ('normal', 'Normal'), ('high', 'High'), ('urgent', 'Urgent')], default='normal', max_length=16)),
-                ('summary', models.TextField(blank=True, default='')),
-                ('started_at', models.DateTimeField(blank=True, null=True)),
-                ('ended_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('agent', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='task_records', to='orm.agentregistryentry')),
-                ('current_decision', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='active_for_tasks', to='orm.decisionrecord')),
-                ('current_step', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='task_records', to='orm.noderun')),
-                ('execution', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='task_records', to='orm.run')),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='task_records', to='orm.organization')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                ("source_node_id", models.CharField(blank=True, default="", max_length=255)),
+                ("external_key", models.CharField(max_length=255)),
+                ("title", models.CharField(max_length=255)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("running", "Running"),
+                            ("waiting", "Waiting"),
+                            ("succeeded", "Succeeded"),
+                            ("failed", "Failed"),
+                            ("canceled", "Canceled"),
+                        ],
+                        default="pending",
+                        max_length=16,
+                    ),
+                ),
+                (
+                    "priority",
+                    models.CharField(
+                        choices=[
+                            ("low", "Low"),
+                            ("normal", "Normal"),
+                            ("high", "High"),
+                            ("urgent", "Urgent"),
+                        ],
+                        default="normal",
+                        max_length=16,
+                    ),
+                ),
+                ("summary", models.TextField(blank=True, default="")),
+                ("started_at", models.DateTimeField(blank=True, null=True)),
+                ("ended_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="task_records",
+                        to="orm.agentregistryentry",
+                    ),
+                ),
+                (
+                    "current_decision",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="active_for_tasks",
+                        to="orm.decisionrecord",
+                    ),
+                ),
+                (
+                    "current_step",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="task_records",
+                        to="orm.noderun",
+                    ),
+                ),
+                (
+                    "execution",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="task_records",
+                        to="orm.run",
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="task_records",
+                        to="orm.organization",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'task_records',
-                'ordering': ['-created_at'],
+                "db_table": "task_records",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.AddField(
-            model_name='decisionrecord',
-            name='task',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='decision_records', to='orm.taskrecord'),
+            model_name="decisionrecord",
+            name="task",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="decision_records",
+                to="orm.taskrecord",
+            ),
         ),
         migrations.CreateModel(
-            name='CostLedgerEntry',
+            name="CostLedgerEntry",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('provider', models.CharField(blank=True, default='', max_length=64)),
-                ('model', models.CharField(blank=True, default='', max_length=128)),
-                ('cost_type', models.CharField(choices=[('llm', 'LLM'), ('memory_summarization', 'Memory Summarization')], default='llm', max_length=32)),
-                ('quantity', models.DecimalField(decimal_places=6, default=0, max_digits=18)),
-                ('unit_cost_usd', models.DecimalField(decimal_places=6, default=0, max_digits=12)),
-                ('total_cost_usd', models.DecimalField(decimal_places=6, default=0, max_digits=12)),
-                ('occurred_at', models.DateTimeField()),
-                ('external_key', models.CharField(max_length=255)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('agent', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_ledger_entries', to='orm.agentregistryentry')),
-                ('execution', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_ledger_entries', to='orm.run')),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='cost_ledger_entries', to='orm.organization')),
-                ('task', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_ledger_entries', to='orm.taskrecord')),
-                ('workflow_revision', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_ledger_entries', to='orm.graphversion')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                ("provider", models.CharField(blank=True, default="", max_length=64)),
+                ("model", models.CharField(blank=True, default="", max_length=128)),
+                (
+                    "cost_type",
+                    models.CharField(
+                        choices=[("llm", "LLM"), ("memory_summarization", "Memory Summarization")],
+                        default="llm",
+                        max_length=32,
+                    ),
+                ),
+                ("quantity", models.DecimalField(decimal_places=6, default=0, max_digits=18)),
+                ("unit_cost_usd", models.DecimalField(decimal_places=6, default=0, max_digits=12)),
+                ("total_cost_usd", models.DecimalField(decimal_places=6, default=0, max_digits=12)),
+                ("occurred_at", models.DateTimeField()),
+                ("external_key", models.CharField(max_length=255)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_ledger_entries",
+                        to="orm.agentregistryentry",
+                    ),
+                ),
+                (
+                    "execution",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_ledger_entries",
+                        to="orm.run",
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="cost_ledger_entries",
+                        to="orm.organization",
+                    ),
+                ),
+                (
+                    "task",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_ledger_entries",
+                        to="orm.taskrecord",
+                    ),
+                ),
+                (
+                    "workflow_revision",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_ledger_entries",
+                        to="orm.graphversion",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'cost_ledger_entries',
-                'ordering': ['-occurred_at', '-created_at'],
+                "db_table": "cost_ledger_entries",
+                "ordering": ["-occurred_at", "-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='CostAggregate',
+            name="CostAggregate",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('grain', models.CharField(choices=[('hourly', 'Hourly'), ('daily', 'Daily')], max_length=16)),
-                ('period_start', models.DateTimeField()),
-                ('period_end', models.DateTimeField()),
-                ('provider', models.CharField(blank=True, default='', max_length=64)),
-                ('model', models.CharField(blank=True, default='', max_length=128)),
-                ('cost_type', models.CharField(blank=True, default='', max_length=32)),
-                ('total_cost_usd', models.DecimalField(decimal_places=6, default=0, max_digits=12)),
-                ('total_quantity', models.DecimalField(decimal_places=6, default=0, max_digits=18)),
-                ('entry_count', models.PositiveIntegerField(default=0)),
-                ('external_key', models.CharField(max_length=255)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('agent', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_aggregates', to='orm.agentregistryentry')),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='cost_aggregates', to='orm.organization')),
-                ('task', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_aggregates', to='orm.taskrecord')),
-                ('workflow_revision', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cost_aggregates', to='orm.graphversion')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                    ),
+                ),
+                (
+                    "grain",
+                    models.CharField(
+                        choices=[("hourly", "Hourly"), ("daily", "Daily")], max_length=16
+                    ),
+                ),
+                ("period_start", models.DateTimeField()),
+                ("period_end", models.DateTimeField()),
+                ("provider", models.CharField(blank=True, default="", max_length=64)),
+                ("model", models.CharField(blank=True, default="", max_length=128)),
+                ("cost_type", models.CharField(blank=True, default="", max_length=32)),
+                ("total_cost_usd", models.DecimalField(decimal_places=6, default=0, max_digits=12)),
+                ("total_quantity", models.DecimalField(decimal_places=6, default=0, max_digits=18)),
+                ("entry_count", models.PositiveIntegerField(default=0)),
+                ("external_key", models.CharField(max_length=255)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_aggregates",
+                        to="orm.agentregistryentry",
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="cost_aggregates",
+                        to="orm.organization",
+                    ),
+                ),
+                (
+                    "task",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_aggregates",
+                        to="orm.taskrecord",
+                    ),
+                ),
+                (
+                    "workflow_revision",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cost_aggregates",
+                        to="orm.graphversion",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'cost_aggregates',
-                'ordering': ['-period_start'],
+                "db_table": "cost_aggregates",
+                "ordering": ["-period_start"],
             },
         ),
         migrations.AddIndex(
-            model_name='taskrecord',
-            index=models.Index(fields=['organization', 'status'], name='task_records_org_status_idx'),
+            model_name="taskrecord",
+            index=models.Index(
+                fields=["organization", "status"], name="task_records_org_status_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='taskrecord',
-            index=models.Index(fields=['execution', 'status'], name='task_rec_exec_stat_idx'),
+            model_name="taskrecord",
+            index=models.Index(fields=["execution", "status"], name="task_rec_exec_stat_idx"),
         ),
         migrations.AddIndex(
-            model_name='taskrecord',
-            index=models.Index(fields=['agent', 'status'], name='task_records_agent_status_idx'),
+            model_name="taskrecord",
+            index=models.Index(fields=["agent", "status"], name="task_records_agent_status_idx"),
         ),
         migrations.AddConstraint(
-            model_name='taskrecord',
-            constraint=models.UniqueConstraint(fields=('organization', 'external_key'), name='task_records_org_external_key_uniq'),
+            model_name="taskrecord",
+            constraint=models.UniqueConstraint(
+                fields=("organization", "external_key"), name="task_records_org_external_key_uniq"
+            ),
         ),
         migrations.AddIndex(
-            model_name='decisionrecord',
-            index=models.Index(fields=['organization', 'status'], name='decision_rec_org_stat_idx'),
+            model_name="decisionrecord",
+            index=models.Index(fields=["organization", "status"], name="decision_rec_org_stat_idx"),
         ),
         migrations.AddIndex(
-            model_name='decisionrecord',
-            index=models.Index(fields=['decision_type', 'status'], name='decision_rec_type_stat_idx'),
+            model_name="decisionrecord",
+            index=models.Index(
+                fields=["decision_type", "status"], name="decision_rec_type_stat_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='decisionrecord',
-            index=models.Index(fields=['execution', 'status'], name='decision_rec_exec_stat_idx'),
+            model_name="decisionrecord",
+            index=models.Index(fields=["execution", "status"], name="decision_rec_exec_stat_idx"),
         ),
         migrations.AddConstraint(
-            model_name='decisionrecord',
-            constraint=models.UniqueConstraint(fields=('organization', 'external_key'), name='decision_records_org_external_key_uniq'),
+            model_name="decisionrecord",
+            constraint=models.UniqueConstraint(
+                fields=("organization", "external_key"),
+                name="decision_records_org_external_key_uniq",
+            ),
         ),
         migrations.AddIndex(
-            model_name='costledgerentry',
-            index=models.Index(fields=['organization', 'occurred_at'], name='cost_ledger_org_time_idx'),
+            model_name="costledgerentry",
+            index=models.Index(
+                fields=["organization", "occurred_at"], name="cost_ledger_org_time_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='costledgerentry',
-            index=models.Index(fields=['cost_type', 'occurred_at'], name='cost_ledger_type_time_idx'),
+            model_name="costledgerentry",
+            index=models.Index(
+                fields=["cost_type", "occurred_at"], name="cost_ledger_type_time_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='costledgerentry',
-            index=models.Index(fields=['agent', 'occurred_at'], name='cost_ledger_agent_time_idx'),
+            model_name="costledgerentry",
+            index=models.Index(fields=["agent", "occurred_at"], name="cost_ledger_agent_time_idx"),
         ),
         migrations.AddConstraint(
-            model_name='costledgerentry',
-            constraint=models.UniqueConstraint(fields=('organization', 'external_key'), name='cost_ledger_org_external_key_uniq'),
+            model_name="costledgerentry",
+            constraint=models.UniqueConstraint(
+                fields=("organization", "external_key"), name="cost_ledger_org_external_key_uniq"
+            ),
         ),
         migrations.AddIndex(
-            model_name='costaggregate',
-            index=models.Index(fields=['organization', 'grain', 'period_start'], name='cost_aggs_org_grain_time_idx'),
+            model_name="costaggregate",
+            index=models.Index(
+                fields=["organization", "grain", "period_start"],
+                name="cost_aggs_org_grain_time_idx",
+            ),
         ),
         migrations.AddIndex(
-            model_name='costaggregate',
-            index=models.Index(fields=['agent', 'grain', 'period_start'], name='cost_aggs_agent_grain_time_idx'),
+            model_name="costaggregate",
+            index=models.Index(
+                fields=["agent", "grain", "period_start"], name="cost_aggs_agent_grain_time_idx"
+            ),
         ),
         migrations.AddConstraint(
-            model_name='costaggregate',
-            constraint=models.UniqueConstraint(fields=('organization', 'external_key'), name='cost_aggregates_org_external_key_uniq'),
+            model_name="costaggregate",
+            constraint=models.UniqueConstraint(
+                fields=("organization", "external_key"),
+                name="cost_aggregates_org_external_key_uniq",
+            ),
         ),
         migrations.AddIndex(
-            model_name='agentregistryentry',
-            index=models.Index(fields=['organization', 'status'], name='agent_registry_org_status_idx'),
+            model_name="agentregistryentry",
+            index=models.Index(
+                fields=["organization", "status"], name="agent_registry_org_status_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='agentregistryentry',
-            index=models.Index(fields=['organization', 'source_workflow'], name='agent_reg_org_wf_idx'),
+            model_name="agentregistryentry",
+            index=models.Index(
+                fields=["organization", "source_workflow"], name="agent_reg_org_wf_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='agentregistryentry',
-            index=models.Index(fields=['last_seen_at'], name='agent_registry_last_seen_idx'),
+            model_name="agentregistryentry",
+            index=models.Index(fields=["last_seen_at"], name="agent_registry_last_seen_idx"),
         ),
         migrations.AddConstraint(
-            model_name='agentregistryentry',
-            constraint=models.UniqueConstraint(fields=('organization', 'source_workflow', 'source_node_id'), name='agent_registry_org_workflow_node_uniq'),
+            model_name="agentregistryentry",
+            constraint=models.UniqueConstraint(
+                fields=("organization", "source_workflow", "source_node_id"),
+                name="agent_registry_org_workflow_node_uniq",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='agentregistryentry',
-            constraint=models.UniqueConstraint(fields=('organization', 'slug'), name='agent_registry_org_slug_uniq'),
+            model_name="agentregistryentry",
+            constraint=models.UniqueConstraint(
+                fields=("organization", "slug"), name="agent_registry_org_slug_uniq"
+            ),
         ),
     ]

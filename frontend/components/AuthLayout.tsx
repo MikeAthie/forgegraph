@@ -38,7 +38,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         <div className="mx-auto flex min-h-[calc(100vh-9rem)] w-full max-w-[1280px] items-center justify-center">
           <div className="grid w-full gap-10 xl:grid-cols-[0.9fr_0.7fr] xl:items-center">
             <section className="hidden xl:block">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Authentication</p>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                Authentication
+              </p>
               <h1
                 className="mt-4 max-w-3xl text-5xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
                 style={{ fontFamily: "var(--font-serif)" }}
@@ -46,7 +48,8 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                 Sign in to supervise agents, decisions, memory, and cost from one operating surface.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
-                ForgeGraph opens on organizational state, not on builder chrome. Authentication should feel aligned with that product posture.
+                ForgeGraph opens on organizational state, not on builder chrome. Authentication should feel aligned with
+                that product posture.
               </p>
             </section>
 

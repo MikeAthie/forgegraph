@@ -45,13 +45,8 @@ def test_post_api_runs_start_start_graph_run():
         graph_name = f"test-graph-{unique_suffix}"
         graph_payload = {
             "name": graph_name,
-            "nodes": [
-                {"id": "n1", "type": "start"},
-                {"id": "n2", "type": "end"}
-            ],
-            "edges": [
-                {"from": "n1", "to": "n2"}
-            ]
+            "nodes": [{"id": "n1", "type": "start"}, {"id": "n2", "type": "end"}],
+            "edges": [{"from": "n1", "to": "n2"}],
         }
         create_graph_resp = session.post(
             f"{BASE_URL}/api/graphs",
@@ -59,7 +54,9 @@ def test_post_api_runs_start_start_graph_run():
             headers=headers,
             timeout=TIMEOUT,
         )
-        assert create_graph_resp.status_code == 200, f"Create graph failed: {create_graph_resp.text}"
+        assert create_graph_resp.status_code == 200, (
+            f"Create graph failed: {create_graph_resp.text}"
+        )
         graph_data = create_graph_resp.json()
         assert graph_data and isinstance(graph_data, dict)
         graph_id = graph_data.get("id")
@@ -93,12 +90,14 @@ def test_post_api_runs_start_start_graph_run():
             headers=headers,
             timeout=TIMEOUT,
         )
-        assert bad_run_resp.status_code == 400, f"Expected 400 for invalid graph_id, got {bad_run_resp.status_code}"
+        assert bad_run_resp.status_code == 400, (
+            f"Expected 400 for invalid graph_id, got {bad_run_resp.status_code}"
+        )
 
     finally:
         # Cleanup: delete graph if possible to avoid clutter
         try:
-            if 'graph_id' in locals():
+            if "graph_id" in locals():
                 session.delete(
                     f"{BASE_URL}/api/graphs/{graph_id}",
                     headers=headers,

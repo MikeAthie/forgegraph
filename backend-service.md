@@ -4,9 +4,13 @@ The backend is the ForgeGraph control plane.
 
 ## Responsibilities
 
-- Authentication, tenancy, RBAC, governance, marketplace, analytics, memory APIs
-- Canonical persistence for workflow definitions, executions, steps, approvals, memory, and usage
-- Projection and summary layer for operator-facing system state
+- Canonical persisted state for workflows, executions, decisions, memory, accounting, and operator views
+- Authentication, JWT validation, tenancy, RBAC, governance, and auditability
+- Idempotent command handling, event ingestion, and snapshot-backed resume orchestration
+- Canonical memory ownership with Postgres and pgvector persistence
+- Real-time and eventual-consistency cost handling, with fast-path limit and overage signaling
+- REST APIs plus WebSocket updates for frontend consumers
+- Rate limiting, throttling, Redis-backed token revocation, and query-boundary isolation
 
 ## Phase 1 Additions
 
@@ -24,4 +28,4 @@ The backend is the ForgeGraph control plane.
 
 ## Rule
 
-Do not move organization-state logic into the engine. Keep runtime execution and operator read models separated.
+The backend is the source of truth by default. Keep runtime execution in the engine and all durable business state in backend-owned systems.

@@ -5,6 +5,7 @@ import time
 BASE_URL = "http://localhost:8000"
 TIMEOUT = 30
 
+
 def test_get_api_auth_sso_provider_with_auth_and_without():
     session = requests.Session()
 
@@ -48,7 +49,9 @@ def test_get_api_auth_sso_provider_with_auth_and_without():
             headers=headers,
             timeout=TIMEOUT,
         )
-        assert sso_resp.status_code == 200, f"Authenticated SSO provider request failed: {sso_resp.text}"
+        assert sso_resp.status_code == 200, (
+            f"Authenticated SSO provider request failed: {sso_resp.text}"
+        )
         sso_json = sso_resp.json()
         # The PRD states SSO provider metadata is returned, no specific 'status' or 'state' fields guaranteed
         assert isinstance(sso_json, dict), "SSO provider response is not a JSON object"
@@ -56,15 +59,21 @@ def test_get_api_auth_sso_provider_with_auth_and_without():
 
         # Unauthenticated GET /api/auth/sso/provider should return 200
         unauth_resp = session.get(f"{BASE_URL}/api/auth/sso/provider", timeout=TIMEOUT)
-        assert unauth_resp.status_code == 200, f"Unauthenticated SSO request did not return 200: {unauth_resp.status_code}"
+        assert unauth_resp.status_code == 200, (
+            f"Unauthenticated SSO request did not return 200: {unauth_resp.status_code}"
+        )
 
     finally:
         # Logout the user if possible
-        if 'access_token' in locals():
+        if "access_token" in locals():
             try:
                 logout_headers = {"Authorization": f"Bearer {access_token}"}
-                logout_resp = session.post(f"{BASE_URL}/api/auth/logout", headers=logout_headers, timeout=TIMEOUT)
-                assert logout_resp.status_code == 200, f"Logout failed: {logout_resp.status_code} {logout_resp.text}"
+                logout_resp = session.post(
+                    f"{BASE_URL}/api/auth/logout", headers=logout_headers, timeout=TIMEOUT
+                )
+                assert logout_resp.status_code == 200, (
+                    f"Logout failed: {logout_resp.status_code} {logout_resp.text}"
+                )
             except Exception:
                 pass
 

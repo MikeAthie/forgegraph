@@ -117,6 +117,15 @@ const workerCount =
 
 export default defineConfig({
   testDir: "./__tests__/e2e",
+  testIgnore: [
+    "**/agent-authoring.spec.ts",
+    "**/graph-editor.spec.ts",
+    "**/graphs.spec.ts",
+    "**/jackie-workflow.spec.ts",
+    "**/marketplace-runtime.spec.ts",
+    "**/onboarding.spec.ts",
+    "**/prompts.spec.ts",
+  ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

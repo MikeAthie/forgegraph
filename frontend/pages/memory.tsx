@@ -183,7 +183,10 @@ export default function MemoryBrowserPage() {
     return [...types].sort((left, right) => left.localeCompare(right));
   }, [observations, selectedObservation]);
 
-  const visibleScopes = useMemo(() => new Set(observations.map((observation) => observation.scope)).size, [observations]);
+  const visibleScopes = useMemo(
+    () => new Set(observations.map((observation) => observation.scope)).size,
+    [observations],
+  );
   const freshestSeenAt = observations[0]?.last_seen_at ?? selectedObservation?.last_seen_at ?? null;
 
   const handleQuerySearch = useCallback((value: string) => {
@@ -229,18 +232,26 @@ export default function MemoryBrowserPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Delete records</span>
-                      <StatusBadge status={canDeleteObservations ? "active" : "pending"} label={canDeleteObservations ? "Allowed" : "Restricted"} />
+                      <StatusBadge
+                        status={canDeleteObservations ? "active" : "pending"}
+                        label={canDeleteObservations ? "Allowed" : "Restricted"}
+                      />
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Retention</span>
-                      <StatusBadge status={canManageRetention ? "active" : "pending"} label={canManageRetention ? "Manageable" : "Restricted"} />
+                      <StatusBadge
+                        status={canManageRetention ? "active" : "pending"}
+                        label={canManageRetention ? "Manageable" : "Restricted"}
+                      />
                     </div>
                   </div>
                 ),
               },
               {
                 title: "Export posture",
-                content: canExportMemoryData ? "Memory exports are available from governed surfaces." : "Exports are restricted to owner and admin roles.",
+                content: canExportMemoryData
+                  ? "Memory exports are available from governed surfaces."
+                  : "Exports are restricted to owner and admin roles.",
               },
             ]}
           />
@@ -275,7 +286,9 @@ export default function MemoryBrowserPage() {
             <MetricCard
               eyebrow="Governance"
               value={currentRole}
-              delta={canManageRetention ? "Retention and export controls available" : "Review-only on governed controls"}
+              delta={
+                canManageRetention ? "Retention and export controls available" : "Review-only on governed controls"
+              }
               tone={canManageRetention ? "emerald" : "amber"}
               icon={<ShieldCheck className="h-4 w-4" />}
             />
@@ -289,7 +302,9 @@ export default function MemoryBrowserPage() {
                 <p className="text-sm">
                   You can view curated observations.{" "}
                   {canDeleteObservations ? "You can delete observations." : "You cannot delete observations."}{" "}
-                  {canManageRetention ? "You can manage retention." : "Retention changes are limited to owner and admin."}{" "}
+                  {canManageRetention
+                    ? "You can manage retention."
+                    : "Retention changes are limited to owner and admin."}{" "}
                   {canExportMemoryData ? "You can export memory reporting." : "Exports are limited to owner and admin."}
                 </p>
               </div>

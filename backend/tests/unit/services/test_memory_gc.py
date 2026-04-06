@@ -33,24 +33,31 @@ class TestGCResult:
 
 class TestGetValidTenantIds:
     @pytest.mark.django_db
-    def test_includes_user_ids(self, user):
+    def test_includes_organization_ids(self, user):
         gc = MemoryGCService(batch_size=10)
         valid_ids = gc.get_valid_tenant_ids()
         assert user.default_organization_id in valid_ids
 
     @pytest.mark.django_db
-    def test_includes_graph_ids(self, graph):
+    def test_excludes_graph_ids(self, graph):
         gc = MemoryGCService(batch_size=10)
         valid_ids = gc.get_valid_tenant_ids()
-        assert graph.id in valid_ids
+        assert graph.id not in valid_ids
 
     @pytest.mark.django_db
-    def test_union_of_users_and_graphs(self, user, graph):
+    def test_excludes_non_canonical_user_ids(self, user):
         gc = MemoryGCService(batch_size=10)
         valid_ids = gc.get_valid_tenant_ids()
-        assert len(valid_ids) >= 2
+        assert user.id not in valid_ids
+
+    @pytest.mark.django_db
+    def test_returns_only_canonical_tenant_ids(self, user, graph):
+        gc = MemoryGCService(batch_size=10)
+        valid_ids = gc.get_valid_tenant_ids()
+        assert len(valid_ids) >= 1
         assert user.default_organization_id in valid_ids
-        assert graph.id in valid_ids
+        assert graph.id not in valid_ids
+        assert user.id not in valid_ids
 
 
 class TestFindOrphanedTenantIds:
@@ -72,12 +79,12 @@ class TestFindOrphanedTenantIds:
         assert user.default_organization_id not in orphans
 
     @pytest.mark.django_db
-    def test_excludes_valid_graph_ids(self, graph, memory_chunk_factory):
+    def test_marks_non_canonical_graph_ids_as_orphaned(self, graph, memory_chunk_factory):
         gc = MemoryGCService(batch_size=10)
         memory_chunk_factory(tenant_id=graph.id)
 
         orphans = gc.find_orphaned_tenant_ids()
-        assert graph.id not in orphans
+        assert graph.id in orphans
 
 
 class TestCleanupOrphanedChunks:
@@ -111,7 +118,7 @@ class TestCleanupOrphanedChunks:
         assert not MemoryChunk.objects.filter(id=chunk.id).exists()
 
     @pytest.mark.django_db
-    def test_preserves_valid_user_chunks(self, user, memory_chunk_factory):
+    def test_preserves_valid_organization_chunks(self, user, memory_chunk_factory):
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
@@ -122,15 +129,16 @@ class TestCleanupOrphanedChunks:
         assert MemoryChunk.objects.filter(id=chunk.id).exists()
 
     @pytest.mark.django_db
-    def test_preserves_valid_graph_chunks(self, graph, memory_chunk_factory):
+    def test_deletes_non_canonical_graph_scoped_chunks(self, graph, memory_chunk_factory):
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
+        memory_chunk_factory(tenant_id=graph.owner.default_organization_id)
         chunk = memory_chunk_factory(tenant_id=graph.id)
 
         gc.cleanup_orphaned_chunks(dry_run=False)
 
-        assert MemoryChunk.objects.filter(id=chunk.id).exists()
+        assert not MemoryChunk.objects.filter(id=chunk.id).exists()
 
 
 class TestCleanupExpiredEntries:
@@ -205,28 +213,29 @@ class TestRunFullGC:
         assert "errors" in result
 
 
-class TestLegacyCleanup:
+class TestCompatibilityCleanup:
     @pytest.mark.django_db
-    def test_prune_missing_users_checks_graphs(self, user, graph, memory_chunk_factory):
-        """Test that prune_missing_users now correctly preserves graph-scoped memory."""
+    def test_prune_missing_users_removes_non_canonical_non_tenant_chunks(
+        self, user, graph, memory_chunk_factory
+    ):
+        """Compatibility cleanup should keep organization chunks and delete non-canonical scopes."""
         from infrastructure.orm.models import MemoryChunk
 
         gc = MemoryGCService(batch_size=10)
 
-        # Create chunks for user and graph
-        user_chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
+        # Create one canonical tenant chunk and two non-canonical chunks.
+        organization_chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
+        user_chunk = memory_chunk_factory(tenant_id=user.id)
         graph_chunk = memory_chunk_factory(tenant_id=graph.id)
-
-        # Create orphan chunk
         orphan_id = uuid4()
         orphan_chunk = memory_chunk_factory(tenant_id=orphan_id)
 
         stats = gc.cleanup(retention_days=0, prune_missing_users=True)
 
-        # Should only delete orphan, not graph or user chunks
-        assert stats["deleted_missing_users"] == 1
-        assert MemoryChunk.objects.filter(id=user_chunk.id).exists()
-        assert MemoryChunk.objects.filter(id=graph_chunk.id).exists()
+        assert stats["deleted_missing_users"] == 3
+        assert MemoryChunk.objects.filter(id=organization_chunk.id).exists()
+        assert not MemoryChunk.objects.filter(id=user_chunk.id).exists()
+        assert not MemoryChunk.objects.filter(id=graph_chunk.id).exists()
         assert not MemoryChunk.objects.filter(id=orphan_chunk.id).exists()
 
 

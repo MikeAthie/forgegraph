@@ -113,6 +113,39 @@ def test_create_observation_updates_existing_topic_when_requested(user) -> None:
     assert original.revision_count == 2
 
 
+def test_create_observation_does_not_silently_overwrite_topic_without_update_flag(user) -> None:
+    service = MemoryObservationService()
+    graph_id = uuid4()
+
+    original = service.create_observation(
+        tenant_id=user.default_organization_id,
+        graph_id=graph_id,
+        type="fact",
+        title="Customer Preference",
+        content="Customer prefers email.",
+        scope="graph",
+        topic_key="contact-preference",
+    )
+
+    replacement = service.create_observation(
+        tenant_id=user.default_organization_id,
+        graph_id=graph_id,
+        type="fact",
+        title="Customer Preference",
+        content="Customer now prefers SMS.",
+        scope="graph",
+        topic_key="contact-preference",
+        update_topic=False,
+    )
+
+    original.refresh_from_db()
+    assert replacement.id != original.id
+    assert original.content == "Customer prefers email."
+    assert replacement.content == "Customer now prefers SMS."
+    assert original.revision_count == 1
+    assert replacement.revision_count == 1
+
+
 def test_delete_observation_soft_deletes_and_hides_from_search(user) -> None:
     service = MemoryObservationService()
     graph_id = uuid4()

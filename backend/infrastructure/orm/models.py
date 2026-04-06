@@ -1939,8 +1939,13 @@ class CostAggregate(models.Model):
             )
         ]
         indexes = [
-            models.Index(fields=["organization", "grain", "period_start"], name="cost_aggs_org_grain_time_idx"),
-            models.Index(fields=["agent", "grain", "period_start"], name="cost_aggs_agent_grain_time_idx"),
+            models.Index(
+                fields=["organization", "grain", "period_start"],
+                name="cost_aggs_org_grain_time_idx",
+            ),
+            models.Index(
+                fields=["agent", "grain", "period_start"], name="cost_aggs_agent_grain_time_idx"
+            ),
         ]
 
     def __str__(self) -> str:

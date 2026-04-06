@@ -3,7 +3,16 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { EmptyBlock, InspectorPanel, KeyValueGrid, Panel, SectionHeader, SelectionList, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import {
+  EmptyBlock,
+  InspectorPanel,
+  KeyValueGrid,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+  formatDateTime,
+} from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { getApiErrorMessage, tasksApi, type TaskRecord } from "@/lib/api";
@@ -42,7 +51,7 @@ export default function TasksPage() {
   }, []);
 
   const selectedTaskId =
-    typeof router.query.task === "string" ? router.query.task : tasks.length > 0 ? tasks[0]?.id ?? null : null;
+    typeof router.query.task === "string" ? router.query.task : tasks.length > 0 ? (tasks[0]?.id ?? null) : null;
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null,
@@ -126,33 +135,42 @@ export default function TasksPage() {
               <Spinner size="lg" />
             </div>
           ) : !selectedTask ? (
-            <EmptyBlock title="No tasks available" description="Task projections will appear here when executions create operator-facing work." />
+            <EmptyBlock
+              title="No tasks available"
+              description="Task projections will appear here when executions create operator-facing work."
+            />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
               <Panel title="Task queue" description="Select a task to inspect its current state and trace linkage.">
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Running</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{groupedCounts.running}</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Running
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                      {groupedCounts.running}
+                    </p>
                   </div>
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Waiting</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{groupedCounts.waiting}</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Waiting
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                      {groupedCounts.waiting}
+                    </p>
                   </div>
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Failed</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{groupedCounts.failed}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                      {groupedCounts.failed}
+                    </p>
                   </div>
                 </div>
                 <SelectionList
                   items={tasks}
                   selectedId={selectedTask.id}
                   onSelect={(task) => {
-                    void router.replace(
-                      { pathname: "/tasks", query: { task: task.id } },
-                      undefined,
-                      { shallow: true },
-                    );
+                    void router.replace({ pathname: "/tasks", query: { task: task.id } }, undefined, { shallow: true });
                   }}
                   renderTitle={(task) => (
                     <div className="flex items-center gap-3">
@@ -162,7 +180,12 @@ export default function TasksPage() {
                   )}
                   renderBody={(task) => task.summary}
                   renderMeta={(task) => <span className="text-xs uppercase tracking-[0.16em]">{task.priority}</span>}
-                  empty={<EmptyBlock title="Queue is clear" description="There are no projected tasks in the current time window." />}
+                  empty={
+                    <EmptyBlock
+                      title="Queue is clear"
+                      description="There are no projected tasks in the current time window."
+                    />
+                  }
                 />
               </Panel>
 
@@ -184,24 +207,35 @@ export default function TasksPage() {
                     items={[
                       { label: "Priority", value: selectedTask.priority },
                       { label: "Current step", value: selectedTask.current_step_id?.slice(0, 8) ?? "Unavailable" },
-                      { label: "Decision gate", value: selectedTask.current_decision_id?.slice(0, 8) ?? "No active decision" },
+                      {
+                        label: "Decision gate",
+                        value: selectedTask.current_decision_id?.slice(0, 8) ?? "No active decision",
+                      },
                       { label: "Started", value: formatDateTime(selectedTask.started_at) },
                     ]}
                   />
                   <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Summary</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Summary
+                    </p>
                     <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">{selectedTask.summary}</p>
                   </div>
                 </Panel>
 
                 <div className="grid gap-6 2xl:grid-cols-2">
-                  <Panel title="Execution trace" description="The task is a projection; the execution remains the canonical trace backbone.">
+                  <Panel
+                    title="Execution trace"
+                    description="The task is a projection; the execution remains the canonical trace backbone."
+                  >
                     <div className="space-y-3">
                       <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                         <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Execution linkage</p>
                         <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                          This task is attached to execution <span className="font-medium text-slate-900 dark:text-slate-50">{selectedTask.execution_id}</span>.
-                          Use the execution view to inspect step-level input, output, tools, and reasoning summaries.
+                          This task is attached to execution{" "}
+                          <span className="font-medium text-slate-900 dark:text-slate-50">
+                            {selectedTask.execution_id}
+                          </span>
+                          . Use the execution view to inspect step-level input, output, tools, and reasoning summaries.
                         </p>
                       </div>
                       <Button asChild className="rounded-full">
@@ -210,7 +244,10 @@ export default function TasksPage() {
                     </div>
                   </Panel>
 
-                  <Panel title="Operational timing" description="Time awareness stays attached to every projected task.">
+                  <Panel
+                    title="Operational timing"
+                    description="Time awareness stays attached to every projected task."
+                  >
                     <KeyValueGrid
                       columns={1}
                       items={[

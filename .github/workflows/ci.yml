@@ -123,6 +123,12 @@ jobs:
         working-directory: engine
         run: go test ./...
 
+      - name: Go test -race
+        working-directory: engine
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+
 
   frontend:
     name: frontend
@@ -252,6 +258,7 @@ jobs:
         run: |
           go test ./application/usecase -run "Scheduler|OnError|RetryAfter|NonRetryable" -count=1
           go test ./adapter/executor -run "HTTPExecutor|ToolExecutor|PromptExecutor" -count=1
+          CGO_ENABLED=1 go test -race ./application/usecase ./adapter/executor -count=1
 
 
   launch_qa_frontend:

@@ -162,7 +162,10 @@ export default function GraphDetailPage() {
               <p className="mt-2 text-sm text-muted-foreground">
                 {error ?? "The workflow may have been deleted or you may not have access."}
               </p>
-              <Link href="/workflows" className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90">
+              <Link
+                href="/workflows"
+                className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90"
+              >
                 Back to workflows
               </Link>
             </div>

@@ -101,7 +101,12 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
             sections={[
               {
                 title: "Access level",
-                content: <StatusBadge status={canManage ? "active" : "pending"} label={canManage ? "Admin-capable" : "Read-only on governed surfaces"} />,
+                content: (
+                  <StatusBadge
+                    status={canManage ? "active" : "pending"}
+                    label={canManage ? "Admin-capable" : "Read-only on governed surfaces"}
+                  />
+                ),
               },
               {
                 title: "Scope",
@@ -153,9 +158,14 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{area.title}</p>
-                                <StatusBadge status={area.accessLabel.includes("admin") ? "paused" : "active"} label={area.accessLabel} />
+                                <StatusBadge
+                                  status={area.accessLabel.includes("admin") ? "paused" : "active"}
+                                  label={area.accessLabel}
+                                />
                               </div>
-                              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{area.description}</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                {area.description}
+                              </p>
                             </div>
                           </div>
                           <Button asChild variant="outline" className="shrink-0 rounded-full">

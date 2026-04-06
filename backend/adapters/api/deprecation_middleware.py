@@ -12,7 +12,7 @@ class ApiDeprecationMiddleware:
 
     LEGACY_PREFIXES = ("/api/graphs", "/api/runs", "/api/approvals")
     SUNSET_AT = "2026-12-31T00:00:00Z"
-    DOC_LINK = "</docs/product/terminology-and-renames.md>; rel=\"deprecation\""
+    DOC_LINK = '</docs/product/terminology-and-renames.md>; rel="deprecation"'
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response

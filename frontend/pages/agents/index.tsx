@@ -4,10 +4,33 @@ import { useRouter } from "next/router";
 import { BrainCircuit, Play, Square, Wallet } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { EmptyBlock, InspectorPanel, KeyValueGrid, MetricCard, Panel, SectionHeader, SelectionList, StatusBadge, formatCurrency, formatDateTime, overviewIcons } from "@/components/os/operations-ui";
+import {
+  EmptyBlock,
+  InspectorPanel,
+  KeyValueGrid,
+  MetricCard,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+  formatCurrency,
+  formatDateTime,
+  overviewIcons,
+} from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
-import { agentsApi, decisionsApi, getApiErrorMessage, memoryApi, runsApi, tasksApi, type AgentRegistryEntry, type DecisionRecord, type MemoryObservation, type TaskRecord } from "@/lib/api";
+import {
+  agentsApi,
+  decisionsApi,
+  getApiErrorMessage,
+  memoryApi,
+  runsApi,
+  tasksApi,
+  type AgentRegistryEntry,
+  type DecisionRecord,
+  type MemoryObservation,
+  type TaskRecord,
+} from "@/lib/api";
 import { showError, showSuccess } from "@/lib/toast";
 
 const summarizePurpose = (agent: AgentRegistryEntry) => {
@@ -65,7 +88,7 @@ export default function AgentsPage() {
   }, [loadSupervisionData]);
 
   const selectedAgentId =
-    typeof router.query.agent === "string" ? router.query.agent : agents.length > 0 ? agents[0]?.id ?? null : null;
+    typeof router.query.agent === "string" ? router.query.agent : agents.length > 0 ? (agents[0]?.id ?? null) : null;
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0] ?? null,
@@ -106,14 +129,22 @@ export default function AgentsPage() {
   }, [selectedAgent?.id]);
 
   const agentTasks = useMemo(
-    () => tasks.filter((task) => task.agent_id === selectedAgent?.id).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")),
+    () =>
+      tasks
+        .filter((task) => task.agent_id === selectedAgent?.id)
+        .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")),
     [selectedAgent?.id, tasks],
   );
   const agentDecisions = useMemo(
-    () => decisions.filter((decision) => decision.agent_id === selectedAgent?.id).sort((a, b) => (b.requested_at ?? b.created_at).localeCompare(a.requested_at ?? a.created_at)).slice(0, 6),
+    () =>
+      decisions
+        .filter((decision) => decision.agent_id === selectedAgent?.id)
+        .sort((a, b) => (b.requested_at ?? b.created_at).localeCompare(a.requested_at ?? a.created_at))
+        .slice(0, 6),
     [decisions, selectedAgent?.id],
   );
-  const currentTask = agentTasks.find((task) => task.status === "running" || task.status === "waiting") ?? agentTasks[0] ?? null;
+  const currentTask =
+    agentTasks.find((task) => task.status === "running" || task.status === "waiting") ?? agentTasks[0] ?? null;
   const currentExecutionId = currentTask?.execution_id ?? selectedAgent?.last_execution_id ?? null;
 
   const handleStopExecution = useCallback(async () => {
@@ -166,7 +197,9 @@ export default function AgentsPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span>Revision</span>
-                <span className="truncate pl-4">{selectedAgent.source_workflow_revision_id?.slice(0, 8) ?? "Draft"}</span>
+                <span className="truncate pl-4">
+                  {selectedAgent.source_workflow_revision_id?.slice(0, 8) ?? "Draft"}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Node</span>
@@ -179,12 +212,14 @@ export default function AgentsPage() {
           title: "Policy snapshot",
           content: Object.keys(selectedAgent.policy_snapshot_json ?? {}).length ? (
             <div className="space-y-2">
-              {Object.entries(selectedAgent.policy_snapshot_json).slice(0, 5).map(([key, value]) => (
-                <div key={key} className="flex items-start justify-between gap-3">
-                  <span className="text-slate-500 dark:text-slate-400">{key}</span>
-                  <span className="max-w-[10rem] text-right">{String(value)}</span>
-                </div>
-              ))}
+              {Object.entries(selectedAgent.policy_snapshot_json)
+                .slice(0, 5)
+                .map(([key, value]) => (
+                  <div key={key} className="flex items-start justify-between gap-3">
+                    <span className="text-slate-500 dark:text-slate-400">{key}</span>
+                    <span className="max-w-[10rem] text-right">{String(value)}</span>
+                  </div>
+                ))}
             </div>
           ) : (
             "No policy snapshot has been attached to this registry entry yet."
@@ -194,9 +229,11 @@ export default function AgentsPage() {
           title: "Capabilities",
           content: Object.keys(selectedAgent.capabilities_json ?? {}).length ? (
             <div className="flex flex-wrap gap-2">
-              {Object.entries(selectedAgent.capabilities_json).slice(0, 6).map(([key, value]) => (
-                <StatusBadge key={key} status="pending" label={`${key}:${String(value)}`} />
-              ))}
+              {Object.entries(selectedAgent.capabilities_json)
+                .slice(0, 6)
+                .map(([key, value]) => (
+                  <StatusBadge key={key} status="pending" label={`${key}:${String(value)}`} />
+                ))}
             </div>
           ) : (
             "Capability metadata has not been projected for this agent yet."
@@ -236,11 +273,9 @@ export default function AgentsPage() {
                     items={agents}
                     selectedId={selectedAgent.id}
                     onSelect={(agent) => {
-                      void router.replace(
-                        { pathname: "/agents", query: { agent: agent.id } },
-                        undefined,
-                        { shallow: true },
-                      );
+                      void router.replace({ pathname: "/agents", query: { agent: agent.id } }, undefined, {
+                        shallow: true,
+                      });
                     }}
                     renderTitle={(agent) => (
                       <div className="flex items-center gap-3">
@@ -250,7 +285,12 @@ export default function AgentsPage() {
                     )}
                     renderBody={(agent) => summarizePurpose(agent)}
                     renderMeta={(agent) => <span className="text-xs">{formatCurrency(agent.total_cost_usd)}</span>}
-                    empty={<EmptyBlock title="No agents found" description="Registry entries appear after agent nodes run in the control plane." />}
+                    empty={
+                      <EmptyBlock
+                        title="No agents found"
+                        description="Registry entries appear after agent nodes run in the control plane."
+                      />
+                    }
                   />
                 </Panel>
 
@@ -294,15 +334,39 @@ export default function AgentsPage() {
                     }
                   >
                     <div className="grid gap-4 lg:grid-cols-4">
-                      <MetricCard eyebrow="Purpose" value="Supervised" delta={summarizePurpose(selectedAgent)} icon={<BrainCircuit className="h-4 w-4" />} />
-                      <MetricCard eyebrow="Current task" value={currentTask ? currentTask.title : "Idle"} delta={currentTask?.summary ?? "No active assignment"} icon={<Play className="h-4 w-4" />} />
-                      <MetricCard eyebrow="Last action" value={formatDateTime(selectedAgent.last_seen_at)} delta="Most recent registry update" icon={overviewIcons.timing} />
-                      <MetricCard eyebrow="Cost today" value={formatCurrency(selectedAgent.total_cost_usd)} delta={`${selectedAgent.task_count} tasks in current window`} tone="rose" icon={<Wallet className="h-4 w-4" />} />
+                      <MetricCard
+                        eyebrow="Purpose"
+                        value="Supervised"
+                        delta={summarizePurpose(selectedAgent)}
+                        icon={<BrainCircuit className="h-4 w-4" />}
+                      />
+                      <MetricCard
+                        eyebrow="Current task"
+                        value={currentTask ? currentTask.title : "Idle"}
+                        delta={currentTask?.summary ?? "No active assignment"}
+                        icon={<Play className="h-4 w-4" />}
+                      />
+                      <MetricCard
+                        eyebrow="Last action"
+                        value={formatDateTime(selectedAgent.last_seen_at)}
+                        delta="Most recent registry update"
+                        icon={overviewIcons.timing}
+                      />
+                      <MetricCard
+                        eyebrow="Cost today"
+                        value={formatCurrency(selectedAgent.total_cost_usd)}
+                        delta={`${selectedAgent.task_count} tasks in current window`}
+                        tone="rose"
+                        icon={<Wallet className="h-4 w-4" />}
+                      />
                     </div>
                   </Panel>
 
                   <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
-                    <Panel title="Current state" description="Short-term and long-term context being used by the selected agent.">
+                    <Panel
+                      title="Current state"
+                      description="Short-term and long-term context being used by the selected agent."
+                    >
                       <KeyValueGrid
                         items={[
                           {
@@ -321,7 +385,10 @@ export default function AgentsPage() {
                       />
                       <div className="mt-4 space-y-3">
                         {memory.slice(0, 3).map((item) => (
-                          <div key={item.id} className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                          <div
+                            key={item.id}
+                            className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          >
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.title}</p>
                               <StatusBadge status="pending" label={item.scope} />
@@ -330,7 +397,10 @@ export default function AgentsPage() {
                           </div>
                         ))}
                         {!memoryLoading && memory.length === 0 ? (
-                          <EmptyBlock title="No memory attached" description="When this agent saves or retrieves knowledge, it will surface here." />
+                          <EmptyBlock
+                            title="No memory attached"
+                            description="When this agent saves or retrieves knowledge, it will surface here."
+                          />
                         ) : null}
                       </div>
                     </Panel>
@@ -339,60 +409,100 @@ export default function AgentsPage() {
                       {agentTasks.length ? (
                         <div className="space-y-3">
                           {agentTasks.map((task) => (
-                            <div key={task.id} className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                            <div
+                              key={task.id}
+                              className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                            >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-3">
-                                    <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">{task.title}</p>
+                                    <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                      {task.title}
+                                    </p>
                                     <StatusBadge status={task.status} />
                                   </div>
-                                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{task.summary}</p>
+                                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                    {task.summary}
+                                  </p>
                                 </div>
-                                <Link href={`/executions/${task.execution_id}`} className="shrink-0 text-sm text-slate-500 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-50">
+                                <Link
+                                  href={`/executions/${task.execution_id}`}
+                                  className="shrink-0 text-sm text-slate-500 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-50"
+                                >
                                   Open
                                 </Link>
                               </div>
                               <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
                                 <span>Priority {task.priority}</span>
-                                <span>Current step {task.current_step_id ? task.current_step_id.slice(0, 8) : "Unavailable"}</span>
+                                <span>
+                                  Current step {task.current_step_id ? task.current_step_id.slice(0, 8) : "Unavailable"}
+                                </span>
                                 <span>Started {formatDateTime(task.started_at)}</span>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <EmptyBlock title="No active tasks" description="This agent is not currently supervising any projected work." />
+                        <EmptyBlock
+                          title="No active tasks"
+                          description="This agent is not currently supervising any projected work."
+                        />
                       )}
                     </Panel>
                   </div>
 
-                  <Panel title="Decision trace" description="Human-readable decision summaries rather than low-level event streams.">
+                  <Panel
+                    title="Decision trace"
+                    description="Human-readable decision summaries rather than low-level event streams."
+                  >
                     {agentDecisions.length ? (
                       <div className="space-y-3">
                         {agentDecisions.map((decision) => (
-                          <div key={decision.id} className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                          <div
+                            key={decision.id}
+                            className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          >
                             <div className="flex flex-wrap items-center gap-2">
                               <StatusBadge status={decision.status} />
                               <StatusBadge status="pending" label={decision.decision_type} />
-                              <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(decision.requested_at ?? decision.created_at)}</span>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {formatDateTime(decision.requested_at ?? decision.created_at)}
+                              </span>
                             </div>
                             <div className="mt-3 grid gap-3 lg:grid-cols-3">
                               <div>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Input</p>
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                  Input
+                                </p>
                                 <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                                  {String(decision.context_json?.input ?? decision.context_json?.summary ?? "Input context was not captured in the projection.")}
+                                  {String(
+                                    decision.context_json?.input ??
+                                      decision.context_json?.summary ??
+                                      "Input context was not captured in the projection.",
+                                  )}
                                 </p>
                               </div>
                               <div>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Reasoning summary</p>
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                  Reasoning summary
+                                </p>
                                 <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                                  {String(decision.context_json?.reasoning_summary ?? "Operator-facing reasoning summary is not available for this record yet.")}
+                                  {String(
+                                    decision.context_json?.reasoning_summary ??
+                                      "Operator-facing reasoning summary is not available for this record yet.",
+                                  )}
                                 </p>
                               </div>
                               <div>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Output</p>
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                  Output
+                                </p>
                                 <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                                  {String(decision.resolution_json?.output ?? decision.resolution_json?.result ?? "Decision is waiting on resolution.")}
+                                  {String(
+                                    decision.resolution_json?.output ??
+                                      decision.resolution_json?.result ??
+                                      "Decision is waiting on resolution.",
+                                  )}
                                 </p>
                               </div>
                             </div>
@@ -400,7 +510,10 @@ export default function AgentsPage() {
                         ))}
                       </div>
                     ) : (
-                      <EmptyBlock title="No recent decisions" description="Decision records tied to this agent will appear here when the agent reaches an approval or intervention boundary." />
+                      <EmptyBlock
+                        title="No recent decisions"
+                        description="Decision records tied to this agent will appear here when the agent reaches an approval or intervention boundary."
+                      />
                     )}
                   </Panel>
                 </div>

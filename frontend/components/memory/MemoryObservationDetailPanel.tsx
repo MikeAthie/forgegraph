@@ -56,20 +56,33 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">{observation.title || "Untitled observation"}</h2>
+                  <h2 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                    {observation.title || "Untitled observation"}
+                  </h2>
                   <StatusBadge status="pending" label={toLabelCase(observation.scope)} />
-                  <StatusBadge status={observation.is_deleted ? "failed" : "active"} label={toLabelCase(observation.type)} />
+                  <StatusBadge
+                    status={observation.is_deleted ? "failed" : "active"}
+                    label={toLabelCase(observation.type)}
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {observation.topic_key ? <StatusBadge status="pending" label={`Topic ${observation.topic_key}`} /> : null}
-                {observation.tool_name ? <StatusBadge status="pending" label={`Tool ${observation.tool_name}`} /> : null}
+                {observation.topic_key ? (
+                  <StatusBadge status="pending" label={`Topic ${observation.topic_key}`} />
+                ) : null}
+                {observation.tool_name ? (
+                  <StatusBadge status="pending" label={`Tool ${observation.tool_name}`} />
+                ) : null}
               </div>
             </div>
 
             <div className="mt-4 rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Captured content</p>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{observation.content}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Captured content
+              </p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">
+                {observation.content}
+              </p>
             </div>
           </div>
 
@@ -103,7 +116,9 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
                   <div key={`${item.label}-${item.value}`} className="flex gap-3">
                     <div className="flex flex-col items-center">
                       <span className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-950 dark:bg-slate-100" />
-                      {index < items.length - 1 ? <span className="mt-2 h-full w-px bg-slate-900/10 dark:bg-white/10" /> : null}
+                      {index < items.length - 1 ? (
+                        <span className="mt-2 h-full w-px bg-slate-900/10 dark:bg-white/10" />
+                      ) : null}
                     </div>
                     <div className="pb-5">
                       <p className="text-sm font-medium text-slate-950 dark:text-slate-50">{item.label}</p>

@@ -25,7 +25,9 @@ test.describe("Workflow Definitions", () => {
   test("shows the workflow workspace page", async ({ page }) => {
     await gotoWithRetry(page, "/workflows");
 
-    await expect(page.getByRole("heading", { name: /definitions, revisions, and execution visibility/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /definitions, revisions, and execution visibility/i }),
+    ).toBeVisible();
     await expect(page.getByRole("link", { name: /open editor/i })).toBeVisible();
   });
 
@@ -71,7 +73,10 @@ test.describe("Workflow Definitions", () => {
     await gotoWithRetry(page, "/graphs");
     await page.getByRole("button", { name: /^new workflow$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 
@@ -98,7 +103,10 @@ test.describe("Workflow Definitions", () => {
     await gotoWithRetry(page, "/graphs");
     await page.getByRole("button", { name: /^new workflow$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
-    await page.getByRole("dialog").getByRole("button", { name: /^create$/i }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^create$/i })
+      .click();
 
     await expectGraphEditorOpen(page);
 

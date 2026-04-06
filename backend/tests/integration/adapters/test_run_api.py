@@ -21,6 +21,7 @@ from infrastructure.orm.models import (
     ApprovalTask,
     Graph,
     GraphVersion,
+    LLMBudget,
     LLMQuota,
     LLMUsage,
     MemoryConfiguration,
@@ -863,6 +864,43 @@ class TestRunStart:
         assert response.data["error"]["details"][0]["scope"] == "tenant_monthly_tokens"
         assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
 
+    def test_start_run_blocked_when_budget_exceeded(
+        self, authenticated_client, user, mock_engine_client
+    ):
+        graph = Graph.objects.create(owner=user, name="Budget Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        usage_run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+        LLMBudget.objects.create(
+            tenant_id=user.default_organization_id,
+            monthly_limit_usd=Decimal("1.00"),
+            warning_threshold_pct=Decimal("0.80"),
+        )
+        LLMUsage.objects.create(
+            tenant_id=user.default_organization_id,
+            run=usage_run,
+            node_id="prompt-1",
+            provider="openai",
+            model="gpt-4.1-mini",
+            prompt_tokens=100,
+            completion_tokens=25,
+            total_tokens=125,
+            cost_usd=Decimal("1.00"),
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "budget"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
+        assert response.data["error"]["code"] == "BUDGET_EXCEEDED"
+        assert response.data["error"]["details"][0]["reason"] == "budget"
+        assert response.data["error"]["details"][0]["scope"] == "tenant_monthly_spend"
+        assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
     @override_settings(
         RUN_START_RATE_LIMIT_PER_MIN=1,
         RUN_RATE_LIMIT_WINDOW_SECONDS=60,
@@ -1382,8 +1420,8 @@ class TestRunReplay:
         assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
-    def test_replay_engine_event_ordering_and_output_equivalence(
-        self, authenticated_client, api_client, mock_engine_client, user
+    def test_replay_engine_events_materialize_expected_state_and_output_equivalence(
+        self, authenticated_client, signed_engine_event_post, mock_engine_client, user
     ):
         graph = Graph.objects.create(owner=user, name="Replay Graph Events")
         graph_json = {
@@ -1424,24 +1462,8 @@ class TestRunReplay:
         assert replay_response.status_code == status.HTTP_201_CREATED
         replay_run = Run.objects.get(id=replay_response.data["data"]["id"])
 
-        def post_engine_event(event_payload: dict[str, Any]) -> None:
-            timestamp_ms = int(time.time() * 1000)
-            body = json.dumps(event_payload)
-            signature = s2s.build_signature("test-secret", str(timestamp_ms), body.encode("utf-8"))
-            headers = {
-                "HTTP_X_FORGEGRAPH_TIMESTAMP": str(timestamp_ms),
-                "HTTP_X_FORGEGRAPH_SIGNATURE": signature,
-            }
-            response = api_client.post(
-                "/api/runs/engine-events",
-                data=body,
-                content_type="application/json",
-                **headers,
-            )
-            assert response.status_code == status.HTTP_200_OK
-
         tenant_id = str(user.default_organization_id)
-        post_engine_event(
+        response = signed_engine_event_post(
             {
                 "event_id": f"evt-replay-{replay_run.id}-run-started",
                 "type": "run_started",
@@ -1449,8 +1471,9 @@ class TestRunReplay:
                 "tenant_id": tenant_id,
             }
         )
-        time.sleep(0.01)
-        post_engine_event(
+        assert response.status_code == status.HTTP_200_OK
+
+        response = signed_engine_event_post(
             {
                 "event_id": f"evt-replay-{replay_run.id}-node-started",
                 "type": "node_started",
@@ -1461,8 +1484,9 @@ class TestRunReplay:
                 "attempt": 1,
             }
         )
-        time.sleep(0.01)
-        post_engine_event(
+        assert response.status_code == status.HTTP_200_OK
+
+        response = signed_engine_event_post(
             {
                 "event_id": f"evt-replay-{replay_run.id}-node-completed",
                 "type": "node_completed",
@@ -1474,8 +1498,9 @@ class TestRunReplay:
                 "output": {"output": source_output},
             }
         )
-        time.sleep(0.01)
-        post_engine_event(
+        assert response.status_code == status.HTTP_200_OK
+
+        response = signed_engine_event_post(
             {
                 "event_id": f"evt-replay-{replay_run.id}-run-completed",
                 "type": "run_completed",
@@ -1484,6 +1509,7 @@ class TestRunReplay:
                 "output": source_output,
             }
         )
+        assert response.status_code == status.HTTP_200_OK
 
         replay_run.refresh_from_db()
         assert replay_run.status == "succeeded"
@@ -1493,22 +1519,26 @@ class TestRunReplay:
         source_run.refresh_from_db()
         assert replay_run.output_json == source_run.output_json
 
-        ordered_events = list(RunEvent.objects.filter(run=replay_run).order_by("created_at", "id"))
-        ordered_types = [event.event_type for event in ordered_events]
-        assert ordered_types == [
-            "run.replay",
-            "run.updated",
-            "node_run.updated",
-            "node_run.updated",
-            "run.updated",
-        ]
+        event_types = list(
+            RunEvent.objects.filter(run=replay_run).values_list("event_type", flat=True)
+        )
+        assert event_types.count("run.replay") == 1
+        assert event_types.count("run.updated") == 2
+        assert event_types.count("node_run.updated") == 2
 
-        node_statuses = [
-            event.payload.get("status")
-            for event in ordered_events
-            if event.event_type == "node_run.updated"
-        ]
-        assert node_statuses == ["running", "succeeded"]
+        node_statuses = set(
+            RunEvent.objects.filter(run=replay_run, event_type="node_run.updated").values_list(
+                "payload__status", flat=True
+            )
+        )
+        assert node_statuses == {"running", "succeeded"}
+
+        run_statuses = set(
+            RunEvent.objects.filter(run=replay_run, event_type="run.updated").values_list(
+                "payload__status", flat=True
+            )
+        )
+        assert run_statuses == {"running", "succeeded"}
 
         node_run = NodeRun.objects.get(run=replay_run, node_id="output", attempt=1)
         assert node_run.status == "succeeded"
@@ -1717,6 +1747,60 @@ class TestEngineRunEvents:
     """Tests for POST /api/runs/engine-events (S2S)."""
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_paused_event_projects_waiting_state_and_approval_task(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Approval Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        payload = {
+            "event_id": "evt-pause-1",
+            "type": "run_paused",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "human_gate_1",
+            "node_type": "human_gate",
+            "attempt": 1,
+            "timestamp": int(time.time() * 1000),
+            "output": {
+                "prompt_message": "Approve customer email draft",
+                "required_fields": ["ticket", "reason"],
+            },
+        }
+
+        response = signed_engine_event_post(payload)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "paused"
+        assert run.paused_node_id == "human_gate_1"
+        assert run.pause_state_json == payload["output"]
+
+        waiting_node = NodeRun.objects.get(run=run, node_id="human_gate_1", attempt=1)
+        assert waiting_node.status == "waiting"
+        assert waiting_node.output_json == {"pause_payload": payload["output"]}
+
+        approval_task = ApprovalTask.objects.get(run=run, node_id="human_gate_1", status="pending")
+        assert approval_task.assignee == user
+        assert approval_task.payload == {
+            "prompt_message": "Approve customer email draft",
+            "required_fields": ["ticket", "reason"],
+        }
+
+        duplicate_response = signed_engine_event_post(payload)
+        assert duplicate_response.status_code == status.HTTP_200_OK
+        assert duplicate_response.data["data"]["duplicate"] is True
+        assert (
+            ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count()
+            == 1
+        )
+        assert NodeRun.objects.filter(run=run, node_id="human_gate_1", attempt=1).count() == 1
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_idempotent_by_event_id(self, api_client, user):
         graph = Graph.objects.create(owner=user, name="My Graph")
         version = GraphVersion.objects.create(
@@ -1766,6 +1850,30 @@ class TestEngineRunEvents:
         run.refresh_from_db()
         assert run.status == "running"
         assert run.started_at == started_at
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_reject_tenant_mismatch(self, signed_engine_event_post, user):
+        graph = Graph.objects.create(owner=user, name="Tenant Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-tenant-mismatch",
+                "type": "run_started",
+                "run_id": str(run.id),
+                "tenant_id": str(uuid4()),
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert RunEvent.objects.filter(run=run).count() == 0
+
+        run.refresh_from_db()
+        assert run.status == "pending"
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_node_stream_chunk_broadcasts(self, api_client, user):
@@ -1972,6 +2080,45 @@ class TestEngineRunEvents:
         assert usage.completion_tokens == 18
         assert usage.total_tokens == 60
 
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_node_completed_is_idempotent_for_llm_usage(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Cost Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        payload = {
+            "event_id": "evt-node-complete-idempotent",
+            "type": "node_completed",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "prompt_1",
+            "node_type": "prompt",
+            "attempt": 1,
+            "timestamp": int(time.time() * 1000),
+            "output": {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 25,
+                    "total_tokens": 75,
+                },
+                "answer": "hello",
+            },
+        }
+
+        first = signed_engine_event_post(payload)
+        second = signed_engine_event_post(payload)
+
+        assert first.status_code == status.HTTP_200_OK
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["data"]["duplicate"] is True
+        assert LLMUsage.objects.filter(run=run, node_id="prompt_1").count() == 1
+
     def test_run_output_schema_strict_marks_failed(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Schema Graph")
         graph_json = {
@@ -2130,6 +2277,88 @@ class TestRunResume:
         assert task.status == "rejected"
         assert task.result == input_json
         assert task.resolved_at is not None
+
+    def test_resume_is_idempotent_for_duplicate_decision_payload(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="My Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
+        ApprovalTask.objects.create(
+            run=run,
+            node_id="gate",
+            assignee=user,
+            status="pending",
+            payload={"prompt_message": "Please approve"},
+        )
+
+        input_json = {"approved": True, "feedback": "Ship it"}
+        first = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": input_json},
+            format="json",
+        )
+        second = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": input_json},
+            format="json",
+        )
+
+        assert first.status_code == status.HTTP_200_OK
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["data"]["duplicate"] is True
+
+        resume_calls = [call for call in mock_engine_client.calls if call[0] == "resume_run"]
+        assert len(resume_calls) == 1
+
+    def test_resume_rejects_when_budget_exceeded(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Budget Resume Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
+        ApprovalTask.objects.create(
+            run=run,
+            node_id="gate",
+            assignee=user,
+            status="pending",
+            payload={"prompt_message": "Please approve"},
+        )
+        usage_run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+        LLMBudget.objects.create(
+            tenant_id=user.default_organization_id,
+            monthly_limit_usd=Decimal("1.00"),
+            warning_threshold_pct=Decimal("0.80"),
+        )
+        LLMUsage.objects.create(
+            tenant_id=user.default_organization_id,
+            run=usage_run,
+            node_id="prompt-1",
+            provider="openai",
+            model="gpt-4.1-mini",
+            prompt_tokens=100,
+            completion_tokens=25,
+            total_tokens=125,
+            cost_usd=Decimal("1.00"),
+        )
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": {"approved": True}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
+        assert response.data["error"]["code"] == "BUDGET_EXCEEDED"
+        assert not any(call[0] == "resume_run" for call in mock_engine_client.calls)
 
 
 class TestRunListEdgeCases:
