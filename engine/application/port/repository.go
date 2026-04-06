@@ -8,8 +8,8 @@ import (
 	"github.com/forgegraph/engine/domain/entity"
 )
 
-// RunRepository persists run and node run data to the database.
-// Implementations handle the actual database operations.
+// RunRepository persists engine runtime state through the configured migration contract.
+// Implementations may target the legacy shared DB during dual-write, a control-plane API after cutover, or in-memory storage for tests/fallbacks.
 type RunRepository interface {
 	// Run operations
 

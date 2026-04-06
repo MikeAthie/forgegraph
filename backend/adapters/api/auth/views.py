@@ -28,6 +28,7 @@ from adapters.api.auth.serializers import (
     RegisterSerializer,
     UserSerializer,
 )
+from application.services.auth_state import issue_ws_ticket, revoke_access_token
 from application.services.tenancy import ensure_default_organization
 
 User = get_user_model()
@@ -119,6 +120,10 @@ class LogoutView(APIView):
         response = Response(status=status.HTTP_204_NO_CONTENT)
         _clear_refresh_cookie(response)
 
+        access_token = getattr(request, "auth", None)
+        if access_token is not None:
+            revoke_access_token(cast(Any, access_token))
+
         if not refresh_token:
             return response
 
@@ -129,6 +134,29 @@ class LogoutView(APIView):
             return response
 
         return response
+
+
+class WSTicketView(APIView):
+    """Issue a short-lived, single-use WebSocket ticket."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        access_token = getattr(request, "auth", None)
+        if access_token is None:
+            return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        ticket, expires_in = issue_ws_ticket(
+            user_id=str(request.user.id),
+            access_token=cast(Any, access_token),
+        )
+        return Response(
+            {
+                "ticket": ticket,
+                "expires_in_seconds": expires_in,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class MeView(APIView):
