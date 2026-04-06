@@ -93,7 +93,9 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
 
     if message_type == "node_stream.summary":
         stream_payload = _payload_dict(message.get("node_stream"))
-        public_type = "node_stream_end" if bool(stream_payload.get("final")) else "node_stream_chunk"
+        public_type = (
+            "node_stream_end" if bool(stream_payload.get("final")) else "node_stream_chunk"
+        )
         return build_ws_public_message(
             public_type,
             run_id=run_id,

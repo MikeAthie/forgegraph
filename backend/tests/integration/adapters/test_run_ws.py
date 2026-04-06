@@ -32,6 +32,22 @@ LOC_MEM_CACHE = {
 }
 
 
+def _ws(user: User, url: str) -> WebsocketCommunicator:
+    communicator = WebsocketCommunicator(application, url)
+
+    assert user.default_organization is not None, "User must have a default organization"
+    scope = cast(dict[str, Any], communicator.scope)
+    scope.update(
+        {
+            "user": user,
+            "organization_id": str(user.default_organization.id),
+            "permissions": ["runs:view"],
+        }
+    )
+
+    return communicator
+
+
 @database_sync_to_async
 def _create_run_for_user(*, user: User, status: str = "running") -> str:
     graph = Graph.objects.create(owner=user, name="My Graph")
@@ -56,7 +72,7 @@ def _create_other_user_and_run() -> tuple[User, str]:
 @database_sync_to_async
 def _issue_ticket_for_user(user: User) -> tuple[str, str]:
     access_token = AccessToken.for_user(user)
-    ticket, _ = issue_ws_ticket(user_id=str(user.id), access_token=access_token)
+    ticket, _ = issue_ws_ticket(user=user, access_token=access_token)
     return str(access_token), ticket
 
 
@@ -78,10 +94,15 @@ def _issue_ticket_via_api(user: User) -> tuple[str, str]:
 @database_sync_to_async
 def _create_same_org_member(user: User) -> User:
     member = User.objects.create_user(email="viewer@example.com", password="password123")
-    member.default_organization = user.default_organization
+
+    organization = user.default_organization
+    assert organization is not None, "User must have a default organization"
+
+    member.default_organization = organization
     member.save(update_fields=["default_organization"])
+
     OrganizationMembership.objects.create(
-        organization=user.default_organization,
+        organization=organization,
         user=member,
         role="viewer",
         is_default=True,
@@ -95,11 +116,12 @@ def _revoke_access(raw_token: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_ws_rejects_missing_token(user):
+async def test_run_ws_rejects_unauthenticated_user(user):
     run_id = await _create_run_for_user(user=user)
 
     communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/")
     connected, _ = await communicator.connect()
+
     assert connected is False
     await communicator.disconnect()
 
@@ -110,7 +132,7 @@ async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
     run_id = await _create_run_for_user(user=user)
 
     _, ticket = await _issue_ticket_via_api(user)
-    communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+    communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await communicator.connect()
     assert connected is True
 
@@ -157,7 +179,7 @@ async def test_run_ws_default_subscription_drops_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
     _, ticket = await _issue_ticket_via_api(user)
-    communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+    communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await communicator.connect()
     assert connected is True
 
@@ -195,8 +217,8 @@ async def test_run_ws_verbose_subscription_receives_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
     _, ticket = await _issue_ticket_via_api(user)
-    communicator = WebsocketCommunicator(
-        application,
+    communicator = _ws(
+        user,
         f"/ws/runs/{run_id}/?ticket={ticket}&event_level=verbose",
     )
     connected, _ = await communicator.connect()
@@ -242,7 +264,7 @@ async def test_run_ws_allows_same_org_member(user):
     member = await _create_same_org_member(user)
 
     _, ticket = await _issue_ticket_for_user(member)
-    communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+    communicator = _ws(member, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await communicator.connect()
     assert connected is True
     await communicator.disconnect()
@@ -254,7 +276,7 @@ async def test_run_ws_rejects_cross_org_user(user):
     _, run_id = await _create_other_user_and_run()
 
     _, ticket = await _issue_ticket_for_user(user)
-    communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+    communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await communicator.connect()
     assert connected is False
     await communicator.disconnect()
@@ -266,12 +288,13 @@ async def test_run_ws_ticket_is_single_use(user):
     run_id = await _create_run_for_user(user=user)
 
     _, ticket = await _issue_ticket_for_user(user)
-    first = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+
+    first = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await first.connect()
     assert connected is True
     await first.disconnect()
 
-    second = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+    second = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await second.connect()
     assert connected is False
     await second.disconnect()
@@ -285,7 +308,7 @@ async def test_run_ws_rejects_ticket_when_access_token_revoked(user):
     access, ticket = await _issue_ticket_for_user(user)
     await _revoke_access(access)
 
-    communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/?ticket={ticket}")
+    communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await communicator.connect()
     assert connected is False
     await communicator.disconnect()

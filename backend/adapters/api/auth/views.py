@@ -31,8 +31,9 @@ from adapters.api.auth.serializers import (
 )
 from application.services.auth_state import issue_ws_ticket, revoke_access_token
 from application.services.tenancy import ensure_default_organization
+from infrastructure.orm.models import User
 
-User = get_user_model()
+UserModel = get_user_model()
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -73,7 +74,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = User.objects.create_user(
+        user = UserModel.objects.create_user(
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
         )
@@ -149,7 +150,7 @@ class WSTicketView(APIView):
 
         ticket, expires_in = issue_ws_ticket(
             access_token=cast(Any, access_token),
-            user=request.user,
+            user=cast("User | None", request.user),
         )
         return Response(
             {

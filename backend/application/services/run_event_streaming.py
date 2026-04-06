@@ -25,20 +25,6 @@ STREAM_SUMMARY_EVENT_TYPE = "node_stream.summary"
 _EVENT_LEVEL_RANK = {
     EVENT_LEVEL_MINIMAL: 0,
     EVENT_LEVEL_DEFAULT: 1,
-EVENT_LEVEL_CRITICAL = "critical"
-EVENT_LEVEL_IMPORTANT = "important"
-EVENT_LEVEL_VERBOSE = "verbose"
-EVENT_LEVELS = (
-    EVENT_LEVEL_CRITICAL,
-    EVENT_LEVEL_IMPORTANT,
-    EVENT_LEVEL_VERBOSE,
-)
-DEFAULT_EVENT_LEVEL = EVENT_LEVEL_IMPORTANT
-STREAM_SUMMARY_EVENT_TYPE = "node_stream.summary"
-
-_EVENT_LEVEL_RANK = {
-    EVENT_LEVEL_CRITICAL: 0,
-    EVENT_LEVEL_IMPORTANT: 1,
     EVENT_LEVEL_VERBOSE: 2,
 }
 
@@ -98,26 +84,10 @@ def classify_transport_event_level(
     if normalized_type in {STREAM_SUMMARY_EVENT_TYPE, "cost_update"}:
         return EVENT_LEVEL_DEFAULT
     if normalized_type in {"node_stream.chunk", "node_stream_chunk", "node_stream_end"}:
-    if normalized_type == "run.updated":
-        return EVENT_LEVEL_CRITICAL
-    if normalized_type == "run.schema_validation":
-        return EVENT_LEVEL_CRITICAL
-    if normalized_type == "node_run.updated":
-        status = str(normalized_payload.get("status") or "").strip().lower()
-        if status in {"failed", "waiting"}:
-            return EVENT_LEVEL_CRITICAL
-        return EVENT_LEVEL_IMPORTANT
-    if normalized_type == STREAM_SUMMARY_EVENT_TYPE:
-        return EVENT_LEVEL_IMPORTANT
-    if normalized_type == "node_stream.chunk":
         return EVENT_LEVEL_VERBOSE
     if normalized_type.startswith("agent."):
         return EVENT_LEVEL_VERBOSE
-    if "error" in normalized_type or "decision" in normalized_type:
-        return EVENT_LEVEL_MINIMAL
     return EVENT_LEVEL_DEFAULT
-        return EVENT_LEVEL_CRITICAL
-    return EVENT_LEVEL_IMPORTANT
 
 
 def add_event_level(

@@ -3072,7 +3072,6 @@ class EngineRunEventsView(APIView):
                             "cost_usd": float(cost),
                         }
 
-
             if event_type in {"node_completed", "node_failed", "node_skipped"}:
                 summary_payload = flush_stream_summary(
                     run_id=str(run.id),

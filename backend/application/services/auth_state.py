@@ -1,6 +1,5 @@
 """
 Redis-backed auth state helpers for token revocation and one-time WebSocket tickets.
-+Redis-backed auth state helpers for token revocation and one-time WebSocket tickets.
 """
 
 from __future__ import annotations
@@ -20,9 +19,6 @@ from rest_framework_simplejwt.tokens import AccessToken, Token
 
 from application.services.tenancy import get_default_membership
 from infrastructure.orm.models import User
-
-from redis import Redis
-from rest_framework_simplejwt.tokens import AccessToken, Token
 
 _REVOKED_ACCESS_PREFIX = "auth:revoked:access:"
 _WS_TICKET_PREFIX = "auth:ws-ticket:"
@@ -78,13 +74,15 @@ def issue_ws_ticket(
     ticket = secrets.token_urlsafe(32)
     resolved_user_id = user_id or (str(user.id) if user is not None else "")
     resolved_org_id = org_id or (
-        str(user.default_organization_id) if user is not None and user.default_organization_id else ""
+        str(getattr(user, "default_organization_id", "") or "") if user is not None else ""
     )
-    resolved_permissions = permissions or (_ws_permissions_for_user(user) if user is not None else ["runs:view"])
+    resolved_permissions = permissions or (
+        _ws_permissions_for_user(user) if user is not None else ["runs:view"]
+    )
     expires_at = timezone.now() + timedelta(seconds=ttl_seconds)
     payload = {
         "ticket": ticket,
-        "user_id": user_id,
+        "user_id": resolved_user_id,
         "org_id": resolved_org_id,
         "permissions": resolved_permissions,
         "expires_at": expires_at.isoformat(),
@@ -92,15 +90,7 @@ def issue_ws_ticket(
         "access_jti": _access_jti(access_token),
         "issued_at": int(time.time()),
     }
-    payload["user_id"] = resolved_user_id
-def issue_ws_ticket(*, user_id: str, access_token: Token) -> tuple[str, int]:
-    ttl_seconds = int(getattr(settings, "AUTH_WS_TICKET_TTL_SECONDS", 45))
-    ticket = secrets.token_urlsafe(32)
-    payload = {
-        "user_id": user_id,
-        "access_jti": _access_jti(access_token),
-        "issued_at": int(time.time()),
-    }
+
     serialized = json.dumps(payload)
     key = f"{_WS_TICKET_PREFIX}{ticket}"
 

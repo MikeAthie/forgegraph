@@ -168,7 +168,6 @@ def test_ws_ticket_requires_authentication_and_returns_short_lived_ticket(api_cl
 
 @override_settings(CACHES=LOC_MEM_CACHE)
 @override_settings(CACHES=LOC_MEM_CACHE)
-
 def test_logout_is_idempotent_without_refresh_cookie(api_client, user):
     login_response = api_client.post(
         "/api/auth/login",

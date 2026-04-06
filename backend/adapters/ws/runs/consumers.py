@@ -11,12 +11,11 @@ import asyncio
 import logging
 from typing import Any
 from urllib.parse import parse_qs
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from django.conf import settings
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 
 from application.services.metrics import (
@@ -31,7 +30,10 @@ from application.services.run_event_streaming import (
     normalize_requested_event_level,
     run_event_group_name,
 )
-from application.services.run_ws_protocol import build_ws_public_message, normalize_ws_public_message
+from application.services.run_ws_protocol import (
+    build_ws_public_message,
+    normalize_ws_public_message,
+)
 from application.services.structured_logging import log_event
 from infrastructure.orm.models import Run
 
@@ -43,7 +45,7 @@ async def _user_can_access_run(*, run_id: str, user_id: UUID, organization_id: s
         await database_sync_to_async(
             lambda: Run.objects.filter(
                 id=run_id,
-                owner__default_organization_id=organization_id,
+                owner__default_organization__id=UUID(organization_id),
                 owner__default_organization__memberships__user_id=user_id,
             ).exists()
         )()
@@ -105,13 +107,6 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             await self.channel_layer.group_add(group_name, self.channel_name)
         await self.accept()
 
-        await self.send_json(
-            {
-                "type": "connected",
-                "run_id": self.run_id,
-                "level": requested_level,
-            }
-        )
         self._ws_connected = True
         record_ws_connected()
         log_event(

@@ -15,8 +15,6 @@ from adapters.api.runs.serializers import NodeRunSerializer, RunDeltaBroadcastSe
 from application.services.run_event_streaming import (
     EVENT_LEVEL_DEFAULT,
     EVENT_LEVEL_MINIMAL,
-from application.services.run_event_streaming import (
-    EVENT_LEVEL_IMPORTANT,
     STREAM_SUMMARY_EVENT_TYPE,
     add_event_level,
     classify_transport_event_level,
@@ -101,13 +99,6 @@ def broadcast_run_schema_validation(*, run: Run, payload: dict[str, Any]) -> dic
 
 
 def broadcast_node_stream_chunk(*, run: Run, payload: dict[str, Any]) -> dict[str, Any]:
-    message = {
-        "event_id": str(uuid.uuid4()),
-        "timestamp": timezone.now().isoformat(),
-        "type": "node_stream.chunk",
-        "run_id": str(run.id),
-        "node_stream": payload,
-    }
     message = add_event_level(
         {
             "event_id": str(uuid.uuid4()),
@@ -156,9 +147,6 @@ def broadcast_transport_event(
         ),
         payload=payload,
         level=level,
-
-        level=EVENT_LEVEL_IMPORTANT,
-
     )
     _send_to_run_group(run_id=str(run.id), message=message)
     return message
