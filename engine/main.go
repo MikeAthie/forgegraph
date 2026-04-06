@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +32,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -54,6 +59,10 @@ type Config struct {
 	MetricsPort                       string
 	MemoryGRPCHost                    string
 	MemoryGRPCPort                    string
+	GRPCTLSCertFile                   string
+	GRPCTLSKeyFile                    string
+	GRPCTLSClientCAFile               string
+	GRPCTLSRequireClientCert          bool
 	CallbackSecret                    string
 	CallbackURL                       string
 	ControlPlaneURL                   string
@@ -63,7 +72,14 @@ type Config struct {
 	EventSpoolPath                    string
 	MarketplaceManifestRefreshSeconds int
 	RuntimeMode                       string
+	RunStateMode                      string
 }
+
+const (
+	runStateModeDualWrite        = "dual-write"
+	runStateModeControlPlaneHTTP = "control-plane-http"
+	runStateModeInMemory         = "in-memory"
+)
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
@@ -88,6 +104,10 @@ func LoadConfig() *Config {
 		MetricsPort:                       getEnv("METRICS_PORT", "9090"),
 		MemoryGRPCHost:                    getEnv("MEMORY_GRPC_HOST", ""),
 		MemoryGRPCPort:                    getEnv("MEMORY_GRPC_PORT", ""),
+		GRPCTLSCertFile:                   getEnv("GRPC_TLS_CERT_FILE", ""),
+		GRPCTLSKeyFile:                    getEnv("GRPC_TLS_KEY_FILE", ""),
+		GRPCTLSClientCAFile:               getEnv("GRPC_TLS_CLIENT_CA_FILE", ""),
+		GRPCTLSRequireClientCert:          strings.EqualFold(getEnv("GRPC_TLS_REQUIRE_CLIENT_CERT", "false"), "true"),
 		CallbackSecret:                    getEnv("ENGINE_CALLBACK_SECRET", ""),
 		CallbackURL:                       getEnv("ENGINE_CALLBACK_URL", ""),
 		ControlPlaneURL:                   getEnv("CONTROL_PLANE_URL", ""),
@@ -97,8 +117,56 @@ func LoadConfig() *Config {
 		EventSpoolPath:                    getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
 		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
 		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
+		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", runStateModeDualWrite)),
 	}
 	return cfg
+}
+
+func normalizeRunStateMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "dual-write", "dual_write", "legacy-db", "legacy_db", "postgres":
+		return runStateModeDualWrite
+	case "control-plane-http", "control_plane_http", "control-plane", "control_plane", "http":
+		return runStateModeControlPlaneHTTP
+	case "in-memory", "in_memory", "memory":
+		return runStateModeInMemory
+	default:
+		return runStateModeDualWrite
+	}
+}
+
+func hasControlPlaneRepositoryConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return strings.TrimSpace(cfg.ControlPlaneURL) != "" && strings.TrimSpace(cfg.CallbackSecret) != ""
+}
+
+func selectRunRepositoryDriver(cfg *Config, hasDB bool) (string, error) {
+	mode := normalizeRunStateMode("")
+	if cfg != nil {
+		mode = cfg.RunStateMode
+	}
+
+	switch mode {
+	case runStateModeDualWrite:
+		if hasDB {
+			return runStateModeDualWrite, nil
+		}
+		if hasControlPlaneRepositoryConfig(cfg) {
+			return runStateModeControlPlaneHTTP, nil
+		}
+		return runStateModeInMemory, nil
+	case runStateModeControlPlaneHTTP:
+		if hasControlPlaneRepositoryConfig(cfg) {
+			return runStateModeControlPlaneHTTP, nil
+		}
+		return "", fmt.Errorf("ENGINE_RUN_STATE_MODE=%s requires CONTROL_PLANE_URL and ENGINE_CALLBACK_SECRET", runStateModeControlPlaneHTTP)
+	case runStateModeInMemory:
+		return runStateModeInMemory, nil
+	default:
+		return "", fmt.Errorf("unsupported ENGINE_RUN_STATE_MODE: %s", mode)
+	}
 }
 
 func refreshMarketplaceManifests(
@@ -150,6 +218,81 @@ func getEnvInt(key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
+}
+
+func resolveEventCallbackURL(cfg *Config) string {
+	if cfg == nil {
+		return ""
+	}
+	if strings.TrimSpace(cfg.CallbackURL) != "" {
+		return strings.TrimSpace(cfg.CallbackURL)
+	}
+	if strings.TrimSpace(cfg.ControlPlaneURL) == "" {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(cfg.ControlPlaneURL), "/") + "/api/runs/engine-events"
+}
+
+func resolveEventSpoolPath(cfg *Config, callbackURL string) string {
+	if cfg == nil {
+		return ""
+	}
+	if strings.TrimSpace(cfg.EventSpoolPath) != "" {
+		return strings.TrimSpace(cfg.EventSpoolPath)
+	}
+	if strings.TrimSpace(callbackURL) == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(callbackURL))
+	return filepath.Join(
+		os.TempDir(),
+		fmt.Sprintf("forgegraph-engine-events-%x.jsonl", sum[:8]),
+	)
+}
+
+func buildGRPCServerOptions(cfg *Config) ([]grpc.ServerOption, bool, error) {
+	if cfg == nil {
+		return nil, false, nil
+	}
+
+	certFile := strings.TrimSpace(cfg.GRPCTLSCertFile)
+	keyFile := strings.TrimSpace(cfg.GRPCTLSKeyFile)
+	clientCAFile := strings.TrimSpace(cfg.GRPCTLSClientCAFile)
+	if certFile == "" && keyFile == "" {
+		return nil, false, nil
+	}
+	if certFile == "" || keyFile == "" {
+		return nil, false, fmt.Errorf("both GRPC_TLS_CERT_FILE and GRPC_TLS_KEY_FILE must be set together")
+	}
+
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to load gRPC TLS key pair: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{certificate},
+	}
+
+	if clientCAFile != "" {
+		clientCAPEM, err := os.ReadFile(clientCAFile)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to read gRPC client CA file: %w", err)
+		}
+		clientCAs := x509.NewCertPool()
+		if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+			return nil, false, fmt.Errorf("failed to parse gRPC client CA file")
+		}
+		tlsConfig.ClientCAs = clientCAs
+		if cfg.GRPCTLSRequireClientCert {
+			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		} else {
+			tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+		}
+	}
+
+	return []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig))}, true, nil
 }
 
 // EngineServer implements the Engine gRPC service
@@ -322,6 +465,7 @@ func main() {
 	// Initialize structured logger
 	logCfg := logger.ConfigFromEnv()
 	log := logger.New(logCfg)
+	log.RedirectStdlib()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider())
 
 	log.Info("engine_starting", "version", "0.1.0")
@@ -339,6 +483,8 @@ func main() {
 		"tool_manifest_dir", cfg.ToolManifestDir,
 		"marketplace_manifest_refresh_seconds", cfg.MarketplaceManifestRefreshSeconds,
 		"runtime_mode", cfg.RuntimeMode,
+		"run_state_mode", cfg.RunStateMode,
+		"grpc_tls_enabled", strings.TrimSpace(cfg.GRPCTLSCertFile) != "" && strings.TrimSpace(cfg.GRPCTLSKeyFile) != "",
 	)
 
 	// Initialize repository and memory store
@@ -363,13 +509,42 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info("database_connected", "driver", "postgres")
-
-		repo = repository.NewPostgresRunRepository(db)
 		memoryStore = store.NewPostgresMemoryStore(db)
 	} else {
 		log.Warn("database_url_not_set", "fallback", "in-memory")
-		repo = repository.NewMemoryRunRepository()
 		memoryStore = store.NewInMemoryMemoryStore()
+	}
+
+	repoDriver, err := selectRunRepositoryDriver(cfg, db != nil)
+	if err != nil {
+		log.Error("run_repository_config_invalid", "error", err.Error())
+		os.Exit(1)
+	}
+
+	switch repoDriver {
+	case runStateModeDualWrite:
+		repo = repository.NewPostgresRunRepository(db)
+		log.Warn(
+			"run_repository_dual_write_mode",
+			"driver", "postgres",
+			"migration_mode", runStateModeDualWrite,
+			"note", "engine keeps legacy runtime writes while backend validates event-derived shadow state",
+		)
+	case runStateModeControlPlaneHTTP:
+		repo = repository.NewHTTPRunRepository(cfg.ControlPlaneURL, cfg.CallbackSecret, nil)
+		log.Info(
+			"run_repository_initialized",
+			"driver", "control-plane-http",
+			"migration_mode", runStateModeControlPlaneHTTP,
+			"control_plane_url", cfg.ControlPlaneURL,
+		)
+	default:
+		repo = repository.NewMemoryRunRepository()
+		log.Warn(
+			"run_repository_fallback",
+			"driver", "in-memory",
+			"migration_mode", repoDriver,
+		)
 	}
 
 	// Optional Redis-backed memory store
@@ -395,17 +570,23 @@ func main() {
 
 	// Initialize event emitter
 	var emitter port.EventEmitter
-	if cfg.CallbackURL != "" {
-		emitterCfg := gateway.DefaultHTTPEventEmitterConfig(cfg.CallbackURL)
-		emitterCfg.SignatureSecret = cfg.CallbackSecret
-		emitterCfg.MaxRetries = cfg.EventMaxRetries
-		emitterCfg.RetryDelay = time.Duration(cfg.EventRetryDelayMs) * time.Millisecond
-		emitterCfg.BufferSize = cfg.EventBufferSize
-		emitterCfg.SpoolPath = cfg.EventSpoolPath
-		emitter = gateway.NewHTTPEventEmitter(emitterCfg)
-	} else {
-		emitter = port.NewNoOpEventEmitter()
+	callbackURL := resolveEventCallbackURL(cfg)
+	if callbackURL == "" {
+		log.Error("event_callback_not_configured", "note", "engine must be able to deliver execution events to the control plane")
+		os.Exit(1)
 	}
+	emitterCfg := gateway.DefaultHTTPEventEmitterConfig(callbackURL)
+	emitterCfg.SignatureSecret = cfg.CallbackSecret
+	emitterCfg.MaxRetries = cfg.EventMaxRetries
+	emitterCfg.RetryDelay = time.Duration(cfg.EventRetryDelayMs) * time.Millisecond
+	emitterCfg.BufferSize = cfg.EventBufferSize
+	emitterCfg.SpoolPath = resolveEventSpoolPath(cfg, callbackURL)
+	emitter, err = gateway.NewHTTPEventEmitter(emitterCfg)
+	if err != nil {
+		log.Error("event_emitter_init_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	log.Info("event_emitter_initialized", "callback_url", callbackURL, "spool_path", emitterCfg.SpoolPath)
 
 	// Initialize node executors
 	registry := port.NewExecutorRegistry()
@@ -575,14 +756,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServerOptions, grpcTLSEnabled, err := buildGRPCServerOptions(cfg)
+	if err != nil {
+		log.Error("grpc_tls_config_invalid", "error", err.Error())
+		os.Exit(1)
+	}
+
+	grpcServer := grpc.NewServer(grpcServerOptions...)
 	engineServer := NewEngineServer(scheduler, repo, log)
 	RegisterEngineServiceServer(grpcServer, engineServer)
 
 	// Enable server reflection for debugging
 	reflection.Register(grpcServer)
 
-	log.Info("grpc_server_listening", "port", cfg.GRPCPort)
+	if grpcTLSEnabled {
+		log.Info("grpc_server_listening", "port", cfg.GRPCPort, "transport_security", "tls")
+	} else {
+		log.Warn("grpc_server_insecure", "port", cfg.GRPCPort, "note", "set GRPC_TLS_CERT_FILE and GRPC_TLS_KEY_FILE to enable TLS")
+	}
 
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Error("grpc_serve_failed", "error", err.Error())

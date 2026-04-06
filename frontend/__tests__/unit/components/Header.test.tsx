@@ -100,10 +100,13 @@ describe("Header", () => {
     it("should not display navigation links when not authenticated", () => {
       render(<Header />);
 
-      expect(screen.queryByRole("link", { name: /graphs/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /overview/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /inbox/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /agents/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /tasks/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /memory/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /prompts/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /runs/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /workflows/i })).not.toBeInTheDocument();
     });
 
     it("should have correct href for Sign in button", () => {
@@ -139,10 +142,13 @@ describe("Header", () => {
     it("should display navigation links when authenticated", () => {
       render(<Header />);
 
-      expect(screen.getByRole("link", { name: /^graphs$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^overview$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^inbox$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^agents$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^tasks$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^memory$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^prompts$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^runs$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^workflows$/i })).toBeInTheDocument();
     });
 
     it("should not display Sign in/Get started buttons when authenticated", () => {
@@ -168,10 +174,13 @@ describe("Header", () => {
     it("should have correct hrefs for navigation links", () => {
       render(<Header />);
 
-      expect(screen.getByRole("link", { name: /^graphs$/i })).toHaveAttribute("href", "/graphs");
+      expect(screen.getByRole("link", { name: /^overview$/i })).toHaveAttribute("href", "/overview");
+      expect(screen.getByRole("link", { name: /^inbox$/i })).toHaveAttribute("href", "/inbox");
+      expect(screen.getByRole("link", { name: /^agents$/i })).toHaveAttribute("href", "/agents");
+      expect(screen.getByRole("link", { name: /^tasks$/i })).toHaveAttribute("href", "/tasks");
       expect(screen.getByRole("link", { name: /^memory$/i })).toHaveAttribute("href", "/memory");
-      expect(screen.getByRole("link", { name: /^prompts$/i })).toHaveAttribute("href", "/prompts");
       expect(screen.getByRole("link", { name: /^runs$/i })).toHaveAttribute("href", "/runs");
+      expect(screen.getByRole("link", { name: /^workflows$/i })).toHaveAttribute("href", "/workflows");
     });
   });
 

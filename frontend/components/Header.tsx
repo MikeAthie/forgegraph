@@ -25,28 +25,26 @@ export default function Header() {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
 
   const navItems = [
-    { href: "/onboarding", label: "Onboarding" },
-    { href: "/graphs", label: "Graphs" },
-    { href: "/prompts", label: "Prompts" },
-    { href: "/credentials", label: "Credentials" },
+    { href: "/overview", label: "Overview" },
+    { href: "/inbox", label: "Inbox" },
+    { href: "/agents", label: "Agents" },
+    { href: "/tasks", label: "Tasks" },
     { href: "/memory", label: "Memory" },
     { href: "/runs", label: "Runs" },
-    { href: "/analytics/llm", label: "Analytics" },
-    { href: "/approvals", label: "Approvals" },
+    { href: "/workflows", label: "Workflows" },
   ] as const;
 
   const canManageOrg = user?.organization_role === "owner" || user?.organization_role === "admin";
   const canViewAuditLogs = canManageOrg;
 
   const activeHref = (() => {
-    if (router.pathname.startsWith("/onboarding")) return "/onboarding";
-    if (router.pathname.startsWith("/graphs")) return "/graphs";
-    if (router.pathname.startsWith("/prompts")) return "/prompts";
-    if (router.pathname.startsWith("/credentials")) return "/credentials";
+    if (router.pathname.startsWith("/overview")) return "/overview";
+    if (router.pathname.startsWith("/inbox") || router.pathname.startsWith("/approvals")) return "/inbox";
+    if (router.pathname.startsWith("/agents")) return "/agents";
+    if (router.pathname.startsWith("/tasks")) return "/tasks";
     if (router.pathname.startsWith("/memory")) return "/memory";
-    if (router.pathname.startsWith("/runs")) return "/runs";
-    if (router.pathname.startsWith("/analytics")) return "/analytics/llm";
-    if (router.pathname.startsWith("/approvals")) return "/approvals";
+    if (router.pathname.startsWith("/runs") || router.pathname.startsWith("/executions")) return "/runs";
+    if (router.pathname.startsWith("/workflows") || router.pathname.startsWith("/graphs")) return "/workflows";
     return null;
   })();
 
@@ -124,7 +122,7 @@ export default function Header() {
                       >
                         <div className="flex w-full items-center justify-between gap-3">
                           <span>{item.label}</span>
-                          {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
+                          {item.href === "/inbox" && (pendingApprovalsCount ?? 0) > 0 && (
                             <Badge
                               variant="destructive"
                               className="h-5 min-w-5 px-1.5"
@@ -151,7 +149,7 @@ export default function Header() {
                   <Button key={item.href} variant={activeHref === item.href ? "secondary" : "ghost"} asChild>
                     <Link href={item.href} className="flex items-center gap-2">
                       <span>{item.label}</span>
-                      {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
+                      {item.href === "/inbox" && (pendingApprovalsCount ?? 0) > 0 && (
                         <Badge
                           variant="destructive"
                           className="h-5 min-w-5 px-1.5"

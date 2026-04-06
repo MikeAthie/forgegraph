@@ -4,6 +4,8 @@ package logger
 
 import (
 	"context"
+	"io"
+	stdlog "log"
 	"log/slog"
 	"os"
 	"strings"
@@ -42,6 +44,10 @@ func ConfigFromEnv() Config {
 
 // New creates a new structured logger with the given configuration
 func New(cfg Config) *Logger {
+	return newWithWriter(cfg, os.Stdout)
+}
+
+func newWithWriter(cfg Config, writer io.Writer) *Logger {
 	var level slog.Level
 	switch strings.ToLower(cfg.Level) {
 	case "debug":
@@ -58,18 +64,29 @@ func New(cfg Config) *Logger {
 
 	opts := &slog.HandlerOptions{
 		Level: level,
+		ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
+			switch attr.Key {
+			case slog.TimeKey:
+				attr.Key = "timestamp"
+			case slog.LevelKey:
+				attr.Value = slog.StringValue(strings.ToLower(attr.Value.String()))
+			case slog.MessageKey:
+				attr.Key = "event_type"
+			}
+			return attr
+		},
 	}
 
 	var handler slog.Handler
 	switch strings.ToLower(cfg.Format) {
 	case "text":
-		handler = slog.NewTextHandler(os.Stdout, opts)
+		handler = slog.NewTextHandler(writer, opts)
 	default:
-		handler = slog.NewJSONHandler(os.Stdout, opts)
+		handler = slog.NewJSONHandler(writer, opts)
 	}
 
 	return &Logger{
-		Logger: slog.New(handler),
+		Logger: slog.New(handler).With("service", "engine"),
 	}
 }
 
@@ -97,6 +114,12 @@ func (l *Logger) WithComponent(component string) *Logger {
 	return &Logger{
 		Logger: l.Logger.With("component", component),
 	}
+}
+
+// RedirectStdlib converts remaining standard-library log output into JSON engine logs.
+func (l *Logger) RedirectStdlib() {
+	stdlog.SetFlags(0)
+	stdlog.SetOutput(&stdlibBridge{logger: l.Logger})
 }
 
 // GRPCRequest logs a gRPC request
@@ -196,4 +219,27 @@ func (l *Logger) NodeSkipped(runID, nodeID string) {
 		"run_id", runID,
 		"node_id", nodeID,
 	)
+}
+
+type stdlibBridge struct {
+	logger *slog.Logger
+}
+
+func (b *stdlibBridge) Write(p []byte) (int, error) {
+	line := strings.TrimSpace(string(p))
+	if line == "" {
+		return len(p), nil
+	}
+
+	level := slog.LevelInfo
+	lowered := strings.ToLower(line)
+	switch {
+	case strings.HasPrefix(lowered, "critical"), strings.HasPrefix(lowered, "error"):
+		level = slog.LevelError
+	case strings.HasPrefix(lowered, "warning"), strings.HasPrefix(lowered, "warn"):
+		level = slog.LevelWarn
+	}
+
+	b.logger.Log(context.Background(), level, "legacy.log", "message", line)
+	return len(p), nil
 }

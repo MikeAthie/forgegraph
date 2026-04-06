@@ -112,6 +112,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
     node_outcomes = serializers.JSONField(read_only=True, allow_null=True)
     agent_events = serializers.JSONField(read_only=True, allow_null=True)
+    timeline = serializers.JSONField(read_only=True, allow_null=True)
     memory_activity = serializers.JSONField(read_only=True, allow_null=True)
 
 
@@ -156,6 +157,7 @@ class RunDeltaBroadcastSerializer(serializers.Serializer[Any]):
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_message = serializers.CharField(read_only=True)
+    trace_id = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class NodeRunDeltaSerializer(serializers.Serializer[Any]):

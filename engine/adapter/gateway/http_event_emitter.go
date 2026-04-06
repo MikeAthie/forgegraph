@@ -8,16 +8,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/forgegraph/engine/adapter/metrics"
 	"github.com/forgegraph/engine/application/port"
 )
+
+var ErrEventCallbackNotConfigured = errors.New("event callback URL is required")
 
 // HTTPEventEmitter sends execution events to the control plane via HTTP POST.
 type HTTPEventEmitter struct {
@@ -33,12 +37,16 @@ type HTTPEventEmitter struct {
 	closeMu   sync.Mutex
 
 	// Configuration
-	maxRetries int
-	retryDelay time.Duration
+	maxRetries         int
+	retryDelay         time.Duration
+	spoolFlushInterval time.Duration
 
-	// Optional disk spool for undelivered events
-	spoolPath string
-	spoolMu   sync.Mutex
+	// Disk spool for undelivered events
+	spoolPath    string
+	spoolMu      sync.Mutex
+	flushMu      sync.Mutex
+	spoolFlushCh chan struct{}
+	stopCh       chan struct{}
 }
 
 // HTTPEventEmitterConfig holds configuration for the event emitter
@@ -61,8 +69,11 @@ type HTTPEventEmitterConfig struct {
 	// SignatureSecret is the shared secret for S2S callback signing (optional)
 	SignatureSecret string
 
-	// SpoolPath enables optional disk persistence for undelivered events (JSONL)
+	// SpoolPath enables disk persistence for undelivered events (JSONL)
 	SpoolPath string
+
+	// SpoolFlushInterval controls how often the emitter retries spooled events.
+	SpoolFlushInterval time.Duration
 }
 
 // DefaultHTTPEventEmitterConfig returns sensible defaults
@@ -76,7 +87,11 @@ func DefaultHTTPEventEmitterConfig(callbackURL string) HTTPEventEmitterConfig {
 }
 
 // NewHTTPEventEmitter creates a new HTTP event emitter
-func NewHTTPEventEmitter(config HTTPEventEmitterConfig) *HTTPEventEmitter {
+func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, error) {
+	if config.CallbackURL == "" {
+		return nil, ErrEventCallbackNotConfigured
+	}
+
 	client := config.Client
 	if client == nil {
 		client = &http.Client{
@@ -99,33 +114,40 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) *HTTPEventEmitter {
 		bufferSize = 100
 	}
 
+	spoolFlushInterval := config.SpoolFlushInterval
+	if spoolFlushInterval <= 0 {
+		spoolFlushInterval = 5 * time.Second
+	}
+
+	spoolPath := config.SpoolPath
+	if spoolPath == "" {
+		spoolPath = defaultSpoolPath(config.CallbackURL)
+	}
+
 	emitter := &HTTPEventEmitter{
-		client:      client,
-		callbackURL: config.CallbackURL,
-		secret:      config.SignatureSecret,
-		eventChan:   make(chan *port.ExecutionEvent, bufferSize),
-		maxRetries:  maxRetries,
-		retryDelay:  retryDelay,
-		spoolPath:   config.SpoolPath,
+		client:             client,
+		callbackURL:        config.CallbackURL,
+		secret:             config.SignatureSecret,
+		eventChan:          make(chan *port.ExecutionEvent, bufferSize),
+		maxRetries:         maxRetries,
+		retryDelay:         retryDelay,
+		spoolFlushInterval: spoolFlushInterval,
+		spoolPath:          spoolPath,
+		spoolFlushCh:       make(chan struct{}, 1),
+		stopCh:             make(chan struct{}),
 	}
 
 	// Start background worker for async events
 	go emitter.worker()
-	if emitter.spoolPath != "" {
-		go func() {
-			if err := emitter.flushSpool(context.Background()); err != nil {
-				log.Printf("Warning: failed to flush event spool: %v", err)
-			}
-		}()
-	}
+	go emitter.spoolWorker()
 
-	return emitter
+	return emitter, nil
 }
 
 // Emit sends an event to the control plane synchronously
 func (e *HTTPEventEmitter) Emit(ctx context.Context, event *port.ExecutionEvent) error {
 	if e.callbackURL == "" {
-		return nil // No callback URL configured, skip silently
+		return ErrEventCallbackNotConfigured
 	}
 
 	return e.sendWithRetry(ctx, event, true)
@@ -133,24 +155,31 @@ func (e *HTTPEventEmitter) Emit(ctx context.Context, event *port.ExecutionEvent)
 
 // EmitAsync queues an event for asynchronous delivery
 func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
+	if event == nil {
+		return
+	}
+
 	e.closeMu.Lock()
 	if e.closed {
 		e.closeMu.Unlock()
-		log.Printf("Warning: EmitAsync called after emitter closed, event dropped: %s", event.Type)
+		if err := e.enqueueDurably(event, "closed"); err != nil {
+			log.Printf("Critical: failed to durably enqueue closed event %s for run %s: %v", event.Type, event.RunID, err)
+		}
 		return
 	}
-	e.pending.Add(1)
 
+	e.pending.Add(1)
 	select {
 	case e.eventChan <- event:
 		e.closeMu.Unlock()
-		// Event queued
+		return
 	default:
-		// Channel full, log and drop
-		e.closeMu.Unlock()
 		e.pending.Done()
-		metrics.RecordEventDrop("buffer_full", event.Type.String())
-		log.Printf("Warning: Event channel full, dropping event: %s for run %s (event_id=%s)", event.Type, event.RunID, event.EventID)
+	}
+	e.closeMu.Unlock()
+
+	if err := e.enqueueDurably(event, "buffer_full"); err != nil {
+		log.Printf("Critical: failed to durably enqueue overflow event %s for run %s: %v", event.Type, event.RunID, err)
 	}
 }
 
@@ -164,9 +193,24 @@ func (e *HTTPEventEmitter) Flush(ctx context.Context) error {
 
 	select {
 	case <-done:
-		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+
+	for {
+		remaining, err := e.flushSpool(ctx)
+		if err != nil {
+			return err
+		}
+		if remaining == 0 {
+			return nil
+		}
+
+		select {
+		case <-time.After(e.retryDelay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
@@ -182,6 +226,33 @@ func (e *HTTPEventEmitter) worker() {
 		}
 		cancel()
 		e.pending.Done()
+	}
+}
+
+func (e *HTTPEventEmitter) spoolWorker() {
+	e.wg.Add(1)
+	defer e.wg.Done()
+
+	if _, err := e.flushSpool(context.Background()); err != nil {
+		log.Printf("Warning: failed to flush event spool on startup: %v", err)
+	}
+
+	ticker := time.NewTicker(e.spoolFlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if _, err := e.flushSpool(context.Background()); err != nil {
+				log.Printf("Warning: failed to flush event spool: %v", err)
+			}
+		case <-e.spoolFlushCh:
+			if _, err := e.flushSpool(context.Background()); err != nil {
+				log.Printf("Warning: failed to flush event spool: %v", err)
+			}
+		case <-e.stopCh:
+			return
+		}
 	}
 }
 
@@ -218,7 +289,9 @@ func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.Execut
 
 	metrics.RecordEventDeliveryFailure(event.Type.String())
 	if spoolOnFailure {
-		e.appendToSpool(event)
+		if err := e.appendToSpool(event); err != nil {
+			return fmt.Errorf("failed after %d retries and could not spool event: %w", e.maxRetries, err)
+		}
 	}
 	return fmt.Errorf("failed after %d retries: %w", e.maxRetries, lastErr)
 }
@@ -237,7 +310,7 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 
 	req.Header.Set("Content-Type", "application/json")
 	if e.secret != "" {
-		timestamp := fmt.Sprintf("%d", event.Timestamp)
+		timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
 		signature := signPayload(e.secret, timestamp, body)
 		req.Header.Set("X-Forgegraph-Timestamp", timestamp)
 		req.Header.Set("X-Forgegraph-Signature", signature)
@@ -310,55 +383,118 @@ func toCloudEventEnvelope(event *port.ExecutionEvent) map[string]any {
 	return envelope
 }
 
-func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) {
+func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) error {
 	if e.spoolPath == "" {
-		return
+		return errors.New("event spool path is not configured")
 	}
 
 	e.spoolMu.Lock()
 	defer e.spoolMu.Unlock()
 
+	if err := os.MkdirAll(filepath.Dir(e.spoolPath), 0o755); err != nil {
+		log.Printf("Warning: failed to create event spool directory: %v", err)
+		return err
+	}
+
 	file, err := os.OpenFile(e.spoolPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		log.Printf("Warning: failed to open event spool: %v", err)
-		return
+		return err
 	}
 	defer file.Close()
 
 	payload, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("Warning: failed to marshal event for spool: %v", err)
-		return
+		return err
 	}
 
 	if _, err := file.Write(append(payload, '\n')); err != nil {
 		log.Printf("Warning: failed to write event to spool: %v", err)
-		return
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		log.Printf("Warning: failed to fsync event spool: %v", err)
+		return err
 	}
 
 	metrics.RecordEventSpooled(event.Type.String())
+	return nil
 }
 
-func (e *HTTPEventEmitter) flushSpool(ctx context.Context) error {
-	if e.spoolPath == "" {
+func (e *HTTPEventEmitter) enqueueDurably(event *port.ExecutionEvent, reason string) error {
+	if err := e.appendToSpool(event); err == nil {
+		e.signalSpoolFlush()
 		return nil
-	}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	e.spoolMu.Lock()
-	defer e.spoolMu.Unlock()
-
-	file, err := os.Open(e.spoolPath)
-	if err != nil {
-		if os.IsNotExist(err) {
+		sendErr := e.sendWithRetry(ctx, event, false)
+		if sendErr == nil {
+			log.Printf("Warning: event spill to durable queue failed for %s; delivered synchronously instead", reason)
 			return nil
 		}
-		return err
+		return fmt.Errorf(
+			"durable enqueue failed (%s): spool=%v send=%w",
+			reason,
+			err,
+			sendErr,
+		)
 	}
-	defer file.Close()
+}
 
+func (e *HTTPEventEmitter) signalSpoolFlush() {
+	select {
+	case e.spoolFlushCh <- struct{}{}:
+	default:
+	}
+}
+
+func (e *HTTPEventEmitter) flushSpool(ctx context.Context) (int, error) {
+	if e.spoolPath == "" {
+		return 0, nil
+	}
+
+	e.flushMu.Lock()
+	defer e.flushMu.Unlock()
+
+	processingPath, err := e.claimSpoolFile()
+	if err != nil {
+		return 0, err
+	}
+	if processingPath == "" {
+		return 0, nil
+	}
+
+	file, err := os.Open(processingPath)
+	if err != nil {
+		e.restoreClaimedSpool(processingPath)
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	var remaining []string
 	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			remaining = append(remaining, scanner.Text())
+			for scanner.Scan() {
+				remaining = append(remaining, scanner.Text())
+			}
+			if err := file.Close(); err != nil {
+				return len(remaining), err
+			}
+			if appendErr := e.requeueRemaining(processingPath, remaining); appendErr != nil {
+				return len(remaining), appendErr
+			}
+			return len(remaining), ctx.Err()
+		default:
+		}
+
 		line := scanner.Text()
 		if line == "" {
 			continue
@@ -375,34 +511,92 @@ func (e *HTTPEventEmitter) flushSpool(ctx context.Context) error {
 
 	if err := scanner.Err(); err != nil {
 		log.Printf("Warning: failed to read event spool: %v", err)
-		return err
-	}
-
-	if len(remaining) == 0 {
-		if err := os.Remove(e.spoolPath); err != nil && !os.IsNotExist(err) {
-			return err
+		if closeErr := file.Close(); closeErr != nil {
+			return len(remaining), closeErr
 		}
-		return nil
+		if appendErr := e.requeueRemaining(processingPath, remaining); appendErr != nil {
+			return len(remaining), appendErr
+		}
+		return len(remaining), err
 	}
 
-	tmpPath := fmt.Sprintf("%s.tmp", e.spoolPath)
-	if err := os.WriteFile(tmpPath, []byte(fmt.Sprintf("%s\n", remaining[0])), 0o600); err != nil {
-		return err
+	if err := file.Close(); err != nil {
+		return len(remaining), err
 	}
-	if len(remaining) > 1 {
-		file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err := e.requeueRemaining(processingPath, remaining); err != nil {
+		return len(remaining), err
+	}
+	return len(remaining), nil
+}
+
+func (e *HTTPEventEmitter) claimSpoolFile() (string, error) {
+	if e.spoolPath == "" {
+		return "", nil
+	}
+
+	e.spoolMu.Lock()
+	defer e.spoolMu.Unlock()
+
+	processingPath := fmt.Sprintf("%s.processing", e.spoolPath)
+	if _, err := os.Stat(processingPath); err == nil {
+		return processingPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	if err := os.Rename(e.spoolPath, processingPath); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	return processingPath, nil
+}
+
+func (e *HTTPEventEmitter) restoreClaimedSpool(processingPath string) {
+	e.spoolMu.Lock()
+	defer e.spoolMu.Unlock()
+
+	if _, err := os.Stat(processingPath); err != nil {
+		return
+	}
+	if _, err := os.Stat(e.spoolPath); err == nil {
+		return
+	}
+	if err := os.Rename(processingPath, e.spoolPath); err != nil && !os.IsNotExist(err) {
+		log.Printf("Warning: failed to restore claimed event spool: %v", err)
+	}
+}
+
+func (e *HTTPEventEmitter) requeueRemaining(processingPath string, remaining []string) error {
+	e.spoolMu.Lock()
+	defer e.spoolMu.Unlock()
+
+	if len(remaining) > 0 {
+		file, err := os.OpenFile(e.spoolPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			return err
 		}
-		for _, line := range remaining[1:] {
+		for _, line := range remaining {
 			if _, err := file.Write(append([]byte(line), '\n')); err != nil {
 				file.Close()
 				return err
 			}
 		}
-		file.Close()
+		if err := file.Sync(); err != nil {
+			file.Close()
+			return err
+		}
+		if err := file.Close(); err != nil {
+			return err
+		}
 	}
-	return os.Rename(tmpPath, e.spoolPath)
+
+	if err := os.Remove(processingPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // Close shuts down the emitter and flushes pending events
@@ -411,25 +605,50 @@ func (e *HTTPEventEmitter) Close(ctx context.Context) error {
 	if !e.closed {
 		e.closed = true
 		close(e.eventChan)
+		close(e.stopCh)
 	}
 	e.closeMu.Unlock()
 
-	if err := e.Flush(ctx); err != nil {
-		return err
-	}
-
-	done := make(chan struct{})
+	pendingDone := make(chan struct{})
 	go func() {
-		e.wg.Wait()
-		close(done)
+		e.pending.Wait()
+		close(pendingDone)
 	}()
 
 	select {
-	case <-done:
+	case <-pendingDone:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	remaining, err := e.flushSpool(ctx)
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	if remaining > 0 {
+		log.Printf("Warning: event emitter closed with %d durably queued events remaining in spool", remaining)
+	}
+
+	closeDone := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(closeDone)
+	}()
+
+	select {
+	case <-closeDone:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func defaultSpoolPath(callbackURL string) string {
+	sum := sha256.Sum256([]byte(callbackURL))
+	return filepath.Join(
+		os.TempDir(),
+		fmt.Sprintf("forgegraph-engine-events-%x.jsonl", sum[:8]),
+	)
 }
 
 // RecordingEventEmitter records all events for testing

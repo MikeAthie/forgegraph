@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { ArrowRight, BellRing, BrainCircuit, FolderTree, HandCoins, ShieldCheck, Waypoints } from "lucide-react";
 
 import { Button, Badge } from "@/components/ui";
@@ -53,7 +55,34 @@ const systemRows = [
 ];
 
 export default function Home() {
+  const router = useRouter();
   const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+    void router.replace("/overview");
+  }, [isAuthenticated, router]);
+
+  if (isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="rounded-[1.7rem] border border-slate-900/10 bg-white/80 px-8 py-8 text-center shadow-[0_30px_90px_-50px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">ForgeGraph</p>
+          <h1
+            className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            Opening the organization dashboard
+          </h1>
+          <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+            The operating system is the primary surface. Builder tooling stays available as a secondary workspace.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

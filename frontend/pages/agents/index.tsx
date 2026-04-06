@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { BrainCircuit, Play, Square, Wallet } from "lucide-react";
+import { BrainCircuit, Play, Square, Wallet, Waypoints } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
@@ -15,7 +15,6 @@ import {
   StatusBadge,
   formatCurrency,
   formatDateTime,
-  overviewIcons,
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
@@ -39,6 +38,35 @@ const summarizePurpose = (agent: AgentRegistryEntry) => {
     return `Configured around ${capabilities.slice(0, 3).join(", ")} with ${agent.default_model || "an unspecified model"}.`;
   }
   return `${agent.display_name} supervises workflow work with ${agent.default_model || "a model that has not been declared yet"}.`;
+};
+
+const deriveWhyDoingThis = (
+  agent: AgentRegistryEntry,
+  currentTask: TaskRecord | null,
+  agentDecisions: DecisionRecord[],
+  memory: MemoryObservation[],
+) => {
+  const memoryHeadline = memory[0]?.title || memory[0]?.topic_key || null;
+  const pendingDecision = agentDecisions.find((decision) => decision.status === "pending") ?? null;
+  const policyKeys = Object.keys(agent.policy_snapshot_json ?? {});
+
+  return {
+    objective:
+      currentTask?.summary ??
+      "No current task is projected. The agent is waiting for new work from its source workflow.",
+    trigger: pendingDecision?.decision_type
+      ? `The current behavior is constrained by ${pendingDecision.decision_type}.`
+      : currentTask
+        ? `The agent is acting because ${currentTask.title.toLowerCase()} is the current assigned unit of work.`
+        : "No active execution trigger is currently visible.",
+    constraints:
+      policyKeys.length > 0
+        ? `Policy is shaping behavior through ${policyKeys.slice(0, 3).join(", ")}.`
+        : "No explicit policy snapshot has been projected for this agent yet.",
+    memory: memoryHeadline
+      ? `Recent memory indicates ${memoryHeadline}.`
+      : "No recent memory item is currently influencing the visible behavior.",
+  };
 };
 
 export default function AgentsPage() {
@@ -147,6 +175,11 @@ export default function AgentsPage() {
     agentTasks.find((task) => task.status === "running" || task.status === "waiting") ?? agentTasks[0] ?? null;
   const currentExecutionId = currentTask?.execution_id ?? selectedAgent?.last_execution_id ?? null;
 
+  const completedTaskCount = agentTasks.filter((task) => task.status === "succeeded").length;
+  const waitingTaskCount = agentTasks.filter((task) => task.status === "waiting").length;
+  const failedTaskCount = agentTasks.filter((task) => task.status === "failed").length;
+  const why = selectedAgent ? deriveWhyDoingThis(selectedAgent, currentTask, agentDecisions, memory) : null;
+
   const handleStopExecution = useCallback(async () => {
     if (!currentExecutionId) {
       return;
@@ -185,7 +218,7 @@ export default function AgentsPage() {
   const inspector = selectedAgent ? (
     <InspectorPanel
       title={selectedAgent.display_name}
-      subtitle="Agent identity persists across workflow revisions. The inspector shows durable metadata, policy scope, and source lineage."
+      subtitle="The inspector keeps durable metadata, policy scope, and registry lineage visible while the center panel focuses on what the agent is doing and why."
       sections={[
         {
           title: "Registry lineage",
@@ -250,7 +283,7 @@ export default function AgentsPage() {
           <SectionHeader
             eyebrow="Agent detail"
             title="Understand and control one agent at a time"
-            description="The supervision view keeps the list of agents visible, but the center of gravity is the selected agent: current task, recent decisions, memory context, and operator controls."
+            description="The center of gravity is the selected agent: current state, recent tasks, performance posture, cost, and a direct explanation of why the agent is behaving this way."
           />
 
           {error ? (
@@ -268,7 +301,10 @@ export default function AgentsPage() {
           ) : (
             <>
               <div className="grid gap-6 xl:grid-cols-[0.72fr_1.28fr]">
-                <Panel title="Agent registry" description="Select an agent to inspect its state and controls.">
+                <Panel
+                  title="Agent registry"
+                  description="Select an agent to inspect its state, performance, and controls."
+                >
                   <SelectionList
                     items={agents}
                     selectedId={selectedAgent.id}
@@ -297,7 +333,7 @@ export default function AgentsPage() {
                 <div className="space-y-6">
                   <Panel
                     title={selectedAgent.display_name}
-                    description="Inspectable state instead of a raw trace stream."
+                    description="Current state and operator controls for the selected agent."
                     action={
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={selectedAgent.status} />
@@ -335,27 +371,31 @@ export default function AgentsPage() {
                   >
                     <div className="grid gap-4 lg:grid-cols-4">
                       <MetricCard
-                        eyebrow="Purpose"
-                        value="Supervised"
-                        delta={summarizePurpose(selectedAgent)}
+                        eyebrow="Current state"
+                        value={currentTask ? currentTask.status : selectedAgent.status}
+                        delta={currentTask?.summary ?? "No active assignment is currently projected."}
                         icon={<BrainCircuit className="h-4 w-4" />}
+                        tone={selectedAgent.status === "attention" ? "amber" : "slate"}
                       />
                       <MetricCard
-                        eyebrow="Current task"
-                        value={currentTask ? currentTask.title : "Idle"}
-                        delta={currentTask?.summary ?? "No active assignment"}
+                        eyebrow="Recent tasks"
+                        value={String(agentTasks.length)}
+                        delta={`${completedTaskCount} completed, ${waitingTaskCount} waiting, ${failedTaskCount} failed`}
+                        icon={<Waypoints className="h-4 w-4" />}
+                      />
+                      <MetricCard
+                        eyebrow="Performance"
+                        value={
+                          agentTasks.length ? `${Math.round((completedTaskCount / agentTasks.length) * 100)}%` : "N/A"
+                        }
+                        delta="Visible success rate for projected tasks"
                         icon={<Play className="h-4 w-4" />}
+                        tone={failedTaskCount > 0 ? "amber" : "emerald"}
                       />
                       <MetricCard
-                        eyebrow="Last action"
-                        value={formatDateTime(selectedAgent.last_seen_at)}
-                        delta="Most recent registry update"
-                        icon={overviewIcons.timing}
-                      />
-                      <MetricCard
-                        eyebrow="Cost today"
+                        eyebrow="Cost"
                         value={formatCurrency(selectedAgent.total_cost_usd)}
-                        delta={`${selectedAgent.task_count} tasks in current window`}
+                        delta={`${selectedAgent.task_count} task${selectedAgent.task_count === 1 ? "" : "s"} in current window`}
                         tone="rose"
                         icon={<Wallet className="h-4 w-4" />}
                       />
@@ -364,22 +404,67 @@ export default function AgentsPage() {
 
                   <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
                     <Panel
+                      title="Why is it doing this?"
+                      description="Readable explanation derived from task state, decisions, memory, and projected policy."
+                    >
+                      {why ? (
+                        <div className="space-y-3">
+                          <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                              Objective
+                            </p>
+                            <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">{why.objective}</p>
+                          </div>
+                          <div className="grid gap-3 lg:grid-cols-3">
+                            <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                Trigger
+                              </p>
+                              <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">{why.trigger}</p>
+                            </div>
+                            <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                Constraints
+                              </p>
+                              <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
+                                {why.constraints}
+                              </p>
+                            </div>
+                            <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                Memory influence
+                              </p>
+                              <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">{why.memory}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <EmptyBlock
+                          title="No explanation available"
+                          description="Select an agent to derive a readable explanation."
+                        />
+                      )}
+                    </Panel>
+
+                    <Panel
                       title="Current state"
-                      description="Short-term and long-term context being used by the selected agent."
+                      description="Short-term task context and recent memory relevant to the selected agent."
                     >
                       <KeyValueGrid
                         items={[
                           {
-                            label: "Short-term context",
+                            label: "Current task",
                             value: currentTask?.summary ?? "No active task context has been projected.",
                           },
                           {
-                            label: "Long-term memory",
-                            value: memoryLoading
-                              ? "Loading memory context..."
-                              : memory.length
-                                ? `${memory.length} recent memory record${memory.length === 1 ? "" : "s"} available`
-                                : "No memory records are currently linked to this agent.",
+                            label: "Latest execution",
+                            value: currentExecutionId ? (
+                              <Link href={`/executions/${currentExecutionId}`} className="underline underline-offset-4">
+                                {currentExecutionId.slice(0, 8)}
+                              </Link>
+                            ) : (
+                              "No recent execution linked"
+                            ),
                           },
                         ]}
                       />
@@ -404,8 +489,10 @@ export default function AgentsPage() {
                         ) : null}
                       </div>
                     </Panel>
+                  </div>
 
-                    <Panel title="Active tasks" description="Units of work currently assigned to this agent.">
+                  <div className="grid gap-6 2xl:grid-cols-[1.04fr_0.96fr]">
+                    <Panel title="Recent tasks" description="Units of work recently assigned to this agent.">
                       {agentTasks.length ? (
                         <div className="space-y-3">
                           {agentTasks.map((task) => (
@@ -449,73 +536,43 @@ export default function AgentsPage() {
                         />
                       )}
                     </Panel>
-                  </div>
 
-                  <Panel
-                    title="Decision trace"
-                    description="Human-readable decision summaries rather than low-level event streams."
-                  >
-                    {agentDecisions.length ? (
-                      <div className="space-y-3">
-                        {agentDecisions.map((decision) => (
-                          <div
-                            key={decision.id}
-                            className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <StatusBadge status={decision.status} />
-                              <StatusBadge status="pending" label={decision.decision_type} />
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {formatDateTime(decision.requested_at ?? decision.created_at)}
-                              </span>
+                    <Panel
+                      title="Decision load"
+                      description="Recent decisions and operator pressure tied to this agent."
+                    >
+                      {agentDecisions.length ? (
+                        <div className="space-y-3">
+                          {agentDecisions.map((decision) => (
+                            <div
+                              key={decision.id}
+                              className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <StatusBadge status={decision.status} />
+                                <StatusBadge status="pending" label={decision.decision_type} />
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  {formatDateTime(decision.requested_at ?? decision.created_at)}
+                                </span>
+                              </div>
+                              <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
+                                {String(
+                                  decision.context_json?.summary ??
+                                    decision.context_json?.prompt_message ??
+                                    "Decision context was not projected for this record.",
+                                )}
+                              </p>
                             </div>
-                            <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                              <div>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                                  Input
-                                </p>
-                                <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                                  {String(
-                                    decision.context_json?.input ??
-                                      decision.context_json?.summary ??
-                                      "Input context was not captured in the projection.",
-                                  )}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                                  Reasoning summary
-                                </p>
-                                <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                                  {String(
-                                    decision.context_json?.reasoning_summary ??
-                                      "Operator-facing reasoning summary is not available for this record yet.",
-                                  )}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                                  Output
-                                </p>
-                                <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                                  {String(
-                                    decision.resolution_json?.output ??
-                                      decision.resolution_json?.result ??
-                                      "Decision is waiting on resolution.",
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <EmptyBlock
-                        title="No recent decisions"
-                        description="Decision records tied to this agent will appear here when the agent reaches an approval or intervention boundary."
-                      />
-                    )}
-                  </Panel>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyBlock
+                          title="No recent decisions"
+                          description="Decision records tied to this agent will appear here when the agent reaches an approval or intervention boundary."
+                        />
+                      )}
+                    </Panel>
+                  </div>
                 </div>
               </div>
             </>

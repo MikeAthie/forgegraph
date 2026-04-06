@@ -26,10 +26,12 @@ from infrastructure.orm.models import (
     LLMUsage,
     MemoryConfiguration,
     NodeRun,
+    NodeRunEventProjection,
     PromptTemplate,
     Run,
     RunCheckpoint,
     RunEvent,
+    RunEventProjection,
     RunQueueEntry,
     User,
 )
@@ -94,6 +96,24 @@ class TestRunList:
         assert run_data["graph_name"] == graph.name
         assert run_data["graph_version_id"] == str(version.id)
         assert run_data["graph_version"] == 2
+
+    def test_list_runs_includes_trace_id(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Trace Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="running",
+            trace_id="0123456789abcdef0123456789abcdef",
+        )
+
+        response = authenticated_client.get("/api/runs/")
+
+        assert response.status_code == status.HTTP_200_OK
+        run_data = next(item for item in response.data["data"] if item["id"] == str(run.id))
+        assert run_data["trace_id"] == run.trace_id
 
     def test_list_runs_orders_null_started_at_last(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="My Graph")
@@ -294,6 +314,87 @@ class TestRunDetail:
         assert response.data["data"]["node_runs"][0]["id"] == str(node_run1.id)
         assert response.data["data"]["node_runs"][0]["duration_ms"] == 100
         assert response.data["data"]["node_runs"][1]["id"] == str(node_run2.id)
+
+    def test_get_run_returns_traceable_timeline(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Timeline Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="paused",
+            trace_id="feedfacefeedfacefeedfacefeedface",
+        )
+
+        RunEvent.objects.create(
+            run=run,
+            event_type="run_started",
+            payload={"status": "running"},
+            trace_id=run.trace_id,
+        )
+        RunEvent.objects.create(
+            run=run,
+            event_type="node_failed",
+            payload={
+                "node_id": "draft_reply",
+                "status": "failed",
+                "error": "Provider timed out",
+                "duration_ms": 2100,
+            },
+            trace_id=run.trace_id,
+        )
+        RunEvent.objects.create(
+            run=run,
+            event_type="node_stream.chunk",
+            payload={"node_id": "draft_reply", "chunk": "partial"},
+            trace_id=run.trace_id,
+        )
+        approval = ApprovalTask.objects.create(
+            run=run,
+            node_id="approval_1",
+            assignee=user,
+            status="approved",
+            payload={"prompt_message": "Approve the draft."},
+            result={"approved": True},
+            resolved_at=timezone.now(),
+        )
+        usage = LLMUsage.objects.create(
+            tenant_id=user.default_organization_id,
+            run=run,
+            node_id="draft_reply",
+            provider="openai",
+            model="gpt-4.1-mini",
+            prompt_tokens=100,
+            completion_tokens=25,
+            total_tokens=125,
+            cost_usd=Decimal("1.250000"),
+        )
+
+        response = authenticated_client.get(f"/api/runs/{run.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data["data"]
+        assert data["trace_id"] == run.trace_id
+
+        timeline = data["timeline"]
+        event_types = [entry["event_type"] for entry in timeline]
+        assert "run_started" in event_types
+        assert "node_failed" in event_types
+        assert "decision_required" in event_types
+        assert "decision_resolved" in event_types
+        assert "cost_updated" in event_types
+        assert "node_stream.chunk" not in event_types
+
+        decision_required = next(
+            entry for entry in timeline if entry["event_type"] == "decision_required"
+        )
+        assert decision_required["decision_id"] == str(approval.id)
+        assert decision_required["trace_id"] == run.trace_id
+
+        cost_update = next(entry for entry in timeline if entry["event_type"] == "cost_updated")
+        assert cost_update["node_id"] == usage.node_id
+        assert cost_update["cost_usd"] == float(usage.cost_usd)
 
     def test_get_run_returns_agent_trace_state(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Agent Graph")
@@ -1784,6 +1885,21 @@ class TestEngineRunEvents:
         assert waiting_node.status == "waiting"
         assert waiting_node.output_json == {"pause_payload": payload["output"]}
 
+        run_projection = RunEventProjection.objects.get(run=run)
+        assert run_projection.status == "paused"
+        assert run_projection.paused_node_id == "human_gate_1"
+        assert run_projection.pause_state_json == payload["output"]
+        assert run_projection.last_event_id == "evt-pause-1"
+        assert run_projection.last_event_type == "run_paused"
+
+        node_projection = NodeRunEventProjection.objects.get(
+            run=run, node_id="human_gate_1", attempt=1
+        )
+        assert node_projection.status == "waiting"
+        assert node_projection.node_type == "human_gate"
+        assert node_projection.output_json == {"pause_payload": payload["output"]}
+        assert node_projection.last_event_type == "run_paused"
+
         approval_task = ApprovalTask.objects.get(run=run, node_id="human_gate_1", status="pending")
         assert approval_task.assignee == user
         assert approval_task.payload == {
@@ -1799,6 +1915,92 @@ class TestEngineRunEvents:
             == 1
         )
         assert NodeRun.objects.filter(run=run, node_id="human_gate_1", attempt=1).count() == 1
+        assert RunEventProjection.objects.filter(run=run).count() == 1
+        assert (
+            NodeRunEventProjection.objects.filter(
+                run=run, node_id="human_gate_1", attempt=1
+            ).count()
+            == 1
+        )
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_build_shadow_state_for_run_and_node_lifecycle(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Lifecycle Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+        base_timestamp = int(time.time() * 1000)
+        events = [
+            {
+                "event_id": "evt-shadow-run-start",
+                "type": "run_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": base_timestamp,
+            },
+            {
+                "event_id": "evt-shadow-node-start",
+                "type": "node_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "node_id": "prompt_1",
+                "node_type": "prompt",
+                "attempt": 1,
+                "timestamp": base_timestamp + 10,
+            },
+            {
+                "event_id": "evt-shadow-node-complete",
+                "type": "node_completed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "node_id": "prompt_1",
+                "node_type": "prompt",
+                "attempt": 1,
+                "timestamp": base_timestamp + 20,
+                "output": {"text": "done"},
+            },
+            {
+                "event_id": "evt-shadow-run-complete",
+                "type": "run_completed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": base_timestamp + 30,
+                "output": {"result": "ok"},
+            },
+        ]
+
+        for payload in events:
+            response = signed_engine_event_post(payload)
+            assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "succeeded"
+        assert run.output_json == {"result": "ok"}
+
+        run_projection = RunEventProjection.objects.get(run=run)
+        assert run_projection.status == "succeeded"
+        assert run_projection.output_json == {"result": "ok"}
+        assert run_projection.started_at is not None
+        assert run_projection.ended_at is not None
+        assert run_projection.last_event_id == "evt-shadow-run-complete"
+        assert run_projection.last_event_type == "run_completed"
+
+        node_run = NodeRun.objects.get(run=run, node_id="prompt_1", attempt=1)
+        assert node_run.status == "succeeded"
+        assert node_run.output_json == {"text": "done"}
+
+        node_projection = NodeRunEventProjection.objects.get(run=run, node_id="prompt_1", attempt=1)
+        assert node_projection.status == "succeeded"
+        assert node_projection.node_type == "prompt"
+        assert node_projection.output_json == {"text": "done"}
+        assert node_projection.started_at is not None
+        assert node_projection.ended_at is not None
+        assert node_projection.last_event_id == "evt-shadow-node-complete"
+        assert node_projection.last_event_type == "node_completed"
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_idempotent_by_event_id(self, api_client, user):
