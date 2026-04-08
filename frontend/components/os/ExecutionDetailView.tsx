@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp, Clock3, Filter } from "lucide-react";
@@ -79,7 +79,9 @@ const buildStepNarrative = (step: NodeRunItem, liveSummary?: string | null) => {
 
 type RunRealtimeMessage =
   | {
-      type: "connected";
+      type: "connection_established";
+      timestamp: string;
+      trace_id: string;
       run_id: string;
       level?: string;
     }
@@ -98,6 +100,57 @@ type RunRealtimeMessage =
         status: NodeRunItem["status"];
         attempt: number;
       };
+      payload: {
+        event_level?: string;
+        organization_id?: string;
+        user_id?: string;
+        permissions?: string[];
+      };
+    }
+  | {
+      type: "heartbeat";
+      timestamp: string;
+      trace_id: string;
+      run_id: string;
+      payload: Record<string, never>;
+    }
+  | {
+      type: "run_started" | "run_completed" | "run_failed" | "run_paused" | "run_resumed" | "run_canceled";
+      timestamp: string;
+      trace_id: string;
+      run_id: string;
+      payload: {
+        status?: string;
+        run?: Partial<RunDetail>;
+      };
+    }
+  | {
+      type: "node_started" | "node_completed" | "node_failed" | "node_skipped" | "node_updated";
+      timestamp: string;
+      trace_id: string;
+      run_id: string;
+      payload: {
+        status?: string;
+        node_run?: Partial<NodeRunItem> & {
+          id: string;
+          node_id: string;
+          node_type: string;
+          status: NodeRunItem["status"];
+          attempt: number;
+        };
+      };
+    }
+  | {
+      type: "node_stream_chunk" | "node_stream_end";
+      timestamp: string;
+      trace_id: string;
+      run_id: string;
+      payload: {
+        node_id: string;
+        attempt: number;
+        text_preview?: string;
+        final?: boolean;
+      };
     }
   | {
       type: "node_stream.summary";
@@ -108,6 +161,13 @@ type RunRealtimeMessage =
         text_preview?: string;
         final?: boolean;
       };
+    }
+  | {
+      type: "decision_required" | "decision_resolved" | "cost_update" | "error";
+      timestamp: string;
+      trace_id: string;
+      run_id: string;
+      payload: Record<string, unknown>;
     };
 
 const buildRunWebSocketUrl = (runId: string, ticket: string) => {
@@ -134,15 +194,31 @@ const applyRealtimeMessage = (current: RunDetail | null, message: RunRealtimeMes
     return current;
   }
 
-  if (message.type === "run.updated") {
+  if (
+    message.type === "run_started" ||
+    message.type === "run_completed" ||
+    message.type === "run_failed" ||
+    message.type === "run_paused" ||
+    message.type === "run_resumed" ||
+    message.type === "run_canceled"
+  ) {
     return {
       ...current,
-      ...message.run,
+      ...(message.payload.run ?? {}),
     };
   }
 
-  if (message.type === "node_run.updated") {
-    const incoming = message.node_run;
+  if (
+    message.type === "node_started" ||
+    message.type === "node_completed" ||
+    message.type === "node_failed" ||
+    message.type === "node_skipped" ||
+    message.type === "node_updated"
+  ) {
+    const incoming = message.payload.node_run;
+    if (!incoming) {
+      return current;
+    }
     const existingIndex = current.node_runs.findIndex(
       (nodeRun) =>
         nodeRun.id === incoming.id || (nodeRun.node_id === incoming.node_id && nodeRun.attempt === incoming.attempt),
@@ -197,6 +273,8 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
   const [liveStatus, setLiveStatus] = useState<"pending" | "active" | "offline">("pending");
   const [showAllSteps, setShowAllSteps] = useState(false);
   const [liveSummaries, setLiveSummaries] = useState<Record<string, string>>({});
+  const reconnectAttemptRef = useRef(0);
+  const hasConnectedOnceRef = useRef(false);
 
   useEffect(() => {
     if (!executionId) {
@@ -237,77 +315,189 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
       return;
     }
 
-    const token = getAccessToken();
-    if (!token) {
+    if (!getAccessToken()) {
       setLiveStatus("offline");
       return;
     }
 
     let disposed = false;
     let socket: WebSocket | null = null;
-    setLiveStatus("pending");
-    void (async () => {
+    let reconnectTimer: number | null = null;
+    let silenceMonitor: number | null = null;
+    let lastActivityAt = Date.now();
+
+    const refreshCanonicalState = async () => {
       try {
-        const { ticket } = await authApi.createWsTicket();
+        const data =
+          routeParam === "executionId" ? await executionsApi.get(executionId) : await runsApi.get(executionId);
+        if (!disposed) {
+          setRun(data);
+          setSelectedStepId((current) =>
+            current && data.node_runs.some((nodeRun) => nodeRun.id === current)
+              ? current
+              : (data.node_runs[0]?.id ?? null),
+          );
+          setLiveSummaries({});
+        }
+      } catch (err: unknown) {
+        if (!disposed) {
+          setError(getApiErrorMessage(err, "Failed to refresh execution detail."));
+        }
+      }
+    };
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (disposed || reconnectTimer !== null) {
+        return;
+      }
+      const delayMs = Math.min(1000 * 2 ** reconnectAttemptRef.current, 10000);
+      reconnectAttemptRef.current += 1;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        void connect(true);
+      }, delayMs);
+    };
+
+    const markActivity = () => {
+      lastActivityAt = Date.now();
+    };
+
+    const handleMessage = (message: RunRealtimeMessage, reconnected: boolean) => {
+      if (message.run_id !== executionId) {
+        return;
+      }
+
+      if (message.type === "connection_established") {
+        reconnectAttemptRef.current = 0;
+        setLiveStatus("active");
+        markActivity();
+        const shouldRefresh = hasConnectedOnceRef.current || reconnected;
+        hasConnectedOnceRef.current = true;
+        if (shouldRefresh) {
+          void refreshCanonicalState();
+        }
+        return;
+      }
+
+      if (message.type === "heartbeat") {
+        markActivity();
+        return;
+      }
+
+      if (message.type === "node_stream_chunk" || message.type === "node_stream_end") {
+        const summaryKey = `${message.payload.node_id}:${message.payload.attempt}`;
+        setLiveSummaries((current) => ({
+          ...current,
+          [summaryKey]: message.payload.text_preview ?? current[summaryKey] ?? "",
+        }));
+        markActivity();
+        return;
+      }
+
+      if (message.type === "decision_required" || message.type === "decision_resolved") {
+        markActivity();
+        void refreshCanonicalState();
+        return;
+      }
+
+      if (message.type === "cost_update") {
+        markActivity();
+        return;
+      }
+
+      if (message.type === "error") {
+        markActivity();
+        void refreshCanonicalState();
+        return;
+      }
+
+      markActivity();
+      setRun((current) => applyRealtimeMessage(current, message));
+      if (message.type === "run_completed" || message.type === "run_failed" || message.type === "run_canceled") {
+        void refreshCanonicalState();
+      }
+    };
+
+    const connect = async (isReconnect: boolean) => {
+      if (disposed) {
+        return;
+      }
+
+      setLiveStatus("pending");
+      if (isReconnect) {
+        await refreshCanonicalState();
+      }
+
+      let ticket: string;
+      try {
+        const ticketResponse = await authApi.issueWsTicket();
+        ticket = ticketResponse.ticket;
+      } catch {
+        if (!disposed) {
+          setLiveStatus("offline");
+          scheduleReconnect();
+        }
+        return;
+      }
+
+      if (disposed) {
+        return;
+      }
+
+      socket = new WebSocket(buildRunWebSocketUrl(executionId, ticket));
+      socket.addEventListener("open", markActivity);
+      socket.addEventListener("message", (event) => {
         if (disposed) {
           return;
         }
 
-        socket = new WebSocket(buildRunWebSocketUrl(executionId, ticket));
-
-        socket.addEventListener("open", () => {
-          if (!disposed) {
-            setLiveStatus("active");
-          }
-        });
-
-        socket.addEventListener("message", (event) => {
-          if (disposed) {
-            return;
-          }
-
-          try {
-            const message = JSON.parse(String(event.data)) as RunRealtimeMessage;
-            if (message.type === "connected") {
-              return;
-            }
-            if (message.type === "node_stream.summary") {
-              const summaryKey = `${message.node_stream.node_id}:${message.node_stream.attempt}`;
-              setLiveSummaries((current) => ({
-                ...current,
-                [summaryKey]: message.node_stream.text_preview ?? current[summaryKey] ?? "",
-              }));
-              return;
-            }
-            setRun((current) => applyRealtimeMessage(current, message));
-          } catch {
-            // Ignore malformed messages and keep the last known canonical state.
-          }
-        });
-
-        socket.addEventListener("error", () => {
-          if (!disposed) {
-            setLiveStatus("offline");
-          }
-        });
-
-        socket.addEventListener("close", () => {
-          if (!disposed) {
-            setLiveStatus("offline");
-          }
-        });
-      } catch {
+        try {
+          const message = JSON.parse(String(event.data)) as RunRealtimeMessage;
+          handleMessage(message, isReconnect);
+        } catch {
+          void refreshCanonicalState();
+        }
+      });
+      socket.addEventListener("error", () => {
         if (!disposed) {
           setLiveStatus("offline");
         }
+      });
+      socket.addEventListener("close", () => {
+        if (!disposed) {
+          setLiveStatus("offline");
+          scheduleReconnect();
+        }
+      });
+    };
+
+    silenceMonitor = window.setInterval(() => {
+      if (disposed) {
+        return;
       }
-    })();
+      if (Date.now() - lastActivityAt > 30000) {
+        socket?.close();
+      }
+    }, 5000);
+
+    void connect(false);
 
     return () => {
       disposed = true;
+      clearReconnectTimer();
+      if (silenceMonitor !== null) {
+        window.clearInterval(silenceMonitor);
+      }
       socket?.close();
     };
-  }, [executionId]);
+  }, [executionId, routeParam]);
 
   useEffect(() => {
     if (!selectedStepId && run?.node_runs.length) {

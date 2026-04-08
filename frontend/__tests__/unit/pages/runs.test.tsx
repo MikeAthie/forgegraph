@@ -174,9 +174,9 @@ describe("Runs pages", () => {
     jest.clearAllMocks();
     MockWebSocket.reset();
     api.clearTokens();
-    jest.spyOn(api.authApi, "createWsTicket").mockResolvedValue({
-      ticket: "ws-ticket",
-      expires_in: 60,
+    jest.spyOn(api.authApi, "issueWsTicket").mockResolvedValue({
+      ticket: "ws-ticket-123",
+      expires_in_seconds: 45,
     });
     mockUseRouter.mockReturnValue({
       push: jest.fn(),
@@ -367,10 +367,21 @@ describe("Runs pages", () => {
       await renderRunDetailPage();
 
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?ticket=ws-ticket&event_level=default`);
+      expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?ticket=ws-ticket-123&event_level=default`);
 
       await act(async () => {
         MockWebSocket.instances[0]?.emit("open");
+        MockWebSocket.instances[0]?.emit("message", {
+          data: JSON.stringify({
+            type: "connection_established",
+            timestamp: "2026-04-05T10:00:00Z",
+            trace_id: "trace-1",
+            run_id: runId,
+            payload: {
+              event_level: "default",
+            },
+          }),
+        });
       });
 
       expect(screen.getByText(/live updates/i)).toBeInTheDocument();
@@ -378,29 +389,39 @@ describe("Runs pages", () => {
       await act(async () => {
         MockWebSocket.instances[0]?.emit("message", {
           data: JSON.stringify({
-            type: "run.updated",
+            type: "run_started",
+            timestamp: "2026-04-05T10:00:05Z",
+            trace_id: "trace-1",
             run_id: runId,
-            run: {
-              status: "succeeded",
-              duration_ms: 5000,
+            payload: {
+              status: "running",
+              run: {
+                status: "running",
+                duration_ms: 5000,
+              },
             },
           }),
         });
         MockWebSocket.instances[0]?.emit("message", {
           data: JSON.stringify({
-            type: "node_run.updated",
+            type: "node_completed",
+            timestamp: "2026-04-05T10:00:03Z",
+            trace_id: "trace-1",
             run_id: runId,
-            node_run: {
-              id: "node-run-2",
-              node_id: "send_summary",
-              node_type: "tool",
+            payload: {
               status: "succeeded",
-              attempt: 1,
-              started_at: "2026-04-05T10:00:02Z",
-              ended_at: "2026-04-05T10:00:03Z",
-              duration_ms: 1000,
-              input_json: { channel: "slack" },
-              output_json: { ok: true },
+              node_run: {
+                id: "node-run-2",
+                node_id: "send_summary",
+                node_type: "tool",
+                status: "succeeded",
+                attempt: 1,
+                started_at: "2026-04-05T10:00:02Z",
+                ended_at: "2026-04-05T10:00:03Z",
+                duration_ms: 1000,
+                input_json: { channel: "slack" },
+                output_json: { ok: true },
+              },
             },
           }),
         });

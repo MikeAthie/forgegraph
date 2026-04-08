@@ -144,6 +144,7 @@ def test_logout_revokes_current_access_token_for_rest(api_client, user):
 
 @override_settings(CACHES=LOC_MEM_CACHE)
 def test_ws_ticket_requires_authentication_and_returns_short_lived_ticket(api_client, user):
+    response = api_client.post("/api/ws-ticket", {}, format="json")
     response = api_client.post("/api/auth/ws-ticket", {}, format="json")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -155,13 +156,17 @@ def test_ws_ticket_requires_authentication_and_returns_short_lived_ticket(api_cl
     access = login_response.data["access"]
 
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+    response = api_client.post("/api/ws-ticket", {}, format="json")
     response = api_client.post("/api/auth/ws-ticket", {}, format="json")
 
     assert response.status_code == status.HTTP_201_CREATED
     assert response.data["ticket"]
     assert response.data["expires_in_seconds"] == settings.AUTH_WS_TICKET_TTL_SECONDS
 
+    assert response.data["org_id"] == str(user.default_organization_id)
 
+
+@override_settings(CACHES=LOC_MEM_CACHE)
 @override_settings(CACHES=LOC_MEM_CACHE)
 def test_logout_is_idempotent_without_refresh_cookie(api_client, user):
     login_response = api_client.post(

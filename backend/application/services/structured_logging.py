@@ -32,6 +32,10 @@ class JsonLogFormatter(logging.Formatter):
         "checkpoint_available",
         "checkpoint_step_index",
         "checkpoint_updated_at",
+        "user_id",
+        "organization_id",
+        "connection_id",
+        "event_level",
     )
 
     def format(self, record: logging.LogRecord) -> str:

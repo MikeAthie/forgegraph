@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -30,8 +31,9 @@ from adapters.api.auth.serializers import (
 )
 from application.services.auth_state import issue_ws_ticket, revoke_access_token
 from application.services.tenancy import ensure_default_organization
+from infrastructure.orm.models import User
 
-User = get_user_model()
+UserModel = get_user_model()
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -72,7 +74,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = User.objects.create_user(
+        user = UserModel.objects.create_user(
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
         )
@@ -147,13 +149,15 @@ class WSTicketView(APIView):
             return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
 
         ticket, expires_in = issue_ws_ticket(
-            user_id=str(request.user.id),
             access_token=cast(Any, access_token),
+            user=cast("User | None", request.user),
         )
         return Response(
             {
                 "ticket": ticket,
                 "expires_in_seconds": expires_in,
+                "expires_at": (timezone.now() + timedelta(seconds=expires_in)).isoformat(),
+                "org_id": str(getattr(request.user, "default_organization_id", "") or ""),
             },
             status=status.HTTP_201_CREATED,
         )

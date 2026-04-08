@@ -6,7 +6,10 @@ Clean Architecture: Interface Adapters layer.
 
 from django.urls import include, path
 
+from adapters.api.auth.views import WSTicketView
+
 urlpatterns = [
+    path("ws-ticket", WSTicketView.as_view(), name="ws-ticket"),
     path("auth/", include("adapters.api.auth.urls")),
     path("system-state/", include("adapters.api.system_state.urls")),
     path("agents/", include("adapters.api.agents.urls")),
