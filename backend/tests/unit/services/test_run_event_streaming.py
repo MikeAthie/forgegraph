@@ -8,12 +8,14 @@ from django.test import override_settings
 from django.utils import timezone
 
 from application.services.run_event_streaming import (
-    EVENT_LEVEL_IMPORTANT,
+    EVENT_LEVEL_DEFAULT,
+    EVENT_LEVEL_MINIMAL,
     EVENT_LEVEL_VERBOSE,
     STREAM_SUMMARY_EVENT_TYPE,
     add_event_level,
     flush_stream_summary,
     message_allowed_for_level,
+    normalize_requested_event_level,
     update_stream_summary,
 )
 
@@ -36,19 +38,22 @@ def test_message_allowed_for_level_filters_verbose_messages_by_default() -> None
             "node_stream": {"chunk": "hello"},
         }
     )
-    important_message = add_event_level(
+    default_message = add_event_level(
         {
             "type": STREAM_SUMMARY_EVENT_TYPE,
             "run_id": str(uuid4()),
             "node_stream": {"chunk_count": 5},
         },
-        level=EVENT_LEVEL_IMPORTANT,
+        level=EVENT_LEVEL_DEFAULT,
     )
 
     assert verbose_message["level"] == EVENT_LEVEL_VERBOSE
-    assert message_allowed_for_level(verbose_message, "important") is False
+    assert verbose_message["category"] == "observability"
+    assert message_allowed_for_level(verbose_message, "default") is False
     assert message_allowed_for_level(verbose_message, "verbose") is True
-    assert message_allowed_for_level(important_message, "important") is True
+    assert message_allowed_for_level(default_message, "default") is True
+    assert normalize_requested_event_level("important") == EVENT_LEVEL_DEFAULT
+    assert normalize_requested_event_level("critical") == EVENT_LEVEL_MINIMAL
 
 
 @override_settings(

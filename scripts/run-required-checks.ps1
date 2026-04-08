@@ -129,6 +129,9 @@ function Invoke-EngineChecks {
   Write-Step "Engine gofmt"
   Invoke-GoFmtCheck $engineDir
 
+  Write-Step "Engine ownership guardrails"
+  Invoke-External $root @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $root "scripts\check-engine-ownership.ps1"))
+
   Write-Step "Engine vet"
   Invoke-External $engineDir @("go", "vet", "./...")
 

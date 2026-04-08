@@ -16,6 +16,7 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 
+from application.services.run_liveness import reconcile_stale_runs
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
@@ -1879,7 +1880,7 @@ class TestEngineRunEvents:
         run.refresh_from_db()
         assert run.status == "paused"
         assert run.paused_node_id == "human_gate_1"
-        assert run.pause_state_json == payload["output"]
+        assert run.pause_state_json is None
 
         waiting_node = NodeRun.objects.get(run=run, node_id="human_gate_1", attempt=1)
         assert waiting_node.status == "waiting"
@@ -1888,7 +1889,7 @@ class TestEngineRunEvents:
         run_projection = RunEventProjection.objects.get(run=run)
         assert run_projection.status == "paused"
         assert run_projection.paused_node_id == "human_gate_1"
-        assert run_projection.pause_state_json == payload["output"]
+        assert run_projection.pause_state_json is None
         assert run_projection.last_event_id == "evt-pause-1"
         assert run_projection.last_event_type == "run_paused"
 
@@ -1922,6 +1923,59 @@ class TestEngineRunEvents:
             ).count()
             == 1
         )
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_paused_event_preserves_durable_pause_state(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Approval Graph Durable State")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "human_gate_1", "type": "human_gate"}], "edges": []},
+        )
+        durable_pause_state = {
+            "state_snapshot": {"input.ticket": "FG-123"},
+            "completed_nodes": [],
+            "skipped_nodes": [],
+            "graph_json": json.dumps(version.graph_json),
+            "tenant_id": str(user.default_organization_id),
+        }
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="running",
+            pause_state_json=durable_pause_state,
+        )
+
+        payload = {
+            "event_id": "evt-pause-2",
+            "type": "run_paused",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "node_id": "human_gate_1",
+            "node_type": "human_gate",
+            "attempt": 1,
+            "timestamp": int(time.time() * 1000),
+            "output": {
+                "prompt_message": "Approve customer email draft",
+                "required_fields": ["ticket", "reason"],
+            },
+        }
+
+        response = signed_engine_event_post(payload)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "paused"
+        assert run.paused_node_id == "human_gate_1"
+        assert run.pause_state_json == durable_pause_state
+
+        run_projection = RunEventProjection.objects.get(run=run)
+        assert run_projection.status == "paused"
+        assert run_projection.paused_node_id == "human_gate_1"
+        assert run_projection.pause_state_json == durable_pause_state
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_build_shadow_state_for_run_and_node_lifecycle(
@@ -2052,6 +2106,96 @@ class TestEngineRunEvents:
         run.refresh_from_db()
         assert run.status == "running"
         assert run.started_at == started_at
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_first_callback_assigns_engine_and_normalizes_category(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Assignment Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-engine-assignment-1",
+                "type": "run_started",
+                "category": "observability",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "engine_instance_id": "engine-a",
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        run.refresh_from_db()
+        assert run.engine_instance_id == "engine-a"
+        assert run.last_progress_at is not None
+        event = RunEvent.objects.get(run=run, external_id="evt-engine-assignment-1")
+        assert event.payload["category"] == "state"
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_reject_engine_instance_mismatch(self, signed_engine_event_post, user):
+        graph = Graph.objects.create(owner=user, name="Assignment Guard Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="pending",
+            engine_instance_id="engine-a",
+        )
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-engine-assignment-2",
+                "type": "run_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "engine_instance_id": "engine-b",
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "engine instance" in response.data["detail"].lower()
+        assert RunEvent.objects.filter(run=run, external_id="evt-engine-assignment-2").count() == 0
+
+    def test_reconcile_stale_runs_persists_checkpoint_diagnostics(self, user):
+        graph = Graph.objects.create(owner=user, name="Stale Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="running",
+            last_progress_at=timezone.now() - timedelta(minutes=10),
+        )
+        checkpoint = RunCheckpoint.objects.create(
+            run=run,
+            node_id="human_gate_1",
+            step_index=7,
+            state_json={"state": "snapshot"},
+            completed_nodes=["draft_reply"],
+            skipped_nodes=[],
+            graph_json={"nodes": [], "edges": []},
+        )
+
+        result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+        assert result.reconciled == 1
+        run.refresh_from_db()
+        assert run.status == "failed"
+
+        event = RunEvent.objects.get(run=run, event_type="run.updated")
+        assert event.payload["checkpoint_available"] is True
+        assert event.payload["checkpoint_node_id"] == "human_gate_1"
+        assert event.payload["checkpoint_step_index"] == 7
+        assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_reject_tenant_mismatch(self, signed_engine_event_post, user):

@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from adapters.api.runs.serializers import NodeRunSerializer, RunDeltaBroadcastSerializer
 from application.services.run_event_streaming import (
-    EVENT_LEVEL_IMPORTANT,
+    EVENT_LEVEL_DEFAULT,
     STREAM_SUMMARY_EVENT_TYPE,
     add_event_level,
     classify_transport_event_level,
@@ -123,7 +123,7 @@ def broadcast_node_stream_summary(*, run: Run, payload: dict[str, Any]) -> dict[
             "node_stream": payload,
         },
         payload=payload,
-        level=EVENT_LEVEL_IMPORTANT,
+        level=EVENT_LEVEL_DEFAULT,
     )
     _send_to_run_group(run_id=str(run.id), message=message)
     return message

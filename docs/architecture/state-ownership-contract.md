@@ -38,6 +38,7 @@ If the engine crashes, losing its in-memory state must not corrupt or erase auth
 
 - Events can inform the backend and operators.
 - Events can trigger backend persistence.
+- Events never mutate durable state directly.
 - Persisted backend state is authoritative, not the event itself.
 
 ## Allowed Runtime Modes

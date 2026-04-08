@@ -283,7 +283,7 @@ class GenericWebhookView(APIView):
                 meta={"queued": True, "channel": "webhook"},
             )
 
-        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        callback_url = run_views.resolve_engine_callback_url(run_id=str(run.id))
         memory_config_json = build_memory_config_json(
             graph_version.graph,
             owner,
@@ -300,7 +300,11 @@ class GenericWebhookView(APIView):
                     "forgegraph.channel": "webhook",
                 },
             ):
-                with run_views.get_engine_client(callback_url) as engine:
+                selected_engine_id, engine_client = run_views.get_engine_assignment(
+                    run_id=str(run.id),
+                    callback_url=callback_url,
+                )
+                with engine_client as engine:
                     engine.start_run(
                         run_id=run.id,
                         graph_json=prepared_graph,
@@ -312,7 +316,15 @@ class GenericWebhookView(APIView):
                         tracestate=trace_metadata["tracestate"],
                     )
                     run.status = "running"
-                    run.save(update_fields=["status"])
+                    update_fields = ["status"]
+                    update_fields.extend(
+                        run_views.touch_run_liveness(
+                            run,
+                            recovery_state=run_views.recovery_state_for_status("running"),
+                            engine_instance_id=selected_engine_id,
+                        )
+                    )
+                    run.save(update_fields=sorted(set(update_fields)))
                     record_run_started()
                     broadcast_run_updated(run)
         except EngineConnectionError as exc:

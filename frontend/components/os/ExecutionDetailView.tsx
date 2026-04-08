@@ -19,6 +19,7 @@ import {
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import {
+  authApi,
   executionsApi,
   getAccessToken,
   getApiErrorMessage,
@@ -109,10 +110,10 @@ type RunRealtimeMessage =
       };
     };
 
-const buildRunWebSocketUrl = (runId: string, token: string) => {
+const buildRunWebSocketUrl = (runId: string, ticket: string) => {
   const apiOrigin = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
   const websocketOrigin = apiOrigin.replace(/^http/i, "ws");
-  return `${websocketOrigin}/ws/runs/${runId}/?token=${encodeURIComponent(token)}&event_level=important`;
+  return `${websocketOrigin}/ws/runs/${runId}/?ticket=${encodeURIComponent(ticket)}&event_level=default`;
 };
 
 const sortNodeRuns = (nodeRuns: NodeRunItem[]) =>
@@ -243,54 +244,68 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
     }
 
     let disposed = false;
+    let socket: WebSocket | null = null;
     setLiveStatus("pending");
-    const socket = new WebSocket(buildRunWebSocketUrl(executionId, token));
-
-    socket.addEventListener("open", () => {
-      if (!disposed) {
-        setLiveStatus("active");
-      }
-    });
-
-    socket.addEventListener("message", (event) => {
-      if (disposed) {
-        return;
-      }
-
+    void (async () => {
       try {
-        const message = JSON.parse(String(event.data)) as RunRealtimeMessage;
-        if (message.type === "connected") {
+        const { ticket } = await authApi.createWsTicket();
+        if (disposed) {
           return;
         }
-        if (message.type === "node_stream.summary") {
-          const summaryKey = `${message.node_stream.node_id}:${message.node_stream.attempt}`;
-          setLiveSummaries((current) => ({
-            ...current,
-            [summaryKey]: message.node_stream.text_preview ?? current[summaryKey] ?? "",
-          }));
-          return;
-        }
-        setRun((current) => applyRealtimeMessage(current, message));
+
+        socket = new WebSocket(buildRunWebSocketUrl(executionId, ticket));
+
+        socket.addEventListener("open", () => {
+          if (!disposed) {
+            setLiveStatus("active");
+          }
+        });
+
+        socket.addEventListener("message", (event) => {
+          if (disposed) {
+            return;
+          }
+
+          try {
+            const message = JSON.parse(String(event.data)) as RunRealtimeMessage;
+            if (message.type === "connected") {
+              return;
+            }
+            if (message.type === "node_stream.summary") {
+              const summaryKey = `${message.node_stream.node_id}:${message.node_stream.attempt}`;
+              setLiveSummaries((current) => ({
+                ...current,
+                [summaryKey]: message.node_stream.text_preview ?? current[summaryKey] ?? "",
+              }));
+              return;
+            }
+            setRun((current) => applyRealtimeMessage(current, message));
+          } catch {
+            // Ignore malformed messages and keep the last known canonical state.
+          }
+        });
+
+        socket.addEventListener("error", () => {
+          if (!disposed) {
+            setLiveStatus("offline");
+          }
+        });
+
+        socket.addEventListener("close", () => {
+          if (!disposed) {
+            setLiveStatus("offline");
+          }
+        });
       } catch {
-        // Ignore malformed messages and keep the last known canonical state.
+        if (!disposed) {
+          setLiveStatus("offline");
+        }
       }
-    });
-
-    socket.addEventListener("error", () => {
-      if (!disposed) {
-        setLiveStatus("offline");
-      }
-    });
-
-    socket.addEventListener("close", () => {
-      if (!disposed) {
-        setLiveStatus("offline");
-      }
-    });
+    })();
 
     return () => {
       disposed = true;
-      socket.close();
+      socket?.close();
     };
   }, [executionId]);
 

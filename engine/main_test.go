@@ -9,8 +9,8 @@ func TestNormalizeRunStateModeDefaultsToControlPlaneHTTP(t *testing.T) {
 	if got := normalizeRunStateMode(""); got != runStateModeControlPlaneHTTP {
 		t.Fatalf("normalizeRunStateMode(\"\") = %s, want %s", got, runStateModeControlPlaneHTTP)
 	}
-	if got := normalizeRunStateMode("postgres"); got != runStateModeLegacyDualWrite {
-		t.Fatalf("normalizeRunStateMode(postgres) = %s, want %s", got, runStateModeLegacyDualWrite)
+	if got := normalizeRunStateMode("postgres"); got != "postgres" {
+		t.Fatalf("normalizeRunStateMode(postgres) = %s, want postgres", got)
 	}
 }
 
@@ -30,8 +30,8 @@ func TestSelectRunRepositoryDriverRequiresControlPlaneConfigForCutover(t *testin
 	}
 }
 
-func TestSelectRunRepositoryDriverAllowsInMemoryFallback(t *testing.T) {
-	cfg := &Config{RunStateMode: runStateModeInMemory}
+func TestSelectRunRepositoryDriverAllowsInMemoryWithExplicitOverride(t *testing.T) {
+	cfg := &Config{RunStateMode: runStateModeInMemory, EngineAllowInMemoryMode: true}
 
 	got, err := selectRunRepositoryDriver(cfg)
 	if err != nil {
@@ -39,6 +39,14 @@ func TestSelectRunRepositoryDriverAllowsInMemoryFallback(t *testing.T) {
 	}
 	if got != runStateModeInMemory {
 		t.Fatalf("selectRunRepositoryDriver() = %s, want %s", got, runStateModeInMemory)
+	}
+}
+
+func TestSelectRunRepositoryDriverRejectsInMemoryWithoutExplicitOverride(t *testing.T) {
+	cfg := &Config{RunStateMode: runStateModeInMemory}
+
+	if _, err := selectRunRepositoryDriver(cfg); err == nil {
+		t.Fatal("expected in-memory mode to require explicit override")
 	}
 }
 

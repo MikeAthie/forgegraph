@@ -8,5 +8,8 @@ Requirements:
 - projections must be explainable back to runtime events
 - operator summaries must not replace runtime trace access
 - events must not become the authoritative durable state without an explicit backend write
+- events never mutate durable state directly; backend handlers validate and apply writes
 
 Primary contract: [state-ownership-contract.md](state-ownership-contract.md)
+
+Implementation plan: [post-stateless-engine-reliability-hardening-v2.md](post-stateless-engine-reliability-hardening-v2.md)

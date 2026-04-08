@@ -67,6 +67,9 @@ type Config struct {
 	EventRetryDelayMs                 int
 	EventBufferSize                   int
 	EventSpoolPath                    string
+	EventVerbosity                    string
+	EngineInstanceID                  string
+	EngineAllowInMemoryMode           bool
 	MarketplaceManifestRefreshSeconds int
 	RuntimeMode                       string
 	RunStateMode                      string
@@ -112,6 +115,9 @@ func LoadConfig() *Config {
 		EventRetryDelayMs:                 getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
 		EventBufferSize:                   getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
 		EventSpoolPath:                    getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
+		EventVerbosity:                    normalizeEventVerbosity(getEnv("ENGINE_EVENT_VERBOSITY", "default")),
+		EngineInstanceID:                  strings.TrimSpace(getEnv("ENGINE_INSTANCE_ID", "")),
+		EngineAllowInMemoryMode:           strings.EqualFold(getEnv("ENGINE_ALLOW_IN_MEMORY_MODE", "false"), "true"),
 		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
 		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
 		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", defaultRunStateMode)),
@@ -120,17 +126,31 @@ func LoadConfig() *Config {
 }
 
 func normalizeRunStateMode(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch normalized {
 	case "":
 		return defaultRunStateMode
-	case "dual-write", "dual_write", "legacy-db", "legacy_db", "postgres":
+	case "dual-write":
 		return runStateModeLegacyDualWrite
 	case "control-plane-http", "control_plane_http", "control-plane", "control_plane", "http":
 		return runStateModeControlPlaneHTTP
 	case "in-memory", "in_memory", "memory":
 		return runStateModeInMemory
 	default:
-		return defaultRunStateMode
+		return normalized
+	}
+}
+
+func normalizeEventVerbosity(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "default":
+		return "default"
+	case "minimal":
+		return "minimal"
+	case "verbose":
+		return "verbose"
+	default:
+		return "default"
 	}
 }
 
@@ -150,10 +170,9 @@ func selectRunRepositoryDriver(cfg *Config) (string, error) {
 	switch mode {
 	case runStateModeLegacyDualWrite:
 		return "", fmt.Errorf(
-			"ENGINE_RUN_STATE_MODE=%s is no longer supported; use %s or %s",
+			"ENGINE_RUN_STATE_MODE=%s is no longer supported; use %s",
 			runStateModeLegacyDualWrite,
 			runStateModeControlPlaneHTTP,
-			runStateModeInMemory,
 		)
 	case runStateModeControlPlaneHTTP:
 		if hasControlPlaneRepositoryConfig(cfg) {
@@ -161,10 +180,28 @@ func selectRunRepositoryDriver(cfg *Config) (string, error) {
 		}
 		return "", fmt.Errorf("ENGINE_RUN_STATE_MODE=%s requires CONTROL_PLANE_URL and ENGINE_CALLBACK_SECRET", runStateModeControlPlaneHTTP)
 	case runStateModeInMemory:
+		if cfg == nil || !cfg.EngineAllowInMemoryMode {
+			return "", fmt.Errorf("ENGINE_RUN_STATE_MODE=%s requires ENGINE_ALLOW_IN_MEMORY_MODE=true", runStateModeInMemory)
+		}
 		return runStateModeInMemory, nil
 	default:
 		return "", fmt.Errorf("unsupported ENGINE_RUN_STATE_MODE: %s", mode)
 	}
+}
+
+func resolveEngineInstanceID(cfg *Config) string {
+	if cfg != nil && strings.TrimSpace(cfg.EngineInstanceID) != "" {
+		return strings.TrimSpace(cfg.EngineInstanceID)
+	}
+	hostname, err := os.Hostname()
+	if err != nil || strings.TrimSpace(hostname) == "" {
+		hostname = "engine"
+	}
+	port := "50051"
+	if cfg != nil && strings.TrimSpace(cfg.GRPCPort) != "" {
+		port = strings.TrimSpace(cfg.GRPCPort)
+	}
+	return fmt.Sprintf("%s:%s", hostname, port)
 }
 
 func refreshMarketplaceManifests(
@@ -482,6 +519,9 @@ func main() {
 		"marketplace_manifest_refresh_seconds", cfg.MarketplaceManifestRefreshSeconds,
 		"runtime_mode", cfg.RuntimeMode,
 		"run_state_mode", cfg.RunStateMode,
+		"engine_event_verbosity", cfg.EventVerbosity,
+		"engine_instance_id", resolveEngineInstanceID(cfg),
+		"engine_allow_in_memory_mode", cfg.EngineAllowInMemoryMode,
 		"grpc_tls_enabled", strings.TrimSpace(cfg.GRPCTLSCertFile) != "" && strings.TrimSpace(cfg.GRPCTLSKeyFile) != "",
 	)
 
@@ -507,14 +547,17 @@ func main() {
 			"migration_mode", runStateModeControlPlaneHTTP,
 			"control_plane_url", cfg.ControlPlaneURL,
 		)
-	default:
+	case runStateModeInMemory:
 		repo = repository.NewMemoryRunRepository()
 		memoryStore = store.NewInMemoryMemoryStore()
 		log.Warn(
-			"run_repository_fallback",
+			"run_repository_local_mode",
 			"driver", "in-memory",
 			"migration_mode", repoDriver,
 		)
+	default:
+		log.Error("run_repository_driver_unreachable", "driver", repoDriver)
+		os.Exit(1)
 	}
 
 	// Optional Redis-backed memory store
@@ -550,6 +593,8 @@ func main() {
 	emitterCfg.RetryDelay = time.Duration(cfg.EventRetryDelayMs) * time.Millisecond
 	emitterCfg.BufferSize = cfg.EventBufferSize
 	emitterCfg.SpoolPath = resolveEventSpoolPath(cfg, callbackURL)
+	emitterCfg.EventVerbosity = cfg.EventVerbosity
+	emitterCfg.EngineInstanceID = resolveEngineInstanceID(cfg)
 	emitter, err = gateway.NewHTTPEventEmitter(emitterCfg)
 	if err != nil {
 		log.Error("event_emitter_init_failed", "error", err.Error())

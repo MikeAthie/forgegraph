@@ -58,6 +58,14 @@ from adapters.ws.runs.broadcast import (
 from application.services.audit_log import record_audit_log
 from application.services.auth_state import validate_access_token
 from application.services.cloudevents import unwrap_engine_event
+from application.services.engine_selection import (
+    EngineAssignmentError,
+    get_engine_target_by_id,
+    reconcile_run_engine_instance,
+    resolve_engine_callback_url,
+    select_engine_target,
+)
+from application.services.event_categories import normalize_event_category
 from application.services.llm_pricing import calculate_cost
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
@@ -117,15 +125,42 @@ logger = logging.getLogger(__name__)
 _UNSET = object()
 
 
-def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
+def get_engine_client(
+    callback_url: str = "",
+    *,
+    host: str | None = None,
+    port: int | None = None,
+) -> GrpcEngineClient:
     """Get an engine client instance. Can be mocked in tests."""
     return GrpcEngineClient(
-        host=settings.ENGINE_HOST,
-        port=settings.ENGINE_PORT,
+        host=host or settings.ENGINE_HOST,
+        port=port or settings.ENGINE_PORT,
         callback_url=callback_url,
         tls_enabled=settings.ENGINE_GRPC_TLS_ENABLED,
         tls_ca_file=settings.ENGINE_GRPC_TLS_CA_FILE,
         tls_server_name=settings.ENGINE_GRPC_TLS_SERVER_NAME,
+    )
+
+
+def get_engine_assignment(*, run_id: str, callback_url: str = "") -> tuple[str, GrpcEngineClient]:
+    target = select_engine_target(run_id=run_id)
+    return (
+        target.engine_id,
+        get_engine_client(callback_url, host=target.host, port=target.port),
+    )
+
+
+def get_engine_client_for_run(*, run: Run, callback_url: str = "") -> tuple[str, GrpcEngineClient]:
+    target = (
+        get_engine_target_by_id(run.engine_instance_id)
+        if str(run.engine_instance_id or "").strip()
+        else None
+    )
+    if target is None:
+        target = select_engine_target(run_id=str(run.id))
+    return (
+        target.engine_id,
+        get_engine_client(callback_url, host=target.host, port=target.port),
     )
 
 
@@ -1539,7 +1574,7 @@ class RunStartView(APIView):
             )
 
         # Send run to the engine
-        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        callback_url = resolve_engine_callback_url(run_id=str(run.id))
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
         )
@@ -1555,7 +1590,11 @@ class RunStartView(APIView):
                     "forgegraph.trigger": "start",
                 },
             ):
-                with get_engine_client(callback_url) as engine:
+                selected_engine_id, engine_client = get_engine_assignment(
+                    run_id=str(run.id),
+                    callback_url=callback_url,
+                )
+                with engine_client as engine:
                     engine.start_run(
                         run_id=run.id,
                         graph_json=prepared_graph,
@@ -1573,7 +1612,7 @@ class RunStartView(APIView):
                         touch_run_liveness(
                             run,
                             recovery_state=recovery_state_for_status("running"),
-                            engine_instance_id=engine_instance_label(),
+                            engine_instance_id=selected_engine_id,
                         )
                     )
                     run.save(update_fields=sorted(set(update_fields)))
@@ -1875,7 +1914,7 @@ class RunInvokeView(APIView):
                 serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
             )
 
-        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        callback_url = resolve_engine_callback_url(run_id=str(run.id))
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
         )
@@ -1891,7 +1930,11 @@ class RunInvokeView(APIView):
                     "forgegraph.trigger": "invoke",
                 },
             ):
-                with get_engine_client(callback_url) as engine:
+                selected_engine_id, engine_client = get_engine_assignment(
+                    run_id=str(run.id),
+                    callback_url=callback_url,
+                )
+                with engine_client as engine:
                     engine.start_run(
                         run_id=run.id,
                         graph_json=graph_json,
@@ -1908,7 +1951,7 @@ class RunInvokeView(APIView):
                         touch_run_liveness(
                             run,
                             recovery_state=recovery_state_for_status("running"),
-                            engine_instance_id=engine_instance_label(),
+                            engine_instance_id=selected_engine_id,
                         )
                     )
                     run.save(update_fields=sorted(set(update_fields)))
@@ -2189,7 +2232,7 @@ class RunReplayView(APIView):
                 serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
             )
 
-        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=replay_run.id)
+        callback_url = resolve_engine_callback_url(run_id=str(replay_run.id))
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
         )
@@ -2205,7 +2248,11 @@ class RunReplayView(APIView):
                     "forgegraph.trigger": "replay",
                 },
             ):
-                with get_engine_client(callback_url) as engine:
+                selected_engine_id, engine_client = get_engine_assignment(
+                    run_id=str(replay_run.id),
+                    callback_url=callback_url,
+                )
+                with engine_client as engine:
                     engine.start_run(
                         run_id=replay_run.id,
                         graph_json=prepared_graph,
@@ -2222,7 +2269,7 @@ class RunReplayView(APIView):
                         touch_run_liveness(
                             replay_run,
                             recovery_state=recovery_state_for_status("running"),
-                            engine_instance_id=engine_instance_label(),
+                            engine_instance_id=selected_engine_id,
                         )
                     )
                     replay_run.save(update_fields=sorted(set(update_fields)))
@@ -2342,7 +2389,8 @@ class RunCancelView(APIView):
 
         # Tell the engine to cancel the run
         try:
-            with get_engine_client() as engine:
+            _, engine_client = get_engine_client_for_run(run=run)
+            with engine_client as engine:
                 engine.cancel_run(run_id=run.id)
 
         except EngineConnectionError as e:
@@ -2455,6 +2503,15 @@ class RunResumeView(APIView):
 
         node_id = serializer.validated_data["node_id"]
         input_json = serializer.validated_data.get("input_json", {})
+        log_event(
+            logger,
+            logging.INFO,
+            "runs_resume_requested",
+            run_id=str(run.id),
+            trace_id=run.trace_id or None,
+            node_id=node_id,
+            message="Received run resume request",
+        )
 
         pending_approval_task = run.approval_tasks.filter(node_id=node_id, status="pending").first()
         if pending_approval_task is None:
@@ -2516,7 +2573,8 @@ class RunResumeView(APIView):
                     "forgegraph.trigger": "resume",
                 },
             ):
-                with get_engine_client() as engine:
+                selected_engine_id, engine_client = get_engine_client_for_run(run=run)
+                with engine_client as engine:
                     engine.resume_run(
                         run_id=run.id,
                         node_id=node_id,
@@ -2524,6 +2582,16 @@ class RunResumeView(APIView):
                         traceparent=trace_context["traceparent"],
                         tracestate=trace_context["tracestate"],
                     )
+            log_event(
+                logger,
+                logging.INFO,
+                "runs_resume_dispatched",
+                run_id=str(run.id),
+                trace_id=run.trace_id or trace_context["trace_id"],
+                node_id=node_id,
+                engine_instance_id=selected_engine_id,
+                message="Dispatched run resume to engine",
+            )
         except EngineConnectionError as e:
             log_event(
                 logger,
@@ -2556,7 +2624,7 @@ class RunResumeView(APIView):
         liveness_fields = touch_run_liveness(
             run,
             recovery_state=recovery_state_for_status(run.status),
-            engine_instance_id=engine_instance_label(),
+            engine_instance_id=selected_engine_id,
         )
         run.save(update_fields=sorted(set(liveness_fields)))
 
@@ -2581,11 +2649,24 @@ class RunResumeView(APIView):
                 },
             )
 
+        log_event(
+            logger,
+            logging.INFO,
+            "runs_resume_completed",
+            run_id=str(run.id),
+            trace_id=run.trace_id or trace_context["trace_id"],
+            node_id=node_id,
+            message="Run resume request completed",
+        )
         return success_response({"resumed": True, "run_id": str(run.id)})
 
 
 class EngineRunEventsView(APIView):
-    """Persist + broadcast engine execution events (S2S)."""
+    """Persist + broadcast engine execution events (S2S).
+
+    Events never mutate durable state directly. The backend validates, deduplicates,
+    enforces monotonicity/ownership rules, and then performs durable writes.
+    """
 
     permission_classes = [AllowAny]
 
@@ -2670,6 +2751,40 @@ class EngineRunEventsView(APIView):
         event_type = event.get("type", "")
         timestamp_ms = event.get("timestamp")
         event_time = _datetime_from_timestamp_ms(timestamp_ms)
+        normalized_category = normalize_event_category(
+            str(event_type),
+            category=str(event.get("category") or ""),
+        )
+
+        try:
+            callback_engine_instance_id, assigned_engine = reconcile_run_engine_instance(
+                assigned_engine_id=run.engine_instance_id,
+                callback_engine_id=str(event.get("engine_instance_id") or ""),
+            )
+        except EngineAssignmentError as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "engine_callback_assignment_conflict",
+                run_id=str(run.id),
+                trace_id=trace_context["trace_id"],
+                event_id=event_id,
+                message="Rejected engine callback due to engine ownership mismatch",
+                assigned_engine_instance_id=run.engine_instance_id or None,
+                callback_engine_instance_id=str(event.get("engine_instance_id") or "").strip() or None,
+                error_detail=str(exc),
+                category=normalized_category,
+            )
+            return problem_response(
+                type_uri="https://forgegraph.dev/problems/engine-instance-mismatch",
+                title="Engine instance mismatch",
+                status=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            )
+
+        if assigned_engine and callback_engine_instance_id != run.engine_instance_id:
+            run.engine_instance_id = callback_engine_instance_id
+            run.save(update_fields=["engine_instance_id"])
 
         def _save_event(
             event_type_name: str,
@@ -2677,11 +2792,17 @@ class EngineRunEventsView(APIView):
             *,
             derived: bool = False,
         ) -> None:
+            normalized_payload = dict(payload)
+            normalized_payload["category"] = normalize_event_category(
+                event_type_name,
+                category=str(normalized_payload.get("category") or ""),
+                payload=normalized_payload,
+            )
             try:
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type_name,
-                    payload=payload,
+                    payload=normalized_payload,
                     external_id=None if derived else event_id,
                     trace_id=trace_context["trace_id"],
                     span_id=trace_context["span_id"],
@@ -2703,7 +2824,7 @@ class EngineRunEventsView(APIView):
                 run,
                 event_time=event_time,
                 recovery_state=recovery_state_for_status(run.status),
-                engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                engine_instance_id=callback_engine_instance_id,
             )
             run.save(update_fields=sorted(set(run_update_fields)))
             _save_event("run.schema_validation", payload)
@@ -2753,7 +2874,7 @@ class EngineRunEventsView(APIView):
                 run,
                 event_time=event_time,
                 recovery_state=recovery_state_for_status(run.status),
-                engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                engine_instance_id=callback_engine_instance_id,
             )
             run.save(update_fields=sorted(set(run_update_fields)))
             message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
@@ -2845,13 +2966,14 @@ class EngineRunEventsView(APIView):
                 raw_pause_payload = redact_payload(event.get("output") or {})
                 pause_payload = raw_pause_payload if isinstance(raw_pause_payload, dict) else {}
                 run_payload["pause_payload"] = pause_payload
-                if pause_payload:
-                    run_payload["pause_state_json"] = pause_payload
-                    run.pause_state_json = pause_payload
-                    update_fields.append("pause_state_json")
+                persisted_pause_state = redact_payload(run.pause_state_json)
+                if persisted_pause_state is not None:
+                    run_payload["pause_state_json"] = persisted_pause_state
                 projection_kwargs = {
                     "paused_node_id": node_id or None,
-                    "pause_state_json": pause_payload if pause_payload else _UNSET,
+                    "pause_state_json": (
+                        persisted_pause_state if persisted_pause_state is not None else _UNSET
+                    ),
                 }
 
             if event_type == "run_resumed":
@@ -2875,7 +2997,7 @@ class EngineRunEventsView(APIView):
                         run,
                         event_time=event_time,
                         recovery_state=recovery_state_for_status(run.status),
-                        engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                        engine_instance_id=callback_engine_instance_id,
                     )
                 )
                 run.trace_id = trace_context["trace_id"]
@@ -3034,7 +3156,7 @@ class EngineRunEventsView(APIView):
                     run,
                     event_time=event_time,
                     recovery_state=recovery_state_for_status(run.status),
-                    engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                    engine_instance_id=callback_engine_instance_id,
                 )
                 run.save(update_fields=sorted(set(run_update_fields)))
                 if event_type == "node_failed" and _payload_contains_policy_denied(
@@ -3120,7 +3242,10 @@ class EngineRunEventsView(APIView):
 
 
 class RunEventsView(APIView):
-    """Persist + broadcast Run/NodeRun delta events."""
+    """Persist + broadcast Run/NodeRun delta events.
+
+    These authenticated events are write requests, not authoritative state by themselves.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -3148,6 +3273,10 @@ class RunEventsView(APIView):
             )
 
         event_type = serializer.validated_data["event_type"]
+        normalized_category = normalize_event_category(
+            event_type,
+            category=str(serializer.validated_data.get("category") or ""),
+        )
 
         if event_type == "run.updated":
             payload = serializer.validated_data["run"]
@@ -3173,7 +3302,14 @@ class RunEventsView(APIView):
                 update_fields.append("pause_state_json")
 
             if update_fields:
-                run.save(update_fields=update_fields)
+                update_fields.extend(
+                    touch_run_liveness(
+                        run,
+                        recovery_state=recovery_state_for_status(run.status),
+                        engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                    )
+                )
+                run.save(update_fields=sorted(set(update_fields)))
 
             # Create ApprovalTask when run is paused (human gate)
             if payload.get("status") == "paused":
@@ -3227,7 +3363,13 @@ class RunEventsView(APIView):
                     RunEvent.objects.create(
                         run=run,
                         event_type="run.schema_validation",
-                        payload=redact_payload({"errors": schema_errors, "mode": schema_mode}),
+                        payload=redact_payload(
+                            {
+                                "errors": schema_errors,
+                                "mode": schema_mode,
+                                "category": normalize_event_category("run.schema_validation"),
+                            }
+                        ),
                     )
                 except Exception as exc:  # pragma: no cover - log and continue
                     log_event(
@@ -3244,7 +3386,12 @@ class RunEventsView(APIView):
                     run.error_message = (
                         f"Output schema validation failed: {schema_errors[0]['message']}"
                     )
-                    run.save(update_fields=["status", "error_message"])
+                    run.save(
+                        update_fields=[
+                            "status",
+                            "error_message",
+                        ]
+                    )
                     payload["status"] = run.status
                     payload["error_message"] = run.error_message
 
@@ -3252,7 +3399,14 @@ class RunEventsView(APIView):
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=_serialize_event_payload(redact_payload(payload)),
+                    payload=_serialize_event_payload(
+                        redact_payload(
+                            {
+                                **payload,
+                                "category": normalized_category,
+                            }
+                        )
+                    ),
                 )
             except Exception as exc:  # pragma: no cover - log and continue
                 log_event(
@@ -3313,11 +3467,24 @@ class RunEventsView(APIView):
                     node_update_fields.append("error_json")
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
+                run_update_fields = touch_run_liveness(
+                    run,
+                    recovery_state=recovery_state_for_status(run.status),
+                    engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                )
+                run.save(update_fields=sorted(set(run_update_fields)))
 
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=_serialize_event_payload(redact_payload(payload)),
+                    payload=_serialize_event_payload(
+                        redact_payload(
+                            {
+                                **payload,
+                                "category": normalized_category,
+                            }
+                        )
+                    ),
                 )
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)
@@ -3329,7 +3496,10 @@ class RunEventsView(APIView):
                 RunEvent.objects.create(
                     run=run,
                     event_type=event_type,
-                    payload=payload,
+                    payload={
+                        **payload,
+                        "category": normalized_category,
+                    },
                 )
             except Exception as exc:  # pragma: no cover - log and continue
                 log_event(
@@ -3359,6 +3529,11 @@ def _build_stream_message(*, run: Run, event: RunEvent) -> dict[str, Any]:
         "type": event.event_type,
         "run_id": str(run.id),
         "trace_id": event.trace_id or run.trace_id,
+        "category": normalize_event_category(
+            event.event_type,
+            category=str(payload.get("category") or ""),
+            payload=payload,
+        ),
     }
     if event.event_type == "run.updated":
         message["run"] = payload

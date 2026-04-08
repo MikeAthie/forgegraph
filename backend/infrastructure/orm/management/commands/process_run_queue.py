@@ -17,8 +17,8 @@ from adapters.gateways.grpc_engine_client import (
 )
 from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.metrics import record_run_completed, record_run_started
+from application.services.engine_selection import resolve_engine_callback_url, select_engine_target
 from application.services.run_liveness import (
-    engine_instance_label,
     reconcile_stale_runs,
     recovery_state_for_status,
     touch_run_liveness,
@@ -44,10 +44,15 @@ from infrastructure.orm.models import RunQueueEntry
 logger = logging.getLogger(__name__)
 
 
-def get_engine_client(callback_url: str = "") -> GrpcEngineClient:
+def get_engine_client(
+    callback_url: str = "",
+    *,
+    host: str | None = None,
+    port: int | None = None,
+) -> GrpcEngineClient:
     return GrpcEngineClient(
-        host=settings.ENGINE_HOST,
-        port=settings.ENGINE_PORT,
+        host=host or settings.ENGINE_HOST,
+        port=port or settings.ENGINE_PORT,
         callback_url=callback_url,
     )
 
@@ -122,7 +127,7 @@ class Command(BaseCommand):
             self._fail_run(entry, run, "Prompt credentials are missing or invalid.")
             return
 
-        callback_url = settings.ENGINE_CALLBACK_URL.format(run_id=run.id)
+        callback_url = resolve_engine_callback_url(run_id=str(run.id))
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
         )
@@ -132,7 +137,8 @@ class Command(BaseCommand):
             run.save(update_fields=["trace_id"])
 
         try:
-            with get_engine_client(callback_url) as engine:
+            target = select_engine_target(run_id=str(run.id))
+            with get_engine_client(callback_url, host=target.host, port=target.port) as engine:
                 engine.start_run(
                     run_id=run.id,
                     graph_json=prepared_graph,
@@ -159,7 +165,7 @@ class Command(BaseCommand):
                 touch_run_liveness(
                     run,
                     recovery_state=recovery_state_for_status("running"),
-                    engine_instance_id=engine_instance_label(),
+                    engine_instance_id=target.engine_id,
                 )
             )
             run.save(update_fields=sorted(set(update_fields)))

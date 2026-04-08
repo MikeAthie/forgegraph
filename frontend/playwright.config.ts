@@ -61,6 +61,10 @@ const memoryGrpcPort = process.env.MEMORY_GRPC_PORT
     : 50052;
 const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT) : 8011;
 const llmMockUrl = `http://127.0.0.1:${llmMockPort}`;
+const playwrightRunId = process.env.PLAYWRIGHT_RUN_ID ?? `${Date.now()}`;
+const engineEventSpoolPath =
+  process.env.ENGINE_EVENT_SPOOL_PATH ??
+  path.join(os.tmpdir(), `forgegraph-playwright-engine-events-${playwrightRunId}-${enginePort}.jsonl`);
 const runtimeFixtureTenantId = process.env.PLAYWRIGHT_RUNTIME_TENANT_ID ?? "00000000-0000-0000-0000-00000000e2e1";
 const runtimeFixtureEmail = process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL ?? "playwright-runtime@example.com";
 const runtimeFixturePassword = process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD ?? "ForgeGraphTest!12345";
@@ -206,6 +210,10 @@ export default defineConfig({
         PLAYWRIGHT_BACKEND_PORT: String(backendPort),
         ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
         ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
+        ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
+        ENGINE_TARGETS:
+          process.env.ENGINE_TARGETS ??
+          `playwright-engine-1=${process.env.ENGINE_HOST ?? "127.0.0.1"}:${String(process.env.ENGINE_PORT ?? enginePort)}`,
         ENGINE_CALLBACK_URL: process.env.ENGINE_CALLBACK_URL ?? `${backendUrl}/api/runs/engine-events`,
         ENGINE_CALLBACK_SECRET: callbackSecret,
         MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
@@ -223,7 +231,11 @@ export default defineConfig({
         GRPC_PORT: String(enginePort),
         METRICS_PORT: String(engineMetricsPort),
         CONTROL_PLANE_URL: backendUrl,
+        ENGINE_RUN_STATE_MODE: process.env.ENGINE_RUN_STATE_MODE ?? "control-plane-http",
         ENGINE_CALLBACK_SECRET: callbackSecret,
+        ENGINE_EVENT_VERBOSITY: process.env.ENGINE_EVENT_VERBOSITY ?? "default",
+        ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
+        ENGINE_EVENT_SPOOL_PATH: engineEventSpoolPath,
         TENANT_ID: runtimeFixtureTenantId,
         MARKETPLACE_MANIFEST_REFRESH_SECONDS: process.env.MARKETPLACE_MANIFEST_REFRESH_SECONDS ?? "1",
         FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",

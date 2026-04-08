@@ -174,6 +174,10 @@ describe("Runs pages", () => {
     jest.clearAllMocks();
     MockWebSocket.reset();
     api.clearTokens();
+    jest.spyOn(api.authApi, "createWsTicket").mockResolvedValue({
+      ticket: "ws-ticket",
+      expires_in: 60,
+    });
     mockUseRouter.mockReturnValue({
       push: jest.fn(),
       replace: jest.fn(),
@@ -363,7 +367,7 @@ describe("Runs pages", () => {
       await renderRunDetailPage();
 
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?token=test-token&event_level=important`);
+      expect(MockWebSocket.instances[0]?.url).toContain(`/ws/runs/${runId}/?ticket=ws-ticket&event_level=default`);
 
       await act(async () => {
         MockWebSocket.instances[0]?.emit("open");

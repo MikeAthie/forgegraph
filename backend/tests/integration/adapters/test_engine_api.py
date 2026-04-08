@@ -60,6 +60,7 @@ class TestEngineRunApi:
         assert response.status_code == 200
         assert response.data["data"]["status"] == "pending"
         assert response.data["data"]["graph_version_id"] == str(version.id)
+        assert response.data["data"]["recovery_policy"] == "fail"
 
         patch_payload = {
             "status": "running",
@@ -171,6 +172,56 @@ class TestEngineRunApi:
         assert response.status_code == 200
         assert response.data["data"]["step_index"] == 2
         assert response.data["data"]["completed_nodes"] == ["node_a"]
+
+    def test_pause_state_round_trip_preserves_graph_json(self, api_client):
+        user = User.objects.create_user(
+            email="engine-pause-state@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Pause State Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "gate", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        graph_json = json.dumps(version.graph_json)
+        payload = {
+            "paused_node_id": "gate",
+            "state_snapshot": {"input.ticket": "FG-123"},
+            "completed_nodes": ["seed"],
+            "skipped_nodes": [],
+            "graph_json": graph_json,
+            "tenant_id": str(user.default_organization_id),
+        }
+        body, headers = _signed_json_request("test-secret", payload)
+        response = api_client.generic(
+            "PUT",
+            f"/api/engine/runs/{run.id}/pause-state",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == 200
+        assert response.data["data"]["paused_node_id"] == "gate"
+        assert response.data["data"]["graph_json"] == graph_json
+
+        response = api_client.get(
+            f"/api/engine/runs/{run.id}/pause-state",
+            **_signed_headers("test-secret"),
+        )
+
+        assert response.status_code == 200
+        assert response.data["data"]["paused_node_id"] == "gate"
+        assert response.data["data"]["state_snapshot"] == {"input.ticket": "FG-123"}
+        assert response.data["data"]["completed_nodes"] == ["seed"]
+        assert response.data["data"]["graph_json"] == graph_json
+
+        run.refresh_from_db()
+        assert run.pause_state_json is not None
+        assert run.pause_state_json["graph_json"] == graph_json
 
     def test_node_run_upsert_and_latest_lookup(self, api_client):
         user = User.objects.create_user(email="engine-node-run@example.com", password="password123")
