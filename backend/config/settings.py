@@ -343,6 +343,7 @@ ENGINE_CALLBACK_URL = os.environ.get(
 )
 ENGINE_CALLBACK_SECRET = os.environ.get("ENGINE_CALLBACK_SECRET", "")
 ENGINE_CALLBACK_MAX_SKEW_SECONDS = int(os.environ.get("ENGINE_CALLBACK_MAX_SKEW_SECONDS", "600"))
+RUN_LIVENESS_TIMEOUT_SECONDS = int(os.environ.get("RUN_LIVENESS_TIMEOUT_SECONDS", "300"))
 ALLOWED_LLM_PROVIDERS = [
     provider.strip().lower()
     for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic").split(",")

@@ -16,7 +16,10 @@ The engine is the ForgeGraph execution plane.
 - Do not own durable memory state
 - Do not stay paused waiting for human approval
 - Treat backend-issued execution contracts as the policy and configuration source of truth
+- Send durable run-state mutations through backend-controlled runtime write APIs
 - Prefer deterministic, invariant-based runtime testing over timing-based assertions
+
+Default runtime state mode is `control-plane-http`. Legacy `dual-write` mode is removed from the supported engine runtime.
 
 ## Non-Goals
 

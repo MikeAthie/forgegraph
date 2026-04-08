@@ -63,6 +63,11 @@ from application.services.metrics import record_run_completed, record_run_starte
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
 from application.services.redaction import redact_payload
+from application.services.run_liveness import (
+    engine_instance_label,
+    recovery_state_for_status,
+    touch_run_liveness,
+)
 from application.services.run_event_streaming import (
     add_event_level,
     event_levels_for_subscription,
@@ -1229,6 +1234,10 @@ class RunListView(APIView):
                     "ended_at": run.ended_at,
                     "duration_ms": run.duration_ms,
                     "trace_id": run.trace_id,
+                    "last_progress_at": run.last_progress_at,
+                    "last_heartbeat_at": run.last_heartbeat_at,
+                    "engine_instance_id": run.engine_instance_id,
+                    "recovery_state": run.recovery_state,
                     "memory_activity": summarize_run_memory_activity(
                         list(run.node_runs.all()),
                         include_operations=False,
@@ -1335,6 +1344,10 @@ class RunDetailView(APIView):
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
             "trace_id": run.trace_id,
+            "last_progress_at": run.last_progress_at,
+            "last_heartbeat_at": run.last_heartbeat_at,
+            "engine_instance_id": run.engine_instance_id,
+            "recovery_state": run.recovery_state,
             "paused_node_id": run.paused_node_id,
             "pause_payload": redact_payload(pause_payload),
             "node_outcomes": node_outcomes,
@@ -1555,7 +1568,15 @@ class RunStartView(APIView):
                     )
                     # Update status to running once engine accepts
                     run.status = "running"
-                    run.save(update_fields=["status"])
+                    update_fields = ["status"]
+                    update_fields.extend(
+                        touch_run_liveness(
+                            run,
+                            recovery_state=recovery_state_for_status("running"),
+                            engine_instance_id=engine_instance_label(),
+                        )
+                    )
+                    run.save(update_fields=sorted(set(update_fields)))
                     record_run_started()
                     broadcast_run_updated(run)
 
@@ -1882,7 +1903,15 @@ class RunInvokeView(APIView):
                         tracestate=trace_metadata["tracestate"],
                     )
                     run.status = "running"
-                    run.save(update_fields=["status"])
+                    update_fields = ["status"]
+                    update_fields.extend(
+                        touch_run_liveness(
+                            run,
+                            recovery_state=recovery_state_for_status("running"),
+                            engine_instance_id=engine_instance_label(),
+                        )
+                    )
+                    run.save(update_fields=sorted(set(update_fields)))
                     record_run_started()
                     broadcast_run_updated(run)
 
@@ -2188,7 +2217,15 @@ class RunReplayView(APIView):
                         tracestate=trace_metadata["tracestate"],
                     )
                     replay_run.status = "running"
-                    replay_run.save(update_fields=["status"])
+                    update_fields = ["status"]
+                    update_fields.extend(
+                        touch_run_liveness(
+                            replay_run,
+                            recovery_state=recovery_state_for_status("running"),
+                            engine_instance_id=engine_instance_label(),
+                        )
+                    )
+                    replay_run.save(update_fields=sorted(set(update_fields)))
                     record_run_started()
                     broadcast_run_updated(replay_run)
 
@@ -2516,6 +2553,13 @@ class RunResumeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        liveness_fields = touch_run_liveness(
+            run,
+            recovery_state=recovery_state_for_status(run.status),
+            engine_instance_id=engine_instance_label(),
+        )
+        run.save(update_fields=sorted(set(liveness_fields)))
+
         # Update ApprovalTask
         approval_task = pending_approval_task
         if approval_task:
@@ -2655,6 +2699,13 @@ class EngineRunEventsView(APIView):
 
         if event_type == "run.schema_validation":
             payload = redact_payload(event.get("output") or {})
+            run_update_fields = touch_run_liveness(
+                run,
+                event_time=event_time,
+                recovery_state=recovery_state_for_status(run.status),
+                engine_instance_id=run.engine_instance_id or engine_instance_label(),
+            )
+            run.save(update_fields=sorted(set(run_update_fields)))
             _save_event("run.schema_validation", payload)
             message = broadcast_run_schema_validation(run=run, payload=payload)
             return success_response(message)
@@ -2698,6 +2749,13 @@ class EngineRunEventsView(APIView):
             )
             if summary_payload:
                 broadcast_node_stream_summary(run=run, payload=summary_payload)
+            run_update_fields = touch_run_liveness(
+                run,
+                event_time=event_time,
+                recovery_state=recovery_state_for_status(run.status),
+                engine_instance_id=run.engine_instance_id or engine_instance_label(),
+            )
+            run.save(update_fields=sorted(set(run_update_fields)))
             message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
             return success_response(message)
 
@@ -2812,6 +2870,14 @@ class EngineRunEventsView(APIView):
                 }
 
             if update_fields:
+                update_fields.extend(
+                    touch_run_liveness(
+                        run,
+                        event_time=event_time,
+                        recovery_state=recovery_state_for_status(run.status),
+                        engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                    )
+                )
                 run.trace_id = trace_context["trace_id"]
                 update_fields.append("trace_id")
                 run.save(update_fields=sorted(set(update_fields)))
@@ -2964,6 +3030,13 @@ class EngineRunEventsView(APIView):
                 node_update_fields.extend(["trace_id", "span_id"])
 
                 node_run.save(update_fields=sorted(set(node_update_fields)))
+                run_update_fields = touch_run_liveness(
+                    run,
+                    event_time=event_time,
+                    recovery_state=recovery_state_for_status(run.status),
+                    engine_instance_id=run.engine_instance_id or engine_instance_label(),
+                )
+                run.save(update_fields=sorted(set(run_update_fields)))
                 if event_type == "node_failed" and _payload_contains_policy_denied(
                     node_payload.get("error_json")
                 ):

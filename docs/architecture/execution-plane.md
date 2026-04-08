@@ -25,3 +25,5 @@ It does not own organization dashboards, agent registry semantics, or accounting
 Human-in-the-loop flows should suspend through backend-owned snapshots, then resume through a fresh engine invocation with explicit context.
 
 Reference: [system-invariants.md](system-invariants.md)
+
+Primary contract: [state-ownership-contract.md](state-ownership-contract.md)

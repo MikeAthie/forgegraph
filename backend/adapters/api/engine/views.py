@@ -21,13 +21,22 @@ from application.services.oauth import (
     get_oauth_provider_config,
 )
 from application.services.redaction import redact_payload
+from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import decrypt_api_key, encrypt_api_key
-from infrastructure.orm.models import APIKey, NodeRun, NodeRunCache, Run, RunCheckpoint
+from infrastructure.orm.models import APIKey, MemoryEntry, NodeRun, NodeRunCache, Run, RunCheckpoint
 from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
 _REFRESH_SKEW = timedelta(minutes=5)
+_RUN_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "pending": {"pending", "running", "failed", "canceled"},
+    "running": {"running", "paused", "succeeded", "failed", "canceled"},
+    "paused": {"paused", "running", "failed", "canceled"},
+    "succeeded": {"succeeded"},
+    "failed": {"failed"},
+    "canceled": {"canceled"},
+}
 
 
 def _parse_expires_at(token_payload: dict[str, object]) -> datetime | None:
@@ -149,6 +158,10 @@ def _serialize_run(run: Run) -> dict[str, object]:
         "output_json": redact_payload(run.output_json),
         "error_message": redact_payload(run.error_message),
         "trace_id": run.trace_id,
+        "last_progress_at": run.last_progress_at.isoformat() if run.last_progress_at else None,
+        "last_heartbeat_at": run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
+        "engine_instance_id": run.engine_instance_id,
+        "recovery_state": run.recovery_state,
     }
 
 
@@ -201,6 +214,25 @@ def _decode_graph_json(raw_value: object) -> object:
             return {}
         return json.loads(text)
     raise ValueError("graph_json must be a JSON object, array, or JSON-encoded string")
+
+
+def _validate_run_status_transition(current_status: str, next_status: str) -> None:
+    allowed = _RUN_STATUS_TRANSITIONS.get(current_status, {current_status})
+    if next_status not in allowed:
+        raise ValueError(
+            f"invalid run status transition: {current_status} -> {next_status}"
+        )
+
+
+def _parse_memory_identity(request: Request, payload: dict[str, object] | None = None) -> tuple[str, str]:
+    source = payload or {}
+    namespace = str(source.get("namespace") or request.query_params.get("namespace") or "").strip()
+    key = str(source.get("key") or request.query_params.get("key") or "").strip()
+    if not namespace:
+        raise ValueError("namespace is required")
+    if not key:
+        raise ValueError("key is required")
+    return namespace, key
 
 
 class EngineCredentialDetailView(APIView):
@@ -311,11 +343,13 @@ class EngineRunDetailView(APIView):
 
         try:
             if "status" in payload:
-                run.status = _validate_status(
+                next_status = _validate_status(
                     payload.get("status"),
                     allowed={"pending", "running", "paused", "succeeded", "failed", "canceled"},
                     field="status",
                 )
+                _validate_run_status_transition(run.status, next_status)
+                run.status = next_status
                 update_fields.append("status")
             if "started_at" in payload:
                 run.started_at = _parse_optional_datetime(payload.get("started_at"))
@@ -334,12 +368,18 @@ class EngineRunDetailView(APIView):
                 update_fields.append("trace_id")
         except ValueError as exc:
             return error_response(
-                code="VALIDATION_ERROR",
+                code="INVALID_STATE" if "transition" in str(exc) else "VALIDATION_ERROR",
                 message=str(exc),
-                status=400,
+                status=409 if "transition" in str(exc) else 400,
             )
 
         if update_fields:
+            update_fields.extend(
+                touch_run_liveness(
+                    run,
+                    recovery_state=recovery_state_for_status(run.status),
+                )
+            )
             run.save(update_fields=sorted(set(update_fields)))
 
         return success_response(_serialize_run(run))
@@ -403,7 +443,14 @@ class EngineRunPauseStateView(APIView):
         }
         run.paused_node_id = paused_node_id
         run.pause_state_json = pause_state
-        run.save(update_fields=["paused_node_id", "pause_state_json"])
+        update_fields = ["paused_node_id", "pause_state_json"]
+        update_fields.extend(
+            touch_run_liveness(
+                run,
+                recovery_state=recovery_state_for_status(run.status or "paused"),
+            )
+        )
+        run.save(update_fields=sorted(set(update_fields)))
 
         return success_response(
             {
@@ -512,6 +559,12 @@ class EngineRunCheckpointView(APIView):
                         "updated_at",
                     ]
                 )
+
+            run_update_fields = touch_run_liveness(
+                run,
+                recovery_state=recovery_state_for_status(run.status),
+            )
+            run.save(update_fields=sorted(set(run_update_fields)))
 
         return success_response(_serialize_checkpoint(checkpoint))
 
@@ -670,6 +723,12 @@ class EngineRunNodeRunDetailView(APIView):
             if update_fields:
                 node_run.save(update_fields=sorted(set(update_fields)))
 
+            run_update_fields = touch_run_liveness(
+                run,
+                recovery_state=recovery_state_for_status(run.status),
+            )
+            run.save(update_fields=sorted(set(run_update_fields)))
+
         return success_response(_serialize_node_run(node_run))
 
 
@@ -732,3 +791,106 @@ class EngineNodeCacheDetailView(APIView):
                 "stored": True,
             }
         )
+
+
+class EngineMemoryEntryView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        auth_error = _verify_engine_request(request)
+        if auth_error is not None:
+            return auth_error
+
+        try:
+            namespace, key = _parse_memory_identity(request)
+        except ValueError as exc:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message=str(exc),
+                status=400,
+            )
+
+        entry = MemoryEntry.objects.filter(namespace=namespace, key=key).first()
+        if entry is None:
+            return error_response(
+                code="NOT_FOUND",
+                message="Memory entry not found",
+                status=404,
+            )
+        if entry.expires_at is not None and entry.expires_at <= timezone.now():
+            entry.delete()
+            return error_response(
+                code="NOT_FOUND",
+                message="Memory entry not found",
+                status=404,
+            )
+
+        return success_response(
+            {
+                "namespace": entry.namespace,
+                "key": entry.key,
+                "value": redact_payload(entry.value_json),
+                "expires_at": entry.expires_at.isoformat() if entry.expires_at else None,
+            }
+        )
+
+    def put(self, request: Request) -> Response:
+        auth_error = _verify_engine_request(request)
+        if auth_error is not None:
+            return auth_error
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        try:
+            namespace, key = _parse_memory_identity(request, cast(dict[str, object], payload))
+            ttl_seconds = int(payload.get("ttl_seconds") or 0)
+        except (TypeError, ValueError) as exc:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message=str(exc),
+                status=400,
+            )
+
+        expires_at = None
+        if ttl_seconds > 0:
+            expires_at = timezone.now() + timedelta(seconds=ttl_seconds)
+
+        entry, _ = MemoryEntry.objects.update_or_create(
+            namespace=namespace,
+            key=key,
+            defaults={
+                "value_json": redact_payload(payload.get("value")),
+                "expires_at": expires_at,
+            },
+        )
+        return success_response(
+            {
+                "namespace": entry.namespace,
+                "key": entry.key,
+                "value": redact_payload(entry.value_json),
+                "expires_at": entry.expires_at.isoformat() if entry.expires_at else None,
+                "stored": True,
+            }
+        )
+
+    def delete(self, request: Request) -> Response:
+        auth_error = _verify_engine_request(request)
+        if auth_error is not None:
+            return auth_error
+
+        try:
+            namespace, key = _parse_memory_identity(request)
+        except ValueError as exc:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message=str(exc),
+                status=400,
+            )
+
+        deleted, _ = MemoryEntry.objects.filter(namespace=namespace, key=key).delete()
+        if deleted == 0:
+            return error_response(
+                code="NOT_FOUND",
+                message="Memory entry not found",
+                status=404,
+            )
+        return success_response({"deleted": True})

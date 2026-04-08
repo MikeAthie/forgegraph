@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -26,7 +25,6 @@ import (
 	"github.com/forgegraph/engine/application/usecase"
 	"github.com/forgegraph/engine/infrastructure/logger"
 
-	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -40,7 +38,6 @@ import (
 // Config holds engine configuration
 type Config struct {
 	GRPCPort                          string
-	DatabaseURL                       string
 	MaxWorkers                        int
 	DefaultTimeout                    int
 	CacheTTLSeconds                   int
@@ -76,16 +73,16 @@ type Config struct {
 }
 
 const (
-	runStateModeDualWrite        = "dual-write"
+	runStateModeLegacyDualWrite  = "dual-write"
 	runStateModeControlPlaneHTTP = "control-plane-http"
 	runStateModeInMemory         = "in-memory"
+	defaultRunStateMode          = runStateModeControlPlaneHTTP
 )
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
 	cfg := &Config{
 		GRPCPort:                          getEnv("GRPC_PORT", "50051"),
-		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		MaxWorkers:                        getEnvInt("MAX_WORKERS", 10),
 		DefaultTimeout:                    getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
 		CacheTTLSeconds:                   getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
@@ -117,21 +114,23 @@ func LoadConfig() *Config {
 		EventSpoolPath:                    getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
 		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
 		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
-		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", runStateModeDualWrite)),
+		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", defaultRunStateMode)),
 	}
 	return cfg
 }
 
 func normalizeRunStateMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "dual-write", "dual_write", "legacy-db", "legacy_db", "postgres":
-		return runStateModeDualWrite
+	case "":
+		return defaultRunStateMode
+	case "dual-write", "dual_write", "legacy-db", "legacy_db", "postgres":
+		return runStateModeLegacyDualWrite
 	case "control-plane-http", "control_plane_http", "control-plane", "control_plane", "http":
 		return runStateModeControlPlaneHTTP
 	case "in-memory", "in_memory", "memory":
 		return runStateModeInMemory
 	default:
-		return runStateModeDualWrite
+		return defaultRunStateMode
 	}
 }
 
@@ -142,21 +141,20 @@ func hasControlPlaneRepositoryConfig(cfg *Config) bool {
 	return strings.TrimSpace(cfg.ControlPlaneURL) != "" && strings.TrimSpace(cfg.CallbackSecret) != ""
 }
 
-func selectRunRepositoryDriver(cfg *Config, hasDB bool) (string, error) {
+func selectRunRepositoryDriver(cfg *Config) (string, error) {
 	mode := normalizeRunStateMode("")
 	if cfg != nil {
 		mode = cfg.RunStateMode
 	}
 
 	switch mode {
-	case runStateModeDualWrite:
-		if hasDB {
-			return runStateModeDualWrite, nil
-		}
-		if hasControlPlaneRepositoryConfig(cfg) {
-			return runStateModeControlPlaneHTTP, nil
-		}
-		return runStateModeInMemory, nil
+	case runStateModeLegacyDualWrite:
+		return "", fmt.Errorf(
+			"ENGINE_RUN_STATE_MODE=%s is no longer supported; use %s or %s",
+			runStateModeLegacyDualWrite,
+			runStateModeControlPlaneHTTP,
+			runStateModeInMemory,
+		)
 	case runStateModeControlPlaneHTTP:
 		if hasControlPlaneRepositoryConfig(cfg) {
 			return runStateModeControlPlaneHTTP, nil
@@ -492,46 +490,17 @@ func main() {
 	var memoryStore port.MemoryStore
 	var redisStore *store.RedisMemoryStore
 	var redisHealth *store.RedisHealthChecker
-	var db *sql.DB
 	var err error
-	if cfg.DatabaseURL != "" {
-		// Connect to PostgreSQL
-		db, err = sql.Open("postgres", cfg.DatabaseURL)
-		if err != nil {
-			log.Error("database_connection_failed", "error", err.Error())
-			os.Exit(1)
-		}
-		defer db.Close()
-
-		// Test connection
-		if err := db.Ping(); err != nil {
-			log.Error("database_ping_failed", "error", err.Error())
-			os.Exit(1)
-		}
-		log.Info("database_connected", "driver", "postgres")
-		memoryStore = store.NewPostgresMemoryStore(db)
-	} else {
-		log.Warn("database_url_not_set", "fallback", "in-memory")
-		memoryStore = store.NewInMemoryMemoryStore()
-	}
-
-	repoDriver, err := selectRunRepositoryDriver(cfg, db != nil)
+	repoDriver, err := selectRunRepositoryDriver(cfg)
 	if err != nil {
 		log.Error("run_repository_config_invalid", "error", err.Error())
 		os.Exit(1)
 	}
 
 	switch repoDriver {
-	case runStateModeDualWrite:
-		repo = repository.NewPostgresRunRepository(db)
-		log.Warn(
-			"run_repository_dual_write_mode",
-			"driver", "postgres",
-			"migration_mode", runStateModeDualWrite,
-			"note", "engine keeps legacy runtime writes while backend validates event-derived shadow state",
-		)
 	case runStateModeControlPlaneHTTP:
 		repo = repository.NewHTTPRunRepository(cfg.ControlPlaneURL, cfg.CallbackSecret, nil)
+		memoryStore = store.NewHTTPMemoryStore(cfg.ControlPlaneURL, cfg.CallbackSecret, nil)
 		log.Info(
 			"run_repository_initialized",
 			"driver", "control-plane-http",
@@ -540,6 +509,7 @@ func main() {
 		)
 	default:
 		repo = repository.NewMemoryRunRepository()
+		memoryStore = store.NewInMemoryMemoryStore()
 		log.Warn(
 			"run_repository_fallback",
 			"driver", "in-memory",
@@ -562,8 +532,7 @@ func main() {
 		if err != nil {
 			log.Error("redis_store_init_failed", "error", err.Error())
 		} else {
-			log.Info("redis_store_initialized", "addr", cfg.RedisAddr)
-			memoryStore = redisStore
+			log.Info("redis_store_initialized", "addr", cfg.RedisAddr, "role", "ephemeral-cache")
 			redisHealth = store.NewRedisHealthChecker(redisStore)
 		}
 	}
@@ -715,11 +684,7 @@ func main() {
 		if redisStore != nil {
 			summaryStore = redisStore
 		}
-		var costTracker *summarizer.CostTracker
-		if db != nil {
-			costTracker = summarizer.NewCostTracker(db)
-		}
-		summaryAdapter := summarizer.NewLLMSummarizerWithTracker(llmClient, "", costTracker)
+		summaryAdapter := summarizer.NewLLMSummarizerWithTracker(llmClient, "", nil)
 		summaryWorker := usecase.NewSummarizationWorker(summaryAdapter, summaryStore, 2, 100)
 		summaryWorker.Start(context.Background())
 		scheduler.SetSummarizationWorker(summaryWorker)

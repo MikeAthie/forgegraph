@@ -236,6 +236,74 @@ func TestSchedulerDeterministicPauseResumeSnapshot(t *testing.T) {
 	}
 }
 
+// Description: A fresh scheduler start resumes from the repository checkpoint instead of re-running completed work.
+// Invariants: checkpoint state is loaded before execution begins; completed nodes from the checkpoint are skipped; resume emits a resumed lifecycle event.
+// Edge cases: the engine starts with no active in-memory run context and reconstructs progress from durable repository state alone.
+func TestSchedulerDeterministicStartRunResumesFromRepositoryCheckpoint(t *testing.T) {
+	engine := NewTestEngine(t, 4)
+
+	startExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"unexpected": true}), nil
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		startOutput, ok := state.GetNodeOutput("start")
+		if !ok {
+			return nil, fmt.Errorf("missing checkpointed start output")
+		}
+		prepared, _ := startOutput.(map[string]any)["prepared"].(string)
+		return port.NewSuccessResult(map[string]any{"result": prepared + "-resumed"}), nil
+	})
+
+	runID := "run-deterministic-checkpoint-resume"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "finish", Type: string(value.NodeTypeOutput), Name: "Finish", Config: map[string]any{}},
+		},
+		[]entity.Edge{
+			{From: "start", To: "finish"},
+		},
+	)
+
+	engine.Repo.checkpoints[runID] = mockCheckpointState{
+		nodeID:        "start",
+		stepIndex:     1,
+		stateSnapshot: map[string]any{"node.start.output": map[string]any{"prepared": "ready"}},
+		completedNodes: []string{
+			"start",
+		},
+		graphJSON: graphJSON,
+	}
+
+	engine.StartRun(runID, graphJSON, `{"query":"ignored because checkpoint is authoritative"}`)
+	engine.AwaitBlockedAttempt(runID, "finish", 1)
+
+	if startExec.getExecuteCount() != 0 {
+		t.Fatalf("expected completed checkpointed node to be skipped, got %d executions", startExec.getExecuteCount())
+	}
+	if engine.Stepper.AttemptCount(runID, "start") != 0 {
+		t.Fatalf("expected no attempt for checkpointed node, got %d", engine.Stepper.AttemptCount(runID, "start"))
+	}
+
+	snapshot := engine.Snapshot(runID)
+	if snapshot.State["node.start.output"].(map[string]any)["prepared"] != "ready" {
+		t.Fatalf("expected checkpoint state to seed resumed run, got %#v", snapshot.State["node.start.output"])
+	}
+
+	engine.Release(runID, "finish")
+	snapshot = engine.AwaitRunStatus(runID, string(value.RunStatusSucceeded))
+	if snapshot.Output["result"] != "ready-resumed" {
+		t.Fatalf("expected resumed checkpoint output, got %#v", snapshot.Output)
+	}
+
+	events := engine.AwaitEvents("run_resumed event from checkpoint start", func(events []ObservedEvent) bool {
+		return countEvents(events, port.EventTypeRunResumed) >= 1
+	})
+	if countEvents(events, port.EventTypeRunResumed) < 1 {
+		t.Fatalf("expected run_resumed event for checkpoint-based start")
+	}
+}
+
 // Description: Retryable failures are retried only when the manual clock advances; final failure occurs after the configured max attempts.
 // Invariants: retries do not happen early; retry count is capped at three; terminal failure is emitted with the final attempt number.
 // Edge cases: downstream nodes never start when the retried node exhausts its policy.

@@ -33,6 +33,7 @@ It supervises a system of agents, tasks, decisions, memory, and cost over time. 
 
 - Product: [docs/product/vision.md](docs/product/vision.md)
 - Mental model: [docs/product/mental-model.md](docs/product/mental-model.md)
+- State ownership: [docs/architecture/state-ownership-contract.md](docs/architecture/state-ownership-contract.md)
 - Backend map: [docs/backend/domain-map.md](docs/backend/domain-map.md)
 - Frontend shell: [docs/frontend/app-shell.md](docs/frontend/app-shell.md)
 - Migration: [docs/migration/ui-rollout.md](docs/migration/ui-rollout.md)
