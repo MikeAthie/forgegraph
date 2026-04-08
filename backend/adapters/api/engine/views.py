@@ -219,12 +219,12 @@ def _decode_graph_json(raw_value: object) -> object:
 def _validate_run_status_transition(current_status: str, next_status: str) -> None:
     allowed = _RUN_STATUS_TRANSITIONS.get(current_status, {current_status})
     if next_status not in allowed:
-        raise ValueError(
-            f"invalid run status transition: {current_status} -> {next_status}"
-        )
+        raise ValueError(f"invalid run status transition: {current_status} -> {next_status}")
 
 
-def _parse_memory_identity(request: Request, payload: dict[str, object] | None = None) -> tuple[str, str]:
+def _parse_memory_identity(
+    request: Request, payload: dict[str, object] | None = None
+) -> tuple[str, str]:
     source = payload or {}
     namespace = str(source.get("namespace") or request.query_params.get("namespace") or "").strip()
     key = str(source.get("key") or request.query_params.get("key") or "").strip()

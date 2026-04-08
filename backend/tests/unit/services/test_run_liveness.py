@@ -13,7 +13,6 @@ from application.services.run_liveness import (
 )
 from infrastructure.orm.models import Graph, GraphVersion, Run, User
 
-
 pytestmark = pytest.mark.django_db
 
 

@@ -63,11 +63,6 @@ from application.services.metrics import record_run_completed, record_run_starte
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
 from application.services.redaction import redact_payload
-from application.services.run_liveness import (
-    engine_instance_label,
-    recovery_state_for_status,
-    touch_run_liveness,
-)
 from application.services.run_event_streaming import (
     add_event_level,
     event_levels_for_subscription,
@@ -77,6 +72,11 @@ from application.services.run_event_streaming import (
     normalize_requested_event_level,
     run_event_group_name,
     update_stream_summary,
+)
+from application.services.run_liveness import (
+    engine_instance_label,
+    recovery_state_for_status,
+    touch_run_liveness,
 )
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
