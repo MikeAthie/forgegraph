@@ -75,21 +75,8 @@ jobs:
         working-directory: backend
         run: uv sync --dev
 
-      - name: Ruff format (check)
-        working-directory: backend
-        run: uv run ruff format --check .
-
-      - name: Ruff lint
-        working-directory: backend
-        run: uv run ruff check .
-
-      - name: Mypy (strict)
-        working-directory: backend
-        run: uv run mypy .
-
-      - name: Pytest
-        working-directory: backend
-        run: uv run pytest
+      - name: Backend checks
+        run: bash scripts/ci/run_backend_checks.sh
 
 
   engine:
@@ -105,29 +92,8 @@ jobs:
           go-version: "1.23.0"
           cache: true
 
-      - name: Go fmt (check)
-        working-directory: engine
-        run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "gofmt required on:"
-            echo "$unformatted"
-            exit 1
-          fi
-
-      - name: Go vet
-        working-directory: engine
-        run: go vet ./...
-
-      - name: Go test
-        working-directory: engine
-        run: go test ./...
-
-      - name: Go test -race
-        working-directory: engine
-        env:
-          CGO_ENABLED: "1"
-        run: go test -race ./...
+      - name: Engine checks
+        run: bash scripts/ci/run_engine_checks.sh
 
 
   frontend:
@@ -148,21 +114,8 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Format (check)
-        working-directory: frontend
-        run: npm run format:check
-
-      - name: Lint
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Unit tests
-        working-directory: frontend
-        run: npm test
-
-      - name: Build
-        working-directory: frontend
-        run: npm run build
+      - name: Frontend checks
+        run: bash scripts/ci/run_frontend_checks.sh
 
 
   launch_qa_backend:
@@ -227,16 +180,7 @@ jobs:
         run: uv sync --dev
 
       - name: Launch QA - Backend Functional/Security
-        working-directory: backend
-        run: >
-          uv run pytest
-          tests/integration/adapters/test_run_api.py
-          tests/integration/adapters/test_run_history_security_api.py
-          tests/integration/adapters/test_credentials_security_api.py
-          tests/integration/adapters/test_audit_logs_api.py
-          tests/integration/adapters/test_metrics_api.py
-          tests/unit/services/test_redaction.py
-          -q
+        run: bash scripts/ci/run_launch_qa_backend.sh
 
 
   launch_qa_engine:
@@ -254,11 +198,7 @@ jobs:
           cache: true
 
       - name: Launch QA - Engine Reliability
-        working-directory: engine
-        run: |
-          go test ./application/usecase -run "Scheduler|OnError|RetryAfter|NonRetryable" -count=1
-          go test ./adapter/executor -run "HTTPExecutor|ToolExecutor|PromptExecutor" -count=1
-          CGO_ENABLED=1 go test -race ./application/usecase ./adapter/executor -count=1
+        run: bash scripts/ci/run_launch_qa_engine.sh
 
 
   launch_qa_frontend:
@@ -281,12 +221,7 @@ jobs:
         run: npm ci
 
       - name: Launch QA - Frontend UX
-        working-directory: frontend
-        run: >
-          npx jest --runInBand
-          __tests__/components/graph-editor/GraphEditor.test.tsx
-          __tests__/components/graph-editor/wizard/AgentWizard.test.tsx
-          __tests__/components/graph-editor/NodeConfigDialog.test.tsx
+        run: bash scripts/ci/run_launch_qa_frontend.sh
 
 
   launch_qa_report:

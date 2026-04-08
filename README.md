@@ -33,6 +33,26 @@ It supervises a system of agents, tasks, decisions, memory, and cost over time. 
 
 - Product: [docs/product/vision.md](docs/product/vision.md)
 - Mental model: [docs/product/mental-model.md](docs/product/mental-model.md)
+- State ownership: [docs/architecture/state-ownership-contract.md](docs/architecture/state-ownership-contract.md)
 - Backend map: [docs/backend/domain-map.md](docs/backend/domain-map.md)
 - Frontend shell: [docs/frontend/app-shell.md](docs/frontend/app-shell.md)
 - Migration: [docs/migration/ui-rollout.md](docs/migration/ui-rollout.md)
+
+## Local CI Hook
+
+Install the shared Git hook once per clone:
+
+- macOS/Linux: `bash scripts/install-git-hooks.sh`
+- PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1`
+
+Run the same gate manually without pushing:
+
+- macOS/Linux: `bash scripts/ci/run_required_checks.sh`
+- PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/run-required-checks.ps1`
+
+The `pre-push` hook runs the same repo-owned check scripts used by GitHub Actions. Backend checks expect local Postgres and Redis to be reachable on the repo defaults from `docker-compose.yml`:
+
+- Postgres: `localhost:5433`
+- Redis: `localhost:6379`
+
+Start them with `docker compose up -d postgres redis` before pushing.

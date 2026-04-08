@@ -2,6 +2,7 @@ from django.urls import path
 
 from adapters.api.engine.views import (
     EngineCredentialDetailView,
+    EngineMemoryEntryView,
     EngineNodeCacheDetailView,
     EngineRunCheckpointView,
     EngineRunDetailView,
@@ -41,5 +42,10 @@ urlpatterns = [
         "node-cache/<str:cache_key>",
         EngineNodeCacheDetailView.as_view(),
         name="engine-node-cache-detail",
+    ),
+    path(
+        "memory/entries",
+        EngineMemoryEntryView.as_view(),
+        name="engine-memory-entry",
     ),
 ]

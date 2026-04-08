@@ -859,6 +859,10 @@ class Run(models.Model):
     output_json = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
     trace_id = models.CharField(max_length=32, blank=True, default="")
+    last_progress_at = models.DateTimeField(null=True, blank=True)
+    last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+    engine_instance_id = models.CharField(max_length=64, blank=True, default="")
+    recovery_state = models.CharField(max_length=32, blank=True, default="idle")
 
     # Human Gate pause state (for durable resume)
     pause_state_json = models.JSONField(null=True, blank=True)
@@ -872,6 +876,8 @@ class Run(models.Model):
             models.Index(fields=["owner", "status"], name="runs_owner_status_idx"),
             models.Index(fields=["owner", "thread_id"], name="runs_owner_thread_idx"),
             models.Index(fields=["trace_id"], name="runs_trace_id_idx"),
+            models.Index(fields=["last_progress_at"], name="runs_progress_idx"),
+            models.Index(fields=["recovery_state"], name="runs_recovery_state_idx"),
         ]
 
     def __str__(self) -> str:

@@ -16,3 +16,5 @@ The backend control plane owns:
 It ingests engine events, materializes operator-facing system state, and exposes canonical state to the frontend over REST and WebSockets.
 
 Reference: [system-invariants.md](system-invariants.md)
+
+Primary contract: [state-ownership-contract.md](state-ownership-contract.md)

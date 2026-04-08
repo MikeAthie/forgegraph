@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "${ROOT}"
+
+echo "Running ForgeGraph required checks before push..."
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    powershell.exe -ExecutionPolicy Bypass -File "${ROOT}/scripts/run-required-checks.ps1"
+    ;;
+  *)
+    bash "${ROOT}/scripts/ci/run_required_checks.sh"
+    ;;
+esac

@@ -26,13 +26,18 @@ const (
 	extractFactsSystemPrompt = "You are a fact extraction service. Return only JSON with key: facts (array of {key,value,confidence,source_node_id})."
 )
 
+// UsageTracker records summarization usage through a backend-owned contract.
+type UsageTracker interface {
+	RecordSummarizationUsage(ctx context.Context, tenantID, model string, usage *executor.LLMUsage) error
+}
+
 // LLMSummarizer implements Summarizer using an LLM client.
 type LLMSummarizer struct {
 	client     executor.LLMClient
 	model      string
 	maxRetries int
 	retryDelay time.Duration
-	costs      *CostTracker
+	costs      UsageTracker
 }
 
 // NewLLMSummarizer creates a new summarizer with sensible defaults.
@@ -40,8 +45,8 @@ func NewLLMSummarizer(client executor.LLMClient, model string) *LLMSummarizer {
 	return NewLLMSummarizerWithTracker(client, model, nil)
 }
 
-// NewLLMSummarizerWithTracker creates a summarizer with an optional cost tracker.
-func NewLLMSummarizerWithTracker(client executor.LLMClient, model string, tracker *CostTracker) *LLMSummarizer {
+// NewLLMSummarizerWithTracker creates a summarizer with an optional usage tracker.
+func NewLLMSummarizerWithTracker(client executor.LLMClient, model string, tracker UsageTracker) *LLMSummarizer {
 	if model == "" {
 		model = defaultSummaryModel
 	}

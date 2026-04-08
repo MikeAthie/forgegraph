@@ -67,6 +67,7 @@ services:
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
+      RUN_LIVENESS_TIMEOUT_SECONDS: ${RUN_LIVENESS_TIMEOUT_SECONDS:-300}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
@@ -102,12 +103,12 @@ services:
     environment:
       GRPC_PORT: 50051
       METRICS_PORT: 9090
-      DATABASE_URL: postgres://forgegraph:forgegraph_secret@postgres:5432/forgegraph?sslmode=disable
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
       CONTROL_PLANE_URL: http://backend:8000
+      ENGINE_RUN_STATE_MODE: ${ENGINE_RUN_STATE_MODE:-control-plane-http}
       TOOL_MANIFEST_DIR: /app/tool-manifests
       MEMORY_GRPC_HOST: memory-grpc
       MEMORY_GRPC_PORT: 50052

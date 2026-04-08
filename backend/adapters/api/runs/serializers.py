@@ -83,6 +83,10 @@ class RunListSerializer(serializers.Serializer[Any]):
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
     memory_activity = serializers.JSONField(read_only=True, allow_null=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
+    last_progress_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    engine_instance_id = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_state = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class RunDetailSerializer(serializers.Serializer[Any]):
@@ -107,6 +111,10 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     error_message = serializers.CharField(read_only=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
+    last_progress_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    engine_instance_id = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_state = serializers.CharField(read_only=True, allow_blank=True)
     # Human Gate pause fields
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
@@ -158,6 +166,7 @@ class RunDeltaBroadcastSerializer(serializers.Serializer[Any]):
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_message = serializers.CharField(read_only=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_state = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class NodeRunDeltaSerializer(serializers.Serializer[Any]):

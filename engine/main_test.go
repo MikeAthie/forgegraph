@@ -5,32 +5,40 @@ import (
 	"testing"
 )
 
-func TestNormalizeRunStateModeDefaultsToDualWrite(t *testing.T) {
-	if got := normalizeRunStateMode(""); got != runStateModeDualWrite {
-		t.Fatalf("normalizeRunStateMode(\"\") = %s, want %s", got, runStateModeDualWrite)
+func TestNormalizeRunStateModeDefaultsToControlPlaneHTTP(t *testing.T) {
+	if got := normalizeRunStateMode(""); got != runStateModeControlPlaneHTTP {
+		t.Fatalf("normalizeRunStateMode(\"\") = %s, want %s", got, runStateModeControlPlaneHTTP)
 	}
-	if got := normalizeRunStateMode("postgres"); got != runStateModeDualWrite {
-		t.Fatalf("normalizeRunStateMode(postgres) = %s, want %s", got, runStateModeDualWrite)
+	if got := normalizeRunStateMode("postgres"); got != runStateModeLegacyDualWrite {
+		t.Fatalf("normalizeRunStateMode(postgres) = %s, want %s", got, runStateModeLegacyDualWrite)
 	}
 }
 
-func TestSelectRunRepositoryDriverUsesPostgresForDualWrite(t *testing.T) {
-	cfg := &Config{RunStateMode: runStateModeDualWrite}
+func TestSelectRunRepositoryDriverRejectsLegacyDualWrite(t *testing.T) {
+	cfg := &Config{RunStateMode: runStateModeLegacyDualWrite}
 
-	got, err := selectRunRepositoryDriver(cfg, true)
-	if err != nil {
-		t.Fatalf("selectRunRepositoryDriver() error = %v", err)
-	}
-	if got != runStateModeDualWrite {
-		t.Fatalf("selectRunRepositoryDriver() = %s, want %s", got, runStateModeDualWrite)
+	if _, err := selectRunRepositoryDriver(cfg); err == nil {
+		t.Fatal("expected dual-write mode to be rejected")
 	}
 }
 
 func TestSelectRunRepositoryDriverRequiresControlPlaneConfigForCutover(t *testing.T) {
 	cfg := &Config{RunStateMode: runStateModeControlPlaneHTTP}
 
-	if _, err := selectRunRepositoryDriver(cfg, true); err == nil {
+	if _, err := selectRunRepositoryDriver(cfg); err == nil {
 		t.Fatal("expected explicit cutover mode to require control-plane config")
+	}
+}
+
+func TestSelectRunRepositoryDriverAllowsInMemoryFallback(t *testing.T) {
+	cfg := &Config{RunStateMode: runStateModeInMemory}
+
+	got, err := selectRunRepositoryDriver(cfg)
+	if err != nil {
+		t.Fatalf("selectRunRepositoryDriver() error = %v", err)
+	}
+	if got != runStateModeInMemory {
+		t.Fatalf("selectRunRepositoryDriver() = %s, want %s", got, runStateModeInMemory)
 	}
 }
 

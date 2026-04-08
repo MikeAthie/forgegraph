@@ -80,6 +80,38 @@ class TestEngineRunApi:
         assert run.status == "running"
         assert run.trace_id == "trace-123"
         assert run.output_json == {"step": "started"}
+        assert run.last_progress_at is not None
+        assert run.recovery_state == "active"
+
+    def test_run_detail_rejects_terminal_status_regression(self, api_client):
+        user = User.objects.create_user(
+            email="engine-status-guard@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Engine Status Guard Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="succeeded")
+
+        patch_payload = {
+            "status": "running",
+        }
+        body, headers = _signed_json_request("test-secret", patch_payload)
+        response = api_client.generic(
+            "PATCH",
+            f"/api/engine/runs/{run.id}",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == 409
+        assert response.data["error"]["code"] == "INVALID_STATE"
+        run.refresh_from_db()
+        assert run.status == "succeeded"
 
     def test_checkpoint_upsert_preserves_newer_step(self, api_client):
         user = User.objects.create_user(
@@ -212,3 +244,36 @@ class TestEngineRunApi:
         stored_first = NodeRun.objects.get(id=node_run_id)
         assert stored_first.attempt == 1
         assert stored_first.input_json == {"prompt": "hello"}
+
+    def test_memory_entry_round_trip(self, api_client):
+        payload = {
+            "namespace": "tenant-a",
+            "key": "session-buffer",
+            "value": {"messages": ["hello"]},
+            "ttl_seconds": 60,
+        }
+        body, headers = _signed_json_request("test-secret", payload)
+        response = api_client.generic(
+            "PUT",
+            "/api/engine/memory/entries",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+        assert response.status_code == 200
+        assert response.data["data"]["stored"] is True
+
+        response = api_client.get(
+            "/api/engine/memory/entries",
+            {"namespace": "tenant-a", "key": "session-buffer"},
+            **_signed_headers("test-secret"),
+        )
+        assert response.status_code == 200
+        assert response.data["data"]["value"] == {"messages": ["hello"]}
+
+        response = api_client.delete(
+            "/api/engine/memory/entries?namespace=tenant-a&key=session-buffer",
+            **_signed_headers("test-secret"),
+        )
+        assert response.status_code == 200
+        assert response.data["data"]["deleted"] is True

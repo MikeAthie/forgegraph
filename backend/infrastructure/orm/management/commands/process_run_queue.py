@@ -17,6 +17,12 @@ from adapters.gateways.grpc_engine_client import (
 )
 from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.metrics import record_run_completed, record_run_started
+from application.services.run_liveness import (
+    engine_instance_label,
+    reconcile_stale_runs,
+    recovery_state_for_status,
+    touch_run_liveness,
+)
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     SubgraphResolutionError,
@@ -82,6 +88,7 @@ class Command(BaseCommand):
 
         while True:
             release_stale_entries(lock_timeout_seconds=queue_settings.lock_timeout_seconds)
+            reconcile_stale_runs()
             entry = claim_next_entry(worker_id=worker_id, settings_override=queue_settings)
             if entry is None:
                 if run_once:
@@ -147,7 +154,15 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             run.status = "running"
-            run.save(update_fields=["status"])
+            update_fields = ["status"]
+            update_fields.extend(
+                touch_run_liveness(
+                    run,
+                    recovery_state=recovery_state_for_status("running"),
+                    engine_instance_id=engine_instance_label(),
+                )
+            )
+            run.save(update_fields=sorted(set(update_fields)))
             record_run_started()
             broadcast_run_updated(run)
             mark_completed(entry)

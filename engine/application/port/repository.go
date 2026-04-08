@@ -8,8 +8,9 @@ import (
 	"github.com/forgegraph/engine/domain/entity"
 )
 
-// RunRepository persists engine runtime state through the configured migration contract.
-// Implementations may target the legacy shared DB during dual-write, a control-plane API after cutover, or in-memory storage for tests/fallbacks.
+// RunRepository persists engine runtime state through the backend-owned contract.
+// Implementations should target the control-plane API in production and may use
+// in-memory storage for tests or explicit local fallback only.
 type RunRepository interface {
 	// Run operations
 
