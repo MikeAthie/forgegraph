@@ -419,8 +419,8 @@ export const authApi = {
     return response.data;
   },
 
-  createWsTicket: async (): Promise<WsTicketResponse> => {
-    const response = await api.post<WsTicketResponse>(API_PATHS.auth.wsTicket, {});
+  createWsTicket: async (): Promise<WebSocketTicketResponse> => {
+    const response = await api.post<WebSocketTicketResponse>(API_PATHS.auth.wsTicket, {});
     return response.data;
   },
 

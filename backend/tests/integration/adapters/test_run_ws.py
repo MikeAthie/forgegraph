@@ -14,9 +14,8 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from application.services.auth_state import issue_ws_ticket, revoke_access_token
 from application.services.run_event_streaming import (
-    EVENT_LEVEL_MINIMAL,
-    EVENT_LEVEL_CRITICAL,
     EVENT_LEVEL_DEFAULT,
+    EVENT_LEVEL_MINIMAL,
     EVENT_LEVEL_VERBOSE,
     run_event_group_name,
 )
