@@ -16,8 +16,8 @@ from adapters.gateways.grpc_engine_client import (
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import broadcast_run_updated
-from application.services.metrics import record_run_completed, record_run_started
 from application.services.engine_selection import resolve_engine_callback_url, select_engine_target
+from application.services.metrics import record_run_completed, record_run_started
 from application.services.run_liveness import (
     reconcile_stale_runs,
     recovery_state_for_status,

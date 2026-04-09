@@ -62,8 +62,10 @@ from application.services.engine_selection import (
     EngineAssignmentError,
     get_engine_target_by_id,
     reconcile_run_engine_instance,
-    resolve_engine_callback_url,
     select_engine_target,
+)
+from application.services.engine_selection import (
+    resolve_engine_callback_url as resolve_engine_callback_url,
 )
 from application.services.event_categories import normalize_event_category
 from application.services.llm_pricing import calculate_cost
@@ -83,8 +85,12 @@ from application.services.run_event_streaming import (
 )
 from application.services.run_liveness import (
     engine_instance_label,
-    recovery_state_for_status,
-    touch_run_liveness,
+)
+from application.services.run_liveness import (
+    recovery_state_for_status as recovery_state_for_status,
+)
+from application.services.run_liveness import (
+    touch_run_liveness as touch_run_liveness,
 )
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
@@ -2771,7 +2777,8 @@ class EngineRunEventsView(APIView):
                 event_id=event_id,
                 message="Rejected engine callback due to engine ownership mismatch",
                 assigned_engine_instance_id=run.engine_instance_id or None,
-                callback_engine_instance_id=str(event.get("engine_instance_id") or "").strip() or None,
+                callback_engine_instance_id=str(event.get("engine_instance_id") or "").strip()
+                or None,
                 error_detail=str(exc),
                 category=normalized_category,
             )

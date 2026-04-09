@@ -43,7 +43,7 @@ class CheckpointContext:
     checkpoint_updated_at: datetime | None = None
 
     @classmethod
-    def from_run(cls, run: Run) -> "CheckpointContext":
+    def from_run(cls, run: Run) -> CheckpointContext:
         try:
             checkpoint = run.checkpoint
         except RunCheckpoint.DoesNotExist:
@@ -228,8 +228,9 @@ def reconcile_stale_runs(
     stale_before = effective_now - timedelta(seconds=max(threshold_seconds, 1))
 
     stale_runs = list(
-        Run.objects.filter(status="running", last_progress_at__lt=stale_before)
-        .order_by("last_progress_at", "started_at")[: max(limit, 1)]
+        Run.objects.filter(status="running", last_progress_at__lt=stale_before).order_by(
+            "last_progress_at", "started_at"
+        )[: max(limit, 1)]
     )
 
     result = RunLivenessResult(scanned=len(stale_runs))
