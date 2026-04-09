@@ -50,6 +50,7 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["queue"]["total_depth"] >= 2
     assert "oldest_pending_age_seconds" in payload["queue"]
     assert "by_tenant" in payload["queue"]
+    assert "websocket" in payload
     assert "guardrails" in payload
     assert "generated_at" in payload
 
