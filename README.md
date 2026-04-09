@@ -49,6 +49,7 @@ Run the same gate manually without pushing:
 
 - macOS/Linux: `bash scripts/ci/run_required_checks.sh`
 - PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/run-required-checks.ps1`
+- Shortcut from repo root on Windows: `.\checks.cmd` or `.\checks.ps1`
 
 The `pre-push` hook runs the same repo-owned check scripts used by GitHub Actions. Backend checks expect local Postgres and Redis to be reachable on the repo defaults from `docker-compose.yml`:
 

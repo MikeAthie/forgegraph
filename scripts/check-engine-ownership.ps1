@@ -1,7 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path $PSScriptRoot -Parent
-$repoRoot = Split-Path $root -Parent
+$repoRoot = Split-Path $PSScriptRoot -Parent
 
 function Assert-NoMatch {
   param(
@@ -9,6 +8,10 @@ function Assert-NoMatch {
     [string[]]$Paths,
     [string]$Message
   )
+
+  if (-not $Paths -or $Paths.Count -eq 0) {
+    throw "No files provided for pattern check: $Message"
+  }
 
   $matches = Select-String -Path $Paths -Pattern $Pattern -SimpleMatch
   if ($matches) {
@@ -23,6 +26,10 @@ function Assert-HasMatch {
     [string[]]$Paths,
     [string]$Message
   )
+
+  if (-not $Paths -or $Paths.Count -eq 0) {
+    throw "No files provided for pattern check: $Message"
+  }
 
   $matches = Select-String -Path $Paths -Pattern $Pattern -SimpleMatch
   if (-not $matches) {
