@@ -22,6 +22,7 @@ coverage/
 playwright-report/
 test-results/
 .cache/ms-playwright/
+.jest-cache/
 
 # Environment files
 .env
@@ -34,6 +35,7 @@ __pycache__/
 *.pyo
 .mypy_cache/
 .pytest_cache/
+.testmondata
 .venv/
 venv/
 env/

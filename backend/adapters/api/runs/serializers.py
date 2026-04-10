@@ -87,6 +87,7 @@ class RunListSerializer(serializers.Serializer[Any]):
     last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
     engine_instance_id = serializers.CharField(read_only=True, allow_blank=True)
     recovery_state = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_policy = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class RunDetailSerializer(serializers.Serializer[Any]):
@@ -115,6 +116,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
     engine_instance_id = serializers.CharField(read_only=True, allow_blank=True)
     recovery_state = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_policy = serializers.CharField(read_only=True, allow_blank=True)
     # Human Gate pause fields
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
@@ -167,6 +169,7 @@ class RunDeltaBroadcastSerializer(serializers.Serializer[Any]):
     error_message = serializers.CharField(read_only=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
     recovery_state = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_policy = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class NodeRunDeltaSerializer(serializers.Serializer[Any]):
@@ -205,6 +208,7 @@ class RunEventSerializer(serializers.Serializer[Any]):
     node_run = NodeRunDeltaSerializer(required=False)
     run = RunUpdateDeltaSerializer(required=False)
     payload = serializers.JSONField(required=False)
+    category = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         event_type = attrs.get("event_type")
@@ -229,8 +233,10 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
     event_id = serializers.CharField(required=False, allow_blank=True)
     version = serializers.IntegerField(required=False)
     type = serializers.ChoiceField(choices=ENGINE_EVENT_TYPE_CHOICES)
+    category = serializers.CharField(required=False, allow_blank=True)
     run_id = serializers.UUIDField()
     tenant_id = serializers.UUIDField()
+    engine_instance_id = serializers.CharField(required=False, allow_blank=True)
     node_id = serializers.CharField(required=False, allow_blank=True)
     node_type = serializers.CharField(required=False, allow_blank=True)
     node_name = serializers.CharField(required=False, allow_blank=True)

@@ -15,6 +15,7 @@ import type { NodeFormProps } from "../NodeConfigDialog";
  * Human gate node specific configuration
  */
 interface HumanGateConfig extends AgentConfig, AdvancedConfig {
+  prompt_message?: string;
   approval_message?: string;
   instructions?: string;
   timeout_hours?: number;
@@ -83,8 +84,11 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
         >
           <Textarea
             id="approval-message"
-            value={gateConfig.approval_message || ""}
-            onChange={(e) => handleChange("approval_message", e.target.value)}
+            value={gateConfig.prompt_message || gateConfig.approval_message || ""}
+            onChange={(e) => {
+              const value = e.target.value;
+              onChange({ ...config, prompt_message: value, approval_message: value });
+            }}
             placeholder="Please review the generated content before it is sent to the customer."
             rows={2}
             className="text-sm resize-none"

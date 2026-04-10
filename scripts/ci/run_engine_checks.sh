@@ -18,6 +18,8 @@ if [ -n "${unformatted}" ]; then
   exit 1
 fi
 
+bash "${SCRIPT_DIR}/check_engine_ownership.sh"
+
 log_section "Engine vet"
 go vet ./...
 
@@ -26,4 +28,3 @@ go test ./...
 
 log_section "Engine race tests"
 CGO_ENABLED=1 go test -race ./...
-

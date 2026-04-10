@@ -839,6 +839,11 @@ class Run(models.Model):
         ("failed", "Failed"),
         ("canceled", "Canceled"),
     ]
+    RECOVERY_POLICY_CHOICES = [
+        ("fail", "Fail"),
+        ("retry", "Retry"),
+        ("resume", "Resume"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -863,6 +868,11 @@ class Run(models.Model):
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
     engine_instance_id = models.CharField(max_length=64, blank=True, default="")
     recovery_state = models.CharField(max_length=32, blank=True, default="idle")
+    recovery_policy = models.CharField(
+        max_length=16,
+        choices=RECOVERY_POLICY_CHOICES,
+        default="fail",
+    )
 
     # Human Gate pause state (for durable resume)
     pause_state_json = models.JSONField(null=True, blank=True)

@@ -14,8 +14,8 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from application.services.auth_state import issue_ws_ticket, revoke_access_token
 from application.services.run_event_streaming import (
-    EVENT_LEVEL_CRITICAL,
     EVENT_LEVEL_DEFAULT,
+    EVENT_LEVEL_MINIMAL,
     EVENT_LEVEL_VERBOSE,
     run_event_group_name,
 )
@@ -145,13 +145,13 @@ async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
     assert channel_layer is not None
 
     await channel_layer.group_send(
-        run_event_group_name(run_id=str(run_id), level=EVENT_LEVEL_CRITICAL),
+        run_event_group_name(run_id=str(run_id), level=EVENT_LEVEL_MINIMAL),
         {
             "type": "broadcast.message",
             "message": {
                 "type": "run.updated",
                 "run_id": str(run_id),
-                "level": "critical",
+                "level": "minimal",
                 "run": {
                     "id": str(run_id),
                     "status": "running",

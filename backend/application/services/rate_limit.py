@@ -44,8 +44,14 @@ def check_rate_limit(
         try:
             count = int(cache.incr(key))
         except ValueError:
-            cache.set(key, 1, timeout=window_seconds)
-            count = 1
+            existing_value = cache.get(key)
+            try:
+                existing_count = int(existing_value) if existing_value is not None else None
+            except (TypeError, ValueError):
+                existing_count = None
+
+            count = 1 if existing_count is None else existing_count + 1
+            cache.set(key, count, timeout=window_seconds)
 
     remaining = max(0, limit - count)
     allowed = count <= limit

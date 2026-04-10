@@ -399,6 +399,36 @@ export async function addOutputNode(page: Page, label = "Output"): Promise<void>
   }
 }
 
+export async function addHumanGateNode(
+  page: Page,
+  options?: {
+    label?: string;
+    promptMessage?: string;
+    instructions?: string;
+  },
+): Promise<void> {
+  const label = options?.label ?? "Human Gate";
+  await addPaletteItem(page, "human_gate");
+  const dialog = page.getByRole("dialog", { name: /configure human gate node/i });
+  await expect(dialog).toBeVisible();
+  if (label !== "Human Gate") {
+    await dialog.locator("#node-label").fill(label);
+  }
+  if (options?.instructions) {
+    await dialog.locator("#instructions").fill(options.instructions);
+  }
+  await dialog.getByRole("button", { name: /^add node$/i }).click();
+  await expect(dialog).toBeHidden();
+
+  const node = getGraphNodeByLabel(page, label);
+  await expect(node).toBeVisible();
+  await node.click();
+
+  const promptField = page.getByPlaceholder("Please review and approve this step...");
+  await expect(promptField).toBeVisible();
+  await promptField.fill(options?.promptMessage ?? "Approve this execution step before it continues.");
+}
+
 export async function addAgentNode(page: Page, options: AgentWorkflowOptions): Promise<void> {
   await addPaletteItem(page, "agent");
   const dialog = page.getByRole("dialog", { name: /configure agent node/i });
@@ -656,6 +686,39 @@ export async function waitForRunTerminal(
       },
     )
     .toMatch(/^(succeeded|failed|canceled)$/);
+
+  if (!latestRun) {
+    throw new Error(`Run ${runId} did not return detail during polling.`);
+  }
+
+  return latestRun;
+}
+
+export async function waitForRunStatus(
+  request: APIRequestContext,
+  accessToken: string,
+  runId: string,
+  expectedStatus: string,
+): Promise<RunDetailResponse> {
+  let latestRun: RunDetailResponse | null = null;
+
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        expect(response.ok()).toBeTruthy();
+        const body = (await response.json()) as { data: RunDetailResponse };
+        latestRun = body.data;
+        return body.data.status;
+      },
+      {
+        timeout: 30_000,
+        message: `Timed out waiting for run ${runId} to reach status ${expectedStatus}.`,
+      },
+    )
+    .toBe(expectedStatus);
 
   if (!latestRun) {
     throw new Error(`Run ${runId} did not return detail during polling.`);

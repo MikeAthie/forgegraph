@@ -162,6 +162,7 @@ def _serialize_run(run: Run) -> dict[str, object]:
         "last_heartbeat_at": run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
         "engine_instance_id": run.engine_instance_id,
         "recovery_state": run.recovery_state,
+        "recovery_policy": run.recovery_policy,
     }
 
 

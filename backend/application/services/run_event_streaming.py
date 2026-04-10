@@ -9,6 +9,8 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
+from application.services.event_categories import normalize_event_category
+
 EVENT_LEVEL_MINIMAL = "minimal"
 EVENT_LEVEL_DEFAULT = "default"
 EVENT_LEVEL_VERBOSE = "verbose"
@@ -27,6 +29,10 @@ _EVENT_LEVEL_RANK = {
     EVENT_LEVEL_DEFAULT: 1,
     EVENT_LEVEL_VERBOSE: 2,
 }
+_EVENT_LEVEL_ALIASES = {
+    "critical": EVENT_LEVEL_MINIMAL,
+    "important": EVENT_LEVEL_DEFAULT,
+}
 
 
 def normalize_requested_event_level(raw_level: str | None) -> str:
@@ -34,10 +40,7 @@ def normalize_requested_event_level(raw_level: str | None) -> str:
         getattr(settings, "RUN_EVENT_STREAM_DEFAULT_LEVEL", DEFAULT_EVENT_LEVEL)
     ).strip()
     candidate = str(raw_level or configured_default or DEFAULT_EVENT_LEVEL).strip().lower()
-    if candidate == "critical":
-        candidate = EVENT_LEVEL_MINIMAL
-    elif candidate == "important":
-        candidate = EVENT_LEVEL_DEFAULT
+    candidate = _EVENT_LEVEL_ALIASES.get(candidate, candidate)
     if candidate in _EVENT_LEVEL_RANK:
         return candidate
     return DEFAULT_EVENT_LEVEL
@@ -60,6 +63,22 @@ def classify_transport_event_level(
     normalized_type = str(event_type or "").strip()
     normalized_payload = payload if isinstance(payload, dict) else {}
 
+    if normalized_type == "run.updated":
+        return EVENT_LEVEL_MINIMAL
+    if normalized_type == "run.schema_validation":
+        return EVENT_LEVEL_DEFAULT
+    if normalized_type == "node_run.updated":
+        return EVENT_LEVEL_MINIMAL
+    if normalized_type == STREAM_SUMMARY_EVENT_TYPE:
+        if bool(normalized_payload.get("final")):
+            return EVENT_LEVEL_MINIMAL
+        return EVENT_LEVEL_DEFAULT
+    if normalized_type == "node_stream.chunk":
+        return EVENT_LEVEL_VERBOSE
+    if normalized_type.startswith("agent."):
+        return EVENT_LEVEL_VERBOSE
+    if "error" in normalized_type or "decision" in normalized_type:
+        return EVENT_LEVEL_MINIMAL
     if normalized_type in {
         "connection_established",
         "heartbeat",
@@ -101,6 +120,11 @@ def add_event_level(
         level or classify_transport_event_level(str(message.get("type") or ""), payload)
     )
     enriched["level"] = enriched_level
+    enriched["category"] = normalize_event_category(
+        str(message.get("type") or ""),
+        category=cast_to_str(message.get("category")),
+        payload=payload,
+    )
     return enriched
 
 
@@ -130,6 +154,14 @@ def _stream_summary_min_chunks() -> int:
 
 def _stream_summary_preview_chars() -> int:
     return int(getattr(settings, "RUN_EVENT_STREAM_SUMMARY_PREVIEW_CHARS", 2000))
+
+
+def _stream_summary_max_pending_chunks() -> int:
+    return int(getattr(settings, "RUN_EVENT_STREAM_SUMMARY_MAX_PENDING_CHUNKS", 24))
+
+
+def _stream_summary_max_active_streams_per_run() -> int:
+    return int(getattr(settings, "RUN_EVENT_STREAM_SUMMARY_MAX_ACTIVE_STREAMS_PER_RUN", 16))
 
 
 def _stream_summary_state_key(*, run_id: str, node_id: str, attempt: int) -> str:
@@ -174,6 +206,8 @@ def _remember_stream_key(*, run_id: str, state_key: str) -> None:
         known_keys = []
     if state_key not in known_keys:
         known_keys.append(state_key)
+    max_active = max(_stream_summary_max_active_streams_per_run(), 1)
+    known_keys = known_keys[-max_active:]
     cache.set(index_key, known_keys, timeout=_stream_summary_cache_ttl_seconds())
 
 
@@ -272,6 +306,8 @@ def update_stream_summary(
     pending_chunk_count = int(state["pending_chunk_count"])
     should_emit = False
     if isinstance(state.get("latest_agent_event"), dict):
+        should_emit = True
+    elif pending_chunk_count >= _stream_summary_max_pending_chunks():
         should_emit = True
     elif pending_chunk_count >= _stream_summary_min_chunks():
         should_emit = True

@@ -7,11 +7,14 @@ import pytest
 from django.utils import timezone
 
 from application.services.run_liveness import (
+    RECOVERY_POLICY_RESUME,
+    CheckpointContext,
+    apply_recovery_policy,
     reconcile_stale_runs,
     recovery_state_for_status,
     touch_run_liveness,
 )
-from infrastructure.orm.models import Graph, GraphVersion, Run, User
+from infrastructure.orm.models import Graph, GraphVersion, Run, RunCheckpoint, RunEvent, User
 
 pytestmark = pytest.mark.django_db
 
@@ -59,3 +62,69 @@ def test_reconcile_stale_runs_fails_stuck_running_run():
     assert run.status == "failed"
     assert run.recovery_state == "stalled_failed"
     assert "Run stalled with no backend-observed progress" in run.error_message
+
+
+def test_run_recovery_policy_defaults_to_fail():
+    run = _make_run(status="running")
+
+    assert run.recovery_policy == "fail"
+
+
+def test_apply_recovery_policy_records_checkpoint_context():
+    run = _make_run(status="running", last_progress_at=timezone.now() - timedelta(minutes=10))
+    checkpoint = RunCheckpoint.objects.create(
+        run=run,
+        node_id="approval_gate",
+        step_index=4,
+        state_json={"state": "snapshot"},
+        completed_nodes=["draft"],
+        skipped_nodes=[],
+        graph_json={"nodes": [], "edges": []},
+    )
+    checkpoint_context = CheckpointContext.from_run(run)
+
+    applied = apply_recovery_policy(
+        run,
+        checkpoint_context=checkpoint_context,
+        now=timezone.now(),
+    )
+
+    assert applied is True
+    run.refresh_from_db()
+    assert run.status == "failed"
+    assert "checkpoint=node:approval_gate step:4" in run.error_message
+
+    event = RunEvent.objects.get(run=run, event_type="run.updated")
+    assert event.payload["recovery_policy"] == "fail"
+    assert event.payload["checkpoint_available"] is True
+    assert event.payload["checkpoint_node_id"] == "approval_gate"
+    assert event.payload["checkpoint_step_index"] == 4
+    assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
+
+
+def test_reconcile_stale_runs_fails_unimplemented_resume_policy_and_marks_context():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    run = _make_run(status="running", last_progress_at=stale_time)
+    run.recovery_policy = RECOVERY_POLICY_RESUME
+    run.save(update_fields=["recovery_policy"])
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "failed"
+    assert "recovery policy 'resume' is not implemented" in run.error_message
+    event = RunEvent.objects.get(run=run, event_type="run.updated")
+    assert event.payload["checkpoint_available"] is False
+    assert event.payload["recovery_policy"] == RECOVERY_POLICY_RESUME
+
+
+def test_reconcile_stale_runs_skips_paused_runs():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    _make_run(status="paused", last_progress_at=stale_time)
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 0
+    assert result.reconciled == 0

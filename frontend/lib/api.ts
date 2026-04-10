@@ -110,6 +110,7 @@ const API_PATHS = {
     logout: "/api/auth/logout",
     refresh: "/api/auth/refresh",
     me: "/api/auth/me",
+    wsTicket: "/api/auth/ws-ticket",
     ssoLogin: "/api/auth/sso/auth0/login",
     ssoCallback: "/api/auth/sso/auth0/callback",
     ssoProvider: "/api/auth/sso/provider",
@@ -415,6 +416,11 @@ export const authApi = {
 
   register: async (email: string, password: string): Promise<User> => {
     const response = await api.post<User>(API_PATHS.auth.register, { email, password });
+    return response.data;
+  },
+
+  createWsTicket: async (): Promise<WebSocketTicketResponse> => {
+    const response = await api.post<WebSocketTicketResponse>(API_PATHS.auth.wsTicket, {});
     return response.data;
   },
 

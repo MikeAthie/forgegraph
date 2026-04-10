@@ -9,6 +9,7 @@ import (
 
 // EventType defines the type of execution event
 type EventType string
+type EventCategory string
 
 const (
 	// Run-level events
@@ -27,6 +28,11 @@ const (
 	EventTypeNodeSkipped     EventType = "node_skipped"
 	EventTypeNodeRetrying    EventType = "node_retrying"
 	EventTypeNodeStreamChunk EventType = "node_stream_chunk"
+)
+
+const (
+	EventCategoryState         EventCategory = "state"
+	EventCategoryObservability EventCategory = "observability"
 )
 
 const EventVersion = 1
@@ -65,6 +71,8 @@ type ExecutionEvent struct {
 	Version int `json:"version"`
 	// Type is the event type
 	Type EventType `json:"type"`
+	// Category distinguishes backend state-triggering events from observability-only events.
+	Category EventCategory `json:"category,omitempty"`
 
 	// RunID is the run this event belongs to
 	RunID string `json:"run_id"`
@@ -104,6 +112,8 @@ type ExecutionEvent struct {
 	Tracestate  string `json:"tracestate,omitempty"`
 	TraceID     string `json:"trace_id,omitempty"`
 	SpanID      string `json:"span_id,omitempty"`
+	// EngineInstanceID identifies the emitting engine instance for callback validation.
+	EngineInstanceID string `json:"engine_instance_id,omitempty"`
 }
 
 // NewEvent creates a new execution event with the current timestamp
@@ -112,9 +122,34 @@ func NewEvent(eventType EventType, runID string) *ExecutionEvent {
 		EventID:   uuid.NewString(),
 		Version:   EventVersion,
 		Type:      eventType,
+		Category:  inferEventCategory(eventType),
 		RunID:     runID,
 		Timestamp: time.Now().UnixMilli(),
 	}
+}
+
+func inferEventCategory(eventType EventType) EventCategory {
+	switch eventType {
+	case EventTypeRunStarted,
+		EventTypeRunCompleted,
+		EventTypeRunFailed,
+		EventTypeRunPaused,
+		EventTypeRunResumed,
+		EventTypeRunCanceled,
+		EventTypeNodeStarted,
+		EventTypeNodeCompleted,
+		EventTypeNodeFailed,
+		EventTypeNodeSkipped,
+		EventTypeNodeRetrying:
+		return EventCategoryState
+	default:
+		return EventCategoryObservability
+	}
+}
+
+// InferEventCategory returns the normalized category for an execution event type.
+func InferEventCategory(eventType EventType) EventCategory {
+	return inferEventCategory(eventType)
 }
 
 // WithNode adds node information to the event
@@ -167,6 +202,12 @@ func (e *ExecutionEvent) WithTrace(traceparent string, tracestate string, traceI
 	e.Tracestate = tracestate
 	e.TraceID = traceID
 	e.SpanID = spanID
+	return e
+}
+
+// WithEngineInstanceID adds the emitting engine instance identifier to the event.
+func (e *ExecutionEvent) WithEngineInstanceID(engineInstanceID string) *ExecutionEvent {
+	e.EngineInstanceID = engineInstanceID
 	return e
 }
 

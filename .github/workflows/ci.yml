@@ -1,9 +1,11 @@
-name: CI
+name: Full CI
 
 on:
-  pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -10,10 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,9 +27,11 @@ var ErrEventCallbackNotConfigured = errors.New("event callback URL is required")
 
 // HTTPEventEmitter sends execution events to the control plane via HTTP POST.
 type HTTPEventEmitter struct {
-	client      *http.Client
-	callbackURL string
-	secret      string
+	client           *http.Client
+	callbackURL      string
+	secret           string
+	eventVerbosity   string
+	engineInstanceID string
 
 	// Async event handling
 	eventChan chan *port.ExecutionEvent
@@ -74,6 +78,10 @@ type HTTPEventEmitterConfig struct {
 
 	// SpoolFlushInterval controls how often the emitter retries spooled events.
 	SpoolFlushInterval time.Duration
+	// EventVerbosity controls which classes of events are emitted.
+	EventVerbosity string
+	// EngineInstanceID stamps every emitted event with the engine instance identity.
+	EngineInstanceID string
 }
 
 // DefaultHTTPEventEmitterConfig returns sensible defaults
@@ -128,6 +136,8 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 		client:             client,
 		callbackURL:        config.CallbackURL,
 		secret:             config.SignatureSecret,
+		eventVerbosity:     normalizeEventVerbosity(config.EventVerbosity),
+		engineInstanceID:   config.EngineInstanceID,
 		eventChan:          make(chan *port.ExecutionEvent, bufferSize),
 		maxRetries:         maxRetries,
 		retryDelay:         retryDelay,
@@ -145,10 +155,54 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 	return emitter, nil
 }
 
+func normalizeEventVerbosity(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "default":
+		return "default"
+	case "minimal":
+		return "minimal"
+	case "verbose":
+		return "verbose"
+	default:
+		return "default"
+	}
+}
+
+func eventAllowedForVerbosity(verbosity string, event *port.ExecutionEvent) bool {
+	if event == nil {
+		return false
+	}
+	switch normalizeEventVerbosity(verbosity) {
+	case "minimal":
+		return event.Category == port.EventCategoryState
+	case "default", "verbose":
+		return true
+	default:
+		return true
+	}
+}
+
+func (e *HTTPEventEmitter) prepareEvent(event *port.ExecutionEvent) *port.ExecutionEvent {
+	if event == nil {
+		return nil
+	}
+	if event.Category == "" {
+		event.Category = port.EventCategory(port.InferEventCategory(event.Type))
+	}
+	if event.EngineInstanceID == "" && strings.TrimSpace(e.engineInstanceID) != "" {
+		event.EngineInstanceID = strings.TrimSpace(e.engineInstanceID)
+	}
+	return event
+}
+
 // Emit sends an event to the control plane synchronously
 func (e *HTTPEventEmitter) Emit(ctx context.Context, event *port.ExecutionEvent) error {
 	if e.callbackURL == "" {
 		return ErrEventCallbackNotConfigured
+	}
+	event = e.prepareEvent(event)
+	if !eventAllowedForVerbosity(e.eventVerbosity, event) {
+		return nil
 	}
 
 	return e.sendWithRetry(ctx, event, true)
@@ -157,6 +211,10 @@ func (e *HTTPEventEmitter) Emit(ctx context.Context, event *port.ExecutionEvent)
 // EmitAsync queues an event for asynchronous delivery
 func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
 	if event == nil {
+		return
+	}
+	event = e.prepareEvent(event)
+	if !eventAllowedForVerbosity(e.eventVerbosity, event) {
 		return
 	}
 
@@ -336,7 +394,15 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
+		responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if readErr != nil {
+			return fmt.Errorf("server returned status %d (failed to read response body: %w)", resp.StatusCode, readErr)
+		}
+		bodyText := strings.TrimSpace(string(responseBody))
+		if bodyText == "" {
+			return fmt.Errorf("server returned status %d", resp.StatusCode)
+		}
+		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, bodyText)
 	}
 
 	return nil

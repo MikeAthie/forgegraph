@@ -337,6 +337,8 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 # Engine Configuration (Go gRPC service)
 ENGINE_HOST = os.environ.get("ENGINE_HOST", "localhost")
 ENGINE_PORT = int(os.environ.get("ENGINE_PORT", "50051"))
+ENGINE_INSTANCE_ID = os.environ.get("ENGINE_INSTANCE_ID", "")
+ENGINE_TARGETS = os.environ.get("ENGINE_TARGETS", "")
 ENGINE_CALLBACK_URL = os.environ.get(
     "ENGINE_CALLBACK_URL",
     "http://localhost:8000/api/runs/engine-events",
@@ -344,6 +346,13 @@ ENGINE_CALLBACK_URL = os.environ.get(
 ENGINE_CALLBACK_SECRET = os.environ.get("ENGINE_CALLBACK_SECRET", "")
 ENGINE_CALLBACK_MAX_SKEW_SECONDS = int(os.environ.get("ENGINE_CALLBACK_MAX_SKEW_SECONDS", "600"))
 RUN_LIVENESS_TIMEOUT_SECONDS = int(os.environ.get("RUN_LIVENESS_TIMEOUT_SECONDS", "300"))
+RUN_EVENT_STREAM_DEFAULT_LEVEL = os.environ.get("RUN_EVENT_STREAM_DEFAULT_LEVEL", "default")
+RUN_EVENT_STREAM_SUMMARY_MAX_PENDING_CHUNKS = int(
+    os.environ.get("RUN_EVENT_STREAM_SUMMARY_MAX_PENDING_CHUNKS", "24")
+)
+RUN_EVENT_STREAM_SUMMARY_MAX_ACTIVE_STREAMS_PER_RUN = int(
+    os.environ.get("RUN_EVENT_STREAM_SUMMARY_MAX_ACTIVE_STREAMS_PER_RUN", "16")
+)
 ALLOWED_LLM_PROVIDERS = [
     provider.strip().lower()
     for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic").split(",")

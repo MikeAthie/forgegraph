@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -150,7 +151,9 @@ func TestEmitAsyncAfterCloseSpoolsInsteadOfDropping(t *testing.T) {
 
 func TestEmitSpoolsOnDeliveryFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"detail":"backend unavailable"}`))
 	}))
 	defer server.Close()
 
@@ -178,6 +181,9 @@ func TestEmitSpoolsOnDeliveryFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Emit() error")
 	}
+	if !strings.Contains(err.Error(), "backend unavailable") {
+		t.Fatalf("Emit() error = %v, want response body detail", err)
+	}
 
 	data, readErr := os.ReadFile(spoolPath)
 	if readErr != nil {
@@ -194,6 +200,91 @@ func TestEmitSpoolsOnDeliveryFailure(t *testing.T) {
 	}
 	if event.RunID != "run-1" {
 		t.Fatalf("event.RunID = %s, want run-1", event.RunID)
+	}
+}
+
+func TestEmitMinimalVerbosityDropsObservabilityEvents(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL:    server.URL,
+		Client:         server.Client(),
+		EventVerbosity: "minimal",
+		MaxRetries:     1,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	if err := emitter.Emit(context.Background(), port.NewEvent(port.EventTypeNodeStreamChunk, "run-1")); err != nil {
+		t.Fatalf("Emit() error = %v", err)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("requestCount = %d, want 0", got)
+	}
+}
+
+func TestEmitStampsEngineInstanceAndCategory(t *testing.T) {
+	received := make(chan *port.ExecutionEvent, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var envelope struct {
+			Data port.ExecutionEvent `json:"data"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		received <- &envelope.Data
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL:      server.URL,
+		Client:           server.Client(),
+		EngineInstanceID: "engine-a",
+		MaxRetries:       1,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	event := port.NewEvent(port.EventTypeRunStarted, "run-1")
+	event.Category = ""
+	if err := emitter.Emit(context.Background(), event); err != nil {
+		t.Fatalf("Emit() error = %v", err)
+	}
+
+	select {
+	case delivered := <-received:
+		if delivered.EngineInstanceID != "engine-a" {
+			t.Fatalf("EngineInstanceID = %s, want engine-a", delivered.EngineInstanceID)
+		}
+		if delivered.Category != port.EventCategoryState {
+			t.Fatalf("Category = %s, want %s", delivered.Category, port.EventCategoryState)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for emitted event")
 	}
 }
 
