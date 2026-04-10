@@ -5,5 +5,5 @@ if (-not (Test-Path $script)) {
   throw "Missing required script: $script"
 }
 
-powershell -NoProfile -ExecutionPolicy Bypass -File $script -ScriptRelativePath "scripts/ci/run_required_checks.sh"
+powershell -NoProfile -ExecutionPolicy Bypass -File $script -ScriptRelativePath "scripts/ci/run_required_checks_fast.sh"
 exit $LASTEXITCODE

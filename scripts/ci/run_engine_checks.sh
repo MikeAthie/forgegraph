@@ -18,7 +18,7 @@ if [ -n "${unformatted}" ]; then
   exit 1
 fi
 
-"${SCRIPT_DIR}/check_engine_ownership.sh"
+bash "${SCRIPT_DIR}/check_engine_ownership.sh"
 
 log_section "Engine vet"
 go vet ./...

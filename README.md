@@ -51,6 +51,16 @@ Run the same gate manually without pushing:
 - PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/run-required-checks.ps1`
 - Shortcut from repo root on Windows: `.\checks.cmd` or `.\checks.ps1`
 
+The PowerShell wrappers intentionally delegate to `scripts/ci/run_required_checks.sh`, so local Windows runs and GitHub Actions use the same repo-owned check scripts.
+
+Run the fast selective gate locally:
+
+- macOS/Linux: `bash scripts/ci/run_required_checks_fast.sh`
+- PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/run-required-checks-fast.ps1`
+- Shortcut from repo root on Windows: `.\checks-fast.cmd` or `.\checks-fast.ps1`
+
+PR CI uses the fast selective scripts. Pushes to `main` and nightly runs use the full authoritative gate.
+
 The `pre-push` hook runs the same repo-owned check scripts used by GitHub Actions. Backend checks expect local Postgres and Redis to be reachable on the repo defaults from `docker-compose.yml`:
 
 - Postgres: `localhost:5433`

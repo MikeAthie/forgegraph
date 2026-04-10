@@ -1,3 +1,4 @@
+const path = require("path");
 const nextJest = require("next/jest");
 
 const createJestConfig = nextJest({
@@ -15,6 +16,7 @@ const customJestConfig = {
   testMatch: ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],
   testPathIgnorePatterns: ["<rootDir>/__tests__/e2e/"],
   modulePathIgnorePatterns: ["<rootDir>/.next/"],
+  cacheDirectory: process.env.JEST_CACHE_DIR || path.join(__dirname, ".jest-cache"),
   collectCoverageFrom: [
     "components/**/*.{js,jsx,ts,tsx}",
     "contexts/**/*.{js,jsx,ts,tsx}",
