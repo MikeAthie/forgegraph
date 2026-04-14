@@ -32,9 +32,26 @@ search_file() {
 
 log_section "Engine ownership guardrails"
 
+[ -f docs/architecture/runtime-invariants.md ] || {
+  echo "Missing canonical runtime contract: docs/architecture/runtime-invariants.md" >&2
+  exit 1
+}
+
 if search_text 'legacy-db|legacy_db|run_repository_fallback' engine; then
   echo "Legacy engine persistence fallback detected. Remove forbidden runtime compatibility paths." >&2
   exit 1
+fi
+
+if command -v rg >/dev/null 2>&1; then
+  if rg -n '"database/sql"|gorm\.io|github\.com/lib/pq|github\.com/jackc/pgx|github\.com/jmoiron/sqlx' engine --glob '*.go'; then
+    echo "Direct database persistence import detected in engine Go source." >&2
+    exit 1
+  fi
+else
+  if grep -R -n -E --include='*.go' '"database/sql"|gorm\.io|github\.com/lib/pq|github\.com/jackc/pgx|github\.com/jmoiron/sqlx' engine; then
+    echo "Direct database persistence import detected in engine Go source." >&2
+    exit 1
+  fi
 fi
 
 if search_file 'normalizeRunStateMode\("postgres"\).*dual-write' engine/main_test.go; then

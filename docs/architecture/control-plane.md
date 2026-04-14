@@ -1,5 +1,7 @@
 # Control Plane
 
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+
 The backend control plane owns:
 
 - canonical persisted business state
@@ -17,4 +19,4 @@ It ingests engine events, materializes operator-facing system state, and exposes
 
 Reference: [system-invariants.md](system-invariants.md)
 
-Primary contract: [state-ownership-contract.md](state-ownership-contract.md)
+Primary runtime contract: [runtime-invariants.md](runtime-invariants.md)

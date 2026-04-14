@@ -20,12 +20,12 @@ jobs:
         image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: forgegraph
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
         ports:
-          - 5432:5432
+          - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U postgres"
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -39,21 +39,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-
-    env:
-      DB_HOST: localhost
-      DB_PORT: "5432"
-      DB_NAME: forgegraph
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      REDIS_HOST: localhost
-      REDIS_PORT: "6379"
-      SECRET_KEY: "ci-not-a-secret"
-      DEBUG: "False"
-      DJANGO_SETTINGS_MODULE: config.settings
-      ALLOWED_HOSTS: "localhost"
-      ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
-      SECURE_SSL_REDIRECT: "false"
 
     steps:
       - uses: actions/checkout@v5

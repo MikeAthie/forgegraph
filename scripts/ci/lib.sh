@@ -28,7 +28,25 @@ require_tcp_service() {
   fi
 }
 
+load_env_file() {
+  local env_file="$1"
+  if [[ ! -f "${env_file}" ]]; then
+    return 0
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "${env_file}"
+  set +a
+}
+
 export_backend_ci_env() {
+  local root
+  root="$(forgegraph_repo_root)"
+  load_env_file "${root}/.env.test"
+
+  export FORGEGRAPH_ENV_FILE="${FORGEGRAPH_ENV_FILE:-.env.test}"
+  export TESTING="${TESTING:-true}"
   export DB_HOST="${DB_HOST:-localhost}"
   export DB_PORT="${DB_PORT:-5433}"
   export DB_NAME="${DB_NAME:-forgegraph}"
@@ -38,9 +56,8 @@ export_backend_ci_env() {
   export REDIS_PORT="${REDIS_PORT:-6379}"
   export SECRET_KEY="${SECRET_KEY:-ci-not-a-secret}"
   export DEBUG="${DEBUG:-False}"
-  export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
-  export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost}"
+  export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.test_settings}"
+  export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1,testserver}"
   export ENCRYPTION_KEY="${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}"
   export SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT:-false}"
 }
-

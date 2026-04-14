@@ -55,12 +55,49 @@ function Resolve-CommandPath {
   return $null
 }
 
+function Resolve-NodeJsCli {
+  param([Parameter(Mandatory = $true)][string]$CliName)
+
+  $nodePath = Resolve-CommandPath "node"
+  if (-not $nodePath) {
+    return $null
+  }
+
+  $nodeDir = Split-Path -Parent $nodePath
+  $cliFile = switch ($CliName) {
+    "npm" { "npm-cli.js" }
+    "npx" { "npx-cli.js" }
+    default { return $null }
+  }
+
+  $cliPath = Join-Path $nodeDir "node_modules\npm\bin\$cliFile"
+  if (-not (Test-Path -LiteralPath $cliPath -PathType Leaf)) {
+    return $null
+  }
+
+  return @{
+    NodePath = $nodePath
+    CliPath  = (Resolve-Path -LiteralPath $cliPath).Path
+  }
+}
+
 function Get-BashCommandSetup {
-  $commands = @("go", "gofmt", "rg", "node", "npm", "npx")
+  $commands = @("go", "gofmt", "rg", "node", "npm", "npx", "python", "uv")
   $lines = New-Object System.Collections.Generic.List[string]
   $resolvedCommands = New-Object System.Collections.Generic.List[string]
 
   foreach ($command in $commands) {
+    if ($command -in @("npm", "npx")) {
+      $nodeCli = Resolve-NodeJsCli $command
+      if ($nodeCli) {
+        $bashNodePath = Convert-ToGitBashPath $nodeCli.NodePath
+        $bashCliPath = ($nodeCli.CliPath -replace '\\', '/')
+        $lines.Add(('{0}() {{ ''{1}'' ''{2}'' "$@"; }}' -f $command, $bashNodePath, $bashCliPath))
+        $resolvedCommands.Add($command)
+        continue
+      }
+    }
+
     $resolvedPath = Resolve-CommandPath $command
     if (-not $resolvedPath) {
       continue

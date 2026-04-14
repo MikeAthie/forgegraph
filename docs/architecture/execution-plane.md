@@ -1,5 +1,7 @@
 # Execution Plane
 
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+
 The Go engine is the execution plane.
 
 It owns:
@@ -26,4 +28,4 @@ Human-in-the-loop flows should suspend through backend-owned snapshots, then res
 
 Reference: [system-invariants.md](system-invariants.md)
 
-Primary contract: [state-ownership-contract.md](state-ownership-contract.md)
+Primary runtime contract: [runtime-invariants.md](runtime-invariants.md)

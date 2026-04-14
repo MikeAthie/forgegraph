@@ -669,3 +669,18 @@ class TestRunStatusTransitions:
 
         run.refresh_from_db()
         assert run.status == "running"
+
+    def test_run_can_transition_from_paused_to_resume_requested(self, user):
+        """Test that a paused run can move into resume_requested while the engine acks resume."""
+        graph = Graph.objects.create(owner=user, name="Test Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        now = timezone.now()
+        run = Run.objects.create(owner=user, graph_version=version, status="paused", started_at=now)
+
+        run.status = "resume_requested"
+        run.save()
+
+        run.refresh_from_db()
+        assert run.status == "resume_requested"

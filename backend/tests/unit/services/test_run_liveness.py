@@ -4,10 +4,12 @@ from datetime import timedelta
 from uuid import uuid4
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from application.services.run_liveness import (
     RECOVERY_POLICY_RESUME,
+    RECOVERY_POLICY_RETRY,
     CheckpointContext,
     apply_recovery_policy,
     reconcile_stale_runs,
@@ -61,6 +63,7 @@ def test_reconcile_stale_runs_fails_stuck_running_run():
     run.refresh_from_db()
     assert run.status == "failed"
     assert run.recovery_state == "stalled_failed"
+    assert run.recovery_reason == "engine_stalled"
     assert "Run stalled with no backend-observed progress" in run.error_message
 
 
@@ -102,7 +105,7 @@ def test_apply_recovery_policy_records_checkpoint_context():
     assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
 
 
-def test_reconcile_stale_runs_fails_unimplemented_resume_policy_and_marks_context():
+def test_reconcile_stale_runs_fails_resume_policy_when_queue_is_disabled():
     stale_time = timezone.now() - timedelta(minutes=10)
     run = _make_run(status="running", last_progress_at=stale_time)
     run.recovery_policy = RECOVERY_POLICY_RESUME
@@ -114,10 +117,122 @@ def test_reconcile_stale_runs_fails_unimplemented_resume_policy_and_marks_contex
     assert result.reconciled == 1
     run.refresh_from_db()
     assert run.status == "failed"
-    assert "recovery policy 'resume' is not implemented" in run.error_message
+    assert "requires RUN_QUEUE_ENABLED=true" in run.error_message
     event = RunEvent.objects.get(run=run, event_type="run.updated")
     assert event.payload["checkpoint_available"] is False
     assert event.payload["recovery_policy"] == RECOVERY_POLICY_RESUME
+
+
+@override_settings(RUN_QUEUE_ENABLED=True)
+def test_reconcile_stale_runs_requeues_retry_policy_and_clears_checkpoint():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    run = _make_run(status="running", last_progress_at=stale_time)
+    run.recovery_policy = RECOVERY_POLICY_RETRY
+    run.paused_node_id = "gate"
+    run.pause_state_json = {"state_snapshot": {"foo": "bar"}}
+    run.engine_instance_id = "engine-a"
+    run.save(
+        update_fields=[
+            "recovery_policy",
+            "paused_node_id",
+            "pause_state_json",
+            "engine_instance_id",
+        ]
+    )
+    RunCheckpoint.objects.create(
+        run=run,
+        node_id="checkpoint_node",
+        step_index=3,
+        state_json={"state": "snapshot"},
+        completed_nodes=["start"],
+        skipped_nodes=[],
+        graph_json={"nodes": [], "edges": []},
+    )
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "pending"
+    assert run.recovery_state == "stalled_retry_pending"
+    assert run.recovery_reason == "engine_stalled"
+    assert run.error_message == ""
+    assert run.engine_instance_id == ""
+    assert run.paused_node_id is None
+    assert run.pause_state_json is None
+    assert not RunCheckpoint.objects.filter(run=run).exists()
+
+    event = RunEvent.objects.get(run=run, event_type="run.updated")
+    assert event.payload["recovery_policy"] == RECOVERY_POLICY_RETRY
+    assert event.payload["recovery_action"] == RECOVERY_POLICY_RETRY
+    assert event.payload["recovery_reason"] == "engine_stalled"
+    assert event.payload["checkpoint_cleared"] is True
+
+    queue_entry = run.queue_entry
+    assert queue_entry.status == "pending"
+
+
+@override_settings(RUN_QUEUE_ENABLED=True)
+def test_reconcile_stale_runs_requeues_stale_resume_requested_run_from_checkpoint():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    run = _make_run(status="resume_requested", last_progress_at=stale_time)
+    run.recovery_policy = RECOVERY_POLICY_RESUME
+    run.engine_instance_id = "engine-a"
+    run.resume_requested_at = stale_time
+    run.save(update_fields=["recovery_policy", "engine_instance_id", "resume_requested_at"])
+    checkpoint = RunCheckpoint.objects.create(
+        run=run,
+        node_id="resume_gate",
+        step_index=7,
+        state_json={"state": "snapshot"},
+        completed_nodes=["draft"],
+        skipped_nodes=[],
+        graph_json={"nodes": [], "edges": []},
+    )
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "pending"
+    assert run.recovery_state == "stalled_resume_pending"
+    assert run.recovery_reason == "resume_timeout"
+    assert run.engine_instance_id == ""
+    assert run.resume_requested_at is None
+    assert run.resume_attempt_id is None
+
+    checkpoint.refresh_from_db()
+    assert checkpoint.node_id == "resume_gate"
+
+    event = RunEvent.objects.get(run=run, event_type="run.updated")
+    assert event.payload["recovery_policy"] == RECOVERY_POLICY_RESUME
+    assert event.payload["recovery_action"] == RECOVERY_POLICY_RESUME
+    assert event.payload["recovery_reason"] == "resume_timeout"
+    assert event.payload["checkpoint_cleared"] is False
+    assert event.payload["checkpoint_available"] is True
+
+    queue_entry = run.queue_entry
+    assert queue_entry.status == "pending"
+
+
+@override_settings(RUN_QUEUE_ENABLED=True)
+def test_reconcile_stale_runs_fails_resume_policy_without_checkpoint():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    run = _make_run(status="resume_requested", last_progress_at=stale_time)
+    run.recovery_policy = RECOVERY_POLICY_RESUME
+    run.resume_requested_at = stale_time
+    run.save(update_fields=["recovery_policy", "resume_requested_at"])
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "failed"
+    assert run.recovery_reason == "missing_checkpoint"
+    assert "requires a backend-owned checkpoint" in run.error_message
 
 
 def test_reconcile_stale_runs_skips_paused_runs():

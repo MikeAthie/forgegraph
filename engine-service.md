@@ -1,5 +1,7 @@
 # Engine Service
 
+> Runtime precedence: [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md) is canonical.
+
 The engine is the ForgeGraph execution plane.
 
 ## Scope

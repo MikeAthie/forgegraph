@@ -1,5 +1,8 @@
 # State Ownership Contract
 
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+> This document elaborates state ownership details but does not override the runtime invariants.
+
 ForgeGraph has one enforceable ownership rule for durable runtime state:
 
 - The backend control plane is the only durable source of truth.

@@ -1,5 +1,8 @@
 # Control Plane Vs Execution Plane
 
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+> This document explains the split. It does not define a competing runtime contract.
+
 Control plane:
 
 - owns canonical durable state

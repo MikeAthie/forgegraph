@@ -1,0 +1,52 @@
+groups:
+  - name: forgegraph-production
+    rules:
+      - alert: ForgeGraphBackendNotReady
+        expr: backend_ready == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Backend readiness failing
+          runbook: docs/ops/runbooks/backend-unhealthy.md
+      - alert: ForgeGraphEngineNotReady
+        expr: engine_ready == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Engine readiness failing
+          runbook: docs/ops/runbooks/engine-unhealthy.md
+      - alert: ForgeGraphQueueBacklog
+        expr: forgegraph_queue_oldest_pending_age_seconds > 300 or forgegraph_queue_depth > 500
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: Queue backlog threshold exceeded
+          runbook: docs/ops/runbooks/queue-backlog.md
+      - alert: ForgeGraphResumeTimeoutSpike
+        expr: increase(forgegraph_liveness_reconciled_total{reason="resume_timeout"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Resume timeout reconciliation detected
+          runbook: docs/ops/runbooks/resume-failure.md
+      - alert: ForgeGraphCallbackAuthFailures
+        expr: increase(forgegraph_callback_auth_failures_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Engine callback signature failures detected
+          runbook: docs/ops/runbooks/callback-auth-failures.md
+      - alert: ForgeGraphBackend5xxSpike
+        expr: increase(forgegraph_api_server_errors_total[10m]) > 5
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Backend 5xx spike detected
+          runbook: docs/ops/runbooks/backend-unhealthy.md
+

@@ -1,7 +1,13 @@
 from django.utils import timezone
 from rest_framework import status
 
-from application.services.metrics import record_run_completed, record_run_started
+from application.services.metrics import (
+    record_api_request,
+    record_callback_auth_failure,
+    record_liveness_reconciliation,
+    record_run_completed,
+    record_run_started,
+)
 from infrastructure.orm.models import (
     Graph,
     GraphVersion,
@@ -36,6 +42,10 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     record_run_started()
     record_run_completed("succeeded", 1200)
     record_run_completed("failed", 3000)
+    record_liveness_reconciliation("engine_stalled")
+    record_callback_auth_failure("invalid_signature")
+    record_api_request(status_code=200, duration_ms=120)
+    record_api_request(status_code=503, duration_ms=240)
 
     response = authenticated_client.get("/api/metrics/summary")
     assert response.status_code == status.HTTP_200_OK
@@ -43,6 +53,8 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["runs"]["started_total"] >= 1
     assert payload["runs"]["completed_total"] >= 2
     assert payload["runs"]["failed_total"] >= 1
+    assert payload["runs"]["liveness_reconciled_total"] >= 1
+    assert payload["runs"]["liveness_reconciled_by_reason"]["engine_stalled"] >= 1
     assert "failure_rate" in payload["runs"]
     assert "active_total" in payload["runs"]
     assert payload["queue"]["pending"] >= 1
@@ -51,6 +63,10 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert "oldest_pending_age_seconds" in payload["queue"]
     assert "by_tenant" in payload["queue"]
     assert "websocket" in payload
+    assert payload["api"]["requests_total"] >= 2
+    assert payload["api"]["server_errors_total"] >= 1
+    assert payload["api"]["callback_auth_failures_total"] >= 1
+    assert payload["api"]["callback_auth_failures_by_reason"]["invalid_signature"] >= 1
     assert "guardrails" in payload
     assert "generated_at" in payload
 

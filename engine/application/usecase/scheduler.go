@@ -2247,6 +2247,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			return fmt.Errorf("invalid input JSON: %w", err)
 		}
 	}
+	resumeAttemptID, _ := decision["_forgegraph_resume_attempt_id"].(string)
+	delete(decision, "_forgegraph_resume_attempt_id")
 
 	// Check if approved or rejected
 	approved, _ := decision["approved"].(bool)
@@ -2447,7 +2449,11 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning))
 
 	// Emit run resumed event
-	s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunResumed))
+	resumedEvent := rc.newEvent(port.EventTypeRunResumed)
+	if strings.TrimSpace(resumeAttemptID) != "" {
+		resumedEvent = resumedEvent.WithOutput(map[string]any{"resume_attempt_id": resumeAttemptID})
+	}
+	s.emitter.EmitAsync(resumedEvent)
 
 	// Start execution in background from all ready nodes
 	go s.executeResumedRun(rc, rc.initialNodes)

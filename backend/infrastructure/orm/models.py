@@ -835,6 +835,7 @@ class Run(models.Model):
         ("pending", "Pending"),
         ("running", "Running"),
         ("paused", "Paused"),
+        ("resume_requested", "Resume Requested"),
         ("succeeded", "Succeeded"),
         ("failed", "Failed"),
         ("canceled", "Canceled"),
@@ -868,11 +869,14 @@ class Run(models.Model):
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
     engine_instance_id = models.CharField(max_length=64, blank=True, default="")
     recovery_state = models.CharField(max_length=32, blank=True, default="idle")
+    recovery_reason = models.CharField(max_length=64, blank=True, default="")
     recovery_policy = models.CharField(
         max_length=16,
         choices=RECOVERY_POLICY_CHOICES,
         default="fail",
     )
+    resume_requested_at = models.DateTimeField(null=True, blank=True)
+    resume_attempt_id = models.UUIDField(null=True, blank=True)
 
     # Human Gate pause state (for durable resume)
     pause_state_json = models.JSONField(null=True, blank=True)

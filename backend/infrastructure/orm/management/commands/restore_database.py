@@ -7,7 +7,7 @@ from django.core.management import BaseCommand, CommandError, call_command
 
 
 class Command(BaseCommand):
-    help = "Restore a JSON backup created via backup_database (dumpdata)."
+    help = "Restore a JSON support backup created via backup_database (dev/support only)."
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(

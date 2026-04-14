@@ -8,7 +8,15 @@ from typing import Any
 
 from rest_framework import serializers
 
-RUN_STATUS_CHOICES = ["pending", "running", "paused", "succeeded", "failed", "canceled"]
+RUN_STATUS_CHOICES = [
+    "pending",
+    "running",
+    "paused",
+    "resume_requested",
+    "succeeded",
+    "failed",
+    "canceled",
+]
 NODE_RUN_STATUS_CHOICES = ["pending", "running", "waiting", "succeeded", "failed", "skipped"]
 RUN_EVENT_TYPE_CHOICES = ["node_run.updated", "run.updated", "run.schema_validation"]
 ENGINE_EVENT_TYPE_CHOICES = [
@@ -87,7 +95,10 @@ class RunListSerializer(serializers.Serializer[Any]):
     last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
     engine_instance_id = serializers.CharField(read_only=True, allow_blank=True)
     recovery_state = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_reason = serializers.CharField(read_only=True, allow_blank=True)
     recovery_policy = serializers.CharField(read_only=True, allow_blank=True)
+    resume_requested_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    resume_attempt_id = serializers.UUIDField(read_only=True, allow_null=True)
 
 
 class RunDetailSerializer(serializers.Serializer[Any]):
@@ -116,7 +127,10 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
     engine_instance_id = serializers.CharField(read_only=True, allow_blank=True)
     recovery_state = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_reason = serializers.CharField(read_only=True, allow_blank=True)
     recovery_policy = serializers.CharField(read_only=True, allow_blank=True)
+    resume_requested_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    resume_attempt_id = serializers.UUIDField(read_only=True, allow_null=True)
     # Human Gate pause fields
     paused_node_id = serializers.CharField(read_only=True, allow_null=True)
     pause_payload = serializers.JSONField(read_only=True, allow_null=True)
@@ -169,7 +183,10 @@ class RunDeltaBroadcastSerializer(serializers.Serializer[Any]):
     error_message = serializers.CharField(read_only=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
     recovery_state = serializers.CharField(read_only=True, allow_blank=True)
+    recovery_reason = serializers.CharField(read_only=True, allow_blank=True)
     recovery_policy = serializers.CharField(read_only=True, allow_blank=True)
+    resume_requested_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    resume_attempt_id = serializers.UUIDField(read_only=True, allow_null=True)
 
 
 class NodeRunDeltaSerializer(serializers.Serializer[Any]):

@@ -65,7 +65,7 @@ def enqueue_run(
 def _active_tenant_run_count(tenant_id: UUID) -> int:
     return Run.objects.filter(
         owner__default_organization_id=tenant_id,
-        status__in=["running", "paused"],
+        status__in=["running", "paused", "resume_requested"],
     ).count()
 
 

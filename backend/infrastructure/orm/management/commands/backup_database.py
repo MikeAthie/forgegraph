@@ -8,7 +8,7 @@ from django.core.management import BaseCommand, call_command
 
 
 class Command(BaseCommand):
-    help = "Create a JSON backup of the database using Django dumpdata."
+    help = "Create a JSON support backup using Django dumpdata (dev/support only, not production recovery)."
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(

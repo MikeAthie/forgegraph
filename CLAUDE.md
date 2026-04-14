@@ -9,6 +9,8 @@ ForgeGraph is a workflow graph execution platform with three components:
 - **Engine**: Go gRPC execution engine (Go 1.23)
 - **Frontend**: Next.js React UI for graph editing (Node 20, TypeScript)
 
+Runtime rule: follow [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md) strictly. If another repo document disagrees, the runtime invariants win.
+
 ## Build & Test Commands
 
 ### Backend (Django)
@@ -72,8 +74,8 @@ Frontend (Next.js)  ──HTTP/WebSocket──>  Backend (Django)  ──gRPC─
 **Communication Flow:**
 1. Frontend calls Backend REST API (axios) and WebSocket for real-time updates
 2. Backend delegates graph execution to Engine via gRPC (proto in `engine/proto/`)
-3. Engine executes nodes, reports status back through gRPC
-4. Backend broadcasts updates to Frontend via Django Channels WebSocket
+3. Engine executes nodes and emits execution events back to backend-controlled APIs
+4. Backend persists authoritative state and broadcasts updates to Frontend via Django Channels WebSocket
 
 **Clean Architecture** across all components:
 - `domain/` - Entities and business logic

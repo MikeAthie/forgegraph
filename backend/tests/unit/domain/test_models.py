@@ -503,7 +503,15 @@ class TestRunModel:
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
         )
 
-        valid_statuses = ["pending", "running", "paused", "succeeded", "failed", "canceled"]
+        valid_statuses = [
+            "pending",
+            "running",
+            "paused",
+            "resume_requested",
+            "succeeded",
+            "failed",
+            "canceled",
+        ]
 
         for status in valid_statuses:
             run = Run.objects.create(owner=user, graph_version=version, status=status)

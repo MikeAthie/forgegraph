@@ -31,6 +31,7 @@ It supervises a system of agents, tasks, decisions, memory, and cost over time. 
 
 ## Docs
 
+- Canonical runtime contract: [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md)
 - Product: [docs/product/vision.md](docs/product/vision.md)
 - Mental model: [docs/product/mental-model.md](docs/product/mental-model.md)
 - State ownership: [docs/architecture/state-ownership-contract.md](docs/architecture/state-ownership-contract.md)
@@ -67,3 +68,14 @@ The `pre-push` hook runs the same repo-owned check scripts used by GitHub Action
 - Redis: `localhost:6379`
 
 Start them with `docker compose up -d postgres redis` before pushing.
+
+`backend/pytest.ini` points pytest at `config.test_settings`, which loads the repo-owned `.env.test` overrides. With the local dependencies up, the authoritative backend full-suite command is:
+
+- `cd backend && uv run pytest`
+
+## Production Ops
+
+- Release contract: `scripts/release/run_backend_migrate.sh` and `.github/workflows/release.yml`
+- Native Postgres backup/restore: `scripts/ops/backup_postgres.sh` and `scripts/ops/restore_postgres.sh`
+- Deploy env contract: `docs/ops/deploy-env-contract.md`
+- Release/rollback runbooks: `docs/ops/release-runbook.md`, `docs/ops/rollback-runbook.md`

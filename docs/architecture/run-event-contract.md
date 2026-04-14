@@ -1,5 +1,7 @@
 # Run Event Contract
 
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+
 `Run` and `RunEvent` remain canonical runtime facts.
 
 Requirements:
@@ -10,6 +12,6 @@ Requirements:
 - events must not become the authoritative durable state without an explicit backend write
 - events never mutate durable state directly; backend handlers validate and apply writes
 
-Primary contract: [state-ownership-contract.md](state-ownership-contract.md)
+Primary runtime contract: [runtime-invariants.md](runtime-invariants.md)
 
 Implementation plan: [post-stateless-engine-reliability-hardening-v2.md](post-stateless-engine-reliability-hardening-v2.md)

@@ -15,7 +15,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
-from application.services.metrics import get_run_metrics_snapshot, get_websocket_metrics_snapshot
+from application.services.metrics import (
+    get_api_metrics_snapshot,
+    get_run_metrics_snapshot,
+    get_websocket_metrics_snapshot,
+)
 from application.services.rbac import has_min_role
 from infrastructure.orm.models import Run, RunQueueEntry, User
 
@@ -34,6 +38,7 @@ class MetricsSummaryView(APIView):
 
         run_metrics = get_run_metrics_snapshot()
         websocket_metrics = get_websocket_metrics_snapshot()
+        api_metrics = get_api_metrics_snapshot()
         queue_pending = RunQueueEntry.objects.filter(status="pending").count()
         queue_processing = RunQueueEntry.objects.filter(status="processing").count()
         queue_total = queue_pending + queue_processing
@@ -73,6 +78,8 @@ class MetricsSummaryView(APIView):
                 "latency_ms_p95": run_metrics.run_latency_ms_p95,
                 "window_size": run_metrics.window_size,
                 "active_total": active_runs,
+                "liveness_reconciled_total": run_metrics.liveness_reconciled_total,
+                "liveness_reconciled_by_reason": run_metrics.liveness_reconciled_by_reason,
             },
             "queue": {
                 "pending": queue_pending,
@@ -95,6 +102,14 @@ class MetricsSummaryView(APIView):
                 "messages_sent_total": websocket_metrics.messages_sent_total,
                 "messages_dropped_total": websocket_metrics.messages_dropped_total,
                 "message_rate_per_minute": websocket_metrics.message_rate_per_minute,
+            },
+            "api": {
+                "requests_total": api_metrics.requests_total,
+                "server_errors_total": api_metrics.server_errors_total,
+                "latency_ms_p50": api_metrics.latency_ms_p50,
+                "latency_ms_p95": api_metrics.latency_ms_p95,
+                "callback_auth_failures_total": api_metrics.callback_auth_failures_total,
+                "callback_auth_failures_by_reason": api_metrics.callback_auth_failures_by_reason,
             },
             "slo": {
                 "run_success_rate_target": getattr(settings, "SLO_RUN_SUCCESS_RATE", 0.99),
