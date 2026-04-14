@@ -114,6 +114,60 @@ class TestEngineRunApi:
         run.refresh_from_db()
         assert run.status == "succeeded"
 
+    def test_run_detail_rejects_paused_to_running_without_resume_request(self, api_client):
+        user = User.objects.create_user(
+            email="engine-status-paused@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Engine Paused Guard Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="paused")
+
+        body, headers = _signed_json_request("test-secret", {"status": "running"})
+        response = api_client.generic(
+            "PATCH",
+            f"/api/engine/runs/{run.id}",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == 409
+        assert response.data["error"]["code"] == "INVALID_STATE"
+        run.refresh_from_db()
+        assert run.status == "paused"
+
+    def test_run_detail_rejects_resume_requested_back_to_paused(self, api_client):
+        user = User.objects.create_user(
+            email="engine-status-resume-requested@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Engine Resume Requested Guard Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="resume_requested")
+
+        body, headers = _signed_json_request("test-secret", {"status": "paused"})
+        response = api_client.generic(
+            "PATCH",
+            f"/api/engine/runs/{run.id}",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+
+        assert response.status_code == 409
+        assert response.data["error"]["code"] == "INVALID_STATE"
+        run.refresh_from_db()
+        assert run.status == "resume_requested"
+
     def test_checkpoint_upsert_preserves_newer_step(self, api_client):
         user = User.objects.create_user(
             email="engine-checkpoint@example.com", password="password123"

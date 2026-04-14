@@ -1,5 +1,8 @@
 # Post-Stateless Engine Reliability Hardening v2
 
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+> This document is an implementation plan and rollout record, not the source of truth for runtime semantics.
+
 This document captures the implementation plan and rollout contract for the post-stateless-engine hardening tranche. It exists to keep the execution context in-repo while the work is being implemented and verified.
 
 ## Objective
@@ -19,6 +22,7 @@ This tranche includes:
 - `Run.recovery_policy` with a durable policy hook
 - stale-run reconciliation through `resolve_stale_run()` -> `apply_recovery_policy()`
 - checkpoint diagnostics in stale-run failure artifacts
+- queue-backed stale `retry` and checkpoint-backed stale `resume`
 - explicit engine mode enforcement in the engine runtime
 - normalized event categories
 - summary-first event streaming with bounded observability fanout
@@ -27,7 +31,6 @@ This tranche includes:
 
 This tranche does not include:
 
-- implemented `retry` or `resume` recovery behavior
 - cross-engine failover or reassignment
 - product-direction refactors
 
@@ -45,6 +48,9 @@ This tranche does not include:
 
 - Keep `Run.last_progress_at` as the authoritative stale-run clock.
 - Keep `last_heartbeat_at`, `recovery_state`, and `engine_instance_id` as supporting runtime visibility fields.
+- Model resume handoff explicitly with `Run.status=resume_requested`, `resume_requested_at`, and `resume_attempt_id`.
+- Record backend-owned recovery cause in `Run.recovery_reason`.
+- Accept `run_resumed` only when the callback matches the active `resume_attempt_id`.
 - Add `Run.recovery_policy` with allowed values `fail`, `retry`, `resume` and default `fail`.
 - Route stale-run reconciliation through `resolve_stale_run()` and `apply_recovery_policy()`.
 - Touch liveness on every backend-observed progress path:
@@ -123,6 +129,7 @@ This tranche does not include:
 - [x] Add `Run.recovery_policy` and migration.
 - [x] Refactor stale reconciliation through recovery-policy hooks.
 - [x] Attach checkpoint diagnostics to stale-run failure artifacts.
+- [x] Implement queue-backed stale `retry` and checkpoint-backed stale `resume`.
 - [x] Touch liveness on backend-observed progress paths.
 - [x] Enforce engine mode guardrails in runtime startup.
 - [x] Add CI ownership guardrails.
@@ -140,6 +147,7 @@ This tranche does not include:
 - No run remains `running` indefinitely after backend-observed progress stops.
 - Stale-run handling always flows through a reusable recovery-policy hook.
 - Stale-run failures always record whether a checkpoint existed and which checkpoint was latest.
+- Human approval resume handoff cannot remain stuck in `paused`; stalled resume requests become explicit backend recovery decisions.
 - Production-like engine startup cannot silently bypass the control-plane ownership contract.
 - Events are explicitly categorized and never treated as direct durable state mutation.
 - Default live streaming is summary-first and bounded.

@@ -207,6 +207,7 @@ class GrpcEngineClient(IEngineClient):
         run_id: UUID,
         node_id: str,
         input_json: dict[str, Any],
+        resume_attempt_id: str | None = None,
         traceparent: str | None = None,
         tracestate: str | None = None,
     ) -> None:
@@ -224,10 +225,13 @@ class GrpcEngineClient(IEngineClient):
         """
         try:
             stub = self._get_stub()
+            engine_input_json = dict(input_json or {})
+            if resume_attempt_id:
+                engine_input_json["_forgegraph_resume_attempt_id"] = resume_attempt_id
             request = ResumeRunRequest(
                 run_id=str(run_id),
                 node_id=node_id,
-                input_json=json.dumps(input_json) if input_json else "{}",
+                input_json=json.dumps(engine_input_json) if engine_input_json else "{}",
                 traceparent=traceparent or "",
                 tracestate=tracestate or "",
             )
@@ -340,6 +344,7 @@ class MockEngineClient(IEngineClient):
         run_id: UUID,
         node_id: str,
         input_json: dict[str, Any],
+        resume_attempt_id: str | None = None,
         traceparent: str | None = None,
         tracestate: str | None = None,
     ) -> None:
@@ -350,6 +355,7 @@ class MockEngineClient(IEngineClient):
                     "run_id": run_id,
                     "node_id": node_id,
                     "input_json": input_json,
+                    "resume_attempt_id": resume_attempt_id,
                     "traceparent": traceparent,
                     "tracestate": tracestate,
                 },

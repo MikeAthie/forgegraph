@@ -1,0 +1,295 @@
+name: Release Contract
+
+on:
+  workflow_run:
+    workflows: ["Full CI"]
+    types: [completed]
+
+concurrency:
+  group: release-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    outputs:
+      owner_lc: ${{ steps.vars.outputs.owner_lc }}
+      sha_tag: ${{ steps.vars.outputs.sha_tag }}
+      branch_tag: ${{ steps.vars.outputs.branch_tag }}
+    steps:
+      - id: vars
+        shell: bash
+        run: |
+          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          echo "branch_tag=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+
+  security-audit:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.0"
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python audit tooling
+        run: python -m pip install --upgrade pip uv pip-audit
+
+      - name: Backend dependency audit
+        working-directory: backend
+        run: |
+          uv sync --dev
+          uv run pip-audit
+
+      - name: Engine dependency audit
+        working-directory: engine
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+      - name: Frontend dependency audit
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --omit=dev
+
+  build-and-scan:
+    needs: [prepare, security-audit]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+            image_name: forgegraph-backend
+          - component: engine
+            context: ./engine
+            dockerfile: ./engine/Dockerfile
+            image_name: forgegraph-engine
+          - component: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            image_name: forgegraph-frontend
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Require frontend release API URL
+        if: ${{ matrix.component == 'frontend' }}
+        shell: bash
+        run: |
+          if [[ -z "${{ vars.RELEASE_FRONTEND_API_URL }}" ]]; then
+            echo "Repository variable RELEASE_FRONTEND_API_URL must be configured for release builds." >&2
+            exit 1
+          fi
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and publish ${{ matrix.component }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.RELEASE_FRONTEND_API_URL }}
+          tags: |
+            ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}
+            ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.branch_tag }}
+
+      - name: Generate SBOM for ${{ matrix.component }}
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.component }}.spdx.json
+
+      - name: Scan ${{ matrix.component }} image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component }}
+          path: sbom-${{ matrix.component }}.spdx.json
+
+  release-smoke:
+    needs: [prepare, build-and-scan]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      BACKEND_IMAGE: ghcr.io/${{ needs.prepare.outputs.owner_lc }}/forgegraph-backend:${{ needs.prepare.outputs.sha_tag }}
+      ENGINE_IMAGE: ghcr.io/${{ needs.prepare.outputs.owner_lc }}/forgegraph-engine:${{ needs.prepare.outputs.sha_tag }}
+      FRONTEND_IMAGE: ghcr.io/${{ needs.prepare.outputs.owner_lc }}/forgegraph-frontend:${{ needs.prepare.outputs.sha_tag }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      SECRET_KEY: release-not-a-secret
+      DEBUG: "False"
+      DJANGO_SETTINGS_MODULE: config.settings
+      ALLOWED_HOSTS: "127.0.0.1,localhost"
+      ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
+      SECURE_SSL_REDIRECT: "false"
+      ENGINE_CALLBACK_SECRET: release-shared-secret
+      ENGINE_CALLBACK_URL: http://127.0.0.1:8000/api/runs/engine-events
+      CONTROL_PLANE_URL: http://127.0.0.1:8000
+      ENGINE_HOST: 127.0.0.1
+      ENGINE_PORT: "50051"
+      READINESS_REQUIRE_ENGINE: "true"
+      FORGEGRAPH_STRICT_RUNTIME_ENV: "true"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull release images
+        run: |
+          docker pull "${BACKEND_IMAGE}"
+          docker pull "${ENGINE_IMAGE}"
+          docker pull "${FRONTEND_IMAGE}"
+
+      - name: Run migration contract
+        run: |
+          docker run --rm --network host \
+            -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
+            -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
+            -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
+            -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            "${BACKEND_IMAGE}" bash -lc "python manage.py validate_runtime_env --strict && python manage.py migrate --noinput && python manage.py collectstatic --noinput"
+
+      - name: Start backend
+        run: |
+          docker run -d --name forgegraph-backend --network host \
+            -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
+            -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
+            -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
+            -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            "${BACKEND_IMAGE}"
+
+      - name: Start engine
+        run: |
+          docker run -d --name forgegraph-engine --network host \
+            -e CONTROL_PLANE_URL -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL \
+            -e ENGINE_RUN_STATE_MODE=control-plane-http \
+            -e GRPC_PORT=50051 -e METRICS_PORT=9090 \
+            "${ENGINE_IMAGE}"
+
+      - name: Start frontend
+        run: |
+          docker run -d --name forgegraph-frontend --network host "${FRONTEND_IMAGE}"
+
+      - name: Smoke release contract
+        run: |
+          python scripts/release/backend_smoke.py \
+            --backend-url http://127.0.0.1:8000 \
+            --frontend-url http://127.0.0.1:3000 \
+            --engine-url http://127.0.0.1:9090 \
+            --callback-secret "${ENGINE_CALLBACK_SECRET}"
+
+      - name: Generate release manifest
+        run: |
+          python scripts/release/generate_release_metadata.py \
+            --sha "${{ github.event.workflow_run.head_sha }}" \
+            --branch "${{ github.event.workflow_run.head_branch }}" \
+            --backend-image "${BACKEND_IMAGE}" \
+            --engine-image "${ENGINE_IMAGE}" \
+            --frontend-image "${FRONTEND_IMAGE}" \
+            --output release-metadata.json
+
+      - name: Upload release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: release-metadata.json
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs forgegraph-backend || true
+          docker logs forgegraph-engine || true
+          docker logs forgegraph-frontend || true
+
+  release-report:
+    needs: [prepare, release-smoke]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report release contract result
+        run: |
+          echo "release-smoke=${{ needs.release-smoke.result }}"
+          if [ "${{ needs.release-smoke.result }}" != "success" ]; then
+            echo "Release contract failed."
+            exit 1
+          fi
+          echo "Release contract passed."

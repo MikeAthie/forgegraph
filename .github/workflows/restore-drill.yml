@@ -1,0 +1,113 @@
+name: Restore Drill
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      SECRET_KEY: restore-drill-secret
+      DEBUG: "False"
+      DJANGO_SETTINGS_MODULE: config.settings
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
+      SECURE_SSL_REDIRECT: "false"
+      FRONTEND_URL: "http://localhost:3000"
+      ENGINE_CALLBACK_SECRET: restore-drill-shared-secret
+      ENGINE_HOST: localhost
+      ENGINE_PORT: "50051"
+      FORGEGRAPH_STRICT_RUNTIME_ENV: "true"
+      READINESS_REQUIRE_ENGINE: "false"
+      PGHOST: localhost
+      PGPORT: "5433"
+      PGUSER: forgegraph
+      PGPASSWORD: forgegraph_secret
+      PGDATABASE: forgegraph
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip uv
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --dev
+
+      - name: Seed database
+        working-directory: backend
+        run: |
+          uv run python manage.py migrate --noinput
+          uv run python manage.py shell -c "from infrastructure.orm.models import User, Graph, GraphVersion, Run; user,_=User.objects.get_or_create(email='restore-drill@example.com'); user.set_password('RestorePass!234'); user.save(); graph,_=Graph.objects.get_or_create(owner=user, name='Restore Drill'); version,_=GraphVersion.objects.get_or_create(graph=graph, version=1, defaults={'graph_json': {'nodes': [], 'edges': []}}); Run.objects.get_or_create(owner=user, graph_version=version, status='succeeded')"
+
+      - name: Create native backup
+        run: bash scripts/ops/backup_postgres.sh backups/restore-drill.dump
+
+      - name: Restore into fresh database
+        run: bash scripts/ops/restore_postgres.sh backups/restore-drill.dump
+
+      - name: Start backend for restore verification
+        working-directory: backend
+        run: |
+          uv run python manage.py runserver 127.0.0.1:8000 --noreload > ../restore-drill-backend.log 2>&1 &
+          echo $! > ../restore-drill-backend.pid
+
+      - name: Verify restored backend
+        run: |
+          python scripts/release/backend_smoke.py \
+            --backend-url http://127.0.0.1:8000 \
+            --skip-engine \
+            --skip-frontend \
+            --skip-callback
+
+      - name: Upload restore drill artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-artifacts
+          path: |
+            backups/restore-drill.dump
+            restore-drill-backend.log

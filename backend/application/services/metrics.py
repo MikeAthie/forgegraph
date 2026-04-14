@@ -22,6 +22,8 @@ class RunMetricsSnapshot:
     run_latency_ms_p50: float | None
     run_latency_ms_p95: float | None
     window_size: int
+    liveness_reconciled_total: int
+    liveness_reconciled_by_reason: dict[str, int]
     generated_at: str
 
 
@@ -35,10 +37,22 @@ class WebSocketMetricsSnapshot:
     generated_at: str
 
 
+@dataclass(frozen=True)
+class ApiMetricsSnapshot:
+    requests_total: int
+    server_errors_total: int
+    latency_ms_p50: float | None
+    latency_ms_p95: float | None
+    callback_auth_failures_total: int
+    callback_auth_failures_by_reason: dict[str, int]
+    generated_at: str
+
+
 _lock = Lock()
 _counters: Counter[str] = Counter()
 _latencies_ms: deque[int] = deque(maxlen=1000)
 _ws_message_timestamps: deque[float] = deque(maxlen=5000)
+_api_latencies_ms: deque[int] = deque(maxlen=2000)
 
 
 def record_run_started() -> None:
@@ -55,6 +69,28 @@ def record_run_completed(status: str, duration_ms: int | None) -> None:
             _counters["run_canceled_total"] += 1
         if duration_ms is not None:
             _latencies_ms.append(duration_ms)
+
+
+def record_liveness_reconciliation(reason: str) -> None:
+    normalized_reason = str(reason or "unknown").strip().lower() or "unknown"
+    with _lock:
+        _counters["liveness_reconciled_total"] += 1
+        _counters[f"liveness_reconciled_reason:{normalized_reason}"] += 1
+
+
+def record_callback_auth_failure(reason: str) -> None:
+    normalized_reason = str(reason or "unknown").strip().lower() or "unknown"
+    with _lock:
+        _counters["callback_auth_failures_total"] += 1
+        _counters[f"callback_auth_failure_reason:{normalized_reason}"] += 1
+
+
+def record_api_request(*, status_code: int, duration_ms: int) -> None:
+    with _lock:
+        _counters["api_requests_total"] += 1
+        if status_code >= 500:
+            _counters["api_server_errors_total"] += 1
+        _api_latencies_ms.append(max(duration_ms, 0))
 
 
 def _prune_ws_message_timestamps(now_ts: float) -> None:
@@ -111,6 +147,12 @@ def get_run_metrics_snapshot() -> RunMetricsSnapshot:
         failed = int(_counters.get("run_failed_total", 0))
         canceled = int(_counters.get("run_canceled_total", 0))
         latencies = list(_latencies_ms)
+        liveness_reconciled_total = int(_counters.get("liveness_reconciled_total", 0))
+        liveness_reconciled_by_reason = {
+            key.split(":", 1)[1]: int(value)
+            for key, value in _counters.items()
+            if key.startswith("liveness_reconciled_reason:")
+        }
 
     success_rate = None
     if completed > 0:
@@ -125,6 +167,8 @@ def get_run_metrics_snapshot() -> RunMetricsSnapshot:
         run_latency_ms_p50=_percentile(latencies, 0.5),
         run_latency_ms_p95=_percentile(latencies, 0.95),
         window_size=len(latencies),
+        liveness_reconciled_total=liveness_reconciled_total,
+        liveness_reconciled_by_reason=liveness_reconciled_by_reason,
         generated_at=timezone.now().isoformat(),
     )
 
@@ -145,5 +189,28 @@ def get_websocket_metrics_snapshot() -> WebSocketMetricsSnapshot:
         messages_sent_total=messages_sent,
         messages_dropped_total=messages_dropped,
         message_rate_per_minute=float(recent_messages),
+        generated_at=timezone.now().isoformat(),
+    )
+
+
+def get_api_metrics_snapshot() -> ApiMetricsSnapshot:
+    with _lock:
+        api_latencies = list(_api_latencies_ms)
+        callback_auth_failures_by_reason = {
+            key.split(":", 1)[1]: int(value)
+            for key, value in _counters.items()
+            if key.startswith("callback_auth_failure_reason:")
+        }
+        callback_auth_failures_total = int(_counters.get("callback_auth_failures_total", 0))
+        requests_total = int(_counters.get("api_requests_total", 0))
+        server_errors_total = int(_counters.get("api_server_errors_total", 0))
+
+    return ApiMetricsSnapshot(
+        requests_total=requests_total,
+        server_errors_total=server_errors_total,
+        latency_ms_p50=_percentile(api_latencies, 0.5),
+        latency_ms_p95=_percentile(api_latencies, 0.95),
+        callback_auth_failures_total=callback_auth_failures_total,
+        callback_auth_failures_by_reason=callback_auth_failures_by_reason,
         generated_at=timezone.now().isoformat(),
     )

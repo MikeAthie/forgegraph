@@ -40,13 +40,24 @@ function Assert-HasMatch {
 $engineMain = Join-Path $repoRoot "engine\main.go"
 $engineTests = Join-Path $repoRoot "engine\main_test.go"
 $engineFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -File | Select-Object -ExpandProperty FullName
+$engineGoFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -Filter *.go -File | Select-Object -ExpandProperty FullName
+$runtimeInvariants = Join-Path $repoRoot "docs\architecture\runtime-invariants.md"
 
 Write-Host ""
 Write-Host "==> Engine ownership guardrails"
 
+if (-not (Test-Path $runtimeInvariants)) {
+  throw "Missing canonical runtime contract: docs/architecture/runtime-invariants.md"
+}
+
 Assert-NoMatch "legacy-db" $engineFiles "Legacy engine fallback alias detected."
 Assert-NoMatch "legacy_db" $engineFiles "Legacy engine fallback alias detected."
 Assert-NoMatch "run_repository_fallback" $engineFiles "Silent engine fallback log detected."
+Assert-NoMatch '"database/sql"' $engineGoFiles "Direct database persistence import detected in engine Go source."
+Assert-NoMatch "gorm.io" $engineGoFiles "Direct database persistence import detected in engine Go source."
+Assert-NoMatch "github.com/lib/pq" $engineGoFiles "Direct database persistence import detected in engine Go source."
+Assert-NoMatch "github.com/jackc/pgx" $engineGoFiles "Direct database persistence import detected in engine Go source."
+Assert-NoMatch "github.com/jmoiron/sqlx" $engineGoFiles "Direct database persistence import detected in engine Go source."
 Assert-NoMatch 'normalizeRunStateMode("postgres") = %s, want dual-write' @($engineTests) "Legacy postgres alias expectation detected in engine tests."
 
 Assert-HasMatch "ENGINE_ALLOW_IN_MEMORY_MODE" @($engineMain) "Missing ENGINE_ALLOW_IN_MEMORY_MODE safeguard in engine startup."

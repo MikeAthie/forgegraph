@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/forgegraph/engine/adapter/executor"
@@ -330,6 +331,24 @@ func buildGRPCServerOptions(cfg *Config) ([]grpc.ServerOption, bool, error) {
 	return []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig))}, true, nil
 }
 
+func readinessPayload(cfg *Config, grpcReady bool, redisHealth store.HealthStatus) map[string]any {
+	redisConfigured := cfg != nil && strings.TrimSpace(cfg.RedisAddr) != ""
+	ready := grpcReady && (!redisConfigured || redisHealth.Healthy)
+	statusValue := "not_ready"
+	if ready {
+		statusValue = "ready"
+	}
+	return map[string]any{
+		"status":                   statusValue,
+		"grpc_ready":               grpcReady,
+		"redis_configured":         redisConfigured,
+		"redis_healthy":            redisHealth.Healthy,
+		"redis_error":              redisHealth.Error,
+		"run_state_mode":           cfg.RunStateMode,
+		"control_plane_configured": hasControlPlaneRepositoryConfig(cfg),
+	}
+}
+
 // EngineServer implements the Engine gRPC service
 type EngineServer struct {
 	UnimplementedEngineServiceServer
@@ -507,6 +526,7 @@ func main() {
 
 	// Load configuration
 	cfg := LoadConfig()
+	var grpcReady atomic.Bool
 	log.Info("config_loaded",
 		"grpc_port", cfg.GRPCPort,
 		"max_workers", cfg.MaxWorkers,
@@ -741,6 +761,20 @@ func main() {
 		go func() {
 			mux := http.NewServeMux()
 			mux.Handle("/metrics", promhttp.Handler())
+			mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+				redisStatus := store.HealthStatus{Healthy: true}
+				if strings.TrimSpace(cfg.RedisAddr) != "" && redisHealth != nil {
+					redisStatus = redisHealth.Check(r.Context())
+				}
+				payload, _ := json.Marshal(readinessPayload(cfg, grpcReady.Load(), redisStatus))
+				w.Header().Set("Content-Type", "application/json")
+				if grpcReady.Load() && (strings.TrimSpace(cfg.RedisAddr) == "" || redisStatus.Healthy) {
+					w.WriteHeader(http.StatusOK)
+				} else {
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}
+				_, _ = w.Write(payload)
+			})
 			mux.HandleFunc("/health/redis", func(w http.ResponseWriter, r *http.Request) {
 				status := store.HealthStatus{Healthy: false, Error: "redis not configured"}
 				if redisHealth != nil {
@@ -784,6 +818,7 @@ func main() {
 	} else {
 		log.Warn("grpc_server_insecure", "port", cfg.GRPCPort, "note", "set GRPC_TLS_CERT_FILE and GRPC_TLS_KEY_FILE to enable TLS")
 	}
+	grpcReady.Store(true)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Error("grpc_serve_failed", "error", err.Error())

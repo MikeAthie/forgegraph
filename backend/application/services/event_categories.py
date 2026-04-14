@@ -30,6 +30,10 @@ OBSERVABILITY_EVENT_TYPES = {
 }
 
 
+class EventSafetyViolation(ValueError):
+    """Raised when a non-state event attempts to mutate runtime state."""
+
+
 def normalize_event_category(
     event_type: str,
     *,
@@ -48,3 +52,29 @@ def normalize_event_category(
     if isinstance(payload, dict) and normalized_category in EVENT_CATEGORIES:
         return normalized_category
     return EVENT_CATEGORY_OBSERVABILITY
+
+
+def event_allows_runtime_state_mutation(
+    event_type: str,
+    *,
+    category: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    return (
+        normalize_event_category(event_type, category=category, payload=payload)
+        == EVENT_CATEGORY_STATE
+    )
+
+
+def assert_runtime_state_mutation_allowed(
+    event_type: str,
+    *,
+    category: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> str:
+    normalized = normalize_event_category(event_type, category=category, payload=payload)
+    if normalized != EVENT_CATEGORY_STATE:
+        raise EventSafetyViolation(
+            f"event '{event_type}' is categorized as '{normalized}' and must not mutate runtime state"
+        )
+    return normalized

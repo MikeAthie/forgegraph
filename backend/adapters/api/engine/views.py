@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
 from application.services.credential_state import is_credential_revoked, is_oauth_provider
+from application.services.metrics import record_callback_auth_failure
 from application.services.oauth import (
     exchange_refresh_token_for_access_token,
     get_oauth_provider_config,
@@ -31,8 +32,9 @@ logger = logging.getLogger(__name__)
 _REFRESH_SKEW = timedelta(minutes=5)
 _RUN_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"pending", "running", "failed", "canceled"},
-    "running": {"running", "paused", "succeeded", "failed", "canceled"},
-    "paused": {"paused", "running", "failed", "canceled"},
+    "running": {"running", "paused", "resume_requested", "succeeded", "failed", "canceled"},
+    "paused": {"paused", "resume_requested", "failed", "canceled"},
+    "resume_requested": {"resume_requested", "running", "failed", "canceled"},
     "succeeded": {"succeeded"},
     "failed": {"failed"},
     "canceled": {"canceled"},
@@ -121,6 +123,7 @@ def _verify_engine_request(request: Request) -> Response | None:
     )
     if ok:
         return None
+    record_callback_auth_failure(reason)
     return Response({"detail": "Unauthorized", "reason": reason}, status=401)
 
 
@@ -162,7 +165,12 @@ def _serialize_run(run: Run) -> dict[str, object]:
         "last_heartbeat_at": run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
         "engine_instance_id": run.engine_instance_id,
         "recovery_state": run.recovery_state,
+        "recovery_reason": run.recovery_reason,
         "recovery_policy": run.recovery_policy,
+        "resume_requested_at": run.resume_requested_at.isoformat()
+        if run.resume_requested_at
+        else None,
+        "resume_attempt_id": str(run.resume_attempt_id) if run.resume_attempt_id else None,
     }
 
 
@@ -346,7 +354,15 @@ class EngineRunDetailView(APIView):
             if "status" in payload:
                 next_status = _validate_status(
                     payload.get("status"),
-                    allowed={"pending", "running", "paused", "succeeded", "failed", "canceled"},
+                    allowed={
+                        "pending",
+                        "running",
+                        "paused",
+                        "resume_requested",
+                        "succeeded",
+                        "failed",
+                        "canceled",
+                    },
                     field="status",
                 )
                 _validate_run_status_transition(run.status, next_status)

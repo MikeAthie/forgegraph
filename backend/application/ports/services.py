@@ -58,6 +58,7 @@ class IEngineClient(ABC):
         run_id: UUID,
         node_id: str,
         input_json: dict[str, Any],
+        resume_attempt_id: str | None = None,
         traceparent: str | None = None,
         tracestate: str | None = None,
     ) -> None:

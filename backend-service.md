@@ -1,5 +1,7 @@
 # Backend Service
 
+> Runtime precedence: [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md) is canonical.
+
 The backend is the ForgeGraph control plane.
 
 ## Responsibilities
@@ -28,4 +30,4 @@ The backend is the ForgeGraph control plane.
 
 ## Rule
 
-The backend is the source of truth by default. Keep runtime execution in the engine and all durable business state in backend-owned systems.
+The backend is the only durable source of truth. Keep runtime execution in the engine and all durable business state in backend-owned systems.

@@ -6,6 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 ROOT="$(forgegraph_repo_root)"
+cd "${ROOT}"
+
+bash "${SCRIPT_DIR}/check_backend_runtime_writes.sh"
+
 cd "${ROOT}/backend"
 
 require_command uv
@@ -24,4 +28,3 @@ uv run mypy .
 
 log_section "Backend tests"
 uv run pytest
-

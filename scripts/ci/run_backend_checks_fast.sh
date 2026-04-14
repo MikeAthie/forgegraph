@@ -19,6 +19,8 @@ if [[ "${BACKEND_CHANGED}" != "1" ]]; then
   exit 0
 fi
 
+bash "${SCRIPT_DIR}/check_backend_runtime_writes.sh"
+
 cd "${ROOT}/backend"
 
 require_command uv

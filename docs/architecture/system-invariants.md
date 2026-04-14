@@ -1,6 +1,9 @@
 # System Invariants
 
-These rules are canonical unless explicitly superseded later.
+> Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is the canonical runtime contract.
+> This document is broader system guidance. If it conflicts with runtime behavior, `runtime-invariants.md` wins.
+
+These rules describe broader product and platform guidance around the runtime contract.
 
 ## Core Direction
 
@@ -111,4 +114,3 @@ These rules are canonical unless explicitly superseded later.
 - The backend stores resumable execution snapshots.
 - The engine restarts work from explicit snapshot-backed context.
 - Snapshot boundaries must remain deterministic and replay-safe.
-

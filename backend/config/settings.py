@@ -15,6 +15,12 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env")
+_override_env_file = os.environ.get("FORGEGRAPH_ENV_FILE", "").strip()
+if _override_env_file:
+    _override_env_path = Path(_override_env_file)
+    if not _override_env_path.is_absolute():
+        _override_env_path = BASE_DIR.parent / _override_env_path
+    load_dotenv(_override_env_path, override=True)
 
 
 def _get_bool_env(name: str, default: bool) -> bool:
@@ -75,6 +81,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "adapters.api.metrics_middleware.RequestMetricsMiddleware",
     "adapters.api.deprecation_middleware.ApiDeprecationMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -292,6 +299,8 @@ AUTH_WS_TICKET_TTL_SECONDS = int(os.environ.get("AUTH_WS_TICKET_TTL_SECONDS", "4
 ENGINE_GRPC_TLS_ENABLED = _get_bool_env("ENGINE_GRPC_TLS_ENABLED", False)
 ENGINE_GRPC_TLS_CA_FILE = os.environ.get("ENGINE_GRPC_TLS_CA_FILE", "")
 ENGINE_GRPC_TLS_SERVER_NAME = os.environ.get("ENGINE_GRPC_TLS_SERVER_NAME", "")
+READINESS_REQUIRE_ENGINE = _get_bool_env("READINESS_REQUIRE_ENGINE", False)
+FORGEGRAPH_STRICT_RUNTIME_ENV = _get_bool_env("FORGEGRAPH_STRICT_RUNTIME_ENV", False)
 
 # Refresh token cookie (recommended for SPAs)
 AUTH_REFRESH_COOKIE = os.environ.get("AUTH_REFRESH_COOKIE", "refresh_token")

@@ -1978,6 +1978,123 @@ class TestEngineRunEvents:
         assert run_projection.pause_state_json == durable_pause_state
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_resumed_event_clears_resume_requested_tracking(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Resume Requested Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "human_gate_1", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="resume_requested",
+            paused_node_id="human_gate_1",
+            pause_state_json={"prompt_message": "Approve draft"},
+            resume_requested_at=timezone.now() - timedelta(minutes=2),
+            resume_attempt_id=uuid4(),
+        )
+
+        payload = {
+            "event_id": "evt-resume-1",
+            "type": "run_resumed",
+            "run_id": str(run.id),
+            "tenant_id": str(user.default_organization_id),
+            "timestamp": int(time.time() * 1000),
+            "output": {
+                "approved": True,
+                "resume_attempt_id": str(run.resume_attempt_id),
+            },
+        }
+
+        response = signed_engine_event_post(payload)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "running"
+        assert run.paused_node_id is None
+        assert run.pause_state_json is None
+        assert run.resume_requested_at is None
+        assert run.resume_attempt_id is None
+        assert run.recovery_state == "active"
+
+        run_projection = RunEventProjection.objects.get(run=run)
+        assert run_projection.status == "running"
+        assert run_projection.paused_node_id is None
+        assert run_projection.pause_state_json is None
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_resumed_rejects_invalid_transition_from_paused(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Invalid Resume Transition Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "human_gate_1", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="paused",
+            paused_node_id="human_gate_1",
+        )
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-resume-invalid-transition",
+                "type": "run_resumed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+                "output": {"resume_attempt_id": str(uuid4())},
+            }
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "invalid run event transition" in response.data["detail"].lower()
+        run.refresh_from_db()
+        assert run.status == "paused"
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_resumed_rejects_stale_resume_attempt(self, signed_engine_event_post, user):
+        graph = Graph.objects.create(owner=user, name="Stale Resume Ack Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "human_gate_1", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="resume_requested",
+            paused_node_id="human_gate_1",
+            pause_state_json={"prompt_message": "Approve draft"},
+            resume_requested_at=timezone.now() - timedelta(minutes=2),
+            resume_attempt_id=uuid4(),
+        )
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-resume-stale-attempt",
+                "type": "run_resumed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+                "output": {"resume_attempt_id": str(uuid4())},
+            }
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "resume_attempt_id" in response.data["detail"]
+        run.refresh_from_db()
+        assert run.status == "resume_requested"
+        assert run.resume_attempt_id is not None
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_build_shadow_state_for_run_and_node_lifecycle(
         self, signed_engine_event_post, user
     ):
@@ -2164,6 +2281,44 @@ class TestEngineRunEvents:
         assert "engine instance" in response.data["detail"].lower()
         assert RunEvent.objects.filter(run=run, external_id="evt-engine-assignment-2").count() == 0
 
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_observability_event_cannot_establish_engine_assignment(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Observability Assignment Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-observability-assignment-1",
+                "type": "node_stream_chunk",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "engine_instance_id": "engine-a",
+                "node_id": "prompt_1",
+                "node_type": "prompt",
+                "attempt": 1,
+                "timestamp": int(time.time() * 1000),
+                "output": {
+                    "chunk": "hello",
+                    "chunk_index": 1,
+                },
+            }
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "must not mutate runtime state" in response.data["detail"].lower()
+        run.refresh_from_db()
+        assert run.engine_instance_id == ""
+        assert run.last_progress_at is None
+        assert (
+            RunEvent.objects.filter(run=run, external_id="evt-observability-assignment-1").count()
+            == 0
+        )
+
     def test_reconcile_stale_runs_persists_checkpoint_diagnostics(self, user):
         graph = Graph.objects.create(owner=user, name="Stale Graph")
         version = GraphVersion.objects.create(
@@ -2261,9 +2416,43 @@ class TestEngineRunEvents:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["data"]["type"] == "node_stream.chunk"
         assert response.data["data"]["node_stream"]["chunk"] == "Hello"
+        run.refresh_from_db()
+        assert run.last_progress_at is None
+        assert run.engine_instance_id == ""
         assert RunEvent.objects.filter(
             run=run, event_type="node_stream.chunk", payload__chunk="Hello"
         ).exists()
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_schema_validation_is_observability_only(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Schema Observability Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-schema-observability-1",
+                "type": "run.schema_validation",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+                "output": {
+                    "errors": [{"message": "value must be a number"}],
+                    "mode": "strict",
+                },
+            }
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        run.refresh_from_db()
+        assert run.status == "running"
+        assert run.last_progress_at is None
+        event = RunEvent.objects.get(run=run, external_id="evt-schema-observability-1")
+        assert event.payload["category"] == "observability"
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_agent_stream_chunk_persists_structured_agent_event(
@@ -2585,6 +2774,14 @@ class TestRunResume:
         assert resume_calls[0][1]["run_id"] == run.id
         assert resume_calls[0][1]["node_id"] == "gate"
         assert resume_calls[0][1]["input_json"] == input_json
+        assert isinstance(resume_calls[0][1]["resume_attempt_id"], str)
+
+        run.refresh_from_db()
+        assert run.status == "resume_requested"
+        assert run.recovery_state == "resume_requested"
+        assert run.resume_requested_at is not None
+        assert run.resume_attempt_id is not None
+        assert resume_calls[0][1]["resume_attempt_id"] == str(run.resume_attempt_id)
 
         # Task updated
         task.refresh_from_db()
@@ -2618,6 +2815,15 @@ class TestRunResume:
         )
 
         assert response.status_code == status.HTTP_200_OK
+
+        run.refresh_from_db()
+        assert run.status == "resume_requested"
+        assert run.resume_requested_at is not None
+        assert run.resume_attempt_id is not None
+
+        resume_calls = [call for call in mock_engine_client.calls if call[0] == "resume_run"]
+        assert len(resume_calls) == 1
+        assert resume_calls[0][1]["resume_attempt_id"] == str(run.resume_attempt_id)
 
         task.refresh_from_db()
         assert task.status == "rejected"
