@@ -17,6 +17,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from application.services.run_liveness import reconcile_stale_runs
+from application.services.run_snapshots import RunSnapshot, set_snapshot
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
@@ -2386,15 +2387,14 @@ class TestEngineRunEvents:
             status="running",
             last_progress_at=timezone.now() - timedelta(minutes=10),
         )
-        checkpoint = RunCheckpoint.objects.create(
-            run=run,
-            node_id="human_gate_1",
-            step_index=7,
-            state_json={"state": "snapshot"},
-            completed_nodes=["draft_reply"],
-            skipped_nodes=[],
-            graph_json={"nodes": [], "edges": []},
+        snapshot = RunSnapshot(
+            run_id=run.id,
+            last_completed_node="human_gate_1",
+            next_node="resume_after_gate",
+            attempt_id="attempt-7",
+            updated_at=timezone.now(),
         )
+        set_snapshot(snapshot)
 
         result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
 
@@ -2405,8 +2405,9 @@ class TestEngineRunEvents:
         event = RunEvent.objects.get(run=run, event_type="run.updated")
         assert event.payload["checkpoint_available"] is True
         assert event.payload["checkpoint_node_id"] == "human_gate_1"
-        assert event.payload["checkpoint_step_index"] == 7
-        assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
+        assert event.payload["checkpoint_next_node"] == "resume_after_gate"
+        assert event.payload["checkpoint_attempt_id"] == "attempt-7"
+        assert event.payload["checkpoint_updated_at"] == snapshot.updated_at.isoformat()
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_reject_tenant_mismatch(self, signed_engine_event_post, user):

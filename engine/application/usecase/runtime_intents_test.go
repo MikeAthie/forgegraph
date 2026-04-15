@@ -32,6 +32,18 @@ func (p *recordingRuntimeIntentPublisher) Count() int {
 	return len(p.intents)
 }
 
+func (p *recordingRuntimeIntentPublisher) CountByIntentType(intentType string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	count := 0
+	for _, intent := range p.intents {
+		if intent.IntentType == intentType {
+			count++
+		}
+	}
+	return count
+}
+
 func (p *recordingRuntimeIntentPublisher) Last() *port.RuntimeIntentEnvelope {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -39,6 +51,19 @@ func (p *recordingRuntimeIntentPublisher) Last() *port.RuntimeIntentEnvelope {
 		return nil
 	}
 	return p.intents[len(p.intents)-1]
+}
+
+func (p *recordingRuntimeIntentPublisher) LastByIntentType(intentType string) *port.RuntimeIntentEnvelope {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := len(p.intents) - 1; i >= 0; i-- {
+		if p.intents[i].IntentType == intentType {
+			cloned := *p.intents[i]
+			cloned.Payload = cloneMapAny(p.intents[i].Payload)
+			return &cloned
+		}
+	}
+	return nil
 }
 
 func TestSchedulerPauseIntentActiveModePublishesWithoutLegacyPauseWrites(t *testing.T) {
@@ -76,11 +101,11 @@ func TestSchedulerPauseIntentActiveModePublishesWithoutLegacyPauseWrites(t *test
 	engine.Release(runID, "gate")
 
 	deadline := time.Now().Add(2 * time.Second)
-	for publisher.Count() == 0 && time.Now().Before(deadline) {
+	for publisher.CountByIntentType("pause_run") == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if publisher.Count() != 1 {
-		t.Fatalf("expected one pause intent to be published, got %d", publisher.Count())
+	if publisher.CountByIntentType("pause_run") != 1 {
+		t.Fatalf("expected one pause_run intent to be published, got %d", publisher.CountByIntentType("pause_run"))
 	}
 	if _, ok := engine.Repo.pauses[runID]; ok {
 		t.Fatalf("expected active pause intent mode to skip legacy pause state writes")
@@ -92,7 +117,7 @@ func TestSchedulerPauseIntentActiveModePublishesWithoutLegacyPauseWrites(t *test
 		t.Fatalf("expected active pause intent mode to suppress run_paused events")
 	}
 
-	intent := publisher.Last()
+	intent := publisher.LastByIntentType("pause_run")
 	if intent == nil {
 		t.Fatal("expected published pause intent")
 	}
@@ -142,8 +167,8 @@ func TestSchedulerPauseIntentShadowModePublishesAndPreservesLegacyPauseWrites(t 
 	if snapshot.PausedNodeID != "gate" {
 		t.Fatalf("expected paused node gate, got %q", snapshot.PausedNodeID)
 	}
-	if publisher.Count() != 1 {
-		t.Fatalf("expected one pause intent in shadow mode, got %d", publisher.Count())
+	if publisher.CountByIntentType("pause_run") != 1 {
+		t.Fatalf("expected one pause_run intent in shadow mode, got %d", publisher.CountByIntentType("pause_run"))
 	}
 	if countEvents(engine.Bus.All(), port.EventTypeRunPaused) != 1 {
 		t.Fatalf("expected shadow mode to preserve run_paused events")
