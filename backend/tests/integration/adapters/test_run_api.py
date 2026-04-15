@@ -17,6 +17,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from application.services.run_liveness import reconcile_stale_runs
+from application.services.run_snapshots import RunSnapshot, set_snapshot
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
@@ -2173,6 +2174,62 @@ class TestEngineRunEvents:
         assert node_projection.last_event_id == "evt-shadow-node-complete"
         assert node_projection.last_event_type == "node_completed"
 
+    @override_settings(
+        ENGINE_CALLBACK_SECRET="test-secret",
+        ENGINE_EVENT_STATE_MUTATION_ENABLED=False,
+    )
+    def test_engine_events_only_update_shadow_state_when_authoritative_mutation_disabled(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Intent Owned Lifecycle Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+        run_started = signed_engine_event_post(
+            {
+                "event_id": "evt-intent-owned-run-start",
+                "type": "run_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+        assert run_started.status_code == status.HTTP_200_OK
+        assert run_started.data["data"]["authoritative_state_updated"] is False
+
+        node_started = signed_engine_event_post(
+            {
+                "event_id": "evt-intent-owned-node-start",
+                "type": "node_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "node_id": "prompt_1",
+                "node_type": "prompt",
+                "attempt": 1,
+                "timestamp": int(time.time() * 1000) + 10,
+            }
+        )
+        assert node_started.status_code == status.HTTP_200_OK
+        assert node_started.data["data"]["authoritative_state_updated"] is False
+
+        run.refresh_from_db()
+        assert run.status == "pending"
+        assert NodeRun.objects.filter(run=run, node_id="prompt_1", attempt=1).count() == 0
+
+        run_projection = RunEventProjection.objects.get(run=run)
+        assert run_projection.status == "running"
+        assert run_projection.last_event_type == "run_started"
+
+        node_projection = NodeRunEventProjection.objects.get(
+            run=run,
+            node_id="prompt_1",
+            attempt=1,
+        )
+        assert node_projection.status == "running"
+        assert node_projection.last_event_type == "node_started"
+
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_idempotent_by_event_id(self, api_client, user):
         graph = Graph.objects.create(owner=user, name="My Graph")
@@ -2330,15 +2387,14 @@ class TestEngineRunEvents:
             status="running",
             last_progress_at=timezone.now() - timedelta(minutes=10),
         )
-        checkpoint = RunCheckpoint.objects.create(
-            run=run,
-            node_id="human_gate_1",
-            step_index=7,
-            state_json={"state": "snapshot"},
-            completed_nodes=["draft_reply"],
-            skipped_nodes=[],
-            graph_json={"nodes": [], "edges": []},
+        snapshot = RunSnapshot(
+            run_id=run.id,
+            last_completed_node="human_gate_1",
+            next_node="resume_after_gate",
+            attempt_id="attempt-7",
+            updated_at=timezone.now(),
         )
+        set_snapshot(snapshot)
 
         result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
 
@@ -2349,8 +2405,9 @@ class TestEngineRunEvents:
         event = RunEvent.objects.get(run=run, event_type="run.updated")
         assert event.payload["checkpoint_available"] is True
         assert event.payload["checkpoint_node_id"] == "human_gate_1"
-        assert event.payload["checkpoint_step_index"] == 7
-        assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
+        assert event.payload["checkpoint_next_node"] == "resume_after_gate"
+        assert event.payload["checkpoint_attempt_id"] == "attempt-7"
+        assert event.payload["checkpoint_updated_at"] == snapshot.updated_at.isoformat()
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_reject_tenant_mismatch(self, signed_engine_event_post, user):

@@ -9,6 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +25,7 @@ import (
 	"github.com/forgegraph/engine/domain/value"
 	"github.com/forgegraph/engine/infrastructure/metrics"
 	"github.com/forgegraph/engine/infrastructure/tracing"
+	"github.com/google/uuid"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -38,6 +42,12 @@ const (
 	sessionNamespacePrefix = "session"
 	sessionBufferKeyPrefix = "buffer"
 	checkpointPayloadV2    = 2
+)
+
+const (
+	RuntimeWriteModeLegacySync         = "legacy-sync"
+	RuntimeWriteModePauseIntents       = "pause-intents"
+	RuntimeWriteModePauseIntentsShadow = "pause-intents-shadow"
 )
 
 const (
@@ -82,17 +92,19 @@ func DefaultSchedulerConfig() SchedulerConfig {
 
 // Scheduler orchestrates workflow execution
 type Scheduler struct {
-	config            SchedulerConfig
-	registry          port.ExecutorRegistry
-	repository        port.RunRepository
-	emitter           port.EventEmitter
-	clock             schedulerClock
-	conditions        *service.ConditionEvaluator
-	summarizer        *SummarizationWorker
-	memoryRetriever   port.MemoryRetriever
-	observationClient port.ObservationMemoryClient
-	memoryStore       port.MemoryStore
-	hooks             schedulerHooks
+	config                 SchedulerConfig
+	registry               port.ExecutorRegistry
+	repository             port.RunRepository
+	emitter                port.EventEmitter
+	runtimeIntentPublisher port.RuntimeIntentPublisher
+	runtimeWriteMode       string
+	clock                  schedulerClock
+	conditions             *service.ConditionEvaluator
+	summarizer             *SummarizationWorker
+	memoryRetriever        port.MemoryRetriever
+	observationClient      port.ObservationMemoryClient
+	memoryStore            port.MemoryStore
+	hooks                  schedulerHooks
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
@@ -121,13 +133,14 @@ func NewScheduler(
 		config.CacheDefaultTTLSeconds = 3600
 	}
 	return &Scheduler{
-		config:      config,
-		registry:    registry,
-		repository:  repository,
-		emitter:     emitter,
-		clock:       systemClock{},
-		conditions:  service.NewConditionEvaluator(),
-		memoryStore: memoryStore,
+		config:           config,
+		registry:         registry,
+		repository:       repository,
+		emitter:          emitter,
+		runtimeWriteMode: RuntimeWriteModeLegacySync,
+		clock:            systemClock{},
+		conditions:       service.NewConditionEvaluator(),
+		memoryStore:      memoryStore,
 	}
 }
 
@@ -144,6 +157,36 @@ func (s *Scheduler) SetMemoryRetriever(retriever port.MemoryRetriever) {
 // SetObservationClient attaches the curated-memory client used by observation nodes.
 func (s *Scheduler) SetObservationClient(client port.ObservationMemoryClient) {
 	s.observationClient = client
+}
+
+// SetRuntimeIntentPublisher configures durable backend write-intent publishing.
+func (s *Scheduler) SetRuntimeIntentPublisher(
+	publisher port.RuntimeIntentPublisher,
+	mode string,
+) {
+	s.runtimeIntentPublisher = publisher
+	s.runtimeWriteMode = normalizeRuntimeWriteMode(mode)
+}
+
+func normalizeRuntimeWriteMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "", RuntimeWriteModeLegacySync:
+		return RuntimeWriteModeLegacySync
+	case RuntimeWriteModePauseIntents:
+		return RuntimeWriteModePauseIntents
+	case RuntimeWriteModePauseIntentsShadow:
+		return RuntimeWriteModePauseIntentsShadow
+	default:
+		return RuntimeWriteModeLegacySync
+	}
+}
+
+func (s *Scheduler) pauseIntentPublishingEnabled() bool {
+	return s.runtimeIntentPublisher != nil && (s.runtimeWriteMode == RuntimeWriteModePauseIntents || s.runtimeWriteMode == RuntimeWriteModePauseIntentsShadow)
+}
+
+func (s *Scheduler) pauseIntentActiveMode() bool {
+	return s.runtimeIntentPublisher != nil && s.runtimeWriteMode == RuntimeWriteModePauseIntents
 }
 
 // runContext holds runtime state for a single run
@@ -175,6 +218,7 @@ type runContext struct {
 	messagesSinceSummary int
 	cooldownRemaining    int
 	summaryInFlight      bool
+	pauseIntentPublished bool
 
 	// Synchronization
 	pendingMu   sync.Mutex
@@ -211,6 +255,16 @@ type runtimeLimits struct {
 	MaxRunDurationMs int64
 	MaxToolCalls     int64
 	MaxLLMCalls      int64
+}
+
+type resumeCheckpoint struct {
+	stepIndex      int
+	stateSnapshot  map[string]any
+	completedNodes []string
+	skippedNodes   []string
+	visitCounts    map[string]int
+	nextNode       string
+	attemptID      string
 }
 
 func (rc *runContext) newEvent(eventType port.EventType) *port.ExecutionEvent {
@@ -345,45 +399,35 @@ func (s *Scheduler) StartRun(
 		tracestate = traceContext[1]
 	}
 	type checkpointData struct {
-		nodeID          string
 		stepIndex       int
 		stateSnapshot   map[string]any
 		pendingSnapshot map[string]int
 		visitCounts     map[string]int
-		payloadVersion  int
 		completedNodes  []string
 		skippedNodes    []string
-		graphJSON       string
 		messageBuffer   []entity.Message
 		memoryConfig    *entity.MemoryConfig
 		currentSummary  *entity.Summary
+		nextNode        string
+		attemptID       string
 	}
 
 	var checkpoint *checkpointData
 	if s.isCheckpointingEnabled() {
-		nodeID, stepIndex, snapshot, completedNodes, skippedNodes, checkpointGraphJSON, err := s.repository.LoadLatestCheckpoint(ctx, runID)
+		resumeState, err := s.loadResumeCheckpoint(ctx, runID)
 		if err == nil {
-			if checkpointGraphJSON != "" {
-				graphJSON = checkpointGraphJSON
-			}
-			stateSnapshot, bufferSnapshot, memoryConfig, summary, completed, skipped, pendingSnapshot, visitCounts, payloadVersion :=
-				parseCheckpointPayload(snapshot, completedNodes, skippedNodes)
 			checkpoint = &checkpointData{
-				nodeID:          nodeID,
-				stepIndex:       stepIndex,
-				stateSnapshot:   stateSnapshot,
-				pendingSnapshot: pendingSnapshot,
-				visitCounts:     visitCounts,
-				payloadVersion:  payloadVersion,
-				completedNodes:  completed,
-				skippedNodes:    skipped,
-				graphJSON:       checkpointGraphJSON,
-				messageBuffer:   bufferSnapshot,
-				memoryConfig:    memoryConfig,
-				currentSummary:  summary,
+				stepIndex:       resumeState.stepIndex,
+				stateSnapshot:   resumeState.stateSnapshot,
+				pendingSnapshot: nil,
+				visitCounts:     resumeState.visitCounts,
+				completedNodes:  resumeState.completedNodes,
+				skippedNodes:    resumeState.skippedNodes,
+				nextNode:        resumeState.nextNode,
+				attemptID:       resumeState.attemptID,
 			}
 		} else if !errors.Is(err, domain.ErrCheckpointNotFound) && !errors.Is(err, domain.ErrRunNotFound) {
-			return fmt.Errorf("failed to load checkpoint: %w", err)
+			log.Printf("Ignoring invalid resume snapshot for run %s and starting clean: %v", runID, err)
 		}
 	}
 
@@ -403,7 +447,7 @@ func (s *Scheduler) StartRun(
 		return fmt.Errorf("unsupported engine_contract_version: %s", engineContractVersion)
 	}
 
-	// Parse input JSON when starting fresh
+	// Parse input JSON when starting fresh.
 	var input map[string]any
 	if checkpoint == nil && inputJSON != "" {
 		if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
@@ -578,6 +622,16 @@ func (s *Scheduler) StartRun(
 			s.applyCheckpointToPending(rc)
 		}
 		rc.initialNodes = s.computeReadyNodes(rc)
+		if checkpoint.nextNode != "" && slices.Contains(rc.initialNodes, checkpoint.nextNode) {
+			ordered := []string{checkpoint.nextNode}
+			for _, nodeID := range rc.initialNodes {
+				if nodeID == checkpoint.nextNode {
+					continue
+				}
+				ordered = append(ordered, nodeID)
+			}
+			rc.initialNodes = ordered
+		}
 	} else {
 		rc.initialNodes = s.computeReadyNodes(rc)
 	}
@@ -594,7 +648,11 @@ func (s *Scheduler) StartRun(
 
 	// Emit run started/resumed event
 	if checkpoint != nil {
-		s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunResumed))
+		resumedEvent := rc.newEvent(port.EventTypeRunResumed)
+		if checkpoint.attemptID != "" {
+			resumedEvent = resumedEvent.WithOutput(map[string]any{"resume_attempt_id": checkpoint.attemptID})
+		}
+		s.emitter.EmitAsync(resumedEvent)
 	} else {
 		s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunStarted))
 	}
@@ -805,46 +863,62 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 
 	// Handle human gate pause
 	if result.Pause {
-		// Set node to "waiting" status - do NOT set ended_at since the node is still pending human input
-		nodeRun.Status = string(value.NodeRunStatusWaiting)
+		pausePayload := map[string]any{}
 		if result.Output != nil {
-			nodeRun.OutputJSON = map[string]any{"pause_payload": result.Output}
+			if typed, ok := result.Output.(map[string]any); ok {
+				pausePayload = typed
+			}
 		}
-		s.repository.UpdateNodeRun(nodeCtx, nodeRun)
 
-		// Save state snapshot for durable resume
-		stateSnapshot := rc.state.Snapshot()
-		completedNodes := make([]string, 0, len(rc.completed))
-		skippedNodes := make([]string, 0, len(rc.skipped))
-		rc.pendingMu.Lock()
-		for id := range rc.completed {
-			completedNodes = append(completedNodes, id)
+		if s.pauseIntentPublishingEnabled() {
+			if err := s.publishPauseRunIntent(context.Background(), rc, node, nodeRun, pausePayload); err != nil {
+				s.setError(rc, fmt.Errorf("failed to publish pause_run intent: %w", err))
+				return
+			}
 		}
-		for id := range rc.skipped {
-			skippedNodes = append(skippedNodes, id)
-		}
-		rc.pendingMu.Unlock()
 
-		s.repository.SavePauseState(
-			context.Background(),
-			rc.runID,
-			nodeID,
-			stateSnapshot,
-			completedNodes,
-			skippedNodes,
-			rc.graphJSON,
-			rc.tenantID,
-		)
-		s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
+		if !s.pauseIntentActiveMode() {
+			// Set node to "waiting" status - do NOT set ended_at since the node is still pending human input
+			nodeRun.Status = string(value.NodeRunStatusWaiting)
+			if len(pausePayload) > 0 {
+				nodeRun.OutputJSON = map[string]any{"pause_payload": pausePayload}
+			}
+			s.repository.UpdateNodeRun(nodeCtx, nodeRun)
 
-		// Emit pause event with the pause payload
-		pauseEvent := rc.newEventFromContext(nodeCtx, port.EventTypeRunPaused).
-			WithNode(nodeID, node.Type, node.Name)
-		if result.Output != nil {
-			pauseEvent = pauseEvent.WithOutput(map[string]any{"pause_payload": result.Output})
+			// Save state snapshot for durable resume
+			stateSnapshot := rc.state.Snapshot()
+			completedNodes := make([]string, 0, len(rc.completed))
+			skippedNodes := make([]string, 0, len(rc.skipped))
+			rc.pendingMu.Lock()
+			for id := range rc.completed {
+				completedNodes = append(completedNodes, id)
+			}
+			for id := range rc.skipped {
+				skippedNodes = append(skippedNodes, id)
+			}
+			rc.pendingMu.Unlock()
+
+			s.repository.SavePauseState(
+				context.Background(),
+				rc.runID,
+				nodeID,
+				stateSnapshot,
+				completedNodes,
+				skippedNodes,
+				rc.graphJSON,
+				rc.tenantID,
+			)
+			s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
+
+			// Emit pause event with the pause payload
+			pauseEvent := rc.newEventFromContext(nodeCtx, port.EventTypeRunPaused).
+				WithNode(nodeID, node.Type, node.Name)
+			if len(pausePayload) > 0 {
+				pauseEvent = pauseEvent.WithOutput(pausePayload)
+			}
+			s.emitter.EmitAsync(pauseEvent)
+			s.flushEmitter("run_paused")
 		}
-		s.emitter.EmitAsync(pauseEvent)
-		s.flushEmitter("run_paused")
 
 		rc.cancel() // Stop further processing
 		return
@@ -981,6 +1055,19 @@ func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node 
 		stateError["next_nodes"] = append([]string(nil), nextNodes...)
 	}
 	rc.state.SetNodeOutput(node.ID, stateError)
+	stateDelta, deletedKeys := computeStateDelta(nodeRun.InputJSON, rc.state.Snapshot())
+	if len(stateDelta) > 0 {
+		if nodeRun.OutputJSON == nil {
+			nodeRun.OutputJSON = map[string]any{}
+		}
+		nodeRun.OutputJSON["state_delta"] = stateDelta
+	}
+	if len(deletedKeys) > 0 {
+		if nodeRun.OutputJSON == nil {
+			nodeRun.OutputJSON = map[string]any{}
+		}
+		nodeRun.OutputJSON["deleted_state_keys"] = deletedKeys
+	}
 
 	if !rc.allowCycles {
 		for _, skippedNodeID := range skippedNodes {
@@ -988,11 +1075,13 @@ func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node 
 		}
 	}
 
+	s.repository.UpdateNodeRun(ctx, nodeRun)
+
 	for _, nextNodeID := range nextNodes {
 		s.decrementAndEnqueue(rc, nextNodeID)
 	}
 
-	s.saveCheckpoint(rc, node.ID)
+	s.saveCheckpoint(rc, node.ID, nextNodes, nodeRun.Attempt)
 	return true
 }
 
@@ -1203,7 +1292,22 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 	// Trigger summarization if configured
 	s.maybeTriggerSummarization(rc, node)
 
-	s.saveCheckpoint(rc, nodeID)
+	stateDelta, deletedKeys := computeStateDelta(nodeRun.InputJSON, rc.state.Snapshot())
+	if len(stateDelta) > 0 {
+		if nodeRun.OutputJSON == nil {
+			nodeRun.OutputJSON = map[string]any{}
+		}
+		nodeRun.OutputJSON["state_delta"] = stateDelta
+	}
+	if len(deletedKeys) > 0 {
+		if nodeRun.OutputJSON == nil {
+			nodeRun.OutputJSON = map[string]any{}
+		}
+		nodeRun.OutputJSON["deleted_state_keys"] = deletedKeys
+	}
+	s.repository.UpdateNodeRun(ctx, nodeRun)
+
+	s.saveCheckpoint(rc, nodeID, nextNodes, nodeRun.Attempt)
 }
 
 func (s *Scheduler) maybeTriggerSummarization(rc *runContext, node *entity.Node) {
@@ -1282,18 +1386,7 @@ func (s *Scheduler) isCheckpointingEnabled() bool {
 	return s.config.CheckpointMode != CheckpointModeNone
 }
 
-func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
-	if !s.isCheckpointingEnabled() {
-		return
-	}
-
-	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
-	if s.config.CheckpointMode == CheckpointModeBatch {
-		if !s.shouldSaveBatchCheckpoint(rc, stepIndex) {
-			return
-		}
-	}
-
+func (s *Scheduler) buildCheckpointSnapshot(rc *runContext, stepIndex int) (map[string]any, []string, []string) {
 	rc.pendingMu.Lock()
 	completedNodes := make([]string, 0, len(rc.completed))
 	for id := range rc.completed {
@@ -1333,13 +1426,144 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string) {
 		checkpointPayload["current_summary"] = rc.currentSummary
 	}
 
+	_ = stepIndex
+	return checkpointPayload, completedNodes, skippedNodes
+}
+
+func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string, nextNodes []string, attempt int) {
+	if !s.isCheckpointingEnabled() {
+		return
+	}
+
+	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
+	if s.config.CheckpointMode == CheckpointModeBatch {
+		if !s.shouldSaveBatchCheckpoint(rc, stepIndex) {
+			return
+		}
+	}
+	checkpointPayload, completedNodes, skippedNodes := s.buildCheckpointSnapshot(rc, stepIndex)
+
 	if err := s.repository.SaveCheckpoint(context.Background(), rc.runID, nodeID, stepIndex, checkpointPayload, completedNodes, skippedNodes, rc.graphJSON); err != nil {
 		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
+	}
+	if err := s.publishNodeCompletedIntent(context.Background(), rc, nodeID, nextNodes, attempt); err != nil {
+		log.Printf("Failed to publish node_completed intent for run %s: %v", rc.runID, err)
 		return
 	}
 	rc.checkpointMu.Lock()
 	rc.lastCheckpointAt = s.clock.Now()
 	rc.checkpointMu.Unlock()
+}
+
+func (s *Scheduler) publishNodeCompletedIntent(
+	ctx context.Context,
+	rc *runContext,
+	nodeID string,
+	nextNodes []string,
+	attempt int,
+) error {
+	if s.runtimeIntentPublisher == nil {
+		return nil
+	}
+
+	nextNode := ""
+	if len(nextNodes) > 0 {
+		nextNode = nextNodes[0]
+	}
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   uuid.NewString(),
+		IntentType: "node_completed",
+		RunID:      rc.runID,
+		AttemptID:  strconv.Itoa(attempt),
+		TraceID:    rc.traceID,
+		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
+		Payload: map[string]any{
+			"node_id":   nodeID,
+			"attempt":   attempt,
+			"next_node": nextNode,
+		},
+	}
+	return s.runtimeIntentPublisher.Publish(ctx, intent)
+}
+
+func (s *Scheduler) publishPauseRunIntent(
+	ctx context.Context,
+	rc *runContext,
+	node *entity.Node,
+	nodeRun *entity.NodeRun,
+	pausePayload map[string]any,
+) error {
+	if !s.pauseIntentPublishingEnabled() {
+		return nil
+	}
+
+	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
+	checkpointPayload, completedNodes, skippedNodes := s.buildCheckpointSnapshot(rc, stepIndex)
+
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   uuid.NewString(),
+		IntentType: "pause_run",
+		RunID:      rc.runID,
+		AttemptID:  strconv.Itoa(nodeRun.Attempt),
+		TraceID:    rc.traceID,
+		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
+		Payload: map[string]any{
+			"node_id":       node.ID,
+			"node_type":     node.Type,
+			"node_name":     node.Name,
+			"node_attempt":  nodeRun.Attempt,
+			"pause_payload": pausePayload,
+			"checkpoint": map[string]any{
+				"node_id":         node.ID,
+				"step_index":      stepIndex,
+				"state_snapshot":  checkpointPayload,
+				"completed_nodes": completedNodes,
+				"skipped_nodes":   skippedNodes,
+				"graph_json":      rc.graphJSON,
+			},
+			"pause_state": map[string]any{
+				"state_snapshot":  rc.state.Snapshot(),
+				"completed_nodes": completedNodes,
+				"skipped_nodes":   skippedNodes,
+				"graph_json":      rc.graphJSON,
+				"tenant_id":       rc.tenantID,
+			},
+		},
+	}
+	if err := s.runtimeIntentPublisher.Publish(ctx, intent); err != nil {
+		atomic.AddInt64(&rc.checkpointSeq, -1)
+		return err
+	}
+	rc.pauseIntentPublished = true
+	rc.checkpointMu.Lock()
+	rc.lastCheckpointAt = s.clock.Now()
+	rc.checkpointMu.Unlock()
+	return nil
+}
+
+func (s *Scheduler) publishAckRunResumedIntent(
+	ctx context.Context,
+	rc *runContext,
+	nodeID string,
+	resumeAttemptID string,
+	resolution map[string]any,
+) error {
+	if s.runtimeIntentPublisher == nil {
+		return fmt.Errorf("runtime intent publisher is not configured")
+	}
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   uuid.NewString(),
+		IntentType: "ack_run_resumed",
+		RunID:      rc.runID,
+		AttemptID:  strings.TrimSpace(resumeAttemptID),
+		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
+		TraceID:    rc.traceID,
+		Payload: map[string]any{
+			"node_id":    nodeID,
+			"resolution": resolution,
+		},
+	}
+	return s.runtimeIntentPublisher.Publish(ctx, intent)
 }
 
 func (s *Scheduler) shouldSaveBatchCheckpoint(rc *runContext, stepIndex int) bool {
@@ -1816,6 +2040,167 @@ func parseCheckpointPayload(stateSnapshot map[string]any, completedNodes []strin
 	return rawState, bufferSnapshot, memoryConfig, summary, parsedCompleted, parsedSkipped, pendingSnapshot, visitCounts, payloadVersion
 }
 
+func (s *Scheduler) loadResumeCheckpoint(ctx context.Context, runID string) (*resumeCheckpoint, error) {
+	snapshot, err := s.repository.LoadRunSnapshot(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil || strings.TrimSpace(snapshot.LastCompletedNode) == "" {
+		return nil, domain.ErrCheckpointNotFound
+	}
+
+	run, err := s.repository.GetRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	nodeRuns, err := s.repository.GetNodeRunsByRunID(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	state := entity.NewStateWithInput(run.InputJSON)
+	sort.Slice(nodeRuns, func(i, j int) bool {
+		leftEndedAt := time.Time{}
+		rightEndedAt := time.Time{}
+		if nodeRuns[i].EndedAt != nil {
+			leftEndedAt = *nodeRuns[i].EndedAt
+		}
+		if nodeRuns[j].EndedAt != nil {
+			rightEndedAt = *nodeRuns[j].EndedAt
+		}
+		if !leftEndedAt.Equal(rightEndedAt) {
+			return leftEndedAt.Before(rightEndedAt)
+		}
+		if !nodeRuns[i].StartedAt.Equal(nodeRuns[j].StartedAt) {
+			return nodeRuns[i].StartedAt.Before(nodeRuns[j].StartedAt)
+		}
+		if nodeRuns[i].Attempt != nodeRuns[j].Attempt {
+			return nodeRuns[i].Attempt < nodeRuns[j].Attempt
+		}
+		return nodeRuns[i].NodeID < nodeRuns[j].NodeID
+	})
+
+	completedSet := make(map[string]bool)
+	skippedSet := make(map[string]bool)
+	visitCounts := make(map[string]int)
+
+	for _, nodeRun := range nodeRuns {
+		if nodeRun == nil {
+			continue
+		}
+		if nodeRun.Attempt > visitCounts[nodeRun.NodeID] {
+			visitCounts[nodeRun.NodeID] = nodeRun.Attempt
+		}
+
+		switch nodeRun.Status {
+		case string(value.NodeRunStatusSucceeded):
+			completedSet[nodeRun.NodeID] = true
+			applyStoredNodeStateDelta(state, nodeRun)
+		case string(value.NodeRunStatusSkipped):
+			skippedSet[nodeRun.NodeID] = true
+		case string(value.NodeRunStatusFailed):
+			if shouldTreatFailedNodeAsCompleted(nodeRun) {
+				completedSet[nodeRun.NodeID] = true
+				applyStoredNodeStateDelta(state, nodeRun)
+			}
+		}
+	}
+
+	if !completedSet[snapshot.LastCompletedNode] {
+		return nil, fmt.Errorf("snapshot last_completed_node %s has no durable completed node run", snapshot.LastCompletedNode)
+	}
+
+	completedNodes := make([]string, 0, len(completedSet))
+	for nodeID := range completedSet {
+		completedNodes = append(completedNodes, nodeID)
+	}
+	sort.Strings(completedNodes)
+
+	skippedNodes := make([]string, 0, len(skippedSet))
+	for nodeID := range skippedSet {
+		skippedNodes = append(skippedNodes, nodeID)
+	}
+	sort.Strings(skippedNodes)
+
+	return &resumeCheckpoint{
+		stepIndex:      max(len(completedNodes), 1),
+		stateSnapshot:  state.Snapshot(),
+		completedNodes: completedNodes,
+		skippedNodes:   skippedNodes,
+		visitCounts:    visitCounts,
+		nextNode:       snapshot.NextNode,
+		attemptID:      snapshot.AttemptID,
+	}, nil
+}
+
+func shouldTreatFailedNodeAsCompleted(nodeRun *entity.NodeRun) bool {
+	if nodeRun == nil {
+		return false
+	}
+	if nodeRun.OutputJSON != nil {
+		if _, ok := nodeRun.OutputJSON["state_delta"]; ok {
+			return true
+		}
+	}
+	action, _ := nodeRun.ErrorJSON["on_error_action"].(string)
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case onErrorStrategySkip, onErrorStrategyFallback:
+		return true
+	default:
+		return false
+	}
+}
+
+func applyStoredNodeStateDelta(state *entity.State, nodeRun *entity.NodeRun) {
+	if state == nil || nodeRun == nil {
+		return
+	}
+	if delta, ok := nodeRun.OutputJSON["state_delta"].(map[string]any); ok && len(delta) > 0 {
+		for key, value := range delta {
+			state.Set(key, value)
+		}
+	}
+	if rawDeleted, ok := nodeRun.OutputJSON["deleted_state_keys"].([]any); ok {
+		for _, item := range rawDeleted {
+			if key, ok := item.(string); ok && key != "" {
+				state.Delete(key)
+			}
+		}
+	}
+	if rawDeleted, ok := nodeRun.OutputJSON["deleted_state_keys"].([]string); ok {
+		for _, key := range rawDeleted {
+			if key != "" {
+				state.Delete(key)
+			}
+		}
+	}
+	if _, ok := nodeRun.OutputJSON["state_delta"]; ok {
+		return
+	}
+	if output, ok := nodeRun.OutputJSON["output"]; ok {
+		state.SetNodeOutput(nodeRun.NodeID, output)
+	}
+}
+
+func computeStateDelta(before map[string]any, after map[string]any) (map[string]any, []string) {
+	delta := make(map[string]any)
+	deleted := make([]string, 0)
+
+	for key, nextValue := range after {
+		if previousValue, ok := before[key]; ok && reflect.DeepEqual(previousValue, nextValue) {
+			continue
+		}
+		delta[key] = nextValue
+	}
+	for key := range before {
+		if _, ok := after[key]; !ok {
+			deleted = append(deleted, key)
+		}
+	}
+	sort.Strings(deleted)
+	return delta, deleted
+}
+
 func toStringSlice(raw []any) []string {
 	out := make([]string, 0, len(raw))
 	for _, value := range raw {
@@ -2073,6 +2458,9 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 		errorMsg = rc.err.Error()
 	} else if rc.ctx.Err() != nil {
 		// Context was cancelled but no error - likely paused or cancelled
+		if rc.pauseIntentPublished {
+			return
+		}
 		// Check current status
 		run, _ := s.repository.GetRun(context.Background(), rc.runID)
 		if run != nil && run.Status == string(value.RunStatusPaused) {
@@ -2275,7 +2663,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 
 		// Mark run as failed
 		s.repository.SetRunEnded(ctx, runID, string(value.RunStatusFailed), nil, errorMsg)
-		s.repository.ClearPauseState(ctx, runID)
+		if !s.pauseIntentActiveMode() {
+			s.repository.ClearPauseState(ctx, runID)
+		}
 		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunFailed, runID).WithTenantID(tenantID).WithError(errorMsg))
 		s.flushEmitter("run_failed")
 		return nil
@@ -2445,8 +2835,20 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	s.activeRuns.Store(runID, rc)
 
 	// Clear pause state and update run status
-	s.repository.ClearPauseState(ctx, runID)
-	s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning))
+	if s.pauseIntentActiveMode() {
+		if err := s.publishAckRunResumedIntent(
+			ctx,
+			rc,
+			nodeID,
+			resumeAttemptID,
+			humanDecision,
+		); err != nil {
+			return fmt.Errorf("failed to publish ack_run_resumed intent: %w", err)
+		}
+	} else {
+		s.repository.ClearPauseState(ctx, runID)
+		s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning))
+	}
 
 	// Emit run resumed event
 	resumedEvent := rc.newEvent(port.EventTypeRunResumed)

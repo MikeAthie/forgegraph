@@ -25,6 +25,7 @@ ALLOWED_RUNTIME_WRITERS = {
     Path("backend/adapters/api/integrations/telegram_views.py"),
     Path("backend/adapters/api/integrations/whatsapp_views.py"),
     Path("backend/adapters/api/integrations/webhook_views.py"),
+    Path("backend/application/services/runtime_write_intents.py"),
     Path("backend/application/services/run_liveness.py"),
     Path("backend/infrastructure/orm/management/commands/process_run_queue.py"),
 }

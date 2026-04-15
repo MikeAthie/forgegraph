@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from django.utils import timezone
 
+from application.services.run_snapshots import RunSnapshot, set_snapshot
 from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run, User
 from infrastructure.security import s2s
 
@@ -276,6 +277,36 @@ class TestEngineRunApi:
         run.refresh_from_db()
         assert run.pause_state_json is not None
         assert run.pause_state_json["graph_json"] == graph_json
+
+    def test_snapshot_round_trip_reads_backend_owned_redis_snapshot(self, api_client):
+        user = User.objects.create_user(email="engine-snapshot@example.com", password="password123")
+        graph = Graph.objects.create(owner=user, name="Snapshot Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+        set_snapshot(
+            RunSnapshot(
+                run_id=run.id,
+                last_completed_node="node_a",
+                next_node="node_b",
+                attempt_id="attempt-9",
+                updated_at=timezone.now(),
+            )
+        )
+
+        response = api_client.get(
+            f"/api/engine/runs/{run.id}/snapshot",
+            **_signed_headers("test-secret"),
+        )
+
+        assert response.status_code == 200
+        assert response.data["data"]["run_id"] == str(run.id)
+        assert response.data["data"]["last_completed_node"] == "node_a"
+        assert response.data["data"]["next_node"] == "node_b"
+        assert response.data["data"]["attempt_id"] == "attempt-9"
 
     def test_node_run_upsert_and_latest_lookup(self, api_client):
         user = User.objects.create_user(email="engine-node-run@example.com", password="password123")

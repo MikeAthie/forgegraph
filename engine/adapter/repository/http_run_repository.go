@@ -13,18 +13,22 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
+	"github.com/google/uuid"
 )
 
 // HTTPRunRepository persists run state through signed control-plane HTTP APIs.
 type HTTPRunRepository struct {
-	baseURL string
-	secret  string
-	client  *http.Client
+	baseURL         string
+	secret          string
+	client          *http.Client
+	intentPublisher port.RuntimeIntentPublisher
 }
 
 type controlPlaneEnvelope[T any] struct {
@@ -66,6 +70,14 @@ type controlPlaneCheckpoint struct {
 	GraphJSON      string         `json:"graph_json"`
 }
 
+type controlPlaneSnapshot struct {
+	RunID             string    `json:"run_id"`
+	LastCompletedNode string    `json:"last_completed_node"`
+	NextNode          string    `json:"next_node"`
+	AttemptID         string    `json:"attempt_id"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
 type controlPlanePauseState struct {
 	PausedNodeID   string         `json:"paused_node_id"`
 	StateSnapshot  map[string]any `json:"state_snapshot"`
@@ -82,14 +94,20 @@ type controlPlaneCacheEntry struct {
 }
 
 // NewHTTPRunRepository creates a control-plane-backed run repository.
-func NewHTTPRunRepository(baseURL, secret string, client *http.Client) *HTTPRunRepository {
+func NewHTTPRunRepository(
+	baseURL,
+	secret string,
+	client *http.Client,
+	intentPublisher port.RuntimeIntentPublisher,
+) *HTTPRunRepository {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &HTTPRunRepository{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		secret:  secret,
-		client:  client,
+		baseURL:         strings.TrimRight(baseURL, "/"),
+		secret:          secret,
+		client:          client,
+		intentPublisher: intentPublisher,
 	}
 }
 
@@ -107,25 +125,33 @@ func (r *HTTPRunRepository) GetRun(ctx context.Context, runID string) (*entity.R
 }
 
 func (r *HTTPRunRepository) UpdateRunStatus(ctx context.Context, runID string, status string) error {
-	return r.updateRun(ctx, runID, map[string]any{"status": status})
+	return r.publishIntent(ctx, "set_run_status", runID, "", "", map[string]any{"status": status})
 }
 
 func (r *HTTPRunRepository) UpdateRunOutput(ctx context.Context, runID string, output map[string]any) error {
-	return r.updateRun(ctx, runID, map[string]any{"output_json": output})
+	return r.publishIntent(ctx, "set_run_status", runID, "", "", map[string]any{"output_json": output})
 }
 
 func (r *HTTPRunRepository) UpdateRunError(ctx context.Context, runID string, errorMsg string) error {
-	return r.updateRun(ctx, runID, map[string]any{"error_message": errorMsg})
+	return r.publishIntent(
+		ctx,
+		"set_run_status",
+		runID,
+		"",
+		"",
+		map[string]any{"error_message": errorMsg},
+	)
 }
 
 func (r *HTTPRunRepository) SetRunEnded(ctx context.Context, runID string, status string, output map[string]any, errorMsg string) error {
 	payload := map[string]any{
-		"status":        status,
-		"output_json":   output,
-		"error_message": errorMsg,
-		"ended_at":      time.Now().UTC().Format(time.RFC3339Nano),
+		"status":            status,
+		"output_json":       output,
+		"error_message":     errorMsg,
+		"ended_at":          time.Now().UTC().Format(time.RFC3339Nano),
+		"clear_pause_state": true,
 	}
-	return r.updateRun(ctx, runID, payload)
+	return r.publishIntent(ctx, "set_run_status", runID, "", "", payload)
 }
 
 func (r *HTTPRunRepository) SavePauseState(
@@ -138,6 +164,9 @@ func (r *HTTPRunRepository) SavePauseState(
 	graphJSON string,
 	tenantID string,
 ) error {
+	if r.intentPublisher != nil {
+		return fmt.Errorf("direct pause-state writes are disabled when runtime intents are enabled")
+	}
 	payload := controlPlanePauseState{
 		PausedNodeID:   pausedNodeID,
 		StateSnapshot:  stateSnapshot,
@@ -174,6 +203,9 @@ func (r *HTTPRunRepository) LoadPauseState(
 }
 
 func (r *HTTPRunRepository) ClearPauseState(ctx context.Context, runID string) error {
+	if r.intentPublisher != nil {
+		return fmt.Errorf("direct pause-state clears are disabled when runtime intents are enabled")
+	}
 	err := r.do(ctx, http.MethodDelete, r.runPauseStatePath(runID), nil, nil)
 	if err != nil {
 		var apiErr *controlPlaneError
@@ -194,7 +226,21 @@ func (r *HTTPRunRepository) SaveCheckpoint(ctx context.Context, runID, nodeID st
 		SkippedNodes:   append([]string(nil), skippedNodes...),
 		GraphJSON:      graphJSON,
 	}
-	return r.do(ctx, http.MethodPut, r.runCheckpointPath(runID), payload, nil)
+	return r.publishIntent(
+		ctx,
+		"store_checkpoint",
+		runID,
+		strconv.Itoa(stepIndex),
+		"",
+		map[string]any{
+			"node_id":         payload.NodeID,
+			"step_index":      payload.StepIndex,
+			"state_snapshot":  payload.StateSnapshot,
+			"completed_nodes": payload.CompletedNodes,
+			"skipped_nodes":   payload.SkippedNodes,
+			"graph_json":      payload.GraphJSON,
+		},
+	)
 }
 
 func (r *HTTPRunRepository) LoadLatestCheckpoint(ctx context.Context, runID string) (nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string, err error) {
@@ -220,6 +266,25 @@ func (r *HTTPRunRepository) ClearCheckpoints(ctx context.Context, runID string) 
 		return err
 	}
 	return nil
+}
+
+func (r *HTTPRunRepository) LoadRunSnapshot(ctx context.Context, runID string) (*port.RunResumeSnapshot, error) {
+	var snapshot controlPlaneSnapshot
+	err := r.do(ctx, http.MethodGet, r.runSnapshotPath(runID), nil, &snapshot)
+	if err != nil {
+		var apiErr *controlPlaneError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			return nil, domain.ErrCheckpointNotFound
+		}
+		return nil, err
+	}
+	return &port.RunResumeSnapshot{
+		RunID:             snapshot.RunID,
+		LastCompletedNode: snapshot.LastCompletedNode,
+		NextNode:          snapshot.NextNode,
+		AttemptID:         snapshot.AttemptID,
+		UpdatedAt:         snapshot.UpdatedAt,
+	}, nil
 }
 
 func (r *HTTPRunRepository) GetCachedNodeResult(ctx context.Context, cacheKey string) (output any, found bool, err error) {
@@ -250,24 +315,14 @@ func (r *HTTPRunRepository) CreateNodeRun(ctx context.Context, nodeRun *entity.N
 	if nodeRun == nil {
 		return nil
 	}
-	persisted, err := r.upsertNodeRun(ctx, nodeRun)
-	if err != nil {
-		return err
-	}
-	*nodeRun = *persisted
-	return nil
+	return r.publishNodeRunIntent(ctx, nodeRun)
 }
 
 func (r *HTTPRunRepository) UpdateNodeRun(ctx context.Context, nodeRun *entity.NodeRun) error {
 	if nodeRun == nil {
 		return nil
 	}
-	persisted, err := r.upsertNodeRun(ctx, nodeRun)
-	if err != nil {
-		return err
-	}
-	*nodeRun = *persisted
-	return nil
+	return r.publishNodeRunIntent(ctx, nodeRun)
 }
 
 func (r *HTTPRunRepository) GetNodeRun(ctx context.Context, runID, nodeID string) (*entity.NodeRun, error) {
@@ -294,6 +349,65 @@ func (r *HTTPRunRepository) GetNodeRunsByRunID(ctx context.Context, runID string
 		return nil, err
 	}
 	return nodeRuns, nil
+}
+
+func (r *HTTPRunRepository) publishNodeRunIntent(ctx context.Context, nodeRun *entity.NodeRun) error {
+	if nodeRun == nil {
+		return nil
+	}
+	payload := map[string]any{
+		"id":         nodeRun.ID,
+		"node_id":    nodeRun.NodeID,
+		"node_type":  nodeRun.NodeType,
+		"status":     nodeRun.Status,
+		"attempt":    nodeRun.Attempt,
+		"started_at": nodeRun.StartedAt.UTC().Format(time.RFC3339Nano),
+		"trace_id":   nodeRun.TraceID,
+		"span_id":    nodeRun.SpanID,
+	}
+	if nodeRun.EndedAt != nil {
+		payload["ended_at"] = nodeRun.EndedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if nodeRun.InputJSON != nil {
+		payload["input_json"] = nodeRun.InputJSON
+	}
+	if nodeRun.OutputJSON != nil {
+		payload["output_json"] = nodeRun.OutputJSON
+	}
+	if nodeRun.ErrorJSON != nil {
+		payload["error_json"] = nodeRun.ErrorJSON
+	}
+	return r.publishIntent(
+		ctx,
+		"upsert_node_run",
+		nodeRun.RunID,
+		strconv.Itoa(nodeRun.Attempt),
+		nodeRun.TraceID,
+		payload,
+	)
+}
+
+func (r *HTTPRunRepository) publishIntent(
+	ctx context.Context,
+	intentType string,
+	runID string,
+	attemptID string,
+	traceID string,
+	payload map[string]any,
+) error {
+	if r.intentPublisher == nil {
+		return fmt.Errorf("runtime intent publisher is not configured")
+	}
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   uuid.NewString(),
+		IntentType: intentType,
+		RunID:      runID,
+		AttemptID:  attemptID,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
+		TraceID:    traceID,
+		Payload:    payload,
+	}
+	return r.intentPublisher.Publish(ctx, intent)
 }
 
 func (r *HTTPRunRepository) updateRun(ctx context.Context, runID string, payload map[string]any) error {
@@ -444,6 +558,10 @@ func (r *HTTPRunRepository) runPauseStatePath(runID string) string {
 
 func (r *HTTPRunRepository) runCheckpointPath(runID string) string {
 	return fmt.Sprintf("/api/engine/runs/%s/checkpoint", runID)
+}
+
+func (r *HTTPRunRepository) runSnapshotPath(runID string) string {
+	return fmt.Sprintf("/api/engine/runs/%s/snapshot", runID)
 }
 
 func (r *HTTPRunRepository) runNodeRunListPath(runID string) string {

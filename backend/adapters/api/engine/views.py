@@ -23,6 +23,7 @@ from application.services.oauth import (
 )
 from application.services.redaction import redact_payload
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
+from application.services.run_snapshots import delete_snapshot, get_snapshot
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import decrypt_api_key, encrypt_api_key
 from infrastructure.orm.models import APIKey, MemoryEntry, NodeRun, NodeRunCache, Run, RunCheckpoint
@@ -601,6 +602,49 @@ class EngineRunCheckpointView(APIView):
                 message="Checkpoint not found",
                 status=404,
             )
+        return success_response({"cleared": True})
+
+
+class EngineRunSnapshotView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, run_id: UUID) -> Response:
+        auth_error = _verify_engine_request(request)
+        if auth_error is not None:
+            return auth_error
+
+        run = _get_run_or_404(run_id)
+        if isinstance(run, Response):
+            return run
+
+        snapshot = get_snapshot(run.id)
+        if snapshot is None:
+            return error_response(
+                code="NO_SNAPSHOT",
+                message="Snapshot not found",
+                status=404,
+            )
+
+        return success_response(
+            {
+                "run_id": str(snapshot.run_id),
+                "last_completed_node": snapshot.last_completed_node,
+                "next_node": snapshot.next_node,
+                "attempt_id": snapshot.attempt_id,
+                "updated_at": snapshot.updated_at.isoformat(),
+            }
+        )
+
+    def delete(self, request: Request, run_id: UUID) -> Response:
+        auth_error = _verify_engine_request(request)
+        if auth_error is not None:
+            return auth_error
+
+        run = _get_run_or_404(run_id)
+        if isinstance(run, Response):
+            return run
+
+        delete_snapshot(run.id)
         return success_response({"cleared": True})
 
 

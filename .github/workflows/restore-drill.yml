@@ -75,13 +75,13 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: uv sync --dev
+        run: python -m uv sync --dev
 
       - name: Seed database
         working-directory: backend
         run: |
-          uv run python manage.py migrate --noinput
-          uv run python manage.py shell -c "from infrastructure.orm.models import User, Graph, GraphVersion, Run; user,_=User.objects.get_or_create(email='restore-drill@example.com'); user.set_password('RestorePass!234'); user.save(); graph,_=Graph.objects.get_or_create(owner=user, name='Restore Drill'); version,_=GraphVersion.objects.get_or_create(graph=graph, version=1, defaults={'graph_json': {'nodes': [], 'edges': []}}); Run.objects.get_or_create(owner=user, graph_version=version, status='succeeded')"
+          python -m uv run python manage.py migrate --noinput
+          python -m uv run python manage.py shell -c "from infrastructure.orm.models import User, Graph, GraphVersion, Run; user,_=User.objects.get_or_create(email='restore-drill@example.com'); user.set_password('RestorePass!234'); user.save(); graph,_=Graph.objects.get_or_create(owner=user, name='Restore Drill'); version,_=GraphVersion.objects.get_or_create(graph=graph, version=1, defaults={'graph_json': {'nodes': [], 'edges': []}}); Run.objects.get_or_create(owner=user, graph_version=version, status='succeeded')"
 
       - name: Create native backup
         run: bash scripts/ops/backup_postgres.sh backups/restore-drill.dump
@@ -92,7 +92,7 @@ jobs:
       - name: Start backend for restore verification
         working-directory: backend
         run: |
-          uv run python manage.py runserver 127.0.0.1:8000 --noreload > ../restore-drill-backend.log 2>&1 &
+          python -m uv run python manage.py runserver 127.0.0.1:8000 --noreload > ../restore-drill-backend.log 2>&1 &
           echo $! > ../restore-drill-backend.pid
 
       - name: Verify restored backend

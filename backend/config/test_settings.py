@@ -13,3 +13,8 @@ import os
 os.environ.setdefault("FORGEGRAPH_ENV_FILE", ".env.test")
 
 from .settings import *  # noqa: F401,F403
+
+# Legacy engine-event mutation stays enabled in the broad test environment while
+# the suite is migrated to the runtime-intent path. Production defaults remain
+# backend-intent-only unless explicitly overridden.
+ENGINE_EVENT_STATE_MUTATION_ENABLED = True
