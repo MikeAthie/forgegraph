@@ -4,10 +4,10 @@ Run status value objects.
 Clean Architecture: Enterprise Business Rules layer.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     """Status of a workflow run."""
 
     PENDING = "pending"
@@ -18,7 +18,7 @@ class RunStatus(str, Enum):
     CANCELED = "canceled"
 
 
-class NodeRunStatus(str, Enum):
+class NodeRunStatus(StrEnum):
     """Status of a node execution within a run."""
 
     PENDING = "pending"

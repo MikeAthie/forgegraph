@@ -5,10 +5,10 @@ Clean Architecture: Enterprise Business Rules layer.
 """
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class BackoffStrategy(str, Enum):
+class BackoffStrategy(StrEnum):
     """Backoff strategy for retries."""
 
     FIXED = "fixed"

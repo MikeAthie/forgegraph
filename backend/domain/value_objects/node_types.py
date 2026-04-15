@@ -5,13 +5,13 @@ Clean Architecture: Enterprise Business Rules layer.
 """
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from domain.value_objects.retry_policy import RetryPolicy
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     """Enumeration of supported node types."""
 
     AGENT = "agent"
