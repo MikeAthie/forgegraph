@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from django.utils import timezone
@@ -46,7 +47,7 @@ def get_snapshot(
     if not raw_payload:
         return None
 
-    payload = json.loads(raw_payload)
+    payload = json.loads(cast(str | bytes | bytearray, raw_payload))
     updated_at = parse_datetime(str(payload.get("updated_at") or "").strip())
     if updated_at is None:
         raise ValueError("snapshot.updated_at must be a valid ISO-8601 timestamp")
