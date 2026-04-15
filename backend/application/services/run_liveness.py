@@ -13,9 +13,10 @@ from application.services.engine_selection import get_default_engine_instance_id
 from application.services.event_categories import EVENT_CATEGORY_STATE
 from application.services.metrics import record_liveness_reconciliation, record_run_completed
 from application.services.run_queue import enqueue_run
+from application.services.run_snapshots import delete_snapshot, get_snapshot
 from application.services.structured_logging import log_event
 from application.services.tenancy import get_tenant_id_for_user
-from infrastructure.orm.models import Run, RunCheckpoint, RunEvent
+from infrastructure.orm.models import Run, RunEvent
 
 logger = logging.getLogger(__name__)
 
@@ -43,27 +44,29 @@ def recovery_state_for_status(status: str) -> str:
 class CheckpointContext:
     checkpoint_available: bool
     checkpoint_node_id: str | None = None
-    checkpoint_step_index: int | None = None
+    checkpoint_next_node: str | None = None
+    checkpoint_attempt_id: str | None = None
     checkpoint_updated_at: datetime | None = None
 
     @classmethod
     def from_run(cls, run: Run) -> CheckpointContext:
-        try:
-            checkpoint = run.checkpoint
-        except RunCheckpoint.DoesNotExist:
+        snapshot = get_snapshot(run.id)
+        if snapshot is None:
             return cls(checkpoint_available=False)
         return cls(
             checkpoint_available=True,
-            checkpoint_node_id=checkpoint.node_id,
-            checkpoint_step_index=checkpoint.step_index,
-            checkpoint_updated_at=checkpoint.updated_at,
+            checkpoint_node_id=snapshot.last_completed_node,
+            checkpoint_next_node=snapshot.next_node or None,
+            checkpoint_attempt_id=snapshot.attempt_id or None,
+            checkpoint_updated_at=snapshot.updated_at,
         )
 
     def as_payload(self) -> dict[str, object]:
         return {
             "checkpoint_available": self.checkpoint_available,
             "checkpoint_node_id": self.checkpoint_node_id,
-            "checkpoint_step_index": self.checkpoint_step_index,
+            "checkpoint_next_node": self.checkpoint_next_node,
+            "checkpoint_attempt_id": self.checkpoint_attempt_id,
             "checkpoint_updated_at": self.checkpoint_updated_at.isoformat()
             if self.checkpoint_updated_at
             else None,
@@ -79,7 +82,8 @@ class CheckpointContext:
         )
         return (
             f"checkpoint=node:{self.checkpoint_node_id or 'unknown'} "
-            f"step:{self.checkpoint_step_index if self.checkpoint_step_index is not None else 'unknown'} "
+            f"next:{self.checkpoint_next_node or 'unknown'} "
+            f"attempt:{self.checkpoint_attempt_id or 'unknown'} "
             f"updated:{updated_at}"
         )
 
@@ -226,7 +230,8 @@ def _fail_stale_run(
         recovery_policy=recovery_policy,
         recovery_reason=recovery_reason,
         checkpoint_available=checkpoint_context.checkpoint_available,
-        checkpoint_step_index=checkpoint_context.checkpoint_step_index,
+        checkpoint_next_node=checkpoint_context.checkpoint_next_node,
+        checkpoint_attempt_id=checkpoint_context.checkpoint_attempt_id,
         checkpoint_updated_at=checkpoint_context.checkpoint_updated_at,
         engine_instance_id=run.engine_instance_id,
     )
@@ -257,7 +262,7 @@ def _queue_stale_run_recovery(
 
     with transaction.atomic():
         if recovery_policy == RECOVERY_POLICY_RETRY:
-            RunCheckpoint.objects.filter(run=run).delete()
+            delete_snapshot(run.id)
 
         run.status = "pending"
         run.ended_at = None
@@ -324,7 +329,8 @@ def _queue_stale_run_recovery(
         recovery_policy=recovery_policy,
         recovery_reason=recovery_reason,
         checkpoint_available=checkpoint_context.checkpoint_available,
-        checkpoint_step_index=checkpoint_context.checkpoint_step_index,
+        checkpoint_next_node=checkpoint_context.checkpoint_next_node,
+        checkpoint_attempt_id=checkpoint_context.checkpoint_attempt_id,
         checkpoint_updated_at=checkpoint_context.checkpoint_updated_at,
         queue_status=queue_entry.status,
     )

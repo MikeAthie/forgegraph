@@ -10,9 +10,30 @@ import pytest
 from rest_framework.test import APIClient
 
 from adapters.gateways.grpc_engine_client import MockEngineClient
+from application.services import run_snapshots
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import User
 from infrastructure.security import s2s
+
+
+class _InMemoryRedis:
+    def __init__(self) -> None:
+        self._values: dict[str, str] = {}
+
+    def get(self, key: str):
+        return self._values.get(key)
+
+    def set(self, key: str, value: str) -> bool:
+        self._values[key] = value
+        return True
+
+    def setex(self, key: str, ttl_seconds: int, value: str) -> bool:
+        _ = ttl_seconds
+        self._values[key] = value
+        return True
+
+    def delete(self, key: str) -> int:
+        return 1 if self._values.pop(key, None) is not None else 0
 
 
 @pytest.fixture
@@ -69,3 +90,10 @@ def signed_engine_event_post(api_client):
         )
 
     return _post
+
+
+@pytest.fixture(autouse=True)
+def in_memory_run_snapshot_redis(monkeypatch):
+    redis_client = _InMemoryRedis()
+    monkeypatch.setattr(run_snapshots, "build_run_snapshot_redis_client", lambda: redis_client)
+    yield redis_client

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
 )
@@ -30,6 +31,13 @@ type checkpointState struct {
 	graphJSON      string
 }
 
+type runSnapshotState struct {
+	lastCompletedNode string
+	nextNode          string
+	attemptID         string
+	updatedAt         time.Time
+}
+
 type cacheEntry struct {
 	output    any
 	expiresAt time.Time
@@ -43,6 +51,7 @@ type MemoryRunRepository struct {
 	nodeRuns    map[string]*entity.NodeRun // key: runID-nodeID
 	pauseStates map[string]*pauseState     // key: runID
 	checkpoints map[string]*checkpointState
+	snapshots   map[string]*runSnapshotState
 	cache       map[string]*cacheEntry
 }
 
@@ -53,6 +62,7 @@ func NewMemoryRunRepository() *MemoryRunRepository {
 		nodeRuns:    make(map[string]*entity.NodeRun),
 		pauseStates: make(map[string]*pauseState),
 		checkpoints: make(map[string]*checkpointState),
+		snapshots:   make(map[string]*runSnapshotState),
 		cache:       make(map[string]*cacheEntry),
 	}
 }
@@ -231,6 +241,7 @@ func (r *MemoryRunRepository) Clear() {
 	r.nodeRuns = make(map[string]*entity.NodeRun)
 	r.pauseStates = make(map[string]*pauseState)
 	r.checkpoints = make(map[string]*checkpointState)
+	r.snapshots = make(map[string]*runSnapshotState)
 	r.cache = make(map[string]*cacheEntry)
 }
 
@@ -344,6 +355,40 @@ func (r *MemoryRunRepository) ClearCheckpoints(ctx context.Context, runID string
 
 	delete(r.checkpoints, runID)
 	return nil
+}
+
+// LoadRunSnapshot retrieves the backend-owned execution snapshot for a run.
+func (r *MemoryRunRepository) LoadRunSnapshot(ctx context.Context, runID string) (*port.RunResumeSnapshot, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, ok := r.runs[runID]; !ok {
+		return nil, domain.ErrRunNotFound
+	}
+
+	snapshot, ok := r.snapshots[runID]
+	if ok {
+		return &port.RunResumeSnapshot{
+			RunID:             runID,
+			LastCompletedNode: snapshot.lastCompletedNode,
+			NextNode:          snapshot.nextNode,
+			AttemptID:         snapshot.attemptID,
+			UpdatedAt:         snapshot.updatedAt,
+		}, nil
+	}
+
+	checkpoint, ok := r.checkpoints[runID]
+	if !ok {
+		return nil, domain.ErrCheckpointNotFound
+	}
+
+	return &port.RunResumeSnapshot{
+		RunID:             runID,
+		LastCompletedNode: checkpoint.nodeID,
+		NextNode:          "",
+		AttemptID:         "",
+		UpdatedAt:         time.Now(),
+	}, nil
 }
 
 // GetCachedNodeResult retrieves a cached node output by key if not expired

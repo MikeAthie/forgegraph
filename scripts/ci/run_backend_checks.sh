@@ -12,19 +12,19 @@ bash "${SCRIPT_DIR}/check_backend_runtime_writes.sh"
 
 cd "${ROOT}/backend"
 
-require_command uv
+require_uv
 export_backend_ci_env
 require_tcp_service "${DB_HOST}" "${DB_PORT}" "Postgres"
 require_tcp_service "${REDIS_HOST}" "${REDIS_PORT}" "Redis"
 
 log_section "Backend format"
-uv run ruff format --check .
+run_uv run ruff format --check .
 
 log_section "Backend lint"
-uv run ruff check .
+run_uv run ruff check .
 
 log_section "Backend typecheck"
-uv run mypy .
+run_uv run mypy .
 
 log_section "Backend tests"
-uv run pytest
+run_uv run pytest

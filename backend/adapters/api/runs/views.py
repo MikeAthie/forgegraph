@@ -2843,6 +2843,9 @@ class EngineRunEventsView(APIView):
             str(event_type),
             category=str(event.get("category") or ""),
         )
+        state_mutation_enabled = bool(
+            getattr(settings, "ENGINE_EVENT_STATE_MUTATION_ENABLED", False)
+        )
 
         try:
             callback_engine_instance_id, assigned_engine = reconcile_run_engine_instance(
@@ -3131,7 +3134,7 @@ class EngineRunEventsView(APIView):
                 run.resume_attempt_id = None
                 update_fields.append("resume_attempt_id")
 
-            if update_fields:
+            if state_mutation_enabled and update_fields:
                 update_fields.extend(
                     touch_run_liveness(
                         run,
@@ -3203,7 +3206,7 @@ class EngineRunEventsView(APIView):
             _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
             for summary_payload in final_run_stream_summaries:
                 broadcast_node_stream_summary(run=run, payload=summary_payload)
-            if event_type == "run_paused" and node_id:
+            if state_mutation_enabled and event_type == "run_paused" and node_id:
                 broadcast_decision_required(
                     run=run,
                     payload={
@@ -3216,7 +3219,7 @@ class EngineRunEventsView(APIView):
                         "node_name": str(pause_payload.get("node_name") or ""),
                     },
                 )
-            elif event_type == "run_resumed" and previous_paused_node_id:
+            elif state_mutation_enabled and event_type == "run_resumed" and previous_paused_node_id:
                 broadcast_decision_resolved(
                     run=run,
                     payload={
@@ -3230,6 +3233,15 @@ class EngineRunEventsView(APIView):
 
             for summary_payload in final_run_stream_summaries:
                 broadcast_node_stream_summary(run=run, payload=summary_payload)
+
+            if not state_mutation_enabled:
+                return success_response(
+                    {
+                        "received": True,
+                        "event_type": event_type,
+                        "authoritative_state_updated": False,
+                    }
+                )
 
             message = broadcast_run_updated(run)
             return success_response(message)
@@ -3298,52 +3310,73 @@ class EngineRunEventsView(APIView):
                 node_payload["status"] = "running"
 
             cost_update_payload: dict[str, Any] | None = None
+            node_run: NodeRun | None = None
             with transaction.atomic():
-                node_run, created = NodeRun.objects.get_or_create(
-                    run=run,
-                    node_id=node_id,
-                    attempt=attempt,
-                    defaults={
-                        "node_type": node_type,
-                        "status": node_payload["status"],
-                    },
-                )
+                if state_mutation_enabled:
+                    node_run, created = NodeRun.objects.get_or_create(
+                        run=run,
+                        node_id=node_id,
+                        attempt=attempt,
+                        defaults={
+                            "node_type": node_type,
+                            "status": node_payload["status"],
+                        },
+                    )
 
-                node_update_fields: list[str] = []
-                if not created and node_run.node_type != node_type:
-                    node_run.node_type = node_type
-                    node_update_fields.append("node_type")
+                    node_update_fields: list[str] = []
+                    if not created and node_run.node_type != node_type:
+                        node_run.node_type = node_type
+                        node_update_fields.append("node_type")
 
-                node_run.status = node_payload["status"]
-                node_update_fields.append("status")
+                    node_run.status = node_payload["status"]
+                    node_update_fields.append("status")
 
-                if "started_at" in node_payload:
-                    node_run.started_at = node_payload["started_at"]
-                    node_update_fields.append("started_at")
-                if "ended_at" in node_payload:
-                    node_run.ended_at = node_payload["ended_at"]
-                    node_update_fields.append("ended_at")
-                if "output_json" in node_payload:
-                    node_run.output_json = node_payload["output_json"]
-                    node_update_fields.append("output_json")
-                if "error_json" in node_payload:
-                    node_run.error_json = node_payload["error_json"]
-                    node_update_fields.append("error_json")
-                node_run.trace_id = trace_context["trace_id"]
-                node_run.span_id = trace_context["span_id"]
-                node_update_fields.extend(["trace_id", "span_id"])
+                    if "started_at" in node_payload:
+                        node_run.started_at = node_payload["started_at"]
+                        node_update_fields.append("started_at")
+                    if "ended_at" in node_payload:
+                        node_run.ended_at = node_payload["ended_at"]
+                        node_update_fields.append("ended_at")
+                    if "output_json" in node_payload:
+                        node_run.output_json = node_payload["output_json"]
+                        node_update_fields.append("output_json")
+                    if "error_json" in node_payload:
+                        node_run.error_json = node_payload["error_json"]
+                        node_update_fields.append("error_json")
+                    node_run.trace_id = trace_context["trace_id"]
+                    node_run.span_id = trace_context["span_id"]
+                    node_update_fields.extend(["trace_id", "span_id"])
 
-                node_run.save(update_fields=sorted(set(node_update_fields)))
-                run_update_fields = touch_run_liveness(
-                    run,
-                    event_time=event_time,
-                    recovery_state=recovery_state_for_status(run.status),
-                    engine_instance_id=callback_engine_instance_id,
-                )
-                if run.trace_id != trace_context["trace_id"]:
-                    run.trace_id = trace_context["trace_id"]
-                    run_update_fields.append("trace_id")
-                run.save(update_fields=sorted(set(run_update_fields)))
+                    node_run.save(update_fields=sorted(set(node_update_fields)))
+                    run_update_fields = touch_run_liveness(
+                        run,
+                        event_time=event_time,
+                        recovery_state=recovery_state_for_status(run.status),
+                        engine_instance_id=callback_engine_instance_id,
+                    )
+                    if run.trace_id != trace_context["trace_id"]:
+                        run.trace_id = trace_context["trace_id"]
+                        run_update_fields.append("trace_id")
+                    run.save(update_fields=sorted(set(run_update_fields)))
+                else:
+                    node_run = NodeRun(
+                        run=run,
+                        node_id=node_id,
+                        node_type=node_type,
+                        attempt=attempt,
+                        status=str(node_payload["status"]),
+                        trace_id=trace_context["trace_id"],
+                        span_id=trace_context["span_id"],
+                    )
+                    if "started_at" in node_payload:
+                        node_run.started_at = node_payload["started_at"]
+                    if "ended_at" in node_payload:
+                        node_run.ended_at = node_payload["ended_at"]
+                    if "output_json" in node_payload:
+                        node_run.output_json = node_payload["output_json"]
+                    if "error_json" in node_payload:
+                        node_run.error_json = node_payload["error_json"]
+
                 if event_type == "node_failed" and _payload_contains_policy_denied(
                     node_payload.get("error_json")
                 ):
@@ -3352,7 +3385,7 @@ class EngineRunEventsView(APIView):
                         tenant_id=get_tenant_id_for_run(run),
                         action="run.policy_denied",
                         resource_type="node_run",
-                        resource_id=str(node_run.id),
+                        resource_id=str(node_run.id or f"{run.id}:{node_id}:{attempt}"),
                         metadata={
                             "run_id": str(run.id),
                             "node_id": node_id,
@@ -3364,7 +3397,7 @@ class EngineRunEventsView(APIView):
                 _project_node_event_state(
                     run=run,
                     node_id=node_id,
-                    node_type=node_run.node_type,
+                    node_type=node_type,
                     attempt=attempt,
                     projection_status=str(node_payload["status"]),
                     trace_id=trace_context["trace_id"],
@@ -3428,6 +3461,15 @@ class EngineRunEventsView(APIView):
 
             if cost_update_payload:
                 broadcast_cost_update(run=run, payload=cost_update_payload)
+
+            if not state_mutation_enabled:
+                return success_response(
+                    {
+                        "received": True,
+                        "event_type": event_type,
+                        "authoritative_state_updated": False,
+                    }
+                )
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)
             return success_response(message)

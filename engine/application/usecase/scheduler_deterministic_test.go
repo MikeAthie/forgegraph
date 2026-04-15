@@ -236,10 +236,10 @@ func TestSchedulerDeterministicPauseResumeSnapshot(t *testing.T) {
 	}
 }
 
-// Description: A fresh scheduler start resumes from the repository checkpoint instead of re-running completed work.
-// Invariants: checkpoint state is loaded before execution begins; completed nodes from the checkpoint are skipped; resume emits a resumed lifecycle event.
-// Edge cases: the engine starts with no active in-memory run context and reconstructs progress from durable repository state alone.
-func TestSchedulerDeterministicStartRunResumesFromRepositoryCheckpoint(t *testing.T) {
+// Description: A fresh scheduler start resumes from the backend-owned snapshot instead of re-running completed work.
+// Invariants: snapshot state is loaded before execution begins; completed nodes from durable node runs are skipped; resume emits a resumed lifecycle event.
+// Edge cases: the engine starts with no active in-memory run context and reconstructs progress from snapshot + durable node runs alone.
+func TestSchedulerDeterministicStartRunResumesFromRepositorySnapshot(t *testing.T) {
 	engine := NewTestEngine(t, 4)
 
 	startExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
@@ -254,7 +254,7 @@ func TestSchedulerDeterministicStartRunResumesFromRepositoryCheckpoint(t *testin
 		return port.NewSuccessResult(map[string]any{"result": prepared + "-resumed"}), nil
 	})
 
-	runID := "run-deterministic-checkpoint-resume"
+	runID := "run-deterministic-snapshot-resume"
 	graphJSON := makeGraphJSON(
 		[]entity.Node{
 			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
@@ -265,14 +265,35 @@ func TestSchedulerDeterministicStartRunResumesFromRepositoryCheckpoint(t *testin
 		},
 	)
 
-	engine.Repo.checkpoints[runID] = mockCheckpointState{
-		nodeID:        "start",
-		stepIndex:     1,
-		stateSnapshot: map[string]any{"node.start.output": map[string]any{"prepared": "ready"}},
-		completedNodes: []string{
-			"start",
+	engine.Repo.runs[runID] = &entity.Run{
+		ID:        runID,
+		Status:    "pending",
+		InputJSON: map[string]any{"query": "authoritative"},
+	}
+	now := time.Date(2026, time.January, 1, 0, 0, 1, 0, time.UTC)
+	engine.Repo.nodeRuns["run-deterministic-snapshot-resume-start"] = &entity.NodeRun{
+		ID:        "run-deterministic-snapshot-resume-start",
+		RunID:     runID,
+		NodeID:    "start",
+		NodeType:  string(value.NodeTypeTransform),
+		Status:    string(value.NodeRunStatusSucceeded),
+		Attempt:   1,
+		StartedAt: now,
+		EndedAt:   func() *time.Time { ended := now.Add(10 * time.Millisecond); return &ended }(),
+		InputJSON: map[string]any{"input.query": "authoritative"},
+		OutputJSON: map[string]any{
+			"output": map[string]any{"prepared": "ready"},
+			"state_delta": map[string]any{
+				"node.start.output": map[string]any{"prepared": "ready"},
+			},
 		},
-		graphJSON: graphJSON,
+	}
+	engine.Repo.snapshots[runID] = &port.RunResumeSnapshot{
+		RunID:             runID,
+		LastCompletedNode: "start",
+		NextNode:          "finish",
+		AttemptID:         "attempt-1",
+		UpdatedAt:         now.Add(10 * time.Millisecond),
 	}
 
 	engine.StartRun(runID, graphJSON, `{"query":"ignored because checkpoint is authoritative"}`)
@@ -293,14 +314,14 @@ func TestSchedulerDeterministicStartRunResumesFromRepositoryCheckpoint(t *testin
 	engine.Release(runID, "finish")
 	snapshot = engine.AwaitRunStatus(runID, string(value.RunStatusSucceeded))
 	if snapshot.Output["result"] != "ready-resumed" {
-		t.Fatalf("expected resumed checkpoint output, got %#v", snapshot.Output)
+		t.Fatalf("expected resumed snapshot output, got %#v", snapshot.Output)
 	}
 
-	events := engine.AwaitEvents("run_resumed event from checkpoint start", func(events []ObservedEvent) bool {
+	events := engine.AwaitEvents("run_resumed event from snapshot start", func(events []ObservedEvent) bool {
 		return countEvents(events, port.EventTypeRunResumed) >= 1
 	})
 	if countEvents(events, port.EventTypeRunResumed) < 1 {
-		t.Fatalf("expected run_resumed event for checkpoint-based start")
+		t.Fatalf("expected run_resumed event for snapshot-based start")
 	}
 }
 

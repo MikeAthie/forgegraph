@@ -9,6 +9,7 @@ from adapters.api.engine.views import (
     EngineRunNodeRunDetailView,
     EngineRunNodeRunListView,
     EngineRunPauseStateView,
+    EngineRunSnapshotView,
 )
 
 urlpatterns = [
@@ -27,6 +28,11 @@ urlpatterns = [
         "runs/<uuid:run_id>/checkpoint",
         EngineRunCheckpointView.as_view(),
         name="engine-run-checkpoint",
+    ),
+    path(
+        "runs/<uuid:run_id>/snapshot",
+        EngineRunSnapshotView.as_view(),
+        name="engine-run-snapshot",
     ),
     path(
         "runs/<uuid:run_id>/node-runs",

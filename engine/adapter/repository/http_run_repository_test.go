@@ -9,9 +9,33 @@ import (
 	"testing"
 	"time"
 
+	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
 )
+
+type recordingIntentPublisher struct {
+	intents []*port.RuntimeIntentEnvelope
+}
+
+func (p *recordingIntentPublisher) Publish(ctx context.Context, intent *port.RuntimeIntentEnvelope) error {
+	_ = ctx
+	cloned := *intent
+	cloned.Payload = cloneMap(intent.Payload)
+	p.intents = append(p.intents, &cloned)
+	return nil
+}
+
+func cloneMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+	output := make(map[string]any, len(input))
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
+}
 
 func TestHTTPRunRepositoryGetRun(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +58,7 @@ func TestHTTPRunRepositoryGetRun(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client())
+	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), nil)
 	run, err := repo.GetRun(context.Background(), "run-1")
 	if err != nil {
 		t.Fatalf("GetRun() error = %v", err)
@@ -53,33 +77,14 @@ func TestHTTPRunRepositoryGetRun(t *testing.T) {
 	}
 }
 
-func TestHTTPRunRepositoryCheckpointRoundTrip(t *testing.T) {
-	var stored map[string]any
+func TestHTTPRunRepositorySaveCheckpointPublishesRuntimeIntent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPut:
-			if err := json.NewDecoder(r.Body).Decode(&stored); err != nil {
-				t.Fatalf("Decode() error = %v", err)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": stored})
-		case http.MethodGet:
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{
-					"node_id":         stored["node_id"],
-					"step_index":      stored["step_index"],
-					"state_snapshot":  stored["state_snapshot"],
-					"completed_nodes": stored["completed_nodes"],
-					"skipped_nodes":   stored["skipped_nodes"],
-					"graph_json":      stored["graph_json"],
-				},
-			})
-		default:
-			t.Fatalf("unexpected method %s", r.Method)
-		}
+		t.Fatalf("unexpected HTTP call %s %s", r.Method, r.URL.Path)
 	}))
 	defer server.Close()
 
-	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client())
+	publisher := &recordingIntentPublisher{}
+	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), publisher)
 	err := repo.SaveCheckpoint(
 		context.Background(),
 		"run-1",
@@ -93,64 +98,32 @@ func TestHTTPRunRepositoryCheckpointRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SaveCheckpoint() error = %v", err)
 	}
-
-	nodeID, stepIndex, snapshot, completed, skipped, graphJSON, err := repo.LoadLatestCheckpoint(context.Background(), "run-1")
-	if err != nil {
-		t.Fatalf("LoadLatestCheckpoint() error = %v", err)
+	if len(publisher.intents) != 1 {
+		t.Fatalf("expected 1 intent, got %d", len(publisher.intents))
 	}
-	if nodeID != "node-1" {
-		t.Fatalf("nodeID = %s, want node-1", nodeID)
+	intent := publisher.intents[0]
+	if intent.IntentType != "store_checkpoint" {
+		t.Fatalf("intent.IntentType = %s", intent.IntentType)
 	}
-	if stepIndex != 3 {
-		t.Fatalf("stepIndex = %d, want 3", stepIndex)
+	if intent.RunID != "run-1" {
+		t.Fatalf("intent.RunID = %s", intent.RunID)
 	}
-	if graphJSON != `{"nodes":[],"edges":[]}` {
-		t.Fatalf("graphJSON = %s", graphJSON)
+	if intent.Payload["node_id"] != "node-1" {
+		t.Fatalf("intent.Payload[node_id] = %#v", intent.Payload["node_id"])
 	}
-	if len(completed) != 1 || completed[0] != "node-1" {
-		t.Fatalf("completed = %#v", completed)
-	}
-	if len(skipped) != 0 {
-		t.Fatalf("skipped = %#v", skipped)
-	}
-	vars, ok := snapshot["vars"].(map[string]any)
-	if !ok || vars["answer"] != float64(42) {
-		t.Fatalf("snapshot = %#v", snapshot)
+	if intent.Payload["step_index"] != 3 {
+		t.Fatalf("intent.Payload[step_index] = %#v", intent.Payload["step_index"])
 	}
 }
 
-func TestHTTPRunRepositoryNodeRunUpsertMutatesID(t *testing.T) {
+func TestHTTPRunRepositoryNodeRunUpsertPublishesRuntimeIntent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Fatalf("unexpected method %s", r.Method)
-		}
-		var payload map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("Decode() error = %v", err)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"id":         "11111111-1111-1111-1111-111111111111",
-				"run_id":     "run-1",
-				"node_id":    "node-1",
-				"node_type":  payload["node_type"],
-				"status":     payload["status"],
-				"attempt":    payload["attempt"],
-				"started_at": payload["started_at"],
-				"ended_at":   payload["ended_at"],
-				"input_json": payload["input_json"],
-				"output_json": map[string]any{
-					"ok": true,
-				},
-				"error_json": nil,
-				"trace_id":   payload["trace_id"],
-				"span_id":    payload["span_id"],
-			},
-		})
+		t.Fatalf("unexpected HTTP call %s %s", r.Method, r.URL.Path)
 	}))
 	defer server.Close()
 
-	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client())
+	publisher := &recordingIntentPublisher{}
+	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), publisher)
 	startedAt := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	nodeRun := &entity.NodeRun{
 		ID:        "logical-node-run-id",
@@ -168,12 +141,18 @@ func TestHTTPRunRepositoryNodeRunUpsertMutatesID(t *testing.T) {
 	if err := repo.CreateNodeRun(context.Background(), nodeRun); err != nil {
 		t.Fatalf("CreateNodeRun() error = %v", err)
 	}
-
-	if nodeRun.ID != "11111111-1111-1111-1111-111111111111" {
-		t.Fatalf("nodeRun.ID = %s", nodeRun.ID)
+	if len(publisher.intents) != 1 {
+		t.Fatalf("expected 1 intent, got %d", len(publisher.intents))
 	}
-	if nodeRun.OutputJSON["ok"] != true {
-		t.Fatalf("nodeRun.OutputJSON = %#v", nodeRun.OutputJSON)
+	intent := publisher.intents[0]
+	if intent.IntentType != "upsert_node_run" {
+		t.Fatalf("intent.IntentType = %s", intent.IntentType)
+	}
+	if intent.Payload["id"] != "logical-node-run-id" {
+		t.Fatalf("intent.Payload[id] = %#v", intent.Payload["id"])
+	}
+	if intent.Payload["node_id"] != "node-1" {
+		t.Fatalf("intent.Payload[node_id] = %#v", intent.Payload["node_id"])
 	}
 }
 
@@ -189,12 +168,45 @@ func TestHTTPRunRepositoryMapsCheckpointNotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client())
+	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), nil)
 	_, _, _, _, _, _, err := repo.LoadLatestCheckpoint(context.Background(), "run-missing")
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	if !errors.Is(err, domain.ErrCheckpointNotFound) {
 		t.Fatalf("err = %v, want ErrCheckpointNotFound", err)
+	}
+}
+
+func TestHTTPRunRepositoryLoadRunSnapshot(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/engine/runs/run-1/snapshot" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"run_id":              "run-1",
+				"last_completed_node": "node-a",
+				"next_node":           "node-b",
+				"attempt_id":          "attempt-4",
+				"updated_at":          "2026-04-14T12:00:00Z",
+			},
+		})
+	}))
+	defer server.Close()
+
+	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), nil)
+	snapshot, err := repo.LoadRunSnapshot(context.Background(), "run-1")
+	if err != nil {
+		t.Fatalf("LoadRunSnapshot() error = %v", err)
+	}
+	if snapshot.LastCompletedNode != "node-a" {
+		t.Fatalf("snapshot.LastCompletedNode = %s", snapshot.LastCompletedNode)
+	}
+	if snapshot.NextNode != "node-b" {
+		t.Fatalf("snapshot.NextNode = %s", snapshot.NextNode)
+	}
+	if snapshot.AttemptID != "attempt-4" {
+		t.Fatalf("snapshot.AttemptID = %s", snapshot.AttemptID)
 	}
 }

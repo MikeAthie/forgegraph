@@ -16,6 +16,37 @@ require_command() {
   fi
 }
 
+require_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    python -m uv --help >/dev/null 2>&1 && return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -m uv --help >/dev/null 2>&1 && return 0
+  fi
+  echo "Missing required command: uv" >&2
+  exit 1
+}
+
+run_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    uv "$@"
+    return
+  fi
+  if command -v python >/dev/null 2>&1; then
+    python -m uv "$@"
+    return
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -m uv "$@"
+    return
+  fi
+  echo "Missing required command: uv" >&2
+  exit 1
+}
+
 require_tcp_service() {
   local host="$1"
   local port="$2"

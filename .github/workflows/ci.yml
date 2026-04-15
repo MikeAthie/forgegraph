@@ -59,7 +59,7 @@ jobs:
 
       - name: Install backend deps (dev)
         working-directory: backend
-        run: uv sync --dev
+        run: python -m uv sync --dev
 
       - name: Backend checks
         run: bash scripts/ci/run_backend_checks.sh
@@ -148,7 +148,7 @@ jobs:
 
       - name: Install backend deps (dev)
         working-directory: backend
-        run: uv sync --dev
+        run: python -m uv sync --dev
 
       - name: Launch QA - Backend Functional/Security
         run: bash scripts/ci/run_launch_qa_backend.sh

@@ -27,6 +27,7 @@ import (
 	"github.com/forgegraph/engine/infrastructure/logger"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	redis "github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
@@ -74,6 +75,8 @@ type Config struct {
 	MarketplaceManifestRefreshSeconds int
 	RuntimeMode                       string
 	RunStateMode                      string
+	RuntimeWriteMode                  string
+	RuntimeIntentStream               string
 }
 
 const (
@@ -122,6 +125,8 @@ func LoadConfig() *Config {
 		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
 		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
 		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", defaultRunStateMode)),
+		RuntimeWriteMode:                  getEnv("ENGINE_RUNTIME_WRITE_MODE", usecase.RuntimeWriteModePauseIntents),
+		RuntimeIntentStream:               getEnv("ENGINE_RUNTIME_INTENT_STREAM", gateway.DefaultRuntimeIntentStream),
 	}
 	return cfg
 }
@@ -539,6 +544,8 @@ func main() {
 		"marketplace_manifest_refresh_seconds", cfg.MarketplaceManifestRefreshSeconds,
 		"runtime_mode", cfg.RuntimeMode,
 		"run_state_mode", cfg.RunStateMode,
+		"runtime_write_mode", cfg.RuntimeWriteMode,
+		"runtime_intent_stream", cfg.RuntimeIntentStream,
 		"engine_event_verbosity", cfg.EventVerbosity,
 		"engine_instance_id", resolveEngineInstanceID(cfg),
 		"engine_allow_in_memory_mode", cfg.EngineAllowInMemoryMode,
@@ -550,6 +557,7 @@ func main() {
 	var memoryStore port.MemoryStore
 	var redisStore *store.RedisMemoryStore
 	var redisHealth *store.RedisHealthChecker
+	var runtimeIntentPublisher port.RuntimeIntentPublisher
 	var err error
 	repoDriver, err := selectRunRepositoryDriver(cfg)
 	if err != nil {
@@ -557,9 +565,59 @@ func main() {
 		os.Exit(1)
 	}
 
+	runtimeWriteMode := usecase.RuntimeWriteModeLegacySync
+	if strings.TrimSpace(cfg.RuntimeWriteMode) != "" {
+		runtimeWriteMode = cfg.RuntimeWriteMode
+	}
+	if runtimeWriteMode != usecase.RuntimeWriteModePauseIntents {
+		log.Error(
+			"runtime_write_mode_invalid",
+			"error", fmt.Sprintf(
+				"ENGINE_RUNTIME_WRITE_MODE=%s is not supported; use %s",
+				runtimeWriteMode,
+				usecase.RuntimeWriteModePauseIntents,
+			),
+		)
+		os.Exit(1)
+	}
+	if strings.TrimSpace(cfg.RedisAddr) == "" {
+		log.Error(
+			"runtime_intent_publisher_config_invalid",
+			"error", "ENGINE_RUNTIME_WRITE_MODE requires REDIS_ADDR",
+		)
+		os.Exit(1)
+	}
+	runtimeIntentClient := redis.NewClient(&redis.Options{
+		Addr:         cfg.RedisAddr,
+		Password:     cfg.RedisPassword,
+		DB:           cfg.RedisDB,
+		PoolSize:     cfg.RedisPoolSize,
+		DialTimeout:  time.Duration(cfg.RedisDialTimeoutMs) * time.Millisecond,
+		ReadTimeout:  time.Duration(cfg.RedisReadTimeoutMs) * time.Millisecond,
+		WriteTimeout: time.Duration(cfg.RedisWriteTimeoutMs) * time.Millisecond,
+	})
+	runtimeIntentPublisher, err = gateway.NewRedisRuntimeIntentPublisher(
+		runtimeIntentClient,
+		cfg.RuntimeIntentStream,
+	)
+	if err != nil {
+		log.Error("runtime_intent_publisher_init_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	log.Info(
+		"runtime_intent_publisher_initialized",
+		"stream", cfg.RuntimeIntentStream,
+		"mode", runtimeWriteMode,
+	)
+
 	switch repoDriver {
 	case runStateModeControlPlaneHTTP:
-		repo = repository.NewHTTPRunRepository(cfg.ControlPlaneURL, cfg.CallbackSecret, nil)
+		repo = repository.NewHTTPRunRepository(
+			cfg.ControlPlaneURL,
+			cfg.CallbackSecret,
+			nil,
+			runtimeIntentPublisher,
+		)
 		memoryStore = store.NewHTTPMemoryStore(cfg.ControlPlaneURL, cfg.CallbackSecret, nil)
 		log.Info(
 			"run_repository_initialized",
@@ -703,6 +761,7 @@ func main() {
 		CacheDefaultTTLSeconds: cfg.CacheTTLSeconds,
 	}
 	scheduler := usecase.NewScheduler(schedulerConfig, registry, repo, emitter, memoryStore)
+	scheduler.SetRuntimeIntentPublisher(runtimeIntentPublisher, runtimeWriteMode)
 	log.Info("scheduler_initialized")
 
 	if cfg.MemoryGRPCHost != "" && cfg.MemoryGRPCPort != "" {

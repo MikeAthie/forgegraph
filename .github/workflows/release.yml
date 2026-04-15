@@ -59,8 +59,8 @@ jobs:
       - name: Backend dependency audit
         working-directory: backend
         run: |
-          uv sync --dev
-          uv run pip-audit
+          python -m uv sync --dev
+          python -m uv run pip-audit
 
       - name: Engine dependency audit
         working-directory: engine

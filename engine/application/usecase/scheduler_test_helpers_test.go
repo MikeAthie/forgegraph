@@ -20,12 +20,14 @@ type mockRepository struct {
 	nodeRunsMu    sync.RWMutex
 	pausesMu      sync.RWMutex
 	checkpointsMu sync.RWMutex
+	snapshotsMu   sync.RWMutex
 	cacheMu       sync.RWMutex
 
 	runs        map[string]*entity.Run
 	nodeRuns    map[string]*entity.NodeRun
 	pauses      map[string]mockPauseState
 	checkpoints map[string]mockCheckpointState
+	snapshots   map[string]*port.RunResumeSnapshot
 	cache       map[string]mockCacheEntry
 }
 
@@ -58,6 +60,7 @@ func newMockRepository() *mockRepository {
 		nodeRuns:    make(map[string]*entity.NodeRun),
 		pauses:      make(map[string]mockPauseState),
 		checkpoints: make(map[string]mockCheckpointState),
+		snapshots:   make(map[string]*port.RunResumeSnapshot),
 		cache:       make(map[string]mockCacheEntry),
 	}
 }
@@ -213,6 +216,26 @@ func (r *mockRepository) ClearCheckpoints(ctx context.Context, runID string) err
 
 	delete(r.checkpoints, runID)
 	return nil
+}
+
+func (r *mockRepository) LoadRunSnapshot(ctx context.Context, runID string) (*port.RunResumeSnapshot, error) {
+	r.snapshotsMu.RLock()
+	defer r.snapshotsMu.RUnlock()
+
+	snapshot, ok := r.snapshots[runID]
+	if ok {
+		cloned := *snapshot
+		return &cloned, nil
+	}
+	checkpoint, ok := r.checkpoints[runID]
+	if !ok {
+		return nil, domain.ErrCheckpointNotFound
+	}
+	return &port.RunResumeSnapshot{
+		RunID:             runID,
+		LastCompletedNode: checkpoint.nodeID,
+		UpdatedAt:         time.Now(),
+	}, nil
 }
 
 // ---------------- CACHE ----------------

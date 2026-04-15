@@ -16,7 +16,8 @@ from application.services.run_liveness import (
     recovery_state_for_status,
     touch_run_liveness,
 )
-from infrastructure.orm.models import Graph, GraphVersion, Run, RunCheckpoint, RunEvent, User
+from application.services.run_snapshots import RunSnapshot, set_snapshot
+from infrastructure.orm.models import Graph, GraphVersion, Run, RunEvent, User
 
 pytestmark = pytest.mark.django_db
 
@@ -75,15 +76,14 @@ def test_run_recovery_policy_defaults_to_fail():
 
 def test_apply_recovery_policy_records_checkpoint_context():
     run = _make_run(status="running", last_progress_at=timezone.now() - timedelta(minutes=10))
-    checkpoint = RunCheckpoint.objects.create(
-        run=run,
-        node_id="approval_gate",
-        step_index=4,
-        state_json={"state": "snapshot"},
-        completed_nodes=["draft"],
-        skipped_nodes=[],
-        graph_json={"nodes": [], "edges": []},
+    checkpoint = RunSnapshot(
+        run_id=run.id,
+        last_completed_node="approval_gate",
+        next_node="after_gate",
+        attempt_id="attempt-4",
+        updated_at=timezone.now(),
     )
+    set_snapshot(checkpoint)
     checkpoint_context = CheckpointContext.from_run(run)
 
     applied = apply_recovery_policy(
@@ -95,13 +95,14 @@ def test_apply_recovery_policy_records_checkpoint_context():
     assert applied is True
     run.refresh_from_db()
     assert run.status == "failed"
-    assert "checkpoint=node:approval_gate step:4" in run.error_message
+    assert "checkpoint=node:approval_gate next:after_gate attempt:attempt-4" in run.error_message
 
     event = RunEvent.objects.get(run=run, event_type="run.updated")
     assert event.payload["recovery_policy"] == "fail"
     assert event.payload["checkpoint_available"] is True
     assert event.payload["checkpoint_node_id"] == "approval_gate"
-    assert event.payload["checkpoint_step_index"] == 4
+    assert event.payload["checkpoint_next_node"] == "after_gate"
+    assert event.payload["checkpoint_attempt_id"] == "attempt-4"
     assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
 
 
@@ -139,14 +140,14 @@ def test_reconcile_stale_runs_requeues_retry_policy_and_clears_checkpoint():
             "engine_instance_id",
         ]
     )
-    RunCheckpoint.objects.create(
-        run=run,
-        node_id="checkpoint_node",
-        step_index=3,
-        state_json={"state": "snapshot"},
-        completed_nodes=["start"],
-        skipped_nodes=[],
-        graph_json={"nodes": [], "edges": []},
+    set_snapshot(
+        RunSnapshot(
+            run_id=run.id,
+            last_completed_node="checkpoint_node",
+            next_node="after_checkpoint",
+            attempt_id="attempt-3",
+            updated_at=timezone.now(),
+        )
     )
 
     result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
@@ -161,7 +162,7 @@ def test_reconcile_stale_runs_requeues_retry_policy_and_clears_checkpoint():
     assert run.engine_instance_id == ""
     assert run.paused_node_id is None
     assert run.pause_state_json is None
-    assert not RunCheckpoint.objects.filter(run=run).exists()
+    assert CheckpointContext.from_run(run).checkpoint_available is False
 
     event = RunEvent.objects.get(run=run, event_type="run.updated")
     assert event.payload["recovery_policy"] == RECOVERY_POLICY_RETRY
@@ -181,15 +182,14 @@ def test_reconcile_stale_runs_requeues_stale_resume_requested_run_from_checkpoin
     run.engine_instance_id = "engine-a"
     run.resume_requested_at = stale_time
     run.save(update_fields=["recovery_policy", "engine_instance_id", "resume_requested_at"])
-    checkpoint = RunCheckpoint.objects.create(
-        run=run,
-        node_id="resume_gate",
-        step_index=7,
-        state_json={"state": "snapshot"},
-        completed_nodes=["draft"],
-        skipped_nodes=[],
-        graph_json={"nodes": [], "edges": []},
+    checkpoint = RunSnapshot(
+        run_id=run.id,
+        last_completed_node="resume_gate",
+        next_node="after_resume_gate",
+        attempt_id="attempt-7",
+        updated_at=timezone.now(),
     )
+    set_snapshot(checkpoint)
 
     result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
 
@@ -203,8 +203,7 @@ def test_reconcile_stale_runs_requeues_stale_resume_requested_run_from_checkpoin
     assert run.resume_requested_at is None
     assert run.resume_attempt_id is None
 
-    checkpoint.refresh_from_db()
-    assert checkpoint.node_id == "resume_gate"
+    assert CheckpointContext.from_run(run).checkpoint_node_id == "resume_gate"
 
     event = RunEvent.objects.get(run=run, event_type="run.updated")
     assert event.payload["recovery_policy"] == RECOVERY_POLICY_RESUME

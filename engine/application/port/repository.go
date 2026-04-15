@@ -4,9 +4,18 @@ package port
 
 import (
 	"context"
+	"time"
 
 	"github.com/forgegraph/engine/domain/entity"
 )
+
+type RunResumeSnapshot struct {
+	RunID             string
+	LastCompletedNode string
+	NextNode          string
+	AttemptID         string
+	UpdatedAt         time.Time
+}
 
 // RunRepository persists engine runtime state through the backend-owned contract.
 // Implementations should target the control-plane API in production and may use
@@ -70,6 +79,9 @@ type RunRepository interface {
 
 	// ClearCheckpoints removes all checkpoints for a run
 	ClearCheckpoints(ctx context.Context, runID string) error
+
+	// LoadRunSnapshot retrieves the backend-owned execution snapshot for deterministic resume.
+	LoadRunSnapshot(ctx context.Context, runID string) (*RunResumeSnapshot, error)
 
 	// Node cache operations
 

@@ -986,6 +986,33 @@ class RunEvent(models.Model):
         return f"RunEvent {self.run_id} - {self.event_type}"
 
 
+class ProcessedRuntimeIntent(models.Model):
+    """ProcessedRuntimeIntent records backend-applied runtime write intents."""
+
+    intent_id = models.UUIDField(primary_key=True)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="processed_runtime_intents",
+    )
+    intent_type = models.CharField(max_length=64)
+    attempt_id = models.CharField(max_length=64, blank=True, default="")
+    trace_id = models.CharField(max_length=32, blank=True, default="")
+    stream_message_id = models.CharField(max_length=64, blank=True, default="")
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "processed_runtime_intents"
+        ordering = ["processed_at"]
+        indexes = [
+            models.Index(fields=["run", "processed_at"], name="rt_intents_run_time_idx"),
+            models.Index(fields=["intent_type", "processed_at"], name="rt_intents_type_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProcessedRuntimeIntent {self.intent_type} {self.intent_id}"
+
+
 class RunEventProjection(models.Model):
     """Event-derived shadow state for validating run reconstruction completeness."""
 
