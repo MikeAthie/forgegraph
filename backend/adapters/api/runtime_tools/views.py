@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hmac
-from typing import Any, cast
+from typing import Any
 
 from django.conf import settings
 from rest_framework import status
@@ -24,12 +24,16 @@ def _is_authorized(request: Request) -> bool:
 
 
 def _extract_payload(request: Request) -> tuple[dict[str, Any], dict[str, Any]]:
-    raw = cast(dict[str, Any], request.data if isinstance(request.data, dict) else {})
+    raw: dict[str, Any]
+    if isinstance(request.data, dict):
+        raw = request.data
+    else:
+        raw = {}
     input_payload = raw.get("input")
     config_payload = raw.get("config")
     return (
-        cast(dict[str, Any], input_payload if isinstance(input_payload, dict) else raw),
-        cast(dict[str, Any], config_payload if isinstance(config_payload, dict) else {}),
+        input_payload if isinstance(input_payload, dict) else raw,
+        config_payload if isinstance(config_payload, dict) else {},
     )
 
 

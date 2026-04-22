@@ -22,6 +22,7 @@ _TEXT_CONTENT_TYPES = (
     "application/xml",
     "application/xhtml+xml",
 )
+_IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 class RuntimeToolError(ValueError):
@@ -208,7 +209,7 @@ def _ensure_public_host(hostname: str) -> None:
             raise RuntimeToolError("Private or local network targets are not allowed")
 
 
-def _is_non_public_ip(ip: ipaddress._BaseAddress) -> bool:
+def _is_non_public_ip(ip: _IPAddress) -> bool:
     return bool(
         ip.is_private
         or ip.is_loopback
