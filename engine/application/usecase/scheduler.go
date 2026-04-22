@@ -207,6 +207,7 @@ type runContext struct {
 	initialNodes         []string
 	tenantID             string
 	sessionID            string
+	attemptID            string
 	traceID              string
 	traceparent          string
 	tracestate           string
@@ -221,12 +222,13 @@ type runContext struct {
 	pauseIntentPublished bool
 
 	// Synchronization
-	pendingMu   sync.Mutex
-	pending     map[string]int  // nodeID -> remaining dependencies
-	completed   map[string]bool // nodeID -> completed successfully
-	skipped     map[string]bool // nodeID -> skipped (branch not taken)
-	running     map[string]bool // nodeID -> currently running
-	visitCounts map[string]int  // nodeID -> number of successful executions started
+	pendingMu       sync.Mutex
+	pending         map[string]int  // nodeID -> remaining dependencies
+	completed       map[string]bool // nodeID -> completed successfully
+	skipped         map[string]bool // nodeID -> skipped (branch not taken)
+	running         map[string]bool // nodeID -> currently running
+	visitCounts     map[string]int  // nodeID -> number of successful executions started
+	resumeRetryNode string          // snapshot next_node allowed one re-entry after a failed pre-snapshot attempt
 
 	// Worker coordination
 	workChan chan string
@@ -275,6 +277,13 @@ func (rc *runContext) newEvent(eventType port.EventType) *port.ExecutionEvent {
 	return event.
 		WithTenantID(rc.tenantID).
 		WithTrace(rc.traceparent, rc.tracestate, rc.traceID, "")
+}
+
+func (rc *runContext) intentContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return port.WithAttemptID(ctx, rc.attemptID)
 }
 
 func (rc *runContext) newEventFromContext(ctx context.Context, eventType port.EventType) *port.ExecutionEvent {
@@ -431,6 +440,11 @@ func (s *Scheduler) StartRun(
 		}
 	}
 
+	currentAttemptID := uuid.NewString()
+	if checkpoint != nil && strings.TrimSpace(checkpoint.attemptID) != "" {
+		currentAttemptID = strings.TrimSpace(checkpoint.attemptID)
+	}
+
 	// Parse graph JSON
 	var graph entity.Graph
 	if err := json.Unmarshal([]byte(graphJSON), &graph); err != nil {
@@ -551,6 +565,7 @@ func (s *Scheduler) StartRun(
 		graphJSON:        graphJSON,
 		tenantID:         tenantID,
 		sessionID:        sessionID,
+		attemptID:        currentAttemptID,
 		traceID:          traceCtx.TraceID,
 		traceparent:      traceCtx.Traceparent,
 		tracestate:       traceCtx.Tracestate,
@@ -592,6 +607,7 @@ func (s *Scheduler) StartRun(
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
+	rc.ctx = port.WithAttemptID(rc.ctx, rc.attemptID)
 
 	if checkpoint != nil {
 		rc.checkpointSeq = int64(checkpoint.stepIndex)
@@ -621,6 +637,9 @@ func (s *Scheduler) StartRun(
 		} else {
 			s.applyCheckpointToPending(rc)
 		}
+		if checkpoint.nextNode != "" && !rc.completed[checkpoint.nextNode] && !rc.skipped[checkpoint.nextNode] {
+			rc.resumeRetryNode = checkpoint.nextNode
+		}
 		rc.initialNodes = s.computeReadyNodes(rc)
 		if checkpoint.nextNode != "" && slices.Contains(rc.initialNodes, checkpoint.nextNode) {
 			ordered := []string{checkpoint.nextNode}
@@ -642,15 +661,15 @@ func (s *Scheduler) StartRun(
 	s.preloadMemory(rc)
 
 	// Update run status to running
-	if err := s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning)); err != nil {
+	if err := s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning)); err != nil {
 		log.Printf("Failed to update run status: %v", err)
 	}
 
 	// Emit run started/resumed event
 	if checkpoint != nil {
 		resumedEvent := rc.newEvent(port.EventTypeRunResumed)
-		if checkpoint.attemptID != "" {
-			resumedEvent = resumedEvent.WithOutput(map[string]any{"resume_attempt_id": checkpoint.attemptID})
+		if rc.attemptID != "" {
+			resumedEvent = resumedEvent.WithOutput(map[string]any{"resume_attempt_id": rc.attemptID})
 		}
 		s.emitter.EmitAsync(resumedEvent)
 	} else {
@@ -752,7 +771,8 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		rc.pendingMu.Unlock()
 		return
 	}
-	if rc.visitCounts[nodeID] >= maxVisits {
+	allowResumeRetry := rc.resumeRetryNode == nodeID
+	if rc.visitCounts[nodeID] >= maxVisits && !allowResumeRetry {
 		rc.pendingMu.Unlock()
 		s.setError(
 			rc,
@@ -762,6 +782,9 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			),
 		)
 		return
+	}
+	if allowResumeRetry {
+		rc.resumeRetryNode = ""
 	}
 	rc.visitCounts[nodeID]++
 	rc.running[nodeID] = true
@@ -815,7 +838,8 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	s.emitter.EmitAsync(
 		rc.newEventFromContext(nodeCtx, port.EventTypeNodeStarted).
 			WithNode(nodeID, node.Type, node.Name).
-			WithAttempt(1),
+			WithAttempt(1).
+			WithAttemptID(rc.attemptID),
 	)
 
 	// Try cache before execution
@@ -871,7 +895,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		}
 
 		if s.pauseIntentPublishingEnabled() {
-			if err := s.publishPauseRunIntent(context.Background(), rc, node, nodeRun, pausePayload); err != nil {
+			if err := s.publishPauseRunIntent(rc.intentContext(context.Background()), rc, node, nodeRun, pausePayload); err != nil {
 				s.setError(rc, fmt.Errorf("failed to publish pause_run intent: %w", err))
 				return
 			}
@@ -899,7 +923,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			rc.pendingMu.Unlock()
 
 			s.repository.SavePauseState(
-				context.Background(),
+				rc.intentContext(context.Background()),
 				rc.runID,
 				nodeID,
 				stateSnapshot,
@@ -908,7 +932,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 				rc.graphJSON,
 				rc.tenantID,
 			)
-			s.repository.UpdateRunStatus(context.Background(), rc.runID, string(value.RunStatusPaused))
+			s.repository.UpdateRunStatus(rc.intentContext(context.Background()), rc.runID, string(value.RunStatusPaused))
 
 			// Emit pause event with the pause payload
 			pauseEvent := rc.newEventFromContext(nodeCtx, port.EventTypeRunPaused).
@@ -995,6 +1019,7 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 				rc.newEventFromContext(execCtx, port.EventTypeNodeRetrying).
 					WithNode(node.ID, node.Type, node.Name).
 					WithAttempt(attempt + 1).
+					WithAttemptID(rc.attemptID).
 					WithError(err.Error()),
 			)
 
@@ -1033,6 +1058,7 @@ func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node 
 	failedEvent := rc.newEventFromContext(ctx, port.EventTypeNodeFailed).
 		WithNode(node.ID, node.Type, node.Name).
 		WithAttempt(nodeRun.Attempt).
+		WithAttemptID(rc.attemptID).
 		WithError(err.Error()).
 		WithDuration(durationMs).
 		WithOutput(map[string]any{"error": errorPayload})
@@ -1283,6 +1309,7 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 	completedEvent := rc.newEventFromContext(ctx, port.EventTypeNodeCompleted).
 		WithNode(nodeID, node.Type, node.Name).
 		WithAttempt(nodeRun.Attempt).
+		WithAttemptID(rc.attemptID).
 		WithDuration(durationMs)
 	if len(nodeRun.OutputJSON) > 0 {
 		completedEvent = completedEvent.WithOutput(nodeRun.OutputJSON)
@@ -1443,10 +1470,10 @@ func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string, nextNodes []st
 	}
 	checkpointPayload, completedNodes, skippedNodes := s.buildCheckpointSnapshot(rc, stepIndex)
 
-	if err := s.repository.SaveCheckpoint(context.Background(), rc.runID, nodeID, stepIndex, checkpointPayload, completedNodes, skippedNodes, rc.graphJSON); err != nil {
+	if err := s.repository.SaveCheckpoint(rc.intentContext(context.Background()), rc.runID, nodeID, stepIndex, checkpointPayload, completedNodes, skippedNodes, rc.graphJSON); err != nil {
 		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
 	}
-	if err := s.publishNodeCompletedIntent(context.Background(), rc, nodeID, nextNodes, attempt); err != nil {
+	if err := s.publishNodeCompletedIntent(rc.intentContext(context.Background()), rc, nodeID, nextNodes, attempt); err != nil {
 		log.Printf("Failed to publish node_completed intent for run %s: %v", rc.runID, err)
 		return
 	}
@@ -1474,7 +1501,7 @@ func (s *Scheduler) publishNodeCompletedIntent(
 		IntentID:   uuid.NewString(),
 		IntentType: "node_completed",
 		RunID:      rc.runID,
-		AttemptID:  strconv.Itoa(attempt),
+		AttemptID:  rc.attemptID,
 		TraceID:    rc.traceID,
 		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
 		Payload: map[string]any{
@@ -1504,7 +1531,7 @@ func (s *Scheduler) publishPauseRunIntent(
 		IntentID:   uuid.NewString(),
 		IntentType: "pause_run",
 		RunID:      rc.runID,
-		AttemptID:  strconv.Itoa(nodeRun.Attempt),
+		AttemptID:  rc.attemptID,
 		TraceID:    rc.traceID,
 		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
 		Payload: map[string]any{
@@ -1551,11 +1578,15 @@ func (s *Scheduler) publishAckRunResumedIntent(
 	if s.runtimeIntentPublisher == nil {
 		return fmt.Errorf("runtime intent publisher is not configured")
 	}
+	activeAttemptID := strings.TrimSpace(resumeAttemptID)
+	if activeAttemptID == "" {
+		activeAttemptID = rc.attemptID
+	}
 	intent := &port.RuntimeIntentEnvelope{
 		IntentID:   uuid.NewString(),
 		IntentType: "ack_run_resumed",
 		RunID:      rc.runID,
-		AttemptID:  strings.TrimSpace(resumeAttemptID),
+		AttemptID:  activeAttemptID,
 		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
 		TraceID:    rc.traceID,
 		Payload: map[string]any{
@@ -1611,7 +1642,7 @@ func (s *Scheduler) computeReadyNodes(rc *runContext) []string {
 		if rc.completed[nodeID] && (!rc.allowCycles || rc.visitCounts[nodeID] >= maxVisits) {
 			continue
 		}
-		if rc.visitCounts[nodeID] >= maxVisits {
+		if rc.visitCounts[nodeID] >= maxVisits && rc.resumeRetryNode != nodeID {
 			continue
 		}
 		if rc.pending[nodeID] <= 0 {
@@ -2362,7 +2393,7 @@ func (s *Scheduler) decrementAndEnqueue(rc *runContext, nodeID string) {
 		rc.pendingMu.Unlock()
 		return
 	}
-	if rc.visitCounts[nodeID] >= maxVisits {
+	if rc.visitCounts[nodeID] >= maxVisits && rc.resumeRetryNode != nodeID {
 		rc.pendingMu.Unlock()
 		s.setError(
 			rc,
@@ -2473,7 +2504,7 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 	}
 
 	// Update run in database
-	s.repository.SetRunEnded(context.Background(), rc.runID, string(finalStatus), output, errorMsg)
+	s.repository.SetRunEnded(rc.intentContext(context.Background()), rc.runID, string(finalStatus), output, errorMsg)
 
 	// Persist session memory snapshot on completion/cancel.
 	if rc.messageBuffer != nil && rc.sessionID != "" {
@@ -2600,7 +2631,7 @@ func (s *Scheduler) CancelRun(runID string) error {
 	rc := val.(*runContext)
 	rc.cancel()
 
-	s.repository.UpdateRunStatus(context.Background(), runID, string(value.RunStatusCanceled))
+	s.repository.UpdateRunStatus(rc.intentContext(context.Background()), runID, string(value.RunStatusCanceled))
 	s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunCanceled))
 	s.flushEmitter("run_canceled")
 
@@ -2847,11 +2878,11 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		}
 	} else {
 		s.repository.ClearPauseState(ctx, runID)
-		s.repository.UpdateRunStatus(ctx, runID, string(value.RunStatusRunning))
+		s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning))
 	}
 
 	// Emit run resumed event
-	resumedEvent := rc.newEvent(port.EventTypeRunResumed)
+	resumedEvent := rc.newEvent(port.EventTypeRunResumed).WithAttemptID(rc.attemptID)
 	if strings.TrimSpace(resumeAttemptID) != "" {
 		resumedEvent = resumedEvent.WithOutput(map[string]any{"resume_attempt_id": resumeAttemptID})
 	}

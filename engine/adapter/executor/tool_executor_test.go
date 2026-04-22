@@ -2,11 +2,9 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -18,20 +16,105 @@ import (
 	"github.com/forgegraph/engine/domain/value"
 )
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 type mockToolCredentialResolver struct {
 	provider string
 	apiKey   string
 	err      error
 }
 
-func (m *mockToolCredentialResolver) Resolve(ctx context.Context, credentialID string, tenantID string) (string, string, error) {
+func (m *mockToolCredentialResolver) Resolve(_ context.Context, _ string, _ string) (string, string, error) {
 	return m.provider, m.apiKey, m.err
 }
 
+// getResultInt safely coerces numeric map values to int for assertions.
+func getResultInt(v any) int {
+	switch x := v.(type) {
+	case int:
+		return x
+	case int64:
+		return int(x)
+	case float64:
+		return int(x)
+	}
+	return 0
+}
+
+// httpToolCall builds a minimal ToolCall for an HTTP tool definition.
+func httpToolCall(def tool.Definition, config map[string]any) ResolvedToolCall {
+	d := def
+	return ResolvedToolCall{
+		Name:       def.Name,
+		Version:    def.Version,
+		Input:      map[string]any{},
+		Config:     config,
+		CallID:     "test-call-id",
+		AttemptID:  "test-attempt-id",
+		Definition: &d,
+	}
+}
+
+// localToolCall builds a minimal ToolCall for a local tool definition.
+func localToolCall(def tool.Definition, input map[string]any, config map[string]any, callID string) ResolvedToolCall {
+	d := def
+	return ResolvedToolCall{
+		Name:       def.Name,
+		Version:    def.Version,
+		Input:      input,
+		Config:     config,
+		CallID:     callID,
+		AttemptID:  "test-attempt-id",
+		Definition: &d,
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 func TestToolExecutor_NodeType(t *testing.T) {
-	executor := NewToolExecutor(tool.NewRegistry())
-	if executor.NodeType() != string(value.NodeTypeTool) {
-		t.Fatalf("NodeType() = %s, want %s", executor.NodeType(), string(value.NodeTypeTool))
+	// Constructor no longer takes a registry.
+	ex := NewToolExecutor()
+	if ex.NodeType() != string(value.NodeTypeTool) {
+		t.Fatalf("NodeType() = %s, want %s", ex.NodeType(), string(value.NodeTypeTool))
+	}
+}
+
+func TestToolExecutor_StrictModeRejectsNodePath(t *testing.T) {
+	registry := tool.NewRegistry()
+	registry.Register(tool.Definition{
+		Name:    "test.strict.adapter",
+		Version: "1.0.0",
+		Execution: tool.ExecutionConfig{
+			Type:  "local",
+			Local: &tool.LocalToolConfig{Handler: "noop"},
+		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
+	})
+
+	ex := NewToolExecutorWithModes(registry, nil, tool.RuntimeModeCloud, LegacyNodeAdapterModeStrict)
+	node := &entity.Node{
+		ID:   "tool-1",
+		Type: "tool",
+		Config: map[string]any{
+			"tool":    "test.strict.adapter",
+			"version": "1.0.0",
+			"input":   map[string]any{},
+		},
+	}
+
+	result, err := ex.Execute(context.Background(), node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected strict mode to reject node-based execution")
+	}
+	if !strings.Contains(result.Error.Error(), "node-based tool execution disabled") {
+		t.Fatalf("unexpected error: %v", result.Error)
 	}
 }
 
@@ -48,34 +131,27 @@ func TestToolExecutor_HTTPRetrySucceeds(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.retry",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodPost,
-		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool":             "test.http.retry",
-			"retry_attempts":   2,
-			"retry_backoff_ms": 1,
-			"input": map[string]any{
-				"query": "hello",
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
 			},
 		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := httpToolCall(def, map[string]any{
+		"retry_attempts":   2,
+		"retry_backoff_ms": 1,
+	})
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -96,36 +172,32 @@ func TestToolExecutor_HTTPRetrySucceeds(t *testing.T) {
 	}
 }
 
-func TestToolExecutor_AcceptsLegacyToolNameKey(t *testing.T) {
+// TestToolExecutor_ExplicitNameOnCall replaces the old "AcceptsLegacyToolNameKey" test.
+// In the new API, the tool name is always explicit on the ToolCall — there is no fallback
+// key lookup. This test verifies a basic named execution works end-to-end.
+func TestToolExecutor_ExplicitNameOnCall(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"ok":true}`)
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
-		Name:    "test.http.legacy-tool-name",
+	def := tool.Definition{
+		Name:    "test.http.named",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodPost,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_legacy_name",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool_name": "test.http.legacy-tool-name",
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), httpToolCall(def, nil))
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -141,35 +213,29 @@ func TestToolExecutor_HTTPToolSubstitutesConfigParametersInURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.params",
 		Version: "1.0.0",
-		Kind:    "http",
-		DefaultConfig: map[string]any{
-			"max_results": 5,
-		},
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL + "/messages?max={{config.max_results}}",
-			Method: http.MethodGet,
-		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_params",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool": "test.http.params",
-			"parameters": map[string]any{
-				"max_results": 12,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				// Backend pre-resolves config; {{config.max_results}} is substituted
+				// from call.Config at execution time via flattenToolConfigTemplateValues.
+				URL:    server.URL + "/messages?max={{config.max_results}}",
+				Method: http.MethodGet,
 			},
 		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	// Config is fully resolved by the backend before reaching the executor.
+	call := httpToolCall(def, map[string]any{
+		"max_results": 12,
+	})
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -188,36 +254,29 @@ func TestToolExecutor_HTTPToolInjectsCredentialAuthorization(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.auth",
 		Version: "1.0.0",
-		Kind:    "http",
-		DefaultConfig: map[string]any{
-			"provider": "gmail",
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodGet,
+			},
 		},
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodGet,
-		},
-	})
-
-	resolver := &mockToolCredentialResolver{provider: "gmail", apiKey: "token-abc"}
-	executor := NewToolExecutorWithResolver(registry, resolver)
-	node := &entity.Node{
-		ID:   "tool_auth",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool":          "test.http.auth",
-			"provider":      "gmail",
-			"credential_id": "cred-123",
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
+	resolver := &mockToolCredentialResolver{provider: "gmail", apiKey: "token-abc"}
+	call := httpToolCall(def, map[string]any{
+		"provider":      "gmail",
+		"credential_id": "cred-123",
+	})
+
 	ctx := port.WithTenantID(context.Background(), "tenant-1")
-	result, err := executor.Execute(ctx, node, entity.NewState())
+	result, err := NewToolExecutorWithResolver(resolver).ExecuteToolCall(ctx, call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -233,31 +292,27 @@ func TestToolExecutor_HTTPRetryableErrorOnExhaustedRetries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.fail",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodPost,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool":             "test.http.fail",
-			"retry_attempts":   2,
-			"retry_backoff_ms": 1,
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := httpToolCall(def, map[string]any{
+		"retry_attempts":   2,
+		"retry_backoff_ms": 1,
+	})
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error == nil {
 		t.Fatal("expected result.Error for exhausted retries")
@@ -273,29 +328,22 @@ func TestToolExecutor_HTTPClientErrorNonRetryable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.4xx",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodPost,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool": "test.http.4xx",
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), httpToolCall(def, nil))
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error == nil {
 		t.Fatal("expected result.Error for 4xx response")
@@ -319,31 +367,27 @@ func TestToolExecutor_HTTPRateLimitUsesRetryAfterDetails(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.rate-limit",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodPost,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_rate_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool":             "test.http.rate-limit",
-			"retry_attempts":   2,
-			"retry_backoff_ms": 1,
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := httpToolCall(def, map[string]any{
+		"retry_attempts":   2,
+		"retry_backoff_ms": 1,
+	})
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -362,31 +406,27 @@ func TestToolExecutor_HTTPQuotaExhaustedNonRetryable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.quota",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodPost,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_quota_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool":             "test.http.quota",
-			"retry_attempts":   3,
-			"retry_backoff_ms": 1,
-		},
+		SideEffects: tool.SideEffectConfig{Type: "external", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := httpToolCall(def, map[string]any{
+		"retry_attempts":   3,
+		"retry_backoff_ms": 1,
+	})
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error == nil {
 		t.Fatal("expected non-retryable quota error")
@@ -399,35 +439,22 @@ func TestToolExecutor_HTTPQuotaExhaustedNonRetryable(t *testing.T) {
 	}
 }
 
-func TestToolExecutor_ExecToolUserFunctionPath(t *testing.T) {
-	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
-
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
-		Name:    "test.exec.success",
+func TestToolExecutor_LocalToolHandlerEcho(t *testing.T) {
+	def := tool.Definition{
+		Name:    "test.local.echo",
 		Version: "1.0.0",
-		Kind:    "exec",
-		Exec: &tool.ExecToolConfig{
-			Command: os.Args[0],
-			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "success"},
+		Execution: tool.ExecutionConfig{
+			Type:  "local",
+			Local: &tool.LocalToolConfig{Handler: "echo"},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_exec_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool": "test.exec.success",
-			"input": map[string]any{
-				"value": 123,
-			},
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := localToolCall(def, map[string]any{"value": 123}, nil, "call-echo-1")
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -441,85 +468,32 @@ func TestToolExecutor_ExecToolUserFunctionPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected result payload map, got %T", output["result"])
 	}
-	if payload["message"] != "ok" {
-		t.Fatalf("unexpected exec payload: %#v", payload)
+	if payload["value"] != float64(123) && payload["value"] != 123 {
+		t.Fatalf("unexpected local payload: %#v", payload)
 	}
 }
 
-func TestToolExecutor_ExecTimeoutRetryable(t *testing.T) {
-	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
-
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
-		Name:    "test.exec.timeout",
+func TestToolExecutor_LocalToolUnsupportedHandlerFails(t *testing.T) {
+	def := tool.Definition{
+		Name:    "test.local.invalid",
 		Version: "1.0.0",
-		Kind:    "exec",
-		Exec: &tool.ExecToolConfig{
-			Command: os.Args[0],
-			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "block"},
+		Execution: tool.ExecutionConfig{
+			Type:  "local",
+			Local: &tool.LocalToolConfig{Handler: "missing"},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_exec_1",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool":           "test.exec.timeout",
-			"timeout_ms":     25,
-			"retry_attempts": 1,
-		},
+		// Idempotent: true so the executor doesn't reject it at the call_id gate,
+		// letting it reach the handler and fail there as the test intends.
+		SideEffects: tool.SideEffectConfig{Type: "external", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := localToolCall(def, nil, nil, "call-invalid-1")
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error == nil {
-		t.Fatal("expected timeout error")
-	}
-	if !domain.IsRetryable(result.Error) {
-		t.Fatalf("expected retryable timeout error, got %T (%v)", result.Error, result.Error)
-	}
-}
-
-func TestToolExecutorHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
-	}
-
-	mode := ""
-	for i, arg := range os.Args {
-		if arg == "--" && i+1 < len(os.Args) {
-			mode = os.Args[i+1]
-			break
-		}
-	}
-	if mode == "" {
-		os.Exit(2)
-	}
-
-	switch mode {
-	case "success":
-		decoder := json.NewDecoder(os.Stdin)
-		var payload map[string]any
-		_ = decoder.Decode(&payload)
-		_, _ = fmt.Fprint(os.Stdout, `{"message":"ok"}`)
-		os.Exit(0)
-	case "block":
-		reader, writer, err := os.Pipe()
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "pipe error: %v", err)
-			os.Exit(1)
-		}
-		defer writer.Close()
-		var buf [1]byte
-		_, _ = reader.Read(buf[:])
-		_, _ = fmt.Fprint(os.Stdout, `{"message":"late"}`)
-		os.Exit(0)
-	default:
-		_, _ = fmt.Fprintf(os.Stderr, "unknown helper mode %s", mode)
-		os.Exit(1)
+		t.Fatal("expected local handler error")
 	}
 }
 
@@ -529,36 +503,26 @@ func TestToolExecutor_HTTPToolBlocksEgressByPolicy(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:    "test.http.policy",
 		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &tool.HTTPToolConfig{
-			URL: server.URL,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{URL: server.URL},
 		},
-	})
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
+	}
 
-	ctx := context.Background()
-	ctx = port.WithRunContext(ctx, &port.RunContext{
+	ctx := port.WithRunContext(context.Background(), &port.RunContext{
 		Policy: &entity.ExecutionPolicy{
 			HTTPAllowlist:   []string{"example.com"},
 			HTTPDefaultDeny: true,
 		},
 	})
 
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_policy",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool": "test.http.policy",
-		},
-	}
-
-	result, err := executor.Execute(ctx, node, entity.NewState())
+	result, err := NewToolExecutor().ExecuteToolCall(ctx, httpToolCall(def, nil))
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error == nil {
 		t.Fatal("expected policy validation error")
@@ -568,36 +532,26 @@ func TestToolExecutor_HTTPToolBlocksEgressByPolicy(t *testing.T) {
 	}
 }
 
-func TestToolExecutor_ExecToolBlockedInCloudMode(t *testing.T) {
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
-		Name:    "test.exec.cloud-blocked",
+func TestToolExecutor_LocalToolAllowedInCloudMode(t *testing.T) {
+	def := tool.Definition{
+		Name:    "test.local.cloud",
 		Version: "1.0.0",
-		Kind:    "exec",
-		Exec: &tool.ExecToolConfig{
-			Command: os.Args[0],
-			Args:    []string{"-test.run=TestToolExecutorHelperProcess", "--", "success"},
+		Execution: tool.ExecutionConfig{
+			Type:  "local",
+			Local: &tool.LocalToolConfig{Handler: "noop"},
 		},
-	})
-
-	executor := NewToolExecutorWithRuntimeMode(registry, tool.RuntimeModeCloud)
-	node := &entity.Node{
-		ID:   "tool_exec_cloud",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool": "test.exec.cloud-blocked",
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	call := localToolCall(def, nil, nil, "call-cloud-1")
+
+	// Constructor no longer takes a registry.
+	result, err := NewToolExecutorWithRuntimeMode(tool.RuntimeModeCloud).ExecuteToolCall(context.Background(), call)
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
-	if result.Error == nil {
-		t.Fatal("expected cloud-mode exec policy error")
-	}
-	if !strings.Contains(result.Error.Error(), "policy denied: exec tools are disabled in cloud mode") {
-		t.Fatalf("unexpected error message: %v", result.Error)
+	if result.Error != nil {
+		t.Fatalf("expected local tool to be allowed in cloud mode, got %v", result.Error)
 	}
 }
 
@@ -608,30 +562,23 @@ func TestToolExecutor_TruncatesOversizedToolResults(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := tool.NewRegistry()
-	registry.Register(tool.Definition{
+	def := tool.Definition{
 		Name:          "test.http.large-result",
 		Version:       "1.0.0",
-		Kind:          "http",
 		MaxResultSize: 20,
-		HTTP: &tool.HTTPToolConfig{
-			URL:    server.URL,
-			Method: http.MethodGet,
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodGet,
+			},
 		},
-	})
-
-	executor := NewToolExecutor(registry)
-	node := &entity.Node{
-		ID:   "tool_large_result",
-		Type: string(value.NodeTypeTool),
-		Config: map[string]any{
-			"tool": "test.http.large-result",
-		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
 	}
 
-	result, err := executor.Execute(context.Background(), node, entity.NewState())
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), httpToolCall(def, nil))
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("ExecuteToolCall() error = %v", err)
 	}
 	if result.Error != nil {
 		t.Fatalf("result.Error = %v", result.Error)
@@ -651,10 +598,10 @@ func TestToolExecutor_TruncatesOversizedToolResults(t *testing.T) {
 	if !strings.Contains(preview, "[truncated]") {
 		t.Fatalf("expected truncated preview marker, got %q", preview)
 	}
-	if got := getConfigInt(output["result_original_chars"]); got != 80 {
+	if got := getResultInt(output["result_original_chars"]); got != 80 {
 		t.Fatalf("result_original_chars = %d, want 80", got)
 	}
-	if got := getConfigInt(output["result_limit_chars"]); got != 20 {
+	if got := getResultInt(output["result_limit_chars"]); got != 20 {
 		t.Fatalf("result_limit_chars = %d, want 20", got)
 	}
 }

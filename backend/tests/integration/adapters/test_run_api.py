@@ -12,12 +12,12 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from django.test import override_settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 
 from application.services.run_liveness import reconcile_stale_runs
-from application.services.run_snapshots import RunSnapshot, set_snapshot
+from application.services.run_snapshots import RunSnapshot, get_snapshot, set_snapshot
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
@@ -27,6 +27,9 @@ from infrastructure.orm.models import (
     LLMQuota,
     LLMUsage,
     MemoryConfiguration,
+    NodePackageInstallation,
+    NodeRegistryPackage,
+    NodeRegistryRelease,
     NodeRun,
     NodeRunEventProjection,
     PromptTemplate,
@@ -1058,9 +1061,140 @@ class TestRunStart:
         assert run_data["queue_available_at"] is not None
 
         run = Run.objects.get(id=run_data["id"])
+        assert isinstance(run.dispatch_graph_json, dict)
+        assert run.dispatch_graph_json["nodes"] == []
+        assert "tool_resolution" in run.dispatch_graph_json["metadata"]
         entry = RunQueueEntry.objects.get(run=run)
         assert entry.status == "pending"
         assert not [call for call in mock_engine_client.calls if call[0] == "start_run"]
+
+    def test_start_run_persists_backend_selected_tool_snapshot(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        package = NodeRegistryPackage.objects.create(
+            slug="crm-lookup",
+            name="CRM Lookup",
+            summary="Lookup CRM records",
+            category="crm",
+        )
+        release = NodeRegistryRelease.objects.create(
+            package=package,
+            version="1.2.0",
+            status="approved",
+            package_kind="runtime_tool",
+            execution_node_type="tool",
+            manifest_version=2,
+            config_defaults={"tool": "crm_lookup"},
+            runtime_manifest={
+                "name": "crm_lookup",
+                "version": "1.2.0",
+                "category": "crm",
+                "visibility": "public",
+                "input_schema": {"type": "object"},
+                "execution": {
+                    "type": "http",
+                    "timeout_seconds": 10,
+                    "http": {"url": "https://example.com/crm", "method": "POST"},
+                },
+                "side_effects": {"type": "read", "idempotent": True},
+            },
+        )
+        NodePackageInstallation.objects.create(
+            organization=user.default_organization,
+            package=package,
+            release=release,
+            install_metadata={},
+        )
+
+        internal_package = NodeRegistryPackage.objects.create(
+            slug="crm-internal",
+            name="CRM Internal",
+            summary="Internal CRM helper",
+            category="crm",
+        )
+        internal_release = NodeRegistryRelease.objects.create(
+            package=internal_package,
+            version="1.0.0",
+            status="approved",
+            package_kind="runtime_tool",
+            execution_node_type="tool",
+            manifest_version=2,
+            config_defaults={"tool": "crm_internal"},
+            runtime_manifest={
+                "name": "crm_internal",
+                "version": "1.0.0",
+                "category": "crm",
+                "visibility": "internal",
+                "input_schema": {"type": "object"},
+                "execution": {
+                    "type": "http",
+                    "timeout_seconds": 10,
+                    "http": {"url": "https://example.com/internal", "method": "POST"},
+                },
+                "side_effects": {"type": "read", "idempotent": True},
+            },
+        )
+        NodePackageInstallation.objects.create(
+            organization=user.default_organization,
+            package=internal_package,
+            release=internal_release,
+            install_metadata={},
+        )
+
+        graph = Graph.objects.create(owner=user, name="Backend Selected Tool Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [
+                    {
+                        "id": "agent_1",
+                        "type": "agent",
+                        "name": "Agent",
+                        "config": {
+                            "tool_selection": {"categories": ["crm"], "max_tools": 5},
+                            "approval_required_tools": ["crm_lookup"],
+                        },
+                    },
+                    {
+                        "id": "tool_1",
+                        "type": "tool",
+                        "name": "Lookup",
+                        "config": {"tool": "crm_lookup"},
+                    },
+                ],
+                "edges": [],
+            },
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {"graph_version_id": str(version.id), "input_json": {"customer_id": "cust_123"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        run = Run.objects.get(id=response.data["data"]["id"])
+        assert isinstance(run.dispatch_graph_json, dict)
+
+        agent_node = next(
+            node for node in run.dispatch_graph_json["nodes"] if node["id"] == "agent_1"
+        )
+        tool_node = next(
+            node for node in run.dispatch_graph_json["nodes"] if node["id"] == "tool_1"
+        )
+        tool_resolution = run.dispatch_graph_json["metadata"]["tool_resolution"]
+
+        assert agent_node["config"]["tools"] == ["crm_lookup"]
+        assert agent_node["config"]["tool_versions"] == {"crm_lookup": "1.2.0"}
+        assert tool_node["config"]["version"] == "1.2.0"
+        assert [tool["name"] for tool in tool_resolution["pinned_tools"]] == ["crm_lookup"]
+        assert tool_resolution["agent_nodes"]["agent_1"]["tools"] == ["crm_lookup"]
+        assert tool_resolution["manifest_version"] == 2
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        assert start_calls[0][1]["graph_json"] == run.dispatch_graph_json
 
 
 class TestRunInvoke:
@@ -1112,12 +1246,14 @@ class TestRunInvoke:
         new_run = Run.objects.get(id=run_data["id"])
         assert new_run.thread_id == thread_id
         assert new_run.input_json == {"query": "hi"}
+        assert isinstance(new_run.dispatch_graph_json, dict)
 
         new_checkpoint = new_run.checkpoint
         assert new_checkpoint.state_json["input.query"] == "hi"
 
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
+        assert start_calls[0][1]["graph_json"] == new_run.dispatch_graph_json
         assert start_calls[0][1]["run_id"] == new_run.id
 
     def test_invoke_resolves_prompt_id_into_checkpoint_and_engine_payload(
@@ -1386,6 +1522,7 @@ class TestRunReplay:
         assert len(start_calls) == 1
         assert start_calls[0][1]["run_id"] == replay_run.id
         assert start_calls[0][1]["input_json"] == {"query": "hello"}
+        assert start_calls[0][1]["graph_json"] == replay_run.dispatch_graph_json
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_replay_resolves_prompt_id_into_checkpoint_and_engine_payload(
@@ -2619,6 +2756,60 @@ class TestEngineRunEvents:
         assert node_run.error_json["error"] == payload["error"]
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_node_failed_does_not_advance_snapshot(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Failure Snapshot Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+        snapshot_updated_at = timezone.now()
+        set_snapshot(
+            RunSnapshot(
+                run_id=run.id,
+                last_completed_node="node_1",
+                next_node="node_2",
+                attempt_id="attempt-1",
+                updated_at=snapshot_updated_at,
+            )
+        )
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-node-failed-does-not-advance-snapshot",
+                "type": "node_failed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "node_id": "node_2",
+                "node_type": "http",
+                "attempt": 1,
+                "timestamp": int(time.time() * 1000),
+                "error": "downstream failure",
+                "output": {
+                    "error": {
+                        "message": "downstream failure",
+                        "type": "retryable_error",
+                        "attempt": 1,
+                        "retryable": True,
+                    }
+                },
+            }
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        snapshot = get_snapshot(run.id)
+        assert snapshot is not None
+        assert snapshot.last_completed_node == "node_1"
+        assert snapshot.next_node == "node_2"
+        assert snapshot.attempt_id == "attempt-1"
+        assert snapshot.updated_at == snapshot_updated_at
+
+        node_run = NodeRun.objects.get(run=run, node_id="node_2", attempt=1)
+        assert node_run.status == "failed"
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_agent_completed_records_llm_usage(self, api_client, user):
         graph = Graph.objects.create(owner=user, name="Agent Graph")
         version = GraphVersion.objects.create(
@@ -2770,11 +2961,12 @@ class TestRunResume:
             owner=user, graph_version=version, status="running", paused_node_id="gate"
         )
 
-        response = authenticated_client.post(
-            f"/api/runs/{run.id}/resume",
-            {"node_id": "gate", "input_json": {"approved": True}},
-            format="json",
-        )
+        with TestCase.captureOnCommitCallbacks(execute=True):
+            response = authenticated_client.post(
+                f"/api/runs/{run.id}/resume",
+                {"node_id": "gate", "input_json": {"approved": True}},
+                format="json",
+            )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data["error"]["code"] == "INVALID_STATE"
         assert not any(call[0] == "resume_run" for call in mock_engine_client.calls)
@@ -2845,6 +3037,47 @@ class TestRunResume:
         assert task.status == "approved"
         assert task.result == input_json
         assert task.resolved_at is not None
+
+    def test_resume_updates_snapshot_attempt_before_dispatch(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Resume Snapshot Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="paused",
+            paused_node_id="gate",
+        )
+        previous_snapshot = RunSnapshot(
+            run_id=run.id,
+            last_completed_node="node_1",
+            next_node="gate",
+            attempt_id="attempt-a",
+            updated_at=timezone.now() - timedelta(minutes=1),
+        )
+        set_snapshot(previous_snapshot)
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": {"approved": True}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        resume_calls = [call for call in mock_engine_client.calls if call[0] == "resume_run"]
+        assert len(resume_calls) == 1
+
+        run.refresh_from_db()
+        snapshot = get_snapshot(run.id)
+        assert snapshot is not None
+        assert snapshot.last_completed_node == "node_1"
+        assert snapshot.next_node == "gate"
+        assert snapshot.attempt_id == str(run.resume_attempt_id)
+        assert snapshot.attempt_id != previous_snapshot.attempt_id
+        assert resume_calls[0][1]["resume_attempt_id"] == snapshot.attempt_id
 
     def test_resume_calls_engine_and_marks_task_rejected(
         self, authenticated_client, mock_engine_client, user

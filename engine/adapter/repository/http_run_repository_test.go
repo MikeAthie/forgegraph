@@ -85,8 +85,9 @@ func TestHTTPRunRepositorySaveCheckpointPublishesRuntimeIntent(t *testing.T) {
 
 	publisher := &recordingIntentPublisher{}
 	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), publisher)
+	ctx := port.WithAttemptID(context.Background(), "attempt-7")
 	err := repo.SaveCheckpoint(
-		context.Background(),
+		ctx,
 		"run-1",
 		"node-1",
 		3,
@@ -108,6 +109,9 @@ func TestHTTPRunRepositorySaveCheckpointPublishesRuntimeIntent(t *testing.T) {
 	if intent.RunID != "run-1" {
 		t.Fatalf("intent.RunID = %s", intent.RunID)
 	}
+	if intent.AttemptID != "attempt-7" {
+		t.Fatalf("intent.AttemptID = %s", intent.AttemptID)
+	}
 	if intent.Payload["node_id"] != "node-1" {
 		t.Fatalf("intent.Payload[node_id] = %#v", intent.Payload["node_id"])
 	}
@@ -124,6 +128,7 @@ func TestHTTPRunRepositoryNodeRunUpsertPublishesRuntimeIntent(t *testing.T) {
 
 	publisher := &recordingIntentPublisher{}
 	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), publisher)
+	ctx := port.WithAttemptID(context.Background(), "attempt-9")
 	startedAt := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	nodeRun := &entity.NodeRun{
 		ID:        "logical-node-run-id",
@@ -138,7 +143,7 @@ func TestHTTPRunRepositoryNodeRunUpsertPublishesRuntimeIntent(t *testing.T) {
 		SpanID:    "span-1",
 	}
 
-	if err := repo.CreateNodeRun(context.Background(), nodeRun); err != nil {
+	if err := repo.CreateNodeRun(ctx, nodeRun); err != nil {
 		t.Fatalf("CreateNodeRun() error = %v", err)
 	}
 	if len(publisher.intents) != 1 {
@@ -148,11 +153,32 @@ func TestHTTPRunRepositoryNodeRunUpsertPublishesRuntimeIntent(t *testing.T) {
 	if intent.IntentType != "upsert_node_run" {
 		t.Fatalf("intent.IntentType = %s", intent.IntentType)
 	}
+	if intent.AttemptID != "attempt-9" {
+		t.Fatalf("intent.AttemptID = %s", intent.AttemptID)
+	}
 	if intent.Payload["id"] != "logical-node-run-id" {
 		t.Fatalf("intent.Payload[id] = %#v", intent.Payload["id"])
 	}
 	if intent.Payload["node_id"] != "node-1" {
 		t.Fatalf("intent.Payload[node_id] = %#v", intent.Payload["node_id"])
+	}
+}
+
+func TestHTTPRunRepositoryUpdateRunStatusRequiresAttemptID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected HTTP call %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	publisher := &recordingIntentPublisher{}
+	repo := NewHTTPRunRepository(server.URL, "test-secret", server.Client(), publisher)
+
+	err := repo.UpdateRunStatus(context.Background(), "run-1", "running")
+	if err == nil {
+		t.Fatal("expected missing attempt_id error")
+	}
+	if err.Error() != "runtime intent attempt_id is required" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

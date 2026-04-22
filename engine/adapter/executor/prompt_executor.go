@@ -92,7 +92,7 @@ type LLMResponse struct {
 	FinishReason string
 
 	// ToolCalls contains provider-native tool calls, if any.
-	ToolCalls []ToolCall
+	ToolCalls []LLMToolCall
 
 	// StructuredData contains parsed structured output when requested.
 	StructuredData any
@@ -106,7 +106,7 @@ type ToolSpec struct {
 	Strict       bool
 }
 
-type ToolCall struct {
+type LLMToolCall struct {
 	ID           string
 	Name         string
 	Arguments    map[string]any

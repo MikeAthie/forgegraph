@@ -59,6 +59,17 @@ The engine exists to execute work.
 - Engine-local process state must never be required for recovery.
 - If no backend-owned checkpoint exists, checkpoint-based resume must fail closed.
 
+### Snapshot Semantics
+
+- A snapshot represents the last successfully completed node in a run.
+- Snapshots are written only after a `node_completed` intent has committed.
+- Snapshots do not represent in-progress execution.
+- Snapshots do not represent partial node execution.
+- Snapshots do not represent failed node states.
+- On failure, the system resumes from the last snapshot.
+- On failure, the failed node is re-executed.
+- Correctness for retried side effects depends on idempotent side effects keyed by a stable `side_effect_id`.
+
 ## 8. Testing Contract
 
 Tests must reinforce this architecture.

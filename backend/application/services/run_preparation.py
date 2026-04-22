@@ -20,6 +20,11 @@ from application.services.credential_state import (
     is_oauth_credential,
     is_oauth_provider,
 )
+from application.services.marketplace_runtime import (
+    build_runtime_manifest_payload,
+    normalize_runtime_mode,
+    select_agent_runtime_tools,
+)
 from application.services.tenancy import get_tenant_id_for_user
 from application.services.trace_context import default_runtime_limits, ensure_trace_context
 from infrastructure.orm.models import (
@@ -323,6 +328,163 @@ def apply_tool_runtime_credentials(graph_json: dict[str, Any], owner: User) -> d
     return data
 
 
+def _normalize_agent_tool_names(raw_value: Any) -> list[str]:
+    if not isinstance(raw_value, list):
+        return []
+    normalized: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str):
+            continue
+        trimmed = item.strip()
+        if trimmed:
+            normalized.append(trimmed)
+    return normalized
+
+
+def _get_runtime_tool_catalog(owner: User) -> dict[str, Any]:
+    tenant_id = get_tenant_id_for_user(owner)
+    runtime_mode = normalize_runtime_mode(getattr(settings, "FORGEGRAPH_RUNTIME_MODE", "cloud"))
+    payload = build_runtime_manifest_payload(tenant_id, runtime_mode)
+    tools = payload.get("tools")
+    return {
+        "tenant_id": tenant_id,
+        "runtime_mode": runtime_mode,
+        "manifest_checksum": str(payload.get("checksum") or ""),
+        "manifest_version": int(payload.get("manifest_version") or 2),
+        "tools": [tool for tool in tools if isinstance(tool, dict)]
+        if isinstance(tools, list)
+        else [],
+    }
+
+
+def apply_backend_tool_selection(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
+    """
+    Resolve agent/tool node tool references against the backend-owned tenant tool catalog.
+
+    The rendered graph becomes the execution contract for the run and is safe to persist
+    for queueing, replay, and retry without giving the engine authority over tool selection.
+    """
+    if not isinstance(graph_json, dict):
+        return graph_json
+
+    catalog = _get_runtime_tool_catalog(owner)
+    available_tools = catalog["tools"]
+    indexed_tools: dict[str, dict[str, Any]] = {}
+    for definition in available_tools:
+        name = str(definition.get("name") or "").strip()
+        version = str(definition.get("version") or "").strip()
+        if not name or not version:
+            continue
+        indexed_tools[f"{name}@{version}"] = definition
+        indexed_tools.setdefault(name, definition)
+
+    data = copy.deepcopy(graph_json)
+    nodes = data.get("nodes")
+    if not isinstance(nodes, list):
+        return data
+
+    pinned_tools: dict[str, dict[str, Any]] = {}
+    agent_nodes: dict[str, dict[str, Any]] = {}
+
+    def _record_pinned(definition: dict[str, Any] | None) -> None:
+        if not isinstance(definition, dict):
+            return
+        name = str(definition.get("name") or "").strip()
+        version = str(definition.get("version") or "").strip()
+        if not name or not version:
+            return
+        pinned_tools[f"{name}@{version}"] = definition
+
+    def _walk(nodes_to_walk: list[dict[str, Any]]) -> None:
+        for node in nodes_to_walk:
+            if not isinstance(node, dict):
+                continue
+            node_type = str(node.get("type") or "").strip().lower()
+            node_id = str(node.get("id") or "").strip() or "node"
+            config_raw = node.get("config")
+            config = config_raw if isinstance(config_raw, dict) else {}
+
+            if node_type == "agent":
+                explicit_tools = _normalize_agent_tool_names(config.get("tools"))
+                tool_selection = (
+                    config.get("tool_selection")
+                    if isinstance(config.get("tool_selection"), dict)
+                    else {}
+                )
+                resolved = select_agent_runtime_tools(
+                    available_tools=available_tools,
+                    explicit_tool_names=explicit_tools,
+                    tool_selection=tool_selection,
+                )
+
+                selected_names = resolved["tool_names"]
+                tool_versions = resolved["tool_versions"]
+                unresolved_explicit_tools = resolved["unresolved_explicit_tools"]
+
+                config["tools"] = selected_names
+                if tool_versions:
+                    config["tool_versions"] = tool_versions
+                approval_required_tools = _normalize_agent_tool_names(
+                    config.get("approval_required_tools")
+                )
+                if approval_required_tools:
+                    invalid_tools = [
+                        tool_name
+                        for tool_name in approval_required_tools
+                        if tool_name not in selected_names
+                    ]
+                    if invalid_tools:
+                        raise RunPreparationError(
+                            "Agent approval_required_tools must be included in the resolved tool set."
+                        )
+
+                for definition in resolved["tool_definitions"]:
+                    _record_pinned(definition)
+
+                agent_nodes[node_id] = {
+                    "tools": selected_names,
+                    "tool_versions": tool_versions,
+                    "unresolved_explicit_tools": unresolved_explicit_tools,
+                }
+                node["config"] = config
+
+            elif node_type == "tool":
+                tool_name = str(config.get("tool") or config.get("tool_name") or "").strip()
+                if tool_name and not str(config.get("version") or "").strip():
+                    matched = indexed_tools.get(tool_name)
+                    if matched is not None:
+                        config["version"] = str(matched.get("version") or "")
+                        _record_pinned(matched)
+                node["config"] = config
+
+            elif node_type == "subgraph" and isinstance(config.get("graph_json"), dict):
+                subgraph = config["graph_json"]
+                sub_nodes = subgraph.get("nodes")
+                if isinstance(sub_nodes, list):
+                    _walk(sub_nodes)
+                config["graph_json"] = subgraph
+                node["config"] = config
+
+    _walk(nodes)
+
+    metadata_raw = data.get("metadata")
+    metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
+    metadata["tool_resolution"] = {
+        "manifest_version": catalog["manifest_version"],
+        "manifest_checksum": catalog["manifest_checksum"],
+        "tenant_id": catalog["tenant_id"],
+        "runtime_mode": catalog["runtime_mode"],
+        "tool_catalog_size": len(available_tools),
+        "pinned_tools": sorted(
+            pinned_tools.values(),
+            key=lambda item: (str(item.get("name") or ""), str(item.get("version") or "")),
+        ),
+        "agent_nodes": agent_nodes,
+    }
+    data["metadata"] = metadata
+    return data
+
+
 def _resolve_prompt_templates_in_place(graph_json: dict[str, Any], owner: User) -> None:
     nodes = graph_json.get("nodes")
     if not isinstance(nodes, list):
@@ -385,7 +547,8 @@ def prepare_graph_for_engine(
     expanded = expand_subgraphs(cleaned, owner)
     namespaced = apply_memory_namespace_prefix(expanded, owner.id)
     resolved = resolve_prompt_templates(namespaced, owner)
-    prepared = apply_tool_runtime_credentials(resolved, owner)
+    credentialized = apply_tool_runtime_credentials(resolved, owner)
+    prepared = apply_backend_tool_selection(credentialized, owner)
     metadata_raw = prepared.get("metadata")
     metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
     transformations = [
@@ -394,6 +557,7 @@ def prepare_graph_for_engine(
         "namespace_memory",
         "resolve_prompt_templates",
         "apply_tool_runtime_credentials",
+        "apply_backend_tool_selection",
     ]
     metadata["engine_contract_version"] = "2"
     metadata["dispatch_transformations"] = transformations

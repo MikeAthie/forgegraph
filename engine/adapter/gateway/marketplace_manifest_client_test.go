@@ -17,7 +17,7 @@ func TestMarketplaceManifestClientFetchSuccess(t *testing.T) {
 			t.Fatal("expected signed headers")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"data":{"tenant_id":"tenant-1","manifest_version":1,"checksum":"abc123","generated_at":"2026-03-12T00:00:00Z","tools":[{"name":"crm_lookup","version":"1.0.0","kind":"http","input_schema":{"type":"object"},"http":{"url":"https://example.com/tool","method":"POST"}}],"packages":[]}}`)
+		_, _ = fmt.Fprint(w, `{"data":{"tenant_id":"tenant-1","manifest_version":2,"checksum":"abc123","generated_at":"2026-03-12T00:00:00Z","tools":[{"name":"crm_lookup","version":"1.0.0","category":"crm","description":"Lookup CRM records","visibility":"public","input_schema":{"type":"object"},"execution":{"type":"http","timeout_seconds":10,"http":{"url":"https://example.com/tool","method":"POST"}},"side_effects":{"type":"read","idempotent":true},"definition_checksum":"tool123"}],"packages":[]}}`)
 	}))
 	defer server.Close()
 

@@ -113,14 +113,28 @@ class Command(BaseCommand):
         session_id = str(run.thread_id) if run.thread_id else None
         graph_version = run.graph_version
 
+        checkpoint = None
         try:
-            prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
-        except PromptTemplateResolutionError as exc:
-            self._fail_run(entry, run, f"Invalid prompt configuration: {exc}")
-            return
-        except (SubgraphResolutionError, ValueError) as exc:
-            self._fail_run(entry, run, f"Invalid subgraph: {exc}")
-            return
+            checkpoint = run.checkpoint
+        except Exception:
+            checkpoint = None
+
+        checkpoint_graph_json = checkpoint.graph_json if checkpoint is not None else None
+        if isinstance(checkpoint_graph_json, dict):
+            prepared_graph = checkpoint_graph_json
+        elif isinstance(run.dispatch_graph_json, dict):
+            prepared_graph = run.dispatch_graph_json
+        else:
+            try:
+                prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
+            except PromptTemplateResolutionError as exc:
+                self._fail_run(entry, run, f"Invalid prompt configuration: {exc}")
+                return
+            except (SubgraphResolutionError, ValueError) as exc:
+                self._fail_run(entry, run, f"Invalid subgraph: {exc}")
+                return
+            run.dispatch_graph_json = prepared_graph
+            run.save(update_fields=["dispatch_graph_json"])
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:

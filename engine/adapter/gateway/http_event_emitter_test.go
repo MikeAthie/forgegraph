@@ -288,6 +288,56 @@ func TestEmitStampsEngineInstanceAndCategory(t *testing.T) {
 	}
 }
 
+func TestEmitIncludesAttemptID(t *testing.T) {
+	received := make(chan *port.ExecutionEvent, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var envelope struct {
+			Data port.ExecutionEvent `json:"data"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		received <- &envelope.Data
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL: server.URL,
+		Client:      server.Client(),
+		MaxRetries:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	event := port.NewEvent(port.EventTypeNodeCompleted, "run-1").
+		WithNode("node-1", "task", "Task").
+		WithAttempt(2).
+		WithAttemptID("attempt-b")
+	if err := emitter.Emit(context.Background(), event); err != nil {
+		t.Fatalf("Emit() error = %v", err)
+	}
+
+	select {
+	case delivered := <-received:
+		if delivered.AttemptID != "attempt-b" {
+			t.Fatalf("AttemptID = %s, want attempt-b", delivered.AttemptID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for emitted event")
+	}
+}
+
 func assertEventually(t *testing.T, timeout time.Duration, condition func() bool) {
 	t.Helper()
 

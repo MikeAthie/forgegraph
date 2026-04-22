@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -12,6 +13,7 @@ from django.utils.dateparse import parse_datetime
 from redis import Redis
 
 SNAPSHOT_KEY_PREFIX = "forgegraph:snapshot"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,26 @@ def set_snapshot(
     client.set(key, serialized)
 
 
+def safe_set_snapshot(
+    snapshot: RunSnapshot,
+    *,
+    redis_client: Redis | None = None,
+) -> None:
+    try:
+        set_snapshot(snapshot, redis_client=redis_client)
+    except Exception:
+        logger.error(
+            "Snapshot write failed",
+            exc_info=True,
+            extra={
+                "run_id": str(snapshot.run_id),
+                "node_id": snapshot.last_completed_node,
+                "next_node": snapshot.next_node,
+                "attempt_id": snapshot.attempt_id,
+            },
+        )
+
+
 def delete_snapshot(
     run_id: UUID | str,
     *,
@@ -87,3 +109,18 @@ def delete_snapshot(
 ) -> None:
     client = redis_client or build_run_snapshot_redis_client()
     client.delete(snapshot_key(run_id))
+
+
+def safe_delete_snapshot(
+    run_id: UUID | str,
+    *,
+    redis_client: Redis | None = None,
+) -> None:
+    try:
+        delete_snapshot(run_id, redis_client=redis_client)
+    except Exception:
+        logger.error(
+            "Snapshot delete failed",
+            exc_info=True,
+            extra={"run_id": str(run_id)},
+        )

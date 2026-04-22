@@ -66,9 +66,21 @@ func NewAgentExecutor(client LLMClient, registry *tool.Registry, resolver Creden
 
 // NewAgentExecutorWithRuntimeMode creates an agent executor using the shared tool registry and runtime mode.
 func NewAgentExecutorWithRuntimeMode(client LLMClient, registry *tool.Registry, resolver CredentialResolver, runtimeMode string) *AgentExecutor {
+	return NewAgentExecutorWithModes(client, registry, resolver, runtimeMode, LegacyNodeAdapterModeLegacy)
+}
+
+// NewAgentExecutorWithModes creates an agent executor using the shared tool registry,
+// the engine runtime mode, and the legacy node-adapter mode.
+func NewAgentExecutorWithModes(
+	client LLMClient,
+	registry *tool.Registry,
+	resolver CredentialResolver,
+	runtimeMode string,
+	legacyNodeAdapterMode string,
+) *AgentExecutor {
 	agent := NewAgentExecutorWithToolInvoker(
 		client,
-		NewToolExecutorWithResolverAndRuntimeMode(registry, resolver, runtimeMode),
+		NewToolExecutorWithModes(registry, resolver, runtimeMode, legacyNodeAdapterMode),
 	)
 	agent.registry = registry
 	return agent
@@ -113,7 +125,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	}
 	var toolSpecs []ToolSpec
 	if provider == "openai" && e.registry != nil {
-		specs, err := e.buildToolSpecs(allowedTools)
+		specs, err := e.buildToolSpecs(allowedTools, normalizeAgentToolVersions(node.Config["tool_versions"]))
 		if err != nil {
 			log.Printf("agent executor: falling back to legacy tool planning for provider %s: %v", provider, err)
 		} else {
@@ -161,6 +173,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	for _, toolName := range normalizeAgentToolList(node.Config["approval_required_tools"]) {
 		approvalRequired[toolName] = struct{}{}
 	}
+	toolVersions := normalizeAgentToolVersions(node.Config["tool_versions"])
 
 	stateSnapshot := state.SnapshotNested()
 	var vectorMemories []port.MemoryChunk
@@ -434,6 +447,9 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 					"input": decision.ToolInput,
 				},
 			}
+			if version := toolVersions[toolName]; strings.TrimSpace(version) != "" {
+				toolNode.Config["version"] = version
+			}
 
 			toolResult, err := e.toolInvoker.Execute(ctx, toolNode, state)
 			if err != nil {
@@ -650,6 +666,29 @@ func compactAgentToolNames(items []string) []string {
 	return normalized
 }
 
+func normalizeAgentToolVersions(raw any) map[string]string {
+	if raw == nil {
+		return nil
+	}
+	typed, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	versions := make(map[string]string, len(typed))
+	for name, value := range typed {
+		trimmedName := strings.TrimSpace(name)
+		trimmedVersion := strings.TrimSpace(toStringValue(value))
+		if trimmedName == "" || trimmedVersion == "" {
+			continue
+		}
+		versions[trimmedName] = trimmedVersion
+	}
+	if len(versions) == 0 {
+		return nil
+	}
+	return versions
+}
+
 func containsTool(allowedTools []string, toolName string) bool {
 	for _, candidate := range allowedTools {
 		if candidate == toolName {
@@ -659,7 +698,7 @@ func containsTool(allowedTools []string, toolName string) bool {
 	return false
 }
 
-func (e *AgentExecutor) buildToolSpecs(allowedTools []string) ([]ToolSpec, error) {
+func (e *AgentExecutor) buildToolSpecs(allowedTools []string, toolVersions map[string]string) ([]ToolSpec, error) {
 	if len(allowedTools) == 0 {
 		return nil, nil
 	}
@@ -668,9 +707,12 @@ func (e *AgentExecutor) buildToolSpecs(allowedTools []string) ([]ToolSpec, error
 	}
 	specs := make([]ToolSpec, 0, len(allowedTools))
 	for _, toolName := range allowedTools {
-		def, ok := e.registry.Resolve(toolName, "")
+		def, ok := e.registry.Resolve(toolName, toolVersions[toolName])
 		if !ok {
 			return nil, fmt.Errorf("tool not found: %s", toolName)
+		}
+		if !def.IsAgentVisible() {
+			continue
 		}
 		if len(def.InputSchema) == 0 {
 			return nil, fmt.Errorf("tool %s requires input_schema for agent autonomy", toolName)
@@ -712,6 +754,9 @@ func (e *AgentExecutor) executeApprovedToolCall(
 			"tool":  toolName,
 			"input": toolInput,
 		},
+	}
+	if version := normalizeAgentToolVersions(node.Config["tool_versions"])[toolName]; strings.TrimSpace(version) != "" {
+		toolNode.Config["version"] = version
 	}
 
 	toolResult, err := e.toolInvoker.Execute(ctx, toolNode, state)
