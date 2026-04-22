@@ -20,7 +20,8 @@ AGENT_NODE_SCHEMA = {
     "provider": {"type": "string", "required": False, "min_length": 1},
     "credential_id": {"type": "string", "required": False, "min_length": 1},
     "model": {"type": "string", "required": True, "min_length": 1},
-    "tools": {"type": "array", "required": True, "min_items": 1, "items_type": "string"},
+    "tools": {"type": "array", "required": False, "min_items": 1, "items_type": "string"},
+    "tool_selection": {"type": "object", "required": False},
     "max_steps": {"type": "integer", "min": 1, "required": False},
     "max_tool_calls": {"type": "integer", "min": 1, "required": False},
     "token_budget": {"type": "integer", "min": 1, "required": False},
@@ -340,6 +341,15 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
 
     if node_type == NodeType.AGENT.value:
         tools = config.get("tools")
+        tool_selection = config.get("tool_selection")
+        if not isinstance(tools, list) and not isinstance(tool_selection, dict):
+            errors.append(
+                {
+                    "field": "tools",
+                    "message": "Agent node requires either 'tools' or 'tool_selection'",
+                    "suggestion": "Provide explicit tools or a tool_selection object",
+                }
+            )
         if isinstance(tools, list):
             normalized_tools = [
                 tool.strip() for tool in tools if isinstance(tool, str) and tool.strip()
@@ -369,6 +379,67 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
                             "suggestion": "Only require approval for tools already listed in 'tools'",
                         }
                     )
+        else:
+            approval_required_tools = config.get("approval_required_tools")
+            if not isinstance(approval_required_tools, list):
+                approval_required_tools = None
+        if isinstance(approval_required_tools, list):
+            invalid_tools = [
+                tool
+                for tool in approval_required_tools
+                if not isinstance(tool, str) or not tool.strip()
+            ]
+            if invalid_tools:
+                errors.append(
+                    {
+                        "field": "approval_required_tools",
+                        "message": "Approval-required tools must be non-empty strings",
+                        "suggestion": "Only include non-empty tool names in 'approval_required_tools'",
+                    }
+                )
+
+        if isinstance(tool_selection, dict):
+            categories = tool_selection.get("categories")
+            names = tool_selection.get("names")
+            exclude_names = tool_selection.get("exclude_names")
+            max_tools = tool_selection.get("max_tools")
+
+            for field_name, value in (
+                ("categories", categories),
+                ("names", names),
+                ("exclude_names", exclude_names),
+            ):
+                if value is None:
+                    continue
+                if not isinstance(value, list):
+                    errors.append(
+                        {
+                            "field": "tool_selection",
+                            "message": f"tool_selection.{field_name} must contain non-empty strings",
+                            "suggestion": f"Only include non-empty strings in tool_selection.{field_name}",
+                        }
+                    )
+                    continue
+                if any(not isinstance(item, str) or not item.strip() for item in value):
+                    errors.append(
+                        {
+                            "field": "tool_selection",
+                            "message": f"tool_selection.{field_name} must contain non-empty strings",
+                            "suggestion": f"Only include non-empty strings in tool_selection.{field_name}",
+                        }
+                    )
+                    break
+
+            if max_tools is not None and (
+                not isinstance(max_tools, int) or isinstance(max_tools, bool) or max_tools < 1
+            ):
+                errors.append(
+                    {
+                        "field": "tool_selection",
+                        "message": "tool_selection.max_tools must be an integer >= 1",
+                        "suggestion": "Set tool_selection.max_tools to a positive integer",
+                    }
+                )
 
         max_steps = config.get("max_steps")
         max_tool_calls = config.get("max_tool_calls")

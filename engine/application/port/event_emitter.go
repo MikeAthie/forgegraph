@@ -91,6 +91,8 @@ type ExecutionEvent struct {
 
 	// Attempt is the retry attempt number (1-based)
 	Attempt int `json:"attempt,omitempty"`
+	// AttemptID correlates the event with the active execution attempt.
+	AttemptID string `json:"attempt_id,omitempty"`
 
 	// Input is the node's input data (for node_started events)
 	Input map[string]any `json:"input,omitempty"`
@@ -163,6 +165,12 @@ func (e *ExecutionEvent) WithNode(nodeID, nodeType, nodeName string) *ExecutionE
 // WithAttempt adds attempt number to the event
 func (e *ExecutionEvent) WithAttempt(attempt int) *ExecutionEvent {
 	e.Attempt = attempt
+	return e
+}
+
+// WithAttemptID adds execution attempt correlation to the event.
+func (e *ExecutionEvent) WithAttemptID(attemptID string) *ExecutionEvent {
+	e.AttemptID = attemptID
 	return e
 }
 

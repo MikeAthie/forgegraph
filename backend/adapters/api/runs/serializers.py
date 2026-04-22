@@ -258,6 +258,7 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
     node_type = serializers.CharField(required=False, allow_blank=True)
     node_name = serializers.CharField(required=False, allow_blank=True)
     attempt = serializers.IntegerField(required=False, min_value=1)
+    attempt_id = serializers.CharField(required=False, allow_blank=True)
     input = serializers.JSONField(required=False)
     output = serializers.JSONField(required=False)
     error = serializers.CharField(required=False, allow_blank=True)

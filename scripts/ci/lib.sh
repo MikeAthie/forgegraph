@@ -92,3 +92,26 @@ export_backend_ci_env() {
   export ENCRYPTION_KEY="${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}"
   export SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT:-false}"
 }
+
+go_race_supported() {
+  local goos
+  goos="$(go env GOOS 2>/dev/null || true)"
+  case "${goos}" in
+    windows)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+run_go_race_or_skip() {
+  if go_race_supported; then
+    CGO_ENABLED=1 go test -race "$@"
+    return
+  fi
+
+  echo "Skipping Go race tests on GOOS=$(go env GOOS 2>/dev/null || echo unknown)." >&2
+  echo "The local Windows ThreadSanitizer runtime is not reliable for this check; Linux CI remains authoritative." >&2
+}

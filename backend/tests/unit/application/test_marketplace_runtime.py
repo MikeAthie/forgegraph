@@ -8,6 +8,8 @@ from application.services.marketplace_runtime import (
     build_runtime_delivery_state,
     build_runtime_manifest_payload,
     is_release_installable_in_runtime_mode,
+    normalize_runtime_tool_manifest,
+    select_agent_runtime_tools,
 )
 from infrastructure.orm.models import (
     NodePackageInstallation,
@@ -57,13 +59,20 @@ def test_build_runtime_manifest_payload_includes_only_ready_runtime_tools(user):
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=2,
         config_defaults={"tool": "crm_lookup"},
         runtime_manifest={
             "name": "crm_lookup",
             "version": "1.2.0",
-            "kind": "http",
+            "category": "crm",
             "input_schema": {"type": "object"},
-            "http": {"url": "https://example.com/crm", "method": "POST"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/crm", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
+            "visibility": "public",
         },
     )
     NodePackageInstallation.objects.create(
@@ -86,6 +95,7 @@ def test_build_runtime_manifest_payload_includes_only_ready_runtime_tools(user):
         package_kind="runtime_tool",
         execution_node_type="tool",
         cloud_allowed=False,
+        manifest_version=1,
         config_defaults={"tool": "blocked_exec"},
         runtime_manifest={
             "name": "blocked_exec",
@@ -126,9 +136,11 @@ def test_build_runtime_manifest_payload_includes_only_ready_runtime_tools(user):
     payload = build_runtime_manifest_payload(str(org.id))
 
     assert payload["tenant_id"] == str(org.id)
-    assert payload["manifest_version"] == 1
+    assert payload["manifest_version"] == 2
     assert len(payload["tools"]) == 1
     assert payload["tools"][0]["name"] == "crm_lookup"
+    assert payload["tools"][0]["execution"]["type"] == "http"
+    assert payload["tools"][0]["definition_checksum"]
     package_states = {item["package_slug"]: item["delivery_state"] for item in payload["packages"]}
     assert package_states["crm-lookup"] == "ready"
     assert package_states["blocked-exec"] == "blocked"
@@ -152,13 +164,19 @@ def test_build_runtime_manifest_payload_is_tenant_scoped(user):
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=2,
         config_defaults={"tool": "tenant_only"},
         runtime_manifest={
             "name": "tenant_only",
             "version": "1.0.0",
-            "kind": "http",
+            "category": "developer",
             "input_schema": {"type": "object"},
-            "http": {"url": "https://example.com/tool", "method": "POST"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/tool", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
         },
     )
     NodePackageInstallation.objects.create(
@@ -175,11 +193,11 @@ def test_build_runtime_manifest_payload_is_tenant_scoped(user):
 
 
 @pytest.mark.django_db
-def test_build_runtime_delivery_state_allows_exec_in_self_hosted(user):
+def test_normalize_runtime_tool_manifest_translates_legacy_http_v1(user):
     package = NodeRegistryPackage.objects.create(
-        slug="self-hosted-exec",
-        name="Self Hosted Exec",
-        summary="Exec tool",
+        slug="legacy-http",
+        name="Legacy HTTP",
+        summary="Legacy tool",
         category="developer",
     )
     release = NodeRegistryRelease.objects.create(
@@ -188,20 +206,23 @@ def test_build_runtime_delivery_state_allows_exec_in_self_hosted(user):
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
-        cloud_allowed=False,
+        manifest_version=1,
         runtime_manifest={
-            "name": "self_hosted_exec",
+            "name": "legacy_http",
             "version": "1.0.0",
-            "kind": "exec",
+            "kind": "http",
             "input_schema": {"type": "object"},
-            "exec": {"command": "python"},
+            "http": {"url": "https://example.com/legacy", "method": "GET"},
         },
     )
 
-    result = build_runtime_delivery_state(release, runtime_mode="self_hosted")
+    normalized, reason = normalize_runtime_tool_manifest(release)
 
-    assert result["state"] == "ready"
-    assert result["reason"] == "ready"
+    assert reason == "translated_legacy_http_v1"
+    assert normalized is not None
+    assert normalized["execution"]["type"] == "http"
+    assert normalized["side_effects"]["type"] == "read"
+    assert normalized["side_effects"]["idempotent"] is True
 
 
 @pytest.mark.django_db
@@ -219,6 +240,7 @@ def test_is_release_installable_in_runtime_mode_blocks_exec_in_cloud(user):
         package_kind="runtime_tool",
         execution_node_type="tool",
         cloud_allowed=True,
+        manifest_version=1,
         runtime_manifest={
             "name": "blocked_exec",
             "version": "1.0.0",
@@ -233,3 +255,88 @@ def test_is_release_installable_in_runtime_mode_blocks_exec_in_cloud(user):
     assert installable is False
     assert delivery["state"] == "blocked"
     assert delivery["reason"] == "exec_not_supported_in_cloud"
+
+
+def test_select_agent_runtime_tools_prefers_explicit_pins_and_excludes_internal_tools():
+    available_tools = [
+        {
+            "name": "crm_lookup",
+            "version": "1.2.0",
+            "category": "crm",
+            "visibility": "public",
+        },
+        {
+            "name": "crm_sync_internal",
+            "version": "1.0.0",
+            "category": "crm",
+            "visibility": "internal",
+        },
+        {
+            "name": "email_send",
+            "version": "2.0.0",
+            "category": "communication",
+            "visibility": "public",
+        },
+    ]
+
+    result = select_agent_runtime_tools(
+        available_tools=available_tools,
+        explicit_tool_names=["missing_tool", "crm_lookup"],
+        tool_selection={
+            "categories": ["crm", "communication"],
+            "exclude_names": ["email_send"],
+        },
+    )
+
+    assert result["tool_names"] == ["missing_tool", "crm_lookup"]
+    assert result["tool_versions"] == {"crm_lookup": "1.2.0"}
+    assert result["unresolved_explicit_tools"] == ["missing_tool"]
+    assert result["tool_definitions"] == [
+        {
+            "name": "crm_lookup",
+            "version": "1.2.0",
+            "category": "crm",
+            "visibility": "public",
+        }
+    ]
+
+
+def test_select_agent_runtime_tools_applies_filters_max_tools_and_stable_order():
+    available_tools = [
+        {
+            "name": "zeta_lookup",
+            "version": "1.0.0",
+            "category": "crm",
+            "visibility": "public",
+        },
+        {
+            "name": "alpha_lookup",
+            "version": "1.0.0",
+            "category": "crm",
+            "visibility": "public",
+        },
+        {
+            "name": "alpha_lookup",
+            "version": "2.0.0",
+            "category": "crm",
+            "visibility": "public",
+        },
+        {
+            "name": "beta_lookup",
+            "version": "1.0.0",
+            "category": "crm",
+            "visibility": "public",
+        },
+    ]
+
+    result = select_agent_runtime_tools(
+        available_tools=available_tools,
+        explicit_tool_names=[],
+        tool_selection={"categories": ["crm"], "max_tools": 2},
+    )
+
+    assert result["tool_names"] == ["alpha_lookup", "beta_lookup"]
+    assert result["tool_versions"] == {
+        "alpha_lookup": "1.0.0",
+        "beta_lookup": "1.0.0",
+    }

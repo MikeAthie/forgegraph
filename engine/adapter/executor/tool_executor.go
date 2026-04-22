@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/forgegraph/engine/adapter/metrics"
 	"github.com/forgegraph/engine/adapter/tool"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
@@ -22,165 +22,298 @@ import (
 	"github.com/forgegraph/engine/domain/value"
 )
 
-// ToolExecutor runs tools defined in the tool registry.
+type ResolvedToolCall struct {
+	Name       string
+	Version    string
+	Input      map[string]interface{}
+	Config     map[string]interface{}
+	AttemptID  string
+	CallID     string
+	Definition *tool.Definition
+}
+
 type ToolExecutor struct {
-	registry    *tool.Registry
-	httpClient  *http.Client
-	resolver    CredentialResolver
-	runtimeMode string
+	httpClient            *http.Client
+	resolver              CredentialResolver
+	runtimeMode           string
+	registry              *tool.Registry
+	legacyNodeAdapterMode string
 }
 
-// NewToolExecutor creates a tool executor with a registry.
-func NewToolExecutor(registry *tool.Registry) *ToolExecutor {
-	return NewToolExecutorWithResolverAndRuntimeMode(registry, nil, tool.RuntimeModeSelfHosted)
+const (
+	LegacyNodeAdapterModeLegacy = "legacy"
+	LegacyNodeAdapterModeStrict = "strict"
+)
+
+func NormalizeLegacyNodeAdapterMode(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), LegacyNodeAdapterModeStrict) {
+		return LegacyNodeAdapterModeStrict
+	}
+	return LegacyNodeAdapterModeLegacy
 }
 
-// NewToolExecutorWithRuntimeMode creates a tool executor with a registry and runtime mode.
-func NewToolExecutorWithRuntimeMode(registry *tool.Registry, runtimeMode string) *ToolExecutor {
-	return NewToolExecutorWithResolverAndRuntimeMode(registry, nil, runtimeMode)
+func NewToolExecutor() *ToolExecutor {
+	return NewToolExecutorWithModes(nil, nil, tool.RuntimeModeSelfHosted, LegacyNodeAdapterModeLegacy)
 }
 
-// NewToolExecutorWithResolver creates a tool executor with a registry and credential resolver.
-func NewToolExecutorWithResolver(registry *tool.Registry, resolver CredentialResolver) *ToolExecutor {
-	return NewToolExecutorWithResolverAndRuntimeMode(registry, resolver, tool.RuntimeModeSelfHosted)
+func NewToolExecutorWithRuntimeMode(runtimeMode string) *ToolExecutor {
+	return NewToolExecutorWithModes(nil, nil, runtimeMode, LegacyNodeAdapterModeLegacy)
 }
 
-// NewToolExecutorWithResolverAndRuntimeMode creates a tool executor with a registry, credential resolver, and runtime mode.
+func NewToolExecutorWithResolver(resolver CredentialResolver) *ToolExecutor {
+	return NewToolExecutorWithModes(nil, resolver, tool.RuntimeModeSelfHosted, LegacyNodeAdapterModeLegacy)
+}
+
 func NewToolExecutorWithResolverAndRuntimeMode(registry *tool.Registry, resolver CredentialResolver, runtimeMode string) *ToolExecutor {
+	return NewToolExecutorWithModes(registry, resolver, runtimeMode, LegacyNodeAdapterModeLegacy)
+}
+
+func NewToolExecutorWithModes(
+	registry *tool.Registry,
+	resolver CredentialResolver,
+	runtimeMode string,
+	legacyNodeAdapterMode string,
+) *ToolExecutor {
 	return &ToolExecutor{
-		registry:    registry,
-		httpClient:  &http.Client{},
-		resolver:    resolver,
-		runtimeMode: tool.NormalizeRuntimeMode(runtimeMode),
+		httpClient:            &http.Client{},
+		resolver:              resolver,
+		runtimeMode:           tool.NormalizeRuntimeMode(runtimeMode),
+		registry:              registry,
+		legacyNodeAdapterMode: NormalizeLegacyNodeAdapterMode(legacyNodeAdapterMode),
 	}
 }
 
-// NodeType returns the node type this executor handles.
 func (e *ToolExecutor) NodeType() string {
 	return string(value.NodeTypeTool)
 }
 
-// Execute runs a tool by name/version.
-//
-// Config options:
-//   - tool: string (required)
-//   - tool_name: string (legacy alias for tool)
-//   - version: string (optional, defaults to latest)
-//   - input: any (optional)
-//   - input_path: string (optional)
-//   - input_template: string (optional)
-//   - config: object (optional) tool-specific config overrides
-//
-// Output:
-//   - tool, version, status/result/metadata
-func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
-	if e.registry == nil {
-		return port.NewErrorResult(domain.NewValidationError("tool", "tool registry not configured")), nil
+func (e *ToolExecutor) Execute(ctx context.Context, node *entity.Node, _ *entity.State) (*port.NodeExecutionResult, error) {
+	if node == nil {
+		return port.NewErrorResult(domain.NewValidationError("tool", "tool node is required")), nil
+	}
+	metrics.RecordLegacyToolAdapterHit()
+	if e.legacyNodeAdapterMode == LegacyNodeAdapterModeStrict {
+		return port.NewErrorResult(
+			domain.NewValidationError("tool", "node-based tool execution disabled"),
+		), nil
 	}
 	if runCtx := port.RunContextFrom(ctx); runCtx != nil && runCtx.TrackToolCall != nil {
 		if err := runCtx.TrackToolCall(); err != nil {
 			return port.NewErrorResult(err), nil
 		}
 	}
+	if e.registry == nil {
+		return port.NewErrorResult(
+			domain.NewValidationError("tool", "tool registry not configured"),
+		), nil
+	}
 
+	call, err := e.buildToolCallFromNode(node, strings.TrimSpace(port.AttemptIDFrom(ctx)))
+	if err != nil {
+		return port.NewErrorResult(err), nil
+	}
+	if strings.TrimSpace(call.Version) == "" {
+		return port.NewErrorResult(
+			domain.NewValidationError("tool", "tool version required"),
+		), nil
+	}
+	log.Printf("legacy_tool_adapter used: tool=%s version=%s", call.Name, call.Version)
+	return e.ExecuteToolCall(ctx, call)
+}
+
+// LEGACY COMPATIBILITY ADAPTER
+// WARNING: This path bypasses backend-prepared execution contracts.
+// DO NOT extend. DO NOT add logic here.
+// No new features may be implemented in Execute(ctx, node, state).
+// All new behavior MUST go through ExecuteToolCall.
+// Remove after full dispatch_graph_json migration.
+func (e *ToolExecutor) buildToolCallFromNode(node *entity.Node, attemptID string) (ResolvedToolCall, error) {
+	def, err := e.resolveToolForLegacy(node)
+	if err != nil {
+		return ResolvedToolCall{}, err
+	}
+
+	input := map[string]any{}
+	if rawInput, ok := node.Config["input"]; ok && rawInput != nil {
+		typed, ok := rawInput.(map[string]any)
+		if !ok {
+			return ResolvedToolCall{}, domain.NewValidationError(
+				"input",
+				"tool node input must be an object",
+			)
+		}
+		input = typed
+	}
+
+	config := make(map[string]any, len(node.Config))
+	for key, value := range node.Config {
+		switch key {
+		case "tool", "tool_name", "version", "input":
+			continue
+		default:
+			config[key] = value
+		}
+	}
+
+	callID := strings.TrimSpace(node.GetConfigString("call_id"))
+	if callID == "" {
+		callID = node.ID
+	}
+
+	return ResolvedToolCall{
+		Name:       def.Name,
+		Version:    def.Version,
+		Input:      input,
+		Config:     config,
+		AttemptID:  attemptID,
+		CallID:     callID,
+		Definition: def,
+	}, nil
+}
+
+func (e *ToolExecutor) resolveToolForLegacy(node *entity.Node) (*tool.Definition, error) {
 	toolName := strings.TrimSpace(node.GetConfigString("tool"))
 	if toolName == "" {
 		toolName = strings.TrimSpace(node.GetConfigString("tool_name"))
 	}
 	if toolName == "" {
-		toolName = strings.TrimSpace(node.GetConfigString("name"))
-	}
-	if toolName == "" {
-		return port.NewErrorResult(domain.NewValidationError("tool", "tool node requires tool name")), nil
+		return nil, domain.NewValidationError("tool", "tool node requires tool")
 	}
 
 	version := strings.TrimSpace(node.GetConfigString("version"))
 	def, ok := e.registry.Resolve(toolName, version)
-	if !ok {
-		return port.NewErrorResult(domain.NewValidationError("tool", fmt.Sprintf("tool not found: %s@%s", toolName, version))), nil
+	if !ok || def == nil {
+		return nil, domain.NewValidationError(
+			"tool",
+			fmt.Sprintf("tool definition not found: %s", toolName),
+		)
+	}
+	if strings.TrimSpace(def.Version) == "" {
+		return nil, domain.NewValidationError("tool", "tool version required")
+	}
+	return def, nil
+}
+
+func (e *ToolExecutor) ExecuteToolCall(
+	ctx context.Context,
+	call ResolvedToolCall,
+) (*port.NodeExecutionResult, error) {
+
+	log.Printf("tool_execute start: tool=%s version=%s call_id=%s attempt_id=%s",
+		call.Name, call.Version, call.CallID, call.AttemptID)
+
+	if call.Definition == nil {
+		return port.NewErrorResult(
+			domain.NewValidationError("tool", "tool definition missing (must be pre-resolved)"),
+		), nil
 	}
 
-	input, err := resolveToolInput(node, state)
-	if err != nil {
-		return port.NewErrorResult(err), nil
+	def := call.Definition
+
+	if strings.TrimSpace(call.Name) == "" {
+		return port.NewErrorResult(
+			domain.NewValidationError("tool", "tool name required"),
+		), nil
 	}
-	if def.InputSchema != nil {
-		validator, err := service.CompileSchema(def.InputSchema)
-		if err != nil {
-			return port.NewErrorResult(domain.NewValidationError("input_schema", err.Error())), nil
-		}
-		if issues, err := validator.Validate(input); err != nil {
-			return port.NewErrorResult(domain.NewValidationError("input_schema", err.Error())), nil
-		} else if len(issues) > 0 {
+
+	if strings.TrimSpace(call.Version) == "" {
+		return port.NewErrorResult(
+			domain.NewValidationError("tool", "tool version required"),
+		), nil
+	}
+
+	// 🔒 Enforce idempotency contract
+	if !def.SideEffects.Idempotent {
+		if strings.TrimSpace(call.CallID) == "" {
 			return port.NewErrorResult(
-				domain.NewValidationError(
-					"input",
-					fmt.Sprintf("tool input invalid: %v", issues[0]["message"]),
-				),
+				domain.NewValidationError("tool", "non-idempotent tool requires call_id"),
 			), nil
 		}
 	}
 
-	toolConfig := map[string]any{}
-	if def.DefaultConfig != nil {
-		for k, v := range def.DefaultConfig {
-			toolConfig[k] = v
+	// ✅ Validate input
+	if def.InputSchema != nil {
+		validator, err := service.CompileSchema(def.InputSchema)
+		if err != nil {
+			return port.NewErrorResult(
+				domain.NewValidationError("input_schema", err.Error()),
+			), nil
 		}
-	}
-	if overrides, ok := node.Config["config"].(map[string]any); ok {
-		for k, v := range overrides {
-			toolConfig[k] = v
-		}
-	}
-	if params, ok := node.Config["parameters"].(map[string]any); ok {
-		for k, v := range params {
-			toolConfig[k] = v
-		}
-	}
-	if params, ok := node.Config["parameters"].(map[string]string); ok {
-		for k, v := range params {
-			toolConfig[k] = v
+		if issues, err := validator.Validate(call.Input); err != nil {
+			return port.NewErrorResult(
+				domain.NewValidationError("input_schema", err.Error()),
+			), nil
+		} else if len(issues) > 0 {
+			return port.NewErrorResult(
+				domain.NewValidationError("input", fmt.Sprintf("invalid: %v", issues[0]["message"])),
+			), nil
 		}
 	}
 
+	// ✅ Validate config (already resolved by backend)
 	if def.ConfigSchema != nil {
 		validator, err := service.CompileSchema(def.ConfigSchema)
 		if err != nil {
-			return port.NewErrorResult(domain.NewValidationError("config_schema", err.Error())), nil
+			return port.NewErrorResult(
+				domain.NewValidationError("config_schema", err.Error()),
+			), nil
 		}
-		if issues, err := validator.Validate(toolConfig); err != nil {
-			return port.NewErrorResult(domain.NewValidationError("config_schema", err.Error())), nil
+		if issues, err := validator.Validate(call.Config); err != nil {
+			return port.NewErrorResult(
+				domain.NewValidationError("config_schema", err.Error()),
+			), nil
 		} else if len(issues) > 0 {
-			return port.NewErrorResult(domain.NewValidationError("config", fmt.Sprintf("tool config invalid: %v", issues[0]["message"]))), nil
+			return port.NewErrorResult(
+				domain.NewValidationError("config", fmt.Sprintf("invalid: %v", issues[0]["message"])),
+			), nil
 		}
+	}
+
+	// Guard: config must be initialized (backend must always send a resolved config map)
+	if call.Config == nil {
+		call.Config = map[string]any{}
 	}
 
 	payload := map[string]any{
-		"input":  input,
-		"config": toolConfig,
+		"input":  call.Input,
+		"config": call.Config,
 	}
 
-	switch strings.ToLower(def.Kind) {
+	execType := strings.ToLower(strings.TrimSpace(def.Execution.Type))
+	if execType == "" {
+		return port.NewErrorResult(
+			domain.NewValidationError("execution.type", "execution.type is required"),
+		), nil
+	}
+
+	switch execType {
+
 	case "http":
-		result, err := e.executeHTTPTool(ctx, def, payload, node, state, toolConfig)
+		result, err := e.executeHTTPTool(ctx, def, payload, call)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
 		if err := validateToolOutput(def, result); err != nil {
 			return port.NewErrorResult(err), nil
 		}
-		return port.NewSuccessResult(applyToolResultLimits(def, result)), nil
-	case "exec":
-		result, err := e.executeExecTool(ctx, def, payload, node, toolConfig)
+		result = applyToolResultLimits(def, result)
+		return port.NewSuccessResult(result), nil
+
+	case "local":
+		result, err := e.executeLocalTool(ctx, def, payload, call)
 		if err != nil {
 			return port.NewErrorResult(err), nil
 		}
 		if err := validateToolOutput(def, result); err != nil {
 			return port.NewErrorResult(err), nil
 		}
-		return port.NewSuccessResult(applyToolResultLimits(def, result)), nil
+		result = applyToolResultLimits(def, result)
+		return port.NewSuccessResult(result), nil
+
 	default:
-		return port.NewErrorResult(domain.NewValidationError("kind", "unsupported tool kind")), nil
+		return port.NewErrorResult(
+			domain.NewValidationError("execution.type", "unsupported"),
+		), nil
 	}
 }
 
@@ -209,26 +342,28 @@ func (e *ToolExecutor) executeHTTPTool(
 	ctx context.Context,
 	def *tool.Definition,
 	payload map[string]any,
-	node *entity.Node,
-	state *entity.State,
-	toolConfig map[string]any,
+	call ResolvedToolCall,
 ) (map[string]any, error) {
-	if def.HTTP == nil {
-		return nil, fmt.Errorf("tool missing http configuration")
+	httpConfig := def.Execution.HTTP
+	if httpConfig == nil {
+		return nil, fmt.Errorf("tool missing execution.http configuration")
 	}
 
-	provider, apiKey, err := e.resolveToolCredentialContext(ctx, node, toolConfig, def)
+	// Resolve credentials using the ToolCall-aware overload.
+	provider, apiKey, err := e.resolveToolCredentialContext(ctx, call, def)
 	if err != nil {
 		return nil, err
 	}
+
+	toolConfig := call.Config
 
 	templateValues := credentialTemplateValues(provider, apiKey)
 	for k, v := range flattenToolConfigTemplateValues(toolConfig) {
 		templateValues[k] = v
 	}
 
-	urlStr := os.ExpandEnv(def.HTTP.URL)
-	urlStr = SubstituteTemplateWithExtras(urlStr, state, templateValues)
+	urlStr := os.ExpandEnv(httpConfig.URL)
+	urlStr = SubstituteTemplateWithExtras(urlStr, nil, templateValues)
 	if urlStr == "" {
 		return nil, fmt.Errorf("tool URL not configured")
 	}
@@ -236,9 +371,9 @@ func (e *ToolExecutor) executeHTTPTool(
 		return nil, newPolicyDeniedValidationError("url", "egress blocked by policy")
 	}
 
-	method := def.HTTP.Method
+	method := httpConfig.Method
 	if method == "" {
-		method = "POST"
+		method = http.MethodPost
 	}
 
 	var bodyBytes []byte
@@ -250,29 +385,29 @@ func (e *ToolExecutor) executeHTTPTool(
 	}
 
 	headers := map[string]string{}
-	for k, v := range def.HTTP.Headers {
+	for k, v := range httpConfig.Headers {
 		headers[k] = v
 	}
-	if overrideHeaders, ok := node.Config["headers"].(map[string]any); ok {
-		for k, v := range overrideHeaders {
+	if h, ok := call.Config["headers"].(map[string]any); ok {
+		for k, v := range h {
 			headers[k] = fmt.Sprintf("%v", v)
 		}
 	}
 	for k, v := range headers {
-		headers[k] = SubstituteTemplateWithExtras(v, state, templateValues)
+		headers[k] = SubstituteTemplateWithExtras(v, nil, templateValues)
 	}
 	if strings.TrimSpace(apiKey) != "" && strings.TrimSpace(headers["Authorization"]) == "" {
 		headers["Authorization"] = "Bearer " + apiKey
 	}
 
-	timeoutMs := resolveToolTimeoutMs(node, toolConfig, def.HTTP.TimeoutMs)
-	retryAttempts := resolveToolRetryAttempts(node, toolConfig)
-	retryBackoffMs := resolveToolRetryBackoffMs(node, toolConfig)
+	timeoutMs := resolveToolTimeoutMs(toolConfig, def.Execution.TimeoutSeconds)
+	retryAttempts := resolveToolRetryAttempts(toolConfig, def)
+	retryBackoffMs := resolveToolRetryBackoffMs(toolConfig)
 	throttleProvider := provider
 	if throttleProvider == "" {
 		throttleProvider = strings.TrimSpace(strings.ToLower(def.Name))
 	}
-	throttleMs := resolveTenantProviderThrottleMs(ctx, throttleProvider, node.Config)
+	throttleMs := resolveTenantProviderThrottleMs(ctx, throttleProvider, toolConfig)
 
 	var lastErr error
 	for attempt := 1; attempt <= retryAttempts; attempt++ {
@@ -411,13 +546,17 @@ func (e *ToolExecutor) executeHTTPTool(
 			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 		}
 
-		return map[string]any{
-			"tool":     def.Name,
-			"version":  def.Version,
-			"status":   resp.StatusCode,
-			"result":   parsed,
-			"attempts": attempt,
-		}, nil
+		result := map[string]any{
+			"tool":       def.Name,
+			"version":    def.Version,
+			"status":     resp.StatusCode,
+			"result":     parsed,
+			"attempts":   attempt,
+			"call_id":    call.CallID,
+			"attempt_id": call.AttemptID,
+		}
+		log.Printf("tool_execute success: tool=%s attempts=%d call_id=%s", def.Name, attempt, call.CallID)
+		return result, nil
 	}
 
 	if lastErr != nil {
@@ -426,26 +565,71 @@ func (e *ToolExecutor) executeHTTPTool(
 	return nil, fmt.Errorf("tool request failed")
 }
 
-func (e *ToolExecutor) resolveToolCredentialContext(
+func (e *ToolExecutor) executeLocalTool(
 	ctx context.Context,
-	node *entity.Node,
-	toolConfig map[string]any,
 	def *tool.Definition,
-) (string, string, error) {
-	provider := strings.ToLower(strings.TrimSpace(node.GetConfigString("provider")))
-	if provider == "" {
-		if providerFromCfg, ok := toolConfig["provider"].(string); ok {
-			provider = strings.ToLower(strings.TrimSpace(providerFromCfg))
-		}
-	}
-	if provider == "" {
-		provider = strings.ToLower(strings.TrimSpace(def.Name))
+	payload map[string]any,
+	call ResolvedToolCall,
+) (map[string]any, error) {
+	localConfig := def.Execution.Local
+	if localConfig == nil {
+		return nil, fmt.Errorf("tool missing execution.local configuration")
 	}
 
-	credentialID := strings.TrimSpace(node.GetConfigString("credential_id"))
+	timeoutMs := resolveToolTimeoutMs(call.Config, def.Execution.TimeoutSeconds)
+	attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
+
+	handlerResult, err := executeBuiltinLocalHandler(attemptCtx, strings.TrimSpace(localConfig.Handler), payload)
+	if err != nil {
+		return nil, err
+	}
+
+	result := map[string]any{
+		"tool":       def.Name,
+		"version":    def.Version,
+		"result":     handlerResult,
+		"attempts":   1,
+		"call_id":    call.CallID,
+		"attempt_id": call.AttemptID,
+	}
+	log.Printf("tool_execute success: tool=%s attempts=1 call_id=%s", def.Name, call.CallID)
+	return result, nil
+}
+
+func executeBuiltinLocalHandler(ctx context.Context, handler string, payload map[string]any) (any, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	switch strings.ToLower(strings.TrimSpace(handler)) {
+	case "echo":
+		return payload["input"], nil
+	case "noop":
+		return map[string]any{"ok": true}, nil
+	default:
+		return nil, fmt.Errorf("unsupported local handler: %s", handler)
+	}
+}
+
+func (e *ToolExecutor) resolveToolCredentialContext(
+	ctx context.Context,
+	call ResolvedToolCall,
+	def *tool.Definition,
+) (string, string, error) {
+	provider := strings.ToLower(strings.TrimSpace(def.Name))
+	if p, ok := call.Config["provider"].(string); ok && strings.TrimSpace(p) != "" {
+		provider = strings.ToLower(strings.TrimSpace(p))
+	}
+
+	credentialID, _ := call.Config["credential_id"].(string)
+	credentialID = strings.TrimSpace(credentialID)
 	if credentialID == "" {
 		return provider, "", nil
 	}
+
 	if e.resolver == nil {
 		return "", "", domain.NewValidationError("credential_id", "credential resolver not configured")
 	}
@@ -480,166 +664,6 @@ func flattenToolConfigTemplateValues(config map[string]any) map[string]string {
 	return values
 }
 
-func (e *ToolExecutor) executeExecTool(
-	ctx context.Context,
-	def *tool.Definition,
-	payload map[string]any,
-	node *entity.Node,
-	toolConfig map[string]any,
-) (map[string]any, error) {
-	if def.Exec == nil {
-		return nil, fmt.Errorf("tool missing exec configuration")
-	}
-	if tool.NormalizeRuntimeMode(e.runtimeMode) == tool.RuntimeModeCloud {
-		return nil, newPolicyDeniedValidationError("tool", "exec tools are disabled in cloud mode")
-	}
-	command := os.ExpandEnv(def.Exec.Command)
-	if command == "" {
-		return nil, fmt.Errorf("tool command not configured")
-	}
-
-	args := make([]string, 0, len(def.Exec.Args))
-	for _, arg := range def.Exec.Args {
-		args = append(args, os.ExpandEnv(arg))
-	}
-
-	inputBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	timeoutMs := resolveToolTimeoutMs(node, toolConfig, def.Exec.TimeoutMs)
-	retryAttempts := resolveToolRetryAttempts(node, toolConfig)
-	retryBackoffMs := resolveToolRetryBackoffMs(node, toolConfig)
-
-	var lastErr error
-	for attempt := 1; attempt <= retryAttempts; attempt++ {
-		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
-		cmd := exec.CommandContext(attemptCtx, command, args...)
-		if def.Exec.WorkDir != "" {
-			cmd.Dir = os.ExpandEnv(def.Exec.WorkDir)
-		}
-		if len(def.Exec.EnvWhitelist) > 0 {
-			env := make([]string, 0, len(def.Exec.EnvWhitelist))
-			for _, key := range def.Exec.EnvWhitelist {
-				if val, ok := os.LookupEnv(key); ok {
-					env = append(env, fmt.Sprintf("%s=%s", key, val))
-				}
-			}
-			cmd.Env = env
-		}
-
-		cmd.Stdin = bytes.NewReader(inputBytes)
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-
-		err := cmd.Run()
-		cancel()
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
-				lastErr = domain.NewRetryableError(err, "tool exec timed out")
-				if attempt < retryAttempts {
-					if backoffErr := sleepWithContext(ctx, retryBackoffMs); backoffErr != nil {
-						return nil, backoffErr
-					}
-					continue
-				}
-				return nil, lastErr
-			}
-			return nil, fmt.Errorf("tool exec failed: %w: %s", err, strings.TrimSpace(stderr.String()))
-		}
-
-		rawOutput := stdout.Bytes()
-		var parsed any
-		if len(rawOutput) > 0 {
-			if err := json.Unmarshal(rawOutput, &parsed); err != nil {
-				parsed = strings.TrimSpace(stdout.String())
-			}
-		}
-
-		result := map[string]any{
-			"tool":     def.Name,
-			"version":  def.Version,
-			"result":   parsed,
-			"attempts": attempt,
-		}
-		if stderr.Len() > 0 {
-			result["stderr"] = strings.TrimSpace(stderr.String())
-		}
-		return result, nil
-	}
-
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	return nil, fmt.Errorf("tool exec failed")
-}
-
-func resolveToolInput(node *entity.Node, state *entity.State) (any, error) {
-	if inputPath := strings.TrimSpace(node.GetConfigString("input_path")); inputPath != "" {
-		if val, ok := state.Get(inputPath); ok {
-			return val, nil
-		}
-		if resolved := resolveStatePath(inputPath, state); resolved != nil {
-			return resolved, nil
-		}
-		return nil, domain.NewValidationError("input_path", "input_path did not resolve to a value")
-	}
-
-	if inputTemplate := node.GetConfigString("input_template"); inputTemplate != "" {
-		return SubstituteTemplate(inputTemplate, state), nil
-	}
-
-	if val, ok := node.Config["input"]; ok {
-		return val, nil
-	}
-
-	return map[string]any{}, nil
-}
-
-func resolveStatePath(path string, state *entity.State) any {
-	parts := strings.Split(path, ".")
-	if len(parts) < 2 {
-		return nil
-	}
-
-	for i := len(parts) - 1; i >= 1; i-- {
-		baseKey := strings.Join(parts[:i], ".")
-		if val, exists := state.Get(baseKey); exists {
-			remaining := parts[i:]
-			return navigateToolValue(val, remaining)
-		}
-	}
-
-	return nil
-}
-
-func navigateToolValue(val any, path []string) any {
-	current := val
-	for _, key := range path {
-		switch v := current.(type) {
-		case map[string]any:
-			current = v[key]
-		case []any:
-			if key == "" {
-				return nil
-			}
-			if idx := parseIndex(key); idx >= 0 && idx < len(v) {
-				current = v[idx]
-			} else {
-				return nil
-			}
-		default:
-			return nil
-		}
-	}
-	return current
-}
-
 func parseIndex(val string) int {
 	if val == "" {
 		return -1
@@ -651,13 +675,10 @@ func parseIndex(val string) int {
 	return parsed
 }
 
-func resolveToolTimeoutMs(node *entity.Node, toolConfig map[string]any, defaultFromDefinition int) int {
-	timeoutMs := node.GetConfigInt("timeout_ms")
-	if timeoutMs <= 0 {
-		timeoutMs = readInt(toolConfig, "timeout_ms")
-	}
-	if timeoutMs <= 0 {
-		timeoutMs = defaultFromDefinition
+func resolveToolTimeoutMs(toolConfig map[string]any, defaultTimeoutSeconds int) int {
+	timeoutMs := readInt(toolConfig, "timeout_ms")
+	if timeoutMs <= 0 && defaultTimeoutSeconds > 0 {
+		timeoutMs = defaultTimeoutSeconds * 1000
 	}
 	if timeoutMs <= 0 {
 		return 30000
@@ -665,22 +686,19 @@ func resolveToolTimeoutMs(node *entity.Node, toolConfig map[string]any, defaultF
 	return timeoutMs
 }
 
-func resolveToolRetryAttempts(node *entity.Node, toolConfig map[string]any) int {
-	retryAttempts := node.GetConfigInt("retry_attempts")
-	if retryAttempts <= 0 {
-		retryAttempts = readInt(toolConfig, "retry_attempts")
+func resolveToolRetryAttempts(toolConfig map[string]any, def *tool.Definition) int {
+	if def != nil && !def.SideEffects.Idempotent {
+		return 1
 	}
+	retryAttempts := readInt(toolConfig, "retry_attempts")
 	if retryAttempts <= 0 {
 		return 1
 	}
 	return retryAttempts
 }
 
-func resolveToolRetryBackoffMs(node *entity.Node, toolConfig map[string]any) int {
-	backoffMs := node.GetConfigInt("retry_backoff_ms")
-	if backoffMs <= 0 {
-		backoffMs = readInt(toolConfig, "retry_backoff_ms")
-	}
+func resolveToolRetryBackoffMs(toolConfig map[string]any) int {
+	backoffMs := readInt(toolConfig, "retry_backoff_ms")
 	if backoffMs <= 0 {
 		return 100
 	}

@@ -8,12 +8,20 @@ from django.utils import timezone
 
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
+    RunPreparationError,
     prepare_graph_for_engine,
     resolve_prompt_templates,
     validate_prompt_credentials,
 )
 from application.services.tenancy import ensure_default_organization
-from infrastructure.orm.models import APIKey, PromptTemplate, User
+from infrastructure.orm.models import (
+    APIKey,
+    NodePackageInstallation,
+    NodeRegistryPackage,
+    NodeRegistryRelease,
+    PromptTemplate,
+    User,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -286,3 +294,185 @@ def test_prepare_graph_for_engine_injects_runtime_contract_metadata() -> None:
     assert metadata["trace"]["trace_id"] == "0123456789abcdef0123456789abcdef"
     assert metadata["trace"]["tracestate"] == "vendor=test"
     assert metadata["runtime_limits"]["max_run_duration_ms"] > 0
+
+
+def test_prepare_graph_for_engine_resolves_backend_selected_tools_and_pins_versions() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    ensure_default_organization(owner)
+    assert owner.default_organization is not None
+
+    package = NodeRegistryPackage.objects.create(
+        slug="crm-lookup",
+        name="CRM Lookup",
+        summary="Lookup customer records",
+        category="crm",
+    )
+    release = NodeRegistryRelease.objects.create(
+        package=package,
+        version="1.2.0",
+        status="approved",
+        package_kind="runtime_tool",
+        execution_node_type="tool",
+        manifest_version=2,
+        config_defaults={"tool": "crm_lookup"},
+        runtime_manifest={
+            "name": "crm_lookup",
+            "version": "1.2.0",
+            "category": "crm",
+            "description": "Lookup CRM records",
+            "visibility": "public",
+            "input_schema": {"type": "object"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/crm", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
+        },
+    )
+    NodePackageInstallation.objects.create(
+        organization=owner.default_organization,
+        package=package,
+        release=release,
+        install_metadata={},
+    )
+
+    internal_package = NodeRegistryPackage.objects.create(
+        slug="crm-sync-internal",
+        name="CRM Sync Internal",
+        summary="Internal sync helper",
+        category="crm",
+    )
+    internal_release = NodeRegistryRelease.objects.create(
+        package=internal_package,
+        version="1.0.0",
+        status="approved",
+        package_kind="runtime_tool",
+        execution_node_type="tool",
+        manifest_version=2,
+        config_defaults={"tool": "crm_sync_internal"},
+        runtime_manifest={
+            "name": "crm_sync_internal",
+            "version": "1.0.0",
+            "category": "crm",
+            "visibility": "internal",
+            "input_schema": {"type": "object"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/internal", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
+        },
+    )
+    NodePackageInstallation.objects.create(
+        organization=owner.default_organization,
+        package=internal_package,
+        release=internal_release,
+        install_metadata={},
+    )
+
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "agent-1",
+                "type": "agent",
+                "name": "Agent",
+                "config": {
+                    "tool_selection": {"categories": ["crm"], "max_tools": 5},
+                    "approval_required_tools": ["crm_lookup"],
+                },
+            },
+            {
+                "id": "tool-1",
+                "type": "tool",
+                "name": "Lookup",
+                "config": {"tool": "crm_lookup"},
+            },
+        ],
+        "edges": [],
+    }
+
+    prepared = prepare_graph_for_engine(graph_json, owner)
+
+    agent_config = prepared["nodes"][0]["config"]
+    tool_config = prepared["nodes"][1]["config"]
+    tool_resolution = prepared["metadata"]["tool_resolution"]
+
+    assert agent_config["tools"] == ["crm_lookup"]
+    assert agent_config["tool_versions"] == {"crm_lookup": "1.2.0"}
+    assert tool_config["version"] == "1.2.0"
+    assert tool_resolution["manifest_version"] == 2
+    assert tool_resolution["tenant_id"] == str(owner.default_organization_id)
+    assert tool_resolution["runtime_mode"] == "cloud"
+    assert tool_resolution["tool_catalog_size"] == 2
+    assert tool_resolution["agent_nodes"]["agent-1"] == {
+        "tools": ["crm_lookup"],
+        "tool_versions": {"crm_lookup": "1.2.0"},
+        "unresolved_explicit_tools": [],
+    }
+    assert [tool["name"] for tool in tool_resolution["pinned_tools"]] == ["crm_lookup"]
+    assert tool_resolution["pinned_tools"][0]["version"] == "1.2.0"
+    assert tool_resolution["manifest_checksum"]
+
+
+def test_prepare_graph_for_engine_rejects_unresolved_approval_required_tools() -> None:
+    owner = User.objects.create_user(email="owner@example.com", password="password123")
+    ensure_default_organization(owner)
+    assert owner.default_organization is not None
+
+    package = NodeRegistryPackage.objects.create(
+        slug="crm-lookup",
+        name="CRM Lookup",
+        summary="Lookup customer records",
+        category="crm",
+    )
+    release = NodeRegistryRelease.objects.create(
+        package=package,
+        version="1.2.0",
+        status="approved",
+        package_kind="runtime_tool",
+        execution_node_type="tool",
+        manifest_version=2,
+        config_defaults={"tool": "crm_lookup"},
+        runtime_manifest={
+            "name": "crm_lookup",
+            "version": "1.2.0",
+            "category": "crm",
+            "visibility": "public",
+            "input_schema": {"type": "object"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/crm", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
+        },
+    )
+    NodePackageInstallation.objects.create(
+        organization=owner.default_organization,
+        package=package,
+        release=release,
+        install_metadata={},
+    )
+
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "agent-1",
+                "type": "agent",
+                "name": "Agent",
+                "config": {
+                    "tool_selection": {"categories": ["crm"], "max_tools": 5},
+                    "approval_required_tools": ["send_email"],
+                },
+            }
+        ],
+        "edges": [],
+    }
+
+    with pytest.raises(
+        RunPreparationError,
+        match="approval_required_tools must be included in the resolved tool set",
+    ):
+        prepare_graph_for_engine(graph_json, owner)

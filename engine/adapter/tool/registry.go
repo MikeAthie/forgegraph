@@ -10,34 +10,46 @@ import (
 	"sync"
 )
 
-// Definition describes a tool entry loaded from manifests.
 type Definition struct {
-	Name          string          `json:"name"`
-	Version       string          `json:"version"`
-	Description   string          `json:"description,omitempty"`
-	Kind          string          `json:"kind"` // "http" or "exec"
-	InputSchema   map[string]any  `json:"input_schema,omitempty"`
-	OutputSchema  map[string]any  `json:"output_schema,omitempty"`
-	ConfigSchema  map[string]any  `json:"config_schema,omitempty"`
-	DefaultConfig map[string]any  `json:"default_config,omitempty"`
-	MaxResultSize int             `json:"max_result_size_chars,omitempty"`
-	HTTP          *HTTPToolConfig `json:"http,omitempty"`
-	Exec          *ExecToolConfig `json:"exec,omitempty"`
+	Name               string           `json:"name"`
+	Version            string           `json:"version"`
+	Category           string           `json:"category,omitempty"`
+	Description        string           `json:"description,omitempty"`
+	Visibility         string           `json:"visibility,omitempty"`
+	InputSchema        map[string]any   `json:"input_schema,omitempty"`
+	OutputSchema       map[string]any   `json:"output_schema,omitempty"`
+	ConfigSchema       map[string]any   `json:"config_schema,omitempty"`
+	DefaultConfig      map[string]any   `json:"default_config,omitempty"`
+	MaxResultSize      int              `json:"max_result_size_chars,omitempty"`
+	Execution          ExecutionConfig  `json:"execution"`
+	SideEffects        SideEffectConfig `json:"side_effects"`
+	AgentHints         map[string]any   `json:"agent_hints,omitempty"`
+	DefinitionChecksum string           `json:"definition_checksum,omitempty"`
+	Kind               string           `json:"kind,omitempty"`
+	HTTP               *HTTPToolConfig  `json:"http,omitempty"`
+	Local              *LocalToolConfig `json:"local,omitempty"`
+}
+
+type ExecutionConfig struct {
+	Type           string           `json:"type"`
+	TimeoutSeconds int              `json:"timeout_seconds,omitempty"`
+	HTTP           *HTTPToolConfig  `json:"http,omitempty"`
+	Local          *LocalToolConfig `json:"local,omitempty"`
 }
 
 type HTTPToolConfig struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method,omitempty"`
-	Headers   map[string]string `json:"headers,omitempty"`
-	TimeoutMs int               `json:"timeout_ms,omitempty"`
+	URL     string            `json:"url"`
+	Method  string            `json:"method,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
-type ExecToolConfig struct {
-	Command      string   `json:"command"`
-	Args         []string `json:"args,omitempty"`
-	TimeoutMs    int      `json:"timeout_ms,omitempty"`
-	WorkDir      string   `json:"workdir,omitempty"`
-	EnvWhitelist []string `json:"env_whitelist,omitempty"`
+type LocalToolConfig struct {
+	Handler string `json:"handler"`
+}
+
+type SideEffectConfig struct {
+	Type       string `json:"type"`
+	Idempotent bool   `json:"idempotent"`
 }
 
 type manifestFile struct {
@@ -47,6 +59,8 @@ type manifestFile struct {
 const (
 	RuntimeModeCloud      = "cloud"
 	RuntimeModeSelfHosted = "self_hosted"
+	VisibilityPublic      = "public"
+	VisibilityInternal    = "internal"
 )
 
 func NormalizeRuntimeMode(runtimeMode string) string {
@@ -57,19 +71,27 @@ func NormalizeRuntimeMode(runtimeMode string) string {
 	return RuntimeModeCloud
 }
 
-// Registry stores tools by name/version.
+func normalizeVisibility(visibility string) string {
+	if strings.EqualFold(strings.TrimSpace(visibility), VisibilityInternal) {
+		return VisibilityInternal
+	}
+	return VisibilityPublic
+}
+
+func (d Definition) IsAgentVisible() bool {
+	return normalizeVisibility(d.Visibility) != VisibilityInternal
+}
+
 type Registry struct {
 	tools       map[string]map[string]*Definition
 	mu          sync.RWMutex
 	runtimeMode string
 }
 
-// NewRegistry creates a registry with builtin tools.
 func NewRegistry() *Registry {
 	return NewRegistryWithRuntimeMode(RuntimeModeSelfHosted)
 }
 
-// NewRegistryWithRuntimeMode creates a registry with builtin tools and runtime policy mode.
 func NewRegistryWithRuntimeMode(runtimeMode string) *Registry {
 	reg := &Registry{
 		tools:       make(map[string]map[string]*Definition),
@@ -81,11 +103,11 @@ func NewRegistryWithRuntimeMode(runtimeMode string) *Registry {
 	return reg
 }
 
-// Register adds or overwrites a tool definition.
 func (r *Registry) Register(def Definition) {
 	if def.Name == "" || def.Version == "" {
 		return
 	}
+	def = normalizeLegacyAliases(def)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	name := strings.ToLower(def.Name)
@@ -94,10 +116,10 @@ func (r *Registry) Register(def Definition) {
 		r.tools[name] = make(map[string]*Definition)
 	}
 	copyDef := def
+	copyDef.Visibility = normalizeVisibility(copyDef.Visibility)
 	r.tools[name][version] = &copyDef
 }
 
-// LoadDefinitions validates and registers a batch of tool definitions.
 func (r *Registry) LoadDefinitions(defs []Definition) error {
 	for _, def := range defs {
 		if err := ValidateDefinitionForRuntimeMode(def, r.runtimeMode); err != nil {
@@ -108,7 +130,6 @@ func (r *Registry) LoadDefinitions(defs []Definition) error {
 	return nil
 }
 
-// Resolve returns a tool definition by name/version (latest if version empty).
 func (r *Registry) Resolve(name, version string) (*Definition, bool) {
 	if name == "" {
 		return nil, false
@@ -127,7 +148,6 @@ func (r *Registry) Resolve(name, version string) (*Definition, bool) {
 	return def, ok
 }
 
-// List returns all tool definitions.
 func (r *Registry) List() []*Definition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -146,7 +166,6 @@ func (r *Registry) List() []*Definition {
 	return result
 }
 
-// LoadManifests loads tool definitions from a directory of JSON manifest files.
 func (r *Registry) LoadManifests(dir string) error {
 	if dir == "" {
 		return nil
@@ -182,19 +201,21 @@ func (r *Registry) LoadManifests(dir string) error {
 	return nil
 }
 
-// ValidateDefinition validates a tool definition before it becomes executable.
 func ValidateDefinition(def Definition) error {
 	return ValidateDefinitionForRuntimeMode(def, RuntimeModeSelfHosted)
 }
 
-// ValidateDefinitionForRuntimeMode validates a tool definition before it becomes executable.
 func ValidateDefinitionForRuntimeMode(def Definition, runtimeMode string) error {
+	def = normalizeLegacyAliases(def)
 	runtimeMode = NormalizeRuntimeMode(runtimeMode)
 	if strings.TrimSpace(def.Name) == "" {
 		return fmt.Errorf("tool definition requires name")
 	}
 	if strings.TrimSpace(def.Version) == "" {
 		return fmt.Errorf("tool definition %s requires version", def.Name)
+	}
+	if strings.TrimSpace(def.Category) == "" {
+		return fmt.Errorf("tool definition %s requires category", def.Name)
 	}
 	if def.InputSchema == nil {
 		return fmt.Errorf("tool definition %s requires input_schema", def.Name)
@@ -207,30 +228,68 @@ func ValidateDefinitionForRuntimeMode(def Definition, runtimeMode string) error 
 	if def.MaxResultSize < 0 {
 		return fmt.Errorf("tool definition %s max_result_size_chars must be >= 0", def.Name)
 	}
-
-	switch strings.ToLower(strings.TrimSpace(def.Kind)) {
-	case "http":
-		if def.HTTP == nil {
-			return fmt.Errorf("http tool %s requires http config", def.Name)
-		}
-		if strings.TrimSpace(def.HTTP.URL) == "" {
-			return fmt.Errorf("http tool %s requires http.url", def.Name)
-		}
-	case "exec":
-		if def.Exec == nil {
-			return fmt.Errorf("exec tool %s requires exec config", def.Name)
-		}
-		if strings.TrimSpace(def.Exec.Command) == "" {
-			return fmt.Errorf("exec tool %s requires exec.command", def.Name)
-		}
-		if runtimeMode == RuntimeModeCloud {
-			return fmt.Errorf("policy denied: exec tools are disabled in cloud mode")
-		}
-	default:
-		return fmt.Errorf("tool %s has unsupported kind %q", def.Name, def.Kind)
+	if def.Execution.TimeoutSeconds < 0 {
+		return fmt.Errorf("tool definition %s execution.timeout_seconds must be >= 0", def.Name)
+	}
+	if def.SideEffects.Type != "read" && def.SideEffects.Type != "write" && def.SideEffects.Type != "external" {
+		return fmt.Errorf("tool definition %s side_effects.type must be read, write, or external", def.Name)
 	}
 
+	switch strings.ToLower(strings.TrimSpace(def.Execution.Type)) {
+	case "http":
+		if def.Execution.HTTP == nil {
+			return fmt.Errorf("http tool %s requires execution.http", def.Name)
+		}
+		if strings.TrimSpace(def.Execution.HTTP.URL) == "" {
+			return fmt.Errorf("http tool %s requires execution.http.url", def.Name)
+		}
+	case "local":
+		if def.Execution.Local == nil {
+			return fmt.Errorf("local tool %s requires execution.local", def.Name)
+		}
+		if strings.TrimSpace(def.Execution.Local.Handler) == "" {
+			return fmt.Errorf("local tool %s requires execution.local.handler", def.Name)
+		}
+	default:
+		return fmt.Errorf("tool %s has unsupported execution.type %q", def.Name, def.Execution.Type)
+	}
+
+	_ = runtimeMode
 	return nil
+}
+
+func normalizeLegacyAliases(def Definition) Definition {
+	if strings.TrimSpace(def.Execution.Type) == "" {
+		switch strings.ToLower(strings.TrimSpace(def.Kind)) {
+		case "http":
+			def.Execution.Type = "http"
+			def.Execution.HTTP = def.HTTP
+		case "local":
+			def.Execution.Type = "local"
+			def.Execution.Local = def.Local
+		}
+	}
+	if def.Execution.HTTP == nil && def.HTTP != nil {
+		def.Execution.HTTP = def.HTTP
+	}
+	if def.Execution.Local == nil && def.Local != nil {
+		def.Execution.Local = def.Local
+	}
+	if strings.TrimSpace(def.Category) == "" {
+		def.Category = "other"
+	}
+	if strings.TrimSpace(def.SideEffects.Type) == "" {
+		switch strings.ToLower(strings.TrimSpace(def.Execution.Type)) {
+		case "http":
+			def.SideEffects = SideEffectConfig{Type: "read", Idempotent: true}
+		case "local":
+			def.SideEffects = SideEffectConfig{Type: "external", Idempotent: false}
+		}
+	}
+	if def.Visibility == "" {
+		def.Visibility = VisibilityPublic
+	}
+	return def
 }
 
 func latestVersion(versions map[string]*Definition) (*Definition, bool) {
