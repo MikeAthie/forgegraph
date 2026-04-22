@@ -91,6 +91,12 @@ export_backend_ci_env() {
   export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1,testserver}"
   export ENCRYPTION_KEY="${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}"
   export SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT:-false}"
+
+  # On WSL with the repo mounted from Windows, keep uv's environment off /mnt/*
+  # to avoid mutating a Windows-created .venv from Linux.
+  if [[ "${root}" == /mnt/* ]]; then
+    export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-${HOME}/.cache/forgegraph/backend-venv}"
+  fi
 }
 
 go_race_supported() {

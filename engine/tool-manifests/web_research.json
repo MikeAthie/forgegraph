@@ -1,0 +1,74 @@
+{
+  "tools": [
+    {
+      "name": "web_fetch",
+      "version": "1.0.0",
+      "description": "Fetch and extract readable text from a public web page.",
+      "kind": "http",
+      "input_schema": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "additionalProperties": false
+      },
+      "default_config": {
+        "timeout_seconds": 10,
+        "max_chars": 12000
+      },
+      "http": {
+        "url": "http://backend:8000/api/runtime-tools/web-fetch?token=${ENGINE_CALLBACK_SECRET}",
+        "method": "POST",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "timeout_ms": 15000
+      }
+    },
+    {
+      "name": "web_search",
+      "version": "1.0.0",
+      "description": "Search the public web for current information and return result links.",
+      "kind": "http",
+      "input_schema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 2
+          },
+          "allowed_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocked_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "default_config": {
+        "timeout_seconds": 10,
+        "max_results": 5
+      },
+      "http": {
+        "url": "http://backend:8000/api/runtime-tools/web-search?token=${ENGINE_CALLBACK_SECRET}",
+        "method": "POST",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "timeout_ms": 15000
+      }
+    }
+  ]
+}
