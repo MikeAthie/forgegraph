@@ -157,9 +157,13 @@ def search_public_web(
         hostname = (parsed.hostname or "").lower()
         if not hostname:
             continue
-        if normalized_allowed and not any(_domain_matches(hostname, domain) for domain in normalized_allowed):
+        if normalized_allowed and not any(
+            _domain_matches(hostname, domain) for domain in normalized_allowed
+        ):
             continue
-        if normalized_blocked and any(_domain_matches(hostname, domain) for domain in normalized_blocked):
+        if normalized_blocked and any(
+            _domain_matches(hostname, domain) for domain in normalized_blocked
+        ):
             continue
         results.append({"title": title or href, "url": href})
         if len(results) >= limit:
