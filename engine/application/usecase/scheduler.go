@@ -1119,9 +1119,9 @@ func (s *Scheduler) calculateBackoff(policy *entity.RetryPolicy, attempt int) in
 	return policy.BackoffMs
 }
 
-// enqueueNextNodes determines which nodes to run next.
-// Returns the selected next nodes and a routing exit reason for diagnostics.
-func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *port.NodeExecutionResult) ([]string, string) {
+// determineNextNodes selects which nodes should run next.
+// It may mark untaken branches as skipped, but it does not schedule execution.
+func (s *Scheduler) determineNextNodes(rc *runContext, node *entity.Node, result *port.NodeExecutionResult) ([]string, string) {
 	edges := rc.plan.GetOutgoingEdges(node.ID)
 	if len(edges) == 0 {
 		return nil, "terminal"
@@ -1163,10 +1163,6 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 			}
 		}
 
-		// Enqueue taken branches
-		for _, nextID := range validNext {
-			s.decrementAndEnqueue(rc, nextID)
-		}
 		return validNext, "next_nodes"
 	}
 
@@ -1183,9 +1179,6 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 					s.markSkipped(rc, skippedID)
 				}
 			}
-			for _, nextID := range nextIDs {
-				s.decrementAndEnqueue(rc, nextID)
-			}
 			if len(nextIDs) == 0 {
 				return nil, "condition_no_match"
 			}
@@ -1197,9 +1190,14 @@ func (s *Scheduler) enqueueNextNodes(rc *runContext, node *entity.Node, result *
 	nextIDs := make([]string, 0, len(edges))
 	for _, edge := range edges {
 		nextIDs = append(nextIDs, edge.To)
-		s.decrementAndEnqueue(rc, edge.To)
 	}
 	return nextIDs, "fan_out"
+}
+
+func (s *Scheduler) enqueueNodeIDs(rc *runContext, nextNodeIDs []string) {
+	for _, nextNodeID := range nextNodeIDs {
+		s.decrementAndEnqueue(rc, nextNodeID)
+	}
 }
 
 func extractNextNodesFromOutput(output any) ([]string, bool, error) {
@@ -1289,8 +1287,9 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 	rc.completed[nodeID] = true
 	rc.pendingMu.Unlock()
 
-	// Determine next nodes and enqueue them
-	nextNodes, exitReason := s.enqueueNextNodes(rc, node, result)
+	// Determine next nodes before emitting completion so the completion event is
+	// always observed before any downstream node can start.
+	nextNodes, exitReason := s.determineNextNodes(rc, node, result)
 
 	loopDiagnostics := s.buildLoopDiagnostics(rc, nodeID, exitReason, nextNodes)
 	nodeOutput := map[string]any{}
@@ -1315,6 +1314,8 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 		completedEvent = completedEvent.WithOutput(nodeRun.OutputJSON)
 	}
 	s.emitter.EmitAsync(completedEvent)
+
+	s.enqueueNodeIDs(rc, nextNodes)
 
 	// Trigger summarization if configured
 	s.maybeTriggerSummarization(rc, node)
