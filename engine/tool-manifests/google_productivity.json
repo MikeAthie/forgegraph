@@ -3,8 +3,9 @@
     {
       "name": "gmail_reader",
       "version": "1.0.0",
+      "category": "communication",
       "description": "Fetch unread Gmail messages",
-      "kind": "http",
+      "visibility": "public",
       "input_schema": {
         "type": "object"
       },
@@ -13,20 +14,28 @@
         "max_results": 10,
         "query": "is:unread"
       },
-      "http": {
-        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={{config.max_results}}&q={{config.query}}",
-        "method": "GET",
-        "headers": {
-          "Accept": "application/json"
-        },
-        "timeout_ms": 30000
+      "execution": {
+        "type": "http",
+        "timeout_seconds": 30,
+        "http": {
+          "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={{config.max_results}}&q={{config.query}}",
+          "method": "GET",
+          "headers": {
+            "Accept": "application/json"
+          }
+        }
+      },
+      "side_effects": {
+        "type": "read",
+        "idempotent": true
       }
     },
     {
       "name": "google_calendar",
       "version": "1.0.0",
+      "category": "productivity",
       "description": "List Google Calendar events",
-      "kind": "http",
+      "visibility": "public",
       "input_schema": {
         "type": "object"
       },
@@ -34,20 +43,28 @@
         "provider": "google_calendar",
         "max_results": 10
       },
-      "http": {
-        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults={{config.max_results}}",
-        "method": "GET",
-        "headers": {
-          "Accept": "application/json"
-        },
-        "timeout_ms": 30000
+      "execution": {
+        "type": "http",
+        "timeout_seconds": 30,
+        "http": {
+          "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults={{config.max_results}}",
+          "method": "GET",
+          "headers": {
+            "Accept": "application/json"
+          }
+        }
+      },
+      "side_effects": {
+        "type": "read",
+        "idempotent": true
       }
     },
     {
       "name": "google_tasks",
       "version": "1.0.0",
+      "category": "productivity",
       "description": "List tasks from Google Tasks default list",
-      "kind": "http",
+      "visibility": "public",
       "input_schema": {
         "type": "object"
       },
@@ -56,13 +73,20 @@
         "max_results": 20,
         "include_completed": false
       },
-      "http": {
-        "url": "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?maxResults={{config.max_results}}&showCompleted={{config.include_completed}}",
-        "method": "GET",
-        "headers": {
-          "Accept": "application/json"
-        },
-        "timeout_ms": 30000
+      "execution": {
+        "type": "http",
+        "timeout_seconds": 30,
+        "http": {
+          "url": "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?maxResults={{config.max_results}}&showCompleted={{config.include_completed}}",
+          "method": "GET",
+          "headers": {
+            "Accept": "application/json"
+          }
+        }
+      },
+      "side_effects": {
+        "type": "read",
+        "idempotent": true
       }
     }
   ]

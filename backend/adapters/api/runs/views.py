@@ -94,15 +94,11 @@ from application.services.run_event_streaming import (
     run_event_group_name,
     update_stream_summary,
 )
-from application.services.run_liveness import (
-    engine_instance_label,
-)
+from application.services.run_liveness import engine_instance_label
 from application.services.run_liveness import (
     recovery_state_for_status as recovery_state_for_status,
 )
-from application.services.run_liveness import (
-    touch_run_liveness as touch_run_liveness,
-)
+from application.services.run_liveness import touch_run_liveness as touch_run_liveness
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     SubgraphResolutionError,
@@ -112,6 +108,13 @@ from application.services.run_preparation import (
     validate_prompt_credentials,
 )
 from application.services.run_queue import enqueue_run
+from application.services.run_snapshots import (
+    RunSnapshot,
+    get_snapshot,
+    safe_delete_snapshot,
+    safe_set_snapshot,
+    set_snapshot,
+)
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
@@ -1570,6 +1573,7 @@ class RunStartView(APIView):
             started_at=timezone.now(),
             ended_at=None,
             input_json=input_json,
+            dispatch_graph_json=prepared_graph,
             output_json=None,
             error_message="",
             trace_id=trace_metadata["trace_id"],
@@ -1900,6 +1904,7 @@ class RunInvokeView(APIView):
                 started_at=timezone.now(),
                 ended_at=None,
                 input_json=input_json,
+                dispatch_graph_json=graph_json,
                 output_json=None,
                 error_message="",
                 trace_id=trace_metadata["trace_id"],
@@ -2204,6 +2209,7 @@ class RunReplayView(APIView):
                 started_at=timezone.now(),
                 ended_at=None,
                 input_json=input_json,
+                dispatch_graph_json=prepared_graph,
                 output_json=None,
                 error_message="",
                 trace_id=trace_metadata["trace_id"],
@@ -2552,6 +2558,7 @@ class RunResumeView(APIView):
 
         node_id = serializer.validated_data["node_id"]
         input_json = serializer.validated_data.get("input_json", {})
+        resume_attempt_id = uuid4()
         log_event(
             logger,
             logging.INFO,
@@ -2559,6 +2566,7 @@ class RunResumeView(APIView):
             run_id=str(run.id),
             trace_id=run.trace_id or None,
             node_id=node_id,
+            resume_attempt_id=str(resume_attempt_id),
             message="Received run resume request",
         )
 
@@ -2607,20 +2615,87 @@ class RunResumeView(APIView):
         if budget_response is not None:
             return budget_response
 
+        existing_snapshot = get_snapshot(run.id)
         resume_requested_at = timezone.now()
-        resume_attempt_id = uuid4()
+        traceparent, tracestate = _request_trace_headers(request)
+        trace_context = ensure_trace_context(
+            traceparent=traceparent,
+            tracestate=tracestate,
+            trace_id=run.trace_id or None,
+        )
+        if not run.trace_id:
+            run.trace_id = trace_context["trace_id"]
+            run.save(update_fields=["trace_id"])
 
-        # Dispatch resume to the engine, then move the run into resume_requested
-        try:
-            traceparent, tracestate = _request_trace_headers(request)
-            trace_context = ensure_trace_context(
-                traceparent=traceparent,
-                tracestate=tracestate,
-                trace_id=run.trace_id or None,
+        updated_snapshot = None
+        if existing_snapshot is not None:
+            updated_snapshot = RunSnapshot(
+                run_id=existing_snapshot.run_id,
+                last_completed_node=existing_snapshot.last_completed_node,
+                next_node=existing_snapshot.next_node,
+                attempt_id=str(resume_attempt_id),
+                updated_at=resume_requested_at,
             )
-            if not run.trace_id:
-                run.trace_id = trace_context["trace_id"]
-                run.save(update_fields=["trace_id"])
+
+        with transaction.atomic():
+            run.status = "resume_requested"
+            run.resume_requested_at = resume_requested_at
+            run.resume_attempt_id = resume_attempt_id
+            update_fields = ["status", "resume_requested_at", "resume_attempt_id"]
+            update_fields.extend(
+                touch_run_liveness(
+                    run,
+                    event_time=resume_requested_at,
+                    recovery_state=recovery_state_for_status("resume_requested"),
+                )
+            )
+            run.save(update_fields=sorted(set(update_fields)))
+
+        def _revert_resume_request() -> None:
+            with transaction.atomic():
+                refreshed_run = Run.objects.select_for_update().get(id=run.id)
+                if (
+                    refreshed_run.status == "resume_requested"
+                    and refreshed_run.resume_attempt_id == resume_attempt_id
+                ):
+                    refreshed_run.status = "paused"
+                    refreshed_run.resume_requested_at = None
+                    refreshed_run.resume_attempt_id = None
+                    revert_fields = ["status", "resume_requested_at", "resume_attempt_id"]
+                    revert_fields.extend(
+                        touch_run_liveness(
+                            refreshed_run,
+                            event_time=timezone.now(),
+                            recovery_state=recovery_state_for_status("paused"),
+                        )
+                    )
+                    refreshed_run.save(update_fields=sorted(set(revert_fields)))
+            if existing_snapshot is not None:
+                safe_set_snapshot(existing_snapshot)
+            elif updated_snapshot is not None:
+                safe_delete_snapshot(run.id)
+
+        if updated_snapshot is not None:
+            try:
+                set_snapshot(updated_snapshot)
+            except Exception as exc:
+                _revert_resume_request()
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "resume_snapshot_update_failed",
+                    run_id=str(run.id),
+                    trace_id=run.trace_id or trace_context["trace_id"],
+                    resume_attempt_id=str(resume_attempt_id),
+                    error_message=str(exc),
+                )
+                return error_response(
+                    code="SNAPSHOT_UNAVAILABLE",
+                    message="Unable to activate the resume attempt. Please try again later.",
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+        try:
             with start_backend_span(
                 "runs.resume",
                 traceparent=trace_context["traceparent"],
@@ -2648,16 +2723,19 @@ class RunResumeView(APIView):
                 run_id=str(run.id),
                 trace_id=run.trace_id or trace_context["trace_id"],
                 node_id=node_id,
+                resume_attempt_id=str(resume_attempt_id),
                 engine_instance_id=selected_engine_id,
                 message="Dispatched run resume to engine",
             )
         except EngineConnectionError as e:
+            _revert_resume_request()
             log_event(
                 logger,
                 logging.ERROR,
                 "engine_resume_connection_failed",
                 run_id=str(run.id),
                 trace_id=run.trace_id or trace_context["trace_id"],
+                resume_attempt_id=str(resume_attempt_id),
                 error_message=str(e),
             )
             return error_response(
@@ -2666,12 +2744,14 @@ class RunResumeView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except EngineExecutionError as e:
+            _revert_resume_request()
             log_event(
                 logger,
                 logging.ERROR,
                 "engine_resume_failed",
                 run_id=str(run.id),
                 trace_id=run.trace_id or trace_context["trace_id"],
+                resume_attempt_id=str(resume_attempt_id),
                 error_message=str(e),
             )
             return error_response(
@@ -2681,19 +2761,15 @@ class RunResumeView(APIView):
             )
 
         with transaction.atomic():
-            run.status = "resume_requested"
-            run.resume_requested_at = resume_requested_at
-            run.resume_attempt_id = resume_attempt_id
-            update_fields = ["status", "resume_requested_at", "resume_attempt_id"]
-            update_fields.extend(
-                touch_run_liveness(
-                    run,
-                    event_time=resume_requested_at,
-                    recovery_state=recovery_state_for_status("resume_requested"),
-                    engine_instance_id=selected_engine_id,
-                )
+            run = Run.objects.select_for_update().get(id=run.id)
+            update_fields = touch_run_liveness(
+                run,
+                event_time=resume_requested_at,
+                recovery_state=recovery_state_for_status("resume_requested"),
+                engine_instance_id=selected_engine_id,
             )
-            run.save(update_fields=sorted(set(update_fields)))
+            if update_fields:
+                run.save(update_fields=sorted(set(update_fields)))
 
             RunEvent.objects.create(
                 run=run,
@@ -2747,6 +2823,7 @@ class RunResumeView(APIView):
             run_id=str(run.id),
             trace_id=run.trace_id or trace_context["trace_id"],
             node_id=node_id,
+            resume_attempt_id=str(resume_attempt_id),
             message="Run resume request completed",
         )
         return success_response({"resumed": True, "run_id": str(run.id)})
@@ -3269,6 +3346,7 @@ class EngineRunEventsView(APIView):
             node_id = event.get("node_id") or ""
             node_type = event.get("node_type") or ""
             attempt = int(event.get("attempt") or 1)
+            attempt_id = str(event.get("attempt_id") or "").strip() or None
             node_payload: dict[str, Any] = {
                 "node_id": node_id,
                 "node_type": node_type,
@@ -3276,6 +3354,20 @@ class EngineRunEventsView(APIView):
                 "trace_id": trace_context["trace_id"],
                 "span_id": trace_context["span_id"],
             }
+            if event_type in {"node_started", "node_completed"}:
+                log_event(
+                    logger,
+                    logging.INFO,
+                    event_type,
+                    run_id=str(run.id),
+                    trace_id=trace_context["trace_id"],
+                    node_id=node_id,
+                    node_type=node_type,
+                    attempt=attempt,
+                    attempt_id=attempt_id,
+                    engine_instance_id=callback_engine_instance_id,
+                    message="Engine node lifecycle event received",
+                )
 
             if event_type == "node_started":
                 node_payload["status"] = "running"

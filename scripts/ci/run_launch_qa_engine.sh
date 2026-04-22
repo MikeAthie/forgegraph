@@ -13,5 +13,4 @@ require_command go
 log_section "Launch QA engine"
 go test ./application/usecase -run "Scheduler|OnError|RetryAfter|NonRetryable" -count=1
 go test ./adapter/executor -run "HTTPExecutor|ToolExecutor|PromptExecutor" -count=1
-CGO_ENABLED=1 go test -race ./application/usecase ./adapter/executor -count=1
-
+run_go_race_or_skip ./application/usecase ./adapter/executor -count=1

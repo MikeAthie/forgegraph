@@ -4,9 +4,11 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 
+from application.services.run_snapshots import RunSnapshot, get_snapshot, set_snapshot
 from application.services.runtime_write_intents import (
     RuntimeIntentEnvelope,
     apply_ack_run_resumed_intent,
@@ -57,7 +59,7 @@ def _intent(
     run: Run,
     intent_type: str,
     payload: dict[str, object],
-    attempt_id: str = "",
+    attempt_id: str = "attempt-default",
     trace_id: str = "trace-intent",
     intent_id: UUID | None = None,
 ) -> RuntimeIntentEnvelope:
@@ -180,6 +182,67 @@ def test_apply_pause_run_intent_persists_backend_owned_pause_state(
     broadcast_decision_required.assert_called_once()
 
 
+@patch("application.services.runtime_write_intents.logger")
+def test_stale_intent_is_ignored_and_logged(logger_mock):
+    run = _make_run(status="running")
+    set_snapshot(
+        RunSnapshot(
+            run_id=run.id,
+            last_completed_node="node-current",
+            next_node="node-next",
+            attempt_id="attempt-b",
+            updated_at=timezone.now(),
+        )
+    )
+    intent = _pause_intent(run=run)
+    intent = RuntimeIntentEnvelope(
+        intent_id=intent.intent_id,
+        intent_type=intent.intent_type,
+        run_id=intent.run_id,
+        attempt_id="attempt-a",
+        trace_id=intent.trace_id,
+        timestamp=intent.timestamp,
+        payload=intent.payload,
+    )
+
+    result = apply_pause_run_intent(intent=intent, stream_message_id="1700000000000-stale")
+
+    assert result == "ignored"
+    run.refresh_from_db()
+    assert run.status == "running"
+    assert not RunCheckpoint.objects.filter(run=run).exists()
+    assert not ProcessedRuntimeIntent.objects.filter(intent_id=intent.intent_id).exists()
+    logger_mock.warning.assert_called_once()
+    assert logger_mock.warning.call_args.args[0] == "intent_ignored_due_to_stale_attempt"
+    assert logger_mock.warning.call_args.kwargs["extra"] == {
+        "run_id": str(run.id),
+        "intent_id": str(intent.intent_id),
+        "intent_type": "pause_run",
+        "intent_attempt_id": "attempt-a",
+        "current_attempt_id": "attempt-b",
+    }
+
+
+@patch("application.services.runtime_write_intents.broadcast_decision_required")
+@patch("application.services.runtime_write_intents.broadcast_run_updated")
+def test_missing_snapshot_does_not_block_intent_processing(
+    broadcast_run_updated,
+    broadcast_decision_required,
+):
+    run = _make_run(status="running")
+    intent = _pause_intent(run=run)
+
+    result = apply_pause_run_intent(intent=intent, stream_message_id="1700000000000-nosnapshot")
+
+    assert result == "processed"
+    run.refresh_from_db()
+    assert run.status == "paused"
+    assert RunCheckpoint.objects.filter(run=run).exists()
+    assert ProcessedRuntimeIntent.objects.filter(intent_id=intent.intent_id).exists()
+    broadcast_run_updated.assert_called_once()
+    broadcast_decision_required.assert_called_once()
+
+
 @patch("application.services.runtime_write_intents.broadcast_decision_required")
 @patch("application.services.runtime_write_intents.broadcast_run_updated")
 def test_apply_pause_run_intent_is_idempotent_for_duplicate_intent_id(
@@ -258,8 +321,18 @@ def test_apply_ack_run_resumed_intent_clears_pause_state_and_resume_tracking(
     broadcast_decision_resolved.assert_called_once()
 
 
-def test_apply_store_checkpoint_intent_persists_checkpoint_without_run_status_change():
+@patch("application.services.runtime_write_intents.logger")
+def test_apply_store_checkpoint_intent_persists_checkpoint_without_run_status_change(logger_mock):
     run = _make_run(status="running")
+    set_snapshot(
+        RunSnapshot(
+            run_id=run.id,
+            last_completed_node="node_1",
+            next_node="node_2",
+            attempt_id="11",
+            updated_at=timezone.now(),
+        )
+    )
     intent = _intent(
         run=run,
         intent_type="store_checkpoint",
@@ -287,10 +360,48 @@ def test_apply_store_checkpoint_intent_persists_checkpoint_without_run_status_ch
 
     processed = ProcessedRuntimeIntent.objects.get(intent_id=intent.intent_id)
     assert processed.intent_type == "store_checkpoint"
+    logger_mock.warning.assert_not_called()
 
 
-@patch("application.services.runtime_write_intents.set_snapshot")
-def test_apply_node_completed_intent_writes_snapshot_after_commit(set_snapshot_mock):
+def test_apply_node_completed_intent_does_not_write_snapshot_when_transaction_rolls_back():
+    run = _make_run(status="running")
+    NodeRun.objects.create(
+        run=run,
+        node_id="node_rollback",
+        node_type="transform",
+        status="succeeded",
+        attempt=1,
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+        output_json={"output": {"ok": True}},
+    )
+    intent = _intent(
+        run=run,
+        intent_type="node_completed",
+        attempt_id="resume-attempt-rollback",
+        payload={
+            "node_id": "node_rollback",
+            "attempt": 1,
+            "next_node": "node_after_rollback",
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="force rollback"):
+        with TestCase.captureOnCommitCallbacks(execute=True) as callbacks:
+            with transaction.atomic():
+                result = apply_node_completed_intent(
+                    intent=intent,
+                    stream_message_id="1700000000003-rollback",
+                )
+                assert result == "processed"
+                raise RuntimeError("force rollback")
+
+    assert callbacks == []
+    assert get_snapshot(run.id) is None
+    assert not ProcessedRuntimeIntent.objects.filter(intent_id=intent.intent_id).exists()
+
+
+def test_apply_node_completed_intent_writes_snapshot_after_commit():
     run = _make_run(status="running")
     NodeRun.objects.create(
         run=run,
@@ -320,15 +431,79 @@ def test_apply_node_completed_intent_writes_snapshot_after_commit(set_snapshot_m
     processed = ProcessedRuntimeIntent.objects.get(intent_id=intent.intent_id)
     assert processed.intent_type == "node_completed"
 
-    set_snapshot_mock.assert_called_once()
-    snapshot = set_snapshot_mock.call_args.args[0]
+    snapshot = get_snapshot(run.id)
+    assert snapshot is not None
     assert str(snapshot.run_id) == str(run.id)
     assert snapshot.last_completed_node == "node_2"
     assert snapshot.next_node == "node_3"
     assert snapshot.attempt_id == "resume-attempt-7"
 
 
-@patch("application.services.runtime_write_intents.delete_snapshot")
+@patch("application.services.runtime_write_intents.logger")
+def test_new_attempt_supersedes_old_snapshot_attempt(logger_mock):
+    run = _make_run(status="running")
+    NodeRun.objects.create(
+        run=run,
+        node_id="node_2",
+        node_type="transform",
+        status="succeeded",
+        attempt=1,
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+        output_json={"output": {"ok": True}},
+    )
+    set_snapshot(
+        RunSnapshot(
+            run_id=run.id,
+            last_completed_node="node_1",
+            next_node="node_2",
+            attempt_id="attempt-b",
+            updated_at=timezone.now(),
+        )
+    )
+    stale_intent = _intent(
+        run=run,
+        intent_type="node_completed",
+        attempt_id="attempt-a",
+        payload={
+            "node_id": "node_2",
+            "attempt": 1,
+            "next_node": "node_3",
+        },
+    )
+    fresh_intent = _intent(
+        run=run,
+        intent_type="node_completed",
+        attempt_id="attempt-b",
+        payload={
+            "node_id": "node_2",
+            "attempt": 1,
+            "next_node": "node_3",
+        },
+    )
+
+    stale_result = apply_node_completed_intent(
+        intent=stale_intent,
+        stream_message_id="1700000000003-stale",
+    )
+    with TestCase.captureOnCommitCallbacks(execute=True):
+        fresh_result = apply_node_completed_intent(
+            intent=fresh_intent,
+            stream_message_id="1700000000003-fresh",
+        )
+
+    assert stale_result == "ignored"
+    assert fresh_result == "processed"
+    assert not ProcessedRuntimeIntent.objects.filter(intent_id=stale_intent.intent_id).exists()
+    assert ProcessedRuntimeIntent.objects.filter(intent_id=fresh_intent.intent_id).exists()
+    snapshot = get_snapshot(run.id)
+    assert snapshot is not None
+    assert snapshot.attempt_id == "attempt-b"
+    assert snapshot.last_completed_node == "node_2"
+    logger_mock.warning.assert_called_once()
+
+
+@patch("application.services.runtime_write_intents.safe_delete_snapshot")
 @patch("application.services.runtime_write_intents.broadcast_run_updated")
 def test_apply_set_run_status_intent_updates_run_and_clears_pause_state_for_terminal_status(
     broadcast_run_updated,
@@ -351,6 +526,7 @@ def test_apply_set_run_status_intent_updates_run_and_clears_pause_state_for_term
     intent = _intent(
         run=run,
         intent_type="set_run_status",
+        attempt_id=str(run.resume_attempt_id),
         trace_id="trace-terminal",
         payload={
             "status": "failed",
@@ -383,6 +559,54 @@ def test_apply_set_run_status_intent_updates_run_and_clears_pause_state_for_term
 
     delete_snapshot_mock.assert_called_once_with(run.id)
     broadcast_run_updated.assert_called_once()
+
+
+@patch("application.services.run_snapshots.logger")
+@patch("application.services.run_snapshots.set_snapshot")
+def test_apply_node_completed_intent_snapshot_write_failure_does_not_break_commit(
+    set_snapshot_mock,
+    logger_mock,
+):
+    run = _make_run(status="running")
+    NodeRun.objects.create(
+        run=run,
+        node_id="node_redis_failure",
+        node_type="transform",
+        status="succeeded",
+        attempt=1,
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+        output_json={"output": {"ok": True}},
+    )
+    set_snapshot_mock.side_effect = RuntimeError("redis unavailable")
+    intent = _intent(
+        run=run,
+        intent_type="node_completed",
+        attempt_id="resume-attempt-redis-failure",
+        payload={
+            "node_id": "node_redis_failure",
+            "attempt": 1,
+            "next_node": "node_after_redis_failure",
+        },
+    )
+
+    with TestCase.captureOnCommitCallbacks(execute=True):
+        result = apply_node_completed_intent(intent=intent, stream_message_id="1700000000003-2")
+
+    assert result == "processed"
+    run.refresh_from_db()
+    assert run.status == "running"
+    assert ProcessedRuntimeIntent.objects.filter(intent_id=intent.intent_id).exists()
+    assert get_snapshot(run.id) is None
+    set_snapshot_mock.assert_called_once()
+    logger_mock.error.assert_called_once()
+    assert logger_mock.error.call_args.args[0] == "Snapshot write failed"
+    assert logger_mock.error.call_args.kwargs["extra"] == {
+        "run_id": str(run.id),
+        "node_id": "node_redis_failure",
+        "next_node": "node_after_redis_failure",
+        "attempt_id": "resume-attempt-redis-failure",
+    }
 
 
 @patch("application.services.runtime_write_intents.broadcast_node_run_updated")

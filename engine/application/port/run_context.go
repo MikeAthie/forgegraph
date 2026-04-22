@@ -65,6 +65,8 @@ type tenantIDKey struct{}
 
 type streamChunkEmitterKey struct{}
 
+type attemptIDKey struct{}
+
 // WithTenantID attaches a tenant ID to the context.
 func WithTenantID(ctx context.Context, tenantID string) context.Context {
 	if tenantID == "" {
@@ -105,4 +107,25 @@ func StreamChunkEmitterFrom(ctx context.Context) StreamChunkEmitter {
 		}
 	}
 	return nil
+}
+
+// WithAttemptID attaches the current execution attempt ID to the context.
+func WithAttemptID(ctx context.Context, attemptID string) context.Context {
+	if attemptID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, attemptIDKey{}, attemptID)
+}
+
+// AttemptIDFrom extracts the current execution attempt ID from the context.
+func AttemptIDFrom(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if value := ctx.Value(attemptIDKey{}); value != nil {
+		if attemptID, ok := value.(string); ok {
+			return attemptID
+		}
+	}
+	return ""
 }

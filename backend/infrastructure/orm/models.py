@@ -862,6 +862,7 @@ class Run(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     input_json = models.JSONField(default=dict, blank=True)
+    dispatch_graph_json = models.JSONField(null=True, blank=True)
     output_json = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
     trace_id = models.CharField(max_length=32, blank=True, default="")

@@ -590,17 +590,17 @@ func buildOpenAITools(specs []executor.ToolSpec) []openAITool {
 	return tools
 }
 
-func parseOpenAIToolCalls(calls []openAIToolCall) []executor.ToolCall {
+func parseOpenAIToolCalls(calls []openAIToolCall) []executor.LLMToolCall {
 	if len(calls) == 0 {
 		return nil
 	}
-	parsed := make([]executor.ToolCall, 0, len(calls))
+	parsed := make([]executor.LLMToolCall, 0, len(calls))
 	for _, call := range calls {
 		args := map[string]any{}
 		if strings.TrimSpace(call.Function.Arguments) != "" {
 			_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
 		}
-		parsed = append(parsed, executor.ToolCall{
+		parsed = append(parsed, executor.LLMToolCall{
 			ID:           call.ID,
 			Name:         call.Function.Name,
 			Arguments:    args,

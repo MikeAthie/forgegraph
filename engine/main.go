@@ -74,6 +74,7 @@ type Config struct {
 	EngineAllowInMemoryMode           bool
 	MarketplaceManifestRefreshSeconds int
 	RuntimeMode                       string
+	LegacyToolAdapterMode             string
 	RunStateMode                      string
 	RuntimeWriteMode                  string
 	RuntimeIntentStream               string
@@ -124,6 +125,7 @@ func LoadConfig() *Config {
 		EngineAllowInMemoryMode:           strings.EqualFold(getEnv("ENGINE_ALLOW_IN_MEMORY_MODE", "false"), "true"),
 		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
 		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
+		LegacyToolAdapterMode:             executor.NormalizeLegacyNodeAdapterMode(getEnv("ENGINE_RUNTIME_MODE", executor.LegacyNodeAdapterModeLegacy)),
 		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", defaultRunStateMode)),
 		RuntimeWriteMode:                  getEnv("ENGINE_RUNTIME_WRITE_MODE", usecase.RuntimeWriteModePauseIntents),
 		RuntimeIntentStream:               getEnv("ENGINE_RUNTIME_INTENT_STREAM", gateway.DefaultRuntimeIntentStream),
@@ -543,6 +545,7 @@ func main() {
 		"tool_manifest_dir", cfg.ToolManifestDir,
 		"marketplace_manifest_refresh_seconds", cfg.MarketplaceManifestRefreshSeconds,
 		"runtime_mode", cfg.RuntimeMode,
+		"legacy_tool_adapter_mode", cfg.LegacyToolAdapterMode,
 		"run_state_mode", cfg.RunStateMode,
 		"runtime_write_mode", cfg.RuntimeWriteMode,
 		"runtime_intent_stream", cfg.RuntimeIntentStream,
@@ -683,9 +686,6 @@ func main() {
 	// Initialize node executors
 	registry := port.NewExecutorRegistry()
 	toolRegistry := tool.NewRegistryWithRuntimeMode(cfg.RuntimeMode)
-	if err := toolRegistry.LoadManifests(cfg.ToolManifestDir); err != nil {
-		log.Warn("tool_manifest_load_failed", "error", err.Error())
-	}
 
 	var manifestClient *gateway.MarketplaceManifestClient
 
@@ -694,6 +694,19 @@ func main() {
 	if cfg.ControlPlaneURL != "" && cfg.CallbackSecret != "" {
 		resolver = gateway.NewBackendCredentialResolver(cfg.ControlPlaneURL, cfg.CallbackSecret)
 		manifestClient = gateway.NewMarketplaceManifestClient(cfg.ControlPlaneURL, cfg.CallbackSecret)
+	}
+	switch {
+	case strings.TrimSpace(cfg.ToolManifestDir) == "":
+	case cfg.RuntimeMode == tool.RuntimeModeCloud:
+		log.Info("tool_manifest_dir_ignored", "reason", "cloud_runtime_disables_local_tool_manifests")
+	case manifestClient != nil:
+		log.Info("tool_manifest_dir_ignored", "reason", "backend_manifest_delivery_configured")
+	default:
+		if err := toolRegistry.LoadManifests(cfg.ToolManifestDir); err != nil {
+			log.Warn("tool_manifest_load_failed", "error", err.Error())
+		} else {
+			log.Info("tool_manifest_dir_loaded", "path", cfg.ToolManifestDir)
+		}
 	}
 	lastManifestChecksum := ""
 	if manifestClient != nil && cfg.TenantID != "" {
@@ -736,14 +749,22 @@ func main() {
 		executor.NewObservationSearchExecutor(nil),
 		executor.NewObservationContextExecutor(nil),
 		executor.NewObservationTimelineExecutor(nil),
-		executor.NewToolExecutorWithResolverAndRuntimeMode(toolRegistry, resolver, cfg.RuntimeMode),
+		executor.NewToolExecutorWithModes(toolRegistry, resolver, cfg.RuntimeMode, cfg.LegacyToolAdapterMode),
 		executor.NewSubgraphExecutor(registry),
 	)
 
 	// Initialize LLM client for Prompt and Agent nodes (multi-provider)
 	fallbackKey := os.Getenv("OPENAI_API_KEY")
 	llmClient := gateway.NewMultiProviderClient(resolver, fallbackKey)
-	registry.Register(executor.NewAgentExecutorWithRuntimeMode(llmClient, toolRegistry, resolver, cfg.RuntimeMode))
+	registry.Register(
+		executor.NewAgentExecutorWithModes(
+			llmClient,
+			toolRegistry,
+			resolver,
+			cfg.RuntimeMode,
+			cfg.LegacyToolAdapterMode,
+		),
+	)
 	registry.Register(executor.NewPromptExecutor(llmClient))
 	if fallbackKey == "" && resolver == nil {
 		log.Warn("llm_client_not_configured", "note", "Prompt and agent nodes require credentials or OPENAI_API_KEY")

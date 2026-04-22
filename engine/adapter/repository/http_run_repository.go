@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -230,7 +229,7 @@ func (r *HTTPRunRepository) SaveCheckpoint(ctx context.Context, runID, nodeID st
 		ctx,
 		"store_checkpoint",
 		runID,
-		strconv.Itoa(stepIndex),
+		"",
 		"",
 		map[string]any{
 			"node_id":         payload.NodeID,
@@ -381,7 +380,7 @@ func (r *HTTPRunRepository) publishNodeRunIntent(ctx context.Context, nodeRun *e
 		ctx,
 		"upsert_node_run",
 		nodeRun.RunID,
-		strconv.Itoa(nodeRun.Attempt),
+		"",
 		nodeRun.TraceID,
 		payload,
 	)
@@ -397,6 +396,12 @@ func (r *HTTPRunRepository) publishIntent(
 ) error {
 	if r.intentPublisher == nil {
 		return fmt.Errorf("runtime intent publisher is not configured")
+	}
+	if attemptID == "" {
+		attemptID = port.AttemptIDFrom(ctx)
+	}
+	if attemptID == "" {
+		return fmt.Errorf("runtime intent attempt_id is required")
 	}
 	intent := &port.RuntimeIntentEnvelope{
 		IntentID:   uuid.NewString(),

@@ -247,6 +247,7 @@ class GenericWebhookView(APIView):
             started_at=timezone.now(),
             ended_at=None,
             input_json=input_json,
+            dispatch_graph_json=prepared_graph,
             output_json=None,
             error_message="",
             trace_id=trace_metadata["trace_id"],
