@@ -107,7 +107,7 @@ class TestAgentNodeSchema:
         assert errors[0]["field"] == "model"
 
     def test_tools_required(self):
-        """Agent node must specify at least one tool."""
+        """Agent node must specify tools or tool selection."""
         errors = validate_node_config("agent", {"model": "gpt-4.1-mini"})
         assert len(errors) == 1
         assert errors[0]["field"] == "tools"
@@ -117,6 +117,16 @@ class TestAgentNodeSchema:
         errors = validate_node_config("agent", {"model": "gpt-4.1-mini", "tools": []})
         assert len(errors) == 1
         assert errors[0]["field"] == "tools"
+
+    def test_tool_selection_only_valid(self):
+        errors = validate_node_config(
+            "agent",
+            {
+                "model": "gpt-4.1-mini",
+                "tool_selection": {"categories": ["crm"], "max_tools": 3},
+            },
+        )
+        assert len(errors) == 0
 
     def test_approval_required_tools_must_be_subset(self):
         """Approval-required tools must already be allow-listed."""
@@ -161,6 +171,7 @@ class TestAgentNodeSchema:
                 "observation_context_paths": ["node.obs_context.output"],
                 "approval_required_tools": ["send_email"],
                 "stop_condition": "final_answer",
+                "tool_selection": {"categories": ["crm"], "exclude_names": ["old_tool"]},
             },
         )
         assert len(errors) == 0

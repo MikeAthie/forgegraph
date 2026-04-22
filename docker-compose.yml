@@ -4,15 +4,15 @@ services:
     image: pgvector/pgvector:pg16
     container_name: forgegraph-postgres
     environment:
-      POSTGRES_DB: forgegraph
-      POSTGRES_USER: forgegraph
-      POSTGRES_PASSWORD: forgegraph_secret
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forgegraph -d forgegraph"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:?DB_USER is required} -d ${DB_NAME:?DB_NAME is required}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,13 +40,13 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: forgegraph
-      DB_USER: forgegraph
-      DB_PASSWORD: forgegraph_secret
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
       DEBUG: ${DEBUG:-false}
-      SECRET_KEY: ${SECRET_KEY:-docker-local-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
@@ -66,9 +66,9 @@ services:
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-}
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
-      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
+      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:?ENGINE_CALLBACK_SECRET is required}
       RUN_LIVENESS_TIMEOUT_SECONDS: ${RUN_LIVENESS_TIMEOUT_SECONDS:-300}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
@@ -106,9 +106,12 @@ services:
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
+      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:?ENGINE_CALLBACK_SECRET is required}
       CONTROL_PLANE_URL: http://backend:8000
       ENGINE_RUN_STATE_MODE: ${ENGINE_RUN_STATE_MODE:-control-plane-http}
+      REDIS_ADDR: ${REDIS_HOST:-redis}:${REDIS_PORT:-6379}
+      ENGINE_RUNTIME_INTENT_STREAM: ${ENGINE_RUNTIME_INTENT_STREAM:-forgegraph:runtime:intents}
+      ENGINE_RUNTIME_WRITE_MODE: ${ENGINE_RUNTIME_WRITE_MODE:-pause-intents}
       TOOL_MANIFEST_DIR: /app/tool-manifests
       MEMORY_GRPC_HOST: memory-grpc
       MEMORY_GRPC_PORT: 50052
@@ -133,17 +136,18 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: forgegraph
-      DB_USER: forgegraph
-      DB_PASSWORD: forgegraph_secret
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
       DEBUG: ${DEBUG:-false}
-      SECRET_KEY: ${SECRET_KEY:-docker-local-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
       MEMORY_GRPC_HOST: 0.0.0.0
       MEMORY_GRPC_PORT: 50052
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:?ENGINE_CALLBACK_SECRET is required}
     depends_on:
       postgres:
         condition: service_healthy

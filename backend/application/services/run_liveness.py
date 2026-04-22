@@ -13,7 +13,7 @@ from application.services.engine_selection import get_default_engine_instance_id
 from application.services.event_categories import EVENT_CATEGORY_STATE
 from application.services.metrics import record_liveness_reconciliation, record_run_completed
 from application.services.run_queue import enqueue_run
-from application.services.run_snapshots import delete_snapshot, get_snapshot
+from application.services.run_snapshots import get_snapshot, safe_delete_snapshot
 from application.services.structured_logging import log_event
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import Run, RunEvent
@@ -259,11 +259,9 @@ def _queue_stale_run_recovery(
         checkpoint_context=checkpoint_context,
         recovery_policy=recovery_policy,
     )
+    should_clear_checkpoint = recovery_policy == RECOVERY_POLICY_RETRY
 
     with transaction.atomic():
-        if recovery_policy == RECOVERY_POLICY_RETRY:
-            delete_snapshot(run.id)
-
         run.status = "pending"
         run.ended_at = None
         run.output_json = None
@@ -317,6 +315,9 @@ def _queue_stale_run_recovery(
             },
             trace_id=run.trace_id,
         )
+
+    if should_clear_checkpoint:
+        safe_delete_snapshot(run.id)
 
     log_event(
         logger,

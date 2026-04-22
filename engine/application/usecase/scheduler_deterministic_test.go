@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -322,6 +323,253 @@ func TestSchedulerDeterministicStartRunResumesFromRepositorySnapshot(t *testing.
 	})
 	if countEvents(events, port.EventTypeRunResumed) < 1 {
 		t.Fatalf("expected run_resumed event for snapshot-based start")
+	}
+}
+
+// Description: Snapshot resume restarts from the last successful boundary and re-executes the failed node.
+// Invariants: completed nodes before the snapshot are skipped; failed nodes are not treated as completed; resume continues from snapshot.NextNode.
+// Edge cases: a prior failed attempt exists durably, but the snapshot still points at the previous successful node.
+func TestSchedulerDeterministicStartRunReexecutesFailedNodeAfterSnapshotBoundary(t *testing.T) {
+	engine := NewTestEngine(t, 4)
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		switch node.ID {
+		case "start":
+			return port.NewSuccessResult(map[string]any{"unexpected": true}), nil
+		case "process":
+			startOutput, ok := state.GetNodeOutput("start")
+			if !ok {
+				return nil, fmt.Errorf("missing resumed start output")
+			}
+			prepared, _ := startOutput.(map[string]any)["prepared"].(string)
+			return port.NewSuccessResult(map[string]any{"processed": prepared + "-again"}), nil
+		default:
+			return nil, fmt.Errorf("unexpected transform node %s", node.ID)
+		}
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		processOutput, ok := state.GetNodeOutput("process")
+		if !ok {
+			return nil, fmt.Errorf("missing process output")
+		}
+		return port.NewSuccessResult(map[string]any{"result": processOutput.(map[string]any)["processed"]}), nil
+	})
+
+	runID := "run-deterministic-resume-reexecutes-failed-node"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "process", Type: string(value.NodeTypeTransform), Name: "Process", Config: map[string]any{}},
+			{ID: "finish", Type: string(value.NodeTypeOutput), Name: "Finish", Config: map[string]any{}},
+		},
+		[]entity.Edge{
+			{From: "start", To: "process"},
+			{From: "process", To: "finish"},
+		},
+	)
+
+	engine.Repo.runs[runID] = &entity.Run{
+		ID:        runID,
+		Status:    "pending",
+		InputJSON: map[string]any{"query": "resume"},
+	}
+	now := time.Date(2026, time.January, 1, 0, 0, 2, 0, time.UTC)
+	engine.Repo.nodeRuns["run-deterministic-resume-reexecutes-failed-node-start"] = &entity.NodeRun{
+		ID:        "run-deterministic-resume-reexecutes-failed-node-start",
+		RunID:     runID,
+		NodeID:    "start",
+		NodeType:  string(value.NodeTypeTransform),
+		Status:    string(value.NodeRunStatusSucceeded),
+		Attempt:   1,
+		StartedAt: now,
+		EndedAt:   func() *time.Time { ended := now.Add(10 * time.Millisecond); return &ended }(),
+		InputJSON: map[string]any{"input.query": "resume"},
+		OutputJSON: map[string]any{
+			"output": map[string]any{"prepared": "ready"},
+			"state_delta": map[string]any{
+				"node.start.output": map[string]any{"prepared": "ready"},
+			},
+		},
+	}
+	engine.Repo.nodeRuns["run-deterministic-resume-reexecutes-failed-node-process-attempt-1"] = &entity.NodeRun{
+		ID:        "run-deterministic-resume-reexecutes-failed-node-process-attempt-1",
+		RunID:     runID,
+		NodeID:    "process",
+		NodeType:  string(value.NodeTypeTransform),
+		Status:    string(value.NodeRunStatusFailed),
+		Attempt:   1,
+		StartedAt: now.Add(20 * time.Millisecond),
+		EndedAt:   func() *time.Time { ended := now.Add(30 * time.Millisecond); return &ended }(),
+		InputJSON: map[string]any{"input.query": "resume"},
+		ErrorJSON: map[string]any{"error": "boom"},
+	}
+	engine.Repo.snapshots[runID] = &port.RunResumeSnapshot{
+		RunID:             runID,
+		LastCompletedNode: "start",
+		NextNode:          "process",
+		AttemptID:         "attempt-1",
+		UpdatedAt:         now.Add(10 * time.Millisecond),
+	}
+
+	engine.StartRun(runID, graphJSON, `{"query":"ignored because checkpoint is authoritative"}`)
+	engine.AwaitBlockedAttempt(runID, "process", 1)
+
+	if transformExec.getNodeExecuteCount("start") != 0 {
+		t.Fatalf("expected completed node before snapshot to be skipped, got %d executions", transformExec.getNodeExecuteCount("start"))
+	}
+
+	engine.Release(runID, "process")
+	engine.AwaitBlockedAttempt(runID, "finish", 1)
+
+	if transformExec.getNodeExecuteCount("process") != 1 {
+		t.Fatalf("expected failed node to be re-executed exactly once, got %d", transformExec.getNodeExecuteCount("process"))
+	}
+
+	engine.Release(runID, "finish")
+	snapshot := engine.AwaitRunStatus(runID, string(value.RunStatusSucceeded))
+	if snapshot.Output["result"] != "ready-again" {
+		t.Fatalf("expected resumed output from re-executed failed node, got %#v", snapshot.Output)
+	}
+
+	nodeRuns, err := engine.Repo.GetNodeRunsByRunID(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("GetNodeRunsByRunID failed: %v", err)
+	}
+	processRuns := 0
+	foundSucceededProcess := false
+	for _, nodeRun := range nodeRuns {
+		if nodeRun.NodeID != "process" {
+			continue
+		}
+		processRuns++
+		if nodeRun.Status == string(value.NodeRunStatusSucceeded) {
+			foundSucceededProcess = true
+		}
+	}
+	if processRuns < 2 || !foundSucceededProcess {
+		t.Fatalf("expected failed node history plus a succeeded resumed execution, got %d process node runs", processRuns)
+	}
+}
+
+// Description: Retry-safe side effects remain correct when a failed node is re-executed from the last successful snapshot.
+// Invariants: the failed node runs again; the external side effect stays single-apply when guarded by a stable side_effect_id.
+// Edge cases: the first attempt already applied the side effect before failing and leaving the snapshot unchanged.
+func TestSchedulerDeterministicResumeKeepsSideEffectIdempotentOnFailedNodeRetry(t *testing.T) {
+	engine := NewTestEngine(t, 4)
+
+	var mu sync.Mutex
+	appliedSideEffects := map[string]int{"email-42": 1}
+	dedupeHits := 0
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		if node.ID == "start" {
+			return port.NewSuccessResult(map[string]any{"unexpected": true}), nil
+		}
+		if node.ID != "side_effect" {
+			return nil, fmt.Errorf("unexpected transform node %s", node.ID)
+		}
+		sideEffectID := state.GetString("input.side_effect_id")
+		if sideEffectID == "" {
+			return nil, fmt.Errorf("missing side_effect_id")
+		}
+
+		mu.Lock()
+		if appliedSideEffects[sideEffectID] > 0 {
+			dedupeHits++
+			mu.Unlock()
+			return port.NewSuccessResult(map[string]any{"side_effect_id": sideEffectID, "applied": false}), nil
+		}
+		appliedSideEffects[sideEffectID]++
+		mu.Unlock()
+		return port.NewSuccessResult(map[string]any{"side_effect_id": sideEffectID, "applied": true}), nil
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		sideEffectOutput, ok := state.GetNodeOutput("side_effect")
+		if !ok {
+			return nil, fmt.Errorf("missing side effect output")
+		}
+		return port.NewSuccessResult(map[string]any{"result": sideEffectOutput}), nil
+	})
+
+	runID := "run-deterministic-resume-side-effect-idempotent"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "side_effect", Type: string(value.NodeTypeTransform), Name: "Side Effect", Config: map[string]any{}},
+			{ID: "finish", Type: string(value.NodeTypeOutput), Name: "Finish", Config: map[string]any{}},
+		},
+		[]entity.Edge{
+			{From: "start", To: "side_effect"},
+			{From: "side_effect", To: "finish"},
+		},
+	)
+
+	engine.Repo.runs[runID] = &entity.Run{
+		ID:        runID,
+		Status:    "pending",
+		InputJSON: map[string]any{"side_effect_id": "email-42"},
+	}
+	now := time.Date(2026, time.January, 1, 0, 0, 3, 0, time.UTC)
+	engine.Repo.nodeRuns["run-deterministic-resume-side-effect-idempotent-start"] = &entity.NodeRun{
+		ID:        "run-deterministic-resume-side-effect-idempotent-start",
+		RunID:     runID,
+		NodeID:    "start",
+		NodeType:  string(value.NodeTypeTransform),
+		Status:    string(value.NodeRunStatusSucceeded),
+		Attempt:   1,
+		StartedAt: now,
+		EndedAt:   func() *time.Time { ended := now.Add(10 * time.Millisecond); return &ended }(),
+		InputJSON: map[string]any{"input.side_effect_id": "email-42"},
+		OutputJSON: map[string]any{
+			"output": map[string]any{"prepared": true},
+			"state_delta": map[string]any{
+				"node.start.output": map[string]any{"prepared": true},
+			},
+		},
+	}
+	engine.Repo.nodeRuns["run-deterministic-resume-side-effect-idempotent-side-effect-attempt-1"] = &entity.NodeRun{
+		ID:        "run-deterministic-resume-side-effect-idempotent-side-effect-attempt-1",
+		RunID:     runID,
+		NodeID:    "side_effect",
+		NodeType:  string(value.NodeTypeTransform),
+		Status:    string(value.NodeRunStatusFailed),
+		Attempt:   1,
+		StartedAt: now.Add(20 * time.Millisecond),
+		EndedAt:   func() *time.Time { ended := now.Add(30 * time.Millisecond); return &ended }(),
+		InputJSON: map[string]any{"input.side_effect_id": "email-42"},
+		ErrorJSON: map[string]any{"error": "post-side-effect failure"},
+	}
+	engine.Repo.snapshots[runID] = &port.RunResumeSnapshot{
+		RunID:             runID,
+		LastCompletedNode: "start",
+		NextNode:          "side_effect",
+		AttemptID:         "attempt-1",
+		UpdatedAt:         now.Add(10 * time.Millisecond),
+	}
+
+	engine.StartRun(runID, graphJSON, `{"side_effect_id":"ignored because checkpoint is authoritative"}`)
+	engine.AwaitBlockedAttempt(runID, "side_effect", 1)
+
+	if transformExec.getNodeExecuteCount("start") != 0 {
+		t.Fatalf("expected completed node before snapshot to be skipped, got %d executions", transformExec.getNodeExecuteCount("start"))
+	}
+
+	engine.Release(runID, "side_effect")
+	engine.AwaitBlockedAttempt(runID, "finish", 1)
+	engine.Release(runID, "finish")
+	engine.AwaitRunStatus(runID, string(value.RunStatusSucceeded))
+
+	if transformExec.getNodeExecuteCount("side_effect") != 1 {
+		t.Fatalf("expected failed side-effect node to be re-executed once, got %d", transformExec.getNodeExecuteCount("side_effect"))
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if appliedSideEffects["email-42"] != 1 {
+		t.Fatalf("expected side effect to remain single-apply, got %d applications", appliedSideEffects["email-42"])
+	}
+	if dedupeHits != 1 {
+		t.Fatalf("expected resumed execution to observe one idempotent dedupe hit, got %d", dedupeHits)
 	}
 }
 

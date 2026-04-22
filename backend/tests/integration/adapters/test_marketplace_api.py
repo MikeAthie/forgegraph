@@ -61,6 +61,7 @@ def test_marketplace_release_submission_and_review(authenticated_client):
             "package_slug": "acme-release-test",
             "package_name": "Acme Release Test",
             "version": "1.0.0",
+            "manifest_version": 2,
             "package_kind": "runtime_tool",
             "execution_node_type": "tool",
             "ui_schema": {"label": "Acme Tool"},
@@ -69,9 +70,15 @@ def test_marketplace_release_submission_and_review(authenticated_client):
             "runtime_manifest": {
                 "name": "acme_lookup",
                 "version": "1.0.0",
-                "kind": "http",
+                "category": "crm",
                 "input_schema": {"type": "object"},
-                "http": {"url": "https://example.com/tool", "method": "POST"},
+                "execution": {
+                    "type": "http",
+                    "timeout_seconds": 10,
+                    "http": {"url": "https://example.com/tool", "method": "POST"},
+                },
+                "side_effects": {"type": "read", "idempotent": True},
+                "visibility": "public",
             },
             "cloud_allowed": True,
         },
@@ -108,6 +115,7 @@ def test_marketplace_release_review_blocks_exec_runtime_release_in_cloud(authent
         status="pending_review",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=1,
         config_defaults={"tool": "blocked_exec_review"},
         runtime_manifest={
             "name": "blocked_exec_review",
@@ -161,15 +169,21 @@ def test_marketplace_release_submission_rejects_template_release_with_runtime_ma
             "package_slug": "template-release-invalid",
             "package_name": "Template Release Invalid",
             "version": "1.0.0",
+            "manifest_version": 2,
             "package_kind": "template_http",
             "execution_node_type": "http",
             "config_defaults": {"url": "https://example.com"},
             "runtime_manifest": {
                 "name": "should_not_exist",
                 "version": "1.0.0",
-                "kind": "http",
+                "category": "developer",
                 "input_schema": {"type": "object"},
-                "http": {"url": "https://example.com/tool"},
+                "execution": {
+                    "type": "http",
+                    "timeout_seconds": 10,
+                    "http": {"url": "https://example.com/tool"},
+                },
+                "side_effects": {"type": "read", "idempotent": True},
             },
         },
         format="json",
@@ -210,15 +224,21 @@ def test_marketplace_catalog_includes_seeded_top_integrations(authenticated_clie
                 "status": "approved",
                 "package_kind": "runtime_tool",
                 "execution_node_type": "tool",
+                "manifest_version": 2,
                 "ui_schema": {"label": name},
                 "config_schema": {"type": "object"},
                 "config_defaults": {"tool": slug.replace("-", "_")},
                 "runtime_manifest": {
                     "name": slug.replace("-", "_"),
                     "version": "1.0.0",
-                    "kind": "http",
+                    "category": category,
                     "input_schema": {"type": "object"},
-                    "http": {"url": f"https://example.com/{slug}", "method": "POST"},
+                    "execution": {
+                        "type": "http",
+                        "timeout_seconds": 10,
+                        "http": {"url": f"https://example.com/{slug}", "method": "POST"},
+                    },
+                    "side_effects": {"type": "read", "idempotent": True},
                 },
                 "cloud_allowed": True,
             },
@@ -252,6 +272,7 @@ def test_marketplace_install_blocks_exec_runtime_release_in_cloud(authenticated_
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=1,
         config_defaults={"tool": "blocked_exec_install"},
         runtime_manifest={
             "name": "blocked_exec_install",
@@ -339,13 +360,19 @@ def test_marketplace_runtime_manifest_endpoint_returns_ready_runtime_tools(api_c
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=2,
         config_defaults={"tool": "crm_lookup"},
         runtime_manifest={
             "name": "crm_lookup",
             "version": "1.2.0",
-            "kind": "http",
+            "category": "crm",
             "input_schema": {"type": "object"},
-            "http": {"url": "https://example.com/crm", "method": "POST"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/crm", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
         },
     )
     NodePackageInstallation.objects.create(
@@ -387,9 +414,10 @@ def test_marketplace_runtime_manifest_endpoint_returns_ready_runtime_tools(api_c
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["tenant_id"] == str(org.id)
-    assert data["manifest_version"] == 1
+    assert data["manifest_version"] == 2
     assert len(data["tools"]) == 1
     assert data["tools"][0]["name"] == "crm_lookup"
+    assert data["tools"][0]["execution"]["type"] == "http"
     assert {item["package_slug"] for item in data["packages"]} == {"crm-lookup", "template-http"}
     assert response["ETag"] == data["checksum"]
 
@@ -411,13 +439,19 @@ def test_marketplace_runtime_manifest_endpoint_supports_etag(api_client, user):
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=2,
         config_defaults={"tool": "crm_lookup"},
         runtime_manifest={
             "name": "crm_lookup",
             "version": "1.0.0",
-            "kind": "http",
+            "category": "crm",
             "input_schema": {"type": "object"},
-            "http": {"url": "https://example.com/crm", "method": "POST"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/crm", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
         },
     )
     NodePackageInstallation.objects.create(
@@ -472,13 +506,19 @@ def test_marketplace_runtime_manifest_preview_returns_tenant_payload(authenticat
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=2,
         config_defaults={"tool": "preview_ready_tool"},
         runtime_manifest={
             "name": "preview_ready_tool",
             "version": "1.0.0",
-            "kind": "http",
+            "category": "developer",
             "input_schema": {"type": "object"},
-            "http": {"url": "https://example.com/preview", "method": "POST"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/preview", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
         },
     )
     NodePackageInstallation.objects.create(
@@ -519,13 +559,19 @@ def test_marketplace_runtime_manifest_endpoint_is_tenant_scoped(api_client, user
         status="approved",
         package_kind="runtime_tool",
         execution_node_type="tool",
+        manifest_version=2,
         config_defaults={"tool": "other_tenant"},
         runtime_manifest={
             "name": "other_tenant",
             "version": "1.0.0",
-            "kind": "http",
+            "category": "developer",
             "input_schema": {"type": "object"},
-            "http": {"url": "https://example.com/other", "method": "POST"},
+            "execution": {
+                "type": "http",
+                "timeout_seconds": 10,
+                "http": {"url": "https://example.com/other", "method": "POST"},
+            },
+            "side_effects": {"type": "read", "idempotent": True},
         },
     )
     NodePackageInstallation.objects.create(

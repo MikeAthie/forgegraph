@@ -577,7 +577,7 @@ class MarketplaceRuntimeManifestPreviewView(APIView):
             return success_response(
                 {
                     "tenant_id": "",
-                    "manifest_version": 1,
+                    "manifest_version": 2,
                     "checksum": "",
                     "generated_at": timezone.now().isoformat(),
                     "packages": [],

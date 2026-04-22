@@ -6,14 +6,38 @@ import (
 	"testing"
 )
 
+func validHTTPDefinition(name string) Definition {
+	return Definition{
+		Name:        name,
+		Version:     "1.0.0",
+		Category:    "web",
+		Description: "test tool",
+		Visibility:  VisibilityPublic,
+		InputSchema: map[string]any{"type": "object"},
+		Execution: ExecutionConfig{
+			Type:           "http",
+			TimeoutSeconds: 10,
+			HTTP: &HTTPToolConfig{
+				URL:    "https://example.com/tool",
+				Method: "POST",
+			},
+		},
+		SideEffects: SideEffectConfig{Type: "read", Idempotent: true},
+	}
+}
+
 func TestRegistryLoadDefinitionsRejectsInvalidRuntimeTool(t *testing.T) {
 	reg := NewRegistry()
 
 	err := reg.LoadDefinitions([]Definition{
 		{
-			Name:    "broken.tool",
-			Version: "1.0.0",
-			Kind:    "http",
+			Name:     "broken.tool",
+			Version:  "1.0.0",
+			Category: "web",
+			Execution: ExecutionConfig{
+				Type: "http",
+			},
+			SideEffects: SideEffectConfig{Type: "read", Idempotent: true},
 		},
 	})
 	if err == nil {
@@ -24,38 +48,27 @@ func TestRegistryLoadDefinitionsRejectsInvalidRuntimeTool(t *testing.T) {
 func TestRegistryRegisterOrderIsDeterministic(t *testing.T) {
 	reg := NewRegistry()
 
-	reg.Register(Definition{
-		Name:    "search.web",
-		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &HTTPToolConfig{
-			URL:    "https://local.example.com/search",
-			Method: "POST",
-		},
-	})
-	reg.Register(Definition{
-		Name:    "search.web",
-		Version: "1.0.0",
-		Kind:    "http",
-		HTTP: &HTTPToolConfig{
-			URL:    "https://remote.example.com/search",
-			Method: "POST",
-		},
-	})
+	local := validHTTPDefinition("search.web")
+	local.Execution.HTTP.URL = "https://local.example.com/search"
+	reg.Register(local)
+
+	remote := validHTTPDefinition("search.web")
+	remote.Execution.HTTP.URL = "https://remote.example.com/search"
+	reg.Register(remote)
 
 	def, ok := reg.Resolve("search.web", "1.0.0")
 	if !ok {
 		t.Fatal("expected search.web to resolve")
 	}
-	if def.HTTP == nil || def.HTTP.URL != "https://remote.example.com/search" {
-		t.Fatalf("expected later registration to win, got %#v", def.HTTP)
+	if def.Execution.HTTP == nil || def.Execution.HTTP.URL != "https://remote.example.com/search" {
+		t.Fatalf("expected later registration to win, got %#v", def.Execution.HTTP)
 	}
 }
 
 func TestRegistryLoadManifestsValidatesDefinitions(t *testing.T) {
 	tmpDir := t.TempDir()
 	manifestPath := filepath.Join(tmpDir, "broken.json")
-	content := []byte(`{"tools":[{"name":"broken.tool","version":"1.0.0","kind":"http"}]}`)
+	content := []byte(`{"tools":[{"name":"broken.tool","version":"1.0.0","category":"web","execution":{"type":"http"},"side_effects":{"type":"read","idempotent":true}}]}`)
 	if err := os.WriteFile(manifestPath, content, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
@@ -67,47 +80,44 @@ func TestRegistryLoadManifestsValidatesDefinitions(t *testing.T) {
 	}
 }
 
-func TestValidateDefinitionForRuntimeMode_BlocksExecInCloud(t *testing.T) {
+func TestValidateDefinitionForRuntimeMode_RejectsMissingLocalHandler(t *testing.T) {
 	err := ValidateDefinitionForRuntimeMode(Definition{
-		Name:        "danger.exec",
+		Name:        "danger.local",
 		Version:     "1.0.0",
-		Kind:        "exec",
+		Category:    "internal",
 		InputSchema: map[string]any{"type": "object"},
-		Exec: &ExecToolConfig{
-			Command: "python",
+		Execution: ExecutionConfig{
+			Type:  "local",
+			Local: &LocalToolConfig{},
 		},
+		SideEffects: SideEffectConfig{Type: "write", Idempotent: false},
 	}, RuntimeModeCloud)
 	if err == nil {
-		t.Fatal("expected exec definition to fail in cloud mode")
+		t.Fatal("expected local definition to fail without handler")
 	}
 }
 
-func TestValidateDefinitionForRuntimeMode_AllowsExecInSelfHosted(t *testing.T) {
+func TestValidateDefinitionForRuntimeMode_AllowsLocalInCloud(t *testing.T) {
 	err := ValidateDefinitionForRuntimeMode(Definition{
-		Name:        "danger.exec",
+		Name:        "safe.local",
 		Version:     "1.0.0",
-		Kind:        "exec",
+		Category:    "internal",
 		InputSchema: map[string]any{"type": "object"},
-		Exec: &ExecToolConfig{
-			Command: "python",
+		Execution: ExecutionConfig{
+			Type:  "local",
+			Local: &LocalToolConfig{Handler: "echo"},
 		},
-	}, RuntimeModeSelfHosted)
+		SideEffects: SideEffectConfig{Type: "read", Idempotent: true},
+	}, RuntimeModeCloud)
 	if err != nil {
-		t.Fatalf("expected exec definition to be allowed in self-hosted mode, got %v", err)
+		t.Fatalf("expected local definition to be allowed in cloud mode, got %v", err)
 	}
 }
 
 func TestValidateDefinitionForRuntimeMode_RejectsNegativeMaxResultSize(t *testing.T) {
-	err := ValidateDefinitionForRuntimeMode(Definition{
-		Name:          "large.result.tool",
-		Version:       "1.0.0",
-		Kind:          "http",
-		InputSchema:   map[string]any{"type": "object"},
-		MaxResultSize: -1,
-		HTTP: &HTTPToolConfig{
-			URL: "https://example.com/tool",
-		},
-	}, RuntimeModeSelfHosted)
+	def := validHTTPDefinition("large.result.tool")
+	def.MaxResultSize = -1
+	err := ValidateDefinitionForRuntimeMode(def, RuntimeModeSelfHosted)
 	if err == nil {
 		t.Fatal("expected negative max_result_size_chars to fail validation")
 	}

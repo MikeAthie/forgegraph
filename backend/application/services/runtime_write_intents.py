@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,7 +20,12 @@ from adapters.ws.runs.broadcast import (
 )
 from application.services.redaction import redact_payload
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
-from application.services.run_snapshots import RunSnapshot, delete_snapshot, set_snapshot
+from application.services.run_snapshots import (
+    RunSnapshot,
+    get_snapshot,
+    safe_delete_snapshot,
+    safe_set_snapshot,
+)
 from infrastructure.orm.models import (
     ApprovalTask,
     NodeRun,
@@ -65,8 +71,9 @@ RUN_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "canceled": {"canceled"},
 }
 
-IntentProcessResult = Literal["processed", "duplicate", "invalid"]
+IntentProcessResult = Literal["processed", "duplicate", "invalid", "ignored"]
 _UNSET = object()
+logger = logging.getLogger(__name__)
 
 
 class RuntimeIntentError(ValueError):
@@ -82,6 +89,32 @@ class RuntimeIntentEnvelope:
     trace_id: str
     timestamp: datetime
     payload: dict[str, Any]
+
+
+def _schedule_node_completed_snapshot(snapshot: RunSnapshot) -> None:
+    """Advance the resume snapshot only for a committed node_completed boundary."""
+
+    def set_node_completed_snapshot() -> None:
+        safe_set_snapshot(snapshot)
+
+    transaction.on_commit(set_node_completed_snapshot)
+
+
+def log_stale_intent(
+    intent: RuntimeIntentEnvelope,
+    *,
+    current_attempt_id: str,
+) -> None:
+    logger.warning(
+        "intent_ignored_due_to_stale_attempt",
+        extra={
+            "run_id": str(intent.run_id),
+            "intent_id": str(intent.intent_id),
+            "intent_type": intent.intent_type,
+            "intent_attempt_id": intent.attempt_id,
+            "current_attempt_id": current_attempt_id,
+        },
+    )
 
 
 def build_runtime_intent_redis_client() -> Redis:
@@ -180,6 +213,7 @@ def apply_pause_run_intent(
     intent: RuntimeIntentEnvelope,
     stream_message_id: str,
 ) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
     pause_payload = intent.payload.get("pause_payload")
     node_id = str(intent.payload.get("node_id") or "").strip()
     if not node_id:
@@ -221,6 +255,9 @@ def apply_pause_run_intent(
             return "duplicate"
 
         run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
         if run.status not in {"running", "paused"}:
             return "invalid"
 
@@ -331,6 +368,7 @@ def apply_ack_run_resumed_intent(
     intent: RuntimeIntentEnvelope,
     stream_message_id: str,
 ) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
     resolution = _payload_dict(intent.payload.get("resolution"))
     node_id = str(intent.payload.get("node_id") or "").strip()
     run: Run | None = None
@@ -341,6 +379,9 @@ def apply_ack_run_resumed_intent(
             return "duplicate"
 
         run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
         if run.status != "resume_requested":
             return "invalid"
 
@@ -403,6 +444,7 @@ def apply_node_completed_intent(
     intent: RuntimeIntentEnvelope,
     stream_message_id: str,
 ) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
     node_id = str(intent.payload.get("node_id") or "").strip()
     if not node_id:
         raise RuntimeIntentError("node_completed payload.node_id is required")
@@ -415,6 +457,9 @@ def apply_node_completed_intent(
             return "duplicate"
 
         run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
         if run.status in {"succeeded", "failed", "canceled"}:
             return "invalid"
 
@@ -426,17 +471,14 @@ def apply_node_completed_intent(
 
         _touch_run(run, event_time=intent.timestamp)
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
-        transaction.on_commit(
-            lambda: set_snapshot(
-                RunSnapshot(
-                    run_id=run.id,
-                    last_completed_node=node_id,
-                    next_node=next_node,
-                    attempt_id=intent.attempt_id or str(attempt),
-                    updated_at=intent.timestamp,
-                )
-            )
+        snapshot = RunSnapshot(
+            run_id=run.id,
+            last_completed_node=node_id,
+            next_node=next_node,
+            attempt_id=intent.attempt_id or str(attempt),
+            updated_at=intent.timestamp,
         )
+        _schedule_node_completed_snapshot(snapshot)
 
     return "processed"
 
@@ -446,6 +488,7 @@ def apply_store_checkpoint_intent(
     intent: RuntimeIntentEnvelope,
     stream_message_id: str,
 ) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
     checkpoint_node_id = str(intent.payload.get("node_id") or "").strip()
     if not checkpoint_node_id:
         raise RuntimeIntentError("store_checkpoint payload.node_id is required")
@@ -461,6 +504,9 @@ def apply_store_checkpoint_intent(
             return "duplicate"
 
         run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
         if run.status in {"succeeded", "failed", "canceled"}:
             return "invalid"
 
@@ -485,6 +531,7 @@ def apply_set_run_status_intent(
     intent: RuntimeIntentEnvelope,
     stream_message_id: str,
 ) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
     raw_status_value = str(intent.payload.get("status") or "").strip()
     if raw_status_value and raw_status_value not in RUN_STATUS_TRANSITIONS:
         raise RuntimeIntentError(
@@ -497,6 +544,9 @@ def apply_set_run_status_intent(
             return "duplicate"
 
         run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
         status_value = raw_status_value or run.status
         if raw_status_value and status_value not in RUN_STATUS_TRANSITIONS.get(
             run.status, {run.status}
@@ -557,7 +607,12 @@ def apply_set_run_status_intent(
         )
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
         if run.status in {"succeeded", "failed", "canceled"}:
-            transaction.on_commit(lambda: delete_snapshot(run.id))
+            run_id = run.id
+
+            def delete_completed_run_snapshot() -> None:
+                safe_delete_snapshot(run_id)
+
+            transaction.on_commit(delete_completed_run_snapshot)
 
     if run is not None:
         broadcast_run_updated(run)
@@ -569,6 +624,7 @@ def apply_upsert_node_run_intent(
     intent: RuntimeIntentEnvelope,
     stream_message_id: str,
 ) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
     node_id = str(intent.payload.get("node_id") or "").strip()
     node_type = str(intent.payload.get("node_type") or "").strip()
     status_value = str(intent.payload.get("status") or "").strip()
@@ -588,6 +644,11 @@ def apply_upsert_node_run_intent(
             return "duplicate"
 
         run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
+        if run.status in {"succeeded", "failed", "canceled"}:
+            return "invalid"
         node_run = _upsert_node_run(
             run=run,
             node_id=node_id,
@@ -642,6 +703,29 @@ def _load_run_for_update(run_id: UUID) -> Run:
 
 def _intent_already_processed(intent_id: UUID) -> bool:
     return ProcessedRuntimeIntent.objects.filter(intent_id=intent_id).exists()
+
+
+def _require_intent_attempt_id(intent: RuntimeIntentEnvelope) -> None:
+    if not str(intent.attempt_id or "").strip():
+        raise RuntimeIntentError(f"{intent.intent_type} intent.attempt_id is required")
+
+
+def _ignore_stale_attempt(
+    *,
+    intent: RuntimeIntentEnvelope,
+    run: Run,
+) -> IntentProcessResult | None:
+    snapshot = get_snapshot(run.id)
+    current_attempt_id = ""
+    if snapshot is not None:
+        current_attempt_id = str(snapshot.attempt_id or "").strip()
+    elif run.resume_attempt_id is not None:
+        current_attempt_id = str(run.resume_attempt_id)
+
+    if current_attempt_id and intent.attempt_id != current_attempt_id:
+        log_stale_intent(intent, current_attempt_id=current_attempt_id)
+        return "ignored"
+    return None
 
 
 def _record_processed_intent(
