@@ -47,7 +47,7 @@ services:
       REDIS_PORT: 6379
       DEBUG: ${DEBUG:-false}
       SECRET_KEY: ${SECRET_KEY:-docker-local-secret-change-me}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,testserver},backend
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
@@ -105,6 +105,7 @@ services:
       METRICS_PORT: 9090
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
+      REDIS_ADDR: redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
       CONTROL_PLANE_URL: http://backend:8000
@@ -140,7 +141,10 @@ services:
       REDIS_PORT: 6379
       DEBUG: ${DEBUG:-false}
       SECRET_KEY: ${SECRET_KEY:-docker-local-secret-change-me}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,testserver},backend
+      ENGINE_HOST: engine
+      ENGINE_PORT: 50051
+      ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:-dev_shared_secret}
       MEMORY_GRPC_HOST: 0.0.0.0
       MEMORY_GRPC_PORT: 50052
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}
@@ -149,6 +153,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; from grpc_health.v1 import health_pb2, health_pb2_grpc; channel = grpc.insecure_channel('127.0.0.1:50052'); stub = health_pb2_grpc.HealthStub(channel); response = stub.Check(health_pb2.HealthCheckRequest(service='memory'), timeout=0.5); raise SystemExit(0 if response.status == health_pb2.HealthCheckResponse.SERVING else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   frontend:
     build:

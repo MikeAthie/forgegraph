@@ -30,6 +30,7 @@ urlpatterns = [
     path("prompts/", include("adapters.api.prompts.urls")),
     path("templates/", include("adapters.api.templates.urls")),
     path("marketplace/", include("adapters.api.marketplace.urls")),
+    path("runtime-tools/", include("adapters.api.runtime_tools.urls")),
     path("onboarding/", include("adapters.api.onboarding.urls")),
     path("metrics/", include("adapters.api.metrics.urls")),
     path("runs/", include("adapters.api.runs.urls")),
