@@ -12,6 +12,8 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from redis import Redis
 
+from application.services.redis_connections import build_redis_client
+
 SNAPSHOT_KEY_PREFIX = "forgegraph:snapshot"
 logger = logging.getLogger(__name__)
 
@@ -26,11 +28,8 @@ class RunSnapshot:
 
 
 def build_run_snapshot_redis_client() -> Redis:
-    return Redis(
-        host=os.environ.get("REDIS_HOST", "localhost"),
-        port=int(os.environ.get("REDIS_PORT", "6379")),
+    return build_redis_client(
         db=int(os.environ.get("RUN_SNAPSHOT_REDIS_DB", os.environ.get("REDIS_DB", "0"))),
-        password=os.environ.get("REDIS_PASSWORD") or None,
         decode_responses=True,
     )
 
@@ -91,7 +90,7 @@ def safe_set_snapshot(
         set_snapshot(snapshot, redis_client=redis_client)
     except Exception:
         logger.error(
-            "Snapshot write failed",
+            "snapshot_write_failed",
             exc_info=True,
             extra={
                 "run_id": str(snapshot.run_id),
@@ -120,7 +119,7 @@ def safe_delete_snapshot(
         delete_snapshot(run_id, redis_client=redis_client)
     except Exception:
         logger.error(
-            "Snapshot delete failed",
+            "snapshot_delete_failed",
             exc_info=True,
             extra={"run_id": str(run_id)},
         )

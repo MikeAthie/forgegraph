@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -39,45 +40,54 @@ import (
 
 // Config holds engine configuration
 type Config struct {
-	GRPCPort                          string
-	MaxWorkers                        int
-	DefaultTimeout                    int
-	CacheTTLSeconds                   int
-	CheckpointMode                    string
-	CheckpointBatchSize               int
-	CheckpointIntervalMs              int
-	ToolManifestDir                   string
-	RedisAddr                         string
-	RedisPassword                     string
-	RedisDB                           int
-	RedisPoolSize                     int
-	RedisDialTimeoutMs                int
-	RedisReadTimeoutMs                int
-	RedisWriteTimeoutMs               int
-	TenantID                          string
-	MetricsPort                       string
-	MemoryGRPCHost                    string
-	MemoryGRPCPort                    string
-	GRPCTLSCertFile                   string
-	GRPCTLSKeyFile                    string
-	GRPCTLSClientCAFile               string
-	GRPCTLSRequireClientCert          bool
-	CallbackSecret                    string
-	CallbackURL                       string
-	ControlPlaneURL                   string
-	EventMaxRetries                   int
-	EventRetryDelayMs                 int
-	EventBufferSize                   int
-	EventSpoolPath                    string
-	EventVerbosity                    string
-	EngineInstanceID                  string
-	EngineAllowInMemoryMode           bool
-	MarketplaceManifestRefreshSeconds int
-	RuntimeMode                       string
-	LegacyToolAdapterMode             string
-	RunStateMode                      string
-	RuntimeWriteMode                  string
-	RuntimeIntentStream               string
+	GRPCPort                             string
+	MaxWorkers                           int
+	DefaultTimeout                       int
+	CacheTTLSeconds                      int
+	CheckpointMode                       string
+	CheckpointBatchSize                  int
+	CheckpointIntervalMs                 int
+	ToolManifestDir                      string
+	RedisAddr                            string
+	RedisUsername                        string
+	RedisPassword                        string
+	RedisDB                              int
+	RedisPoolSize                        int
+	RedisDialTimeoutMs                   int
+	RedisReadTimeoutMs                   int
+	RedisWriteTimeoutMs                  int
+	RedisSentinelAddrs                   string
+	RedisSentinelMasterName              string
+	RedisSentinelUsername                string
+	RedisSentinelPassword                string
+	TenantID                             string
+	MetricsPort                          string
+	MemoryGRPCHost                       string
+	MemoryGRPCPort                       string
+	GRPCTLSCertFile                      string
+	GRPCTLSKeyFile                       string
+	GRPCTLSClientCAFile                  string
+	GRPCTLSRequireClientCert             bool
+	CallbackSecret                       string
+	CallbackURL                          string
+	ControlPlaneURL                      string
+	EventMaxRetries                      int
+	EventRetryDelayMs                    int
+	EventBufferSize                      int
+	EventSpoolPath                       string
+	EventVerbosity                       string
+	EngineInstanceID                     string
+	EngineAllowInMemoryMode              bool
+	MarketplaceManifestRefreshSeconds    int
+	RuntimeMode                          string
+	LegacyToolAdapterMode                string
+	RunStateMode                         string
+	RuntimeWriteMode                     string
+	RuntimeIntentStream                  string
+	RuntimeIntentPublishInitialBackoffMs int
+	RuntimeIntentPublishMaxBackoffMs     int
+	RuntimeIntentPublishMaxElapsedTimeMs int
+	RuntimeIntentStreamMaxLen            int64
 }
 
 const (
@@ -90,45 +100,54 @@ const (
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
 	cfg := &Config{
-		GRPCPort:                          getEnv("GRPC_PORT", "50051"),
-		MaxWorkers:                        getEnvInt("MAX_WORKERS", 10),
-		DefaultTimeout:                    getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
-		CacheTTLSeconds:                   getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
-		CheckpointMode:                    strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
-		CheckpointBatchSize:               getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
-		CheckpointIntervalMs:              getEnvInt("CHECKPOINT_INTERVAL_MS", 0),
-		ToolManifestDir:                   getEnv("TOOL_MANIFEST_DIR", ""),
-		RedisAddr:                         getEnv("REDIS_ADDR", ""),
-		RedisPassword:                     getEnv("REDIS_PASSWORD", ""),
-		RedisDB:                           getEnvInt("REDIS_DB", 0),
-		RedisPoolSize:                     getEnvInt("REDIS_POOL_SIZE", 0),
-		RedisDialTimeoutMs:                getEnvInt("REDIS_DIAL_TIMEOUT_MS", 0),
-		RedisReadTimeoutMs:                getEnvInt("REDIS_READ_TIMEOUT_MS", 0),
-		RedisWriteTimeoutMs:               getEnvInt("REDIS_WRITE_TIMEOUT_MS", 0),
-		TenantID:                          getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000000"),
-		MetricsPort:                       getEnv("METRICS_PORT", "9090"),
-		MemoryGRPCHost:                    getEnv("MEMORY_GRPC_HOST", ""),
-		MemoryGRPCPort:                    getEnv("MEMORY_GRPC_PORT", ""),
-		GRPCTLSCertFile:                   getEnv("GRPC_TLS_CERT_FILE", ""),
-		GRPCTLSKeyFile:                    getEnv("GRPC_TLS_KEY_FILE", ""),
-		GRPCTLSClientCAFile:               getEnv("GRPC_TLS_CLIENT_CA_FILE", ""),
-		GRPCTLSRequireClientCert:          strings.EqualFold(getEnv("GRPC_TLS_REQUIRE_CLIENT_CERT", "false"), "true"),
-		CallbackSecret:                    getEnv("ENGINE_CALLBACK_SECRET", ""),
-		CallbackURL:                       getEnv("ENGINE_CALLBACK_URL", ""),
-		ControlPlaneURL:                   getEnv("CONTROL_PLANE_URL", ""),
-		EventMaxRetries:                   getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
-		EventRetryDelayMs:                 getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
-		EventBufferSize:                   getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
-		EventSpoolPath:                    getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
-		EventVerbosity:                    normalizeEventVerbosity(getEnv("ENGINE_EVENT_VERBOSITY", "default")),
-		EngineInstanceID:                  strings.TrimSpace(getEnv("ENGINE_INSTANCE_ID", "")),
-		EngineAllowInMemoryMode:           strings.EqualFold(getEnv("ENGINE_ALLOW_IN_MEMORY_MODE", "false"), "true"),
-		MarketplaceManifestRefreshSeconds: getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
-		RuntimeMode:                       tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
-		LegacyToolAdapterMode:             executor.NormalizeLegacyNodeAdapterMode(getEnv("ENGINE_RUNTIME_MODE", executor.LegacyNodeAdapterModeLegacy)),
-		RunStateMode:                      normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", defaultRunStateMode)),
-		RuntimeWriteMode:                  getEnv("ENGINE_RUNTIME_WRITE_MODE", usecase.RuntimeWriteModePauseIntents),
-		RuntimeIntentStream:               getEnv("ENGINE_RUNTIME_INTENT_STREAM", gateway.DefaultRuntimeIntentStream),
+		GRPCPort:                             getEnv("GRPC_PORT", "50051"),
+		MaxWorkers:                           getEnvInt("MAX_WORKERS", 10),
+		DefaultTimeout:                       getEnvInt("DEFAULT_TIMEOUT_MS", 30000),
+		CacheTTLSeconds:                      getEnvInt("CACHE_DEFAULT_TTL_SECONDS", 3600),
+		CheckpointMode:                       strings.ToLower(getEnv("CHECKPOINT_MODE", "node")),
+		CheckpointBatchSize:                  getEnvInt("CHECKPOINT_BATCH_SIZE", 10),
+		CheckpointIntervalMs:                 getEnvInt("CHECKPOINT_INTERVAL_MS", 0),
+		ToolManifestDir:                      getEnv("TOOL_MANIFEST_DIR", ""),
+		RedisAddr:                            getEnv("REDIS_ADDR", ""),
+		RedisUsername:                        getEnv("REDIS_USERNAME", ""),
+		RedisPassword:                        getEnv("REDIS_PASSWORD", ""),
+		RedisDB:                              getEnvInt("REDIS_DB", 0),
+		RedisPoolSize:                        getEnvInt("REDIS_POOL_SIZE", 0),
+		RedisDialTimeoutMs:                   getEnvInt("REDIS_DIAL_TIMEOUT_MS", 0),
+		RedisReadTimeoutMs:                   getEnvInt("REDIS_READ_TIMEOUT_MS", 0),
+		RedisWriteTimeoutMs:                  getEnvInt("REDIS_WRITE_TIMEOUT_MS", 0),
+		RedisSentinelAddrs:                   getEnv("REDIS_SENTINEL_ADDRS", ""),
+		RedisSentinelMasterName:              getEnv("REDIS_SENTINEL_MASTER_NAME", ""),
+		RedisSentinelUsername:                getEnv("REDIS_SENTINEL_USERNAME", ""),
+		RedisSentinelPassword:                getEnv("REDIS_SENTINEL_PASSWORD", ""),
+		TenantID:                             getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000000"),
+		MetricsPort:                          getEnv("METRICS_PORT", "9090"),
+		MemoryGRPCHost:                       getEnv("MEMORY_GRPC_HOST", ""),
+		MemoryGRPCPort:                       getEnv("MEMORY_GRPC_PORT", ""),
+		GRPCTLSCertFile:                      getEnv("GRPC_TLS_CERT_FILE", ""),
+		GRPCTLSKeyFile:                       getEnv("GRPC_TLS_KEY_FILE", ""),
+		GRPCTLSClientCAFile:                  getEnv("GRPC_TLS_CLIENT_CA_FILE", ""),
+		GRPCTLSRequireClientCert:             strings.EqualFold(getEnv("GRPC_TLS_REQUIRE_CLIENT_CERT", "false"), "true"),
+		CallbackSecret:                       getEnv("ENGINE_CALLBACK_SECRET", ""),
+		CallbackURL:                          getEnv("ENGINE_CALLBACK_URL", ""),
+		ControlPlaneURL:                      getEnv("CONTROL_PLANE_URL", ""),
+		EventMaxRetries:                      getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
+		EventRetryDelayMs:                    getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
+		EventBufferSize:                      getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
+		EventSpoolPath:                       getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
+		EventVerbosity:                       normalizeEventVerbosity(getEnv("ENGINE_EVENT_VERBOSITY", "default")),
+		EngineInstanceID:                     strings.TrimSpace(getEnv("ENGINE_INSTANCE_ID", "")),
+		EngineAllowInMemoryMode:              strings.EqualFold(getEnv("ENGINE_ALLOW_IN_MEMORY_MODE", "false"), "true"),
+		MarketplaceManifestRefreshSeconds:    getEnvInt("MARKETPLACE_MANIFEST_REFRESH_SECONDS", 0),
+		RuntimeMode:                          tool.NormalizeRuntimeMode(getEnv("FORGEGRAPH_RUNTIME_MODE", tool.RuntimeModeCloud)),
+		LegacyToolAdapterMode:                executor.NormalizeLegacyNodeAdapterMode(getEnv("ENGINE_RUNTIME_MODE", executor.LegacyNodeAdapterModeLegacy)),
+		RunStateMode:                         normalizeRunStateMode(getEnv("ENGINE_RUN_STATE_MODE", defaultRunStateMode)),
+		RuntimeWriteMode:                     getEnv("ENGINE_RUNTIME_WRITE_MODE", usecase.RuntimeWriteModePauseIntents),
+		RuntimeIntentStream:                  getEnv("ENGINE_RUNTIME_INTENT_STREAM", gateway.DefaultRuntimeIntentStream),
+		RuntimeIntentPublishInitialBackoffMs: getEnvInt("ENGINE_RUNTIME_INTENT_RETRY_INITIAL_BACKOFF_MS", 100),
+		RuntimeIntentPublishMaxBackoffMs:     getEnvInt("ENGINE_RUNTIME_INTENT_RETRY_MAX_BACKOFF_MS", 2000),
+		RuntimeIntentPublishMaxElapsedTimeMs: getEnvInt("ENGINE_RUNTIME_INTENT_RETRY_MAX_ELAPSED_MS", 20000),
+		RuntimeIntentStreamMaxLen:            int64(getEnvInt("ENGINE_RUNTIME_INTENT_STREAM_MAXLEN", 0)),
 	}
 	return cfg
 }
@@ -261,6 +280,78 @@ func getEnvInt(key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
+}
+
+func hasRuntimeIntentRedisConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	if strings.TrimSpace(cfg.RedisSentinelMasterName) != "" && len(parseCSVStrings(cfg.RedisSentinelAddrs)) > 0 {
+		return true
+	}
+	return strings.TrimSpace(cfg.RedisAddr) != ""
+}
+
+func runtimeIntentRedisMode(cfg *Config) string {
+	if cfg == nil {
+		return "none"
+	}
+	if strings.TrimSpace(cfg.RedisSentinelMasterName) != "" && len(parseCSVStrings(cfg.RedisSentinelAddrs)) > 0 {
+		return "sentinel"
+	}
+	if strings.TrimSpace(cfg.RedisAddr) != "" {
+		return "direct"
+	}
+	return "none"
+}
+
+func parseCSVStrings(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		values = append(values, part)
+	}
+	return values
+}
+
+func buildRuntimeIntentRedisClient(cfg *Config) (gateway.RuntimeIntentStreamClient, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("runtime intent redis config is required")
+	}
+	if strings.TrimSpace(cfg.RedisSentinelMasterName) != "" && len(parseCSVStrings(cfg.RedisSentinelAddrs)) > 0 {
+		return redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:       strings.TrimSpace(cfg.RedisSentinelMasterName),
+			SentinelAddrs:    parseCSVStrings(cfg.RedisSentinelAddrs),
+			SentinelUsername: strings.TrimSpace(cfg.RedisSentinelUsername),
+			SentinelPassword: strings.TrimSpace(cfg.RedisSentinelPassword),
+			Username:         strings.TrimSpace(cfg.RedisUsername),
+			Password:         strings.TrimSpace(cfg.RedisPassword),
+			DB:               cfg.RedisDB,
+			PoolSize:         cfg.RedisPoolSize,
+			DialTimeout:      time.Duration(cfg.RedisDialTimeoutMs) * time.Millisecond,
+			ReadTimeout:      time.Duration(cfg.RedisReadTimeoutMs) * time.Millisecond,
+			WriteTimeout:     time.Duration(cfg.RedisWriteTimeoutMs) * time.Millisecond,
+		}), nil
+	}
+	if strings.TrimSpace(cfg.RedisAddr) == "" {
+		return nil, fmt.Errorf("runtime intent redis requires REDIS_ADDR or Redis Sentinel configuration")
+	}
+	return redis.NewClient(&redis.Options{
+		Addr:         cfg.RedisAddr,
+		Username:     strings.TrimSpace(cfg.RedisUsername),
+		Password:     cfg.RedisPassword,
+		DB:           cfg.RedisDB,
+		PoolSize:     cfg.RedisPoolSize,
+		DialTimeout:  time.Duration(cfg.RedisDialTimeoutMs) * time.Millisecond,
+		ReadTimeout:  time.Duration(cfg.RedisReadTimeoutMs) * time.Millisecond,
+		WriteTimeout: time.Duration(cfg.RedisWriteTimeoutMs) * time.Millisecond,
+	}), nil
 }
 
 func resolveEventCallbackURL(cfg *Config) string {
@@ -526,6 +617,7 @@ func main() {
 	// Initialize structured logger
 	logCfg := logger.ConfigFromEnv()
 	log := logger.New(logCfg)
+	slog.SetDefault(log.Logger)
 	log.RedirectStdlib()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider())
 
@@ -543,6 +635,8 @@ func main() {
 		"checkpoint_batch_size", cfg.CheckpointBatchSize,
 		"checkpoint_interval_ms", cfg.CheckpointIntervalMs,
 		"tool_manifest_dir", cfg.ToolManifestDir,
+		"runtime_intent_redis_mode", runtimeIntentRedisMode(cfg),
+		"runtime_intent_sentinel_count", len(parseCSVStrings(cfg.RedisSentinelAddrs)),
 		"marketplace_manifest_refresh_seconds", cfg.MarketplaceManifestRefreshSeconds,
 		"runtime_mode", cfg.RuntimeMode,
 		"legacy_tool_adapter_mode", cfg.LegacyToolAdapterMode,
@@ -583,25 +677,27 @@ func main() {
 		)
 		os.Exit(1)
 	}
-	if strings.TrimSpace(cfg.RedisAddr) == "" {
+	if !hasRuntimeIntentRedisConfig(cfg) {
 		log.Error(
 			"runtime_intent_publisher_config_invalid",
-			"error", "ENGINE_RUNTIME_WRITE_MODE requires REDIS_ADDR",
+			"error", "ENGINE_RUNTIME_WRITE_MODE requires REDIS_ADDR or Redis Sentinel configuration",
 		)
 		os.Exit(1)
 	}
-	runtimeIntentClient := redis.NewClient(&redis.Options{
-		Addr:         cfg.RedisAddr,
-		Password:     cfg.RedisPassword,
-		DB:           cfg.RedisDB,
-		PoolSize:     cfg.RedisPoolSize,
-		DialTimeout:  time.Duration(cfg.RedisDialTimeoutMs) * time.Millisecond,
-		ReadTimeout:  time.Duration(cfg.RedisReadTimeoutMs) * time.Millisecond,
-		WriteTimeout: time.Duration(cfg.RedisWriteTimeoutMs) * time.Millisecond,
-	})
-	runtimeIntentPublisher, err = gateway.NewRedisRuntimeIntentPublisher(
+	runtimeIntentClient, err := buildRuntimeIntentRedisClient(cfg)
+	if err != nil {
+		log.Error("runtime_intent_publisher_config_invalid", "error", err.Error())
+		os.Exit(1)
+	}
+	runtimeIntentPublisher, err = gateway.NewRedisRuntimeIntentPublisherWithConfig(
 		runtimeIntentClient,
 		cfg.RuntimeIntentStream,
+		gateway.RuntimeIntentPublisherConfig{
+			InitialBackoff: time.Duration(cfg.RuntimeIntentPublishInitialBackoffMs) * time.Millisecond,
+			MaxBackoff:     time.Duration(cfg.RuntimeIntentPublishMaxBackoffMs) * time.Millisecond,
+			MaxElapsedTime: time.Duration(cfg.RuntimeIntentPublishMaxElapsedTimeMs) * time.Millisecond,
+			StreamMaxLen:   cfg.RuntimeIntentStreamMaxLen,
+		},
 	)
 	if err != nil {
 		log.Error("runtime_intent_publisher_init_failed", "error", err.Error())
@@ -611,6 +707,7 @@ func main() {
 		"runtime_intent_publisher_initialized",
 		"stream", cfg.RuntimeIntentStream,
 		"mode", runtimeWriteMode,
+		"redis_mode", runtimeIntentRedisMode(cfg),
 	)
 
 	switch repoDriver {

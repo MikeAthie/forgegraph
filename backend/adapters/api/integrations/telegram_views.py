@@ -40,6 +40,10 @@ from application.services.schema_validation import (
     validate_json_schema,
 )
 from application.services.telemetry import start_backend_span
+from application.services.tool_executions import (
+    ToolExecutionDispatchBlocked,
+    prepare_tool_executions_for_dispatch,
+)
 from application.services.trace_context import ensure_trace_context
 from infrastructure.crypto.encryption import decrypt_api_key
 from infrastructure.orm.models import APIKey, GraphVersion, Run, User
@@ -454,6 +458,23 @@ class TelegramWebhookView(APIView):
             error_message="",
             trace_id=trace_metadata["trace_id"],
         )
+        try:
+            prepared_graph = prepare_tool_executions_for_dispatch(
+                run=run,
+                graph_json=prepared_graph,
+            )
+        except ToolExecutionDispatchBlocked as exc:
+            run.status = "failed"
+            run.ended_at = timezone.now()
+            run.error_message = str(exc)
+            run.save(update_fields=["status", "ended_at", "error_message"])
+            return error_response(
+                code="TOOL_EXECUTION_DISPATCH_BLOCKED",
+                message=str(exc),
+                status=status.HTTP_409_CONFLICT,
+            )
+        run.dispatch_graph_json = prepared_graph
+        run.save(update_fields=["dispatch_graph_json"])
         broadcast_run_updated(run)
         record_audit_log(
             actor=owner,

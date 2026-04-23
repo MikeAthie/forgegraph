@@ -2,11 +2,13 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/forgegraph/engine/application/port"
+	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
 	"github.com/forgegraph/engine/domain/value"
 )
@@ -126,6 +128,122 @@ func TestSchedulerPauseIntentActiveModePublishesWithoutLegacyPauseWrites(t *test
 	}
 	if intent.Payload["node_id"] != "gate" {
 		t.Fatalf("expected gate node_id in pause intent, got %#v", intent.Payload["node_id"])
+	}
+}
+
+func TestSchedulerPublishesToolExecutionLifecycleIntents(t *testing.T) {
+	engine := NewTestEngine(t, 2)
+	publisher := &recordingRuntimeIntentPublisher{}
+	engine.Scheduler.SetRuntimeIntentPublisher(publisher, RuntimeWriteModeLegacySync)
+
+	engine.RegisterExecutor(string(value.NodeTypeTool), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"ok": true}), nil
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-tool-execution-lifecycle"
+	graph := entity.Graph{
+		Nodes: []entity.Node{
+			{
+				ID:   "tool_1",
+				Type: string(value.NodeTypeTool),
+				Name: "Tool",
+				Config: map[string]any{
+					"tool":              "email.send",
+					"version":           "1.0.0",
+					"tool_execution_id": "11111111-1111-1111-1111-111111111111",
+					"idempotency_key":   "idem-tool-1",
+					"side_effect_class": "idempotent",
+				},
+			},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		Edges: []entity.Edge{{From: "tool_1", To: "output"}},
+		Metadata: map[string]any{
+			"engine_contract_version": "2",
+			"backend_attempt_id":      "backend-attempt-tool-lifecycle",
+		},
+	}
+	graphJSONBytes, err := json.Marshal(graph)
+	if err != nil {
+		t.Fatalf("marshal graph: %v", err)
+	}
+
+	engine.StartRun(runID, string(graphJSONBytes), "{}")
+	engine.AwaitBlockedAttempt(runID, "tool_1", 1)
+	engine.Release(runID, "tool_1")
+	engine.AwaitBlockedAttempt(runID, "output", 1)
+	engine.Release(runID, "output")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for publisher.CountByIntentType("tool_execution_succeeded") == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if publisher.CountByIntentType("tool_execution_started") != 1 {
+		t.Fatalf("expected one tool_execution_started intent, got %d", publisher.CountByIntentType("tool_execution_started"))
+	}
+	if publisher.CountByIntentType("tool_execution_succeeded") != 1 {
+		t.Fatalf("expected one tool_execution_succeeded intent, got %d", publisher.CountByIntentType("tool_execution_succeeded"))
+	}
+	intent := publisher.LastByIntentType("tool_execution_succeeded")
+	if intent.AttemptID != "backend-attempt-tool-lifecycle" {
+		t.Fatalf("attempt_id = %q", intent.AttemptID)
+	}
+	if intent.Payload["tool_execution_id"] != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("tool_execution_id = %#v", intent.Payload["tool_execution_id"])
+	}
+	if intent.Payload["idempotency_key"] != "idem-tool-1" {
+		t.Fatalf("idempotency_key = %#v", intent.Payload["idempotency_key"])
+	}
+}
+
+func TestSchedulerBlocksAutomaticRetryForUnsafeToolExecution(t *testing.T) {
+	engine := NewTestEngine(t, 2)
+	var attempts int
+	engine.RegisterExecutor(string(value.NodeTypeTool), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		attempts++
+		return nil, domain.NewRetryableError(context.DeadlineExceeded, "retryable unsafe tool failure")
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-tool-unsafe-retry-blocked"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{
+				ID:   "tool_1",
+				Type: string(value.NodeTypeTool),
+				Name: "Tool",
+				Config: map[string]any{
+					"tool":              "email.send",
+					"version":           "1.0.0",
+					"tool_execution_id": "11111111-1111-1111-1111-111111111111",
+					"idempotency_key":   "idem-tool-1",
+					"side_effect_class": "non_idempotent",
+				},
+				RetryPolicy: &entity.RetryPolicy{MaxAttempts: 3, BackoffMs: 1, BackoffStrategy: "fixed"},
+			},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "tool_1", To: "output"}},
+	)
+
+	engine.StartRun(runID, graphJSON, "{}")
+	engine.AwaitBlockedAttempt(runID, "tool_1", 1)
+	engine.Release(runID, "tool_1")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for engine.Repo.getRunStatus(runID) != string(value.RunStatusFailed) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if attempts != 1 {
+		t.Fatalf("unsafe tool attempts = %d, want 1", attempts)
+	}
+	if status := engine.Repo.getRunStatus(runID); status != string(value.RunStatusFailed) {
+		t.Fatalf("run status = %q", status)
 	}
 }
 

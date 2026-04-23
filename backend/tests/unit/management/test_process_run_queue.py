@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import ANY
 
 import pytest
 
@@ -95,4 +96,23 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
     assert run.status == "running"
     assert entry.status == "completed"
     assert len(engine_client.start_calls) == 1
-    assert engine_client.start_calls[0]["graph_json"] == persisted_graph
+
+    graph_json = engine_client.start_calls[0]["graph_json"]
+    assert isinstance(graph_json, dict)
+
+    assert graph_json["edges"] == persisted_graph["edges"]
+    assert graph_json["nodes"] == [
+        {
+            "id": "agent_1",
+            "type": "agent",
+            "name": "Agent",
+            "config": {},
+        }
+    ]
+    assert graph_json["metadata"] == {
+        "tool_resolution": {
+            "manifest_version": 2,
+            "manifest_checksum": "pinned-checksum",
+        },
+        "backend_attempt_id": ANY,
+    }

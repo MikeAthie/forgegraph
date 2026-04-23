@@ -38,6 +38,10 @@ from application.services.run_queue import (
     release_stale_entries,
 )
 from application.services.tenancy import get_tenant_id_for_user
+from application.services.tool_executions import (
+    ToolExecutionDispatchBlocked,
+    prepare_tool_executions_for_dispatch,
+)
 from application.services.trace_context import ensure_trace_context
 from infrastructure.orm.models import RunQueueEntry
 
@@ -133,8 +137,17 @@ class Command(BaseCommand):
             except (SubgraphResolutionError, ValueError) as exc:
                 self._fail_run(entry, run, f"Invalid subgraph: {exc}")
                 return
-            run.dispatch_graph_json = prepared_graph
-            run.save(update_fields=["dispatch_graph_json"])
+
+        try:
+            prepared_graph = prepare_tool_executions_for_dispatch(
+                run=run,
+                graph_json=prepared_graph,
+            )
+        except ToolExecutionDispatchBlocked as exc:
+            self._fail_run(entry, run, f"Tool execution dispatch blocked: {exc}")
+            return
+        run.dispatch_graph_json = prepared_graph
+        run.save(update_fields=["dispatch_graph_json"])
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:

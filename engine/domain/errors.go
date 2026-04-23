@@ -58,6 +58,63 @@ type RetryableError struct {
 	Details      map[string]any
 }
 
+// AmbiguousExecutionError marks an external operation whose outcome is unknown.
+type AmbiguousExecutionError struct {
+	Err     error
+	Message string
+	Code    string
+	Details map[string]any
+}
+
+func NewAmbiguousExecutionError(err error, message string, code string, details map[string]any) *AmbiguousExecutionError {
+	copiedDetails := make(map[string]any, len(details))
+	for key, value := range details {
+		copiedDetails[key] = value
+	}
+	return &AmbiguousExecutionError{
+		Err:     err,
+		Message: message,
+		Code:    code,
+		Details: copiedDetails,
+	}
+}
+
+func (e *AmbiguousExecutionError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("%s: %v", e.Message, e.Err)
+	}
+	return e.Err.Error()
+}
+
+func (e *AmbiguousExecutionError) Unwrap() error {
+	return e.Err
+}
+
+func IsAmbiguousOutcome(err error) bool {
+	var ambiguous *AmbiguousExecutionError
+	return errors.As(err, &ambiguous)
+}
+
+func AmbiguousCodeFromError(err error) string {
+	var ambiguous *AmbiguousExecutionError
+	if errors.As(err, &ambiguous) {
+		return ambiguous.Code
+	}
+	return ""
+}
+
+func AmbiguousDetailsFromError(err error) map[string]any {
+	var ambiguous *AmbiguousExecutionError
+	if !errors.As(err, &ambiguous) || len(ambiguous.Details) == 0 {
+		return nil
+	}
+	details := make(map[string]any, len(ambiguous.Details))
+	for key, value := range ambiguous.Details {
+		details[key] = value
+	}
+	return details
+}
+
 // NewRetryableError creates a new retryable error
 func NewRetryableError(err error, message string) *RetryableError {
 	return NewRetryableErrorWithDetails(err, message, "", 0, nil)

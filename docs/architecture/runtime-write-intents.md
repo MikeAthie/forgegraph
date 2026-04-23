@@ -108,6 +108,29 @@ Operational behavior:
 - logs intent metadata for retries and discards
 - logs lag and emits warnings once lag crosses the configured threshold
 
+Progress means the durable system state moved forward or the message reached a terminal
+handling outcome:
+
+- a backend DB transaction committed
+- the stream message was ACKed after commit or terminal handling
+- the stream message was dead-lettered and the original was ACKed
+
+Polling, fetching, or reclaiming a message is activity, not progress.
+
+Dead-letter entries must include enough operator context to diagnose one run without
+reading raw Redis payloads: `run_id`, `intent_id`, `attempt_id`, `delivery_count`,
+`reason`, `error_class`, `stream_message_id`, and `timestamp`.
+
+Stream retention has two layers:
+
+- time-based trimming for acknowledged entries after normal progress
+- a conservative hard-cap pressure-relief trim that never cuts across pending or
+  undelivered consumer-group safety boundaries
+
+If an ancient pending message is still required for correctness, the hard cap may only
+trim entries that are safely behind that boundary; the consumer must eventually ACK or
+dead-letter pending messages to fully release stream pressure.
+
 ## Engine Mode
 
 Runtime writes are now intent-owned. Engine startup fails closed unless:
