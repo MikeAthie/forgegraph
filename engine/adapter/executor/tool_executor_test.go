@@ -47,13 +47,16 @@ func getResultInt(v any) int {
 func httpToolCall(def tool.Definition, config map[string]any) ResolvedToolCall {
 	d := def
 	return ResolvedToolCall{
-		Name:       def.Name,
-		Version:    def.Version,
-		Input:      map[string]any{},
-		Config:     config,
-		CallID:     "test-call-id",
-		AttemptID:  "test-attempt-id",
-		Definition: &d,
+		Name:            def.Name,
+		Version:         def.Version,
+		Input:           map[string]any{},
+		Config:          config,
+		CallID:          "test-call-id",
+		AttemptID:       "test-attempt-id",
+		ToolExecutionID: "11111111-1111-1111-1111-111111111111",
+		IdempotencyKey:  "test-idempotency-key",
+		SideEffectClass: "idempotent",
+		Definition:      &d,
 	}
 }
 
@@ -61,13 +64,16 @@ func httpToolCall(def tool.Definition, config map[string]any) ResolvedToolCall {
 func localToolCall(def tool.Definition, input map[string]any, config map[string]any, callID string) ResolvedToolCall {
 	d := def
 	return ResolvedToolCall{
-		Name:       def.Name,
-		Version:    def.Version,
-		Input:      input,
-		Config:     config,
-		CallID:     callID,
-		AttemptID:  "test-attempt-id",
-		Definition: &d,
+		Name:            def.Name,
+		Version:         def.Version,
+		Input:           input,
+		Config:          config,
+		CallID:          callID,
+		AttemptID:       "test-attempt-id",
+		ToolExecutionID: "11111111-1111-1111-1111-111111111111",
+		IdempotencyKey:  "test-idempotency-key",
+		SideEffectClass: "idempotent",
+		Definition:      &d,
 	}
 }
 
@@ -169,6 +175,120 @@ func TestToolExecutor_HTTPRetrySucceeds(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&attempts); got != 2 {
 		t.Fatalf("server attempts = %d, want 2", got)
+	}
+}
+
+func TestToolExecutor_SendsExecutionIdentityHeaders(t *testing.T) {
+	var idempotencyHeader string
+	var executionHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idempotencyHeader = r.Header.Get("Idempotency-Key")
+		executionHeader = r.Header.Get("X-ForgeGraph-Tool-Execution-ID")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	def := tool.Definition{
+		Name:    "test.http.identity",
+		Version: "1.0.0",
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
+		},
+		SideEffects: tool.SideEffectConfig{Type: "external", Idempotent: true},
+	}
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), httpToolCall(def, nil))
+	if err != nil {
+		t.Fatalf("ExecuteToolCall() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if idempotencyHeader != "test-idempotency-key" {
+		t.Fatalf("Idempotency-Key = %q", idempotencyHeader)
+	}
+	if executionHeader != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("X-ForgeGraph-Tool-Execution-ID = %q", executionHeader)
+	}
+}
+
+func TestToolExecutor_MissingExecutionIdentityDisablesAutomaticRetry(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		http.Error(w, "temporary", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	def := tool.Definition{
+		Name:    "test.http.unsafe-missing-identity",
+		Version: "1.0.0",
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
+		},
+		SideEffects: tool.SideEffectConfig{Type: "external", Idempotent: true},
+	}
+	call := httpToolCall(def, map[string]any{"retry_attempts": 3, "retry_backoff_ms": 1})
+	call.ToolExecutionID = ""
+	call.IdempotencyKey = ""
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), call)
+	if err != nil {
+		t.Fatalf("ExecuteToolCall() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatalf("expected error")
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("server attempts = %d, want 1", got)
+	}
+}
+
+func TestToolExecutor_HTTPConnectionDropAfterSendIsAmbiguous(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatalf("response writer does not support hijacking")
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Fatalf("hijack: %v", err)
+		}
+		_ = conn.Close()
+	}))
+	defer server.Close()
+
+	def := tool.Definition{
+		Name:    "test.http.ambiguous",
+		Version: "1.0.0",
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodPost,
+			},
+		},
+		SideEffects: tool.SideEffectConfig{Type: "external", Idempotent: true},
+	}
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), httpToolCall(def, nil))
+	if err != nil {
+		t.Fatalf("ExecuteToolCall() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatalf("expected ambiguous result error")
+	}
+	if !domain.IsAmbiguousOutcome(result.Error) {
+		t.Fatalf("expected ambiguous outcome, got %T: %v", result.Error, result.Error)
 	}
 }
 

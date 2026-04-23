@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "django-expert": {
+      "source": "vintasoftware/django-ai-plugins",
+      "sourceType": "github",
+      "computedHash": "48918a76e3f070c0cbd13a70324bf1c4d2cc8251f33a27055a4e432312a3ac0c"
+    },
+    "django-security": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "computedHash": "7d7a2cd3340482d1a99b5f0a5ab2929ad7a5259c81973d09e8676fb19565c624"
+    }
+  }
+}

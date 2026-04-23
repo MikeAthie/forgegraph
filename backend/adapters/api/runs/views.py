@@ -123,6 +123,10 @@ from application.services.schema_validation import (
 from application.services.structured_logging import log_event
 from application.services.telemetry import start_backend_span
 from application.services.tenancy import get_tenant_id_for_user as resolve_tenant_id_for_user
+from application.services.tool_executions import (
+    ToolExecutionDispatchBlocked,
+    prepare_tool_executions_for_dispatch,
+)
 from application.services.trace_context import ensure_trace_context
 from infrastructure.orm.models import (
     ApprovalTask,
@@ -254,6 +258,14 @@ def _run_preparation_error_response(exc: Exception) -> Response:
         code="INVALID_SUBGRAPH",
         message=str(exc),
         status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _tool_execution_dispatch_error_response(exc: Exception) -> Response:
+    return error_response(
+        code="TOOL_EXECUTION_DISPATCH_BLOCKED",
+        message=str(exc),
+        status=status.HTTP_409_CONFLICT,
     )
 
 
@@ -1578,6 +1590,19 @@ class RunStartView(APIView):
             error_message="",
             trace_id=trace_metadata["trace_id"],
         )
+        try:
+            prepared_graph = prepare_tool_executions_for_dispatch(
+                run=run,
+                graph_json=prepared_graph,
+            )
+        except ToolExecutionDispatchBlocked as exc:
+            run.status = "failed"
+            run.ended_at = timezone.now()
+            run.error_message = str(exc)
+            run.save(update_fields=["status", "ended_at", "error_message"])
+            return _tool_execution_dispatch_error_response(exc)
+        run.dispatch_graph_json = prepared_graph
+        run.save(update_fields=["dispatch_graph_json"])
         broadcast_run_updated(run)
         record_audit_log(
             actor=user,
@@ -1895,30 +1920,40 @@ class RunInvokeView(APIView):
         for key, value in input_json.items():
             seed_state[f"input.{key}"] = value
 
-        with transaction.atomic():
-            run = Run.objects.create(
-                owner=user,
-                graph_version=graph_version,
-                thread_id=thread_id,
-                status="pending",
-                started_at=timezone.now(),
-                ended_at=None,
-                input_json=input_json,
-                dispatch_graph_json=graph_json,
-                output_json=None,
-                error_message="",
-                trace_id=trace_metadata["trace_id"],
-            )
+        try:
+            with transaction.atomic():
+                run = Run.objects.create(
+                    owner=user,
+                    graph_version=graph_version,
+                    thread_id=thread_id,
+                    status="pending",
+                    started_at=timezone.now(),
+                    ended_at=None,
+                    input_json=input_json,
+                    dispatch_graph_json=graph_json,
+                    output_json=None,
+                    error_message="",
+                    trace_id=trace_metadata["trace_id"],
+                )
+                graph_json = prepare_tool_executions_for_dispatch(
+                    run=run,
+                    graph_json=graph_json,
+                )
+                run.dispatch_graph_json = graph_json
+                run.save(update_fields=["dispatch_graph_json"])
+                checkpoint_graph_json = pyjson.dumps(graph_json)
 
-            RunCheckpoint.objects.create(
-                run=run,
-                node_id="seed",
-                step_index=0,
-                state_json=seed_state,
-                completed_nodes=[],
-                skipped_nodes=[],
-                graph_json=checkpoint_graph_json,
-            )
+                RunCheckpoint.objects.create(
+                    run=run,
+                    node_id="seed",
+                    step_index=0,
+                    state_json=seed_state,
+                    completed_nodes=[],
+                    skipped_nodes=[],
+                    graph_json=checkpoint_graph_json,
+                )
+        except ToolExecutionDispatchBlocked as exc:
+            return _tool_execution_dispatch_error_response(exc)
 
         broadcast_run_updated(run)
         record_audit_log(
@@ -2200,42 +2235,52 @@ class RunReplayView(APIView):
         session_id = str(run.thread_id) if run.thread_id else None
         checkpoint_graph_json = pyjson.dumps(prepared_graph)
 
-        with transaction.atomic():
-            replay_run = Run.objects.create(
-                owner=user,
-                graph_version=graph_version,
-                thread_id=run.thread_id,
-                status="pending",
-                started_at=timezone.now(),
-                ended_at=None,
-                input_json=input_json,
-                dispatch_graph_json=prepared_graph,
-                output_json=None,
-                error_message="",
-                trace_id=trace_metadata["trace_id"],
-            )
+        try:
+            with transaction.atomic():
+                replay_run = Run.objects.create(
+                    owner=user,
+                    graph_version=graph_version,
+                    thread_id=run.thread_id,
+                    status="pending",
+                    started_at=timezone.now(),
+                    ended_at=None,
+                    input_json=input_json,
+                    dispatch_graph_json=prepared_graph,
+                    output_json=None,
+                    error_message="",
+                    trace_id=trace_metadata["trace_id"],
+                )
+                prepared_graph = prepare_tool_executions_for_dispatch(
+                    run=replay_run,
+                    graph_json=prepared_graph,
+                )
+                replay_run.dispatch_graph_json = prepared_graph
+                replay_run.save(update_fields=["dispatch_graph_json"])
+                checkpoint_graph_json = pyjson.dumps(prepared_graph)
 
-            RunCheckpoint.objects.create(
-                run=replay_run,
-                node_id=checkpoint.node_id,
-                step_index=checkpoint.step_index,
-                state_json=state_json,
-                completed_nodes=completed_nodes,
-                skipped_nodes=skipped_nodes,
-                graph_json=checkpoint_graph_json,
-            )
+                RunCheckpoint.objects.create(
+                    run=replay_run,
+                    node_id=checkpoint.node_id,
+                    step_index=checkpoint.step_index,
+                    state_json=state_json,
+                    completed_nodes=completed_nodes,
+                    skipped_nodes=skipped_nodes,
+                    graph_json=checkpoint_graph_json,
+                )
 
-            RunEvent.objects.create(
-                run=replay_run,
-                event_type="run.replay",
-                payload={
-                    "source_run_id": str(run.id),
-                    "from_node_id": node_id or None,
-                    "checkpoint_step": checkpoint.step_index,
-                },
-                trace_id=trace_metadata["trace_id"],
-                span_id=trace_metadata["span_id"],
-            )
+                RunEvent.objects.create(
+                    run=replay_run,
+                    event_type="run.replay",
+                    payload={
+                        "source_run_id": str(run.id),
+                        "from_node_id": node_id or None,
+                        "checkpoint_step": checkpoint.step_index,
+                    },
+                    trace_id=trace_metadata["trace_id"],
+                    span_id=trace_metadata["span_id"],
+                )
+        except ToolExecutionDispatchBlocked as exc:
+            return _tool_execution_dispatch_error_response(exc)
 
         broadcast_run_updated(replay_run)
         record_audit_log(

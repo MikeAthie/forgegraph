@@ -23,13 +23,16 @@ import (
 )
 
 type ResolvedToolCall struct {
-	Name       string
-	Version    string
-	Input      map[string]interface{}
-	Config     map[string]interface{}
-	AttemptID  string
-	CallID     string
-	Definition *tool.Definition
+	Name            string
+	Version         string
+	Input           map[string]interface{}
+	Config          map[string]interface{}
+	AttemptID       string
+	CallID          string
+	ToolExecutionID string
+	IdempotencyKey  string
+	SideEffectClass string
+	Definition      *tool.Definition
 }
 
 type ToolExecutor struct {
@@ -161,13 +164,16 @@ func (e *ToolExecutor) buildToolCallFromNode(node *entity.Node, attemptID string
 	}
 
 	return ResolvedToolCall{
-		Name:       def.Name,
-		Version:    def.Version,
-		Input:      input,
-		Config:     config,
-		AttemptID:  attemptID,
-		CallID:     callID,
-		Definition: def,
+		Name:            def.Name,
+		Version:         def.Version,
+		Input:           input,
+		Config:          config,
+		AttemptID:       attemptID,
+		CallID:          callID,
+		ToolExecutionID: strings.TrimSpace(node.GetConfigString("tool_execution_id")),
+		IdempotencyKey:  strings.TrimSpace(node.GetConfigString("idempotency_key")),
+		SideEffectClass: normalizeSideEffectClass(node.GetConfigString("side_effect_class")),
+		Definition:      def,
 	}, nil
 }
 
@@ -199,8 +205,8 @@ func (e *ToolExecutor) ExecuteToolCall(
 	call ResolvedToolCall,
 ) (*port.NodeExecutionResult, error) {
 
-	log.Printf("tool_execute start: tool=%s version=%s call_id=%s attempt_id=%s",
-		call.Name, call.Version, call.CallID, call.AttemptID)
+	log.Printf("tool_execute start: tool=%s version=%s call_id=%s attempt_id=%s tool_execution_id=%s side_effect_class=%s",
+		call.Name, call.Version, call.CallID, call.AttemptID, call.ToolExecutionID, call.SideEffectClass)
 
 	if call.Definition == nil {
 		return port.NewErrorResult(
@@ -209,6 +215,32 @@ func (e *ToolExecutor) ExecuteToolCall(
 	}
 
 	def := call.Definition
+	call.SideEffectClass = effectiveSideEffectClass(call.SideEffectClass, def)
+
+	if strings.TrimSpace(call.ToolExecutionID) == "" || strings.TrimSpace(call.IdempotencyKey) == "" {
+		log.Printf("tool_execution_identity_missing: tool=%s version=%s call_id=%s attempt_id=%s side_effect_class=non_idempotent",
+			call.Name, call.Version, call.CallID, call.AttemptID)
+		call.SideEffectClass = "non_idempotent"
+	}
+	if call.Config == nil {
+		call.Config = map[string]any{}
+	}
+	if boolFromAny(call.Config["skip_tool_execution"]) {
+		log.Printf("tool_execute skipped: tool=%s version=%s tool_execution_id=%s reason=backend_marked_succeeded",
+			call.Name, call.Version, call.ToolExecutionID)
+		return port.NewSuccessResult(map[string]any{
+			"tool":              call.Name,
+			"version":           call.Version,
+			"tool_execution_id": call.ToolExecutionID,
+			"idempotency_key":   call.IdempotencyKey,
+			"skipped":           true,
+			"skip_reason":       "tool_execution_already_succeeded",
+		}), nil
+	}
+	delete(call.Config, "tool_execution_id")
+	delete(call.Config, "idempotency_key")
+	delete(call.Config, "side_effect_class")
+	delete(call.Config, "skip_tool_execution")
 
 	if strings.TrimSpace(call.Name) == "" {
 		return port.NewErrorResult(
@@ -269,14 +301,16 @@ func (e *ToolExecutor) ExecuteToolCall(
 		}
 	}
 
-	// Guard: config must be initialized (backend must always send a resolved config map)
-	if call.Config == nil {
-		call.Config = map[string]any{}
-	}
-
 	payload := map[string]any{
 		"input":  call.Input,
 		"config": call.Config,
+		"execution": map[string]any{
+			"tool_execution_id": call.ToolExecutionID,
+			"idempotency_key":   call.IdempotencyKey,
+			"side_effect_class": call.SideEffectClass,
+			"attempt_id":        call.AttemptID,
+			"call_id":           call.CallID,
+		},
 	}
 
 	execType := strings.ToLower(strings.TrimSpace(def.Execution.Type))
@@ -401,7 +435,7 @@ func (e *ToolExecutor) executeHTTPTool(
 	}
 
 	timeoutMs := resolveToolTimeoutMs(toolConfig, def.Execution.TimeoutSeconds)
-	retryAttempts := resolveToolRetryAttempts(toolConfig, def)
+	retryAttempts := resolveToolRetryAttempts(toolConfig, def, call)
 	retryBackoffMs := resolveToolRetryBackoffMs(toolConfig)
 	throttleProvider := provider
 	if throttleProvider == "" {
@@ -445,12 +479,36 @@ func (e *ToolExecutor) executeHTTPTool(
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}
+		req.Header.Set("X-ForgeGraph-Tool-Execution-ID", call.ToolExecutionID)
+		req.Header.Set("X-ForgeGraph-Attempt-ID", call.AttemptID)
+		if strings.TrimSpace(call.IdempotencyKey) != "" && def.SideEffects.Idempotent {
+			req.Header.Set("Idempotency-Key", call.IdempotencyKey)
+			req.Header.Set("X-Idempotency-Key", call.IdempotencyKey)
+			log.Printf("tool_idempotency_applied: tool=%s tool_execution_id=%s idempotency_key=%s adapter=http",
+				def.Name, call.ToolExecutionID, call.IdempotencyKey)
+		} else {
+			log.Printf("tool_idempotency_not_applied: tool=%s tool_execution_id=%s supported=%t has_key=%t adapter=http",
+				def.Name, call.ToolExecutionID, def.SideEffects.Idempotent, strings.TrimSpace(call.IdempotencyKey) != "")
+		}
 
 		resp, err := e.httpClient.Do(req)
 		if err != nil {
 			cancel()
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
+			}
+			if requestMayHaveReachedUpstream(method, len(bodyBytes)) {
+				return nil, domain.NewAmbiguousExecutionError(
+					err,
+					"tool http outcome ambiguous after request send",
+					"http_request_outcome_unknown",
+					map[string]any{
+						"tool":              def.Name,
+						"tool_execution_id": call.ToolExecutionID,
+						"idempotency_key":   call.IdempotencyKey,
+						"attempt":           attempt,
+					},
+				)
 			}
 			lastErr = domain.NewRetryableErrorWithDetails(
 				err,
@@ -475,25 +533,19 @@ func (e *ToolExecutor) executeHTTPTool(
 		resp.Body.Close()
 		cancel()
 		if err != nil {
-			lastErr = domain.NewRetryableErrorWithDetails(
+			return nil, domain.NewAmbiguousExecutionError(
 				err,
-				"failed to read tool response",
-				"read_error",
-				0,
+				"tool http outcome ambiguous while reading response",
+				"http_response_read_unknown",
 				map[string]any{
-					"tool": def.Name,
+					"tool":              def.Name,
+					"tool_execution_id": call.ToolExecutionID,
+					"idempotency_key":   call.IdempotencyKey,
+					"status_code":       resp.StatusCode,
+					"attempt":           attempt,
 				},
 			)
-			if attempt < retryAttempts {
-				delayMs := computeProviderRetryDelayMs(retryBackoffMs, attempt, 0)
-				if backoffErr := sleepWithContext(ctx, delayMs); backoffErr != nil {
-					return nil, backoffErr
-				}
-				continue
-			}
-			return nil, lastErr
 		}
-
 		var parsed any
 		contentType := resp.Header.Get("Content-Type")
 		if strings.Contains(contentType, "application/json") {
@@ -547,15 +599,17 @@ func (e *ToolExecutor) executeHTTPTool(
 		}
 
 		result := map[string]any{
-			"tool":       def.Name,
-			"version":    def.Version,
-			"status":     resp.StatusCode,
-			"result":     parsed,
-			"attempts":   attempt,
-			"call_id":    call.CallID,
-			"attempt_id": call.AttemptID,
+			"tool":              def.Name,
+			"version":           def.Version,
+			"status":            resp.StatusCode,
+			"result":            parsed,
+			"attempts":          attempt,
+			"call_id":           call.CallID,
+			"attempt_id":        call.AttemptID,
+			"tool_execution_id": call.ToolExecutionID,
+			"idempotency_key":   call.IdempotencyKey,
 		}
-		log.Printf("tool_execute success: tool=%s attempts=%d call_id=%s", def.Name, attempt, call.CallID)
+		log.Printf("tool_execute success: tool=%s attempts=%d call_id=%s tool_execution_id=%s", def.Name, attempt, call.CallID, call.ToolExecutionID)
 		return result, nil
 	}
 
@@ -584,16 +638,25 @@ func (e *ToolExecutor) executeLocalTool(
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(call.IdempotencyKey) != "" && def.SideEffects.Idempotent {
+		log.Printf("tool_idempotency_applied: tool=%s tool_execution_id=%s idempotency_key=%s adapter=local",
+			def.Name, call.ToolExecutionID, call.IdempotencyKey)
+	} else {
+		log.Printf("tool_idempotency_not_applied: tool=%s tool_execution_id=%s supported=%t has_key=%t adapter=local",
+			def.Name, call.ToolExecutionID, def.SideEffects.Idempotent, strings.TrimSpace(call.IdempotencyKey) != "")
+	}
 
 	result := map[string]any{
-		"tool":       def.Name,
-		"version":    def.Version,
-		"result":     handlerResult,
-		"attempts":   1,
-		"call_id":    call.CallID,
-		"attempt_id": call.AttemptID,
+		"tool":              def.Name,
+		"version":           def.Version,
+		"result":            handlerResult,
+		"attempts":          1,
+		"call_id":           call.CallID,
+		"attempt_id":        call.AttemptID,
+		"tool_execution_id": call.ToolExecutionID,
+		"idempotency_key":   call.IdempotencyKey,
 	}
-	log.Printf("tool_execute success: tool=%s attempts=1 call_id=%s", def.Name, call.CallID)
+	log.Printf("tool_execute success: tool=%s attempts=1 call_id=%s tool_execution_id=%s", def.Name, call.CallID, call.ToolExecutionID)
 	return result, nil
 }
 
@@ -686,8 +749,14 @@ func resolveToolTimeoutMs(toolConfig map[string]any, defaultTimeoutSeconds int) 
 	return timeoutMs
 }
 
-func resolveToolRetryAttempts(toolConfig map[string]any, def *tool.Definition) int {
+func resolveToolRetryAttempts(toolConfig map[string]any, def *tool.Definition, call ResolvedToolCall) int {
 	if def != nil && !def.SideEffects.Idempotent {
+		return 1
+	}
+	if effectiveSideEffectClass(call.SideEffectClass, def) == "non_idempotent" || effectiveSideEffectClass(call.SideEffectClass, def) == "critical" {
+		return 1
+	}
+	if strings.TrimSpace(call.ToolExecutionID) == "" || strings.TrimSpace(call.IdempotencyKey) == "" {
 		return 1
 	}
 	retryAttempts := readInt(toolConfig, "retry_attempts")
@@ -695,6 +764,52 @@ func resolveToolRetryAttempts(toolConfig map[string]any, def *tool.Definition) i
 		return 1
 	}
 	return retryAttempts
+}
+
+func normalizeSideEffectClass(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "pure", "idempotent", "non_idempotent", "critical":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return ""
+	}
+}
+
+func effectiveSideEffectClass(raw string, def *tool.Definition) string {
+	normalized := normalizeSideEffectClass(raw)
+	if normalized != "" {
+		return normalized
+	}
+	if def != nil {
+		if def.SideEffects.Type == "read" {
+			return "pure"
+		}
+		if def.SideEffects.Idempotent {
+			return "idempotent"
+		}
+	}
+	return "non_idempotent"
+}
+
+func boolFromAny(raw any) bool {
+	switch typed := raw.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true") || strings.TrimSpace(typed) == "1"
+	default:
+		return false
+	}
+}
+
+func requestMayHaveReachedUpstream(method string, bodyLen int) bool {
+	normalized := strings.ToUpper(strings.TrimSpace(method))
+	switch normalized {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return bodyLen > 0
+	}
 }
 
 func resolveToolRetryBackoffMs(toolConfig map[string]any) int {

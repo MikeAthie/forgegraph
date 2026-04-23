@@ -1014,6 +1014,62 @@ class ProcessedRuntimeIntent(models.Model):
         return f"ProcessedRuntimeIntent {self.intent_type} {self.intent_id}"
 
 
+class ToolExecution(models.Model):
+    """Backend-owned execution identity for one logical external tool operation."""
+
+    SIDE_EFFECT_CLASS_CHOICES = [
+        ("pure", "Pure"),
+        ("idempotent", "Idempotent"),
+        ("non_idempotent", "Non-Idempotent"),
+        ("critical", "Critical"),
+    ]
+    STATUS_CHOICES = [
+        ("planned", "Planned"),
+        ("in_progress", "In Progress"),
+        ("succeeded", "Succeeded"),
+        ("failed", "Failed"),
+        ("ambiguous", "Ambiguous"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="tool_executions",
+    )
+    node_id = models.CharField(max_length=255)
+    attempt_id = models.CharField(max_length=64)
+    tool_name = models.CharField(max_length=128)
+    tool_version = models.CharField(max_length=64, blank=True, default="")
+    idempotency_key = models.CharField(max_length=128)
+    side_effect_class = models.CharField(
+        max_length=32,
+        choices=SIDE_EFFECT_CLASS_CHOICES,
+        default="non_idempotent",
+    )
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="planned")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tool_executions"
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "node_id", "attempt_id"],
+                name="tool_exec_run_node_attempt_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "status"], name="tool_exec_run_status_idx"),
+            models.Index(fields=["idempotency_key"], name="tool_exec_idem_key_idx"),
+            models.Index(fields=["tool_name", "tool_version"], name="tool_exec_tool_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ToolExecution {self.id} {self.tool_name}@{self.tool_version} - {self.status}"
+
+
 class RunEventProjection(models.Model):
     """Event-derived shadow state for validating run reconstruction completeness."""
 

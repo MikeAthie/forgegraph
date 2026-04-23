@@ -456,6 +456,11 @@ func (s *Scheduler) StartRun(
 		if rawVersion, ok := graph.Metadata["engine_contract_version"].(string); ok {
 			engineContractVersion = strings.TrimSpace(rawVersion)
 		}
+		if checkpoint == nil {
+			if rawAttemptID, ok := graph.Metadata["backend_attempt_id"].(string); ok && strings.TrimSpace(rawAttemptID) != "" {
+				currentAttemptID = strings.TrimSpace(rawAttemptID)
+			}
+		}
 	}
 	if engineContractVersion != "" && engineContractVersion != "2" {
 		return fmt.Errorf("unsupported engine_contract_version: %s", engineContractVersion)
@@ -833,6 +838,12 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	if err := s.repository.CreateNodeRun(nodeCtx, nodeRun); err != nil {
 		log.Printf("Failed to create node run: %v", err)
 	}
+	if node.Type == string(value.NodeTypeTool) {
+		if err := s.publishToolExecutionStatusIntent(rc.intentContext(context.Background()), rc, node, "tool_execution_started", "", nil); err != nil {
+			s.setError(rc, fmt.Errorf("failed to publish tool_execution_started intent: %w", err))
+			return
+		}
+	}
 
 	// Emit node started
 	s.emitter.EmitAsync(
@@ -1008,6 +1019,10 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 
 		lastErr = err
 
+		if node.Type == string(value.NodeTypeTool) && !toolNodeAllowsSchedulerRetry(node) {
+			return nil, err
+		}
+
 		// Check if error is retryable
 		if !domain.IsRetryable(err) {
 			return nil, err
@@ -1040,6 +1055,23 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 }
 
 func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, err error, durationMs int64) bool {
+	if node.Type == string(value.NodeTypeTool) {
+		intentType := "tool_execution_failed"
+		if domain.IsAmbiguousOutcome(err) {
+			intentType = "tool_execution_ambiguous"
+		}
+		if publishErr := s.publishToolExecutionStatusIntent(
+			rc.intentContext(context.Background()),
+			rc,
+			node,
+			intentType,
+			err.Error(),
+			err,
+		); publishErr != nil {
+			s.setError(rc, fmt.Errorf("failed to publish %s intent: %w", intentType, publishErr))
+			return false
+		}
+	}
 	onError := parseOnErrorPolicy(node)
 	retryPolicy := s.resolveRetryPolicy(node)
 
@@ -1240,6 +1272,19 @@ func extractNextNodesFromOutput(output any) ([]string, bool, error) {
 
 func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, result *port.NodeExecutionResult, durationMs int64) {
 	nodeID := node.ID
+	if node.Type == string(value.NodeTypeTool) {
+		if err := s.publishToolExecutionStatusIntent(
+			rc.intentContext(context.Background()),
+			rc,
+			node,
+			"tool_execution_succeeded",
+			"",
+			nil,
+		); err != nil {
+			s.setError(rc, fmt.Errorf("failed to publish tool_execution_succeeded intent: %w", err))
+			return
+		}
+	}
 
 	// Allow any node to emit routing directives via output.next_nodes / output.next_node
 	if !result.HasNextNodes() {
@@ -1511,6 +1556,62 @@ func (s *Scheduler) publishNodeCompletedIntent(
 			"next_node": nextNode,
 		},
 	}
+	return s.runtimeIntentPublisher.Publish(ctx, intent)
+}
+
+func (s *Scheduler) publishToolExecutionStatusIntent(
+	ctx context.Context,
+	rc *runContext,
+	node *entity.Node,
+	intentType string,
+	reason string,
+	execErr error,
+) error {
+	if s.runtimeIntentPublisher == nil || node == nil {
+		return nil
+	}
+	toolExecutionID := strings.TrimSpace(node.GetConfigString("tool_execution_id"))
+	idempotencyKey := strings.TrimSpace(node.GetConfigString("idempotency_key"))
+	sideEffectClass := strings.TrimSpace(node.GetConfigString("side_effect_class"))
+	if toolExecutionID == "" {
+		log.Printf("tool_execution_identity_missing: run_id=%s node_id=%s intent_type=%s", rc.runID, node.ID, intentType)
+		return nil
+	}
+	payload := map[string]any{
+		"tool_execution_id": toolExecutionID,
+		"node_id":           node.ID,
+		"tool_name":         strings.TrimSpace(node.GetConfigString("tool")),
+		"tool_version":      strings.TrimSpace(node.GetConfigString("version")),
+		"idempotency_key":   idempotencyKey,
+		"side_effect_class": sideEffectClass,
+		"reason":            reason,
+	}
+	if payload["tool_name"] == "" {
+		payload["tool_name"] = strings.TrimSpace(node.GetConfigString("tool_name"))
+	}
+	if strings.TrimSpace(idempotencyKey) != "" {
+		payload["idempotency_applied"] = true
+	}
+	if execErr != nil {
+		payload["error_class"] = fmt.Sprintf("%T", execErr)
+		if domain.IsAmbiguousOutcome(execErr) {
+			payload["ambiguous_code"] = domain.AmbiguousCodeFromError(execErr)
+			if details := domain.AmbiguousDetailsFromError(execErr); len(details) > 0 {
+				payload["ambiguous_details"] = details
+			}
+		}
+	}
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   uuid.NewString(),
+		IntentType: intentType,
+		RunID:      rc.runID,
+		AttemptID:  rc.attemptID,
+		TraceID:    rc.traceID,
+		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
+		Payload:    payload,
+	}
+	log.Printf("tool_execution_intent_publish: run_id=%s node_id=%s tool_execution_id=%s intent_type=%s idempotency_key=%s",
+		rc.runID, node.ID, toolExecutionID, intentType, idempotencyKey)
 	return s.runtimeIntentPublisher.Publish(ctx, intent)
 }
 
@@ -3170,6 +3271,25 @@ func (s *Scheduler) resolveRetryPolicy(node *entity.Node) *entity.RetryPolicy {
 		base.BackoffStrategy = "exponential"
 	}
 	return base
+}
+
+func toolNodeAllowsSchedulerRetry(node *entity.Node) bool {
+	if node == nil {
+		return false
+	}
+	sideEffectClass := strings.ToLower(strings.TrimSpace(node.GetConfigString("side_effect_class")))
+	switch sideEffectClass {
+	case "pure", "idempotent":
+	default:
+		log.Printf("tool_retry_blocked_unsafe: node_id=%s side_effect_class=%s reason=unsafe_or_missing_contract", node.ID, sideEffectClass)
+		return false
+	}
+	if strings.TrimSpace(node.GetConfigString("tool_execution_id")) == "" ||
+		strings.TrimSpace(node.GetConfigString("idempotency_key")) == "" {
+		log.Printf("tool_retry_blocked_unsafe: node_id=%s side_effect_class=%s reason=missing_execution_identity", node.ID, sideEffectClass)
+		return false
+	}
+	return true
 }
 
 func parseOnErrorPolicy(node *entity.Node) onErrorPolicy {

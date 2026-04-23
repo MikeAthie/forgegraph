@@ -78,6 +78,28 @@ var (
 		},
 		[]string{"operation"},
 	)
+	runtimeIntentPublishTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "forgegraph_runtime_intent_publish_total",
+			Help: "Total runtime intent publish attempts by result and intent type.",
+		},
+		[]string{"result", "intent_type"},
+	)
+	runtimeIntentPublishRetries = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "forgegraph_runtime_intent_publish_retries_total",
+			Help: "Total runtime intent publish retries by intent type.",
+		},
+		[]string{"intent_type"},
+	)
+	runtimeIntentPublishLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "forgegraph_runtime_intent_publish_latency_seconds",
+			Help:    "Runtime intent publish latency.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"intent_type"},
+	)
 )
 
 func init() {
@@ -92,6 +114,9 @@ func init() {
 		summarizationCostTotal,
 		preloadOpsTotal,
 		preloadLatency,
+		runtimeIntentPublishTotal,
+		runtimeIntentPublishRetries,
+		runtimeIntentPublishLatency,
 	)
 	redisCircuitState.WithLabelValues("open").Set(0)
 	redisCircuitState.WithLabelValues("closed").Set(1)
@@ -165,4 +190,24 @@ func RecordPreloadOperation(operation string, status string, duration time.Durat
 	}
 	preloadOpsTotal.WithLabelValues(operation, status).Inc()
 	preloadLatency.WithLabelValues(operation).Observe(duration.Seconds())
+}
+
+// RecordRuntimeIntentPublish tracks runtime intent publishing outcomes.
+func RecordRuntimeIntentPublish(intentType string, result string, duration time.Duration) {
+	if intentType == "" {
+		intentType = "unknown"
+	}
+	if result == "" {
+		result = "success"
+	}
+	runtimeIntentPublishTotal.WithLabelValues(result, intentType).Inc()
+	runtimeIntentPublishLatency.WithLabelValues(intentType).Observe(duration.Seconds())
+}
+
+// RecordRuntimeIntentPublishRetry increments runtime intent retry metrics.
+func RecordRuntimeIntentPublishRetry(intentType string) {
+	if intentType == "" {
+		intentType = "unknown"
+	}
+	runtimeIntentPublishRetries.WithLabelValues(intentType).Inc()
 }

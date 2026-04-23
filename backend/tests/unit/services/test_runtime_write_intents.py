@@ -600,7 +600,7 @@ def test_apply_node_completed_intent_snapshot_write_failure_does_not_break_commi
     assert get_snapshot(run.id) is None
     set_snapshot_mock.assert_called_once()
     logger_mock.error.assert_called_once()
-    assert logger_mock.error.call_args.args[0] == "Snapshot write failed"
+    assert logger_mock.error.call_args.args[0] == "snapshot_write_failed"
     assert logger_mock.error.call_args.kwargs["extra"] == {
         "run_id": str(run.id),
         "node_id": "node_redis_failure",

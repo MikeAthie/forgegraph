@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 from uuid import UUID
 
 from django.db import transaction
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from redis import Redis
 
@@ -19,6 +20,7 @@ from adapters.ws.runs.broadcast import (
     broadcast_run_updated,
 )
 from application.services.redaction import redact_payload
+from application.services.redis_connections import build_redis_client
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
 from application.services.run_snapshots import (
     RunSnapshot,
@@ -26,6 +28,7 @@ from application.services.run_snapshots import (
     safe_delete_snapshot,
     safe_set_snapshot,
 )
+from application.services.tool_executions import transition_tool_execution
 from infrastructure.orm.models import (
     ApprovalTask,
     NodeRun,
@@ -35,6 +38,7 @@ from infrastructure.orm.models import (
     RunCheckpoint,
     RunEvent,
     RunEventProjection,
+    ToolExecution,
 )
 
 RUNTIME_INTENT_STREAM = (
@@ -51,6 +55,13 @@ RUNTIME_INTENT_CONSUMER_GROUP = (
     ).strip()
     or "backend-runtime-writers"
 )
+RUNTIME_INTENT_DEAD_LETTER_STREAM = (
+    os.environ.get(
+        "FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM",
+        "forgegraph:runtime:intents:dead",
+    ).strip()
+    or "forgegraph:runtime:intents:dead"
+)
 
 SUPPORTED_RUNTIME_INTENTS = {
     "pause_run",
@@ -58,6 +69,10 @@ SUPPORTED_RUNTIME_INTENTS = {
     "node_completed",
     "store_checkpoint",
     "set_run_status",
+    "tool_execution_started",
+    "tool_execution_succeeded",
+    "tool_execution_failed",
+    "tool_execution_ambiguous",
     "upsert_node_run",
 }
 
@@ -118,11 +133,8 @@ def log_stale_intent(
 
 
 def build_runtime_intent_redis_client() -> Redis:
-    return Redis(
-        host=os.environ.get("REDIS_HOST", "localhost"),
-        port=int(os.environ.get("REDIS_PORT", "6379")),
+    return build_redis_client(
         db=int(os.environ.get("RUNTIME_INTENT_REDIS_DB", os.environ.get("REDIS_DB", "0"))),
-        password=os.environ.get("REDIS_PASSWORD") or None,
         decode_responses=True,
     )
 
@@ -203,6 +215,11 @@ def process_runtime_intent_message(
         return apply_store_checkpoint_intent(intent=intent, stream_message_id=stream_message_id)
     if intent.intent_type == "set_run_status":
         return apply_set_run_status_intent(intent=intent, stream_message_id=stream_message_id)
+    if intent.intent_type.startswith("tool_execution_"):
+        return apply_tool_execution_status_intent(
+            intent=intent,
+            stream_message_id=stream_message_id,
+        )
     if intent.intent_type == "upsert_node_run":
         return apply_upsert_node_run_intent(intent=intent, stream_message_id=stream_message_id)
     raise RuntimeIntentError(f"unsupported runtime intent type: {intent.intent_type}")
@@ -619,6 +636,90 @@ def apply_set_run_status_intent(
     return "processed"
 
 
+def apply_tool_execution_status_intent(
+    *,
+    intent: RuntimeIntentEnvelope,
+    stream_message_id: str,
+) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
+    status_by_intent_type = {
+        "tool_execution_started": "in_progress",
+        "tool_execution_succeeded": "succeeded",
+        "tool_execution_failed": "failed",
+        "tool_execution_ambiguous": "ambiguous",
+    }
+    next_status = status_by_intent_type.get(intent.intent_type)
+    if next_status is None:
+        raise RuntimeIntentError(f"unsupported tool execution intent type: {intent.intent_type}")
+
+    try:
+        tool_execution_id = UUID(str(intent.payload.get("tool_execution_id") or "").strip())
+    except ValueError as exc:
+        raise RuntimeIntentError("tool execution payload.tool_execution_id must be a UUID") from exc
+
+    run: Run | None = None
+    with transaction.atomic():
+        if _intent_already_processed(intent.intent_id):
+            return "duplicate"
+
+        run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
+
+        tool_execution = (
+            ToolExecution.objects.select_for_update()
+            .filter(
+                id=tool_execution_id,
+                run=run,
+            )
+            .first()
+        )
+        if tool_execution is None:
+            raise RuntimeIntentError("tool execution record not found for run")
+        if tool_execution.attempt_id != intent.attempt_id:
+            raise RuntimeIntentError("tool execution attempt_id does not match intent.attempt_id")
+
+        transition_tool_execution(tool_execution=tool_execution, status=next_status)
+        _touch_run(run, event_time=intent.timestamp)
+        _create_run_event(
+            run=run,
+            event_type=f"tool_execution.{next_status}",
+            external_id=str(intent.intent_id),
+            trace_id=run.trace_id,
+            payload={
+                "tool_execution_id": str(tool_execution.id),
+                "node_id": tool_execution.node_id,
+                "attempt_id": tool_execution.attempt_id,
+                "tool_name": tool_execution.tool_name,
+                "tool_version": tool_execution.tool_version,
+                "idempotency_key": tool_execution.idempotency_key,
+                "side_effect_class": tool_execution.side_effect_class,
+                "status": next_status,
+                "reason": str(intent.payload.get("reason") or "").strip(),
+                "error_class": str(intent.payload.get("error_class") or "").strip(),
+                "idempotency_applied": bool(intent.payload.get("idempotency_applied")),
+                "category": "state",
+            },
+        )
+        if next_status == "ambiguous" and run.status not in {"succeeded", "failed", "canceled"}:
+            _update_run_fields(
+                run,
+                status="failed",
+                ended_at=intent.timestamp,
+                error_message=(
+                    "Tool execution outcome is ambiguous; automatic retry blocked. "
+                    f"tool_execution_id={tool_execution.id}"
+                ),
+                event_time=intent.timestamp,
+            )
+        _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
+
+    if run is not None:
+        broadcast_run_updated(run)
+    return "processed"
+
+
 def apply_upsert_node_run_intent(
     *,
     intent: RuntimeIntentEnvelope,
@@ -699,6 +800,76 @@ def _load_run_for_update(run_id: UUID) -> Run:
         return Run.objects.select_for_update().select_related("owner").get(id=run_id)
     except Run.DoesNotExist as exc:
         raise RuntimeIntentError(f"run '{run_id}' not found") from exc
+
+
+def mark_run_transport_failure(
+    *,
+    run_id: UUID | str | None,
+    stream_message_id: str,
+    reason: str,
+    event_time: datetime | None = None,
+    dead_letter_stream: str = RUNTIME_INTENT_DEAD_LETTER_STREAM,
+    intent_id: str = "",
+    intent_type: str = "",
+) -> bool:
+    raw_run_id = str(run_id or "").strip()
+    if not raw_run_id:
+        return False
+
+    try:
+        parsed_run_id = UUID(raw_run_id)
+    except ValueError:
+        return False
+
+    effective_event_time = event_time or timezone.now()
+    try:
+        with transaction.atomic():
+            run = _load_run_for_update(parsed_run_id)
+            is_terminal = run.status in {"succeeded", "failed", "canceled"}
+            next_status = run.status if is_terminal else "failed"
+            transport_error_message = (
+                "Runtime intent transport dead-lettered an intent. "
+                f"message_id={stream_message_id}. "
+                f"intent_id={intent_id or 'unknown'}. "
+                f"intent_type={intent_type or 'unknown'}. "
+                f"reason={reason}."
+            )
+            _update_run_fields(
+                run,
+                status=next_status,
+                ended_at=effective_event_time
+                if next_status == "failed" and not is_terminal
+                else _UNSET,
+                error_message=transport_error_message if not is_terminal else _UNSET,
+                resume_requested_at=None if run.resume_requested_at is not None else _UNSET,
+                resume_attempt_id=None if run.resume_attempt_id is not None else _UNSET,
+                event_time=effective_event_time,
+            )
+            run.recovery_state = "transport_dead_lettered"
+            run.recovery_reason = "transport_dead_lettered"
+            run.save(update_fields=["recovery_state", "recovery_reason"])
+            _create_run_event(
+                run=run,
+                event_type="run.updated",
+                external_id=intent_id or stream_message_id,
+                trace_id=run.trace_id,
+                payload={
+                    "status": run.status,
+                    "error_message": transport_error_message,
+                    "recovery_state": "transport_dead_lettered",
+                    "recovery_reason": "transport_dead_lettered",
+                    "stream_message_id": stream_message_id,
+                    "dead_letter_stream": dead_letter_stream,
+                    "intent_id": intent_id or None,
+                    "intent_type": intent_type or None,
+                    "category": "state",
+                },
+            )
+    except RuntimeIntentError:
+        return False
+
+    broadcast_run_updated(run)
+    return True
 
 
 def _intent_already_processed(intent_id: UUID) -> bool:
