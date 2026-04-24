@@ -40,7 +40,7 @@ def login_user(session: requests.Session, email: str, password: str) -> str:
     payload = response.json()
     assert "access" in payload and payload["access"]
     assert "refresh" not in payload
-    assert len(session.cookies) >= 1
+    assert session.cookies.get("refresh_token")
     return payload["access"]
 
 

@@ -21,12 +21,13 @@ from adapters.ws.runs.broadcast import (
 )
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
+from application.services.metrics import record_stale_attempt_ignored
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
 from application.services.run_snapshots import (
     RunSnapshot,
-    get_snapshot,
+    delete_snapshot,
     safe_delete_snapshot,
-    safe_set_snapshot,
+    set_snapshot,
 )
 from application.services.tool_executions import transition_tool_execution
 from infrastructure.orm.models import (
@@ -106,13 +107,41 @@ class RuntimeIntentEnvelope:
     payload: dict[str, Any]
 
 
-def _schedule_node_completed_snapshot(snapshot: RunSnapshot) -> None:
-    """Advance the resume snapshot only for a committed node_completed boundary."""
+def _schedule_node_completed_boundary(
+    *,
+    intent: RuntimeIntentEnvelope,
+    snapshot: RunSnapshot,
+    event_time: datetime,
+    stream_message_id: str,
+) -> None:
+    """Finalize the node_completed boundary only after commit and snapshot durability."""
 
-    def set_node_completed_snapshot() -> None:
-        safe_set_snapshot(snapshot)
+    def finalize_node_completed_boundary() -> None:
+        set_snapshot(snapshot)
+        try:
+            with transaction.atomic():
+                if _intent_already_processed(intent.intent_id):
+                    return
 
-    transaction.on_commit(set_node_completed_snapshot)
+                run = _load_run_for_update(intent.run_id)
+                _touch_run(run, event_time=event_time)
+                _record_processed_intent(
+                    intent=intent,
+                    run=run,
+                    stream_message_id=stream_message_id,
+                )
+        except Exception:
+            try:
+                delete_snapshot(snapshot.run_id)
+            except Exception:
+                logger.warning(
+                    "node_completed_snapshot_compensation_failed",
+                    exc_info=True,
+                    extra={"run_id": str(snapshot.run_id), "intent_id": str(intent.intent_id)},
+                )
+            raise
+
+    transaction.on_commit(finalize_node_completed_boundary)
 
 
 def log_stale_intent(
@@ -127,6 +156,7 @@ def log_stale_intent(
             "intent_id": str(intent.intent_id),
             "intent_type": intent.intent_type,
             "intent_attempt_id": intent.attempt_id,
+            "active_attempt_id": current_attempt_id,
             "current_attempt_id": current_attempt_id,
         },
     )
@@ -486,8 +516,6 @@ def apply_node_completed_intent(
         if node_run.status not in {"succeeded", "failed"}:
             return "invalid"
 
-        _touch_run(run, event_time=intent.timestamp)
-        _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
         snapshot = RunSnapshot(
             run_id=run.id,
             last_completed_node=node_id,
@@ -495,7 +523,12 @@ def apply_node_completed_intent(
             attempt_id=intent.attempt_id or str(attempt),
             updated_at=intent.timestamp,
         )
-        _schedule_node_completed_snapshot(snapshot)
+        _schedule_node_completed_boundary(
+            intent=intent,
+            snapshot=snapshot,
+            event_time=intent.timestamp,
+            stream_message_id=stream_message_id,
+        )
 
     return "processed"
 
@@ -886,14 +919,10 @@ def _ignore_stale_attempt(
     intent: RuntimeIntentEnvelope,
     run: Run,
 ) -> IntentProcessResult | None:
-    snapshot = get_snapshot(run.id)
-    current_attempt_id = ""
-    if snapshot is not None:
-        current_attempt_id = str(snapshot.attempt_id or "").strip()
-    elif run.resume_attempt_id is not None:
-        current_attempt_id = str(run.resume_attempt_id)
+    current_attempt_id = run.active_attempt_id
 
     if current_attempt_id and intent.attempt_id != current_attempt_id:
+        record_stale_attempt_ignored("runtime_intent")
         log_stale_intent(intent, current_attempt_id=current_attempt_id)
         return "ignored"
     return None

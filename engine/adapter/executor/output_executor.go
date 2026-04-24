@@ -3,6 +3,7 @@ package executor
 
 import (
 	"context"
+	"strings"
 
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain/entity"
@@ -39,7 +40,7 @@ func (e *OutputExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	if mapping, ok := node.Config["output_mapping"].(map[string]any); ok {
 		for key, pathVal := range mapping {
 			if path, ok := pathVal.(string); ok {
-				if val, exists := state.Get(path); exists {
+				if val, exists := resolveOutputPath(state, path); exists {
 					output[key] = val
 				}
 			}
@@ -81,4 +82,28 @@ func (e *OutputExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	return port.NewSuccessResult(output), nil
+}
+
+func resolveOutputPath(state *entity.State, path string) (any, bool) {
+	if val, exists := state.Get(path); exists {
+		return val, true
+	}
+
+	current := any(state.SnapshotNested())
+	for _, part := range strings.Split(path, ".") {
+		if part == "" {
+			continue
+		}
+		nextMap, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		next, exists := nextMap[part]
+		if !exists {
+			return nil, false
+		}
+		current = next
+	}
+
+	return current, true
 }

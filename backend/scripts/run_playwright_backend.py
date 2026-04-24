@@ -58,6 +58,17 @@ def main() -> int:
 
     env.setdefault("MEMORY_GRPC_HOST", "127.0.0.1")
     env.setdefault("MEMORY_GRPC_PORT", "50052")
+    env["REDIS_HOST"] = env.get("PLAYWRIGHT_REDIS_HOST", "127.0.0.1")
+    env["REDIS_PORT"] = env.get("PLAYWRIGHT_REDIS_PORT", "6379")
+    env["REDIS_ADDR"] = f"{env['REDIS_HOST']}:{env['REDIS_PORT']}"
+    for key in (
+        "REDIS_SENTINEL_ADDRS",
+        "REDIS_SENTINELS",
+        "REDIS_SENTINEL_MASTER_NAME",
+        "REDIS_SENTINEL_USERNAME",
+        "REDIS_SENTINEL_PASSWORD",
+    ):
+        env[key] = ""
 
     run_step(
         [sys.executable, "manage.py", "migrate", "--noinput", "--verbosity", "0"],
@@ -92,6 +103,18 @@ def main() -> int:
         env=env,
         text=True,
     )
+    runtime_intent_process = subprocess.Popen(
+        [
+            sys.executable,
+            "manage.py",
+            "process_runtime_write_intents",
+            "--consumer",
+            "playwright-runtime-intents",
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+    )
     runserver_process = subprocess.Popen(
         [
             sys.executable,
@@ -110,6 +133,7 @@ def main() -> int:
 
     def handle_shutdown(signum: int, _frame: object) -> None:
         terminate_process(runserver_process)
+        terminate_process(runtime_intent_process)
         terminate_process(grpc_process)
         raise SystemExit(128 + signum)
 
@@ -121,6 +145,7 @@ def main() -> int:
         return runserver_exit
     finally:
         terminate_process(runserver_process)
+        terminate_process(runtime_intent_process)
         terminate_process(grpc_process)
 
 

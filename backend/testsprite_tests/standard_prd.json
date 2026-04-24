@@ -17,26 +17,26 @@
       "name": "Authentication and Identity",
       "description": "User registration, login/logout, token refresh, profile lookup, and SSO provider metadata for ForgeGraph control plane access.",
       "user_flows": [
-        "POST /api/auth/register with {email,password} -> Receive 200 with user and token payload -> POST /api/auth/login with same credentials -> Receive 200 with access and refresh tokens -> GET /api/auth/me with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 with user profile -> POST /api/auth/refresh with refresh_token -> Receive 200 with refreshed access token -> POST /api/auth/logout with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 logout confirmation",
+        "POST /api/auth/register with {email,password} -> Receive 201 with a top-level user payload and no tokens -> POST /api/auth/login with same credentials -> Receive 200 with an access token in JSON and refresh_token as an HttpOnly cookie -> GET /api/auth/me with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 with user profile -> POST /api/auth/refresh using the refresh cookie -> Receive 200 with refreshed access token -> POST /api/auth/logout with Authorization: Bearer <ACCESS_TOKEN> -> Receive 204 and clear the refresh cookie",
         "GET /api/auth/sso/provider -> Receive 200 with SSO provider metadata",
-        "POST /api/auth/login with invalid credentials -> Receive 401 Authentication failed -> GET /api/auth/me without Authorization header -> Receive 401 -> POST /api/auth/refresh with invalid refresh token -> Receive 401 Invalid refresh token"
+        "POST /api/auth/login with invalid credentials -> Receive 401 Authentication failed -> GET /api/auth/me without Authorization header -> Receive 401 -> POST /api/auth/refresh with missing refresh cookie may receive 400 -> POST /api/auth/refresh with invalid refresh token -> Receive 401 Invalid refresh token"
       ]
     },
     {
       "name": "Graph Authoring and Validation",
       "description": "Create, validate, version, fetch and import external workflow graphs using the GraphValidator and stable Graph JSON contracts.",
       "user_flows": [
-        "POST /api/graphs/validate with Authorization: Bearer <ACCESS_TOKEN> and body {graph} -> Receive 200 validation result (valid) -> POST /api/graphs with Authorization: Bearer <ACCESS_TOKEN> and body {name,nodes,edges} -> Receive 200 graph detail with id -> GET /api/graphs with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 graph list including new graph -> GET /api/graphs/{graph_id} with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 graph detail -> POST /api/graphs/external-workflows with Authorization: Bearer <ACCESS_TOKEN> and Idempotency-Key header -> Receive 200 imported workflow result",
-        "POST /api/graphs/validate with Authorization: Bearer <ACCESS_TOKEN> and invalid graph payload -> Receive 400 Invalid graph -> POST /api/graphs with Authorization: Bearer <ACCESS_TOKEN> and invalid payload -> Receive 400 Validation error -> GET /api/graphs/{nonexistent_id} with Authorization: Bearer <ACCESS_TOKEN> -> Receive 404 Graph not found"
+        "POST /api/graphs/validate with Authorization: Bearer <ACCESS_TOKEN> and body {graph_json,strict?} -> Receive 200 validation result -> POST /api/graphs/ with Authorization: Bearer <ACCESS_TOKEN> and body {name,description?} -> Receive 201 data-wrapped graph metadata with version_count=0 and latest_version=null -> POST /api/graphs/{graph_id}/versions with {graph_json} -> Receive 201 data-wrapped graph version -> GET /api/graphs/ with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 graph list including new graph",
+        "POST /api/graphs/validate with Authorization: Bearer <ACCESS_TOKEN> and invalid semantic graph payload -> Receive 200 validation result with data.valid=false -> POST /api/graphs/ with Authorization: Bearer <ACCESS_TOKEN> and invalid payload -> Receive 400 Validation error -> GET /api/graphs/{nonexistent_id} with Authorization: Bearer <ACCESS_TOKEN> -> Receive 404 Graph not found"
       ]
     },
     {
       "name": "Run Lifecycle and Engine Coordination",
       "description": "Start and manage workflow runs, stream and inspect run events, resume/replay/cancel runs, and receive engine callback events for run state updates.",
       "user_flows": [
-        "POST /api/runs/start with Authorization: Bearer <ACCESS_TOKEN> and body {graph_id,input} -> Receive 200 Run accepted with run_id -> GET /api/runs/{run_id} with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 run detail (status/PENDING or RUNNING) -> GET /api/runs/{run_id}/events with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 run event list -> GET /api/runs/{run_id}/stream with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 event stream (SSE/WebSocket established) -> POST /api/runs/{run_id}/cancel with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 cancel result",
+        "POST /api/runs/start with Authorization: Bearer <ACCESS_TOKEN> and body {graph_version_id,input_json?} -> Receive 201 data-wrapped run detail with run_id/status -> GET /api/runs/{run_id} with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 run detail -> GET /api/runs/{run_id}/events with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 run event list -> GET /api/runs/{run_id}/stream with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 event stream (SSE/WebSocket established) -> POST /api/runs/{run_id}/cancel with Authorization: Bearer <ACCESS_TOKEN> -> Receive 200 cancel result",
         "POST /api/runs/invoke with Authorization: Bearer <ACCESS_TOKEN> and invocation payload -> Receive 200 Run accepted",
-        "POST /api/runs/start with Authorization: Bearer <ACCESS_TOKEN> and invalid graph_id -> Receive 400 Validation error -> POST /api/runs/engine-events with invalid engine callback secret header -> Receive 403 Invalid engine callback secret"
+        "POST /api/runs/start with Authorization: Bearer <ACCESS_TOKEN> and nonexistent graph_version_id -> Receive 404 -> POST /api/runs/engine-events with invalid or missing HMAC signature headers -> Receive 401"
       ]
     },
     {
@@ -61,7 +61,7 @@
     "type": "backend",
     "tech_stack": [
       "Python 3.12",
-      "Django 5",
+      "Django",
       "Django REST Framework",
       "Channels",
       "PostgreSQL",
@@ -86,17 +86,17 @@
             "description": "Register a new user account.",
             "auth_required": false,
             "response_schema": {
-              "200": "User and token payload",
+              "201": "Top-level user payload without tokens",
               "400": "Validation error"
             }
           },
           {
             "method": "POST",
             "path": "/api/auth/login",
-            "description": "Authenticate a user and issue tokens.",
+            "description": "Authenticate a user, return an access token in JSON, and set the refresh token as an HttpOnly cookie.",
             "auth_required": false,
             "response_schema": {
-              "200": "Access and refresh token payload",
+              "200": "Access token payload plus refresh_token cookie",
               "401": "Authentication failed"
             }
           },
@@ -106,16 +106,16 @@
             "description": "Invalidate the current authenticated session.",
             "auth_required": true,
             "response_schema": {
-              "200": "Logout confirmation"
+              "204": "Refresh cookie cleared"
             }
           },
           {
             "method": "POST",
             "path": "/api/auth/refresh",
-            "description": "Refresh an access token.",
+            "description": "Refresh an access token using the refresh_token cookie.",
             "auth_required": false,
             "response_schema": {
-              "200": "Refreshed access token",
+              "200": "Refreshed access token without refresh token in JSON",
               "401": "Invalid refresh token"
             }
           },
@@ -132,7 +132,7 @@
             "method": "GET",
             "path": "/api/auth/sso/provider",
             "description": "Return SSO provider configuration.",
-            "auth_required": false,
+            "auth_required": true,
             "response_schema": {
               "200": "SSO provider metadata"
             }
@@ -156,7 +156,7 @@
         "endpoints": [
           {
             "method": "GET",
-            "path": "/api/graphs",
+            "path": "/api/graphs/",
             "description": "List workflow graphs visible to the current tenant or user.",
             "auth_required": true,
             "response_schema": {
@@ -165,18 +165,17 @@
           },
           {
             "method": "POST",
-            "path": "/api/graphs",
-            "description": "Create a new workflow graph.",
+            "path": "/api/graphs/",
+            "description": "Create workflow graph metadata. Versions are created separately.",
             "auth_required": true,
             "request_schema": {
               "body": {
                 "name": "string",
-                "nodes": "array",
-                "edges": "array"
+                "description": "string"
               }
             },
             "response_schema": {
-              "200": "Graph detail",
+              "201": "Data-wrapped graph metadata",
               "400": "Validation error"
             }
           },
@@ -187,12 +186,28 @@
             "auth_required": true,
             "request_schema": {
               "body": {
-                "graph": "object"
+                "graph_json": "object",
+                "strict": "boolean"
               }
             },
             "response_schema": {
               "200": "Validation result",
               "400": "Invalid graph"
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/api/graphs/{graph_id}/versions",
+            "description": "Create a durable graph version from graph_json.",
+            "auth_required": true,
+            "request_schema": {
+              "body": {
+                "graph_json": "object"
+              }
+            },
+            "response_schema": {
+              "201": "Data-wrapped graph version",
+              "404": "Graph not found"
             }
           },
           {
@@ -248,13 +263,13 @@
             "auth_required": true,
             "request_schema": {
               "body": {
-                "graph_id": "uuid",
-                "input": "object"
+                "graph_version_id": "uuid",
+                "input_json": "object"
               }
             },
             "response_schema": {
-              "200": "Run accepted response",
-              "400": "Validation error"
+              "201": "Data-wrapped run accepted response",
+              "404": "Graph version not found"
             }
           },
           {
@@ -324,11 +339,11 @@
           {
             "method": "POST",
             "path": "/api/runs/engine-events",
-            "description": "Receive callback events from the engine runtime.",
-            "auth_required": true,
+            "description": "Receive signed server-to-server callback events from the engine runtime. Events are transport artifacts; backend persistence remains authoritative.",
+            "auth_required": false,
             "response_schema": {
-              "200": "Callback accepted",
-              "403": "Invalid engine callback secret"
+              "200": "Signed callback accepted and data-wrapped response returned; duplicate event_ids return data.duplicate=true",
+              "401": "Invalid or missing engine callback signature"
             }
           }
         ],

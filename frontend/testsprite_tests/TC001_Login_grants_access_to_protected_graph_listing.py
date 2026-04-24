@@ -31,29 +31,35 @@ async def run_test():
 
         # Interact with the page elements to simulate user flow
         # -> Navigate to http://localhost:3000
-        await page.goto("http://localhost:3000", wait_until="commit", timeout=10000)
+        await page.goto("http://localhost:3000")
         
-        # -> Click the 'Sign in' link to open the login page so the email and password fields can be filled.
+        # -> Click the 'Sign in' link to open the login page or modal so the email and password fields can be filled.
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/nav/div/div/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/header/div/div[2]/a').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Fill the email field with the configured username, fill the password field, then submit the sign-in form.
+        # -> Fill the email and password fields and submit the login form (use inputs [300] and [305], then click [311]).
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('test@example.com')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('test@example.com')
         
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div[2]/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('WY3QGTJ7@q5eYq3')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div[2]/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('WY3QGTJ7@q5eYq3')
         
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/button').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
+        await asyncio.sleep(3); await elem.click()
+        
+        # -> Click the Workflows navigation item (index 818) to open the protected workflow/graph listing, then confirm the listing page is displayed.
+        frame = context.pages[-1]
+        # Click element
+        elem = frame.locator('xpath=/html/body/div/div/div/div[2]/aside/div[2]/div[2]/nav/a[2]').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
         # --> Test passed — verified by AI agent
         frame = context.pages[-1]

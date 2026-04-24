@@ -61,6 +61,12 @@ const memoryGrpcPort = process.env.MEMORY_GRPC_PORT
     : 50052;
 const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT) : 8011;
 const llmMockUrl = `http://127.0.0.1:${llmMockPort}`;
+const preferredLlmBaseUrl =
+  process.env.OPENAI_BASE_URL ??
+  process.env.LOCAL_LLM_BASE_URL ??
+  process.env.PLAYWRIGHT_LOCAL_LLM_URL ??
+  `${llmMockUrl}/v1`;
+const useLlmMockServer = preferredLlmBaseUrl === `${llmMockUrl}/v1`;
 const playwrightRunId = process.env.PLAYWRIGHT_RUN_ID ?? `${Date.now()}`;
 const engineEventSpoolPath =
   process.env.ENGINE_EVENT_SPOOL_PATH ??
@@ -73,6 +79,9 @@ const runtimeFixturePackageName = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ??
 const runtimeFixtureToolName = process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
 const runtimeFixtureToolUrl = process.env.PLAYWRIGHT_RUNTIME_TOOL_URL ?? `${backendUrl}/health`;
 const callbackSecret = process.env.ENGINE_CALLBACK_SECRET ?? "playwright-callback-secret";
+const redisHost = process.env.PLAYWRIGHT_REDIS_HOST ?? "127.0.0.1";
+const redisPort = process.env.PLAYWRIGHT_REDIS_PORT ?? "6379";
+const redisAddr = `${redisHost}:${redisPort}`;
 const dbHost = process.env.DB_HOST ?? "localhost";
 const dbPort = process.env.DB_PORT ?? "5433";
 const dbName = process.env.DB_NAME ?? "forgegraph";
@@ -170,16 +179,20 @@ export default defineConfig({
   ],
 
   webServer: [
-    {
-      command: `node scripts/playwright-openai-mock.mjs`,
-      url: `${llmMockUrl}/health`,
-      reuseExistingServer: !process.env.CI,
-      cwd: __dirname,
-      env: {
-        ...process.env,
-        PLAYWRIGHT_LLM_MOCK_PORT: String(llmMockPort),
-      },
-    },
+    ...(useLlmMockServer
+      ? [
+          {
+            command: `node scripts/playwright-openai-mock.mjs`,
+            url: `${llmMockUrl}/health`,
+            reuseExistingServer: !process.env.CI,
+            cwd: __dirname,
+            env: {
+              ...process.env,
+              PLAYWRIGHT_LLM_MOCK_PORT: String(llmMockPort),
+            },
+          },
+        ]
+      : []),
     {
       command: "python scripts/run_playwright_backend.py",
       url: `${backendUrl}/health`,
@@ -208,6 +221,14 @@ export default defineConfig({
         DB_USER: dbUser,
         DB_PASSWORD: dbPassword,
         PLAYWRIGHT_BACKEND_PORT: String(backendPort),
+        REDIS_HOST: redisHost,
+        REDIS_PORT: redisPort,
+        REDIS_ADDR: redisAddr,
+        REDIS_SENTINEL_ADDRS: "",
+        REDIS_SENTINEL_MASTER_NAME: "",
+        REDIS_SENTINELS: "",
+        REDIS_SENTINEL_USERNAME: "",
+        REDIS_SENTINEL_PASSWORD: "",
         ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
         ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
         ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
@@ -219,6 +240,8 @@ export default defineConfig({
         MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
         MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
         FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
+        OPENAI_BASE_URL: preferredLlmBaseUrl,
       },
     },
     {
@@ -236,6 +259,14 @@ export default defineConfig({
         ENGINE_EVENT_VERBOSITY: process.env.ENGINE_EVENT_VERBOSITY ?? "default",
         ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
         ENGINE_EVENT_SPOOL_PATH: engineEventSpoolPath,
+        REDIS_ADDR: redisAddr,
+        REDIS_HOST: redisHost,
+        REDIS_PORT: redisPort,
+        REDIS_SENTINEL_ADDRS: "",
+        REDIS_SENTINEL_MASTER_NAME: "",
+        REDIS_SENTINELS: "",
+        REDIS_SENTINEL_USERNAME: "",
+        REDIS_SENTINEL_PASSWORD: "",
         TENANT_ID: runtimeFixtureTenantId,
         MARKETPLACE_MANIFEST_REFRESH_SECONDS: process.env.MARKETPLACE_MANIFEST_REFRESH_SECONDS ?? "1",
         FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
@@ -244,7 +275,7 @@ export default defineConfig({
         MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
         MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
-        OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? `${llmMockUrl}/v1`,
+        OPENAI_BASE_URL: preferredLlmBaseUrl,
       },
     },
     {

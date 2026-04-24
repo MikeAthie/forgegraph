@@ -7,6 +7,7 @@ from application.services.metrics import (
     record_liveness_reconciliation,
     record_run_completed,
     record_run_started,
+    record_stale_attempt_ignored,
 )
 from infrastructure.orm.models import (
     Graph,
@@ -43,6 +44,7 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     record_run_completed("succeeded", 1200)
     record_run_completed("failed", 3000)
     record_liveness_reconciliation("engine_stalled")
+    record_stale_attempt_ignored("engine_callback")
     record_callback_auth_failure("invalid_signature")
     record_api_request(status_code=200, duration_ms=120)
     record_api_request(status_code=503, duration_ms=240)
@@ -55,6 +57,8 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["runs"]["failed_total"] >= 1
     assert payload["runs"]["liveness_reconciled_total"] >= 1
     assert payload["runs"]["liveness_reconciled_by_reason"]["engine_stalled"] >= 1
+    assert payload["runs"]["stale_attempt_ignored_total"] >= 1
+    assert payload["runs"]["stale_attempt_ignored_by_source"]["engine_callback"] >= 1
     assert "failure_rate" in payload["runs"]
     assert "active_total" in payload["runs"]
     assert payload["queue"]["pending"] >= 1

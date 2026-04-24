@@ -2,7 +2,7 @@
   {
     "id": "TC001",
     "title": "Login grants access to protected graph listing",
-    "description": "Verifies a user can sign in and land in the authenticated app with access to the protected graphs page.",
+    "description": "Verifies a user can sign in, land in the authenticated app shell, and reach the protected workflow/graph listing using the current navigation model.",
     "category": "Authentication and Session Flows",
     "steps": [
       {
@@ -23,19 +23,19 @@
       },
       {
         "type": "action",
-        "description": "Click the navigation link to the graphs page"
+        "description": "After login, open the protected workflow listing by using the visible Workflows navigation item when present, or by navigating directly to /workflows or /graphs"
       },
       {
         "type": "assertion",
-        "description": "Verify the graphs list page is displayed"
+        "description": "Verify the protected workflow or graph listing page is displayed"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC002",
-    "title": "Registration creates a new session and unlocks protected pages",
-    "description": "Verifies a visitor can register a new account and then access a protected page within the authenticated app.",
+    "title": "Registration redirects to login and the new account can sign in",
+    "description": "Verifies the current registration contract: account creation redirects to /login?registered=true, shows the registration-success message, and the new user can then sign in and open a protected page.",
     "category": "Authentication and Session Flows",
     "steps": [
       {
@@ -55,8 +55,16 @@
         "description": "Submit the registration form"
       },
       {
+        "type": "assertion",
+        "description": "Verify /login?registered=true is shown with the registration-success message"
+      },
+      {
         "type": "action",
-        "description": "Click the navigation link to the graphs page"
+        "description": "Sign in with the newly registered email and password"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /graphs"
       },
       {
         "type": "assertion",
@@ -67,8 +75,8 @@
   },
   {
     "id": "TC003",
-    "title": "Approve or deny a pending approval and see it removed from the pending list",
-    "description": "Verifies an operator can open a pending approval, submit a decision, and observe the approval removed from the pending approvals list.",
+    "title": "Inspect inbox and submit an approval decision when one is pending",
+    "description": "Verifies the current inbox page renders its backend-owned approval posture. If a pending approval exists, submit Approve or Reject; otherwise verify the empty pending-inbox state.",
     "category": "Prompt, Credential, Approval, and Memory Management",
     "steps": [
       {
@@ -89,23 +97,19 @@
       },
       {
         "type": "action",
-        "description": "Navigate to /approvals"
+        "description": "Navigate to /inbox"
       },
       {
         "type": "action",
-        "description": "Open the first pending approval from the list"
+        "description": "Inspect the current pending approval, if one exists"
       },
       {
         "type": "action",
-        "description": "Select an approval decision"
-      },
-      {
-        "type": "action",
-        "description": "Submit the approval decision"
+        "description": "Submit Approve or Reject when the selected approval is pending"
       },
       {
         "type": "assertion",
-        "description": "Verify the previously opened approval is no longer shown in the pending approvals list"
+        "description": "Verify the inbox posture remains visible or the empty pending-inbox state is shown"
       }
     ],
     "priority": "Medium"
@@ -157,8 +161,8 @@
   },
   {
     "id": "TC005",
-    "title": "Update memory observation tags and see them reflected in the observation list",
-    "description": "Verifies an operator can edit tags or metadata for a memory observation and see the updated tags reflected in the memory observations list.",
+    "title": "Inspect memory observations without editing backend-owned records",
+    "description": "Verifies the current memory UI is an inspection surface for backend-owned observations. It should render the observation ledger and detail panel without exposing tag or metadata edit controls.",
     "category": "Prompt, Credential, Approval, and Memory Management",
     "steps": [
       {
@@ -187,23 +191,19 @@
       },
       {
         "type": "action",
-        "description": "Fill \"tc004-tag\" into the tags field"
-      },
-      {
-        "type": "action",
-        "description": "Save the observation changes"
+        "description": "Open the first memory observation from the list when one exists"
       },
       {
         "type": "assertion",
-        "description": "Verify the memory observations list shows an observation with tag \"tc004-tag\""
+        "description": "Verify the observation detail displays captured content and no editable tags/metadata fields"
       }
     ],
     "priority": "Medium"
   },
   {
     "id": "TC006",
-    "title": "Update credential metadata and see it reflected in the credential list",
-    "description": "Verifies an operator can update credential metadata from the credential detail view and see the updated metadata reflected in the credentials list.",
+    "title": "Inspect credential management and OAuth actions",
+    "description": "Verifies the current credentials page renders credential management, OAuth integration status, and either credential cards or the empty state. The UI does not expose credential metadata editing.",
     "category": "Prompt, Credential, Approval, and Memory Management",
     "steps": [
       {
@@ -228,27 +228,19 @@
       },
       {
         "type": "action",
-        "description": "Open the first credential from the list"
-      },
-      {
-        "type": "action",
-        "description": "Fill \"TC002 metadata update\" into a credential metadata field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the credential changes"
+        "description": "Inspect the rendered credential list or empty state"
       },
       {
         "type": "assertion",
-        "description": "Verify the credentials list shows a credential with metadata \"TC002 metadata update\""
+        "description": "Verify OAuth integrations and connection checklist content are displayed"
       }
     ],
     "priority": "Medium"
   },
   {
     "id": "TC007",
-    "title": "Complete an onboarding milestone and see progress update",
-    "description": "Verifies an authenticated user can complete an onboarding milestone and see the onboarding progress update on the page.",
+    "title": "View onboarding progress controls",
+    "description": "Verifies the current onboarding page renders backend-driven progress controls and labels. The test does not assume an incomplete milestone exists because seeded data may already be complete.",
     "category": "Analytics, Onboarding, and Admin Surfaces",
     "steps": [
       {
@@ -273,15 +265,11 @@
       },
       {
         "type": "action",
-        "description": "Open the first incomplete milestone"
-      },
-      {
-        "type": "action",
-        "description": "Complete the milestone using the provided control"
+        "description": "Inspect onboarding progress controls"
       },
       {
         "type": "assertion",
-        "description": "Verify onboarding progress reflects the completed milestone"
+        "description": "Verify the onboarding checklist progress and label are visible"
       }
     ],
     "priority": "Medium"
@@ -399,8 +387,8 @@
   },
   {
     "id": "TC011",
-    "title": "Prevent saving a memory observation with invalid tag input",
-    "description": "Verifies the memory observation editor blocks saving when tags or metadata input is invalid and shows a validation error.",
+    "title": "Memory observation detail remains inspect-only",
+    "description": "Verifies the current memory observation detail does not expose editable tag or metadata inputs, so invalid tag-saving is not a valid UI flow.",
     "category": "Prompt, Credential, Approval, and Memory Management",
     "steps": [
       {
@@ -429,15 +417,11 @@
       },
       {
         "type": "action",
-        "description": "Fill an invalid value into the tags or metadata field"
-      },
-      {
-        "type": "action",
-        "description": "Attempt to save the observation changes"
+        "description": "Inspect the observation detail panel"
       },
       {
         "type": "assertion",
-        "description": "Verify a validation error is visible and the changes are not saved"
+        "description": "Verify no editable tag or metadata inputs are present"
       }
     ],
     "priority": "Low"

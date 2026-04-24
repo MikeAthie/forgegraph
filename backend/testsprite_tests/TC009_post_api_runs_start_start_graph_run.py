@@ -8,103 +8,123 @@ TIMEOUT = 30
 
 def test_post_api_runs_start_start_graph_run():
     session = requests.Session()
-    unique_suffix = str(uuid.uuid4())
-    test_email = f"testuser_{unique_suffix}@example.com"
-    password = "testPassword123!"
+    unique_email = f"testuser_{uuid.uuid4().hex}@example.com"
+    password = "StrongPass!234"
+
+    # Register user
+    register_resp = session.post(
+        f"{BASE_URL}/api/auth/register",
+        json={"email": unique_email, "password": password},
+        timeout=TIMEOUT,
+    )
+    assert register_resp.status_code == 201, f"Unexpected status {register_resp.status_code} on register"
+    user_data = register_resp.json()
+    assert isinstance(user_data, dict)
+    assert "id" in user_data and "email" in user_data
+    assert user_data["email"] == unique_email
+
+    # Login user
+    login_resp = session.post(
+        f"{BASE_URL}/api/auth/login",
+        json={"email": unique_email, "password": password},
+        timeout=TIMEOUT,
+    )
+    assert login_resp.status_code == 200, f"Unexpected status {login_resp.status_code} on login"
+    login_json = login_resp.json()
+    assert "access" in login_json
+    assert "refresh_token" not in login_json
+    access_token = login_json["access"]
+    assert "refresh_token" in login_resp.cookies
+    refresh_cookie = login_resp.cookies["refresh_token"]
+
+    headers_auth = {"Authorization": f"Bearer {access_token}"}
+
+    graph_metadata = None
+    graph_version = None
+    run_started = None
 
     try:
-        # Register user
-        register_resp = session.post(
-            f"{BASE_URL}/api/auth/register",
-            json={"email": test_email, "password": password},
-            timeout=TIMEOUT,
-        )
-        assert register_resp.status_code == 200, f"Register failed: {register_resp.text}"
-        register_json = register_resp.json()
-        # The register endpoint returns user object directly, not wrapped in 'user'
-        assert isinstance(register_json, dict)
-        assert register_json.get("email") == test_email
-
-        # Login user
-        login_resp = session.post(
-            f"{BASE_URL}/api/auth/login",
-            json={"email": test_email, "password": password},
-            timeout=TIMEOUT,
-        )
-        assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
-        login_json = login_resp.json()
-        access_token = login_json.get("access")
-        refresh_token = login_json.get("refresh")
-        assert access_token and isinstance(access_token, str)
-        assert refresh_token and isinstance(refresh_token, str)
-
-        # Setup auth header for further requests
-        headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-
-        # Create a graph with required fields (name, nodes, edges)
-        graph_name = f"test-graph-{unique_suffix}"
+        # Create graph metadata
         graph_payload = {
-            "name": graph_name,
-            "nodes": [{"id": "n1", "type": "start"}, {"id": "n2", "type": "end"}],
-            "edges": [{"from": "n1", "to": "n2"}],
+            "name": "Test Graph for Run Start",
+            "description": "Created during test_post_api_runs_start_start_graph_run",
         }
-        create_graph_resp = session.post(
-            f"{BASE_URL}/api/graphs",
+        graph_resp = session.post(
+            f"{BASE_URL}/api/graphs/",
             json=graph_payload,
-            headers=headers,
+            headers=headers_auth,
             timeout=TIMEOUT,
         )
-        assert create_graph_resp.status_code == 200, (
-            f"Create graph failed: {create_graph_resp.text}"
-        )
-        graph_data = create_graph_resp.json()
-        assert graph_data and isinstance(graph_data, dict)
-        graph_id = graph_data.get("id")
-        assert graph_id and isinstance(graph_id, str)
-        assert graph_data.get("name") == graph_name
+        assert graph_resp.status_code == 201, f"Unexpected status {graph_resp.status_code} creating graph"
+        graph_data = graph_resp.json()
+        assert "data" in graph_data
+        graph_metadata = graph_data["data"]
+        assert "id" in graph_metadata
+        assert graph_metadata.get("version_count", 0) == 0
+        assert graph_metadata.get("latest_version") is None
+        graph_id = graph_metadata["id"]
 
-        # Start a run with input
+        # Create graph version
+        valid_graph_json = {
+            "nodes": [
+                {"id": "output-1", "type": "output", "name": "Output", "config": {}}
+            ],
+            "edges": [{"id": "edge-1", "from": "START", "to": "output-1"}],
+        }
+        version_resp = session.post(
+            f"{BASE_URL}/api/graphs/{graph_id}/versions",
+            json={"graph_json": valid_graph_json},
+            headers=headers_auth,
+            timeout=TIMEOUT,
+        )
+        assert version_resp.status_code == 201, f"Unexpected status {version_resp.status_code} creating graph version"
+        version_data = version_resp.json()
+        assert "data" in version_data
+        graph_version = version_data["data"]
+        assert "id" in graph_version
+        graph_version_id = graph_version["id"]
+
+        # Start run with valid graph_version_id and input_json
         input_json = {"input_key": "input_value"}
-        run_start_payload = {"graph_id": graph_id, "input": input_json}
-        start_run_resp = session.post(
+        run_start_resp = session.post(
             f"{BASE_URL}/api/runs/start",
-            json=run_start_payload,
-            headers=headers,
+            json={"graph_version_id": graph_version_id, "input_json": input_json},
+            headers=headers_auth,
             timeout=TIMEOUT,
         )
-        assert start_run_resp.status_code == 200, f"Start run failed: {start_run_resp.text}"
-        run_data = start_run_resp.json()
-        assert run_data and isinstance(run_data, dict)
-        run_id = run_data.get("run_id")
-        assert run_id and isinstance(run_id, str)
-        assert run_data.get("graph_id") == graph_id
-        assert run_data.get("status") and isinstance(run_data.get("status"), str)
-        # input returned might match or be None - no strict assertion since PRD doesn't specify
+        assert run_start_resp.status_code == 201, f"Unexpected status {run_start_resp.status_code} starting run"
+        run_data = run_start_resp.json()
+        assert "data" in run_data
+        run_started = run_data["data"]
+        assert "id" in run_started
+        assert run_started["graph_version_id"] == graph_version_id
+        assert "status" in run_started
+        assert "input_json" in run_started
+        assert run_started["input_json"] == input_json
 
-        # Attempt to start a run with a nonexistent graph_id -> expect 400 Validation error
-        fake_graph_id = str(uuid.uuid4())
-        bad_payload = {"graph_id": fake_graph_id, "input": {}}
-        bad_run_resp = session.post(
+        # Test with nonexistent graph_version_id returns 404
+        fake_version_id = str(uuid.uuid4())
+        nonexistent_resp = session.post(
             f"{BASE_URL}/api/runs/start",
-            json=bad_payload,
-            headers=headers,
+            json={"graph_version_id": fake_version_id},
+            headers=headers_auth,
             timeout=TIMEOUT,
         )
-        assert bad_run_resp.status_code == 400, (
-            f"Expected 400 for invalid graph_id, got {bad_run_resp.status_code}"
-        )
+        assert nonexistent_resp.status_code == 404
 
     finally:
-        # Cleanup: delete graph if possible to avoid clutter
-        try:
-            if "graph_id" in locals():
-                session.delete(
-                    f"{BASE_URL}/api/graphs/{graph_id}",
-                    headers=headers,
+        # Cleanup: attempt to delete graph if created, deleting graph versions is not specified, so deleting graph only
+        if graph_metadata and "id" in graph_metadata:
+            try:
+                del_resp = session.delete(
+                    f"{BASE_URL}/api/graphs/{graph_metadata['id']}",
+                    headers=headers_auth,
                     timeout=TIMEOUT,
                 )
-        except Exception:
-            pass
+                # Accept 204 or 404 (already deleted)
+                assert del_resp.status_code in (204, 404)
+            except Exception:
+                pass
 
 
 test_post_api_runs_start_start_graph_run()

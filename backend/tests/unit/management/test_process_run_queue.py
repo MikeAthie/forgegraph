@@ -99,6 +99,7 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
 
     graph_json = engine_client.start_calls[0]["graph_json"]
     assert isinstance(graph_json, dict)
+    assert run.dispatch_graph_json == persisted_graph
 
     assert graph_json["edges"] == persisted_graph["edges"]
     assert graph_json["nodes"] == [
@@ -116,3 +117,4 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
         },
         "backend_attempt_id": ANY,
     }
+    assert "backend_attempt_id" not in run.dispatch_graph_json["metadata"]

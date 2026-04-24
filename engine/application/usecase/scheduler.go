@@ -387,6 +387,60 @@ func (rc *runContext) clearSummaryInFlight() {
 	rc.summaryMu.Unlock()
 }
 
+func seedSimulationExecutionState(graph *entity.Graph, state *entity.State) {
+	if graph == nil || state == nil {
+		return
+	}
+	if _, exists := state.Get("vars.execution_state"); exists {
+		return
+	}
+	if existing, exists := state.Get("input.execution_state"); exists {
+		state.SetVar("execution_state", existing)
+		return
+	}
+
+	defaultGoal := ""
+	usesSimulationState := false
+	for _, node := range graph.Nodes {
+		if node.Type != string(value.NodeTypeTransform) {
+			continue
+		}
+		expressionType := strings.TrimSpace(node.GetConfigString("expression_type"))
+		if expressionType != "simulation_step" {
+			continue
+		}
+		usesSimulationState = true
+		if defaultGoal == "" {
+			defaultGoal = strings.TrimSpace(node.GetConfigString("default_goal"))
+		}
+	}
+	if !usesSimulationState {
+		return
+	}
+
+	goal := defaultGoal
+	if rawGoal, exists := state.Get("input.goal"); exists {
+		if candidate := strings.TrimSpace(fmt.Sprintf("%v", rawGoal)); candidate != "" {
+			goal = candidate
+		}
+	}
+	if goal == "" {
+		goal = "Launch a deterministic digital marketing campaign."
+	}
+
+	state.SetVar(
+		"execution_state",
+		map[string]any{
+			"goal":              goal,
+			"strategy":          nil,
+			"content_assets":    []any{},
+			"distribution_plan": nil,
+			"analytics":         nil,
+			"iteration":         0,
+		},
+	)
+}
+
 // StartRun begins executing a workflow
 func (s *Scheduler) StartRun(
 	ctx context.Context,
@@ -503,6 +557,7 @@ func (s *Scheduler) StartRun(
 	} else {
 		state = entity.NewStateWithInput(input)
 	}
+	seedSimulationExecutionState(&graph, state)
 
 	// Extract optional state schema validation metadata
 	stateSchemaRaw, schemaMode := extractStateSchemaMetadata(graph.Metadata)
@@ -761,6 +816,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	}
 
 	maxVisits := s.maxVisitsForNode(rc, node)
+	currentVisitCount := 0
 
 	// Mark as running
 	rc.pendingMu.Lock()
@@ -792,6 +848,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		rc.resumeRetryNode = ""
 	}
 	rc.visitCounts[nodeID]++
+	currentVisitCount = rc.visitCounts[nodeID]
 	rc.running[nodeID] = true
 	rc.pendingMu.Unlock()
 
@@ -823,13 +880,14 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	defer nodeSpan.End()
 
 	// Create node run record
+	baseAttempt := s.baseAttemptForVisit(node, currentVisitCount)
 	nodeRun := &entity.NodeRun{
-		ID:        fmt.Sprintf("%s-%s", rc.runID, nodeID),
+		ID:        fmt.Sprintf("%s-%s-%d", rc.runID, nodeID, baseAttempt),
 		RunID:     rc.runID,
 		NodeID:    nodeID,
 		NodeType:  node.Type,
 		Status:    string(value.NodeRunStatusRunning),
-		Attempt:   1,
+		Attempt:   baseAttempt,
 		StartedAt: s.clock.Now(),
 		InputJSON: rc.state.Snapshot(),
 		TraceID:   nodeTrace.TraceID,
@@ -849,8 +907,9 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	s.emitter.EmitAsync(
 		rc.newEventFromContext(nodeCtx, port.EventTypeNodeStarted).
 			WithNode(nodeID, node.Type, node.Name).
-			WithAttempt(1).
-			WithAttemptID(rc.attemptID),
+			WithAttempt(nodeRun.Attempt).
+			WithAttemptID(rc.attemptID).
+			WithInput(nodeRun.InputJSON),
 	)
 
 	// Try cache before execution
@@ -971,6 +1030,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 // executeWithRetries handles retry logic
 func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node *entity.Node, executor port.NodeExecutor, nodeRun *entity.NodeRun) (*port.NodeExecutionResult, error) {
 	policy := s.resolveRetryPolicy(node)
+	baseAttempt := nodeRun.Attempt
 
 	timeout := node.TimeoutMs
 	if timeout == 0 {
@@ -979,7 +1039,7 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 
 	var lastErr error
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
-		nodeRun.Attempt = attempt
+		nodeRun.Attempt = baseAttempt + attempt - 1
 
 		// Create timeout context
 		execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
@@ -1033,7 +1093,7 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 			s.emitter.EmitAsync(
 				rc.newEventFromContext(execCtx, port.EventTypeNodeRetrying).
 					WithNode(node.ID, node.Type, node.Name).
-					WithAttempt(attempt + 1).
+					WithAttempt(baseAttempt + attempt).
 					WithAttemptID(rc.attemptID).
 					WithError(err.Error()),
 			)
@@ -1052,6 +1112,20 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 	}
 
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+func (s *Scheduler) baseAttemptForVisit(node *entity.Node, visitCount int) int {
+	if visitCount <= 1 {
+		return 1
+	}
+	maxAttempts := 1
+	if node != nil {
+		policy := s.resolveRetryPolicy(node)
+		if policy != nil && policy.MaxAttempts > 0 {
+			maxAttempts = policy.MaxAttempts
+		}
+	}
+	return ((visitCount - 1) * maxAttempts) + 1
 }
 
 func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node *entity.Node, nodeRun *entity.NodeRun, err error, durationMs int64) bool {

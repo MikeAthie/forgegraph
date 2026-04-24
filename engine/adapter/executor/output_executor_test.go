@@ -50,6 +50,59 @@ func TestOutputExecutor_Execute_WithOutputMapping(t *testing.T) {
 	}
 }
 
+func TestOutputExecutor_Execute_WithNestedOutputMapping(t *testing.T) {
+	executor := NewOutputExecutor()
+	state := entity.NewState()
+	state.SetVar(
+		"execution_state",
+		map[string]any{
+			"goal": "Launch ForgeGraph",
+			"strategy": map[string]any{
+				"primary_channel": "linkedin",
+			},
+			"content_assets": []any{"asset-a", "asset-b"},
+			"iteration":      2,
+		},
+	)
+
+	node := &entity.Node{
+		ID:   "output_1",
+		Type: string(value.NodeTypeOutput),
+		Config: map[string]any{
+			"output_mapping": map[string]any{
+				"goal":             "vars.execution_state.goal",
+				"strategy":         "vars.execution_state.strategy",
+				"content_assets":   "vars.execution_state.content_assets",
+				"iteration":        "vars.execution_state.iteration",
+				"primary_channel":  "vars.execution_state.strategy.primary_channel",
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("Output is not map[string]any")
+	}
+
+	if output["goal"] != "Launch ForgeGraph" {
+		t.Fatalf("Expected goal to resolve nested path, got %v", output["goal"])
+	}
+	if output["iteration"] != 2 {
+		t.Fatalf("Expected iteration = 2, got %v", output["iteration"])
+	}
+	if output["primary_channel"] != "linkedin" {
+		t.Fatalf("Expected primary_channel = linkedin, got %v", output["primary_channel"])
+	}
+	if assets, ok := output["content_assets"].([]any); !ok || len(assets) != 2 {
+		t.Fatalf("Expected nested content assets slice, got %T %v", output["content_assets"], output["content_assets"])
+	}
+}
+
 func TestOutputExecutor_Execute_WithOutputKeys(t *testing.T) {
 	executor := NewOutputExecutor()
 	state := entity.NewState()

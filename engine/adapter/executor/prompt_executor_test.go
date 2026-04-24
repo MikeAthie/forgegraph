@@ -211,6 +211,48 @@ func TestPromptExecutor_Execute_WithVectorMemories(t *testing.T) {
 	}
 }
 
+func TestPromptExecutor_Execute_DisableMemoryContextSkipsAugmentationAndCapture(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{Content: "response", Model: "gpt-4"},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+
+	buffer := entity.NewMessageBuffer(5)
+	buffer.Push(entity.Message{Role: "user", Content: "Earlier question"})
+	buffer.Push(entity.Message{Role: "assistant", Content: "Earlier answer"})
+
+	runCtx := &port.RunContext{
+		MemoryBuffer: buffer,
+		MemoryConfig: &entity.MemoryConfig{
+			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: true},
+		},
+	}
+
+	ctx := port.WithRunContext(context.Background(), runCtx)
+	node := &entity.Node{
+		ID:   "prompt_no_memory",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template":        "Current question?",
+			"disable_memory_context": true,
+		},
+	}
+
+	_, err := executor.Execute(ctx, node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if strings.Contains(mockClient.received.Prompt, "Recent messages:") {
+		t.Fatalf("expected prompt to skip memory augmentation, got: %s", mockClient.received.Prompt)
+	}
+	if buffer.Count() != 2 {
+		t.Fatalf("expected memory buffer to remain unchanged, got %d messages", buffer.Count())
+	}
+}
+
 func TestPromptExecutor_Execute_WithSystemPrompt(t *testing.T) {
 	mockClient := &testMockLLMClient{
 		response: &LLMResponse{
@@ -747,5 +789,112 @@ func TestPromptExecutor_Execute_BlocksProviderByPolicy(t *testing.T) {
 	}
 	if !strings.Contains(result.Error.Error(), "policy denied: provider blocked by policy") {
 		t.Fatalf("unexpected error: %v", result.Error)
+	}
+}
+
+func TestPromptExecutor_Execute_StoresStructuredResponseInStateOutputKey(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{
+			Content: `{"goal":"Launch","iteration":1}`,
+			Model:   "gpt-4",
+			StructuredData: map[string]any{
+				"goal":      "Launch",
+				"iteration": 1,
+			},
+		},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewState()
+
+	node := &entity.Node{
+		ID:   "prompt_state_store",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Return state JSON.",
+			"output_key":      "execution_state",
+			"provider":        "openai",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	stored, exists := state.Get("vars.execution_state")
+	if !exists {
+		t.Fatal("expected vars.execution_state to be stored")
+	}
+	storedMap, ok := stored.(map[string]any)
+	if !ok {
+		t.Fatalf("stored state type = %T, want map[string]any", stored)
+	}
+	if storedMap["goal"] != "Launch" {
+		t.Fatalf("stored goal = %v, want Launch", storedMap["goal"])
+	}
+	if storedMap["iteration"] != 1 {
+		t.Fatalf("stored iteration = %v, want 1", storedMap["iteration"])
+	}
+
+	output := result.Output.(map[string]any)
+	if output["state_output_key"] != "execution_state" {
+		t.Fatalf("state_output_key = %v, want execution_state", output["state_output_key"])
+	}
+}
+
+func TestPromptExecutor_Execute_OnlyFailsWhenSimulationFailureConfigured(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{
+			Content: `{"ok":true}`,
+			Model:   "gpt-4",
+		},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	state := entity.NewStateWithInput(map[string]any{
+		"force_content_failure": true,
+	})
+
+	strategyNode := &entity.Node{
+		ID:   "strategy_agent",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Return JSON.",
+			"provider":        "openai",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), strategyNode, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("unexpected prompt failure without simulate_failure config: %v", result.Error)
+	}
+
+	contentNode := &entity.Node{
+		ID:   "content_copywriter_specialist",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template":               "Return JSON.",
+			"provider":                      "openai",
+			"simulate_failure_input_key":    "force_content_failure",
+			"simulate_failure_on_iteration": 1,
+		},
+	}
+
+	result, err = executor.Execute(context.Background(), contentNode, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected simulated content failure")
+	}
+	if !strings.Contains(result.Error.Error(), "simulated content_copywriter_specialist failure") {
+		t.Fatalf("unexpected simulated failure error: %v", result.Error)
 	}
 }

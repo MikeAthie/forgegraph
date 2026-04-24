@@ -139,20 +139,36 @@ else:
         }
     }
 
-# Cache
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
-    }
-}
-
-# Channels
+# Cache / channels
 USE_IN_MEMORY_CHANNEL_LAYER = os.environ.get("USE_IN_MEMORY_CHANNEL_LAYER", "false").lower() in {
     "1",
     "true",
     "yes",
 }
+USE_IN_MEMORY_CACHE = os.environ.get(
+    "USE_IN_MEMORY_CACHE",
+    os.environ.get("USE_IN_MEMORY_CHANNEL_LAYER", "false"),
+).lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+if USE_SQLITE or USE_IN_MEMORY_CACHE:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "forgegraph-local-cache",
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
+        }
+    }
+
 CHANNEL_LAYERS: dict[str, dict[str, Any]]
 if USE_SQLITE or USE_IN_MEMORY_CHANNEL_LAYER:
     CHANNEL_LAYERS = {

@@ -90,7 +90,7 @@ func (s *State) Snapshot() map[string]any {
 	defer s.mu.RUnlock()
 	snapshot := make(map[string]any, len(s.values))
 	for k, v := range s.values {
-		snapshot[k] = v
+		snapshot[k] = cloneStateValue(v)
 	}
 	return snapshot
 }
@@ -103,7 +103,7 @@ func (s *State) SnapshotNested() map[string]any {
 
 	root := make(map[string]any, len(s.values))
 	for key, value := range s.values {
-		insertNestedValue(root, key, value)
+		insertNestedValue(root, key, cloneStateValue(value))
 	}
 	return root
 }
@@ -204,5 +204,24 @@ func insertNestedValue(root map[string]any, key string, value any) {
 			current[part] = child
 		}
 		current = child
+	}
+}
+
+func cloneStateValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneStateValue(item)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = cloneStateValue(item)
+		}
+		return cloned
+	default:
+		return value
 	}
 }

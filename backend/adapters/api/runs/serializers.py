@@ -122,6 +122,8 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     output_json = serializers.JSONField(read_only=True, allow_null=True)
     error_message = serializers.CharField(read_only=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
+    backend_attempt_id = serializers.CharField(read_only=True, allow_blank=True)
+    status_history = serializers.JSONField(read_only=True, allow_null=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
     last_progress_at = serializers.DateTimeField(read_only=True, allow_null=True)
     last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)

@@ -80,6 +80,7 @@ from application.services.metrics import (
     record_callback_auth_failure,
     record_run_completed,
     record_run_started,
+    record_stale_attempt_ignored,
 )
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
@@ -147,6 +148,64 @@ from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
 _UNSET = object()
+
+
+def _engine_event_attempt_id(event_type: str, event: dict[str, Any]) -> str:
+    attempt_id = str(event.get("attempt_id") or "").strip()
+    if attempt_id:
+        return attempt_id
+    if event_type == "run_resumed":
+        output = event.get("output")
+        if isinstance(output, dict):
+            return str(output.get("resume_attempt_id") or "").strip()
+    return ""
+
+
+def _ignore_stale_engine_attempt(
+    *,
+    run: Run,
+    event_type: str,
+    event: dict[str, Any],
+    event_id: str,
+    trace_id: str,
+    normalized_category: str,
+) -> Response | None:
+    if normalized_category != "state":
+        return None
+
+    current_attempt_id = run.active_attempt_id
+    event_attempt_id = _engine_event_attempt_id(event_type, event)
+    if not current_attempt_id or not event_attempt_id or event_attempt_id == current_attempt_id:
+        return None
+
+    record_stale_attempt_ignored("engine_callback")
+    log_event(
+        logger,
+        logging.WARNING,
+        "stale_attempt_ignored",
+        run_id=str(run.id),
+        trace_id=trace_id,
+        event_id=event_id,
+        attempt_id=event_attempt_id,
+        active_attempt_id=current_attempt_id,
+        current_attempt_id=current_attempt_id,
+        message="Ignored stale engine callback for superseded attempt",
+        category=normalized_category,
+    )
+    if event_type == "run_resumed":
+        return problem_response(
+            type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
+            title="Stale resume acknowledgement",
+            status=status.HTTP_409_CONFLICT,
+            detail="run_resumed acknowledgement does not match the active resume_attempt_id.",
+        )
+    return success_response(
+        {
+            "received": True,
+            "stale": True,
+            "authoritative_state_updated": False,
+        }
+    )
 
 
 def get_engine_client(
@@ -556,6 +615,58 @@ def _derive_agent_trace(
     return trace
 
 
+def _merge_nested_payload(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in incoming.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_nested_payload(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _insert_dotted_payload_value(root: dict[str, Any], dotted_key: str, value: Any) -> None:
+    parts = [part for part in dotted_key.split(".") if part]
+    if not parts:
+        return
+
+    current = root
+    for part in parts[:-1]:
+        existing = current.get(part)
+        if not isinstance(existing, dict):
+            existing = {}
+            current[part] = existing
+        current = existing
+
+    leaf_key = parts[-1]
+    existing_leaf = current.get(leaf_key)
+    if isinstance(existing_leaf, dict) and isinstance(value, dict):
+        current[leaf_key] = _merge_nested_payload(existing_leaf, value)
+    else:
+        current[leaf_key] = value
+
+
+def _expand_dotted_payload(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_expand_dotted_payload(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    expanded: dict[str, Any] = {}
+    for key, item in value.items():
+        nested_item = _expand_dotted_payload(item)
+        if not isinstance(key, str) or "." not in key:
+            existing = expanded.get(key)
+            if isinstance(existing, dict) and isinstance(nested_item, dict):
+                expanded[key] = _merge_nested_payload(existing, nested_item)
+            else:
+                expanded[key] = nested_item
+            continue
+        _insert_dotted_payload_value(expanded, key, nested_item)
+    return expanded
+
+
 def _serialize_node_run_for_detail(
     *,
     node_run: NodeRun,
@@ -570,7 +681,7 @@ def _serialize_node_run_for_detail(
         "started_at": node_run.started_at,
         "ended_at": node_run.ended_at,
         "duration_ms": node_run.duration_ms,
-        "input_json": redact_payload(node_run.input_json),
+        "input_json": _expand_dotted_payload(redact_payload(node_run.input_json)),
         "output_json": redact_payload(node_run.output_json),
         "error_json": redact_payload(node_run.error_json),
         "trace_id": node_run.trace_id,
@@ -658,6 +769,58 @@ def _timeline_message_for_event(event_type: str, payload: dict[str, Any]) -> str
     if event_type == "run.schema_validation":
         return "Run output schema validation reported issues."
     return event_type.replace(".", " ").replace("_", " ")
+
+
+def _run_status_from_event(event_type: str, payload: dict[str, Any]) -> str | None:
+    if event_type == "run.updated":
+        status_value = payload.get("status")
+        if isinstance(status_value, str):
+            return status_value
+        run_payload = payload.get("run")
+        if isinstance(run_payload, dict):
+            status_value = run_payload.get("status")
+            if isinstance(status_value, str):
+                return status_value
+
+    if event_type.startswith("run_") or event_type == "run.resume_requested":
+        status_value = _timeline_status_from_payload(event_type, payload)
+        if isinstance(status_value, str) and status_value in {
+            "pending",
+            "running",
+            "paused",
+            "resume_requested",
+            "succeeded",
+            "failed",
+            "canceled",
+        }:
+            return status_value
+
+    return None
+
+
+def _build_run_status_history(*, run: Run) -> list[str]:
+    history: list[str] = []
+
+    def append_status(status_value: str | None) -> None:
+        if not status_value:
+            return
+        if history and history[-1] == status_value:
+            return
+        history.append(status_value)
+
+    append_status("pending")
+
+    event_rows = (
+        RunEvent.objects.filter(run=run)
+        .order_by("created_at", "id")
+        .only("event_type", "payload")
+    )
+    for event_row in event_rows:
+        payload = redact_payload(event_row.payload or {})
+        append_status(_run_status_from_event(event_row.event_type, payload))
+
+    append_status(str(run.status or "").strip() or None)
+    return history
 
 
 def _validate_run_event_transition(*, current_status: str, event_type: str) -> None:
@@ -1436,6 +1599,8 @@ class RunDetailView(APIView):
             "output_json": redact_payload(run.output_json),
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
+            "backend_attempt_id": run.active_attempt_id,
+            "status_history": _build_run_status_history(run=run),
             "trace_id": run.trace_id,
             "last_progress_at": run.last_progress_at,
             "last_heartbeat_at": run.last_heartbeat_at,
@@ -1591,18 +1756,19 @@ class RunStartView(APIView):
             trace_id=trace_metadata["trace_id"],
         )
         try:
-            prepared_graph = prepare_tool_executions_for_dispatch(
+            outbound_graph = prepare_tool_executions_for_dispatch(
                 run=run,
                 graph_json=prepared_graph,
             )
+            if outbound_graph != run.dispatch_graph_json:
+                run.dispatch_graph_json = outbound_graph
+                run.save(update_fields=["dispatch_graph_json"])
         except ToolExecutionDispatchBlocked as exc:
             run.status = "failed"
             run.ended_at = timezone.now()
             run.error_message = str(exc)
             run.save(update_fields=["status", "ended_at", "error_message"])
             return _tool_execution_dispatch_error_response(exc)
-        run.dispatch_graph_json = prepared_graph
-        run.save(update_fields=["dispatch_graph_json"])
         broadcast_run_updated(run)
         record_audit_log(
             actor=user,
@@ -1673,7 +1839,7 @@ class RunStartView(APIView):
                 with engine_client as engine:
                     engine.start_run(
                         run_id=run.id,
-                        graph_json=prepared_graph,
+                        graph_json=outbound_graph,
                         input_json=input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
@@ -1692,6 +1858,7 @@ class RunStartView(APIView):
                         )
                     )
                     run.save(update_fields=sorted(set(update_fields)))
+                    _persist_run_updated_event(run)
                     record_run_started()
                     broadcast_run_updated(run)
 
@@ -1935,13 +2102,14 @@ class RunInvokeView(APIView):
                     error_message="",
                     trace_id=trace_metadata["trace_id"],
                 )
-                graph_json = prepare_tool_executions_for_dispatch(
+                outbound_graph = prepare_tool_executions_for_dispatch(
                     run=run,
                     graph_json=graph_json,
                 )
-                run.dispatch_graph_json = graph_json
-                run.save(update_fields=["dispatch_graph_json"])
-                checkpoint_graph_json = pyjson.dumps(graph_json)
+                if outbound_graph != run.dispatch_graph_json:
+                    run.dispatch_graph_json = outbound_graph
+                    run.save(update_fields=["dispatch_graph_json"])
+                checkpoint_graph_json = pyjson.dumps(outbound_graph)
 
                 RunCheckpoint.objects.create(
                     run=run,
@@ -2024,7 +2192,7 @@ class RunInvokeView(APIView):
                 with engine_client as engine:
                     engine.start_run(
                         run_id=run.id,
-                        graph_json=graph_json,
+                        graph_json=outbound_graph,
                         input_json=input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
@@ -2042,6 +2210,7 @@ class RunInvokeView(APIView):
                         )
                     )
                     run.save(update_fields=sorted(set(update_fields)))
+                    _persist_run_updated_event(run)
                     record_run_started()
                     broadcast_run_updated(run)
 
@@ -2250,13 +2419,14 @@ class RunReplayView(APIView):
                     error_message="",
                     trace_id=trace_metadata["trace_id"],
                 )
-                prepared_graph = prepare_tool_executions_for_dispatch(
+                outbound_graph = prepare_tool_executions_for_dispatch(
                     run=replay_run,
                     graph_json=prepared_graph,
                 )
-                replay_run.dispatch_graph_json = prepared_graph
-                replay_run.save(update_fields=["dispatch_graph_json"])
-                checkpoint_graph_json = pyjson.dumps(prepared_graph)
+                if outbound_graph != replay_run.dispatch_graph_json:
+                    replay_run.dispatch_graph_json = outbound_graph
+                    replay_run.save(update_fields=["dispatch_graph_json"])
+                checkpoint_graph_json = pyjson.dumps(outbound_graph)
 
                 RunCheckpoint.objects.create(
                     run=replay_run,
@@ -2353,7 +2523,7 @@ class RunReplayView(APIView):
                 with engine_client as engine:
                     engine.start_run(
                         run_id=replay_run.id,
-                        graph_json=prepared_graph,
+                        graph_json=outbound_graph,
                         input_json=input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
@@ -2371,6 +2541,7 @@ class RunReplayView(APIView):
                         )
                     )
                     replay_run.save(update_fields=sorted(set(update_fields)))
+                    _persist_run_updated_event(replay_run)
                     record_run_started()
                     broadcast_run_updated(replay_run)
 
@@ -2968,6 +3139,16 @@ class EngineRunEventsView(APIView):
         state_mutation_enabled = bool(
             getattr(settings, "ENGINE_EVENT_STATE_MUTATION_ENABLED", False)
         )
+        stale_attempt_response = _ignore_stale_engine_attempt(
+            run=run,
+            event_type=event_type,
+            event=event,
+            event_id=str(event_id or ""),
+            trace_id=trace_context["trace_id"],
+            normalized_category=normalized_category,
+        )
+        if stale_attempt_response is not None:
+            return stale_attempt_response
 
         try:
             callback_engine_instance_id, assigned_engine = reconcile_run_engine_instance(
@@ -3415,6 +3596,21 @@ class EngineRunEventsView(APIView):
                 )
 
             if event_type == "node_started":
+                node_payload["input_json"] = redact_payload(event.get("input") or {})
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "node_input",
+                    run_id=str(run.id),
+                    trace_id=trace_context["trace_id"],
+                    node_id=node_id,
+                    node_type=node_type,
+                    attempt=attempt,
+                    attempt_id=attempt_id,
+                    engine_instance_id=callback_engine_instance_id,
+                    payload=node_payload["input_json"],
+                    message="Engine node input received",
+                )
                 node_payload["status"] = "running"
                 if event_time:
                     node_payload["started_at"] = event_time
@@ -3423,6 +3619,20 @@ class EngineRunEventsView(APIView):
                 if event_time:
                     node_payload["ended_at"] = event_time
                 node_payload["output_json"] = redact_payload(event.get("output"))
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "node_output",
+                    run_id=str(run.id),
+                    trace_id=trace_context["trace_id"],
+                    node_id=node_id,
+                    node_type=node_type,
+                    attempt=attempt,
+                    attempt_id=attempt_id,
+                    engine_instance_id=callback_engine_instance_id,
+                    payload=node_payload["output_json"],
+                    message="Engine node output received",
+                )
             elif event_type == "node_failed":
                 node_payload["status"] = "failed"
                 if event_time:
@@ -3439,6 +3649,20 @@ class EngineRunEventsView(APIView):
                 elif error_message:
                     error_json.setdefault("error", error_message)
                 node_payload["error_json"] = error_json
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "node_output",
+                    run_id=str(run.id),
+                    trace_id=trace_context["trace_id"],
+                    node_id=node_id,
+                    node_type=node_type,
+                    attempt=attempt,
+                    attempt_id=attempt_id,
+                    engine_instance_id=callback_engine_instance_id,
+                    payload=node_payload["error_json"],
+                    message="Engine node failure output received",
+                )
             elif event_type == "node_skipped":
                 node_payload["status"] = "skipped"
                 if event_time:
@@ -3474,6 +3698,9 @@ class EngineRunEventsView(APIView):
                     if "ended_at" in node_payload:
                         node_run.ended_at = node_payload["ended_at"]
                         node_update_fields.append("ended_at")
+                    if "input_json" in node_payload:
+                        node_run.input_json = node_payload["input_json"]
+                        node_update_fields.append("input_json")
                     if "output_json" in node_payload:
                         node_run.output_json = node_payload["output_json"]
                         node_update_fields.append("output_json")
@@ -3509,6 +3736,8 @@ class EngineRunEventsView(APIView):
                         node_run.started_at = node_payload["started_at"]
                     if "ended_at" in node_payload:
                         node_run.ended_at = node_payload["ended_at"]
+                    if "input_json" in node_payload:
+                        node_run.input_json = node_payload["input_json"]
                     if "output_json" in node_payload:
                         node_run.output_json = node_payload["output_json"]
                     if "error_json" in node_payload:
@@ -3976,6 +4205,28 @@ def _serialize_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
         else:
             serialized[key] = value
     return serialized
+
+
+def _persist_run_updated_event(run: Run) -> None:
+    RunEvent.objects.create(
+        run=run,
+        event_type="run.updated",
+        trace_id=run.trace_id,
+        payload=_serialize_event_payload(
+            redact_payload(
+                {
+                    "status": run.status,
+                    "started_at": run.started_at,
+                    "ended_at": run.ended_at,
+                    "output_json": run.output_json,
+                    "error_message": run.error_message,
+                    "paused_node_id": run.paused_node_id,
+                    "pause_state_json": run.pause_state_json,
+                    "category": "state",
+                }
+            )
+        ),
+    )
 
 
 def _get_user_from_request(request: Request) -> User | None:

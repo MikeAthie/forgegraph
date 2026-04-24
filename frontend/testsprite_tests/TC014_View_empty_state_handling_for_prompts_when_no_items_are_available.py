@@ -31,41 +31,38 @@ async def run_test():
 
         # Interact with the page elements to simulate user flow
         # -> Navigate to http://localhost:3000
-        await page.goto("http://localhost:3000", wait_until="commit", timeout=10000)
+        await page.goto("http://localhost:3000")
         
-        # -> Click the 'Sign in' link to open the login page so the test can authenticate.
+        # -> Open the login form by clicking the 'Sign in' link so we can authenticate and then navigate to /prompts.
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/nav/div/div/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/header/div/div[2]/a').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Fill the email and password fields with the provided credentials and submit the sign in form, then navigate to /prompts to verify the empty state.
+        # -> Fill the email and password fields and submit the login form (attempt 1 of 1).
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('test@example.com')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('test@example.com')
         
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div[2]/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('WY3QGTJ7@q5eYq3')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div[2]/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('WY3QGTJ7@q5eYq3')
         
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/button').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Click the 'Prompts' navigation link to open the prompts page and verify that a clear empty state is displayed when no prompts exist.
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/header/nav/div/div/div[2]/a[3]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        # -> Wait for the sign-in to complete, then navigate to /prompts to verify the empty-state rendering.
+        await page.goto("http://localhost:3000/prompts")
         
-        # -> Enter a search term that yields no results, wait for the UI to update, and extract visible text to verify a clear empty state is displayed for the prompts list.
+        # -> Enter a search query that matches no prompts (e.g. 'no-such-prompt-xyz-12345') into the 'Search prompts...' field and press Enter to trigger an empty-state view.
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div[2]/div/div/div[2]/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('no-such-prompt-xyz-000')
+        elem = frame.locator('xpath=/html/body/div/div/div/div[2]/div/main/div/div/div[2]/div/div/div[2]/div/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('no-such-prompt-xyz-12345')
         
         # --> Test passed — verified by AI agent
         frame = context.pages[-1]
