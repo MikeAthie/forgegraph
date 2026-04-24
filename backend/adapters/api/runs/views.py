@@ -173,7 +173,7 @@ def _ignore_stale_engine_attempt(
     if normalized_category != "state":
         return None
 
-    current_attempt_id = run.active_attempt_id
+    current_attempt_id = run.authoritative_attempt_id
     event_attempt_id = _engine_event_attempt_id(event_type, event)
     if not current_attempt_id or not event_attempt_id or event_attempt_id == current_attempt_id:
         return None
@@ -811,9 +811,7 @@ def _build_run_status_history(*, run: Run) -> list[str]:
     append_status("pending")
 
     event_rows = (
-        RunEvent.objects.filter(run=run)
-        .order_by("created_at", "id")
-        .only("event_type", "payload")
+        RunEvent.objects.filter(run=run).order_by("created_at", "id").only("event_type", "payload")
     )
     for event_row in event_rows:
         payload = redact_payload(event_row.payload or {})
@@ -1760,9 +1758,6 @@ class RunStartView(APIView):
                 run=run,
                 graph_json=prepared_graph,
             )
-            if outbound_graph != run.dispatch_graph_json:
-                run.dispatch_graph_json = outbound_graph
-                run.save(update_fields=["dispatch_graph_json"])
         except ToolExecutionDispatchBlocked as exc:
             run.status = "failed"
             run.ended_at = timezone.now()
@@ -2106,9 +2101,6 @@ class RunInvokeView(APIView):
                     run=run,
                     graph_json=graph_json,
                 )
-                if outbound_graph != run.dispatch_graph_json:
-                    run.dispatch_graph_json = outbound_graph
-                    run.save(update_fields=["dispatch_graph_json"])
                 checkpoint_graph_json = pyjson.dumps(outbound_graph)
 
                 RunCheckpoint.objects.create(
@@ -2423,9 +2415,6 @@ class RunReplayView(APIView):
                     run=replay_run,
                     graph_json=prepared_graph,
                 )
-                if outbound_graph != replay_run.dispatch_graph_json:
-                    replay_run.dispatch_graph_json = outbound_graph
-                    replay_run.save(update_fields=["dispatch_graph_json"])
                 checkpoint_graph_json = pyjson.dumps(outbound_graph)
 
                 RunCheckpoint.objects.create(

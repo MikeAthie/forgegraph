@@ -53,10 +53,7 @@ async function loginViaUi(page: Page, email: string, password: string): Promise<
   await page.waitForLoadState("networkidle");
 }
 
-async function proxyFrontendApiRequests(
-  page: Page,
-  request: APIRequestContext,
-): Promise<void> {
+async function proxyFrontendApiRequests(page: Page, request: APIRequestContext): Promise<void> {
   await page.route("**/api/**", async (route) => {
     const requestUrl = new URL(route.request().url());
     const backendUrl = `${API_BASE_URL}${requestUrl.pathname}${requestUrl.search}`;
@@ -97,11 +94,7 @@ async function assertOrganizationExists(
   return body.data.organization;
 }
 
-async function createGraphVersion(
-  request: APIRequestContext,
-  accessToken: string,
-  graphId: string,
-): Promise<string> {
+async function createGraphVersion(request: APIRequestContext, accessToken: string, graphId: string): Promise<string> {
   const response = await request.post(`${API_BASE_URL}/api/graphs/${graphId}/versions`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     data: {
@@ -280,7 +273,10 @@ test.describe("Marketing Simulation Replay", () => {
     let previousExecutionState: unknown = undefined;
     for (const nodeRun of statefulNodeRuns) {
       const inputExecutionState = getInputExecutionState(nodeRun);
-      expect(inputExecutionState, `Missing execution_state input for ${nodeRun.node_id}#${nodeRun.attempt}`).toBeTruthy();
+      expect(
+        inputExecutionState,
+        `Missing execution_state input for ${nodeRun.node_id}#${nodeRun.attempt}`,
+      ).toBeTruthy();
       if (previousExecutionState !== undefined) {
         expect(inputExecutionState).toEqual(previousExecutionState);
       }
@@ -295,7 +291,10 @@ test.describe("Marketing Simulation Replay", () => {
         `Missing execution_state input for prompt node ${nodeRun.node_id}#${nodeRun.attempt}`,
       ).toBeTruthy();
       const output = nodeRun.output_json?.output;
-      expect(output && typeof output === "object", `Missing prompt output for ${nodeRun.node_id}#${nodeRun.attempt}`).toBeTruthy();
+      expect(
+        output && typeof output === "object",
+        `Missing prompt output for ${nodeRun.node_id}#${nodeRun.attempt}`,
+      ).toBeTruthy();
       const promptOutput = output as {
         prompt?: unknown;
         response?: unknown;
@@ -310,7 +309,10 @@ test.describe("Marketing Simulation Replay", () => {
       expect(typeof promptOutput.model).toBe("string");
       expect(typeof promptOutput.prompt).toBe("string");
       expect(typeof promptOutput.response).toBe("string");
-      expect(promptOutput.structured_response, `Missing structured_response for ${nodeRun.node_id}#${nodeRun.attempt}`).toBeTruthy();
+      expect(
+        promptOutput.structured_response,
+        `Missing structured_response for ${nodeRun.node_id}#${nodeRun.attempt}`,
+      ).toBeTruthy();
       expect(promptOutput.schema_validation?.valid).toBe(true);
       expect(Number(promptOutput.usage?.total_tokens ?? 0)).toBeGreaterThan(0);
       expect(typeof promptOutput.state_output_key).toBe("string");

@@ -70,11 +70,11 @@ func TestOutputExecutor_Execute_WithNestedOutputMapping(t *testing.T) {
 		Type: string(value.NodeTypeOutput),
 		Config: map[string]any{
 			"output_mapping": map[string]any{
-				"goal":             "vars.execution_state.goal",
-				"strategy":         "vars.execution_state.strategy",
-				"content_assets":   "vars.execution_state.content_assets",
-				"iteration":        "vars.execution_state.iteration",
-				"primary_channel":  "vars.execution_state.strategy.primary_channel",
+				"goal":            "vars.execution_state.goal",
+				"strategy":        "vars.execution_state.strategy",
+				"content_assets":  "vars.execution_state.content_assets",
+				"iteration":       "vars.execution_state.iteration",
+				"primary_channel": "vars.execution_state.strategy.primary_channel",
 			},
 		},
 	}

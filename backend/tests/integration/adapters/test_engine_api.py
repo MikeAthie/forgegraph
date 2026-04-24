@@ -83,7 +83,9 @@ class TestEngineRunApi:
         assert run.trace_id == ""
         assert run.output_json is None
         assert run.last_progress_at is None
-        assert "cannot mutate durable run state directly" in response.data["error"]["message"].lower()
+        assert (
+            "cannot mutate durable run state directly" in response.data["error"]["message"].lower()
+        )
 
     def test_run_detail_rejects_terminal_status_regression(self, api_client):
         user = User.objects.create_user(

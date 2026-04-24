@@ -634,8 +634,8 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
                 }
             )
 
-        fallback_provider_available = (
-            provider in {"", "openai"} and bool(str(getattr(settings, "OPENAI_API_KEY", "")).strip())
+        fallback_provider_available = provider in {"", "openai"} and bool(
+            str(getattr(settings, "OPENAI_API_KEY", "")).strip()
         )
         if not credential_id:
             if not fallback_provider_available:

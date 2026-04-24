@@ -907,7 +907,7 @@ class Run(models.Model):
         return None
 
     @property
-    def active_attempt_id(self) -> str:
+    def authoritative_attempt_id(self) -> str:
         from application.services.run_snapshots import get_snapshot
 
         try:
@@ -941,6 +941,14 @@ class Run(models.Model):
         )
         if isinstance(processed_attempt_id, str) and processed_attempt_id.strip():
             return processed_attempt_id.strip()
+
+        return ""
+
+    @property
+    def active_attempt_id(self) -> str:
+        attempt_id = self.authoritative_attempt_id
+        if attempt_id:
+            return attempt_id
 
         return f"backend-attempt-{self.id}"
 

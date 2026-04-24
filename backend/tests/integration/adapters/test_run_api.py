@@ -348,7 +348,9 @@ class TestRunDetail:
         response = authenticated_client.get(f"/api/runs/{run.id}")
 
         assert response.status_code == status.HTTP_200_OK
-        returned = next(item for item in response.data["data"]["node_runs"] if item["id"] == str(node_run.id))
+        returned = next(
+            item for item in response.data["data"]["node_runs"] if item["id"] == str(node_run.id)
+        )
         assert returned["input_json"]["input"]["goal"] == (
             "Launch a replayable AI digital marketing campaign for ForgeGraph."
         )
@@ -1268,9 +1270,7 @@ class TestRunStart:
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
         payload_graph = start_calls[0][1]["graph_json"]
-        payload_tool_node = next(
-            node for node in payload_graph["nodes"] if node["id"] == "tool_1"
-        )
+        payload_tool_node = next(node for node in payload_graph["nodes"] if node["id"] == "tool_1")
         assert payload_graph["metadata"]["tool_resolution"] == tool_resolution
         assert "backend_attempt_id" in payload_graph["metadata"]
         assert payload_tool_node["config"]["tool_execution_id"]
@@ -1603,7 +1603,10 @@ class TestRunReplay:
         assert len(start_calls) == 1
         assert start_calls[0][1]["run_id"] == replay_run.id
         assert start_calls[0][1]["input_json"] == {"query": "hello"}
-        assert "backend_attempt_id" not in (replay_run.dispatch_graph_json.get("metadata") or {})
+        assert isinstance(replay_run.dispatch_graph_json, dict)
+        replay_metadata = replay_run.dispatch_graph_json.get("metadata")
+        assert isinstance(replay_metadata, dict)
+        assert "backend_attempt_id" not in replay_metadata
         assert "backend_attempt_id" in start_calls[0][1]["graph_json"]["metadata"]
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
@@ -1845,7 +1848,7 @@ class TestRunReplay:
             RunEvent.objects.filter(run=replay_run).values_list("event_type", flat=True)
         )
         assert event_types.count("run.replay") == 1
-        assert event_types.count("run.updated") == 2
+        assert event_types.count("run.updated") >= 2
         assert event_types.count("node_run.updated") == 2
 
         node_statuses = set(

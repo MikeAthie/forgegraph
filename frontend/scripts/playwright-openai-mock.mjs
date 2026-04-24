@@ -36,14 +36,16 @@ function cloneState(state) {
 }
 
 function buildMarketingPatch(stage, currentState) {
-  const next = cloneState(currentState ?? {
-    goal: "Launch a replayable AI digital marketing campaign for ForgeGraph.",
-    strategy: null,
-    content_assets: [],
-    distribution_plan: null,
-    analytics: null,
-    iteration: 0,
-  });
+  const next = cloneState(
+    currentState ?? {
+      goal: "Launch a replayable AI digital marketing campaign for ForgeGraph.",
+      strategy: null,
+      content_assets: [],
+      distribution_plan: null,
+      analytics: null,
+      iteration: 0,
+    },
+  );
   const pass = Number(next.iteration ?? 0) + 1;
 
   switch (stage) {

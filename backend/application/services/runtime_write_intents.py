@@ -19,9 +19,9 @@ from adapters.ws.runs.broadcast import (
     broadcast_node_run_updated,
     broadcast_run_updated,
 )
+from application.services.metrics import record_stale_attempt_ignored
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
-from application.services.metrics import record_stale_attempt_ignored
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
 from application.services.run_snapshots import (
     RunSnapshot,
@@ -919,7 +919,7 @@ def _ignore_stale_attempt(
     intent: RuntimeIntentEnvelope,
     run: Run,
 ) -> IntentProcessResult | None:
-    current_attempt_id = run.active_attempt_id
+    current_attempt_id = run.authoritative_attempt_id
 
     if current_attempt_id and intent.attempt_id != current_attempt_id:
         record_stale_attempt_ignored("runtime_intent")

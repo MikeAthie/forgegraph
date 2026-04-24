@@ -4,6 +4,7 @@ import copy
 import json
 import time
 from types import SimpleNamespace
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,7 +16,9 @@ from application.services.run_queue import RunQueueSettings, enqueue_run
 from application.services.run_snapshots import RunSnapshot, get_snapshot, set_snapshot
 from application.services.runtime_write_intents import process_runtime_intent_message
 from infrastructure.orm.management.commands import process_run_queue
-from infrastructure.orm.management.commands.process_run_queue import Command as ProcessRunQueueCommand
+from infrastructure.orm.management.commands.process_run_queue import (
+    Command as ProcessRunQueueCommand,
+)
 from infrastructure.orm.models import (
     Graph,
     GraphVersion,
@@ -286,11 +289,14 @@ def test_active_attempt_can_update_node_state_via_engine_event(signed_engine_eve
     assert response.status_code == status.HTTP_200_OK
     assert node_run.status == "succeeded"
     assert node_run.output_json == {"answer": "fresh"}
-    assert NodeRunEventProjection.objects.get(
-        run=run,
-        node_id="node_1",
-        attempt=1,
-    ).status == "succeeded"
+    assert (
+        NodeRunEventProjection.objects.get(
+            run=run,
+            node_id="node_1",
+            attempt=1,
+        ).status
+        == "succeeded"
+    )
     assert RunEvent.objects.filter(run=run, external_id="evt-active-node-completed").exists()
 
 
@@ -485,7 +491,9 @@ def test_process_run_queue_enriches_persisted_dispatch_graph_without_mutating_so
         process_run_queue,
         "prepare_graph_for_engine",
         lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("prepare_graph_for_engine should not run for persisted dispatch_graph_json")
+            AssertionError(
+                "prepare_graph_for_engine should not run for persisted dispatch_graph_json"
+            )
         ),
     )
     monkeypatch.setattr(process_run_queue, "validate_prompt_credentials", lambda graph, owner: [])
@@ -514,12 +522,12 @@ def test_process_run_queue_enriches_persisted_dispatch_graph_without_mutating_so
 
     run.refresh_from_db()
 
-    outbound_graph = engine_client.start_calls[0]["graph_json"]
+    outbound_graph = cast(dict[str, Any], engine_client.start_calls[0]["graph_json"])
+    outbound_metadata = cast(dict[str, Any], outbound_graph["metadata"])
+    persisted_metadata = cast(dict[str, Any], original_persisted_graph["metadata"])
 
     assert persisted_graph == original_persisted_graph
     assert run.dispatch_graph_json == original_persisted_graph
-    assert "backend_attempt_id" not in original_persisted_graph["metadata"]
-    assert outbound_graph["metadata"]["tool_resolution"] == original_persisted_graph["metadata"][
-        "tool_resolution"
-    ]
-    assert "backend_attempt_id" in outbound_graph["metadata"]
+    assert "backend_attempt_id" not in persisted_metadata
+    assert outbound_metadata["tool_resolution"] == persisted_metadata["tool_resolution"]
+    assert "backend_attempt_id" in outbound_metadata

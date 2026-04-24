@@ -5,9 +5,7 @@ export type MarketingSimulationGraphOptions = {
 
 const defaultGoal = "Launch a replayable AI digital marketing campaign for ForgeGraph.";
 const defaultModel =
-  process.env.PLAYWRIGHT_MARKETING_LLM_MODEL ??
-  process.env.OPENAI_MODEL ??
-  "docker.io/ai/llama3.1:latest";
+  process.env.PLAYWRIGHT_MARKETING_LLM_MODEL ?? process.env.OPENAI_MODEL ?? "docker.io/ai/llama3.1:latest";
 const promptNodeTimeoutMs = 180_000;
 
 const strategySchema = {
@@ -23,14 +21,7 @@ const strategySchema = {
       items: { type: "string" },
     },
   },
-  required: [
-    "company",
-    "objective",
-    "primary_channel",
-    "audience",
-    "positioning",
-    "content_pillars",
-  ],
+  required: ["company", "objective", "primary_channel", "audience", "positioning", "content_pillars"],
   additionalProperties: false,
 } as const;
 
@@ -114,14 +105,7 @@ const executionStateSchema = {
     analytics: analyticsSchema,
     iteration: { type: "integer" },
   },
-  required: [
-    "goal",
-    "strategy",
-    "content_assets",
-    "distribution_plan",
-    "analytics",
-    "iteration",
-  ],
+  required: ["goal", "strategy", "content_assets", "distribution_plan", "analytics", "iteration"],
   additionalProperties: false,
 } as const;
 
@@ -227,9 +211,7 @@ function buildStagePrompt(stage: string, instructions: string[]): string {
   ].join("\n");
 }
 
-export function buildMarketingSimulationGraph(
-  options: MarketingSimulationGraphOptions = {},
-): Record<string, unknown> {
+export function buildMarketingSimulationGraph(options: MarketingSimulationGraphOptions = {}): Record<string, unknown> {
   const goal = options.defaultGoal ?? defaultGoal;
   const model = options.model ?? defaultModel;
 
@@ -486,14 +468,7 @@ export function buildMarketingSimulationGraph(
           analytics: { type: "object" },
           iteration: { type: "integer", minimum: 2 },
         },
-        required: [
-          "goal",
-          "strategy",
-          "content_assets",
-          "distribution_plan",
-          "analytics",
-          "iteration",
-        ],
+        required: ["goal", "strategy", "content_assets", "distribution_plan", "analytics", "iteration"],
         additionalProperties: false,
       },
     },
