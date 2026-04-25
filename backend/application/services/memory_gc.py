@@ -204,7 +204,14 @@ class MemoryGCService:
             max_age_days = self.chunk_retention_days
 
         cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
-        old_qs = MemoryChunk.objects.filter(created_at__lt=cutoff)
+        old_qs = (
+            MemoryChunk.objects.filter(created_at__lt=cutoff)
+            .exclude(
+                observation_links__deleted_at__isnull=True,
+                observation_links__last_seen_at__gte=cutoff,
+            )
+            .distinct()
+        )
         count = old_qs.count()
 
         logger.info(

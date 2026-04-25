@@ -7,7 +7,7 @@ import pytest
 from django.utils import timezone
 
 from application.services.run_snapshots import RunSnapshot, set_snapshot
-from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run, User
+from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run, RunCheckpoint, User
 from infrastructure.security import s2s
 
 pytestmark = pytest.mark.django_db
@@ -279,6 +279,47 @@ class TestEngineRunApi:
         run.refresh_from_db()
         assert run.pause_state_json is not None
         assert run.pause_state_json["graph_json"] == graph_json
+
+    def test_pause_state_get_falls_back_to_checkpoint_graph_json(self, api_client):
+        user = User.objects.create_user(
+            email="engine-pause-fallback@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Pause State Fallback Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "gate", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="paused",
+            paused_node_id="gate",
+            pause_state_json={
+                "state_snapshot": {"input.ticket": "FG-123"},
+                "completed_nodes": ["seed"],
+                "skipped_nodes": [],
+                "tenant_id": str(user.default_organization_id),
+            },
+        )
+        RunCheckpoint.objects.create(
+            run=run,
+            node_id="gate",
+            step_index=3,
+            state_json={"input.ticket": "FG-123"},
+            completed_nodes=["seed"],
+            skipped_nodes=[],
+            graph_json=version.graph_json,
+        )
+
+        response = api_client.get(
+            f"/api/engine/runs/{run.id}/pause-state",
+            **_signed_headers("test-secret"),
+        )
+
+        assert response.status_code == 200
+        assert json.loads(response.data["data"]["graph_json"]) == version.graph_json
 
     def test_snapshot_round_trip_reads_backend_owned_redis_snapshot(self, api_client):
         user = User.objects.create_user(email="engine-snapshot@example.com", password="password123")

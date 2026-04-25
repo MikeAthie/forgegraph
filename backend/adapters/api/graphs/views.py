@@ -29,6 +29,7 @@ from adapters.api.graphs.serializers import (
     GraphDetailSerializer,
     GraphListSerializer,
     GraphUpdateSerializer,
+    GraphVersionCreateByGraphSerializer,
     GraphVersionCreateSerializer,
     GraphVersionDetailSerializer,
     GraphVersionSummarySerializer,
@@ -370,6 +371,80 @@ class GraphVersionListCreateView(APIView):
 
         # Update graph timestamp
         graph.save()  # This triggers auto_now on updated_at
+
+        version_data = GraphVersionDetailSerializer(
+            {
+                "id": version.id,
+                "graph_id": version.graph_id,
+                "version": version.version,
+                "graph_json": version.graph_json,
+                "checksum": version.checksum,
+                "created_at": version.created_at,
+            }
+        ).data
+
+        return success_response(version_data, status=status.HTTP_201_CREATED)
+
+
+class GraphVersionCreateView(APIView):
+    """Create a graph version from a top-level graph_id payload."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Create a new graph version."""
+        user = cast(User, request.user)
+        if not has_min_role(user, "member"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to create graph versions in this organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = GraphVersionCreateByGraphSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="The request contains invalid fields",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=[
+                    {"field": field, "issue": ", ".join(errors)}
+                    for field, errors in serializer.errors.items()
+                ],
+            )
+
+        graph_id = serializer.validated_data["graph_id"]
+        graph = Graph.objects.for_user(user).filter(id=graph_id).first()
+        if graph is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Graph with id '{graph_id}' not found or you do not have access to it",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        graph_json = serializer.validated_data["graph_json"]
+
+        validator = GraphValidator()
+        issues = validator.validate(graph_json, require_entry_exit=False)
+        errors = [issue for issue in issues if issue.get("severity") != "warning"]
+        if errors:
+            return error_response(
+                code="GRAPH_VALIDATION_ERROR",
+                message="Graph validation failed",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=errors,
+            )
+
+        latest = graph.versions.order_by("-version").first()
+        next_version = (latest.version + 1) if latest else 1
+
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=next_version,
+            graph_json=graph_json,
+        )
+
+        graph.save()
 
         version_data = GraphVersionDetailSerializer(
             {

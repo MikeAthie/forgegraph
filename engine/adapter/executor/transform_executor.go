@@ -583,6 +583,12 @@ func cloneToAnySlice(value any) ([]any, error) {
 			cloned[i] = cloneTransformValue(item)
 		}
 		return cloned, nil
+	case []string:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = item
+		}
+		return cloned, nil
 	default:
 		return nil, fmt.Errorf("value is not an array")
 	}
@@ -618,6 +624,12 @@ func cloneTransformValue(value any) any {
 		cloned := make([]map[string]any, len(typed))
 		for i, item := range typed {
 			cloned[i] = cloneTransformValue(item).(map[string]any)
+		}
+		return cloned
+	case []string:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = item
 		}
 		return cloned
 	default:

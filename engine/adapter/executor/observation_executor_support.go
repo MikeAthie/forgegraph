@@ -185,6 +185,19 @@ func observationsToMaps(observations []port.Observation) []map[string]any {
 	return result
 }
 
+func observationIDs(observations []port.Observation) []string {
+	if len(observations) == 0 {
+		return []string{}
+	}
+	result := make([]string, 0, len(observations))
+	for _, observation := range observations {
+		if id := strings.TrimSpace(observation.ID); id != "" {
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
 func formatObservationTime(value time.Time) string {
 	if value.IsZero() {
 		return ""

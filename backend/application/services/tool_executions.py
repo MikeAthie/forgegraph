@@ -47,6 +47,10 @@ def prepare_tool_executions_for_dispatch(
         raise ToolExecutionDispatchBlocked("tool execution attempt_id could not be derived")
 
     data = copy.deepcopy(graph_json)
+    if not data.get("graph_id"):
+        data["graph_id"] = str(run.graph_version.graph_id)
+    if not data.get("version_id"):
+        data["version_id"] = str(run.graph_version_id)
     metadata_raw = data.get("metadata")
     metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
     metadata["backend_attempt_id"] = attempt

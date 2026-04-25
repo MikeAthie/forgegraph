@@ -233,6 +233,21 @@ class TestGraphVersionListCreate:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["data"]["version"] == 2
 
+    def test_create_version_via_top_level_endpoint(self, authenticated_client, user):
+        """Top-level graph version create should accept graph_id in the payload."""
+        graph = Graph.objects.create(owner=user, name="Top Level Test")
+        graph_json = {"nodes": [{"id": "n1", "type": "prompt", "name": "Test"}], "edges": []}
+
+        response = authenticated_client.post(
+            "/api/graph-versions",
+            {"graph_id": str(graph.id), "graph_json": graph_json},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["data"]["graph_id"] == str(graph.id)
+        assert response.data["data"]["graph_json"] == graph_json
+
     def test_create_version_validates_graph_json(self, authenticated_client, user):
         """Should validate graph_json structure."""
         graph = Graph.objects.create(owner=user, name="Test")

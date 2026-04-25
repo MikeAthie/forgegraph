@@ -7,6 +7,8 @@ Clean Architecture: Interface Adapters layer.
 from django.urls import include, path
 
 from adapters.api.auth.views import WSTicketView
+from adapters.api.graphs.views import GraphVersionCreateView
+from adapters.api.runs.views import RunListView
 
 urlpatterns = [
     path("ws-ticket", WSTicketView.as_view(), name="ws-ticket"),
@@ -23,6 +25,7 @@ urlpatterns = [
     path("integrations/", include("adapters.api.integrations.urls")),
     path("orgs/", include("adapters.api.organizations.urls")),
     path("graphs/", include("adapters.api.graphs.urls")),
+    path("graph-versions", GraphVersionCreateView.as_view(), name="graph-version-create-top-level"),
     path("health/", include("adapters.api.health.urls")),
     path("analytics/", include("adapters.api.analytics.urls")),
     path("billing/", include("adapters.api.billing.urls")),
@@ -33,6 +36,7 @@ urlpatterns = [
     path("runtime-tools/", include("adapters.api.runtime_tools.urls")),
     path("onboarding/", include("adapters.api.onboarding.urls")),
     path("metrics/", include("adapters.api.metrics.urls")),
+    path("runs", RunListView.as_view(), name="run-list-create-top-level"),
     path("runs/", include("adapters.api.runs.urls")),
     path("approvals/", include("adapters.api.approvals.urls")),
     path("audit-logs/", include("adapters.api.audit_logs.urls")),

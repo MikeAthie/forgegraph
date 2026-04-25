@@ -12,6 +12,7 @@ from adapters.api.graphs.views import (
     GraphListCreateView,
     GraphMemoryConfigView,
     GraphValidateView,
+    GraphVersionCreateView,
     GraphVersionDetailView,
     GraphVersionLatestView,
     GraphVersionListCreateView,
@@ -19,6 +20,7 @@ from adapters.api.graphs.views import (
 
 urlpatterns = [
     path("", GraphListCreateView.as_view(), name="graph-list-create"),
+    path("versions", GraphVersionCreateView.as_view(), name="graph-version-create"),
     path(
         "external-workflows",
         ExternalWorkflowCreateView.as_view(),
