@@ -71,6 +71,7 @@ type Config struct {
 	CallbackSecret                       string
 	CallbackURL                          string
 	ControlPlaneURL                      string
+	EngineHost                           string
 	EventMaxRetries                      int
 	EventRetryDelayMs                    int
 	EventBufferSize                      int
@@ -131,6 +132,7 @@ func LoadConfig() *Config {
 		CallbackSecret:                       getEnv("ENGINE_CALLBACK_SECRET", ""),
 		CallbackURL:                          getEnv("ENGINE_CALLBACK_URL", ""),
 		ControlPlaneURL:                      getEnv("CONTROL_PLANE_URL", ""),
+		EngineHost:                           strings.TrimSpace(getEnv("ENGINE_HOST", "localhost")),
 		EventMaxRetries:                      getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
 		EventRetryDelayMs:                    getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
 		EventBufferSize:                      getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
@@ -219,6 +221,13 @@ func selectRunRepositoryDriver(cfg *Config) (string, error) {
 func resolveEngineInstanceID(cfg *Config) string {
 	if cfg != nil && strings.TrimSpace(cfg.EngineInstanceID) != "" {
 		return strings.TrimSpace(cfg.EngineInstanceID)
+	}
+	if cfg != nil && strings.TrimSpace(cfg.EngineHost) != "" {
+		port := "50051"
+		if strings.TrimSpace(cfg.GRPCPort) != "" {
+			port = strings.TrimSpace(cfg.GRPCPort)
+		}
+		return fmt.Sprintf("%s:%s", strings.TrimSpace(cfg.EngineHost), port)
 	}
 	hostname, err := os.Hostname()
 	if err != nil || strings.TrimSpace(hostname) == "" {

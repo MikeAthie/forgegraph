@@ -195,9 +195,7 @@ def _serialize_node_run(node_run: NodeRun) -> dict[str, object]:
 
 
 def _serialize_checkpoint(checkpoint: RunCheckpoint) -> dict[str, object]:
-    graph_json = checkpoint.graph_json
-    if not isinstance(graph_json, str):
-        graph_json = json.dumps(graph_json)
+    graph_json = _stringify_graph_json(checkpoint.graph_json)
     return {
         "node_id": checkpoint.node_id,
         "step_index": checkpoint.step_index,
@@ -224,6 +222,14 @@ def _decode_graph_json(raw_value: object) -> object:
             return {}
         return json.loads(text)
     raise ValueError("graph_json must be a JSON object, array, or JSON-encoded string")
+
+
+def _stringify_graph_json(raw_value: object) -> str:
+    if isinstance(raw_value, str):
+        return raw_value
+    if isinstance(raw_value, (dict, list)):
+        return json.dumps(raw_value)
+    return str(raw_value or "")
 
 
 def _validate_run_status_transition(current_status: str, next_status: str) -> None:
@@ -378,13 +384,19 @@ class EngineRunPauseStateView(APIView):
             )
 
         pause_state = dict(run.pause_state_json)
+        graph_json = pause_state.get("graph_json")
+        if not graph_json:
+            try:
+                graph_json = run.checkpoint.graph_json
+            except RunCheckpoint.DoesNotExist:
+                graph_json = ""
         return success_response(
             {
                 "paused_node_id": run.paused_node_id,
                 "state_snapshot": redact_payload(pause_state.get("state_snapshot") or {}),
                 "completed_nodes": list(pause_state.get("completed_nodes") or []),
                 "skipped_nodes": list(pause_state.get("skipped_nodes") or []),
-                "graph_json": str(pause_state.get("graph_json") or ""),
+                "graph_json": _stringify_graph_json(graph_json),
                 "tenant_id": str(pause_state.get("tenant_id") or ""),
             }
         )
@@ -411,7 +423,7 @@ class EngineRunPauseStateView(APIView):
             "state_snapshot": redact_payload(payload.get("state_snapshot") or {}),
             "completed_nodes": list(payload.get("completed_nodes") or []),
             "skipped_nodes": list(payload.get("skipped_nodes") or []),
-            "graph_json": str(payload.get("graph_json") or ""),
+            "graph_json": _stringify_graph_json(payload.get("graph_json")),
             "tenant_id": str(payload.get("tenant_id") or ""),
         }
         run.paused_node_id = paused_node_id

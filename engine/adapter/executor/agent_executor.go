@@ -178,12 +178,18 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	stateSnapshot := state.SnapshotNested()
 	var vectorMemories []port.MemoryChunk
 	if curatedContext != nil && runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
-		tenantID := port.TenantIDFrom(ctx)
+		tenantID := strings.TrimSpace(runCtx.TenantID)
+		if tenantID == "" {
+			tenantID = strings.TrimSpace(port.TenantIDFrom(ctx))
+		}
 		query := buildAgentContextQuery(node, stateSnapshot)
 		if tenantID != "" && query != "" {
 			req := port.MemoryRetrieveRequest{
 				TenantID:       tenantID,
 				Query:          query,
+				AgentID:        strings.TrimSpace(node.GetConfigString("agent_id")),
+				RunID:          strings.TrimSpace(runCtx.RunID),
+				SessionID:      strings.TrimSpace(runCtx.SessionID),
 				TopK:           runCtx.MemoryConfig.Tier3.TopK,
 				Threshold:      runCtx.MemoryConfig.Tier3.Threshold,
 				RecencyWeight:  runCtx.MemoryConfig.Tier3.RecencyWeight,

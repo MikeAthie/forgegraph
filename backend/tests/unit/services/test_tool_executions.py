@@ -90,6 +90,8 @@ def test_prepare_tool_executions_creates_record_and_dispatch_identity(user) -> N
     assert execution.side_effect_class == "idempotent"
     assert config["tool_execution_id"] == str(execution.id)
     assert config["idempotency_key"] == execution.idempotency_key
+    assert prepared["graph_id"] == str(run.graph_version.graph_id)
+    assert prepared["version_id"] == str(run.graph_version_id)
     assert prepared["metadata"]["backend_attempt_id"] == backend_attempt_id_for_run(run)
 
 

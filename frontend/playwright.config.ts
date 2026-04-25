@@ -36,11 +36,15 @@ function loadRootEnvFile() {
 
 loadRootEnvFile();
 
+const runtimeTarget = (process.env.PLAYWRIGHT_RUNTIME_TARGET ?? "docker").toLowerCase();
+const useDockerRuntime = runtimeTarget !== "local";
 const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_DEV_PORT) : 3001;
+const dockerFrontendUrl = process.env.PLAYWRIGHT_DOCKER_FRONTEND_URL ?? "http://127.0.0.1:3000";
 // Use 127.0.0.1 to keep frontend/backend on the same "site" for SameSite=Lax cookies.
-const devUrl = `http://127.0.0.1:${devPort}`;
+const devUrl = useDockerRuntime ? dockerFrontendUrl : `http://127.0.0.1:${devPort}`;
 const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ? Number(process.env.PLAYWRIGHT_BACKEND_PORT) : 8002;
-const backendUrl = `http://127.0.0.1:${backendPort}`;
+const dockerBackendUrl = process.env.PLAYWRIGHT_DOCKER_BACKEND_URL ?? "http://127.0.0.1:8000";
+const backendUrl = useDockerRuntime ? dockerBackendUrl : `http://127.0.0.1:${backendPort}`;
 const trustedFrontendOrigins = [
   devUrl,
   "http://localhost:3000",
@@ -61,11 +65,12 @@ const memoryGrpcPort = process.env.MEMORY_GRPC_PORT
     : 50052;
 const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT) : 8011;
 const llmMockUrl = `http://127.0.0.1:${llmMockPort}`;
+const dockerLocalLlmUrl = process.env.PLAYWRIGHT_DOCKER_LOCAL_LLM_URL ?? "http://127.0.0.1:12434/v1";
 const preferredLlmBaseUrl =
   process.env.OPENAI_BASE_URL ??
   process.env.LOCAL_LLM_BASE_URL ??
   process.env.PLAYWRIGHT_LOCAL_LLM_URL ??
-  `${llmMockUrl}/v1`;
+  (runtimeTarget === "docker" ? dockerLocalLlmUrl : `${llmMockUrl}/v1`);
 const useLlmMockServer = preferredLlmBaseUrl === `${llmMockUrl}/v1`;
 const playwrightRunId = process.env.PLAYWRIGHT_RUN_ID ?? `${Date.now()}`;
 const engineEventSpoolPath =
@@ -92,6 +97,7 @@ const engineDatabaseUrl =
 
 // Give E2E helpers a stable default API URL (avoids IPv6 localhost issues on some hosts).
 process.env.PLAYWRIGHT_API_URL = process.env.PLAYWRIGHT_API_URL ?? backendUrl;
+process.env.PLAYWRIGHT_RUNTIME_TARGET = runtimeTarget;
 process.env.PLAYWRIGHT_RUNTIME_TENANT_ID = runtimeFixtureTenantId;
 process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL = runtimeFixtureEmail;
 process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD = runtimeFixturePassword;
@@ -100,6 +106,7 @@ process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME = runtimeFixturePackageName;
 process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME = runtimeFixtureToolName;
 process.env.PLAYWRIGHT_RUNTIME_TOOL_URL = runtimeFixtureToolUrl;
 process.env.PLAYWRIGHT_LLM_MOCK_URL = llmMockUrl;
+process.env.OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? preferredLlmBaseUrl;
 process.env.TESTING = process.env.TESTING ?? "true";
 process.env.SECRET_KEY = process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production";
 process.env.ALLOWED_HOSTS = process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver";
@@ -129,7 +136,8 @@ const workerCount =
       : undefined;
 
 export default defineConfig({
-  testDir: "./__tests__/e2e",
+  testDir: "./__tests__",
+  testMatch: ["**/e2e/*.spec.ts", "**/consulting/specs/*.spec.ts"],
   testIgnore: [
     "**/agent-authoring.spec.ts",
     "**/graph-editor.spec.ts",
@@ -193,99 +201,103 @@ export default defineConfig({
           },
         ]
       : []),
-    {
-      command: "python scripts/run_playwright_backend.py",
-      url: `${backendUrl}/health`,
-      reuseExistingServer: !process.env.CI,
-      cwd: path.join(__dirname, "..", "backend"),
-      env: {
-        ...process.env,
-        TESTING: process.env.TESTING ?? "true",
-        DEBUG: process.env.DEBUG ?? "true",
-        SECRET_KEY: process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production",
-        ALLOWED_HOSTS: process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver",
-        ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=",
-        USE_SQLITE: process.env.USE_SQLITE ?? "false",
-        SQLITE_DB_PATH: sqliteDbPath,
-        USE_IN_MEMORY_CHANNEL_LAYER: process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
-        CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? trustedFrontendOrigins,
-        CSRF_TRUSTED_ORIGINS: process.env.CSRF_TRUSTED_ORIGINS ?? trustedFrontendOrigins,
-        SECURE_SSL_REDIRECT: process.env.SECURE_SSL_REDIRECT ?? "false",
-        SESSION_COOKIE_SECURE: process.env.SESSION_COOKIE_SECURE ?? "false",
-        CSRF_COOKIE_SECURE: process.env.CSRF_COOKIE_SECURE ?? "false",
-        AUTH_REFRESH_COOKIE_SECURE: process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false",
-        FRONTEND_URL: process.env.FRONTEND_URL ?? devUrl,
-        DB_HOST: dbHost,
-        DB_PORT: dbPort,
-        DB_NAME: dbName,
-        DB_USER: dbUser,
-        DB_PASSWORD: dbPassword,
-        PLAYWRIGHT_BACKEND_PORT: String(backendPort),
-        REDIS_HOST: redisHost,
-        REDIS_PORT: redisPort,
-        REDIS_ADDR: redisAddr,
-        REDIS_SENTINEL_ADDRS: "",
-        REDIS_SENTINEL_MASTER_NAME: "",
-        REDIS_SENTINELS: "",
-        REDIS_SENTINEL_USERNAME: "",
-        REDIS_SENTINEL_PASSWORD: "",
-        ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
-        ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
-        ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
-        ENGINE_TARGETS:
-          process.env.ENGINE_TARGETS ??
-          `playwright-engine-1=${process.env.ENGINE_HOST ?? "127.0.0.1"}:${String(process.env.ENGINE_PORT ?? enginePort)}`,
-        ENGINE_CALLBACK_URL: process.env.ENGINE_CALLBACK_URL ?? `${backendUrl}/api/runs/engine-events`,
-        ENGINE_CALLBACK_SECRET: callbackSecret,
-        MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
-        MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
-        FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
-        OPENAI_BASE_URL: preferredLlmBaseUrl,
-      },
-    },
-    {
-      command: "go run .",
-      url: `${engineMetricsUrl}/metrics`,
-      reuseExistingServer: !process.env.CI,
-      cwd: path.join(__dirname, "..", "engine"),
-      env: {
-        ...process.env,
-        GRPC_PORT: String(enginePort),
-        METRICS_PORT: String(engineMetricsPort),
-        CONTROL_PLANE_URL: backendUrl,
-        ENGINE_RUN_STATE_MODE: process.env.ENGINE_RUN_STATE_MODE ?? "control-plane-http",
-        ENGINE_CALLBACK_SECRET: callbackSecret,
-        ENGINE_EVENT_VERBOSITY: process.env.ENGINE_EVENT_VERBOSITY ?? "default",
-        ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
-        ENGINE_EVENT_SPOOL_PATH: engineEventSpoolPath,
-        REDIS_ADDR: redisAddr,
-        REDIS_HOST: redisHost,
-        REDIS_PORT: redisPort,
-        REDIS_SENTINEL_ADDRS: "",
-        REDIS_SENTINEL_MASTER_NAME: "",
-        REDIS_SENTINELS: "",
-        REDIS_SENTINEL_USERNAME: "",
-        REDIS_SENTINEL_PASSWORD: "",
-        TENANT_ID: runtimeFixtureTenantId,
-        MARKETPLACE_MANIFEST_REFRESH_SECONDS: process.env.MARKETPLACE_MANIFEST_REFRESH_SECONDS ?? "1",
-        FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
-        TOOL_MANIFEST_DIR: process.env.TOOL_MANIFEST_DIR ?? "",
-        DATABASE_URL: engineDatabaseUrl,
-        MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
-        MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
-        OPENAI_BASE_URL: preferredLlmBaseUrl,
-      },
-    },
-    {
-      command: `npm run dev -- -p ${devPort}`,
-      url: devUrl,
-      reuseExistingServer: !process.env.CI,
-      env: {
-        ...process.env,
-        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? backendUrl,
-      },
-    },
+    ...(!useDockerRuntime
+      ? [
+          {
+            command: "python scripts/run_playwright_backend.py",
+            url: `${backendUrl}/health`,
+            reuseExistingServer: !process.env.CI,
+            cwd: path.join(__dirname, "..", "backend"),
+            env: {
+              ...process.env,
+              TESTING: process.env.TESTING ?? "true",
+              DEBUG: process.env.DEBUG ?? "true",
+              SECRET_KEY: process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production",
+              ALLOWED_HOSTS: process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver",
+              ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=",
+              USE_SQLITE: process.env.USE_SQLITE ?? "false",
+              SQLITE_DB_PATH: sqliteDbPath,
+              USE_IN_MEMORY_CHANNEL_LAYER: process.env.USE_IN_MEMORY_CHANNEL_LAYER ?? "true",
+              CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? trustedFrontendOrigins,
+              CSRF_TRUSTED_ORIGINS: process.env.CSRF_TRUSTED_ORIGINS ?? trustedFrontendOrigins,
+              SECURE_SSL_REDIRECT: process.env.SECURE_SSL_REDIRECT ?? "false",
+              SESSION_COOKIE_SECURE: process.env.SESSION_COOKIE_SECURE ?? "false",
+              CSRF_COOKIE_SECURE: process.env.CSRF_COOKIE_SECURE ?? "false",
+              AUTH_REFRESH_COOKIE_SECURE: process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false",
+              FRONTEND_URL: process.env.FRONTEND_URL ?? devUrl,
+              DB_HOST: dbHost,
+              DB_PORT: dbPort,
+              DB_NAME: dbName,
+              DB_USER: dbUser,
+              DB_PASSWORD: dbPassword,
+              PLAYWRIGHT_BACKEND_PORT: String(backendPort),
+              REDIS_HOST: redisHost,
+              REDIS_PORT: redisPort,
+              REDIS_ADDR: redisAddr,
+              REDIS_SENTINEL_ADDRS: "",
+              REDIS_SENTINEL_MASTER_NAME: "",
+              REDIS_SENTINELS: "",
+              REDIS_SENTINEL_USERNAME: "",
+              REDIS_SENTINEL_PASSWORD: "",
+              ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
+              ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
+              ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
+              ENGINE_TARGETS:
+                process.env.ENGINE_TARGETS ??
+                `playwright-engine-1=${process.env.ENGINE_HOST ?? "127.0.0.1"}:${String(process.env.ENGINE_PORT ?? enginePort)}`,
+              ENGINE_CALLBACK_URL: process.env.ENGINE_CALLBACK_URL ?? `${backendUrl}/api/runs/engine-events`,
+              ENGINE_CALLBACK_SECRET: callbackSecret,
+              MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
+              MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
+              FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
+              OPENAI_BASE_URL: preferredLlmBaseUrl,
+            },
+          },
+          {
+            command: "go run .",
+            url: `${engineMetricsUrl}/metrics`,
+            reuseExistingServer: !process.env.CI,
+            cwd: path.join(__dirname, "..", "engine"),
+            env: {
+              ...process.env,
+              GRPC_PORT: String(enginePort),
+              METRICS_PORT: String(engineMetricsPort),
+              CONTROL_PLANE_URL: backendUrl,
+              ENGINE_RUN_STATE_MODE: process.env.ENGINE_RUN_STATE_MODE ?? "control-plane-http",
+              ENGINE_CALLBACK_SECRET: callbackSecret,
+              ENGINE_EVENT_VERBOSITY: process.env.ENGINE_EVENT_VERBOSITY ?? "default",
+              ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
+              ENGINE_EVENT_SPOOL_PATH: engineEventSpoolPath,
+              REDIS_ADDR: redisAddr,
+              REDIS_HOST: redisHost,
+              REDIS_PORT: redisPort,
+              REDIS_SENTINEL_ADDRS: "",
+              REDIS_SENTINEL_MASTER_NAME: "",
+              REDIS_SENTINELS: "",
+              REDIS_SENTINEL_USERNAME: "",
+              REDIS_SENTINEL_PASSWORD: "",
+              TENANT_ID: runtimeFixtureTenantId,
+              MARKETPLACE_MANIFEST_REFRESH_SECONDS: process.env.MARKETPLACE_MANIFEST_REFRESH_SECONDS ?? "1",
+              FORGEGRAPH_RUNTIME_MODE: process.env.FORGEGRAPH_RUNTIME_MODE ?? "cloud",
+              TOOL_MANIFEST_DIR: process.env.TOOL_MANIFEST_DIR ?? "",
+              DATABASE_URL: engineDatabaseUrl,
+              MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
+              MEMORY_GRPC_PORT: String(process.env.MEMORY_GRPC_PORT ?? memoryGrpcPort),
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "playwright-openai-key",
+              OPENAI_BASE_URL: preferredLlmBaseUrl,
+            },
+          },
+          {
+            command: `npm run dev -- -p ${devPort}`,
+            url: devUrl,
+            reuseExistingServer: !process.env.CI,
+            env: {
+              ...process.env,
+              NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? backendUrl,
+            },
+          },
+        ]
+      : []),
   ],
 });

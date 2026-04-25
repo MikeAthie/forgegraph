@@ -204,11 +204,17 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 
 	var vectorMemories []port.MemoryChunk
 	if !disableMemoryContext && runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
-		tenantID := port.TenantIDFrom(ctx)
+		tenantID := strings.TrimSpace(runCtx.TenantID)
+		if tenantID == "" {
+			tenantID = strings.TrimSpace(port.TenantIDFrom(ctx))
+		}
 		if tenantID != "" {
 			req := port.MemoryRetrieveRequest{
 				TenantID:       tenantID,
 				Query:          basePrompt,
+				AgentID:        strings.TrimSpace(node.GetConfigString("agent_id")),
+				RunID:          strings.TrimSpace(runCtx.RunID),
+				SessionID:      strings.TrimSpace(runCtx.SessionID),
 				TopK:           runCtx.MemoryConfig.Tier3.TopK,
 				Threshold:      runCtx.MemoryConfig.Tier3.Threshold,
 				RecencyWeight:  runCtx.MemoryConfig.Tier3.RecencyWeight,

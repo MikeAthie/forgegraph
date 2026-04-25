@@ -175,6 +175,9 @@ func TestPromptExecutor_Execute_WithVectorMemories(t *testing.T) {
 	state := entity.NewState()
 
 	runCtx := &port.RunContext{
+		TenantID:  "tenant-1",
+		RunID:     "run-123",
+		SessionID: "session-123",
 		MemoryConfig: &entity.MemoryConfig{
 			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: false},
 			Tier3: entity.Tier3Config{Enabled: true, TopK: 5, Threshold: 0.7, RecencyWeight: 0.2},
@@ -190,6 +193,7 @@ func TestPromptExecutor_Execute_WithVectorMemories(t *testing.T) {
 		Type: string(value.NodeTypePrompt),
 		Config: map[string]any{
 			"prompt_template": "What is our timeline?",
+			"agent_id":        "agent-123",
 		},
 	}
 
@@ -200,6 +204,15 @@ func TestPromptExecutor_Execute_WithVectorMemories(t *testing.T) {
 
 	if retriever.lastRequest == nil || retriever.lastRequest.Query == "" {
 		t.Fatal("expected memory retriever to be called with query")
+	}
+	if retriever.lastRequest.TenantID != "tenant-1" {
+		t.Fatalf("tenant_id = %q, want tenant-1", retriever.lastRequest.TenantID)
+	}
+	if retriever.lastRequest.RunID != "run-123" || retriever.lastRequest.SessionID != "session-123" {
+		t.Fatalf("expected run/session scope in request, got %#v", retriever.lastRequest)
+	}
+	if retriever.lastRequest.AgentID != "agent-123" {
+		t.Fatalf("agent_id = %q, want agent-123", retriever.lastRequest.AgentID)
 	}
 
 	prompt := mockClient.received.Prompt

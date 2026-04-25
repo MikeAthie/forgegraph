@@ -497,6 +497,9 @@ func TestAgentExecutor_Execute_WithExplicitCuratedContext(t *testing.T) {
 	buffer.Push(entity.Message{Role: "assistant", Content: "Earlier answer"})
 
 	runCtx := &port.RunContext{
+		TenantID:     "tenant-1",
+		RunID:        "run-456",
+		SessionID:    "session-456",
 		MemoryBuffer: buffer,
 		MemoryConfig: &entity.MemoryConfig{
 			Tier1: entity.Tier1Config{Enabled: true, AutoPrepend: true},
@@ -517,6 +520,7 @@ func TestAgentExecutor_Execute_WithExplicitCuratedContext(t *testing.T) {
 			"model":                     "gpt-4.1-mini",
 			"tools":                     []any{"crm_lookup"},
 			"instructions":              "Resolve ticket {{input.ticket}}.",
+			"agent_id":                  "agent-curated-id",
 			"observation_context_paths": []any{"node.obs_ctx.output"},
 		},
 	}
@@ -552,5 +556,17 @@ func TestAgentExecutor_Execute_WithExplicitCuratedContext(t *testing.T) {
 	}
 	if memoryContext["vector_memory_count"] != 1 {
 		t.Fatalf("vector_memory_count = %v, want 1", memoryContext["vector_memory_count"])
+	}
+	if retriever.lastRequest == nil {
+		t.Fatal("expected memory retriever request")
+	}
+	if retriever.lastRequest.TenantID != "tenant-1" {
+		t.Fatalf("tenant_id = %q, want tenant-1", retriever.lastRequest.TenantID)
+	}
+	if retriever.lastRequest.RunID != "run-456" || retriever.lastRequest.SessionID != "session-456" {
+		t.Fatalf("expected run/session scope in request, got %#v", retriever.lastRequest)
+	}
+	if retriever.lastRequest.AgentID != "agent-curated-id" {
+		t.Fatalf("agent_id = %q, want agent-curated-id", retriever.lastRequest.AgentID)
 	}
 }

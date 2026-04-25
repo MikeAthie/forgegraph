@@ -99,3 +99,14 @@ func TestResolveEventSpoolPathDefaultsStable(t *testing.T) {
 		t.Fatalf("spool path extension = %s, want .jsonl", filepath.Ext(first))
 	}
 }
+
+func TestResolveEngineInstanceIDPrefersConfiguredEngineHost(t *testing.T) {
+	cfg := &Config{
+		EngineHost: "engine",
+		GRPCPort:   "50051",
+	}
+
+	if got := resolveEngineInstanceID(cfg); got != "engine:50051" {
+		t.Fatalf("resolveEngineInstanceID() = %s, want engine:50051", got)
+	}
+}

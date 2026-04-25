@@ -41,5 +41,13 @@ class MemoryChunkRepository:
         )[:top_k]
 
     def delete_older_than(self, cutoff: datetime) -> int:
-        deleted, _ = MemoryChunk.objects.filter(source_timestamp__lt=cutoff).delete()
+        deleted, _ = (
+            MemoryChunk.objects.filter(source_timestamp__lt=cutoff)
+            .exclude(
+                observation_links__deleted_at__isnull=True,
+                observation_links__last_seen_at__gte=cutoff,
+            )
+            .distinct()
+            .delete()
+        )
         return deleted

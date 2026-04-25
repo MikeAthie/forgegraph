@@ -30,8 +30,10 @@ class FakeChunk:
 class FakeRepository(MemoryChunkRepository):
     def __init__(self, chunks: list[FakeChunk]) -> None:
         self._chunks = chunks
+        self.last_kwargs: dict[str, Any] | None = None
 
     def search(self, **kwargs: Any) -> list[FakeChunk]:  # type: ignore[override]
+        self.last_kwargs = kwargs
         return self._chunks
 
 
@@ -261,6 +263,30 @@ class TestResultFields:
         assert result.combined_score == pytest.approx(0.8 * 0.85 + 0.2 * 1.0)
         assert result.content == "test"
         assert result.metadata == {"key": "value"}
+
+
+class TestScoping:
+    @pytest.mark.asyncio
+    async def test_search_forwards_scope_filters_to_repository(self):
+        now = datetime.now(UTC)
+        repository = FakeRepository([FakeChunk("scoped", 0.9, now, {})])
+        service = VectorSearchService(FakeEmbedder(), repository)
+
+        await service.search(
+            tenant_id="tenant-1",
+            query="renewal",
+            agent_id="agent-1",
+            run_id="run-1",
+            session_id="session-1",
+            top_k=4,
+        )
+
+        assert repository.last_kwargs is not None
+        assert repository.last_kwargs["tenant_id"] == "tenant-1"
+        assert repository.last_kwargs["agent_id"] == "agent-1"
+        assert repository.last_kwargs["run_id"] == "run-1"
+        assert repository.last_kwargs["session_id"] == "session-1"
+        assert repository.last_kwargs["top_k"] == 14
 
 
 class TestEdgeCases:

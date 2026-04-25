@@ -23,6 +23,7 @@ from application.services.metrics import record_stale_attempt_ignored
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
+from application.services.run_locking import acquire_run_transaction_lock
 from application.services.run_snapshots import (
     RunSnapshot,
     delete_snapshot,
@@ -322,7 +323,7 @@ def apply_pause_run_intent(
             "state_snapshot": redact_payload(pause_state_snapshot),
             "completed_nodes": list(pause_state.get("completed_nodes") or []),
             "skipped_nodes": list(pause_state.get("skipped_nodes") or []),
-            "graph_json": str(pause_state.get("graph_json") or ""),
+            "graph_json": _stringify_graph_json(pause_state.get("graph_json")),
             "tenant_id": str(pause_state.get("tenant_id") or ""),
         }
 
@@ -830,6 +831,7 @@ def apply_upsert_node_run_intent(
 
 def _load_run_for_update(run_id: UUID) -> Run:
     try:
+        acquire_run_transaction_lock(run_id)
         return Run.objects.select_for_update().select_related("owner").get(id=run_id)
     except Run.DoesNotExist as exc:
         raise RuntimeIntentError(f"run '{run_id}' not found") from exc
@@ -1310,6 +1312,14 @@ def _decode_graph_json(raw_value: object) -> object:
                 "checkpoint.graph_json must be a JSON object, array, or JSON string"
             ) from exc
     raise RuntimeIntentError("checkpoint.graph_json must be a JSON object, array, or JSON string")
+
+
+def _stringify_graph_json(raw_value: object) -> str:
+    if isinstance(raw_value, str):
+        return raw_value
+    if isinstance(raw_value, (dict, list)):
+        return json.dumps(raw_value)
+    return str(raw_value or "")
 
 
 def _payload_dict(raw_value: object) -> dict[str, Any]:

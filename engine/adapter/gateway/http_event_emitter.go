@@ -25,6 +25,42 @@ import (
 
 var ErrEventCallbackNotConfigured = errors.New("event callback URL is required")
 
+type eventDeliveryError struct {
+	err       error
+	retryable bool
+}
+
+func (e *eventDeliveryError) Error() string {
+	return e.err.Error()
+}
+
+func (e *eventDeliveryError) Unwrap() error {
+	return e.err
+}
+
+func isRetryableEventDeliveryError(err error) bool {
+	var deliveryErr *eventDeliveryError
+	if errors.As(err, &deliveryErr) {
+		return deliveryErr.retryable
+	}
+	return true
+}
+
+func isRetryableEventHTTPStatus(statusCode int) bool {
+	switch {
+	case statusCode == http.StatusRequestTimeout:
+		return true
+	case statusCode == http.StatusTooEarly:
+		return true
+	case statusCode == http.StatusTooManyRequests:
+		return true
+	case statusCode >= http.StatusInternalServerError:
+		return true
+	default:
+		return false
+	}
+}
+
 // HTTPEventEmitter sends execution events to the control plane via HTTP POST.
 type HTTPEventEmitter struct {
 	client           *http.Client
@@ -186,13 +222,42 @@ func (e *HTTPEventEmitter) prepareEvent(event *port.ExecutionEvent) *port.Execut
 	if event == nil {
 		return nil
 	}
-	if event.Category == "" {
-		event.Category = port.EventCategory(port.InferEventCategory(event.Type))
+	prepared := *event
+	if prepared.Category == "" {
+		prepared.Category = port.EventCategory(port.InferEventCategory(prepared.Type))
 	}
-	if event.EngineInstanceID == "" && strings.TrimSpace(e.engineInstanceID) != "" {
-		event.EngineInstanceID = strings.TrimSpace(e.engineInstanceID)
+	if prepared.EngineInstanceID == "" && strings.TrimSpace(e.engineInstanceID) != "" {
+		prepared.EngineInstanceID = strings.TrimSpace(e.engineInstanceID)
 	}
-	return event
+	prepared.Input = cloneEventMap(event.Input)
+	prepared.Output = cloneEventMap(event.Output)
+	return &prepared
+}
+
+func cloneEventMap(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = cloneEventValue(value)
+	}
+	return cloned
+}
+
+func cloneEventValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneEventMap(typed)
+	case []any:
+		cloned := make([]any, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneEventValue(item)
+		}
+		return cloned
+	default:
+		return value
+	}
 }
 
 // Emit sends an event to the control plane synchronously
@@ -333,8 +398,14 @@ func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.Execut
 		}
 
 		lastErr = err
+		retryable := isRetryableEventDeliveryError(err)
 		if attempt > 1 {
 			metrics.RecordEventDeliveryRetry(event.Type.String())
+		}
+
+		if !retryable {
+			metrics.RecordEventDeliveryFailure(event.Type.String())
+			return err
 		}
 
 		// Don't retry on context cancellation
@@ -396,13 +467,22 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 	if resp.StatusCode >= 400 {
 		responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if readErr != nil {
-			return fmt.Errorf("server returned status %d (failed to read response body: %w)", resp.StatusCode, readErr)
+			return &eventDeliveryError{
+				err:       fmt.Errorf("server returned status %d (failed to read response body: %w)", resp.StatusCode, readErr),
+				retryable: isRetryableEventHTTPStatus(resp.StatusCode),
+			}
 		}
 		bodyText := strings.TrimSpace(string(responseBody))
 		if bodyText == "" {
-			return fmt.Errorf("server returned status %d", resp.StatusCode)
+			return &eventDeliveryError{
+				err:       fmt.Errorf("server returned status %d", resp.StatusCode),
+				retryable: isRetryableEventHTTPStatus(resp.StatusCode),
+			}
 		}
-		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, bodyText)
+		return &eventDeliveryError{
+			err:       fmt.Errorf("server returned status %d: %s", resp.StatusCode, bodyText),
+			retryable: isRetryableEventHTTPStatus(resp.StatusCode),
+		}
 	}
 
 	return nil
@@ -578,7 +658,16 @@ func (e *HTTPEventEmitter) flushSpool(ctx context.Context) (int, error) {
 			continue
 		}
 		if err := e.sendWithRetry(ctx, &event, false); err != nil {
-			remaining = append(remaining, line)
+			if shouldRequeueSpooledEvent(err) {
+				remaining = append(remaining, line)
+				continue
+			}
+			log.Printf(
+				"Warning: dropping non-retryable spooled event: run_id=%s event_id=%s err=%v",
+				event.RunID,
+				event.EventID,
+				err,
+			)
 		}
 	}
 
@@ -600,6 +689,16 @@ func (e *HTTPEventEmitter) flushSpool(ctx context.Context) (int, error) {
 		return len(remaining), err
 	}
 	return len(remaining), nil
+}
+
+func shouldRequeueSpooledEvent(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return isRetryableEventDeliveryError(err)
 }
 
 func (e *HTTPEventEmitter) claimSpoolFile() (string, error) {

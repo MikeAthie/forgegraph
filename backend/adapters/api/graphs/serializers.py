@@ -99,6 +99,17 @@ class GraphVersionCreateSerializer(serializers.Serializer[Any]):
         return _validate_graph_json_payload(value)
 
 
+class GraphVersionCreateByGraphSerializer(serializers.Serializer[Any]):
+    """Serializer for creating a graph version with a top-level graph_id payload."""
+
+    graph_id = serializers.UUIDField()
+    graph_json = serializers.JSONField()
+
+    def validate_graph_json(self, value: Any) -> dict[str, Any]:
+        """Validate the graph JSON structure."""
+        return _validate_graph_json_payload(value)
+
+
 class ExternalWorkflowCreateSerializer(serializers.Serializer[Any]):
     """Serializer for creating a graph and initial version in one request."""
 

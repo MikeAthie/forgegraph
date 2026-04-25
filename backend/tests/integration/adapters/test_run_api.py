@@ -792,6 +792,25 @@ class TestRunStart:
         created_run_id = run_data["id"]
         assert Run.objects.filter(id=created_run_id, owner=user, graph_version=version).exists()
 
+    def test_post_runs_alias_creates_run(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="My Graph Alias")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+
+        response = authenticated_client.post(
+            "/api/runs",
+            {"graph_version_id": str(version.id), "input_json": {"hello": "alias"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "data" in response.data
+        run_data = response.data["data"]
+        assert run_data["graph_version_id"] == str(version.id)
+        assert run_data["status"] == "running"
+        assert run_data["input_json"] == {"hello": "alias"}
+
     def test_start_run_for_other_user_graph_returns_404(self, api_client, user):
         other_user = User.objects.create_user(email="other@example.com", password="password123")
         graph = Graph.objects.create(owner=other_user, name="Other Graph")

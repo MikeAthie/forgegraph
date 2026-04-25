@@ -100,6 +100,7 @@ from application.services.run_liveness import (
     recovery_state_for_status as recovery_state_for_status,
 )
 from application.services.run_liveness import touch_run_liveness as touch_run_liveness
+from application.services.run_locking import acquire_run_transaction_lock
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     SubgraphResolutionError,
@@ -148,6 +149,11 @@ from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
 _UNSET = object()
+
+
+def _lock_run_for_update(run_id: UUID) -> Run:
+    acquire_run_transaction_lock(run_id)
+    return Run.objects.select_for_update().select_related("owner").get(id=run_id)
 
 
 def _engine_event_attempt_id(event_type: str, event: dict[str, Any]) -> str:
@@ -1346,6 +1352,10 @@ class RunListView(APIView):
     """List runs (stub)."""
 
     permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Create and start a run using the same contract as /api/runs/start."""
+        return RunStartView().post(request)
 
     def get(self, request: Request) -> Response:
         """List user's runs."""
@@ -3295,248 +3305,250 @@ class EngineRunEventsView(APIView):
                     status=status.HTTP_409_CONFLICT,
                     detail=str(exc),
                 )
-            previous_status = run.status
-            previous_paused_node_id = run.paused_node_id
-            previous_pause_state = (
-                dict(run.pause_state_json) if isinstance(run.pause_state_json, dict) else {}
-            )
-            run_payload: dict[str, Any] = {}
-            update_fields: list[str] = []
-            pause_payload: dict[str, Any] = {}
-            node_id = ""
-            projection_kwargs: dict[str, Any] = {}
+            with transaction.atomic():
+                run = _lock_run_for_update(run.id)
+                previous_status = run.status
+                previous_paused_node_id = run.paused_node_id
+                previous_pause_state = (
+                    dict(run.pause_state_json) if isinstance(run.pause_state_json, dict) else {}
+                )
+                run_payload: dict[str, Any] = {}
+                update_fields: list[str] = []
+                pause_payload: dict[str, Any] = {}
+                node_id = ""
+                projection_kwargs: dict[str, Any] = {}
 
-            if event_type == "run_started":
-                run_payload["status"] = "running"
-                run.status = "running"
-                update_fields.append("status")
-                if event_time:
-                    run_payload["started_at"] = event_time
-                    run.started_at = event_time
-                    update_fields.append("started_at")
-                projection_kwargs = {
-                    "started_at": event_time,
-                }
+                if event_type == "run_started":
+                    run_payload["status"] = "running"
+                    run.status = "running"
+                    update_fields.append("status")
+                    if event_time:
+                        run_payload["started_at"] = event_time
+                        run.started_at = event_time
+                        update_fields.append("started_at")
+                    projection_kwargs = {
+                        "started_at": event_time,
+                    }
 
-            if event_type == "run_completed":
-                run_payload["status"] = "succeeded"
-                run.status = "succeeded"
-                update_fields.append("status")
-                if event_time:
-                    run_payload["ended_at"] = event_time
-                    run.ended_at = event_time
-                    update_fields.append("ended_at")
-                if "output" in event:
-                    redacted_output = redact_payload(event.get("output"))
-                    run_payload["output_json"] = redacted_output
-                    run.output_json = redacted_output
-                    update_fields.append("output_json")
-                projection_kwargs = {
-                    "ended_at": event_time,
-                    "output_json": run_payload.get("output_json", _UNSET),
-                }
+                if event_type == "run_completed":
+                    run_payload["status"] = "succeeded"
+                    run.status = "succeeded"
+                    update_fields.append("status")
+                    if event_time:
+                        run_payload["ended_at"] = event_time
+                        run.ended_at = event_time
+                        update_fields.append("ended_at")
+                    if "output" in event:
+                        redacted_output = redact_payload(event.get("output"))
+                        run_payload["output_json"] = redacted_output
+                        run.output_json = redacted_output
+                        update_fields.append("output_json")
+                    projection_kwargs = {
+                        "ended_at": event_time,
+                        "output_json": run_payload.get("output_json", _UNSET),
+                    }
 
-            if event_type == "run_failed":
-                run_payload["status"] = "failed"
-                run.status = "failed"
-                update_fields.append("status")
-                if event_time:
-                    run_payload["ended_at"] = event_time
-                    run.ended_at = event_time
-                    update_fields.append("ended_at")
-                error_message = redact_payload(event.get("error") or "")
-                run_payload["error_message"] = error_message
-                run.error_message = error_message
-                update_fields.append("error_message")
-                projection_kwargs = {
-                    "ended_at": event_time,
-                    "error_message": error_message,
-                }
+                if event_type == "run_failed":
+                    run_payload["status"] = "failed"
+                    run.status = "failed"
+                    update_fields.append("status")
+                    if event_time:
+                        run_payload["ended_at"] = event_time
+                        run.ended_at = event_time
+                        update_fields.append("ended_at")
+                    error_message = redact_payload(event.get("error") or "")
+                    run_payload["error_message"] = error_message
+                    run.error_message = error_message
+                    update_fields.append("error_message")
+                    projection_kwargs = {
+                        "ended_at": event_time,
+                        "error_message": error_message,
+                    }
 
-            if event_type == "run_canceled":
-                run_payload["status"] = "canceled"
-                run.status = "canceled"
-                update_fields.append("status")
-                if event_time:
-                    run_payload["ended_at"] = event_time
-                    run.ended_at = event_time
-                    update_fields.append("ended_at")
-                projection_kwargs = {
-                    "ended_at": event_time,
-                }
+                if event_type == "run_canceled":
+                    run_payload["status"] = "canceled"
+                    run.status = "canceled"
+                    update_fields.append("status")
+                    if event_time:
+                        run_payload["ended_at"] = event_time
+                        run.ended_at = event_time
+                        update_fields.append("ended_at")
+                    projection_kwargs = {
+                        "ended_at": event_time,
+                    }
 
-            if event_type == "run_paused":
-                run_payload["status"] = "paused"
-                run.status = "paused"
-                update_fields.append("status")
-                node_id = str(event.get("node_id") or "")
-                if node_id:
-                    run_payload["paused_node_id"] = node_id
-                    run.paused_node_id = node_id
+                if event_type == "run_paused":
+                    run_payload["status"] = "paused"
+                    run.status = "paused"
+                    update_fields.append("status")
+                    node_id = str(event.get("node_id") or "")
+                    if node_id:
+                        run_payload["paused_node_id"] = node_id
+                        run.paused_node_id = node_id
+                        update_fields.append("paused_node_id")
+                    raw_pause_payload = redact_payload(event.get("output") or {})
+                    pause_payload = raw_pause_payload if isinstance(raw_pause_payload, dict) else {}
+                    run_payload["pause_payload"] = pause_payload
+                    persisted_pause_state = redact_payload(run.pause_state_json)
+                    if persisted_pause_state is not None:
+                        run_payload["pause_state_json"] = persisted_pause_state
+                    projection_kwargs = {
+                        "paused_node_id": node_id or None,
+                        "pause_state_json": (
+                            persisted_pause_state if persisted_pause_state is not None else _UNSET
+                        ),
+                    }
+
+                if event_type == "run_resumed":
+                    event_output = event.get("output")
+                    resume_output = event_output if isinstance(event_output, dict) else {}
+                    resume_attempt_id = str(resume_output.get("resume_attempt_id") or "").strip()
+                    if run.resume_attempt_id:
+                        expected_resume_attempt_id = str(run.resume_attempt_id)
+                        if not resume_attempt_id or resume_attempt_id != expected_resume_attempt_id:
+                            return problem_response(
+                                type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
+                                title="Stale resume acknowledgement",
+                                status=status.HTTP_409_CONFLICT,
+                                detail=(
+                                    "run_resumed acknowledgement does not match the active "
+                                    "resume_attempt_id."
+                                ),
+                            )
+                    run_payload["status"] = "running"
+                    run.status = "running"
+                    update_fields.append("status")
+                    run_payload["paused_node_id"] = None
+                    run.paused_node_id = None
                     update_fields.append("paused_node_id")
-                raw_pause_payload = redact_payload(event.get("output") or {})
-                pause_payload = raw_pause_payload if isinstance(raw_pause_payload, dict) else {}
-                run_payload["pause_payload"] = pause_payload
-                persisted_pause_state = redact_payload(run.pause_state_json)
-                if persisted_pause_state is not None:
-                    run_payload["pause_state_json"] = persisted_pause_state
-                projection_kwargs = {
-                    "paused_node_id": node_id or None,
-                    "pause_state_json": (
-                        persisted_pause_state if persisted_pause_state is not None else _UNSET
-                    ),
-                }
+                    run_payload["pause_state_json"] = None
+                    run.pause_state_json = None
+                    update_fields.append("pause_state_json")
+                    projection_kwargs = {
+                        "paused_node_id": None,
+                        "pause_state_json": None,
+                    }
 
-            if event_type == "run_resumed":
-                event_output = event.get("output")
-                resume_output = event_output if isinstance(event_output, dict) else {}
-                resume_attempt_id = str(resume_output.get("resume_attempt_id") or "").strip()
-                if run.resume_attempt_id:
-                    expected_resume_attempt_id = str(run.resume_attempt_id)
-                    if not resume_attempt_id or resume_attempt_id != expected_resume_attempt_id:
-                        return problem_response(
-                            type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
-                            title="Stale resume acknowledgement",
-                            status=status.HTTP_409_CONFLICT,
-                            detail=(
-                                "run_resumed acknowledgement does not match the active "
-                                "resume_attempt_id."
-                            ),
+                if run.resume_requested_at is not None:
+                    run_payload["resume_requested_at"] = None
+                    run.resume_requested_at = None
+                    update_fields.append("resume_requested_at")
+                if run.resume_attempt_id is not None:
+                    run_payload["resume_attempt_id"] = None
+                    run.resume_attempt_id = None
+                    update_fields.append("resume_attempt_id")
+
+                if state_mutation_enabled and update_fields:
+                    update_fields.extend(
+                        touch_run_liveness(
+                            run,
+                            event_time=event_time,
+                            recovery_state=recovery_state_for_status(run.status),
+                            engine_instance_id=callback_engine_instance_id,
                         )
-                run_payload["status"] = "running"
-                run.status = "running"
-                update_fields.append("status")
-                run_payload["paused_node_id"] = None
-                run.paused_node_id = None
-                update_fields.append("paused_node_id")
-                run_payload["pause_state_json"] = None
-                run.pause_state_json = None
-                update_fields.append("pause_state_json")
-                projection_kwargs = {
-                    "paused_node_id": None,
-                    "pause_state_json": None,
-                }
-
-            if run.resume_requested_at is not None:
-                run_payload["resume_requested_at"] = None
-                run.resume_requested_at = None
-                update_fields.append("resume_requested_at")
-            if run.resume_attempt_id is not None:
-                run_payload["resume_attempt_id"] = None
-                run.resume_attempt_id = None
-                update_fields.append("resume_attempt_id")
-
-            if state_mutation_enabled and update_fields:
-                update_fields.extend(
-                    touch_run_liveness(
-                        run,
-                        event_time=event_time,
-                        recovery_state=recovery_state_for_status(run.status),
-                        engine_instance_id=callback_engine_instance_id,
                     )
-                )
-                run.trace_id = trace_context["trace_id"]
-                update_fields.append("trace_id")
-                run.save(update_fields=sorted(set(update_fields)))
+                    run.trace_id = trace_context["trace_id"]
+                    update_fields.append("trace_id")
+                    run.save(update_fields=sorted(set(update_fields)))
 
-            final_run_stream_summaries: list[dict[str, Any]] = []
-            if event_type in {"run_completed", "run_failed", "run_canceled", "run_paused"}:
-                final_run_stream_summaries = flush_all_stream_summaries(
-                    run_id=str(run.id),
-                    final_reason=event_type,
-                )
+                final_run_stream_summaries: list[dict[str, Any]] = []
+                if event_type in {"run_completed", "run_failed", "run_canceled", "run_paused"}:
+                    final_run_stream_summaries = flush_all_stream_summaries(
+                        run_id=str(run.id),
+                        final_reason=event_type,
+                    )
 
-            _project_run_event_state(
-                run=run,
-                projection_status=run.status,
-                trace_id=trace_context["trace_id"],
-                event_type=event_type,
-                event_id=event_id,
-                event_time=event_time,
-                **projection_kwargs,
-            )
-
-            if event_type == "run_paused" and node_id:
-                _project_pause_state(
+                _project_run_event_state(
                     run=run,
-                    node_id=node_id,
-                    node_type=str(event.get("node_type") or ""),
-                    attempt=int(event.get("attempt") or 1),
-                    pause_payload=pause_payload if isinstance(pause_payload, dict) else {},
+                    projection_status=run.status,
                     trace_id=trace_context["trace_id"],
-                    span_id=trace_context["span_id"],
-                    event_time=event_time,
-                )
-                _project_node_event_state(
-                    run=run,
-                    node_id=node_id,
-                    node_type=str(event.get("node_type") or "human_gate"),
-                    attempt=int(event.get("attempt") or 1),
-                    projection_status="waiting",
-                    trace_id=trace_context["trace_id"],
-                    span_id=trace_context["span_id"],
                     event_type=event_type,
                     event_id=event_id,
                     event_time=event_time,
-                    started_at=event_time,
-                    output_json={"pause_payload": pause_payload} if pause_payload else _UNSET,
+                    **projection_kwargs,
                 )
 
-            if event_type == "run_started" and previous_status != "running":
-                record_run_started()
-            if event_type in {
-                "run_completed",
-                "run_failed",
-                "run_canceled",
-            } and previous_status not in {
-                "succeeded",
-                "failed",
-                "canceled",
-            }:
-                record_run_completed(run.status, run.duration_ms)
+                if event_type == "run_paused" and node_id:
+                    _project_pause_state(
+                        run=run,
+                        node_id=node_id,
+                        node_type=str(event.get("node_type") or ""),
+                        attempt=int(event.get("attempt") or 1),
+                        pause_payload=pause_payload if isinstance(pause_payload, dict) else {},
+                        trace_id=trace_context["trace_id"],
+                        span_id=trace_context["span_id"],
+                        event_time=event_time,
+                    )
+                    _project_node_event_state(
+                        run=run,
+                        node_id=node_id,
+                        node_type=str(event.get("node_type") or "human_gate"),
+                        attempt=int(event.get("attempt") or 1),
+                        projection_status="waiting",
+                        trace_id=trace_context["trace_id"],
+                        span_id=trace_context["span_id"],
+                        event_type=event_type,
+                        event_id=event_id,
+                        event_time=event_time,
+                        started_at=event_time,
+                        output_json={"pause_payload": pause_payload} if pause_payload else _UNSET,
+                    )
 
-            _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
-            for summary_payload in final_run_stream_summaries:
-                broadcast_node_stream_summary(run=run, payload=summary_payload)
-            if state_mutation_enabled and event_type == "run_paused" and node_id:
-                broadcast_decision_required(
-                    run=run,
-                    payload={
-                        "node_id": node_id,
-                        "node_type": str(event.get("node_type") or "human_gate"),
-                        "attempt": int(event.get("attempt") or 1),
-                        "status": "waiting",
-                        "prompt_message": str(pause_payload.get("prompt_message") or ""),
-                        "required_fields": list(pause_payload.get("required_fields") or []),
-                        "node_name": str(pause_payload.get("node_name") or ""),
-                    },
-                )
-            elif state_mutation_enabled and event_type == "run_resumed" and previous_paused_node_id:
-                broadcast_decision_resolved(
-                    run=run,
-                    payload={
-                        "node_id": previous_paused_node_id,
-                        "status": "resolved",
-                        "prompt_message": str(previous_pause_state.get("prompt_message") or ""),
-                        "required_fields": list(previous_pause_state.get("required_fields") or []),
-                        "resolution": redact_payload(event.get("output") or {}),
-                    },
-                )
+                if event_type == "run_started" and previous_status != "running":
+                    record_run_started()
+                if event_type in {
+                    "run_completed",
+                    "run_failed",
+                    "run_canceled",
+                } and previous_status not in {
+                    "succeeded",
+                    "failed",
+                    "canceled",
+                }:
+                    record_run_completed(run.status, run.duration_ms)
 
-            for summary_payload in final_run_stream_summaries:
-                broadcast_node_stream_summary(run=run, payload=summary_payload)
+                _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
+                for summary_payload in final_run_stream_summaries:
+                    broadcast_node_stream_summary(run=run, payload=summary_payload)
+                if state_mutation_enabled and event_type == "run_paused" and node_id:
+                    broadcast_decision_required(
+                        run=run,
+                        payload={
+                            "node_id": node_id,
+                            "node_type": str(event.get("node_type") or "human_gate"),
+                            "attempt": int(event.get("attempt") or 1),
+                            "status": "waiting",
+                            "prompt_message": str(pause_payload.get("prompt_message") or ""),
+                            "required_fields": list(pause_payload.get("required_fields") or []),
+                            "node_name": str(pause_payload.get("node_name") or ""),
+                        },
+                    )
+                elif state_mutation_enabled and event_type == "run_resumed" and previous_paused_node_id:
+                    broadcast_decision_resolved(
+                        run=run,
+                        payload={
+                            "node_id": previous_paused_node_id,
+                            "status": "resolved",
+                            "prompt_message": str(previous_pause_state.get("prompt_message") or ""),
+                            "required_fields": list(previous_pause_state.get("required_fields") or []),
+                            "resolution": redact_payload(event.get("output") or {}),
+                        },
+                    )
 
-            if not state_mutation_enabled:
-                return success_response(
-                    {
-                        "received": True,
-                        "event_type": event_type,
-                        "authoritative_state_updated": False,
-                    }
-                )
+                for summary_payload in final_run_stream_summaries:
+                    broadcast_node_stream_summary(run=run, payload=summary_payload)
 
-            message = broadcast_run_updated(run)
-            return success_response(message)
+                if not state_mutation_enabled:
+                    return success_response(
+                        {
+                            "received": True,
+                            "event_type": event_type,
+                            "authoritative_state_updated": False,
+                        }
+                    )
+
+                message = broadcast_run_updated(run)
+                return success_response(message)
 
         if event_type in {
             "node_started",
@@ -3662,6 +3674,7 @@ class EngineRunEventsView(APIView):
             cost_update_payload: dict[str, Any] | None = None
             node_run: NodeRun | None = None
             with transaction.atomic():
+                run = _lock_run_for_update(run.id)
                 if state_mutation_enabled:
                     node_run, created = NodeRun.objects.get_or_create(
                         run=run,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -177,6 +178,26 @@ def test_apply_pause_run_intent_persists_backend_owned_pause_state(
     processed = ProcessedRuntimeIntent.objects.get(intent_id=intent.intent_id)
     assert processed.intent_type == "pause_run"
     assert processed.stream_message_id == "1700000000000-0"
+
+
+@patch("application.services.runtime_write_intents.broadcast_decision_required")
+@patch("application.services.runtime_write_intents.broadcast_run_updated")
+def test_apply_pause_run_intent_serializes_object_graph_json_in_pause_state(
+    broadcast_run_updated,
+    broadcast_decision_required,
+):
+    run = _make_run()
+    intent = _pause_intent(run=run)
+    intent.payload["pause_state"]["graph_json"] = {"nodes": [{"id": "gate"}], "edges": []}
+
+    result = apply_pause_run_intent(intent=intent, stream_message_id="1700000000000-0")
+
+    assert result == "processed"
+    run.refresh_from_db()
+    assert run.pause_state_json is not None
+    assert run.pause_state_json["graph_json"] == json.dumps(
+        {"nodes": [{"id": "gate"}], "edges": []}
+    )
 
     broadcast_run_updated.assert_called_once()
     broadcast_decision_required.assert_called_once()

@@ -203,6 +203,108 @@ func TestEmitSpoolsOnDeliveryFailure(t *testing.T) {
 	}
 }
 
+func TestEmitDoesNotRetryOrSpoolOnNonRetryableConflict(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"detail":"invalid run transition"}`))
+	}))
+	defer server.Close()
+
+	spoolPath := filepath.Join(t.TempDir(), "events.jsonl")
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL:        server.URL,
+		Client:             server.Client(),
+		MaxRetries:         3,
+		RetryDelay:         10 * time.Millisecond,
+		SpoolPath:          spoolPath,
+		SpoolFlushInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	err = emitter.Emit(context.Background(), port.NewEvent(port.EventTypeRunCompleted, "run-1"))
+	if err == nil {
+		t.Fatal("expected Emit() error")
+	}
+	if !strings.Contains(err.Error(), "status 409") {
+		t.Fatalf("Emit() error = %v, want status 409 detail", err)
+	}
+
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("requestCount = %d, want 1", got)
+	}
+	if _, statErr := os.Stat(spoolPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no spool file, got stat error %v", statErr)
+	}
+}
+
+func TestFlushSpoolDropsNonRetryableNotFoundEvents(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"detail":"Run with id 'missing' not found."}`))
+	}))
+	defer server.Close()
+
+	spoolPath := filepath.Join(t.TempDir(), "events.jsonl")
+	event := port.NewEvent(port.EventTypeRunCompleted, "missing")
+	payload, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if writeErr := os.WriteFile(spoolPath, append(payload, '\n'), 0o600); writeErr != nil {
+		t.Fatalf("WriteFile() error = %v", writeErr)
+	}
+
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL:        server.URL,
+		Client:             server.Client(),
+		MaxRetries:         3,
+		RetryDelay:         10 * time.Millisecond,
+		SpoolPath:          spoolPath,
+		SpoolFlushInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	remaining, err := emitter.flushSpool(context.Background())
+	if err != nil {
+		t.Fatalf("flushSpool() error = %v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("remaining = %d, want 0", remaining)
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("requestCount = %d, want 1", got)
+	}
+	for _, candidatePath := range []string{spoolPath, spoolPath + ".processing"} {
+		if _, statErr := os.Stat(candidatePath); !os.IsNotExist(statErr) {
+			t.Fatalf("expected %s to be removed, stat error = %v", candidatePath, statErr)
+		}
+	}
+}
+
 func TestEmitMinimalVerbosityDropsObservabilityEvents(t *testing.T) {
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -332,6 +434,85 @@ func TestEmitIncludesAttemptID(t *testing.T) {
 	case delivered := <-received:
 		if delivered.AttemptID != "attempt-b" {
 			t.Fatalf("AttemptID = %s, want attempt-b", delivered.AttemptID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for emitted event")
+	}
+}
+
+func TestEmitAsyncFreezesMutableEventPayload(t *testing.T) {
+	received := make(chan map[string]any, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var envelope struct {
+			Data struct {
+				Output map[string]any `json:"output"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		received <- envelope.Data.Output
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL: server.URL,
+		Client:      server.Client(),
+		MaxRetries:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	output := map[string]any{
+		"memory_context": map[string]any{
+			"curated_observation_count": 1,
+			"curated_observations": []any{
+				map[string]any{"title": "before"},
+			},
+		},
+	}
+	event := port.NewEvent(port.EventTypeNodeCompleted, "run-async-freeze").WithOutput(output)
+	emitter.EmitAsync(event)
+
+	output["memory_context"].(map[string]any)["curated_observation_count"] = 9
+	output["memory_context"].(map[string]any)["curated_observations"].([]any)[0].(map[string]any)["title"] = "after"
+
+	flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := emitter.Flush(flushCtx); err != nil {
+		t.Fatalf("Flush() error = %v", err)
+	}
+
+	select {
+	case delivered := <-received:
+		memoryContext, ok := delivered["memory_context"].(map[string]any)
+		if !ok {
+			t.Fatalf("memory_context missing from delivered payload: %#v", delivered)
+		}
+		if got := memoryContext["curated_observation_count"]; got != float64(1) {
+			t.Fatalf("curated_observation_count = %#v, want 1", got)
+		}
+		curatedObservations, ok := memoryContext["curated_observations"].([]any)
+		if !ok || len(curatedObservations) != 1 {
+			t.Fatalf("curated_observations = %#v, want single observation", memoryContext["curated_observations"])
+		}
+		observation, ok := curatedObservations[0].(map[string]any)
+		if !ok {
+			t.Fatalf("observation = %#v, want object", curatedObservations[0])
+		}
+		if got := observation["title"]; got != "before" {
+			t.Fatalf("title = %#v, want before", got)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for emitted event")

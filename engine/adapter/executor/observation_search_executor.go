@@ -73,9 +73,25 @@ func (e *ObservationSearchExecutor) Execute(ctx context.Context, node *entity.No
 	}
 
 	return port.NewSuccessResult(map[string]any{
-		"query":        query,
-		"scope":        scope,
-		"count":        len(observations),
+		"query": query,
+		"scope": scope,
+		"count": len(observations),
+		"memory_retrieval": map[string]any{
+			"count":            len(observations),
+			"scope":            scope,
+			"used_by_nodes":    []string{},
+			"ignored_by_nodes": []string{},
+			"memory_ids":       observationIDs(observations),
+		},
+		"state_patch": map[string]any{
+			"memory_retrieval": map[string]any{
+				"count":            len(observations),
+				"scope":            scope,
+				"used_by_nodes":    []string{},
+				"ignored_by_nodes": []string{},
+				"memory_ids":       observationIDs(observations),
+			},
+		},
 		"observations": observationsToMaps(observations),
 	}), nil
 }

@@ -196,6 +196,38 @@ class TestCleanupOldChunks:
         assert not MemoryChunk.objects.filter(id=old_chunk.id).exists()
         assert MemoryChunk.objects.filter(id=new_chunk.id).exists()
 
+    @pytest.mark.django_db
+    def test_preserves_old_chunk_when_linked_observation_was_recently_used(
+        self, user, memory_chunk_factory
+    ):
+        from infrastructure.orm.models import MemoryChunk, MemoryObservation
+
+        gc = MemoryGCService(batch_size=10, chunk_retention_days=90)
+
+        old_chunk = memory_chunk_factory(tenant_id=user.default_organization_id)
+        MemoryChunk.objects.filter(id=old_chunk.id).update(
+            created_at=datetime.now(UTC) - timedelta(days=100),
+            source_timestamp=datetime.now(UTC) - timedelta(days=100),
+        )
+        recent_observation = MemoryObservation.objects.create(
+            tenant_id=user.default_organization_id,
+            graph_id=uuid4(),
+            run_id=uuid4(),
+            session_id=uuid4(),
+            type="fact",
+            title="Recently used note",
+            content="This memory was used recently.",
+            scope="run",
+            memory_chunk_id=old_chunk.id,
+            last_seen_at=datetime.now(UTC) - timedelta(days=1),
+        )
+
+        result = gc.cleanup_old_chunks(max_age_days=90, dry_run=False)
+
+        assert result.chunks_deleted == 0
+        assert MemoryChunk.objects.filter(id=old_chunk.id).exists()
+        assert MemoryObservation.objects.filter(id=recent_observation.id).exists()
+
 
 class TestRunFullGC:
     @pytest.mark.django_db
