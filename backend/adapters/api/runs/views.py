@@ -3523,14 +3523,20 @@ class EngineRunEventsView(APIView):
                             "node_name": str(pause_payload.get("node_name") or ""),
                         },
                     )
-                elif state_mutation_enabled and event_type == "run_resumed" and previous_paused_node_id:
+                elif (
+                    state_mutation_enabled
+                    and event_type == "run_resumed"
+                    and previous_paused_node_id
+                ):
                     broadcast_decision_resolved(
                         run=run,
                         payload={
                             "node_id": previous_paused_node_id,
                             "status": "resolved",
                             "prompt_message": str(previous_pause_state.get("prompt_message") or ""),
-                            "required_fields": list(previous_pause_state.get("required_fields") or []),
+                            "required_fields": list(
+                                previous_pause_state.get("required_fields") or []
+                            ),
                             "resolution": redact_payload(event.get("output") or {}),
                         },
                     )

@@ -398,12 +398,8 @@ test.describe("Consulting Memory Comparison", () => {
           "Sellers complained about marketplace fees after the policy change.",
           "Some sellers considered alternative channels.",
         ],
-        reflection_warnings: [
-          "Do not assume SMB CRM churn behaves like seller marketplace churn.",
-        ],
-        recommended_next_actions: [
-          "Segment fee sensitivity by seller cohort.",
-        ],
+        reflection_warnings: ["Do not assume SMB CRM churn behaves like seller marketplace churn."],
+        recommended_next_actions: ["Segment fee sensitivity by seller cohort."],
       },
     };
 
