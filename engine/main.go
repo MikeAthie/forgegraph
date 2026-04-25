@@ -861,7 +861,9 @@ func main() {
 
 	// Initialize LLM client for Prompt and Agent nodes (multi-provider)
 	fallbackKey := os.Getenv("OPENAI_API_KEY")
-	llmClient := gateway.NewMultiProviderClient(resolver, fallbackKey)
+	llmClient := gateway.NewLLMChaosClientFromEnv(
+		gateway.NewMultiProviderClient(resolver, fallbackKey),
+	)
 	registry.Register(
 		executor.NewAgentExecutorWithModes(
 			llmClient,

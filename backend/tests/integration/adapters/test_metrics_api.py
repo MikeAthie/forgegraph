@@ -9,6 +9,10 @@ from application.services.metrics import (
     record_run_started,
     record_stale_attempt_ignored,
 )
+from application.services.runtime_transport_metrics import (
+    record_transport_event,
+    update_transport_health,
+)
 from infrastructure.orm.models import (
     Graph,
     GraphVersion,
@@ -48,6 +52,17 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     record_callback_auth_failure("invalid_signature")
     record_api_request(status_code=200, duration_ms=120)
     record_api_request(status_code=503, duration_ms=240)
+    record_transport_event("intent_received")
+    record_transport_event("intent_applied")
+    record_transport_event("intent_ack")
+    update_transport_health(
+        pending=2,
+        lag=3,
+        backlog=5,
+        consumer_idle_ms=1500,
+        oldest_pending_idle_ms=900,
+        dead_letter_count=1,
+    )
 
     response = authenticated_client.get("/api/metrics/summary")
     assert response.status_code == status.HTTP_200_OK
@@ -71,6 +86,13 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["api"]["server_errors_total"] >= 1
     assert payload["api"]["callback_auth_failures_total"] >= 1
     assert payload["api"]["callback_auth_failures_by_reason"]["invalid_signature"] >= 1
+    assert payload["runtime_transport"]["intent_received_total"] >= 1
+    assert payload["runtime_transport"]["intent_applied_total"] >= 1
+    assert payload["runtime_transport"]["intent_ack_total"] >= 1
+    assert payload["runtime_transport"]["stream_pending"] >= 2
+    assert payload["runtime_transport"]["stream_lag"] >= 3
+    assert payload["runtime_transport"]["stream_backlog"] >= 5
+    assert payload["runtime_transport"]["dead_letter_count"] >= 1
     assert "guardrails" in payload
     assert "generated_at" in payload
 

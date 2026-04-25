@@ -20,6 +20,9 @@ from application.services.metrics import (
     get_run_metrics_snapshot,
     get_websocket_metrics_snapshot,
 )
+from application.services.runtime_transport_metrics import (
+    get_runtime_transport_metrics_snapshot,
+)
 from application.services.rbac import has_min_role
 from infrastructure.orm.models import Run, RunQueueEntry, User
 
@@ -39,6 +42,7 @@ class MetricsSummaryView(APIView):
         run_metrics = get_run_metrics_snapshot()
         websocket_metrics = get_websocket_metrics_snapshot()
         api_metrics = get_api_metrics_snapshot()
+        runtime_transport_metrics = get_runtime_transport_metrics_snapshot()
         queue_pending = RunQueueEntry.objects.filter(status="pending").count()
         queue_processing = RunQueueEntry.objects.filter(status="processing").count()
         queue_total = queue_pending + queue_processing
@@ -112,6 +116,26 @@ class MetricsSummaryView(APIView):
                 "latency_ms_p95": api_metrics.latency_ms_p95,
                 "callback_auth_failures_total": api_metrics.callback_auth_failures_total,
                 "callback_auth_failures_by_reason": api_metrics.callback_auth_failures_by_reason,
+            },
+            "runtime_transport": {
+                "intent_publish_failures_total": (
+                    runtime_transport_metrics.intent_publish_failures_total
+                ),
+                "intent_received_total": runtime_transport_metrics.intent_received_total,
+                "intent_applied_total": runtime_transport_metrics.intent_applied_total,
+                "intent_ack_total": runtime_transport_metrics.intent_ack_total,
+                "intent_reclaimed_total": runtime_transport_metrics.intent_reclaimed_total,
+                "duplicate_intent_ignored_total": (
+                    runtime_transport_metrics.duplicate_intent_ignored_total
+                ),
+                "dead_lettered_total": runtime_transport_metrics.dead_lettered_total,
+                "stream_pending": runtime_transport_metrics.stream_pending,
+                "stream_lag": runtime_transport_metrics.stream_lag,
+                "stream_backlog": runtime_transport_metrics.stream_backlog,
+                "consumer_idle_ms": runtime_transport_metrics.consumer_idle_ms,
+                "oldest_pending_idle_ms": runtime_transport_metrics.oldest_pending_idle_ms,
+                "dead_letter_count": runtime_transport_metrics.dead_letter_count,
+                "generated_at": runtime_transport_metrics.generated_at,
             },
             "slo": {
                 "run_success_rate_target": getattr(settings, "SLO_RUN_SUCCESS_RATE", 0.99),

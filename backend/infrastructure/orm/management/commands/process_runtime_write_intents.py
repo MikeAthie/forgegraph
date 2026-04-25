@@ -647,6 +647,7 @@ class Command(BaseCommand):
 
         update_transport_health(
             pending=pending,
+            lag=lag,
             backlog=backlog,
             consumer_idle_ms=consumer_idle_ms,
             oldest_pending_idle_ms=oldest_pending_idle_ms,

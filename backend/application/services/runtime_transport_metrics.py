@@ -17,6 +17,7 @@ class RuntimeTransportMetricsSnapshot:
     duplicate_intent_ignored_total: int
     dead_lettered_total: int
     stream_pending: int
+    stream_lag: int
     stream_backlog: int
     consumer_idle_ms: int
     oldest_pending_idle_ms: int
@@ -28,6 +29,7 @@ _lock = Lock()
 _counters: Counter[str] = Counter()
 _gauges: dict[str, int] = {
     "stream_pending": 0,
+    "stream_lag": 0,
     "stream_backlog": 0,
     "consumer_idle_ms": 0,
     "oldest_pending_idle_ms": 0,
@@ -44,6 +46,7 @@ def record_transport_event(event_type: str) -> None:
 def update_transport_health(
     *,
     pending: int,
+    lag: int,
     backlog: int,
     consumer_idle_ms: int,
     oldest_pending_idle_ms: int,
@@ -51,6 +54,7 @@ def update_transport_health(
 ) -> None:
     with _lock:
         _gauges["stream_pending"] = max(int(pending), 0)
+        _gauges["stream_lag"] = max(int(lag), 0)
         _gauges["stream_backlog"] = max(int(backlog), 0)
         _gauges["consumer_idle_ms"] = max(int(consumer_idle_ms), 0)
         _gauges["oldest_pending_idle_ms"] = max(int(oldest_pending_idle_ms), 0)
@@ -71,6 +75,7 @@ def get_runtime_transport_metrics_snapshot() -> RuntimeTransportMetricsSnapshot:
         duplicate_intent_ignored_total=int(counters.get("event:duplicate_intent_ignored", 0)),
         dead_lettered_total=int(counters.get("event:dead_lettered", 0)),
         stream_pending=int(gauges.get("stream_pending", 0)),
+        stream_lag=int(gauges.get("stream_lag", 0)),
         stream_backlog=int(gauges.get("stream_backlog", 0)),
         consumer_idle_ms=int(gauges.get("consumer_idle_ms", 0)),
         oldest_pending_idle_ms=int(gauges.get("oldest_pending_idle_ms", 0)),
