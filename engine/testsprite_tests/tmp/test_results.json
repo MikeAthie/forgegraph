@@ -1,16 +1,16 @@
 [
   {
-    "projectId": "18554169-e080-4905-86ad-cb31520c9f6b",
-    "testId": "8f5ef4e7-8e5c-4335-a0a7-d497c3c00312",
+    "projectId": "7e75cdc7-279a-4b4e-af96-1936189fc4af",
+    "testId": "b7c0ee3f-ef9a-4ec5-ab74-021741cd213d",
     "userId": "044834a8-b001-70c6-2ff2-627f1d6b286f",
     "title": "TC008-test_metrics_endpoint_returns_prometheus_metrics",
     "description": "Verify that the GET /metrics endpoint returns a 200 status with Prometheus metrics text representing engine health and runtime telemetry.",
-    "code": "import requests\n\ndef test_metrics_endpoint_returns_prometheus_metrics():\n    url = \"http://localhost:9090/metrics\"\n    headers = {\n        \"Accept\": \"text/plain\"\n    }\n    try:\n        response = requests.get(url, headers=headers, timeout=30)\n        assert response.status_code == 200, f\"Expected status code 200, got {response.status_code}\"\n        content_type = response.headers.get(\"Content-Type\", \"\")\n        assert \"text/plain\" in content_type, f\"Expected 'text/plain' content type, got {content_type}\"\n        content = response.text\n        # Basic validation that response contains typical Prometheus metric identifiers\n        assert \"runtime\" in content or \"engine\" in content or \"prometheus\" in content or \"# HELP\" in content or \"# TYPE\" in content, \\\n            \"Prometheus metrics text not found in response content\"\n    except requests.RequestException as e:\n        assert False, f\"Request to /metrics endpoint failed: {e}\"\n\ntest_metrics_endpoint_returns_prometheus_metrics()",
+    "code": "import requests\n\ndef test_metrics_endpoint_returns_prometheus_metrics():\n    url = \"http://localhost:9090/metrics\"\n    headers = {\n        \"Accept\": \"text/plain\"\n    }\n    try:\n        response = requests.get(url, headers=headers, timeout=30)\n        response.raise_for_status()\n    except requests.RequestException as e:\n        assert False, f\"HTTP request failed: {e}\"\n\n    assert response.status_code == 200, f\"Expected status code 200, got {response.status_code}\"\n    content_type = response.headers.get(\"Content-Type\", \"\")\n    assert \"text/plain\" in content_type, f\"Expected Content-Type 'text/plain', got {content_type}\"\n    content = response.text\n    assert content.strip() != \"\", \"Metrics response is empty\"\n    # Check for at least one Prometheus metric pattern (e.g., help or type lines)\n    assert any(line.startswith(\"# HELP\") or line.startswith(\"# TYPE\") for line in content.splitlines()), \\\n        \"Response does not contain Prometheus metric HELP or TYPE lines\"\n\ntest_metrics_endpoint_returns_prometheus_metrics()",
     "testStatus": "PASSED",
     "testError": "",
     "testType": "BACKEND",
     "createFrom": "mcp",
-    "created": "2026-04-01T08:38:39.558Z",
-    "modified": "2026-04-01T08:38:43.403Z"
+    "created": "2026-04-24T18:17:46.322Z",
+    "modified": "2026-04-24T18:17:51.854Z"
   }
 ]

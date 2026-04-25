@@ -31,43 +31,32 @@ async def run_test():
 
         # Interact with the page elements to simulate user flow
         # -> Navigate to http://localhost:3000
-        await page.goto("http://localhost:3000", wait_until="commit", timeout=10000)
+        await page.goto("http://localhost:3000")
         
-        # -> Open the login page by clicking the 'Sign in' link.
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/nav/div/div/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        # -> Navigate to /login so the login form fields become available.
+        await page.goto("http://localhost:3000/login")
         
-        # -> Fill the email and password fields and submit the login form, then navigate to /admin to inspect marketplace admin UI.
+        # -> Fill the email and password fields and submit the login form (first login attempt).
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('test@example.com')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('test@example.com')
         
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div[2]/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('WY3QGTJ7@q5eYq3')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div[2]/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('WY3QGTJ7@q5eYq3')
         
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/button').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Open the account menu (if needed) and navigate to /admin to access the marketplace admin page, then verify that marketplace packages and admin controls are rendered.
+        # -> Click the 'Marketplace' navigation link to open the marketplace admin view and then verify marketplace packages and admin controls are rendered.
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/header/nav/div/div[2]/button[2]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        await page.goto("http://localhost:3000/admin", wait_until="commit", timeout=10000)
-        
-        # -> Click the 'Open Marketplace' link (element index 1764) to open the marketplace admin page and verify that marketplace packages and administration controls are rendered.
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/section[3]/div[2]/div[2]/div/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/div[2]/aside/div[2]/div[2]/nav/a').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
         # --> Test passed — verified by AI agent
         frame = context.pages[-1]

@@ -16,6 +16,94 @@ function extractPrompt(messages) {
   return typeof lastMessage?.content === "string" ? lastMessage.content : "";
 }
 
+function extractStage(prompt) {
+  const match = prompt.match(/Stage:\s*([A-Za-z0-9_:-]+)/);
+  return match ? match[1] : "";
+}
+
+function extractExecutionState(prompt) {
+  const match = prompt.match(/BEGIN_EXECUTION_STATE_JSON\s*([\s\S]*?)\s*END_EXECUTION_STATE_JSON/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function cloneState(state) {
+  return JSON.parse(JSON.stringify(state));
+}
+
+function buildMarketingPatch(stage, currentState) {
+  const next = cloneState(
+    currentState ?? {
+      goal: "Launch a replayable AI digital marketing campaign for ForgeGraph.",
+      strategy: null,
+      content_assets: [],
+      distribution_plan: null,
+      analytics: null,
+      iteration: 0,
+    },
+  );
+  const pass = Number(next.iteration ?? 0) + 1;
+
+  switch (stage) {
+    case "strategy_agent":
+      return {
+        strategy: {
+          company: "ForgeGraph Digital Marketing Co",
+          objective: next.goal,
+          primary_channel: "linkedin",
+          audience: "B2B operators evaluating AI workflow tooling",
+          positioning: `Iteration ${pass} message focused on replayable execution and observability.`,
+          content_pillars: ["reliability", "traceability", "measurable campaign loops"],
+        },
+      };
+    case "content_copywriter_specialist":
+      return {
+        asset: {
+          asset_id: `copy-${pass}`,
+          specialist: "copywriter_specialist",
+          channel: "linkedin",
+          format: "post",
+          headline: `Replayable growth loop v${pass}`,
+          body: `Launch ForgeGraph's replayable workflow story with observable execution, resilient retries, and clear operator trust signals in pass ${pass}.`,
+          iteration: pass,
+          reviewed: false,
+          department: "content",
+          state_field: "content_assets",
+        },
+      };
+    case "content_editor_specialist":
+      return {
+        asset: {
+          asset_id: `editorial-${pass}`,
+          specialist: "editor_specialist",
+          channel: "email",
+          format: "brief",
+          headline: `Editorial QA pass v${pass}`,
+          body: "Reviewed copy for clarity, CTA alignment, and observable execution language.",
+          iteration: pass,
+          reviewed: true,
+          department: "content",
+          state_field: "content_assets",
+        },
+      };
+    case "distribution_agent":
+      return {
+        distribution_plan: {
+          owner: "distribution_agent",
+          channels: next.content_assets.map((asset) => asset.channel),
+          asset_ids: next.content_assets.map((asset) => asset.asset_id),
+          cadence: `day-${pass} morning publish window`,
+        },
+      };
+    default:
+      return next;
+  }
+}
+
 function extractAllowedTools(prompt) {
   const marker = "Allowed tools:\n";
   const nextMarker = "\n\nCurrent workflow state:";
@@ -83,6 +171,13 @@ function handleAgentPrompt(prompt, model) {
   );
 }
 
+function handleMarketingPrompt(prompt, model) {
+  const stage = extractStage(prompt);
+  const currentState = extractExecutionState(prompt);
+  const patch = buildMarketingPatch(stage, currentState);
+  return buildChatCompletion(JSON.stringify(patch, null, 2), model);
+}
+
 const server = http.createServer(async (request, response) => {
   if (!request.url) {
     json(response, 404, { error: "missing URL" });
@@ -107,6 +202,11 @@ const server = http.createServer(async (request, response) => {
 
     if (prompt.includes("You are executing inside a ForgeGraph agent node.")) {
       json(response, 200, handleAgentPrompt(prompt, model));
+      return;
+    }
+
+    if (prompt.includes("BEGIN_EXECUTION_STATE_JSON") && prompt.includes("END_EXECUTION_STATE_JSON")) {
+      json(response, 200, handleMarketingPrompt(prompt, model));
       return;
     }
 

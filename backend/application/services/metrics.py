@@ -24,6 +24,8 @@ class RunMetricsSnapshot:
     window_size: int
     liveness_reconciled_total: int
     liveness_reconciled_by_reason: dict[str, int]
+    stale_attempt_ignored_total: int
+    stale_attempt_ignored_by_source: dict[str, int]
     generated_at: str
 
 
@@ -76,6 +78,13 @@ def record_liveness_reconciliation(reason: str) -> None:
     with _lock:
         _counters["liveness_reconciled_total"] += 1
         _counters[f"liveness_reconciled_reason:{normalized_reason}"] += 1
+
+
+def record_stale_attempt_ignored(source: str) -> None:
+    normalized_source = str(source or "unknown").strip().lower() or "unknown"
+    with _lock:
+        _counters["stale_attempt_ignored_total"] += 1
+        _counters[f"stale_attempt_ignored_source:{normalized_source}"] += 1
 
 
 def record_callback_auth_failure(reason: str) -> None:
@@ -153,6 +162,12 @@ def get_run_metrics_snapshot() -> RunMetricsSnapshot:
             for key, value in _counters.items()
             if key.startswith("liveness_reconciled_reason:")
         }
+        stale_attempt_ignored_total = int(_counters.get("stale_attempt_ignored_total", 0))
+        stale_attempt_ignored_by_source = {
+            key.split(":", 1)[1]: int(value)
+            for key, value in _counters.items()
+            if key.startswith("stale_attempt_ignored_source:")
+        }
 
     success_rate = None
     if completed > 0:
@@ -169,6 +184,8 @@ def get_run_metrics_snapshot() -> RunMetricsSnapshot:
         window_size=len(latencies),
         liveness_reconciled_total=liveness_reconciled_total,
         liveness_reconciled_by_reason=liveness_reconciled_by_reason,
+        stale_attempt_ignored_total=stale_attempt_ignored_total,
+        stale_attempt_ignored_by_source=stale_attempt_ignored_by_source,
         generated_at=timezone.now().isoformat(),
     )
 

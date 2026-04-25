@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/forgegraph/engine/domain/entity"
@@ -246,6 +247,322 @@ func TestTransformExecutor_Execute_DefaultExpressionType(t *testing.T) {
 	}
 }
 
+func TestTransformExecutor_Execute_SimulationStep_StrategyAgent(t *testing.T) {
+	executor := NewTransformExecutor()
+	state := entity.NewStateWithInput(map[string]any{
+		"goal": "Launch a deterministic growth campaign.",
+	})
+
+	node := &entity.Node{
+		ID:   "strategy_agent",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "simulation_step",
+			"simulation_role": "strategy_agent",
+			"output_key":      "execution_state",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("Output type = %T, want map[string]any", result.Output)
+	}
+	statePayload, ok := output["state"].(map[string]any)
+	if !ok {
+		t.Fatalf("output.state type = %T, want map[string]any", output["state"])
+	}
+	if statePayload["goal"] != "Launch a deterministic growth campaign." {
+		t.Fatalf("goal = %v", statePayload["goal"])
+	}
+	if _, ok := statePayload["strategy"].(map[string]any); !ok {
+		t.Fatalf("strategy missing from state payload: %#v", statePayload)
+	}
+
+	stored, exists := state.Get("vars.execution_state")
+	if !exists {
+		t.Fatal("expected vars.execution_state to be stored")
+	}
+	storedMap, ok := stored.(map[string]any)
+	if !ok {
+		t.Fatalf("stored state type = %T, want map[string]any", stored)
+	}
+	if storedMap["goal"] != "Launch a deterministic growth campaign." {
+		t.Fatalf("stored goal = %v", storedMap["goal"])
+	}
+}
+
+func TestTransformExecutor_Execute_SimulationStep_ContentAndAnalytics(t *testing.T) {
+	executor := NewTransformExecutor()
+	state := entity.NewState()
+	state.SetVar("execution_state", map[string]any{
+		"goal": "Ship a visible campaign loop.",
+		"strategy": map[string]any{
+			"primary_channel": "linkedin",
+		},
+		"content_assets":    []any{},
+		"distribution_plan": nil,
+		"analytics":         nil,
+		"iteration":         0,
+	})
+
+	contentNode := &entity.Node{
+		ID:   "content_copywriter_specialist",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "simulation_step",
+			"simulation_role": "content_copywriter_specialist",
+			"output_key":      "execution_state",
+		},
+	}
+
+	if _, err := executor.Execute(context.Background(), contentNode, state); err != nil {
+		t.Fatalf("content Execute() error = %v", err)
+	}
+
+	contentAgentNode := &entity.Node{
+		ID:   "content_agent",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "simulation_step",
+			"simulation_role": "content_agent",
+			"output_key":      "execution_state",
+		},
+	}
+
+	if _, err := executor.Execute(context.Background(), contentAgentNode, state); err != nil {
+		t.Fatalf("content agent Execute() error = %v", err)
+	}
+
+	distributionNode := &entity.Node{
+		ID:   "distribution_agent",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "simulation_step",
+			"simulation_role": "distribution_agent",
+			"output_key":      "execution_state",
+		},
+	}
+
+	if _, err := executor.Execute(context.Background(), distributionNode, state); err != nil {
+		t.Fatalf("distribution Execute() error = %v", err)
+	}
+
+	analyticsNode := &entity.Node{
+		ID:   "analytics_agent",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "simulation_step",
+			"simulation_role": "analytics_agent",
+			"output_key":      "execution_state",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), analyticsNode, state)
+	if err != nil {
+		t.Fatalf("analytics Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("analytics result.Error = %v", result.Error)
+	}
+
+	stored, exists := state.Get("vars.execution_state")
+	if !exists {
+		t.Fatal("expected vars.execution_state to exist after simulation steps")
+	}
+	storedMap, ok := stored.(map[string]any)
+	if !ok {
+		t.Fatalf("stored state type = %T, want map[string]any", stored)
+	}
+
+	contentAssets, ok := storedMap["content_assets"].([]any)
+	if !ok {
+		t.Fatalf("content_assets type = %T, want []any", storedMap["content_assets"])
+	}
+	if len(contentAssets) != 1 {
+		t.Fatalf("content_assets length = %d, want 1", len(contentAssets))
+	}
+	if _, ok := storedMap["distribution_plan"].(map[string]any); !ok {
+		t.Fatalf("distribution_plan missing from stored state: %#v", storedMap)
+	}
+	if iteration, ok := storedMap["iteration"].(float64); !ok || iteration != 1 {
+		t.Fatalf("iteration = %v, want 1", storedMap["iteration"])
+	}
+}
+
+func TestTransformExecutor_Execute_SimulationStep_ForcedContentFailure(t *testing.T) {
+	executor := NewTransformExecutor()
+	state := entity.NewStateWithInput(map[string]any{
+		"goal":                  "Test failure visibility.",
+		"force_content_failure": true,
+	})
+
+	node := &entity.Node{
+		ID:   "content_copywriter_specialist",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "simulation_step",
+			"simulation_role": "content_copywriter_specialist",
+			"output_key":      "execution_state",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() should not return transport error, got %v", err)
+	}
+	if result.Error == nil {
+		t.Fatal("expected simulated failure result")
+	}
+}
+
+func TestTransformExecutor_Execute_StatePatch_DeepMerge(t *testing.T) {
+	executor := NewTransformExecutor()
+	state := entity.NewState()
+	state.SetVar("execution_state", map[string]any{
+		"goal": "Upgrade campaign quality.",
+		"strategy": map[string]any{
+			"primary_channel": "linkedin",
+		},
+		"content_assets":    []any{},
+		"distribution_plan": nil,
+		"analytics":         nil,
+		"iteration":         0,
+	})
+	state.SetNodeOutput("strategy_agent", map[string]any{
+		"structured_response": map[string]any{
+			"strategy": map[string]any{
+				"company":         "ForgeGraph Digital Marketing Co",
+				"objective":       "Upgrade campaign quality.",
+				"primary_channel": "linkedin",
+				"audience":        "B2B operators",
+			},
+		},
+	})
+
+	node := &entity.Node{
+		ID:   "merge_strategy",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "state_patch",
+			"expression":      "node.strategy_agent.output.structured_response",
+			"output_key":      "execution_state",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("Output type = %T, want map[string]any", result.Output)
+	}
+	statePayload, ok := output["state"].(map[string]any)
+	if !ok {
+		t.Fatalf("output.state type = %T, want map[string]any", output["state"])
+	}
+	strategy, ok := statePayload["strategy"].(map[string]any)
+	if !ok {
+		t.Fatalf("strategy type = %T, want map[string]any", statePayload["strategy"])
+	}
+	if strategy["company"] != "ForgeGraph Digital Marketing Co" {
+		t.Fatalf("strategy.company = %v", strategy["company"])
+	}
+	if statePayload["goal"] != "Upgrade campaign quality." {
+		t.Fatalf("goal = %v", statePayload["goal"])
+	}
+}
+
+func TestTransformExecutor_Execute_StatePatch_AppendArray(t *testing.T) {
+	executor := NewTransformExecutor()
+	state := entity.NewState()
+	state.SetVar("execution_state", map[string]any{
+		"goal": "Upgrade campaign quality.",
+		"strategy": map[string]any{
+			"primary_channel": "linkedin",
+		},
+		"content_assets": []any{
+			map[string]any{
+				"asset_id": "copy-1",
+			},
+		},
+		"distribution_plan": nil,
+		"analytics":         nil,
+		"iteration":         0,
+	})
+	state.SetNodeOutput("content_copywriter_specialist", map[string]any{
+		"structured_response": map[string]any{
+			"asset": map[string]any{
+				"asset_id":    "copy-2",
+				"specialist":  "copywriter_specialist",
+				"channel":     "linkedin",
+				"format":      "post",
+				"headline":    "Replayable growth loop v2",
+				"body":        "Guard rails and prompts are visible.",
+				"iteration":   1,
+				"reviewed":    false,
+				"department":  "content",
+				"state_field": "content_assets",
+			},
+		},
+	})
+
+	node := &entity.Node{
+		ID:   "merge_copywriter_asset",
+		Type: string(value.NodeTypeTransform),
+		Config: map[string]any{
+			"expression_type": "state_patch",
+			"expression":      "node.content_copywriter_specialist.output.structured_response.asset",
+			"patch_mode":      "append_array",
+			"target_path":     "content_assets",
+			"output_key":      "execution_state",
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), node, state)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+
+	output, ok := result.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("Output type = %T, want map[string]any", result.Output)
+	}
+	statePayload, ok := output["state"].(map[string]any)
+	if !ok {
+		t.Fatalf("output.state type = %T, want map[string]any", output["state"])
+	}
+	contentAssets, ok := statePayload["content_assets"].([]any)
+	if !ok {
+		t.Fatalf("content_assets type = %T, want []any", statePayload["content_assets"])
+	}
+	if len(contentAssets) != 2 {
+		t.Fatalf("content_assets length = %d, want 2", len(contentAssets))
+	}
+	lastAsset, ok := contentAssets[1].(map[string]any)
+	if !ok {
+		t.Fatalf("last asset type = %T, want map[string]any", contentAssets[1])
+	}
+	if lastAsset["asset_id"] != "copy-2" {
+		t.Fatalf("last asset_id = %v", lastAsset["asset_id"])
+	}
+}
+
 func TestSubstituteTemplate(t *testing.T) {
 	state := entity.NewState()
 	state.Set("name", "Claude")
@@ -292,5 +609,36 @@ func TestSubstituteTemplate(t *testing.T) {
 				t.Errorf("SubstituteTemplate() = %v, want %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestSubstituteTemplate_RendersStructuredStateAsJSON(t *testing.T) {
+	state := entity.NewState()
+	state.SetVar("execution_state", map[string]any{
+		"goal": "Test prompt serialization",
+		"strategy": map[string]any{
+			"primary_channel": "linkedin",
+		},
+		"content_assets": []any{
+			map[string]any{
+				"asset_id": "copy-1",
+				"headline": "Traceable campaigns",
+			},
+		},
+		"distribution_plan": nil,
+		"analytics":         nil,
+		"iteration":         1,
+	})
+
+	result := SubstituteTemplate("BEGIN\n{{vars.execution_state}}\nEND", state)
+
+	if !strings.Contains(result, "\"goal\": \"Test prompt serialization\"") {
+		t.Fatalf("expected JSON goal in template output, got %q", result)
+	}
+	if !strings.Contains(result, "\"content_assets\": [") {
+		t.Fatalf("expected JSON array in template output, got %q", result)
+	}
+	if strings.Contains(result, "map[") {
+		t.Fatalf("expected JSON rendering instead of Go map formatting, got %q", result)
 	}
 }

@@ -35,6 +35,7 @@ class JsonLogFormatter(logging.Formatter):
         "attempt_id",
         "resume_attempt_id",
         "intent_attempt_id",
+        "active_attempt_id",
         "current_attempt_id",
         "tenant_id",
         "category",
@@ -67,6 +68,10 @@ class JsonLogFormatter(logging.Formatter):
         "progress_age_seconds",
         "no_progress_threshold_seconds",
         "trimmed_count",
+        "payload",
+        "input_json",
+        "output_json",
+        "error_json",
     )
 
     def format(self, record: logging.LogRecord) -> str:

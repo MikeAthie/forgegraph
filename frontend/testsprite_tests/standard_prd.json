@@ -17,8 +17,8 @@
       "name": "Authentication and Session Flows",
       "description": "Allow users to register, sign in, and access protected pages; unauthenticated attempts are redirected to authentication entry points.",
       "user_flows": [
-        "Navigate to /register -> Fill email and password fields on login or registration forms -> Submit credentials and wait for navigation into the authenticated app -> See app navigation and protected pages available",
-        "Navigate to /login -> Fill email and password fields on login or registration forms -> Submit credentials and wait for navigation into the authenticated app -> See app navigation and protected pages available",
+        "Navigate to /register -> Fill email and password fields -> Submit registration -> See /login?registered=true and the registration-success message -> Sign in with the new account -> See protected pages available",
+        "Navigate to /login -> Fill email and password fields on login or registration forms -> Submit credentials and wait for navigation into the authenticated app -> Land on /overview and use the current shell navigation, where workflow access may be labeled Workflows instead of Graphs",
         "Navigate to /login -> Fill email and password fields with incorrect credentials -> Submit credentials -> See validation error indicating invalid credentials"
       ]
     },
@@ -26,8 +26,8 @@
       "name": "Graph Authoring Experience",
       "description": "Provide a visual editor for creating and editing workflow graphs, configuring nodes, running validation overlays, and using wizards to scaffold content.",
       "user_flows": [
-        "Navigate to /graphs -> Open a graph from the list -> Add nodes -> Connect edges between nodes -> Open node configuration forms -> Edit node settings and graph metadata -> Trigger validation -> See validation overlay indicating pass -> Save graph",
-        "Navigate to /graphs -> Open a graph from the list -> Add a node with incomplete configuration -> Trigger validation -> See validation errors in overlay -> Open node configuration forms -> Fix node configuration -> Trigger validation -> See validation overlay indicating pass -> Save graph"
+        "Navigate to /workflows or /graphs -> Open a graph from the list -> Add nodes -> Connect edges between nodes -> Open node configuration forms -> Edit node settings and graph metadata -> Trigger validation -> See validation overlay indicating pass -> Save graph",
+        "Navigate to /workflows or /graphs -> Open a graph from the list -> Add a node with incomplete configuration -> Trigger validation -> See validation errors in overlay -> Open node configuration forms -> Fix node configuration -> Trigger validation -> See validation overlay indicating pass -> Save graph"
       ]
     },
     {
@@ -40,19 +40,19 @@
     },
     {
       "name": "Prompt, Credential, Approval, and Memory Management",
-      "description": "Operational pages for browsing, inspecting, creating, and updating prompts, credentials, approvals, and stored memory observations.",
+      "description": "Operational pages for browsing, inspecting, creating, and updating prompts, credentials, approvals, and stored memory observations. Memory observations are currently inspect-only in the UI, and credential metadata editing is not exposed.",
       "user_flows": [
         "Navigate to /prompts -> Browse list of prompts -> Open a prompt detail -> Edit prompt content and submit -> See updated prompt in the list",
-        "Navigate to /credentials -> Browse credential list -> Open credential detail -> Update credential metadata and submit -> See updated credential in the list",
-        "Navigate to /approvals -> Browse pending approvals -> Open an approval detail -> Submit an approval decision -> See the approval removed from the pending list",
-        "Navigate to /memory -> Browse memory observations -> Open an observation detail -> Update tags or metadata and save -> See updated observation in the list"
+        "Navigate to /credentials -> Browse credential list or empty state -> Inspect OAuth integration and connection checklist actions",
+        "Navigate to /inbox -> Browse pending approvals -> Submit Approve or Reject when a pending approval exists -> See the inbox posture remain visible or the empty state when no items are pending",
+        "Navigate to /memory -> Browse memory observations -> Open an observation detail -> Inspect captured content without tag or metadata edit controls"
       ]
     },
     {
       "name": "Analytics, Onboarding, and Admin Surfaces",
       "description": "Dashboards and admin interfaces for onboarding progress, LLM and memory analytics, billing, organization, SSO, audit logs, marketplace, and operations.",
       "user_flows": [
-        "Navigate to /onboarding -> Review onboarding milestones and complete a milestone -> See onboarding progress update",
+        "Navigate to /onboarding -> Review backend-driven onboarding checklist progress and labels; do not assume an incomplete milestone exists",
         "Navigate to /analytics/llm -> Review LLM usage charts and metrics -> Navigate to /analytics/memory -> Review memory usage charts and metrics",
         "Navigate to /admin -> Navigate to /admin/billing -> Review billing and plan information",
         "Navigate to /admin -> Navigate to /admin/organization -> Inspect organization settings and members",
@@ -91,7 +91,7 @@
         "path": "/graphs",
         "file": "pages/graphs.tsx",
         "auth_required": true,
-        "description": "Graph listing and navigation page."
+        "description": "Graph listing page. The authenticated shell may expose this area through a Workflows navigation label."
       },
       {
         "path": "/graphs/[graphId]",
@@ -124,10 +124,10 @@
         "description": "Memory browser and observation management page."
       },
       {
-        "path": "/approvals",
-        "file": "pages/approvals.tsx",
+        "path": "/inbox",
+        "file": "pages/inbox.tsx",
         "auth_required": true,
-        "description": "Human approval queue page."
+        "description": "Human approval inbox page. The legacy /approvals page reuses the same implementation."
       },
       {
         "path": "/credentials",
@@ -229,7 +229,8 @@
         "entry_route": "/login",
         "user_interactions": [
           "Fill email and password fields on login or registration forms.",
-          "Submit credentials and wait for navigation into the authenticated app.",
+          "Submit registration and expect redirect to /login?registered=true before signing in.",
+          "Submit login credentials and wait for navigation into the authenticated app.",
           "Attempt to open a protected page and get redirected when unauthenticated.",
           "Return from OAuth or SSO callback routes and complete login flow."
         ],
@@ -251,7 +252,7 @@
       },
       {
         "name": "Graph Authoring Experience",
-        "description": "Visual workflow graph editing, node configuration, validation overlays, and wizard-assisted authoring.",
+        "description": "Visual workflow graph editing, node configuration, validation overlays, and wizard-assisted authoring. In the current shell, entry can be surfaced as Workflows.",
         "files": [
           "pages/graphs.tsx",
           "pages/graphs/[graphId].tsx",
@@ -261,7 +262,7 @@
           "components/graph-editor/validation/ValidationOverlay.tsx",
           "components/graph-editor/wizard/AgentWizard.tsx"
         ],
-        "entry_route": "/graphs",
+        "entry_route": "/workflows",
         "user_interactions": [
           "Open the graph list and navigate into a graph editor.",
           "Add nodes, connect edges, and open node configuration forms.",
@@ -323,10 +324,11 @@
       },
       {
         "name": "Prompt, Credential, Approval, and Memory Management",
-        "description": "Operational pages for prompts, credentials, human approvals, and stored memory observations.",
+        "description": "Operational pages for prompts, credentials, human approvals, and stored memory observations. Prompt editing and approval decisions are interactive; memory observations are inspect-only; credential metadata editing is not exposed.",
         "files": [
           "pages/prompts.tsx",
           "pages/credentials.tsx",
+          "pages/inbox.tsx",
           "pages/approvals.tsx",
           "pages/memory.tsx",
           "components/memory/MemoryObservationList.tsx",
@@ -335,8 +337,8 @@
         "entry_route": "/prompts",
         "user_interactions": [
           "Open prompt, credential, approval, or memory pages from the app navigation.",
-          "Browse lists, inspect detail panels, and submit relevant forms.",
-          "Review pending approvals and memory observations."
+          "Browse lists, inspect detail panels, and submit only currently exposed forms.",
+          "Review pending approvals and inspect memory observations without making the client authoritative for durable state."
         ],
         "api_calls": [
           {
@@ -350,6 +352,10 @@
           {
             "method": "GET",
             "endpoint": "/api/approvals"
+          },
+          {
+            "method": "POST",
+            "endpoint": "/api/runs/{run_id}/resume"
           },
           {
             "method": "GET",

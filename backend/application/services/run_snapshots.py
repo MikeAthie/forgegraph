@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
+from django.conf import settings
+from django.core.cache import cache
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from redis import Redis
@@ -34,6 +36,12 @@ def build_run_snapshot_redis_client() -> Redis:
     )
 
 
+def _use_cache_snapshot_store() -> bool:
+    default_cache = settings.CACHES.get("default", {})
+    backend = str(default_cache.get("BACKEND") or "").lower()
+    return "locmemcache" in backend
+
+
 def snapshot_key(run_id: UUID | str) -> str:
     return f"{SNAPSHOT_KEY_PREFIX}:{run_id}"
 
@@ -43,8 +51,11 @@ def get_snapshot(
     *,
     redis_client: Redis | None = None,
 ) -> RunSnapshot | None:
-    client = redis_client or build_run_snapshot_redis_client()
-    raw_payload = client.get(snapshot_key(run_id))
+    if redis_client is None and _use_cache_snapshot_store():
+        raw_payload = cache.get(snapshot_key(run_id))
+    else:
+        client = redis_client or build_run_snapshot_redis_client()
+        raw_payload = client.get(snapshot_key(run_id))
     if not raw_payload:
         return None
 
@@ -67,7 +78,6 @@ def set_snapshot(
     *,
     redis_client: Redis | None = None,
 ) -> None:
-    client = redis_client or build_run_snapshot_redis_client()
     payload = asdict(snapshot)
     payload["run_id"] = str(snapshot.run_id)
     payload["updated_at"] = (snapshot.updated_at or timezone.now()).isoformat()
@@ -75,6 +85,12 @@ def set_snapshot(
 
     ttl_seconds = int(os.environ.get("FORGEGRAPH_RUN_SNAPSHOT_TTL_SECONDS", "0") or "0")
     key = snapshot_key(snapshot.run_id)
+
+    if redis_client is None and _use_cache_snapshot_store():
+        cache.set(key, serialized, timeout=ttl_seconds or None)
+        return
+
+    client = redis_client or build_run_snapshot_redis_client()
     if ttl_seconds > 0:
         client.setex(key, ttl_seconds, serialized)
         return
@@ -106,6 +122,10 @@ def delete_snapshot(
     *,
     redis_client: Redis | None = None,
 ) -> None:
+    if redis_client is None and _use_cache_snapshot_store():
+        cache.delete(snapshot_key(run_id))
+        return
+
     client = redis_client or build_run_snapshot_redis_client()
     client.delete(snapshot_key(run_id))
 

@@ -245,6 +245,14 @@ def _parse_memory_identity(
     return namespace, key
 
 
+def _reject_engine_durable_write() -> Response:
+    return error_response(
+        code="FORBIDDEN",
+        message="Engine cannot mutate durable run state directly. Use backend-owned event or intent paths.",
+        status=403,
+    )
+
+
 class EngineCredentialDetailView(APIView):
     permission_classes = [AllowAny]
 
@@ -347,60 +355,7 @@ class EngineRunDetailView(APIView):
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):
             return run
-
-        payload = request.data if isinstance(request.data, dict) else {}
-        update_fields: list[str] = []
-
-        try:
-            if "status" in payload:
-                next_status = _validate_status(
-                    payload.get("status"),
-                    allowed={
-                        "pending",
-                        "running",
-                        "paused",
-                        "resume_requested",
-                        "succeeded",
-                        "failed",
-                        "canceled",
-                    },
-                    field="status",
-                )
-                _validate_run_status_transition(run.status, next_status)
-                run.status = next_status
-                update_fields.append("status")
-            if "started_at" in payload:
-                run.started_at = _parse_optional_datetime(payload.get("started_at"))
-                update_fields.append("started_at")
-            if "ended_at" in payload:
-                run.ended_at = _parse_optional_datetime(payload.get("ended_at"))
-                update_fields.append("ended_at")
-            if "output_json" in payload:
-                run.output_json = redact_payload(payload.get("output_json"))
-                update_fields.append("output_json")
-            if "error_message" in payload:
-                run.error_message = str(redact_payload(payload.get("error_message") or ""))
-                update_fields.append("error_message")
-            if "trace_id" in payload:
-                run.trace_id = str(payload.get("trace_id") or "")
-                update_fields.append("trace_id")
-        except ValueError as exc:
-            return error_response(
-                code="INVALID_STATE" if "transition" in str(exc) else "VALIDATION_ERROR",
-                message=str(exc),
-                status=409 if "transition" in str(exc) else 400,
-            )
-
-        if update_fields:
-            update_fields.extend(
-                touch_run_liveness(
-                    run,
-                    recovery_state=recovery_state_for_status(run.status),
-                )
-            )
-            run.save(update_fields=sorted(set(update_fields)))
-
-        return success_response(_serialize_run(run))
+        return _reject_engine_durable_write()
 
 
 class EngineRunPauseStateView(APIView):

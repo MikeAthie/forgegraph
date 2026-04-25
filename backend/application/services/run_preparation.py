@@ -634,14 +634,18 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
                 }
             )
 
+        fallback_provider_available = provider in {"", "openai"} and bool(
+            str(getattr(settings, "OPENAI_API_KEY", "")).strip()
+        )
         if not credential_id:
-            errors.append(
-                {
-                    "field": "credential_id",
-                    "message": f"Prompt node '{node_id}' is missing a credential.",
-                    "suggestion": "Select an API key in the node configuration.",
-                }
-            )
+            if not fallback_provider_available:
+                errors.append(
+                    {
+                        "field": "credential_id",
+                        "message": f"Prompt node '{node_id}' is missing a credential.",
+                        "suggestion": "Select an API key in the node configuration.",
+                    }
+                )
         else:
             credential_ids.add(credential_id)
 

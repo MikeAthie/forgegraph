@@ -219,6 +219,7 @@ def test_stale_intent_is_ignored_and_logged(logger_mock):
         "intent_id": str(intent.intent_id),
         "intent_type": "pause_run",
         "intent_attempt_id": "attempt-a",
+        "active_attempt_id": "attempt-b",
         "current_attempt_id": "attempt-b",
     }
 
@@ -561,11 +562,9 @@ def test_apply_set_run_status_intent_updates_run_and_clears_pause_state_for_term
     broadcast_run_updated.assert_called_once()
 
 
-@patch("application.services.run_snapshots.logger")
-@patch("application.services.run_snapshots.set_snapshot")
-def test_apply_node_completed_intent_snapshot_write_failure_does_not_break_commit(
+@patch("application.services.runtime_write_intents.set_snapshot")
+def test_apply_node_completed_intent_snapshot_write_failure_fails_closed(
     set_snapshot_mock,
-    logger_mock,
 ):
     run = _make_run(status="running")
     NodeRun.objects.create(
@@ -590,23 +589,23 @@ def test_apply_node_completed_intent_snapshot_write_failure_does_not_break_commi
         },
     )
 
-    with TestCase.captureOnCommitCallbacks(execute=True):
-        result = apply_node_completed_intent(intent=intent, stream_message_id="1700000000003-2")
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        with TestCase.captureOnCommitCallbacks(execute=True):
+            result = apply_node_completed_intent(
+                intent=intent,
+                stream_message_id="1700000000003-2",
+            )
+            assert result == "processed"
 
-    assert result == "processed"
     run.refresh_from_db()
     assert run.status == "running"
-    assert ProcessedRuntimeIntent.objects.filter(intent_id=intent.intent_id).exists()
+    assert run.last_progress_at is None
+    assert run.last_heartbeat_at is None
+    assert NodeRun.objects.filter(run=run, node_id="node_redis_failure", attempt=1).count() == 1
+    assert not RunCheckpoint.objects.filter(run=run).exists()
+    assert not ProcessedRuntimeIntent.objects.filter(intent_id=intent.intent_id).exists()
     assert get_snapshot(run.id) is None
     set_snapshot_mock.assert_called_once()
-    logger_mock.error.assert_called_once()
-    assert logger_mock.error.call_args.args[0] == "snapshot_write_failed"
-    assert logger_mock.error.call_args.kwargs["extra"] == {
-        "run_id": str(run.id),
-        "node_id": "node_redis_failure",
-        "next_node": "node_after_redis_failure",
-        "attempt_id": "resume-attempt-redis-failure",
-    }
 
 
 @patch("application.services.runtime_write_intents.broadcast_node_run_updated")

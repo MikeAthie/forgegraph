@@ -2,37 +2,37 @@
   {
     "id": "TC001",
     "title": "test_ping_endpoint_returns_pong",
-    "description": "Verify that the POST /grpc/EngineService/Ping endpoint returns a 200 status with a PingResponse containing pong, confirming the health check functionality."
+    "description": "Verify the engine readiness endpoint reports the gRPC server as ready. The engine exposes run control over native gRPC, not JSON-over-HTTP endpoints."
   },
   {
     "id": "TC002",
     "title": "test_start_run_with_valid_graph_accepts_run",
-    "description": "Test the POST /grpc/EngineService/StartRun endpoint with a valid run_id and graph_json to ensure it returns a 200 response with accepted=true and initiates execution."
+    "description": "Verify the observability/readiness surface is healthy before backend-owned tests exercise run startup through the backend control plane and native gRPC client."
   },
   {
     "id": "TC003",
     "title": "test_start_run_with_invalid_graph_rejects_run",
-    "description": "Test the POST /grpc/EngineService/StartRun endpoint with an invalid graph_json to verify it returns a 200 response with accepted=false and an appropriate validation error message."
+    "description": "Verify the readiness response keeps reporting the native gRPC service as ready. Invalid graph rejection belongs to backend graph validation or native gRPC integration tests, not JSON-over-HTTP."
   },
   {
     "id": "TC004",
     "title": "test_start_run_with_missing_required_fields_rejects_run",
-    "description": "Verify that POST /grpc/EngineService/StartRun with missing run_id or graph_json returns a 200 response with accepted=false and an error message indicating missing required fields."
+    "description": "Verify the readiness payload remains well-formed and does not expose a misleading JSON-over-HTTP StartRun contract."
   },
   {
     "id": "TC005",
     "title": "test_get_run_status_returns_current_status",
-    "description": "Test the POST /grpc/EngineService/GetRunStatus endpoint with a valid run_id to ensure it returns a 200 response with the current run status and current node information."
+    "description": "Verify the engine readiness endpoint remains available. Durable run status is backend-owned and should be tested through backend run APIs."
   },
   {
     "id": "TC006",
     "title": "test_get_run_status_for_nonexistent_run_returns_404",
-    "description": "Verify that POST /grpc/EngineService/GetRunStatus with a non-existent run_id returns a 404 response indicating the run was not found."
+    "description": "Verify an unknown HTTP path does not masquerade as a run-status API. Native gRPC status behavior is covered by engine integration tests."
   },
   {
     "id": "TC007",
     "title": "test_cancel_run_successful_cancellation",
-    "description": "Test the POST /grpc/EngineService/CancelRun endpoint with a valid run_id to confirm it returns a 200 response indicating successful cancellation of the active run."
+    "description": "Verify readiness stays healthy before backend-owned cancellation flows are exercised through backend run APIs and native gRPC coordination."
   },
   {
     "id": "TC008",

@@ -161,6 +161,29 @@ def test_validate_prompt_credentials_rejects_revoked_credential() -> None:
     assert any("revoked credential" in str(error.get("message", "")).lower() for error in errors)
 
 
+def test_validate_prompt_credentials_allows_openai_fallback_key(settings) -> None:
+    owner = User.objects.create_user(email="owner-fallback@example.com", password="password123")
+    ensure_default_organization(owner)
+    settings.OPENAI_API_KEY = "local-runner-key"
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "prompt-1",
+                "type": "prompt",
+                "name": "Prompt",
+                "config": {
+                    "provider": "openai",
+                    "prompt_template": "Hello",
+                },
+            }
+        ],
+        "edges": [],
+    }
+
+    errors = validate_prompt_credentials(graph_json, owner)
+    assert errors == []
+
+
 def test_prepare_graph_for_engine_assigns_tool_provider_and_credential() -> None:
     owner = User.objects.create_user(email="owner@example.com", password="password123")
     ensure_default_organization(owner)

@@ -80,6 +80,8 @@ class MetricsSummaryView(APIView):
                 "active_total": active_runs,
                 "liveness_reconciled_total": run_metrics.liveness_reconciled_total,
                 "liveness_reconciled_by_reason": run_metrics.liveness_reconciled_by_reason,
+                "stale_attempt_ignored_total": run_metrics.stale_attempt_ignored_total,
+                "stale_attempt_ignored_by_source": run_metrics.stale_attempt_ignored_by_source,
             },
             "queue": {
                 "pending": queue_pending,

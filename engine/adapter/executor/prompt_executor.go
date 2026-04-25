@@ -171,6 +171,15 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 			return port.NewErrorResult(err), nil
 		}
 	}
+	if shouldFailPromptExecution(node, state) {
+		return port.NewErrorResult(
+			fmt.Errorf(
+				"simulated %s failure at iteration %d",
+				promptFailureRole(node),
+				promptExecutionIteration(state)+1,
+			),
+		), nil
+	}
 
 	// Get prompt template (required)
 	promptTemplate, ok := node.Config["prompt_template"].(string)
@@ -181,13 +190,20 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	// Substitute variables in prompt
 	basePrompt := SubstituteTemplate(promptTemplate, state)
 	prompt := basePrompt
-	curatedContext, err := resolveCuratedContext(node, state)
-	if err != nil {
-		return port.NewErrorResult(err), nil
+	disableMemoryContext := getConfigBool(node.Config["disable_memory_context"])
+	var (
+		curatedContext *curatedContextAssembly
+		err            error
+	)
+	if !disableMemoryContext {
+		curatedContext, err = resolveCuratedContext(node, state)
+		if err != nil {
+			return port.NewErrorResult(err), nil
+		}
 	}
 
 	var vectorMemories []port.MemoryChunk
-	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
+	if !disableMemoryContext && runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier3.Enabled && runCtx.MemoryRetriever != nil {
 		tenantID := port.TenantIDFrom(ctx)
 		if tenantID != "" {
 			req := port.MemoryRetrieveRequest{
@@ -209,10 +225,10 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		}
 	}
 
-	shouldAugment := curatedContext != nil || (runCtx != nil &&
+	shouldAugment := !disableMemoryContext && (curatedContext != nil || (runCtx != nil &&
 		runCtx.MemoryConfig != nil &&
 		runCtx.MemoryConfig.Tier1.AutoPrepend &&
-		runCtx.MemoryBuffer != nil) || len(vectorMemories) > 0
+		runCtx.MemoryBuffer != nil) || len(vectorMemories) > 0)
 	if shouldAugment {
 		var buffer *entity.MessageBuffer
 		var summary *entity.Summary
@@ -362,7 +378,7 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 	}
 
 	// Capture messages in buffer
-	if runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.Enabled && runCtx.MemoryBuffer != nil {
+	if !disableMemoryContext && runCtx != nil && runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.Enabled && runCtx.MemoryBuffer != nil {
 		runCtx.MemoryBuffer.Push(entity.Message{
 			Role:    "user",
 			Content: basePrompt,
@@ -472,8 +488,98 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 			output["schema_validation"] = map[string]any{"valid": true, "errors": []any{}}
 		}
 	}
+	if outputKey, ok := node.Config["output_key"].(string); ok && strings.TrimSpace(outputKey) != "" {
+		state.SetVar(strings.TrimSpace(outputKey), resolvePromptStateOutput(response))
+		output["state_output_key"] = strings.TrimSpace(outputKey)
+	}
 
 	return port.NewSuccessResult(output), nil
+}
+
+func resolvePromptStateOutput(response *LLMResponse) any {
+	if response == nil {
+		return nil
+	}
+	if response.StructuredData != nil {
+		return response.StructuredData
+	}
+	trimmed := strings.TrimSpace(response.Content)
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		var parsed any
+		if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+			return parsed
+		}
+	}
+	return response.Content
+}
+
+func promptFailureRole(node *entity.Node) string {
+	if node == nil {
+		return "prompt"
+	}
+	if role := strings.TrimSpace(node.GetConfigString("simulation_role")); role != "" {
+		return role
+	}
+	if node.ID != "" {
+		return node.ID
+	}
+	return "prompt"
+}
+
+func promptExecutionIteration(state *entity.State) int {
+	if state == nil {
+		return 0
+	}
+	rawState, ok := state.Get("vars.execution_state")
+	if !ok || rawState == nil {
+		return 0
+	}
+	payload, ok := rawState.(map[string]any)
+	if !ok {
+		encoded, err := json.Marshal(rawState)
+		if err != nil {
+			return 0
+		}
+		if err := json.Unmarshal(encoded, &payload); err != nil {
+			return 0
+		}
+	}
+	switch typed := payload["iteration"].(type) {
+	case int:
+		return typed
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func shouldFailPromptExecution(node *entity.Node, state *entity.State) bool {
+	if node == nil || state == nil {
+		return false
+	}
+	if _, configured := node.Config["simulate_failure_input_key"]; !configured {
+		if _, configured = node.Config["simulate_failure_on_iteration"]; !configured {
+			return false
+		}
+	}
+	inputKey := strings.TrimSpace(node.GetConfigString("simulate_failure_input_key"))
+	if inputKey == "" {
+		inputKey = "force_content_failure"
+	}
+	rawEnabled, ok := state.GetInput(inputKey)
+	if !ok {
+		return false
+	}
+	enabled, ok := rawEnabled.(bool)
+	if !ok || !enabled {
+		return false
+	}
+	targetIteration := node.GetConfigInt("simulate_failure_on_iteration")
+	if targetIteration <= 0 {
+		targetIteration = 1
+	}
+	return promptExecutionIteration(state)+1 == targetIteration
 }
 
 func getConfigBool(value any) bool {

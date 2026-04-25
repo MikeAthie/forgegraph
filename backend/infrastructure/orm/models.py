@@ -906,6 +906,52 @@ class Run(models.Model):
             return int(delta.total_seconds() * 1000)
         return None
 
+    @property
+    def authoritative_attempt_id(self) -> str:
+        from application.services.run_snapshots import get_snapshot
+
+        try:
+            snapshot = get_snapshot(self.id)
+        except Exception:
+            snapshot = None
+        if snapshot is not None:
+            attempt_id = str(snapshot.attempt_id or "").strip()
+            if attempt_id:
+                return attempt_id
+
+        if self.resume_attempt_id is not None:
+            return str(self.resume_attempt_id)
+
+        metadata = (
+            self.dispatch_graph_json.get("metadata")
+            if isinstance(self.dispatch_graph_json, dict)
+            else None
+        )
+        if isinstance(metadata, dict):
+            backend_attempt_id = str(metadata.get("backend_attempt_id") or "").strip()
+            if backend_attempt_id:
+                return backend_attempt_id
+
+        processed_attempt_id = (
+            ProcessedRuntimeIntent.objects.filter(run=self)
+            .exclude(attempt_id="")
+            .order_by("-processed_at")
+            .values_list("attempt_id", flat=True)
+            .first()
+        )
+        if isinstance(processed_attempt_id, str) and processed_attempt_id.strip():
+            return processed_attempt_id.strip()
+
+        return ""
+
+    @property
+    def active_attempt_id(self) -> str:
+        attempt_id = self.authoritative_attempt_id
+        if attempt_id:
+            return attempt_id
+
+        return f"backend-attempt-{self.id}"
+
 
 class RunQueueEntry(models.Model):
     """Queue entry for run execution."""

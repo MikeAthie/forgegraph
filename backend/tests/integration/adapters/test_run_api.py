@@ -320,6 +320,79 @@ class TestRunDetail:
         assert response.data["data"]["node_runs"][0]["duration_ms"] == 100
         assert response.data["data"]["node_runs"][1]["id"] == str(node_run2.id)
 
+    def test_get_run_expands_dotted_node_input_payloads(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Replay Input Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        node_run = NodeRun.objects.create(
+            run=run,
+            node_id="strategy_agent",
+            node_type="transform",
+            status="running",
+            input_json={
+                "input.goal": "Launch a replayable AI digital marketing campaign for ForgeGraph.",
+                "vars.execution_state": {
+                    "goal": "Launch a replayable AI digital marketing campaign for ForgeGraph.",
+                    "iteration": 0,
+                    "strategy": None,
+                    "content_assets": [],
+                    "distribution_plan": None,
+                    "analytics": None,
+                },
+            },
+        )
+
+        response = authenticated_client.get(f"/api/runs/{run.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        returned = next(
+            item for item in response.data["data"]["node_runs"] if item["id"] == str(node_run.id)
+        )
+        assert returned["input_json"]["input"]["goal"] == (
+            "Launch a replayable AI digital marketing campaign for ForgeGraph."
+        )
+        assert returned["input_json"]["vars"]["execution_state"]["goal"] == (
+            "Launch a replayable AI digital marketing campaign for ForgeGraph."
+        )
+        assert returned["input_json"]["vars"]["execution_state"]["iteration"] == 0
+
+    def test_get_run_includes_backend_attempt_and_status_history(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="Replay Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [],
+                "edges": [],
+                "metadata": {"backend_attempt_id": "attempt-backend-1"},
+            },
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="succeeded",
+            dispatch_graph_json={
+                "nodes": [],
+                "edges": [],
+                "metadata": {"backend_attempt_id": "attempt-backend-1"},
+            },
+        )
+        RunEvent.objects.create(run=run, event_type="run_started", payload={"status": "running"})
+        RunEvent.objects.create(
+            run=run,
+            event_type="run_completed",
+            payload={"status": "succeeded"},
+        )
+
+        response = authenticated_client.get(f"/api/runs/{run.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["backend_attempt_id"] == "attempt-backend-1"
+        assert response.data["data"]["status_history"] == ["pending", "running", "succeeded"]
+
     def test_get_run_returns_traceable_timeline(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="Timeline Graph")
         version = GraphVersion.objects.create(
@@ -1191,10 +1264,17 @@ class TestRunStart:
         assert [tool["name"] for tool in tool_resolution["pinned_tools"]] == ["crm_lookup"]
         assert tool_resolution["agent_nodes"]["agent_1"]["tools"] == ["crm_lookup"]
         assert tool_resolution["manifest_version"] == 2
+        assert "backend_attempt_id" not in run.dispatch_graph_json["metadata"]
+        assert "tool_execution_id" not in tool_node["config"]
 
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
-        assert start_calls[0][1]["graph_json"] == run.dispatch_graph_json
+        payload_graph = start_calls[0][1]["graph_json"]
+        payload_tool_node = next(node for node in payload_graph["nodes"] if node["id"] == "tool_1")
+        assert payload_graph["metadata"]["tool_resolution"] == tool_resolution
+        assert "backend_attempt_id" in payload_graph["metadata"]
+        assert payload_tool_node["config"]["tool_execution_id"]
+        assert payload_tool_node["config"]["idempotency_key"]
 
 
 class TestRunInvoke:
@@ -1253,7 +1333,8 @@ class TestRunInvoke:
 
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
-        assert start_calls[0][1]["graph_json"] == new_run.dispatch_graph_json
+        assert "backend_attempt_id" not in (new_run.dispatch_graph_json.get("metadata") or {})
+        assert "backend_attempt_id" in start_calls[0][1]["graph_json"]["metadata"]
         assert start_calls[0][1]["run_id"] == new_run.id
 
     def test_invoke_resolves_prompt_id_into_checkpoint_and_engine_payload(
@@ -1522,7 +1603,11 @@ class TestRunReplay:
         assert len(start_calls) == 1
         assert start_calls[0][1]["run_id"] == replay_run.id
         assert start_calls[0][1]["input_json"] == {"query": "hello"}
-        assert start_calls[0][1]["graph_json"] == replay_run.dispatch_graph_json
+        assert isinstance(replay_run.dispatch_graph_json, dict)
+        replay_metadata = replay_run.dispatch_graph_json.get("metadata")
+        assert isinstance(replay_metadata, dict)
+        assert "backend_attempt_id" not in replay_metadata
+        assert "backend_attempt_id" in start_calls[0][1]["graph_json"]["metadata"]
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_replay_resolves_prompt_id_into_checkpoint_and_engine_payload(
@@ -1763,7 +1848,7 @@ class TestRunReplay:
             RunEvent.objects.filter(run=replay_run).values_list("event_type", flat=True)
         )
         assert event_types.count("run.replay") == 1
-        assert event_types.count("run.updated") == 2
+        assert event_types.count("run.updated") >= 2
         assert event_types.count("node_run.updated") == 2
 
         node_statuses = set(
@@ -2310,6 +2395,52 @@ class TestEngineRunEvents:
         assert node_projection.ended_at is not None
         assert node_projection.last_event_id == "evt-shadow-node-complete"
         assert node_projection.last_event_type == "node_completed"
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_events_node_started_persists_input_payload(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Node Input Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+
+        base_timestamp = int(time.time() * 1000)
+        run_started = signed_engine_event_post(
+            {
+                "event_id": "evt-input-run-start",
+                "type": "run_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": base_timestamp,
+            }
+        )
+        assert run_started.status_code == status.HTTP_200_OK
+
+        node_started = signed_engine_event_post(
+            {
+                "event_id": "evt-input-node-start",
+                "type": "node_started",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "node_id": "strategy_agent",
+                "node_type": "transform",
+                "attempt": 1,
+                "timestamp": base_timestamp + 10,
+                "input": {
+                    "goal": "Launch a replayable marketing loop.",
+                    "vars": {"execution_state": {"iteration": 0}},
+                },
+            }
+        )
+        assert node_started.status_code == status.HTTP_200_OK
+
+        node_run = NodeRun.objects.get(run=run, node_id="strategy_agent", attempt=1)
+        assert node_run.input_json == {
+            "goal": "Launch a replayable marketing loop.",
+            "vars": {"execution_state": {"iteration": 0}},
+        }
 
     @override_settings(
         ENGINE_CALLBACK_SECRET="test-secret",

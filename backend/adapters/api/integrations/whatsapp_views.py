@@ -491,8 +491,6 @@ class WhatsAppWebhookView(APIView):
                 message=str(exc),
                 status=status.HTTP_409_CONFLICT,
             )
-        run.dispatch_graph_json = prepared_graph
-        run.save(update_fields=["dispatch_graph_json"])
         broadcast_run_updated(run)
         record_audit_log(
             actor=owner,

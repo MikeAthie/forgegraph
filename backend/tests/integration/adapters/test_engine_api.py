@@ -77,13 +77,15 @@ class TestEngineRunApi:
             **headers,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 403
         run.refresh_from_db()
-        assert run.status == "running"
-        assert run.trace_id == "trace-123"
-        assert run.output_json == {"step": "started"}
-        assert run.last_progress_at is not None
-        assert run.recovery_state == "active"
+        assert run.status == "pending"
+        assert run.trace_id == ""
+        assert run.output_json is None
+        assert run.last_progress_at is None
+        assert (
+            "cannot mutate durable run state directly" in response.data["error"]["message"].lower()
+        )
 
     def test_run_detail_rejects_terminal_status_regression(self, api_client):
         user = User.objects.create_user(
@@ -110,8 +112,8 @@ class TestEngineRunApi:
             **headers,
         )
 
-        assert response.status_code == 409
-        assert response.data["error"]["code"] == "INVALID_STATE"
+        assert response.status_code == 403
+        assert response.data["error"]["code"] == "FORBIDDEN"
         run.refresh_from_db()
         assert run.status == "succeeded"
 
@@ -137,8 +139,8 @@ class TestEngineRunApi:
             **headers,
         )
 
-        assert response.status_code == 409
-        assert response.data["error"]["code"] == "INVALID_STATE"
+        assert response.status_code == 403
+        assert response.data["error"]["code"] == "FORBIDDEN"
         run.refresh_from_db()
         assert run.status == "paused"
 
@@ -164,8 +166,8 @@ class TestEngineRunApi:
             **headers,
         )
 
-        assert response.status_code == 409
-        assert response.data["error"]["code"] == "INVALID_STATE"
+        assert response.status_code == 403
+        assert response.data["error"]["code"] == "FORBIDDEN"
         run.refresh_from_db()
         assert run.status == "resume_requested"
 

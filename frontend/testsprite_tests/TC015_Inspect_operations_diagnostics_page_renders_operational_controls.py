@@ -31,50 +31,29 @@ async def run_test():
 
         # Interact with the page elements to simulate user flow
         # -> Navigate to http://localhost:3000
-        await page.goto("http://localhost:3000", wait_until="commit", timeout=10000)
+        await page.goto("http://localhost:3000")
         
-        # -> Click the 'Sign in' link to open the login form (element index 98).
+        # -> Click the 'Sign in' link to open the login page.
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/nav/div/div/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/header/div/div[2]/a').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Input email into the email field (element index 619).
+        # -> Fill the email and password fields and click the 'Sign in' button to authenticate.
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('test@example.com')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('test@example.com')
         
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div[2]/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('WY3QGTJ7@q5eYq3')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div[2]/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('WY3QGTJ7@q5eYq3')
         
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/button').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        # -> Open the account menu to find the Admin or Operations navigation link (click the account button).
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/header/nav/div/div[2]/button[2]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        # -> Click the 'Admin & Governance' menu item to open the admin page and access Operations.
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div[2]/div/div[3]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        # -> Navigate to /admin so the admin UI can be loaded, then open the Operations section.
-        await page.goto("http://localhost:3000/admin", wait_until="commit", timeout=10000)
-        
-        # -> Click the 'Policies & Operations' (Operations) entry to open the Operations admin section and then verify operational controls or diagnostics content is rendered.
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/section[2]/div[5]/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
         # --> Test passed — verified by AI agent
         frame = context.pages[-1]

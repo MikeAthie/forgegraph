@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 import socket
 import time
@@ -125,9 +126,9 @@ class Command(BaseCommand):
 
         checkpoint_graph_json = checkpoint.graph_json if checkpoint is not None else None
         if isinstance(checkpoint_graph_json, dict):
-            prepared_graph = checkpoint_graph_json
+            prepared_graph = copy.deepcopy(checkpoint_graph_json)
         elif isinstance(run.dispatch_graph_json, dict):
-            prepared_graph = run.dispatch_graph_json
+            prepared_graph = copy.deepcopy(run.dispatch_graph_json)
         else:
             try:
                 prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
@@ -139,15 +140,13 @@ class Command(BaseCommand):
                 return
 
         try:
-            prepared_graph = prepare_tool_executions_for_dispatch(
+            outbound_graph = prepare_tool_executions_for_dispatch(
                 run=run,
                 graph_json=prepared_graph,
             )
         except ToolExecutionDispatchBlocked as exc:
             self._fail_run(entry, run, f"Tool execution dispatch blocked: {exc}")
             return
-        run.dispatch_graph_json = prepared_graph
-        run.save(update_fields=["dispatch_graph_json"])
 
         credential_errors = validate_prompt_credentials(prepared_graph, user)
         if credential_errors:
@@ -168,7 +167,7 @@ class Command(BaseCommand):
             with get_engine_client(callback_url, host=target.host, port=target.port) as engine:
                 engine.start_run(
                     run_id=run.id,
-                    graph_json=prepared_graph,
+                    graph_json=outbound_graph,
                     input_json=run.input_json,
                     memory_config_json=memory_config_json,
                     tenant_id=tenant_id,

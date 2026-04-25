@@ -1,79 +1,30 @@
 import asyncio
+
 from playwright import async_api
 from playwright.async_api import expect
 
+from _helpers import BASE_URL, close_browser, launch_page, login
+
+
 async def run_test():
-    pw = None
-    browser = None
-    context = None
-
+    pw = browser = context = None
     try:
-        # Start a Playwright session in asynchronous mode
-        pw = await async_api.async_playwright().start()
+        pw, browser, context, page = await launch_page(async_api)
+        await login(page)
 
-        # Launch a Chromium browser in headless mode with custom arguments
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--window-size=1280,720",         # Set the browser window size
-                "--disable-dev-shm-usage",        # Avoid using /dev/shm which can cause issues in containers
-                "--ipc=host",                     # Use host-level IPC for better stability
-                "--single-process"                # Run the browser in a single process mode
-            ],
-        )
+        await page.goto(f"{BASE_URL}/memory")
+        await expect(page.get_by_text("Memory posture")).to_be_visible()
+        await expect(page.get_by_role("heading", name="Observation ledger")).to_be_visible()
 
-        # Create a new browser context (like an incognito window)
-        context = await browser.new_context()
-        context.set_default_timeout(5000)
-
-        # Open a new page in the browser context
-        page = await context.new_page()
-
-        # Interact with the page elements to simulate user flow
-        # -> Navigate to http://localhost:3000
-        await page.goto("http://localhost:3000", wait_until="commit", timeout=10000)
-        
-        # -> Open the login page by clicking the 'Sign in' link
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/nav/div/div/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        # -> Fill the email and password fields with the configured credentials and submit the login form.
-        frame = context.pages[-1]
-        # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('test@example.com')
-        
-        frame = context.pages[-1]
-        # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div[2]/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('WY3QGTJ7@q5eYq3')
-        
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/button').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        # -> Click the 'Memory' navigation link to open the Memory page and view the observations list.
-        frame = context.pages[-1]
-        # Click element
-        elem = frame.locator('xpath=/html/body/div/div/header/nav/div/div/div[2]/a[5]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
-        
-        # --> Test passed — verified by AI agent
-        frame = context.pages[-1]
-        current_url = await frame.evaluate("() => window.location.href")
-        assert current_url is not None, "Test completed successfully"
-        await asyncio.sleep(5)
-
+        first_observation = page.locator("button").filter(has_text="Recorded").first()
+        if await first_observation.count() > 0:
+            await first_observation.click()
+            await expect(page.get_by_role("heading", name="Observation detail")).to_be_visible()
+            await expect(page.get_by_text("Captured content")).to_be_visible()
+        else:
+            await expect(page.get_by_text("No observations matched")).to_be_visible()
     finally:
-        if context:
-            await context.close()
-        if browser:
-            await browser.close()
-        if pw:
-            await pw.stop()
+        await close_browser(pw, browser, context)
+
 
 asyncio.run(run_test())
-    

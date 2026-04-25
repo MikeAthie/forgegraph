@@ -39,6 +39,37 @@ It supervises a system of agents, tasks, decisions, memory, and cost over time. 
 - Frontend shell: [docs/frontend/app-shell.md](docs/frontend/app-shell.md)
 - Migration: [docs/migration/ui-rollout.md](docs/migration/ui-rollout.md)
 
+## Test Automation Notes
+
+Generated tests should target the current OS surfaces first and treat legacy routes as compatibility coverage:
+
+- Frontend primary routes: `/overview`, `/agents`, `/tasks`, `/inbox`, `/memory`, `/accounting`, `/library`, `/workflows`, `/settings`
+- Frontend compatibility routes: `/graphs`, `/runs`, `/approvals`
+- Backend current aliases: `/api/workflows`, `/api/executions`, `/api/decisions`, `/api/agents`, `/api/tasks`, `/api/accounting`, `/api/system-state`
+- Backend compatibility routes: `/api/graphs`, `/api/runs`, `/api/approvals`
+
+Runtime-sensitive coverage must preserve the control-plane contract from [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md):
+
+- The backend owns durable state, snapshots, resume state, and recovery decisions.
+- The engine executes work but is not authoritative for durable runtime state.
+- The frontend observes backend-owned state and issues user actions; it is not authoritative.
+
+For deterministic browser coverage in local and hosted automation, seed the shared frontend fixture user before generating or running UI-heavy suites:
+
+```bash
+cd backend
+uv run python manage.py seed_testsprite_frontend_fixture
+```
+
+That fixture prepares `test@example.com` with a default organization plus an editable prompt, a pending approval, a visible memory observation, and a visible credential so generated tests can cover real operator flows instead of empty states.
+
+For backend API coverage, prefer these contracts:
+
+- Auth flows under `/api/auth/*`
+- Workflow metadata creation followed by workflow revision creation before execution start
+- Execution lifecycle through `/api/executions/*` or `/api/runs/*`
+- Signed engine callback delivery through `/api/runs/engine-events`
+
 ## Local CI Hook
 
 Install the shared Git hook once per clone:

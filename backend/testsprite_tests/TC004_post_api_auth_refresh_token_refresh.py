@@ -1,66 +1,87 @@
 import requests
 import uuid
+import random
+import string
 
 BASE_URL = "http://localhost:8000"
-REGISTER_URL = f"{BASE_URL}/api/auth/register"
-LOGIN_URL = f"{BASE_URL}/api/auth/login"
-REFRESH_URL = f"{BASE_URL}/api/auth/refresh"
+
+def random_email():
+    return f"testuser_{uuid.uuid4().hex}@example.com"
+
+def random_password(length=12):
+    chars = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(random.choice(chars) for _ in range(length))
 
 
 def test_post_api_auth_refresh_token_refresh():
-    # Create unique email for registration
-    unique_email = f"testuser_{uuid.uuid4()}@example.com"
-    password = "TestPassword123!"
+    session = requests.Session()
+    # Register a new user
+    email = random_email()
+    password = random_password()
+    register_payload = {"email": email, "password": password}
+    register_url = f"{BASE_URL}/api/auth/register"
+    try:
+        r = session.post(register_url, json=register_payload, timeout=30)
+        assert r.status_code == 201, f"Expected 201 Created on register, got {r.status_code}"
+        user_data = r.json()
+        assert "id" in user_data and "email" in user_data, "User payload must contain id and email"
+        # Login with the registered user
+        login_url = f"{BASE_URL}/api/auth/login"
+        login_payload = {"email": email, "password": password}
+        r = session.post(login_url, json=login_payload, timeout=30)
+        assert r.status_code == 200, f"Expected 200 OK on login, got {r.status_code}"
+        login_json = r.json()
+        assert "access" in login_json, "Login response JSON must contain access token"
+        # Refresh token should NOT be in JSON body
+        assert "refresh" not in login_json, "Refresh token must NOT be in JSON response"
 
-    # Register user
-    register_payload = {"email": unique_email, "password": password}
-    register_resp = requests.post(REGISTER_URL, json=register_payload, timeout=30)
-    assert register_resp.status_code == 200, f"Registration failed: {register_resp.text}"
-    register_json = register_resp.json()
-    assert "id" in register_json, f"ID missing in registration response: {register_resp.text}"
-    assert "email" in register_json, f"Email missing in registration response: {register_resp.text}"
-    assert register_json["email"] == unique_email
+        # The refresh token must be in HttpOnly cookie named refresh_token
+        cookies = session.cookies
+        refresh_token_cookie = cookies.get("refresh_token")
+        assert refresh_token_cookie is not None, "Refresh token cookie must be set after login"
 
-    # Login user
-    login_payload = {"email": unique_email, "password": password}
-    login_resp = requests.post(LOGIN_URL, json=login_payload, timeout=30)
-    assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
-    login_json = login_resp.json()
-    assert "access" in login_json, f"Access token missing in login response: {login_resp.text}"
-    assert "refresh" in login_json, f"Refresh token missing in login response: {login_resp.text}"
+        # POST /api/auth/refresh WITH valid refresh token cookie
+        refresh_url = f"{BASE_URL}/api/auth/refresh"
+        r = session.post(refresh_url, timeout=30)
+        # The refresh endpoint returns 200 with JSON access token without refresh token
+        if r.status_code == 200:
+            refresh_json = r.json()
+            assert "access" in refresh_json, "Refresh response JSON must contain access token"
+            assert "refresh" not in refresh_json, "Refresh token must NOT be in refresh response JSON"
+        else:
+            # According to spec may raise 400 if refresh cookie missing or 401 if invalid refresh token
+            # Since cookie is from login, it should be valid
+            assert False, f"Unexpected status code on valid refresh token: {r.status_code} {r.text}"
 
-    refresh_token = login_json["refresh"]
+        # POST /api/auth/refresh WITHOUT refresh cookie (simulate by clearing cookies)
+        session.cookies.clear()
+        r = session.post(refresh_url, timeout=30)
+        # Missing refresh cookie may return 400
+        assert r.status_code in (400, 401), f"Expected 400 or 401 on missing refresh cookie, got {r.status_code}"
 
-    # --- Step 1: Refresh using the refresh token in JSON payload ---
-    refresh_payload = {"refresh": refresh_token}
-    refresh_resp1 = requests.post(REFRESH_URL, json=refresh_payload, timeout=30)
-    assert refresh_resp1.status_code == 200, f"Refresh with JSON field failed: {refresh_resp1.text}"
-    refresh_json1 = refresh_resp1.json()
-    assert "access" in refresh_json1, f"New access token missing on refresh: {refresh_resp1.text}"
+        # POST /api/auth/refresh WITH invalid refresh cookie
+        session.cookies.set("refresh_token", "INVALID_REFRESH_TOKEN")
+        r = session.post(refresh_url, timeout=30)
+        # Should return 401 Unauthorized for invalid refresh cookie
+        assert r.status_code == 401, f"Expected 401 on invalid refresh token, got {r.status_code}"
 
-    # --- Step 2: Refresh using new access token does not return new refresh token as per PRD ---
-    # Use the same refresh token again (simulate)
-    refresh_payload2 = {"refresh": refresh_token}
-    refresh_resp2 = requests.post(REFRESH_URL, json=refresh_payload2, timeout=30)
-    assert refresh_resp2.status_code == 200, f"Second refresh failed: {refresh_resp2.text}"
-    refresh_json2 = refresh_resp2.json()
-    assert "access" in refresh_json2, (
-        f"New access token missing on second refresh: {refresh_resp2.text}"
-    )
-
-    # --- Step 3: Attempt reuse of invalid refresh token (simulate by altering token) - expect 401 ---
-    reuse_payload = {"refresh": "invalid_refresh_token_for_reuse_test"}
-    reuse_resp = requests.post(REFRESH_URL, json=reuse_payload, timeout=30)
-    assert reuse_resp.status_code == 401, (
-        f"Invalid refresh token should fail with 401 but got {reuse_resp.status_code}"
-    )
-
-    # --- Step 4: Attempt refresh with invalid refresh token - expect 401 ---
-    invalid_payload = {"refresh": "invalid_refresh_token_value"}
-    invalid_resp = requests.post(REFRESH_URL, json=invalid_payload, timeout=30)
-    assert invalid_resp.status_code == 401, (
-        f"Invalid refresh token should fail with 401 but got {invalid_resp.status_code}"
-    )
+    finally:
+        # Cleanup - Login again to get fresh access and refresh token to logout and clear session
+        try:
+            # Login again to re-acquire valid tokens if possible
+            r = session.post(f"{BASE_URL}/api/auth/login", json={"email": email, "password": password}, timeout=30)
+            if r.status_code == 200:
+                access_token = r.json().get("access")
+                refresh_token = session.cookies.get("refresh_token")
+                if access_token and refresh_token:
+                    # Logout to invalidate refresh cookie
+                    logout_url = f"{BASE_URL}/api/auth/logout"
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    session.cookies.set("refresh_token", refresh_token)
+                    r = session.post(logout_url, headers=headers, timeout=30)
+                    # Ignore logout response status here
+        except Exception:
+            pass
 
 
 test_post_api_auth_refresh_token_refresh()

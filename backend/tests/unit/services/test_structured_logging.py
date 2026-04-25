@@ -50,6 +50,7 @@ def test_json_formatter_keeps_stale_intent_metadata():
             "intent_id": "intent-1",
             "intent_type": "pause_run",
             "intent_attempt_id": "attempt-a",
+            "active_attempt_id": "attempt-b",
             "current_attempt_id": "attempt-b",
         },
     )
@@ -60,4 +61,28 @@ def test_json_formatter_keeps_stale_intent_metadata():
     assert payload["intent_id"] == "intent-1"
     assert payload["intent_type"] == "pause_run"
     assert payload["intent_attempt_id"] == "attempt-a"
+    assert payload["active_attempt_id"] == "attempt-b"
     assert payload["current_attempt_id"] == "attempt-b"
+
+
+def test_log_event_serializes_node_payload_fields():
+    logger, stream = _build_logger("test.structured_logging.node_payload")
+
+    log_event(
+        logger,
+        logging.INFO,
+        "node_output",
+        run_id="run-456",
+        node_id="analytics_agent",
+        payload={"iteration": 2, "ctr": 0.09},
+        input_json={"goal": "launch"},
+        output_json={"analytics": {"iteration": 2}},
+    )
+
+    payload = json.loads(stream.getvalue())
+    assert payload["event_type"] == "node_output"
+    assert payload["run_id"] == "run-456"
+    assert payload["node_id"] == "analytics_agent"
+    assert payload["payload"] == {"iteration": 2, "ctr": 0.09}
+    assert payload["input_json"] == {"goal": "launch"}
+    assert payload["output_json"] == {"analytics": {"iteration": 2}}

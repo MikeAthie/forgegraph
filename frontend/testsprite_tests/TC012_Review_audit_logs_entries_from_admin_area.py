@@ -31,41 +31,41 @@ async def run_test():
 
         # Interact with the page elements to simulate user flow
         # -> Navigate to http://localhost:3000
-        await page.goto("http://localhost:3000", wait_until="commit", timeout=10000)
+        await page.goto("http://localhost:3000")
         
-        # -> Open the Sign in page by clicking the 'Sign in' control.
+        # -> Click the 'Sign in' link to open the login page so we can authenticate as the org admin.
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/nav/div/div/div[2]/a').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/header/div/div[2]/a').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Fill the email field with test@example.com, fill the password field with WY3QGTJ7@q5eYq3, and submit the sign in form.
+        # -> Fill the email and password fields and submit the Sign in form.
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('test@example.com')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('test@example.com')
         
         frame = context.pages[-1]
         # Input text
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/div[2]/input').nth(0)
-        await page.wait_for_timeout(3000); await elem.fill('WY3QGTJ7@q5eYq3')
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div[2]/input').nth(0)
+        await asyncio.sleep(3); await elem.fill('WY3QGTJ7@q5eYq3')
         
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/main/div/div/div[2]/form/button').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Open the user menu to find and navigate to the Admin / Audit Logs page (click the user menu).
+        # -> Open the Settings/admin area to find the Audit Logs navigation and view the audit entries (click 'Settings').
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div/div/header/nav/div/div[2]/button[2]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/div[2]/aside/div[2]/div[2]/nav/a[3]').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
-        # -> Click the 'Audit logs' menu item to open the Audit Logs page and verify that a list or table of audit entries is rendered.
+        # -> Click the 'Audit logs' navigation item and verify the audit entries table or list is rendered.
         frame = context.pages[-1]
         # Click element
-        elem = frame.locator('xpath=/html/body/div[2]/div/div[7]').nth(0)
-        await page.wait_for_timeout(3000); await elem.click(timeout=5000)
+        elem = frame.locator('xpath=/html/body/div/div/div/div[2]/div/main/div/div/div/div/div[2]/section[2]/div[2]/div/div[3]/div/a').nth(0)
+        await asyncio.sleep(3); await elem.click()
         
         # --> Test passed — verified by AI agent
         frame = context.pages[-1]
