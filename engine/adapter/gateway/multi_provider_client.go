@@ -25,6 +25,16 @@ func (c *MultiProviderClient) Complete(ctx context.Context, request *executor.LL
 	provider := strings.ToLower(request.Provider)
 
 	apiKey := request.APIKey
+	llmMode := strings.ToLower(strings.TrimSpace(request.LLMMode))
+	if llmMode == "" {
+		llmMode = strings.ToLower(strings.TrimSpace(request.Metadata["llm_mode"]))
+	}
+	if llmMode == "" {
+		llmMode = LLMModeManaged
+	}
+	if llmMode == LLMModeBYOK && strings.TrimSpace(apiKey) == "" {
+		return nil, fmt.Errorf("byok api key missing")
+	}
 	if apiKey == "" && request.CredentialID != "" && c.resolver != nil {
 		tenantID := request.TenantID
 		if tenantID == "" {
@@ -48,6 +58,11 @@ func (c *MultiProviderClient) Complete(ctx context.Context, request *executor.LL
 	if provider == "" {
 		provider = "openai"
 	}
+	request.Provider = provider
+	request.APIKey = apiKey
+	if request.CredentialSource == "" {
+		request.CredentialSource = llmMode
+	}
 
 	switch provider {
 	case "openai":
@@ -57,6 +72,7 @@ func (c *MultiProviderClient) Complete(ctx context.Context, request *executor.LL
 		if apiKey == "" {
 			return nil, fmt.Errorf("openai api key missing")
 		}
+		request.APIKey = apiKey
 		client := NewOpenAIClientWithKey(apiKey)
 		return client.Complete(ctx, request)
 	case "anthropic":
@@ -79,6 +95,16 @@ func (c *MultiProviderClient) StreamComplete(
 	provider := strings.ToLower(request.Provider)
 
 	apiKey := request.APIKey
+	llmMode := strings.ToLower(strings.TrimSpace(request.LLMMode))
+	if llmMode == "" {
+		llmMode = strings.ToLower(strings.TrimSpace(request.Metadata["llm_mode"]))
+	}
+	if llmMode == "" {
+		llmMode = LLMModeManaged
+	}
+	if llmMode == LLMModeBYOK && strings.TrimSpace(apiKey) == "" {
+		return nil, fmt.Errorf("byok api key missing")
+	}
 	if apiKey == "" && request.CredentialID != "" && c.resolver != nil {
 		tenantID := request.TenantID
 		if tenantID == "" {
@@ -102,6 +128,11 @@ func (c *MultiProviderClient) StreamComplete(
 	if provider == "" {
 		provider = "openai"
 	}
+	request.Provider = provider
+	request.APIKey = apiKey
+	if request.CredentialSource == "" {
+		request.CredentialSource = llmMode
+	}
 
 	switch provider {
 	case "openai":
@@ -111,6 +142,7 @@ func (c *MultiProviderClient) StreamComplete(
 		if apiKey == "" {
 			return nil, fmt.Errorf("openai api key missing")
 		}
+		request.APIKey = apiKey
 		client := NewOpenAIClientWithKey(apiKey)
 		return client.StreamComplete(ctx, request, onChunk)
 	case "anthropic":

@@ -366,6 +366,7 @@ export default function OnboardingPage() {
       });
       const run = await runsApi.start({
         graph_version_id: clone.graph_version_id,
+        llm_mode: "managed",
         input_json: inputPayload,
       });
       void completeMilestone("run_template", { template_id: selectedTemplate.id });

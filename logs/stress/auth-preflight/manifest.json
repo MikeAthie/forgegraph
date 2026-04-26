@@ -1,0 +1,33 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-26T02:00:16.506614+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\auth-preflight",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 5",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "endpoint-saturation",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 4909.0,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 1
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 4909.0,
+        "max_latency_ms": 4909,
+        "retry_count": 0,
+        "successful_runs": 1,
+        "timeouts": 0,
+        "total_runs": 1
+      },
+      "scenario": "endpoint-saturation"
+    }
+  ],
+  "started_at": "2026-04-26T02:00:10.067893+00:00"
+}

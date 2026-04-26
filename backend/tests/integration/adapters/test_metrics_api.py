@@ -84,15 +84,24 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert "websocket" in payload
     assert payload["api"]["requests_total"] >= 2
     assert payload["api"]["server_errors_total"] >= 1
+    assert "timeout_like_requests_total" in payload["api"]
+    assert "timeout_like_rate_per_minute" in payload["api"]
+    assert "timeout_threshold_ms" in payload["api"]
     assert payload["api"]["callback_auth_failures_total"] >= 1
     assert payload["api"]["callback_auth_failures_by_reason"]["invalid_signature"] >= 1
     assert payload["runtime_transport"]["intent_received_total"] >= 1
     assert payload["runtime_transport"]["intent_applied_total"] >= 1
     assert payload["runtime_transport"]["intent_ack_total"] >= 1
-    assert payload["runtime_transport"]["stream_pending"] >= 2
-    assert payload["runtime_transport"]["stream_lag"] >= 3
-    assert payload["runtime_transport"]["stream_backlog"] >= 5
-    assert payload["runtime_transport"]["dead_letter_count"] >= 1
+    assert "stream_length" in payload["runtime_transport"]
+    assert "pending" in payload["runtime_transport"]
+    assert "lag" in payload["runtime_transport"]
+    assert "backlog" in payload["runtime_transport"]
+    assert payload["runtime_transport"]["source"] in {"redis", "in_process_fallback"}
+    if payload["runtime_transport"]["source"] == "in_process_fallback":
+        assert payload["runtime_transport"]["stream_pending"] >= 2
+        assert payload["runtime_transport"]["stream_lag"] >= 3
+        assert payload["runtime_transport"]["stream_backlog"] >= 5
+        assert payload["runtime_transport"]["dead_letter_count"] >= 1
     assert "guardrails" in payload
     assert "generated_at" in payload
 

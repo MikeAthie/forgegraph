@@ -20,10 +20,10 @@ from application.services.metrics import (
     get_run_metrics_snapshot,
     get_websocket_metrics_snapshot,
 )
-from application.services.runtime_transport_metrics import (
-    get_runtime_transport_metrics_snapshot,
-)
 from application.services.rbac import has_min_role
+from application.services.runtime_transport_observability import (
+    get_runtime_transport_observability_snapshot,
+)
 from infrastructure.orm.models import Run, RunQueueEntry, User
 
 
@@ -42,7 +42,7 @@ class MetricsSummaryView(APIView):
         run_metrics = get_run_metrics_snapshot()
         websocket_metrics = get_websocket_metrics_snapshot()
         api_metrics = get_api_metrics_snapshot()
-        runtime_transport_metrics = get_runtime_transport_metrics_snapshot()
+        runtime_transport_metrics = get_runtime_transport_observability_snapshot()
         queue_pending = RunQueueEntry.objects.filter(status="pending").count()
         queue_processing = RunQueueEntry.objects.filter(status="processing").count()
         queue_total = queue_pending + queue_processing
@@ -112,6 +112,9 @@ class MetricsSummaryView(APIView):
             "api": {
                 "requests_total": api_metrics.requests_total,
                 "server_errors_total": api_metrics.server_errors_total,
+                "timeout_like_requests_total": api_metrics.timeout_like_requests_total,
+                "timeout_like_rate_per_minute": api_metrics.timeout_like_rate_per_minute,
+                "timeout_threshold_ms": api_metrics.timeout_threshold_ms,
                 "latency_ms_p50": api_metrics.latency_ms_p50,
                 "latency_ms_p95": api_metrics.latency_ms_p95,
                 "callback_auth_failures_total": api_metrics.callback_auth_failures_total,
@@ -129,12 +132,18 @@ class MetricsSummaryView(APIView):
                     runtime_transport_metrics.duplicate_intent_ignored_total
                 ),
                 "dead_lettered_total": runtime_transport_metrics.dead_lettered_total,
-                "stream_pending": runtime_transport_metrics.stream_pending,
-                "stream_lag": runtime_transport_metrics.stream_lag,
-                "stream_backlog": runtime_transport_metrics.stream_backlog,
+                "stream_length": runtime_transport_metrics.stream_length,
+                "pending": runtime_transport_metrics.pending,
+                "lag": runtime_transport_metrics.lag,
+                "backlog": runtime_transport_metrics.backlog,
+                "stream_pending": runtime_transport_metrics.pending,
+                "stream_lag": runtime_transport_metrics.lag,
+                "stream_backlog": runtime_transport_metrics.backlog,
                 "consumer_idle_ms": runtime_transport_metrics.consumer_idle_ms,
                 "oldest_pending_idle_ms": runtime_transport_metrics.oldest_pending_idle_ms,
                 "dead_letter_count": runtime_transport_metrics.dead_letter_count,
+                "source": runtime_transport_metrics.source,
+                "error": runtime_transport_metrics.error,
                 "generated_at": runtime_transport_metrics.generated_at,
             },
             "slo": {

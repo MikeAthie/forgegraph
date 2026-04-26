@@ -8,6 +8,8 @@ from typing import Any
 
 from rest_framework import serializers
 
+from application.services.llm_access import LLMAccessValidationError, llm_access_from_request
+
 RUN_STATUS_CHOICES = [
     "pending",
     "running",
@@ -44,7 +46,39 @@ NODE_SCOPED_ENGINE_EVENT_TYPES = {
 }
 
 
-class RunStartSerializer(serializers.Serializer[Any]):
+class LLMAccessRequestMixin(serializers.Serializer[Any]):
+    """Optional run-level LLM access fields."""
+
+    llm_mode = serializers.ChoiceField(
+        choices=["managed", "byok"],
+        required=False,
+        help_text="LLM access mode. Defaults to managed.",
+    )
+    provider = serializers.CharField(required=False, allow_blank=True)
+    credential_id = serializers.UUIDField(required=False, allow_null=True)
+    api_key = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        write_only=True,
+        trim_whitespace=True,
+    )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs = super().validate(attrs)
+        try:
+            attrs["llm_access"] = llm_access_from_request(attrs)
+        except LLMAccessValidationError as exc:
+            raise serializers.ValidationError(
+                {
+                    detail["field"]: [detail["message"]]
+                    for detail in exc.details
+                    if detail.get("field")
+                }
+            ) from exc
+        return attrs
+
+
+class RunStartSerializer(LLMAccessRequestMixin, serializers.Serializer[Any]):
     """Serializer for starting a run."""
 
     graph_version_id = serializers.UUIDField()
@@ -52,7 +86,7 @@ class RunStartSerializer(serializers.Serializer[Any]):
     thread_id = serializers.UUIDField(required=False, allow_null=True)
 
 
-class RunInvokeSerializer(serializers.Serializer[Any]):
+class RunInvokeSerializer(LLMAccessRequestMixin, serializers.Serializer[Any]):
     """Serializer for invoking a threaded run."""
 
     thread_id = serializers.UUIDField()
@@ -66,7 +100,7 @@ class RunResumeSerializer(serializers.Serializer[Any]):
     input_json = serializers.JSONField(required=False, default=dict)
 
 
-class RunReplaySerializer(serializers.Serializer[Any]):
+class RunReplaySerializer(LLMAccessRequestMixin, serializers.Serializer[Any]):
     """Serializer for replaying a run from a checkpoint."""
 
     node_id = serializers.CharField(required=False, allow_blank=True)
@@ -90,6 +124,7 @@ class RunListSerializer(serializers.Serializer[Any]):
     ended_at = serializers.DateTimeField(read_only=True, allow_null=True)
     duration_ms = serializers.IntegerField(read_only=True, allow_null=True)
     memory_activity = serializers.JSONField(read_only=True, allow_null=True)
+    llm_access = serializers.JSONField(read_only=True, allow_null=True)
     trace_id = serializers.CharField(read_only=True, allow_blank=True)
     last_progress_at = serializers.DateTimeField(read_only=True, allow_null=True)
     last_heartbeat_at = serializers.DateTimeField(read_only=True, allow_null=True)
@@ -140,6 +175,7 @@ class RunDetailSerializer(serializers.Serializer[Any]):
     agent_events = serializers.JSONField(read_only=True, allow_null=True)
     timeline = serializers.JSONField(read_only=True, allow_null=True)
     memory_activity = serializers.JSONField(read_only=True, allow_null=True)
+    llm_access = serializers.JSONField(read_only=True, allow_null=True)
 
 
 class NodeRunSerializer(serializers.Serializer[Any]):

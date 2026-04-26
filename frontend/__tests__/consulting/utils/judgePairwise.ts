@@ -34,10 +34,7 @@ function compareRank<T extends keyof ReadinessEvaluation>(
   return ranks[forgegraph[key]] - ranks[baseline[key]];
 }
 
-export function judgePairwise(
-  forgegraph: ReadinessEvaluation,
-  baseline: ReadinessEvaluation,
-): PairwiseJudgement {
+export function judgePairwise(forgegraph: ReadinessEvaluation, baseline: ReadinessEvaluation): PairwiseJudgement {
   const driverDelta = compareRank(forgegraph, baseline, "driver_match", DRIVER_MATCH_RANK);
   if (driverDelta > 0) {
     return {

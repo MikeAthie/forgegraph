@@ -248,7 +248,9 @@ function formatRate(count: number, total: number): string {
 }
 
 test.describe("Consulting SaaS Experiment", () => {
-  test("runs a benchmark case pack with deterministic evaluation and pairwise comparison", async ({ request }, testInfo) => {
+  test("runs a benchmark case pack with deterministic evaluation and pairwise comparison", async ({
+    request,
+  }, testInfo) => {
     test.setTimeout(720_000);
     const dockerLogWindowStart = new Date(Date.now() - 5_000).toISOString();
     const user = createTestUser(testInfo, "consulting-eval-readiness");

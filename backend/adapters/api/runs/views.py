@@ -75,7 +75,18 @@ from application.services.event_categories import (
     assert_runtime_state_mutation_allowed,
     normalize_event_category,
 )
+from application.services.llm_access import (
+    LLM_MODE_MANAGED,
+    LLMAccessConfig,
+    LLMAccessValidationError,
+    attach_llm_access_to_graph,
+    engine_input_with_llm_access,
+    engine_llm_access_from_graph,
+    public_llm_access_from_graph,
+    resolve_llm_access_for_dispatch,
+)
 from application.services.llm_pricing import calculate_cost
+from application.services.managed_llm_limits import check_managed_llm_limits
 from application.services.metrics import (
     record_callback_auth_failure,
     record_run_completed,
@@ -304,6 +315,53 @@ def _queue_payload(run: Run) -> dict[str, Any]:
         "queue_attempts": entry.attempts,
         "queue_available_at": entry.available_at,
     }
+
+
+def _public_llm_access_payload(run: Run) -> dict[str, Any]:
+    return public_llm_access_from_graph(
+        run.dispatch_graph_json if isinstance(run.dispatch_graph_json, dict) else {}
+    )
+
+
+def _engine_input_for_llm_access(
+    input_json: dict[str, Any],
+    llm_access: LLMAccessConfig,
+) -> dict[str, Any]:
+    return engine_input_with_llm_access(input_json, llm_access)
+
+
+def _llm_access_error_response(exc: LLMAccessValidationError) -> Response:
+    return error_response(
+        code="INVALID_LLM_ACCESS",
+        message="LLM access configuration is invalid.",
+        status=status.HTTP_400_BAD_REQUEST,
+        details=exc.details,
+    )
+
+
+def _managed_llm_limit_response(
+    *,
+    user: User,
+    graph_json: dict[str, Any],
+    llm_access: LLMAccessConfig,
+) -> Response | None:
+    if llm_access.llm_mode != LLM_MODE_MANAGED:
+        return None
+    result = check_managed_llm_limits(graph_json=graph_json, user=user)
+    if result.allowed:
+        return None
+    response = error_response(
+        code="MANAGED_LIMIT_EXCEEDED",
+        message="Managed LLM limit exceeded.",
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+        details=result.details,
+    )
+    if result.rate_limit is not None:
+        response["Retry-After"] = str(result.rate_limit.retry_after_seconds)
+        response["X-RateLimit-Limit"] = str(result.rate_limit.limit)
+        response["X-RateLimit-Remaining"] = str(result.rate_limit.remaining)
+        response["X-RateLimit-Reset"] = result.rate_limit.reset_at.isoformat()
+    return response
 
 
 def _run_preparation_error_response(exc: Exception) -> Response:
@@ -1506,6 +1564,7 @@ class RunListView(APIView):
                         list(run.node_runs.all()),
                         include_operations=False,
                     ),
+                    "llm_access": _public_llm_access_payload(run),
                 }
             )
 
@@ -1624,6 +1683,7 @@ class RunDetailView(APIView):
             "agent_events": agent_events,
             "timeline": _build_run_timeline(run=run),
             "memory_activity": summarize_run_memory_activity(node_runs, include_operations=True),
+            "llm_access": _public_llm_access_payload(run),
             "node_runs": [
                 _serialize_node_run_for_detail(
                     node_run=node_run,
@@ -1675,6 +1735,7 @@ class RunStartView(APIView):
         tenant_uuid = UUID(tenant_id)
         graph_version_id = serializer.validated_data["graph_version_id"]
         input_json = serializer.validated_data.get("input_json") or {}
+        llm_access = serializer.validated_data["llm_access"]
         thread_id = serializer.validated_data.get("thread_id")
         session_id = str(thread_id) if thread_id else None
         input_size_response = _input_size_guardrail_response(input_json)
@@ -1695,6 +1756,11 @@ class RunStartView(APIView):
                 message=f"GraphVersion with id '{graph_version_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        try:
+            llm_access = resolve_llm_access_for_dispatch(llm_access, user)
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
 
         entitlement_response = check_entitlements(user)
         if entitlement_response is not None:
@@ -1737,11 +1803,26 @@ class RunStartView(APIView):
                 traceparent=traceparent,
                 tracestate=tracestate,
             )
+            prepared_graph = attach_llm_access_to_graph(prepared_graph, llm_access)
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
         trace_metadata = _trace_metadata_from_graph(prepared_graph)
 
-        credential_errors = validate_prompt_credentials(prepared_graph, user)
+        managed_limit_response = _managed_llm_limit_response(
+            user=user,
+            graph_json=prepared_graph,
+            llm_access=llm_access,
+        )
+        if managed_limit_response is not None:
+            return managed_limit_response
+
+        credential_errors = validate_prompt_credentials(
+            prepared_graph,
+            user,
+            llm_access=llm_access,
+        )
         if credential_errors:
             return error_response(
                 code="INVALID_CREDENTIALS",
@@ -1813,6 +1894,7 @@ class RunStartView(APIView):
                 "error_message": redact_payload(run.error_message),
                 "duration_ms": run.duration_ms,
                 "trace_id": run.trace_id,
+                "llm_access": _public_llm_access_payload(run),
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
@@ -1826,6 +1908,7 @@ class RunStartView(APIView):
             graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
+        engine_input_json = _engine_input_for_llm_access(input_json, llm_access)
         try:
             with start_backend_span(
                 "runs.start",
@@ -1845,7 +1928,7 @@ class RunStartView(APIView):
                     engine.start_run(
                         run_id=run.id,
                         graph_json=outbound_graph,
-                        input_json=input_json,
+                        input_json=engine_input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
                         session_id=session_id,
@@ -1926,6 +2009,7 @@ class RunStartView(APIView):
             "output_json": redact_payload(run.output_json),
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
+            "llm_access": _public_llm_access_payload(run),
             "node_runs": [],
         }
 
@@ -1971,6 +2055,7 @@ class RunInvokeView(APIView):
         thread_id = serializer.validated_data["thread_id"]
         session_id = str(thread_id)
         input_json = serializer.validated_data.get("input_json") or {}
+        llm_access = serializer.validated_data["llm_access"]
         input_size_response = _input_size_guardrail_response(input_json)
         if input_size_response is not None:
             return input_size_response
@@ -1981,6 +2066,11 @@ class RunInvokeView(APIView):
                 message="input_json must be a JSON object",
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        try:
+            llm_access = resolve_llm_access_for_dispatch(llm_access, user)
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
 
         quota_response = check_llm_quota(user)
         if quota_response is not None:
@@ -2053,11 +2143,26 @@ class RunInvokeView(APIView):
                 traceparent=traceparent,
                 tracestate=tracestate,
             )
+            graph_json = attach_llm_access_to_graph(graph_json, llm_access)
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
         trace_metadata = _trace_metadata_from_graph(graph_json)
 
-        credential_errors = validate_prompt_credentials(graph_json, user)
+        managed_limit_response = _managed_llm_limit_response(
+            user=user,
+            graph_json=graph_json,
+            llm_access=llm_access,
+        )
+        if managed_limit_response is not None:
+            return managed_limit_response
+
+        credential_errors = validate_prompt_credentials(
+            graph_json,
+            user,
+            llm_access=llm_access,
+        )
         if credential_errors:
             return error_response(
                 code="INVALID_CREDENTIALS",
@@ -2164,6 +2269,7 @@ class RunInvokeView(APIView):
                 "error_message": redact_payload(run.error_message),
                 "duration_ms": run.duration_ms,
                 "trace_id": run.trace_id,
+                "llm_access": _public_llm_access_payload(run),
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
@@ -2176,6 +2282,7 @@ class RunInvokeView(APIView):
             graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
+        engine_input_json = _engine_input_for_llm_access(input_json, llm_access)
         try:
             with start_backend_span(
                 "runs.invoke",
@@ -2195,7 +2302,7 @@ class RunInvokeView(APIView):
                     engine.start_run(
                         run_id=run.id,
                         graph_json=outbound_graph,
-                        input_json=input_json,
+                        input_json=engine_input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
                         session_id=session_id,
@@ -2275,6 +2382,7 @@ class RunInvokeView(APIView):
             "output_json": redact_payload(run.output_json),
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
+            "llm_access": _public_llm_access_payload(run),
             "node_runs": [],
         }
 
@@ -2309,6 +2417,9 @@ class RunReplayView(APIView):
             )
         tenant_uuid = UUID(get_tenant_id_for_user(user))
         node_id = str(serializer.validated_data.get("node_id") or "").strip()
+        request_overrides_llm_access = any(
+            key in request.data for key in ("llm_mode", "provider", "credential_id", "api_key")
+        )
 
         try:
             run = run_queryset_for_user(user).select_related("graph_version__graph").get(id=run_id)
@@ -2325,6 +2436,17 @@ class RunReplayView(APIView):
                 message=f"Cannot replay a run in status '{run.status}'. Run must be completed.",
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        try:
+            llm_access = (
+                resolve_llm_access_for_dispatch(serializer.validated_data["llm_access"], user)
+                if request_overrides_llm_access
+                else engine_llm_access_from_graph(
+                    run.dispatch_graph_json if isinstance(run.dispatch_graph_json, dict) else {},
+                    user,
+                )
+            )
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
 
         try:
             checkpoint = run.checkpoint
@@ -2368,11 +2490,26 @@ class RunReplayView(APIView):
                 traceparent=traceparent,
                 tracestate=tracestate,
             )
+            prepared_graph = attach_llm_access_to_graph(prepared_graph, llm_access)
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
         trace_metadata = _trace_metadata_from_graph(prepared_graph)
 
-        credential_errors = validate_prompt_credentials(prepared_graph, user)
+        managed_limit_response = _managed_llm_limit_response(
+            user=user,
+            graph_json=prepared_graph,
+            llm_access=llm_access,
+        )
+        if managed_limit_response is not None:
+            return managed_limit_response
+
+        credential_errors = validate_prompt_credentials(
+            prepared_graph,
+            user,
+            llm_access=llm_access,
+        )
         if credential_errors:
             return error_response(
                 code="INVALID_CREDENTIALS",
@@ -2492,6 +2629,7 @@ class RunReplayView(APIView):
                 "error_message": redact_payload(replay_run.error_message),
                 "duration_ms": replay_run.duration_ms,
                 "trace_id": replay_run.trace_id,
+                "llm_access": _public_llm_access_payload(replay_run),
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
@@ -2504,6 +2642,7 @@ class RunReplayView(APIView):
             graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
+        engine_input_json = _engine_input_for_llm_access(input_json, llm_access)
         try:
             with start_backend_span(
                 "runs.replay",
@@ -2523,7 +2662,7 @@ class RunReplayView(APIView):
                     engine.start_run(
                         run_id=replay_run.id,
                         graph_json=outbound_graph,
-                        input_json=input_json,
+                        input_json=engine_input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
                         session_id=session_id,
@@ -2603,6 +2742,7 @@ class RunReplayView(APIView):
             "output_json": redact_payload(replay_run.output_json),
             "error_message": redact_payload(replay_run.error_message),
             "duration_ms": replay_run.duration_ms,
+            "llm_access": _public_llm_access_payload(replay_run),
             "node_runs": [],
         }
 
@@ -2716,6 +2856,7 @@ class RunCancelView(APIView):
             "error_message": redact_payload(run.error_message),
             "duration_ms": run.duration_ms,
             "memory_activity": summarize_run_memory_activity(node_runs, include_operations=True),
+            "llm_access": _public_llm_access_payload(run),
             "node_runs": [
                 _serialize_node_run_for_detail(node_run=node_run) for node_run in node_runs
             ],
@@ -2841,6 +2982,14 @@ class RunResumeView(APIView):
         if not run.trace_id:
             run.trace_id = trace_context["trace_id"]
             run.save(update_fields=["trace_id"])
+        try:
+            resume_llm_access = engine_llm_access_from_graph(
+                run.dispatch_graph_json if isinstance(run.dispatch_graph_json, dict) else {},
+                user,
+            )
+            engine_input_json = _engine_input_for_llm_access(input_json, resume_llm_access)
+        except LLMAccessValidationError as exc:
+            return _llm_access_error_response(exc)
 
         updated_snapshot = None
         if existing_snapshot is not None:
@@ -2926,7 +3075,7 @@ class RunResumeView(APIView):
                     engine.resume_run(
                         run_id=run.id,
                         node_id=node_id,
-                        input_json=input_json,
+                        input_json=engine_input_json,
                         resume_attempt_id=str(resume_attempt_id),
                         traceparent=trace_context["traceparent"],
                         tracestate=trace_context["tracestate"],

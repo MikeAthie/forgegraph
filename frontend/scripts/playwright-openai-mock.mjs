@@ -76,8 +76,7 @@ const CONSULTING_CASE_LIBRARY = {
       ],
     },
     baseline: {
-      problem_statement:
-        "Acquisition is up, but new users may not be reaching value quickly enough to retain.",
+      problem_statement: "Acquisition is up, but new users may not be reaching value quickly enough to retain.",
       issue_tree: {
         core_question: "Why are more signups not producing better revenue outcomes?",
         branches: [
@@ -188,7 +187,8 @@ const CONSULTING_CASE_LIBRARY = {
       },
       recommendation: {
         selected_hypothesis: "h1",
-        selected_hypothesis_text: "The new dispatch console introduced a usability regression for routine frontline work.",
+        selected_hypothesis_text:
+          "The new dispatch console introduced a usability regression for routine frontline work.",
         rationale:
           "Usability regression is primary because the strongest evidence is higher task time, more corrections, and specific interface friction in the new mandatory workflow rather than broad support failure.",
       },
@@ -215,14 +215,7 @@ const CONSULTING_CASE_LIBRARY = {
         "The dispatch launch increased usage, but support and training may not have kept pace with the workflow change.",
       issue_tree: {
         core_question: "Why did customer sentiment drop after the dispatch launch?",
-        branches: [
-          "Support capacity",
-          "Usability",
-          "Workflow fit",
-          "Training",
-          "Positioning",
-          "Competition",
-        ],
+        branches: ["Support capacity", "Usability", "Workflow fit", "Training", "Positioning", "Competition"],
       },
       hypotheses: [
         {
@@ -251,7 +244,8 @@ const CONSULTING_CASE_LIBRARY = {
       },
       recommendation: {
         selected_hypothesis: "h1",
-        selected_hypothesis_text: "Support capacity and training gaps are making the rollout feel rougher than it should.",
+        selected_hypothesis_text:
+          "Support capacity and training gaps are making the rollout feel rougher than it should.",
         rationale:
           "Support capacity is a plausible but weaker explanation because launch-period staffing and training noise amplified user frustration.",
       },
@@ -383,7 +377,9 @@ const CONSULTING_CASE_LIBRARY = {
       reflection: {
         weak_hypotheses: ["h3"],
         missing_evidence: ["Direct separation of packaging effects versus discount effects."],
-        inconsistencies: ["Segment mix and discount policy both matter, and the primary mechanism still needs ranking."],
+        inconsistencies: [
+          "Segment mix and discount policy both matter, and the primary mechanism still needs ranking.",
+        ],
       },
       recommendation: {
         selected_hypothesis: "h1",
@@ -523,7 +519,8 @@ const CONSULTING_CASE_LIBRARY = {
       },
       recommendation: {
         selected_hypothesis: "h1",
-        selected_hypothesis_text: "Support capacity is the main bottleneck because the team cannot absorb the new ticket load.",
+        selected_hypothesis_text:
+          "Support capacity is the main bottleneck because the team cannot absorb the new ticket load.",
         rationale:
           "Support capacity is a strong secondary explanation because response times worsened sharply once the queue expanded.",
       },
@@ -1136,7 +1133,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (prompt.includes("Current execution state JSON:") && prompt.includes("Context JSON:") && prompt.includes("Stage:")) {
+    if (
+      prompt.includes("Current execution state JSON:") &&
+      prompt.includes("Context JSON:") &&
+      prompt.includes("Stage:")
+    ) {
       json(response, 200, handleConsultingStagePrompt(prompt, model));
       return;
     }

@@ -1,0 +1,301 @@
+{
+  "analysis": {
+    "breaking_point": "concurrency 50",
+    "data_integrity": "safe",
+    "first_failure_type": "timeout",
+    "scenario": "engine-concurrency",
+    "system_behavior": "stalls"
+  },
+  "completed_at": "2026-04-25T21:17:21.067364+00:00",
+  "concurrency_levels": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "metrics": {
+    "avg_latency_ms": 19107.24,
+    "duplicate_node_execution_count": 0,
+    "error_types": {
+      "timeout": 4,
+      "unknown": 196
+    },
+    "failed_runs": 4,
+    "latency_p95_ms": 55304.84999999998,
+    "max_latency_ms": 62979,
+    "retry_count": 26,
+    "successful_runs": 196,
+    "timeouts": 4,
+    "total_runs": 200
+  },
+  "metrics_after": {
+    "api": {
+      "callback_auth_failures_by_reason": {},
+      "callback_auth_failures_total": 0,
+      "latency_ms_p50": 29.0,
+      "latency_ms_p95": 116.0,
+      "requests_total": 31723,
+      "server_errors_total": 0
+    },
+    "generated_at": "2026-04-25T21:17:21.050566+00:00",
+    "guardrails": {
+      "queue_max_concurrency_per_tenant": 5,
+      "run_input_max_bytes": 262144,
+      "run_max_active_per_tenant": 25
+    },
+    "queue": {
+      "by_tenant": [
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "e7291434-6200-4149-856c-b9d0ba97aba2",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "4cd75096-575e-4c23-95b6-6148cf770d0a",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "65e0e712-9153-493b-86b0-de55ef4049ee",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "b1cd03f1-7cdb-4989-b3de-d819cbc12901",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "7babc9bf-f281-4e29-9fe1-76ee7d19d115",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "02476c0b-1162-42a2-a995-eaf4d6174794",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "b4a7b27b-617d-4b11-ac6e-b22d5416cc54",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "91403e00-08b0-41f0-a6f9-e4cddf56edf8",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "170bc98f-b6e0-4c0f-beb0-34e5787db1bd",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "94485338-0742-463f-bb44-817ce668a5d7",
+          "total": 2
+        }
+      ],
+      "oldest_pending_age_seconds": null,
+      "pending": 0,
+      "processing": 374,
+      "total_depth": 374
+    },
+    "runs": {
+      "active_total": 443,
+      "canceled_total": 0,
+      "completed_total": 0,
+      "failed_total": 0,
+      "failure_rate": null,
+      "latency_ms_p50": null,
+      "latency_ms_p95": null,
+      "liveness_reconciled_by_reason": {},
+      "liveness_reconciled_total": 0,
+      "stale_attempt_ignored_by_source": {},
+      "stale_attempt_ignored_total": 0,
+      "started_total": 379,
+      "success_rate": null,
+      "window_size": 0
+    },
+    "runtime_transport": {
+      "consumer_idle_ms": 0,
+      "dead_letter_count": 0,
+      "dead_lettered_total": 0,
+      "duplicate_intent_ignored_total": 0,
+      "generated_at": "2026-04-25T21:17:21.050837+00:00",
+      "intent_ack_total": 0,
+      "intent_applied_total": 0,
+      "intent_publish_failures_total": 0,
+      "intent_received_total": 0,
+      "intent_reclaimed_total": 0,
+      "oldest_pending_idle_ms": 0,
+      "stream_backlog": 0,
+      "stream_lag": 0,
+      "stream_pending": 0
+    },
+    "slo": {
+      "queue_max_depth_target": 500,
+      "run_p95_latency_ms_target": 60000,
+      "run_success_rate_target": 0.99
+    },
+    "violations": {
+      "queue_depth": false,
+      "run_p95_latency": false,
+      "run_success_rate": false
+    },
+    "websocket": {
+      "active_connections": 0,
+      "connection_failures_total": 0,
+      "message_rate_per_minute": 0.0,
+      "messages_dropped_total": 0,
+      "messages_sent_total": 0
+    }
+  },
+  "metrics_before": {
+    "api": {
+      "callback_auth_failures_by_reason": {},
+      "callback_auth_failures_total": 0,
+      "latency_ms_p50": 24.0,
+      "latency_ms_p95": 88.04999999999995,
+      "requests_total": 15522,
+      "server_errors_total": 0
+    },
+    "generated_at": "2026-04-25T21:12:54.594161+00:00",
+    "guardrails": {
+      "queue_max_concurrency_per_tenant": 5,
+      "run_input_max_bytes": 262144,
+      "run_max_active_per_tenant": 25
+    },
+    "queue": {
+      "by_tenant": [
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "e7291434-6200-4149-856c-b9d0ba97aba2",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "4cd75096-575e-4c23-95b6-6148cf770d0a",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "65e0e712-9153-493b-86b0-de55ef4049ee",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "b1cd03f1-7cdb-4989-b3de-d819cbc12901",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "7babc9bf-f281-4e29-9fe1-76ee7d19d115",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "02476c0b-1162-42a2-a995-eaf4d6174794",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "b4a7b27b-617d-4b11-ac6e-b22d5416cc54",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "91403e00-08b0-41f0-a6f9-e4cddf56edf8",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "170bc98f-b6e0-4c0f-beb0-34e5787db1bd",
+          "total": 2
+        },
+        {
+          "pending": 0,
+          "processing": 2,
+          "tenant_id": "94485338-0742-463f-bb44-817ce668a5d7",
+          "total": 2
+        }
+      ],
+      "oldest_pending_age_seconds": null,
+      "pending": 0,
+      "processing": 374,
+      "total_depth": 374
+    },
+    "runs": {
+      "active_total": 443,
+      "canceled_total": 0,
+      "completed_total": 0,
+      "failed_total": 0,
+      "failure_rate": null,
+      "latency_ms_p50": null,
+      "latency_ms_p95": null,
+      "liveness_reconciled_by_reason": {},
+      "liveness_reconciled_total": 0,
+      "stale_attempt_ignored_by_source": {},
+      "stale_attempt_ignored_total": 0,
+      "started_total": 179,
+      "success_rate": null,
+      "window_size": 0
+    },
+    "runtime_transport": {
+      "consumer_idle_ms": 0,
+      "dead_letter_count": 0,
+      "dead_lettered_total": 0,
+      "duplicate_intent_ignored_total": 0,
+      "generated_at": "2026-04-25T21:12:54.594501+00:00",
+      "intent_ack_total": 0,
+      "intent_applied_total": 0,
+      "intent_publish_failures_total": 0,
+      "intent_received_total": 0,
+      "intent_reclaimed_total": 0,
+      "oldest_pending_idle_ms": 0,
+      "stream_backlog": 0,
+      "stream_lag": 0,
+      "stream_pending": 0
+    },
+    "slo": {
+      "queue_max_depth_target": 500,
+      "run_p95_latency_ms_target": 60000,
+      "run_success_rate_target": 0.99
+    },
+    "violations": {
+      "queue_depth": false,
+      "run_p95_latency": false,
+      "run_success_rate": false
+    },
+    "websocket": {
+      "active_connections": 0,
+      "connection_failures_total": 0,
+      "message_rate_per_minute": 0.0,
+      "messages_dropped_total": 0,
+      "messages_sent_total": 0
+    }
+  },
+  "notes": [],
+  "runs_per_level": 50,
+  "scenario": "engine-concurrency",
+  "started_at": "2026-04-25T21:12:54.576498+00:00"
+}

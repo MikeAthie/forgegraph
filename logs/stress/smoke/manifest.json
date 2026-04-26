@@ -1,0 +1,33 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-25T21:05:43.153127+00:00",
+  "graph_version_id": "328289d0-b244-4410-a658-145141ee148c",
+  "output_dir": "logs\\stress\\smoke",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "concurrency 1",
+        "data_integrity": "safe",
+        "first_failure_type": "internal",
+        "scenario": "endpoint-saturation",
+        "system_behavior": "crashes"
+      },
+      "metrics": {
+        "avg_latency_ms": 45.0,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 1
+        },
+        "failed_runs": 1,
+        "latency_p95_ms": 45.0,
+        "max_latency_ms": 45,
+        "retry_count": 0,
+        "successful_runs": 0,
+        "timeouts": 0,
+        "total_runs": 1
+      },
+      "scenario": "endpoint-saturation"
+    }
+  ],
+  "started_at": "2026-04-25T21:05:40.800353+00:00"
+}

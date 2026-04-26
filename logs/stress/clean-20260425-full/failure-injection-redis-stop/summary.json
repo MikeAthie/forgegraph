@@ -1,0 +1,44 @@
+{
+  "analysis": {
+    "breaking_point": "concurrency 5",
+    "data_integrity": "safe",
+    "first_failure_type": "internal",
+    "scenario": "failure-injection-redis-stop",
+    "system_behavior": "crashes"
+  },
+  "completed_at": "2026-04-25T23:31:11.247408+00:00",
+  "concurrency_levels": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "metrics": {
+    "avg_latency_ms": 87.77,
+    "duplicate_node_execution_count": 0,
+    "error_types": {
+      "internal": 200
+    },
+    "failed_runs": 200,
+    "latency_p95_ms": 217.09999999999997,
+    "max_latency_ms": 232,
+    "retry_count": 0,
+    "successful_runs": 0,
+    "timeouts": 0,
+    "total_runs": 200
+  },
+  "metrics_after": {
+    "error": "Given token not valid for any token type",
+    "status_code": 401
+  },
+  "metrics_before": {
+    "error": "Given token not valid for any token type",
+    "status_code": 401
+  },
+  "notes": [
+    "failure plan skipped because no runs were created for service redis"
+  ],
+  "runs_per_level": 50,
+  "scenario": "failure-injection-redis-stop",
+  "started_at": "2026-04-25T23:28:11.097748+00:00"
+}

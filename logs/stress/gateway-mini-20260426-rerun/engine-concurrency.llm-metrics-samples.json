@@ -1,0 +1,752 @@
+[
+  {
+    "timestamp": "2026-04-26T02:02:30.3445934Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 62,
+    "llm_failures": 2,
+    "avg_latency_ms": 3308.8548387096776,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:30.9435213Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 62,
+    "llm_failures": 2,
+    "avg_latency_ms": 3308.8548387096776,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:31.4552933Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 62,
+    "llm_failures": 2,
+    "avg_latency_ms": 3308.8548387096776,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:31.9661763Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 62,
+    "llm_failures": 2,
+    "avg_latency_ms": 3308.8548387096776,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:32.4731309Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 2,
+    "avg_latency_ms": 3272.190476190476,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:32.9799520Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 66,
+    "llm_failures": 2,
+    "avg_latency_ms": 3181.348484848485,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:33.4883781Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 67,
+    "llm_failures": 2,
+    "avg_latency_ms": 3161.805970149254,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:33.9997243Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 68,
+    "llm_failures": 2,
+    "avg_latency_ms": 3133.985294117647,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:34.5086329Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 69,
+    "llm_failures": 2,
+    "avg_latency_ms": 3114.31884057971,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:35.0151685Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 69,
+    "llm_failures": 2,
+    "avg_latency_ms": 3114.31884057971,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:35.5224835Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 71,
+    "llm_failures": 2,
+    "avg_latency_ms": 3101.549295774648,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:36.0368306Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 72,
+    "llm_failures": 2,
+    "avg_latency_ms": 3091.0833333333335,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:36.5498729Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 72,
+    "llm_failures": 2,
+    "avg_latency_ms": 3091.0833333333335,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:37.0593000Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 72,
+    "llm_failures": 2,
+    "avg_latency_ms": 3091.0833333333335,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:37.5744724Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 72,
+    "llm_failures": 2,
+    "avg_latency_ms": 3091.0833333333335,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:38.0824784Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 74,
+    "llm_failures": 2,
+    "avg_latency_ms": 3059.324324324324,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:38.5905634Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 76,
+    "llm_failures": 2,
+    "avg_latency_ms": 3040.157894736842,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:39.0996727Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 77,
+    "llm_failures": 2,
+    "avg_latency_ms": 3035.181818181818,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:39.6126291Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 78,
+    "llm_failures": 2,
+    "avg_latency_ms": 3013,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:40.1199056Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 78,
+    "llm_failures": 2,
+    "avg_latency_ms": 3013,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:40.6289080Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 78,
+    "llm_failures": 2,
+    "avg_latency_ms": 3013,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:41.1376934Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 80,
+    "llm_failures": 2,
+    "avg_latency_ms": 3008.0875,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:41.6483946Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:42.1621852Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:42.6743320Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:43.1873225Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:43.7010329Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:44.2299141Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:44.7427973Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:45.2545266Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 82,
+    "llm_failures": 2,
+    "avg_latency_ms": 2996.817073170732,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:45.7608270Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 87,
+    "llm_failures": 2,
+    "avg_latency_ms": 2978.885057471264,
+    "queue_depth": 4,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:46.2685452Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 89,
+    "llm_failures": 2,
+    "avg_latency_ms": 2982.9438202247193,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:46.7747905Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 91,
+    "llm_failures": 2,
+    "avg_latency_ms": 2990.978021978022,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:47.2849417Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 93,
+    "llm_failures": 2,
+    "avg_latency_ms": 2984.6344086021504,
+    "queue_depth": 5,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:47.7934517Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 93,
+    "llm_failures": 2,
+    "avg_latency_ms": 2984.6344086021504,
+    "queue_depth": 5,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:48.3030398Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 94,
+    "llm_failures": 2,
+    "avg_latency_ms": 2978.2872340425533,
+    "queue_depth": 4,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:48.8155461Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 95,
+    "llm_failures": 2,
+    "avg_latency_ms": 2980.0947368421052,
+    "queue_depth": 3,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:49.3279006Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 95,
+    "llm_failures": 2,
+    "avg_latency_ms": 2980.0947368421052,
+    "queue_depth": 3,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:49.8379278Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 96,
+    "llm_failures": 2,
+    "avg_latency_ms": 2990.40625,
+    "queue_depth": 2,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:50.3484645Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 96,
+    "llm_failures": 2,
+    "avg_latency_ms": 2990.40625,
+    "queue_depth": 2,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:50.8631567Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 97,
+    "llm_failures": 2,
+    "avg_latency_ms": 3007.556701030928,
+    "queue_depth": 1,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:51.3749276Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 98,
+    "llm_failures": 2,
+    "avg_latency_ms": 3024.285714285714,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:51.8850930Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 98,
+    "llm_failures": 2,
+    "avg_latency_ms": 3024.285714285714,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:52.4051497Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 100,
+    "llm_failures": 2,
+    "avg_latency_ms": 3079.92,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:52.9127200Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 101,
+    "llm_failures": 2,
+    "avg_latency_ms": 3111.732673267327,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:53.4288630Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:53.9428280Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:54.4563891Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:54.9657968Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:55.4879906Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:56.0444593Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:56.5695596Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:57.0816248Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:57.5929267Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:58.1049110Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 102,
+    "llm_failures": 2,
+    "avg_latency_ms": 3140.0686274509803,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:58.6154307Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 105,
+    "llm_failures": 2,
+    "avg_latency_ms": 3158.7238095238095,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:59.1239438Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 109,
+    "llm_failures": 2,
+    "avg_latency_ms": 3198.532110091743,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:02:59.6298804Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 111,
+    "llm_failures": 2,
+    "avg_latency_ms": 3228.5225225225226,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:00.1368374Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 112,
+    "llm_failures": 2,
+    "avg_latency_ms": 3246.5,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:00.6439827Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 112,
+    "llm_failures": 2,
+    "avg_latency_ms": 3246.5,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:01.1554978Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 112,
+    "llm_failures": 2,
+    "avg_latency_ms": 3246.5,
+    "queue_depth": 6,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:01.6775205Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 114,
+    "llm_failures": 2,
+    "avg_latency_ms": 3246.6315789473683,
+    "queue_depth": 4,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:02.1910782Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 114,
+    "llm_failures": 2,
+    "avg_latency_ms": 3246.6315789473683,
+    "queue_depth": 4,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:02.6998964Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 114,
+    "llm_failures": 2,
+    "avg_latency_ms": 3246.6315789473683,
+    "queue_depth": 4,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:03.2112025Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 115,
+    "llm_failures": 2,
+    "avg_latency_ms": 3256.686956521739,
+    "queue_depth": 3,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:03.7227106Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 117,
+    "llm_failures": 3,
+    "avg_latency_ms": 3278.6153846153848,
+    "queue_depth": 1,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:04.2331515Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 117,
+    "llm_failures": 3,
+    "avg_latency_ms": 3278.6153846153848,
+    "queue_depth": 1,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:04.7398715Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 117,
+    "llm_failures": 3,
+    "avg_latency_ms": 3278.6153846153848,
+    "queue_depth": 2,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:05.2492260Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 118,
+    "llm_failures": 3,
+    "avg_latency_ms": 3301.6525423728813,
+    "queue_depth": 1,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:05.7595281Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 119,
+    "llm_failures": 3,
+    "avg_latency_ms": 3325.075630252101,
+    "queue_depth": 0,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:06.2686392Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 120,
+    "llm_failures": 3,
+    "avg_latency_ms": 3358.05,
+    "queue_depth": 0,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:06.7767105Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 122,
+    "llm_failures": 3,
+    "avg_latency_ms": 3419.6393442622953,
+    "queue_depth": 0,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:07.2987797Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 123,
+    "llm_failures": 3,
+    "avg_latency_ms": 3414.2276422764226,
+    "queue_depth": 0,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:07.8112334Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 123,
+    "llm_failures": 3,
+    "avg_latency_ms": 3414.2276422764226,
+    "queue_depth": 0,
+    "fallback_count": 1,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:03:08.3376750Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 123,
+    "llm_failures": 3,
+    "avg_latency_ms": 3414.2276422764226,
+    "queue_depth": 0,
+    "fallback_count": 1,
+    "circuit_open": false
+  }
+]

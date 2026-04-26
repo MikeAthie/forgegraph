@@ -2,9 +2,45 @@ package port
 
 import (
 	"context"
+	"strings"
 
 	"github.com/forgegraph/engine/domain/entity"
 )
+
+const (
+	LLMModeManaged = "managed"
+	LLMModeBYOK    = "byok"
+)
+
+type LLMAccessConfig struct {
+	Mode         string
+	Provider     string
+	CredentialID string
+	APIKey       string
+}
+
+func (c LLMAccessConfig) Normalized() LLMAccessConfig {
+	mode := strings.ToLower(strings.TrimSpace(c.Mode))
+	if mode != LLMModeBYOK {
+		mode = LLMModeManaged
+	}
+	provider := strings.ToLower(strings.TrimSpace(c.Provider))
+	if provider == "" {
+		provider = "openai"
+	}
+	apiKey := strings.TrimSpace(c.APIKey)
+	credentialID := strings.TrimSpace(c.CredentialID)
+	if mode != LLMModeBYOK {
+		credentialID = ""
+		apiKey = ""
+	}
+	return LLMAccessConfig{
+		Mode:         mode,
+		Provider:     provider,
+		CredentialID: credentialID,
+		APIKey:       apiKey,
+	}
+}
 
 // RunContext provides execution-scoped memory context to executors.
 type RunContext struct {
@@ -24,6 +60,7 @@ type RunContext struct {
 	MemoryRetriever   MemoryRetriever
 	ObservationClient ObservationMemoryClient
 	Policy            *entity.ExecutionPolicy
+	LLMAccess         LLMAccessConfig
 }
 
 // StreamChunkEmitter receives incremental LLM response chunks.

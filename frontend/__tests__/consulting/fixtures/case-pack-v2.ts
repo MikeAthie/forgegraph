@@ -170,10 +170,7 @@ export const CONSULTING_CASE_PACK_V2: ConsultingCaseDefinition[] = [
         "Healthy engagement makes the revenue decline look counterintuitive.",
         "A few large enterprise expansions slipped one month, which makes timing look relevant.",
       ],
-      distractors: [
-        "A competitor released a free community edition.",
-        "Paid-search conversion softened slightly.",
-      ],
+      distractors: ["A competitor released a free community edition.", "Paid-search conversion softened slightly."],
       constraints: [
         "Leadership needs a revenue diagnosis, not a product-health diagnosis.",
         "The answer must explain how monetization fell while usage stayed healthy.",
@@ -286,9 +283,7 @@ export const CONSULTING_CASE_PACK_V2: ConsultingCaseDefinition[] = [
   },
 ];
 
-export function buildConsultingExecutionInput(
-  consultingCase: ConsultingCaseDefinition,
-): ConsultingExecutionInput {
+export function buildConsultingExecutionInput(consultingCase: ConsultingCaseDefinition): ConsultingExecutionInput {
   return {
     problem: consultingCase.problem_brief,
     context: {

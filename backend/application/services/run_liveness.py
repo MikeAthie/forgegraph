@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from adapters.ws.runs.broadcast import broadcast_run_updated
@@ -425,15 +426,22 @@ def reconcile_stale_runs(
 ) -> RunLivenessResult:
     effective_now = now or timezone.now()
     threshold_seconds = stale_after_seconds or int(
-        getattr(settings, "RUN_LIVENESS_TIMEOUT_SECONDS", 300)
+        getattr(
+            settings,
+            "RUN_ENGINE_STALLED_TIMEOUT_SECONDS",
+            getattr(settings, "RUN_LIVENESS_TIMEOUT_SECONDS", 60),
+        )
     )
     stale_before = effective_now - timedelta(seconds=max(threshold_seconds, 1))
 
     stale_runs = list(
-        Run.objects.filter(
-            status__in=["running", "resume_requested"],
-            last_progress_at__lt=stale_before,
-        ).order_by("last_progress_at", "resume_requested_at", "started_at")[: max(limit, 1)]
+        Run.objects.filter(status__in=["running", "resume_requested"])
+        .filter(
+            Q(last_progress_at__lt=stale_before)
+            | Q(last_progress_at__isnull=True, started_at__lt=stale_before)
+            | Q(status="resume_requested", resume_requested_at__lt=stale_before)
+        )
+        .order_by("last_progress_at", "resume_requested_at", "started_at")[: max(limit, 1)]
     )
 
     result = RunLivenessResult(scanned=len(stale_runs))

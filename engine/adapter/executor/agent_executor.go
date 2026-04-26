@@ -117,6 +117,8 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 
 	provider := strings.ToLower(strings.TrimSpace(node.GetConfigString("provider")))
 	credentialID := strings.TrimSpace(node.GetConfigString("credential_id"))
+	runCtx := port.RunContextFrom(ctx)
+	provider = ResolveLLMProviderForAccess(runCtx, provider, credentialID)
 	if provider == "" && credentialID == "" {
 		provider = "openai"
 	}
@@ -133,7 +135,6 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 		}
 	}
 
-	runCtx := port.RunContextFrom(ctx)
 	if validation := validateLLMPolicy(runCtx, provider, model); validation != nil {
 		return port.NewErrorResult(validation), nil
 	}
@@ -263,7 +264,9 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 			SystemPrompt: systemPrompt,
 			CredentialID: credentialID,
 			TenantID:     port.TenantIDFrom(ctx),
+			Metadata:     BuildLLMRequestMetadata(runCtx, node.ID),
 		}
+		ApplyLLMAccessToRequest(runCtx, request)
 		if runCtx != nil && runCtx.TrackLLMCall != nil {
 			if err := runCtx.TrackLLMCall(); err != nil {
 				return port.NewErrorResult(err), nil
@@ -297,6 +300,14 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 		}
 		if response.Model != "" {
 			step["response_model"] = response.Model
+		}
+		step["llm_metadata"] = map[string]any{
+			"llm_mode":          responseLLMMode(runCtx, response),
+			"provider":          response.Provider,
+			"credential_source": response.CredentialSource,
+			"fallback_used":     response.FallbackUsed,
+			"error_type":        response.ErrorType,
+			"latency_ms":        response.LatencyMS,
 		}
 		if response.FinishReason != "" {
 			step["finish_reason"] = response.FinishReason
@@ -545,6 +556,11 @@ func buildAgentOutput(node *entity.Node, provider string, model string, finalOut
 	}
 	if usage != nil {
 		output["usage"] = usageMap(usage)
+	}
+	if len(steps) > 0 {
+		if metadata, ok := steps[len(steps)-1]["llm_metadata"]; ok {
+			output["llm_metadata"] = metadata
+		}
 	}
 	if memoryContext != nil {
 		output["memory_context"] = memoryContext

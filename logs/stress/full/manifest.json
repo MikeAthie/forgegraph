@@ -1,0 +1,34 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-25T21:58:40.548207+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\full",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "failure-injection-redis-stop",
+        "system_behavior": "recovers"
+      },
+      "metrics": {
+        "avg_latency_ms": 19981.655,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "timeout": 7,
+          "unknown": 193
+        },
+        "failed_runs": 7,
+        "latency_p95_ms": 54559.799999999996,
+        "max_latency_ms": 63728,
+        "retry_count": 25,
+        "successful_runs": 193,
+        "timeouts": 7,
+        "total_runs": 200
+      },
+      "scenario": "failure-injection-redis-stop"
+    }
+  ],
+  "started_at": "2026-04-25T21:53:54.960514+00:00"
+}

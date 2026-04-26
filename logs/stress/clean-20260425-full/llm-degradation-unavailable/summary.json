@@ -1,0 +1,42 @@
+{
+  "analysis": {
+    "breaking_point": "concurrency 5",
+    "data_integrity": "safe",
+    "first_failure_type": "internal",
+    "scenario": "llm-degradation-unavailable",
+    "system_behavior": "crashes"
+  },
+  "completed_at": "2026-04-25T23:25:05.196401+00:00",
+  "concurrency_levels": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "metrics": {
+    "avg_latency_ms": 113.23,
+    "duplicate_node_execution_count": 0,
+    "error_types": {
+      "internal": 200
+    },
+    "failed_runs": 200,
+    "latency_p95_ms": 306.04999999999995,
+    "max_latency_ms": 345,
+    "retry_count": 0,
+    "successful_runs": 0,
+    "timeouts": 0,
+    "total_runs": 200
+  },
+  "metrics_after": {
+    "error": "Given token not valid for any token type",
+    "status_code": 401
+  },
+  "metrics_before": {
+    "error": "Given token not valid for any token type",
+    "status_code": 401
+  },
+  "notes": [],
+  "runs_per_level": 50,
+  "scenario": "llm-degradation-unavailable",
+  "started_at": "2026-04-25T23:25:02.990064+00:00"
+}

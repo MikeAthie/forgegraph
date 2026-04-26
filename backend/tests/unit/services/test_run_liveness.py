@@ -68,6 +68,34 @@ def test_reconcile_stale_runs_fails_stuck_running_run():
     assert "Run stalled with no backend-observed progress" in run.error_message
 
 
+def test_reconcile_stale_runs_detects_running_run_without_progress_timestamp():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    run = _make_run(status="running", last_progress_at=None)
+    run.started_at = stale_time
+    run.save(update_fields=["started_at"])
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "failed"
+    assert run.recovery_reason == "engine_stalled"
+
+
+@override_settings(RUN_ENGINE_STALLED_TIMEOUT_SECONDS=30, RUN_LIVENESS_TIMEOUT_SECONDS=300)
+def test_reconcile_stale_runs_uses_engine_stalled_timeout_setting_by_default():
+    stale_time = timezone.now() - timedelta(seconds=45)
+    run = _make_run(status="running", last_progress_at=stale_time)
+
+    result = reconcile_stale_runs(now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "failed"
+
+
 def test_run_recovery_policy_defaults_to_fail():
     run = _make_run(status="running")
 

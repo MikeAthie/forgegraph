@@ -1266,6 +1266,21 @@ export type RunStatus = "pending" | "running" | "paused" | "succeeded" | "failed
 
 export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | string;
 
+export type LLMMode = "managed" | "byok";
+
+export interface LLMAccessPayload {
+  llm_mode?: LLMMode;
+  provider?: string;
+  credential_id?: string;
+}
+
+export interface RunLLMAccess {
+  llm_mode: LLMMode;
+  provider: string;
+  credential_id?: string | null;
+  api_key_present: boolean;
+}
+
 export interface RunListItem {
   id: string;
   thread_id?: string | null;
@@ -1282,6 +1297,7 @@ export interface RunListItem {
   duration_ms: number | null;
   trace_id?: string;
   memory_activity?: RunMemoryActivitySummary | null;
+  llm_access?: RunLLMAccess | null;
 }
 
 export interface MemoryObservationPreview {
@@ -1496,6 +1512,7 @@ export interface RunDetail {
     details?: Record<string, unknown> | null;
   }> | null;
   memory_activity?: RunMemoryActivitySummary | null;
+  llm_access?: RunLLMAccess | null;
   // Human Gate pause fields
   paused_node_id?: string | null;
   pause_payload?: {
@@ -1675,12 +1692,17 @@ export interface ResumeRunInput {
   };
 }
 
-export interface InvokeRunInput {
+export interface StartRunInput extends LLMAccessPayload {
+  graph_version_id: string;
+  input_json?: Record<string, unknown>;
+}
+
+export interface InvokeRunInput extends LLMAccessPayload {
   thread_id: string;
   input_json?: Record<string, unknown>;
 }
 
-export interface ReplayRunInput {
+export interface ReplayRunInput extends LLMAccessPayload {
   node_id?: string;
 }
 
@@ -1695,7 +1717,7 @@ export const runsApi = {
     return response.data.data;
   },
 
-  start: async (input: { graph_version_id: string; input_json?: Record<string, unknown> }): Promise<RunDetail> => {
+  start: async (input: StartRunInput): Promise<RunDetail> => {
     const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.start, input);
     return response.data.data;
   },

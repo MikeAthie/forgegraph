@@ -1,0 +1,79 @@
+[
+  {
+    "ts": "2026-04-26T01:54:38.7461208Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:39.0027893Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:39.2657262Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:39.5333948Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:39.7983729Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:40.0644527Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:40.3321821Z",
+    "scenario": "engine-concurrency",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  }
+]

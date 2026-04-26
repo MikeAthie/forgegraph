@@ -43,6 +43,9 @@ class WebSocketMetricsSnapshot:
 class ApiMetricsSnapshot:
     requests_total: int
     server_errors_total: int
+    timeout_like_requests_total: int
+    timeout_like_rate_per_minute: float
+    timeout_threshold_ms: int
     latency_ms_p50: float | None
     latency_ms_p95: float | None
     callback_auth_failures_total: int
@@ -55,6 +58,8 @@ _counters: Counter[str] = Counter()
 _latencies_ms: deque[int] = deque(maxlen=1000)
 _ws_message_timestamps: deque[float] = deque(maxlen=5000)
 _api_latencies_ms: deque[int] = deque(maxlen=2000)
+_api_timeout_like_timestamps: deque[float] = deque(maxlen=5000)
+_api_timeout_threshold_ms = 5000
 
 
 def record_run_started() -> None:
@@ -94,12 +99,30 @@ def record_callback_auth_failure(reason: str) -> None:
         _counters[f"callback_auth_failure_reason:{normalized_reason}"] += 1
 
 
-def record_api_request(*, status_code: int, duration_ms: int) -> None:
+def record_api_request(
+    *,
+    status_code: int,
+    duration_ms: int,
+    timeout_like: bool = False,
+    timeout_threshold_ms: int | None = None,
+) -> None:
+    now_ts = time.time()
     with _lock:
+        global _api_timeout_threshold_ms
+        if timeout_threshold_ms is not None and timeout_threshold_ms > 0:
+            _api_timeout_threshold_ms = int(timeout_threshold_ms)
         _counters["api_requests_total"] += 1
         if status_code >= 500:
             _counters["api_server_errors_total"] += 1
+        if timeout_like:
+            _counters["api_timeout_like_requests_total"] += 1
+            _api_timeout_like_timestamps.append(now_ts)
         _api_latencies_ms.append(max(duration_ms, 0))
+
+
+def _prune_api_timeout_like_timestamps(now_ts: float) -> None:
+    while _api_timeout_like_timestamps and (now_ts - _api_timeout_like_timestamps[0]) > 60:
+        _api_timeout_like_timestamps.popleft()
 
 
 def _prune_ws_message_timestamps(now_ts: float) -> None:
@@ -211,7 +234,9 @@ def get_websocket_metrics_snapshot() -> WebSocketMetricsSnapshot:
 
 
 def get_api_metrics_snapshot() -> ApiMetricsSnapshot:
+    now_ts = time.time()
     with _lock:
+        _prune_api_timeout_like_timestamps(now_ts)
         api_latencies = list(_api_latencies_ms)
         callback_auth_failures_by_reason = {
             key.split(":", 1)[1]: int(value)
@@ -221,10 +246,16 @@ def get_api_metrics_snapshot() -> ApiMetricsSnapshot:
         callback_auth_failures_total = int(_counters.get("callback_auth_failures_total", 0))
         requests_total = int(_counters.get("api_requests_total", 0))
         server_errors_total = int(_counters.get("api_server_errors_total", 0))
+        timeout_like_requests_total = int(_counters.get("api_timeout_like_requests_total", 0))
+        timeout_like_rate_per_minute = float(len(_api_timeout_like_timestamps))
+        timeout_threshold_ms = int(_api_timeout_threshold_ms)
 
     return ApiMetricsSnapshot(
         requests_total=requests_total,
         server_errors_total=server_errors_total,
+        timeout_like_requests_total=timeout_like_requests_total,
+        timeout_like_rate_per_minute=timeout_like_rate_per_minute,
+        timeout_threshold_ms=timeout_threshold_ms,
         latency_ms_p50=_percentile(api_latencies, 0.5),
         latency_ms_p95=_percentile(api_latencies, 0.95),
         callback_auth_failures_total=callback_auth_failures_total,

@@ -1,0 +1,1012 @@
+[
+  {
+    "timestamp": "2026-04-26T02:05:15.6065264Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:15.9471637Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:16.2113136Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:16.4749070Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:16.7383812Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:17.0028949Z",
+    "scenario": "llm-degradation-unavailable",
+    "error": "An error occurred while sending the request."
+  },
+  {
+    "timestamp": "2026-04-26T02:05:17.2975125Z",
+    "scenario": "llm-degradation-unavailable",
+    "error": "An error occurred while sending the request."
+  },
+  {
+    "timestamp": "2026-04-26T02:05:17.5627491Z",
+    "scenario": "llm-degradation-unavailable",
+    "error": "The request was canceled due to the configured HttpClient.Timeout of 2 seconds elapsing."
+  },
+  {
+    "timestamp": "2026-04-26T02:05:19.8407654Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:20.1086033Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:20.3763098Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:20.6403130Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:20.9061182Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:21.1728467Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:21.4354558Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:21.7013148Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:21.9660766Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:22.2315083Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:22.4962268Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 5,
+    "llm_failures": 5,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 5,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:22.7628658Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 5,
+    "llm_failures": 5,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 5,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:23.0274065Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 5,
+    "llm_failures": 5,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 5,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:23.2921983Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:23.5571812Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:23.8372854Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:24.1029972Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:24.3664467Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:24.6325106Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:24.8991014Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:25.1636873Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 10,
+    "llm_failures": 10,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 10,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:25.4273715Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 15,
+    "llm_failures": 15,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 15,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:25.6922862Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 15,
+    "llm_failures": 15,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 15,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:25.9594840Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 15,
+    "llm_failures": 15,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 15,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:26.2239338Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 15,
+    "llm_failures": 15,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 15,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:26.4880368Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 15,
+    "llm_failures": 15,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 15,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:26.7516841Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 15,
+    "llm_failures": 15,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 15,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:27.0168817Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 20,
+    "llm_failures": 20,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:27.2799967Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 20,
+    "llm_failures": 20,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:27.5458470Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 20,
+    "llm_failures": 20,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:27.8092575Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 22,
+    "llm_failures": 22,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:28.0740894Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:28.3405297Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:28.6043086Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:28.8683868Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:29.1325409Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:29.3973901Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:29.6641272Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 25,
+    "llm_failures": 25,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:29.9298358Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 29,
+    "llm_failures": 29,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:30.1931254Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 30,
+    "llm_failures": 30,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:30.4619953Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 30,
+    "llm_failures": 30,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:30.7280250Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 30,
+    "llm_failures": 30,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:30.9911802Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 30,
+    "llm_failures": 30,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:31.2554874Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 30,
+    "llm_failures": 30,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:31.5189299Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 30,
+    "llm_failures": 30,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:31.7853887Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 40,
+    "llm_failures": 40,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:32.0567389Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 40,
+    "llm_failures": 40,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:32.3151030Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 40,
+    "llm_failures": 40,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:32.5803103Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 44,
+    "llm_failures": 44,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:32.8454702Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:33.1102736Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:33.3734325Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:33.6400051Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:33.9063088Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:34.1731853Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:34.4384338Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 50,
+    "llm_failures": 50,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:34.7043890Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:34.9706426Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:35.2384344Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:35.5031221Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:35.7695330Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:36.0336515Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:36.2977794Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 60,
+    "llm_failures": 60,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:36.5625793Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 69,
+    "llm_failures": 69,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:36.8259623Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 70,
+    "llm_failures": 70,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:37.0913201Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 70,
+    "llm_failures": 70,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:37.3560415Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 70,
+    "llm_failures": 70,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:37.6225506Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:37.8891377Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:38.1562397Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:38.4221381Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:38.6876177Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:38.9511085Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:39.2156954Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:39.4805180Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 80,
+    "llm_failures": 80,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:39.7456547Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:40.0093230Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:40.2746960Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:40.5416670Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:40.8056392Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:41.0696269Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:41.3361379Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:41.5974827Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 90,
+    "llm_failures": 90,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 20,
+    "circuit_open": true
+  },
+  {
+    "timestamp": "2026-04-26T02:05:41.8644729Z",
+    "scenario": "llm-degradation-unavailable",
+    "error": "An error occurred while sending the request."
+  },
+  {
+    "timestamp": "2026-04-26T02:05:42.1385077Z",
+    "scenario": "llm-degradation-unavailable",
+    "error": "An error occurred while sending the request."
+  },
+  {
+    "timestamp": "2026-04-26T02:05:42.4067310Z",
+    "scenario": "llm-degradation-unavailable",
+    "error": "The request was canceled due to the configured HttpClient.Timeout of 2 seconds elapsing."
+  },
+  {
+    "timestamp": "2026-04-26T02:05:44.6757422Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:44.9439319Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:45.2087076Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:45.4734000Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:45.7346998Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:45.9978361Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:46.2634490Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:46.5246488Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:46.7868629Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  },
+  {
+    "timestamp": "2026-04-26T02:05:47.0575202Z",
+    "scenario": "llm-degradation-unavailable",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false
+  }
+]

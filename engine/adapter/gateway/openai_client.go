@@ -365,8 +365,11 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 	choice := apiResp.Choices[0]
 
 	return &executor.LLMResponse{
-		Content: choice.Message.Content,
-		Model:   apiResp.Model,
+		Content:          choice.Message.Content,
+		Model:            apiResp.Model,
+		Provider:         "openai",
+		LLMMode:          request.LLMMode,
+		CredentialSource: request.CredentialSource,
 		Usage: &executor.LLMUsage{
 			PromptTokens:     apiResp.Usage.PromptTokens,
 			CompletionTokens: apiResp.Usage.CompletionTokens,
@@ -564,10 +567,13 @@ func (c *OpenAIClient) StreamComplete(
 	}
 
 	return &executor.LLMResponse{
-		Content:      content.String(),
-		Model:        responseModel,
-		Usage:        usage,
-		FinishReason: finishReason,
+		Content:          content.String(),
+		Model:            responseModel,
+		Provider:         "openai",
+		LLMMode:          request.LLMMode,
+		CredentialSource: request.CredentialSource,
+		Usage:            usage,
+		FinishReason:     finishReason,
 	}, nil
 }
 

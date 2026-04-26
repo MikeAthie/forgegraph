@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -167,11 +168,15 @@ class HttpJsonClient:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.access_token: str | None = None
+        self._email: str | None = None
+        self._password: str | None = None
 
     def set_access_token(self, token: str) -> None:
         self.access_token = token
 
     def login(self, email: str, password: str) -> str:
+        self._email = email
+        self._password = password
         payload = self.request(
             "POST",
             "/api/auth/login",
@@ -221,6 +226,10 @@ class HttpJsonClient:
             raise RuntimeError(f"HTTP {exc.code} {path}: {detail}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"request failed for {path}: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError(f"request timed out for {path}: {exc}") from exc
+        except socket.timeout as exc:
+            raise RuntimeError(f"request timed out for {path}: {exc}") from exc
 
     def try_request(
         self,
@@ -230,6 +239,7 @@ class HttpJsonClient:
         body: dict[str, Any] | None = None,
         auth: bool = True,
         timeout: float = 30.0,
+        retry_auth: bool = True,
     ) -> tuple[dict[str, Any] | None, int | None, str | None]:
         url = self.base_url + path
         data = None
@@ -253,11 +263,35 @@ class HttpJsonClient:
                 error_message = deep_get(parsed, "error", "message") or deep_get(parsed, "detail")
                 if error_message:
                     message = str(error_message)
+                if exc.code == 401 and auth and retry_auth and self._email and self._password:
+                    self.login(self._email, self._password)
+                    return self.try_request(
+                        method,
+                        path,
+                        body=body,
+                        auth=auth,
+                        timeout=timeout,
+                        retry_auth=False,
+                    )
                 return parsed, exc.code, message
             except json.JSONDecodeError:
+                if exc.code == 401 and auth and retry_auth and self._email and self._password:
+                    self.login(self._email, self._password)
+                    return self.try_request(
+                        method,
+                        path,
+                        body=body,
+                        auth=auth,
+                        timeout=timeout,
+                        retry_auth=False,
+                    )
                 return None, exc.code, message
         except urllib.error.URLError as exc:
             return None, None, str(exc.reason)
+        except TimeoutError as exc:
+            return None, None, str(exc)
+        except socket.timeout as exc:
+            return None, None, str(exc)
 
 
 class DockerComposeController:

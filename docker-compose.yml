@@ -35,6 +35,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: forgegraph-backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -67,7 +68,13 @@ services:
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:?ENGINE_CALLBACK_SECRET is required}
-      RUN_LIVENESS_TIMEOUT_SECONDS: ${RUN_LIVENESS_TIMEOUT_SECONDS:-300}
+      RUN_LIVENESS_TIMEOUT_SECONDS: ${RUN_LIVENESS_TIMEOUT_SECONDS:-60}
+      RUN_ENGINE_STALLED_TIMEOUT_SECONDS: ${RUN_ENGINE_STALLED_TIMEOUT_SECONDS:-60}
+      BACKEND_WATCHDOG_ENABLED: ${BACKEND_WATCHDOG_ENABLED:-true}
+      BACKEND_WATCHDOG_HEALTH_TIMEOUT_SECONDS: ${BACKEND_WATCHDOG_HEALTH_TIMEOUT_SECONDS:-5}
+      BACKEND_WATCHDOG_REQUEST_TIMEOUT_MS: ${BACKEND_WATCHDOG_REQUEST_TIMEOUT_MS:-5000}
+      BACKEND_WATCHDOG_REQUEST_TIMEOUTS_PER_MINUTE: ${BACKEND_WATCHDOG_REQUEST_TIMEOUTS_PER_MINUTE:-10}
+      BACKEND_WATCHDOG_QUEUE_BACKLOG_THRESHOLD: ${BACKEND_WATCHDOG_QUEUE_BACKLOG_THRESHOLD:-500}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-local-playwright-key}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:12434/v1}
@@ -90,7 +97,7 @@ services:
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -fsS --max-time $${BACKEND_WATCHDOG_HEALTH_TIMEOUT_SECONDS:-5} http://localhost:8000/health || kill -TERM 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -101,6 +108,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: forgegraph-backend-runtime-intents
+    restart: unless-stopped
     command:
       [
         "python",
@@ -139,7 +147,8 @@ services:
       ENGINE_HOST: engine
       ENGINE_PORT: 50051
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:?ENGINE_CALLBACK_SECRET is required}
-      RUN_LIVENESS_TIMEOUT_SECONDS: ${RUN_LIVENESS_TIMEOUT_SECONDS:-300}
+      RUN_LIVENESS_TIMEOUT_SECONDS: ${RUN_LIVENESS_TIMEOUT_SECONDS:-60}
+      RUN_ENGINE_STALLED_TIMEOUT_SECONDS: ${RUN_ENGINE_STALLED_TIMEOUT_SECONDS:-60}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-local-playwright-key}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:12434/v1}
@@ -161,6 +170,12 @@ services:
       - ./backend:/app
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   engine:
     build:
@@ -176,6 +191,19 @@ services:
       ENGINE_HOST: engine
       MAX_WORKERS: 10
       DEFAULT_TIMEOUT_MS: 30000
+      ENGINE_LLM_MAX_CONCURRENCY: ${ENGINE_LLM_MAX_CONCURRENCY:-4}
+      ENGINE_LLM_MAX_QUEUE_SIZE: ${ENGINE_LLM_MAX_QUEUE_SIZE:-32}
+      ENGINE_LLM_QUEUE_TIMEOUT_MS: ${ENGINE_LLM_QUEUE_TIMEOUT_MS:-5000}
+      ENGINE_LLM_REQUEST_TIMEOUT_MS: ${ENGINE_LLM_REQUEST_TIMEOUT_MS:-45000}
+      ENGINE_LLM_CIRCUIT_FAILURE_RATE_THRESHOLD: ${ENGINE_LLM_CIRCUIT_FAILURE_RATE_THRESHOLD:-0.75}
+      ENGINE_LLM_CIRCUIT_MIN_REQUESTS: ${ENGINE_LLM_CIRCUIT_MIN_REQUESTS:-20}
+      ENGINE_LLM_CIRCUIT_WINDOW_SIZE: ${ENGINE_LLM_CIRCUIT_WINDOW_SIZE:-20}
+      ENGINE_LLM_CIRCUIT_COOLDOWN_MS: ${ENGINE_LLM_CIRCUIT_COOLDOWN_MS:-15000}
+      ENGINE_LLM_FALLBACK_MODE: ${ENGINE_LLM_FALLBACK_MODE:-error}
+      ENGINE_LLM_FALLBACK_CONTENT: ${ENGINE_LLM_FALLBACK_CONTENT:-}
+      FORGEGRAPH_LLM_CHAOS_MODE: ${FORGEGRAPH_LLM_CHAOS_MODE:-off}
+      FORGEGRAPH_LLM_CHAOS_DELAY_MS: ${FORGEGRAPH_LLM_CHAOS_DELAY_MS:-0}
+      FORGEGRAPH_LLM_CHAOS_ERROR_MESSAGE: ${FORGEGRAPH_LLM_CHAOS_ERROR_MESSAGE:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:12434/v1}
       ENGINE_CALLBACK_SECRET: ${ENGINE_CALLBACK_SECRET:?ENGINE_CALLBACK_SECRET is required}

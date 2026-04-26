@@ -20,6 +20,7 @@ from application.services.credential_state import (
     is_oauth_credential,
     is_oauth_provider,
 )
+from application.services.llm_access import LLM_MODE_BYOK, LLMAccessConfig
 from application.services.marketplace_runtime import (
     build_runtime_manifest_payload,
     normalize_runtime_mode,
@@ -580,7 +581,12 @@ def prepare_graph_for_engine(
     return prepared
 
 
-def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[dict[str, Any]]:
+def validate_prompt_credentials(
+    graph_json: dict[str, Any],
+    user: User,
+    *,
+    llm_access: LLMAccessConfig | None = None,
+) -> list[dict[str, Any]]:
     allowed_providers = set(getattr(settings, "ALLOWED_LLM_PROVIDERS", ["openai", "anthropic"]))
     policy = TenantPolicy.objects.filter(tenant_id=get_tenant_id_for_user(user)).first()
     allowed_policy_providers = (
@@ -606,16 +612,27 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
         config = config_raw if isinstance(config_raw, dict) else {}
         provider = str(config.get("provider") or "").strip().lower()
         credential_id = str(config.get("credential_id") or "").strip()
+        access_provider = str(getattr(llm_access, "provider", "") or "").strip().lower()
+        effective_provider = provider or access_provider
+        run_byok_available = (
+            getattr(llm_access, "llm_mode", "") == LLM_MODE_BYOK
+            and bool(str(getattr(llm_access, "api_key", "") or "").strip())
+            and (not provider or not access_provider or provider == access_provider)
+        )
 
-        if provider and provider not in allowed_providers:
+        if effective_provider and effective_provider not in allowed_providers:
             errors.append(
                 {
                     "field": "provider",
-                    "message": f"Prompt node '{node_id}' uses unsupported provider '{provider}'.",
+                    "message": f"Prompt node '{node_id}' uses unsupported provider '{effective_provider}'.",
                     "suggestion": f"Use one of: {', '.join(sorted(allowed_providers))}.",
                 }
             )
-        if allowed_policy_providers and provider and provider not in allowed_policy_providers:
+        if (
+            allowed_policy_providers
+            and effective_provider
+            and effective_provider not in allowed_policy_providers
+        ):
             errors.append(
                 {
                     "field": "provider",
@@ -634,16 +651,16 @@ def validate_prompt_credentials(graph_json: dict[str, Any], user: User) -> list[
                 }
             )
 
-        fallback_provider_available = provider in {"", "openai"} and bool(
+        fallback_provider_available = effective_provider in {"", "openai"} and bool(
             str(getattr(settings, "OPENAI_API_KEY", "")).strip()
         )
         if not credential_id:
-            if not fallback_provider_available:
+            if not run_byok_available and not fallback_provider_available:
                 errors.append(
                     {
                         "field": "credential_id",
                         "message": f"Prompt node '{node_id}' is missing a credential.",
-                        "suggestion": "Select an API key in the node configuration.",
+                        "suggestion": "Select an API key in the node configuration or use run-level BYOK.",
                     }
                 )
         else:

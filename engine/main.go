@@ -664,6 +664,7 @@ func main() {
 	var redisStore *store.RedisMemoryStore
 	var redisHealth *store.RedisHealthChecker
 	var runtimeIntentPublisher port.RuntimeIntentPublisher
+	var llmMetricsSnapshot func() gateway.LLMMetricsSnapshot
 	var err error
 	repoDriver, err := selectRunRepositoryDriver(cfg)
 	if err != nil {
@@ -861,9 +862,16 @@ func main() {
 
 	// Initialize LLM client for Prompt and Agent nodes (multi-provider)
 	fallbackKey := os.Getenv("OPENAI_API_KEY")
-	llmClient := gateway.NewLLMChaosClientFromEnv(
-		gateway.NewMultiProviderClient(resolver, fallbackKey),
+	llmGateway := gateway.NewLLMGatewayFromEnv(
+		gateway.NewLocalLLMClient(
+			gateway.NewLLMChaosClientFromEnv(
+				gateway.NewMultiProviderClient(resolver, fallbackKey),
+			),
+		),
+		gateway.NewFallbackLLMClientFromEnv(),
 	)
+	llmMetricsSnapshot = llmGateway.MetricsSnapshot
+	llmClient := gateway.NewExecutorLLMClient(llmGateway)
 	registry.Register(
 		executor.NewAgentExecutorWithModes(
 			llmClient,
@@ -969,6 +977,16 @@ func main() {
 					status = redisHealth.Check(r.Context())
 				}
 				payload, _ := json.Marshal(status)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(payload)
+			})
+			mux.HandleFunc("/metrics/llm", func(w http.ResponseWriter, r *http.Request) {
+				snapshot := gateway.LLMMetricsSnapshot{}
+				if llmMetricsSnapshot != nil {
+					snapshot = llmMetricsSnapshot()
+				}
+				payload, _ := json.Marshal(snapshot)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write(payload)

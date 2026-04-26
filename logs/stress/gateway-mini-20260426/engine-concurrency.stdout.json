@@ -1,0 +1,33 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-26T01:54:40.402957+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\gateway-mini-20260426",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "concurrency 5",
+        "data_integrity": "safe",
+        "first_failure_type": "rate_limit",
+        "scenario": "engine-concurrency",
+        "system_behavior": "crashes"
+      },
+      "metrics": {
+        "avg_latency_ms": 89.5,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "rate_limit": 30
+        },
+        "failed_runs": 30,
+        "latency_p95_ms": 117.84999999999998,
+        "max_latency_ms": 128,
+        "retry_count": 0,
+        "successful_runs": 0,
+        "timeouts": 0,
+        "total_runs": 30
+      },
+      "scenario": "engine-concurrency"
+    }
+  ],
+  "started_at": "2026-04-26T01:54:39.630247+00:00"
+}

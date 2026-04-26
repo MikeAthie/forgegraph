@@ -1,0 +1,33 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-26T01:13:53.742776+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\gateway-validation-normal-1",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 1",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "endpoint-saturation",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 5630.0,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 1
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 5630.0,
+        "max_latency_ms": 5630,
+        "retry_count": 0,
+        "successful_runs": 1,
+        "timeouts": 0,
+        "total_runs": 1
+      },
+      "scenario": "endpoint-saturation"
+    }
+  ],
+  "started_at": "2026-04-26T01:13:47.321338+00:00"
+}

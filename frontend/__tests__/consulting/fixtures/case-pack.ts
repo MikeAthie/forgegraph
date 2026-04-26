@@ -181,9 +181,7 @@ export const CONSULTING_CASE_PACK: ConsultingCaseDefinition[] = [
   },
 ];
 
-export function buildConsultingExecutionInput(
-  consultingCase: ConsultingCaseDefinition,
-): ConsultingExecutionInput {
+export function buildConsultingExecutionInput(consultingCase: ConsultingCaseDefinition): ConsultingExecutionInput {
   return {
     problem: consultingCase.problem_brief,
     context: {

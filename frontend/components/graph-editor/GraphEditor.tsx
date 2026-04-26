@@ -1377,6 +1377,7 @@ export function GraphEditor({
     try {
       const run = await runsApi.start({
         graph_version_id: currentVersionId,
+        llm_mode: "managed",
         input_json: {},
       });
       showSuccess("Run created");
@@ -1623,6 +1624,7 @@ export function GraphEditor({
         setStartingRun(true);
         const run = await runsApi.start({
           graph_version_id: versionId,
+          llm_mode: "managed",
           input_json: { mode: "wizard_test" },
         });
         showSuccess("Test run started");

@@ -100,6 +100,41 @@ var (
 		},
 		[]string{"intent_type"},
 	)
+	llmRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "forgegraph_llm_requests_total",
+			Help: "Total LLM gateway requests.",
+		},
+		[]string{"provider", "status", "error_type", "fallback_used"},
+	)
+	llmLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "forgegraph_llm_latency_seconds",
+			Help:    "LLM gateway request latency.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"provider", "status"},
+	)
+	llmQueueDepth = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "forgegraph_llm_queue_depth",
+			Help: "Current LLM gateway queue depth.",
+		},
+	)
+	llmFallbackTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "forgegraph_llm_fallback_total",
+			Help: "Total LLM gateway fallback attempts.",
+		},
+		[]string{"provider", "status"},
+	)
+	llmCircuitState = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "forgegraph_llm_circuit_state",
+			Help: "LLM gateway circuit breaker state (1=open, 0=closed).",
+		},
+		[]string{"state"},
+	)
 )
 
 func init() {
@@ -117,9 +152,16 @@ func init() {
 		runtimeIntentPublishTotal,
 		runtimeIntentPublishRetries,
 		runtimeIntentPublishLatency,
+		llmRequestsTotal,
+		llmLatency,
+		llmQueueDepth,
+		llmFallbackTotal,
+		llmCircuitState,
 	)
 	redisCircuitState.WithLabelValues("open").Set(0)
 	redisCircuitState.WithLabelValues("closed").Set(1)
+	llmCircuitState.WithLabelValues("open").Set(0)
+	llmCircuitState.WithLabelValues("closed").Set(1)
 }
 
 // RecordRedisOperation tracks Redis operation metrics.
@@ -210,4 +252,49 @@ func RecordRuntimeIntentPublishRetry(intentType string) {
 		intentType = "unknown"
 	}
 	runtimeIntentPublishRetries.WithLabelValues(intentType).Inc()
+}
+
+func RecordLLMRequest(provider string, status string, errorType string, fallbackUsed bool, duration time.Duration) {
+	if provider == "" {
+		provider = "unknown"
+	}
+	if status == "" {
+		status = "unknown"
+	}
+	if errorType == "" {
+		errorType = "none"
+	}
+	fallbackValue := "false"
+	if fallbackUsed {
+		fallbackValue = "true"
+	}
+	llmRequestsTotal.WithLabelValues(provider, status, errorType, fallbackValue).Inc()
+	llmLatency.WithLabelValues(provider, status).Observe(duration.Seconds())
+}
+
+func RecordLLMQueueDepth(depth int64) {
+	if depth < 0 {
+		depth = 0
+	}
+	llmQueueDepth.Set(float64(depth))
+}
+
+func RecordLLMFallback(provider string, status string) {
+	if provider == "" {
+		provider = "unknown"
+	}
+	if status == "" {
+		status = "unknown"
+	}
+	llmFallbackTotal.WithLabelValues(provider, status).Inc()
+}
+
+func RecordLLMCircuitState(open bool) {
+	if open {
+		llmCircuitState.WithLabelValues("open").Set(1)
+		llmCircuitState.WithLabelValues("closed").Set(0)
+		return
+	}
+	llmCircuitState.WithLabelValues("open").Set(0)
+	llmCircuitState.WithLabelValues("closed").Set(1)
 }

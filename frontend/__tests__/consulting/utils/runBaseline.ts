@@ -8,13 +8,12 @@ function isExecutionState(value: unknown): value is ConsultingExecutionState {
 
 export async function runBaseline(input: ConsultingExecutionInput): Promise<ConsultingExecutionState> {
   const result = await callLocalLlmJson<ConsultingExecutionState>({
-    systemPrompt:
-      [
-        "You are producing a single-response consulting artifact for ForgeGraph evaluation.",
-        "Use only the provided case input.",
-        "Do not use memory, external context, or multi-step reasoning.",
-        "Return JSON only. Do not include markdown, explanation, or extra keys.",
-      ].join(" "),
+    systemPrompt: [
+      "You are producing a single-response consulting artifact for ForgeGraph evaluation.",
+      "Use only the provided case input.",
+      "Do not use memory, external context, or multi-step reasoning.",
+      "Return JSON only. Do not include markdown, explanation, or extra keys.",
+    ].join(" "),
     userPrompt: [
       "Solve this business problem in one response.",
       "Return exactly this JSON shape with all fields present:",

@@ -162,9 +162,12 @@ func (c *AnthropicClient) Complete(ctx context.Context, request *executor.LLMReq
 	}
 
 	return &executor.LLMResponse{
-		Content: content,
-		Model:   parsed.Model,
-		Usage:   usage,
+		Content:          content,
+		Model:            parsed.Model,
+		Provider:         "anthropic",
+		LLMMode:          request.LLMMode,
+		CredentialSource: request.CredentialSource,
+		Usage:            usage,
 	}, nil
 }
 

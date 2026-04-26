@@ -45,6 +45,11 @@ const (
 )
 
 const (
+	llmAccessMetadataKey    = "llm_access"
+	llmAccessEngineInputKey = "_forgegraph_llm_access"
+)
+
+const (
 	RuntimeWriteModeLegacySync         = "legacy-sync"
 	RuntimeWriteModePauseIntents       = "pause-intents"
 	RuntimeWriteModePauseIntentsShadow = "pause-intents-shadow"
@@ -519,14 +524,16 @@ func (s *Scheduler) StartRun(
 	if engineContractVersion != "" && engineContractVersion != "2" {
 		return fmt.Errorf("unsupported engine_contract_version: %s", engineContractVersion)
 	}
+	llmAccess := extractLLMAccessFromMetadata(graph.Metadata)
 
-	// Parse input JSON when starting fresh.
+	// Parse input JSON. Private dispatch fields are consumed before state is built.
 	var input map[string]any
-	if checkpoint == nil && inputJSON != "" {
+	if inputJSON != "" {
 		if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
 			return fmt.Errorf("invalid input JSON: %w", err)
 		}
 	}
+	llmAccess = mergeLLMAccess(llmAccess, extractLLMAccessFromInput(input))
 
 	// Validate graph
 	validator := service.NewGraphValidator()
@@ -664,6 +671,7 @@ func (s *Scheduler) StartRun(
 		MemoryRetriever:   s.memoryRetriever,
 		ObservationClient: s.observationClient,
 		Policy:            entity.PolicyFromMetadata(graph.Metadata),
+		LLMAccess:         llmAccess,
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
@@ -2844,6 +2852,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	}
 	resumeAttemptID, _ := decision["_forgegraph_resume_attempt_id"].(string)
 	delete(decision, "_forgegraph_resume_attempt_id")
+	llmAccessFromInput := extractLLMAccessFromInput(decision)
 
 	// Check if approved or rejected
 	approved, _ := decision["approved"].(bool)
@@ -2893,6 +2902,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	if engineContractVersion != "" && engineContractVersion != "2" {
 		return fmt.Errorf("unsupported engine_contract_version: %s", engineContractVersion)
 	}
+	llmAccess := mergeLLMAccess(extractLLMAccessFromMetadata(graph.Metadata), llmAccessFromInput)
 
 	stateSchemaRaw, schemaMode := extractStateSchemaMetadata(graph.Metadata)
 	stateSchema, err := service.CompileSchema(stateSchemaRaw)
@@ -2999,6 +3009,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		TrackToolCall:     rc.trackToolCall,
 		MemoryRetriever:   s.memoryRetriever,
 		ObservationClient: s.observationClient,
+		Policy:            entity.PolicyFromMetadata(graph.Metadata),
+		LLMAccess:         llmAccess,
 	}
 	rc.ctx = port.WithRunContext(rc.ctx, rc.memoryCtx)
 	if rc.tenantID != "" {
@@ -3269,6 +3281,71 @@ func extractRuntimeLimits(metadata map[string]any) runtimeLimits {
 	limits.MaxToolCalls = int64(getRuntimeLimitInt(raw["max_tool_calls_total"]))
 	limits.MaxLLMCalls = int64(getRuntimeLimitInt(raw["max_llm_calls_total"]))
 	return limits
+}
+
+func extractLLMAccessFromMetadata(metadata map[string]any) port.LLMAccessConfig {
+	if metadata == nil {
+		return port.LLMAccessConfig{}.Normalized()
+	}
+	raw, ok := metadata[llmAccessMetadataKey].(map[string]any)
+	if !ok || raw == nil {
+		return port.LLMAccessConfig{}.Normalized()
+	}
+	return port.LLMAccessConfig{
+		Mode:         stringMapValue(raw, "llm_mode"),
+		Provider:     stringMapValue(raw, "provider"),
+		CredentialID: stringMapValue(raw, "credential_id"),
+	}.Normalized()
+}
+
+func extractLLMAccessFromInput(input map[string]any) port.LLMAccessConfig {
+	if input == nil {
+		return port.LLMAccessConfig{}
+	}
+	raw := input[llmAccessEngineInputKey]
+	delete(input, llmAccessEngineInputKey)
+	payload, ok := raw.(map[string]any)
+	if !ok || payload == nil {
+		return port.LLMAccessConfig{}
+	}
+	return port.LLMAccessConfig{
+		Mode:         stringMapValue(payload, "llm_mode"),
+		Provider:     stringMapValue(payload, "provider"),
+		CredentialID: stringMapValue(payload, "credential_id"),
+		APIKey:       stringMapValue(payload, "api_key"),
+	}.Normalized()
+}
+
+func mergeLLMAccess(base port.LLMAccessConfig, override port.LLMAccessConfig) port.LLMAccessConfig {
+	base = base.Normalized()
+	if strings.TrimSpace(override.Mode) == "" &&
+		strings.TrimSpace(override.Provider) == "" &&
+		strings.TrimSpace(override.CredentialID) == "" &&
+		strings.TrimSpace(override.APIKey) == "" {
+		return base
+	}
+	override = override.Normalized()
+	if override.Provider == "" {
+		override.Provider = base.Provider
+	}
+	if override.APIKey == "" && override.Mode == port.LLMModeBYOK {
+		override.APIKey = base.APIKey
+	}
+	if override.CredentialID == "" && override.Mode == port.LLMModeBYOK {
+		override.CredentialID = base.CredentialID
+	}
+	return override.Normalized()
+}
+
+func stringMapValue(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	value, ok := payload[key].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 func getRuntimeLimitInt(value any) int {

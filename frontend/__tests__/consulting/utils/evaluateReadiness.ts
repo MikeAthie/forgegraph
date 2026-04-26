@@ -125,15 +125,7 @@ const DRIVER_KEYWORDS: Array<{ driver: ConsultingDriver; keywords: string[] }> =
   },
   {
     driver: "support_capacity",
-    keywords: [
-      "support queue",
-      "response time",
-      "sla",
-      "staffing",
-      "agent capacity",
-      "support backlog",
-      "headcount",
-    ],
+    keywords: ["support queue", "response time", "sla", "staffing", "agent capacity", "support backlog", "headcount"],
   },
   {
     driver: "feature_positioning_gap",
@@ -209,7 +201,7 @@ const STOP_WORDS = new Set([
   "users",
   "user",
   "feature",
-      "problem",
+  "problem",
 ]);
 
 function normalizeText(value: string | null | undefined): string {
