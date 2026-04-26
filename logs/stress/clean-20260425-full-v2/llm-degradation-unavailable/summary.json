@@ -1,0 +1,198 @@
+{
+  "analysis": {
+    "breaking_point": "concurrency 10",
+    "data_integrity": "safe",
+    "first_failure_type": "timeout",
+    "scenario": "llm-degradation-unavailable",
+    "system_behavior": "stalls"
+  },
+  "completed_at": "2026-04-26T00:27:38.090956+00:00",
+  "concurrency_levels": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "metrics": {
+    "avg_latency_ms": 27293.515,
+    "duplicate_node_execution_count": 0,
+    "error_types": {
+      "internal": 10,
+      "timeout": 63,
+      "unknown": 127
+    },
+    "failed_runs": 73,
+    "latency_p95_ms": 47723.74999999999,
+    "max_latency_ms": 68684,
+    "retry_count": 246,
+    "successful_runs": 127,
+    "timeouts": 63,
+    "total_runs": 200
+  },
+  "metrics_after": {
+    "api": {
+      "callback_auth_failures_by_reason": {},
+      "callback_auth_failures_total": 0,
+      "latency_ms_p50": 25.0,
+      "latency_ms_p95": 264.04999999999995,
+      "requests_total": 111694,
+      "server_errors_total": 0,
+      "timeout_like_rate_per_minute": 0.0,
+      "timeout_like_requests_total": 0,
+      "timeout_threshold_ms": 5000
+    },
+    "generated_at": "2026-04-26T00:27:38.070179+00:00",
+    "guardrails": {
+      "queue_max_concurrency_per_tenant": 5,
+      "run_input_max_bytes": 262144,
+      "run_max_active_per_tenant": 25
+    },
+    "queue": {
+      "by_tenant": [],
+      "oldest_pending_age_seconds": null,
+      "pending": 0,
+      "processing": 0,
+      "total_depth": 0
+    },
+    "runs": {
+      "active_total": 249,
+      "canceled_total": 0,
+      "completed_total": 30,
+      "failed_total": 0,
+      "failure_rate": 0.0,
+      "latency_ms_p50": 33870.5,
+      "latency_ms_p95": 47508.75,
+      "liveness_reconciled_by_reason": {},
+      "liveness_reconciled_total": 0,
+      "stale_attempt_ignored_by_source": {},
+      "stale_attempt_ignored_total": 0,
+      "started_total": 1198,
+      "success_rate": 1.0,
+      "window_size": 30
+    },
+    "runtime_transport": {
+      "backlog": 0,
+      "consumer_idle_ms": 1705,
+      "dead_letter_count": 0,
+      "dead_lettered_total": 0,
+      "duplicate_intent_ignored_total": 0,
+      "error": "",
+      "generated_at": "2026-04-26T00:27:38.072079+00:00",
+      "intent_ack_total": 0,
+      "intent_applied_total": 0,
+      "intent_publish_failures_total": 0,
+      "intent_received_total": 0,
+      "intent_reclaimed_total": 0,
+      "lag": 0,
+      "oldest_pending_idle_ms": 0,
+      "pending": 0,
+      "source": "redis",
+      "stream_backlog": 0,
+      "stream_lag": 0,
+      "stream_length": 14768,
+      "stream_pending": 0
+    },
+    "slo": {
+      "queue_max_depth_target": 500,
+      "run_p95_latency_ms_target": 60000,
+      "run_success_rate_target": 0.99
+    },
+    "violations": {
+      "queue_depth": false,
+      "run_p95_latency": false,
+      "run_success_rate": false
+    },
+    "websocket": {
+      "active_connections": 0,
+      "connection_failures_total": 0,
+      "message_rate_per_minute": 0.0,
+      "messages_dropped_total": 0,
+      "messages_sent_total": 0
+    }
+  },
+  "metrics_before": {
+    "api": {
+      "callback_auth_failures_by_reason": {},
+      "callback_auth_failures_total": 0,
+      "latency_ms_p50": 29.0,
+      "latency_ms_p95": 229.0,
+      "requests_total": 92818,
+      "server_errors_total": 0,
+      "timeout_like_rate_per_minute": 0.0,
+      "timeout_like_requests_total": 0,
+      "timeout_threshold_ms": 5000
+    },
+    "generated_at": "2026-04-26T00:18:32.534120+00:00",
+    "guardrails": {
+      "queue_max_concurrency_per_tenant": 5,
+      "run_input_max_bytes": 262144,
+      "run_max_active_per_tenant": 25
+    },
+    "queue": {
+      "by_tenant": [],
+      "oldest_pending_age_seconds": null,
+      "pending": 0,
+      "processing": 0,
+      "total_depth": 0
+    },
+    "runs": {
+      "active_total": 249,
+      "canceled_total": 0,
+      "completed_total": 25,
+      "failed_total": 0,
+      "failure_rate": 0.0,
+      "latency_ms_p50": 30251.0,
+      "latency_ms_p95": 47595.0,
+      "liveness_reconciled_by_reason": {},
+      "liveness_reconciled_total": 0,
+      "stale_attempt_ignored_by_source": {},
+      "stale_attempt_ignored_total": 0,
+      "started_total": 998,
+      "success_rate": 1.0,
+      "window_size": 25
+    },
+    "runtime_transport": {
+      "backlog": 0,
+      "consumer_idle_ms": 1988,
+      "dead_letter_count": 0,
+      "dead_lettered_total": 0,
+      "duplicate_intent_ignored_total": 0,
+      "error": "",
+      "generated_at": "2026-04-26T00:18:32.537282+00:00",
+      "intent_ack_total": 0,
+      "intent_applied_total": 0,
+      "intent_publish_failures_total": 0,
+      "intent_received_total": 0,
+      "intent_reclaimed_total": 0,
+      "lag": 0,
+      "oldest_pending_idle_ms": 0,
+      "pending": 0,
+      "source": "redis",
+      "stream_backlog": 0,
+      "stream_lag": 0,
+      "stream_length": 12262,
+      "stream_pending": 0
+    },
+    "slo": {
+      "queue_max_depth_target": 500,
+      "run_p95_latency_ms_target": 60000,
+      "run_success_rate_target": 0.99
+    },
+    "violations": {
+      "queue_depth": false,
+      "run_p95_latency": false,
+      "run_success_rate": false
+    },
+    "websocket": {
+      "active_connections": 0,
+      "connection_failures_total": 0,
+      "message_rate_per_minute": 0.0,
+      "messages_dropped_total": 0,
+      "messages_sent_total": 0
+    }
+  },
+  "notes": [],
+  "runs_per_level": 50,
+  "scenario": "llm-degradation-unavailable",
+  "started_at": "2026-04-26T00:18:32.521540+00:00"
+}

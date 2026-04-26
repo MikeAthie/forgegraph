@@ -1,0 +1,203 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-25T22:28:09.125950+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\postfix",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "endpoint-saturation",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 8849.4,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 17354.85,
+        "max_latency_ms": 17978,
+        "retry_count": 5,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "endpoint-saturation"
+    },
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "engine-concurrency",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 9794.125,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 17559.249999999996,
+        "max_latency_ms": 18637,
+        "retry_count": 6,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "engine-concurrency"
+    },
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "redis-saturation",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 8332.3,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 16783.75,
+        "max_latency_ms": 17819,
+        "retry_count": 4,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "redis-saturation"
+    },
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "llm-degradation-delay",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 12280.4,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 23848.199999999997,
+        "max_latency_ms": 24801,
+        "retry_count": 12,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "llm-degradation-delay"
+    },
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "llm-degradation-timeout",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 10961.075,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 24647.5,
+        "max_latency_ms": 24660,
+        "retry_count": 7,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "llm-degradation-timeout"
+    },
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "llm-degradation-unavailable",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 11128.8,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 19743.350000000002,
+        "max_latency_ms": 19847,
+        "retry_count": 7,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "llm-degradation-unavailable"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 5",
+        "data_integrity": "safe",
+        "first_failure_type": "connection",
+        "scenario": "failure-injection-engine-stop",
+        "system_behavior": "recovers"
+      },
+      "metrics": {
+        "avg_latency_ms": 27098.2,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "connection": 2,
+          "internal": 4,
+          "unknown": 34
+        },
+        "failed_runs": 6,
+        "latency_p95_ms": 181428.7,
+        "max_latency_ms": 181606,
+        "retry_count": 7,
+        "successful_runs": 34,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "failure-injection-engine-stop"
+    },
+    {
+      "analysis": {
+        "breaking_point": "not observed up to concurrency 50",
+        "data_integrity": "safe",
+        "first_failure_type": "none",
+        "scenario": "failure-injection-redis-stop",
+        "system_behavior": "recovers"
+      },
+      "metrics": {
+        "avg_latency_ms": 12127.325,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "latency_p95_ms": 20463.699999999997,
+        "max_latency_ms": 20479,
+        "retry_count": 7,
+        "successful_runs": 40,
+        "timeouts": 0,
+        "total_runs": 40
+      },
+      "scenario": "failure-injection-redis-stop"
+    }
+  ],
+  "started_at": "2026-04-25T22:14:03.092271+00:00"
+}

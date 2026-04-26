@@ -1,0 +1,218 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-26T00:39:50.394161+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\clean-20260425-full-v2",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "concurrency 10",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "endpoint-saturation",
+        "system_behavior": "stalls"
+      },
+      "metrics": {
+        "avg_latency_ms": 27537.215,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 12,
+          "timeout": 66,
+          "unknown": 122
+        },
+        "failed_runs": 78,
+        "latency_p95_ms": 46531.599999999984,
+        "max_latency_ms": 57862,
+        "retry_count": 245,
+        "successful_runs": 122,
+        "timeouts": 66,
+        "total_runs": 200
+      },
+      "scenario": "endpoint-saturation"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 10",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "engine-concurrency",
+        "system_behavior": "stalls"
+      },
+      "metrics": {
+        "avg_latency_ms": 26693.77,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 13,
+          "timeout": 68,
+          "unknown": 119
+        },
+        "failed_runs": 81,
+        "latency_p95_ms": 45824.39999999999,
+        "max_latency_ms": 66634,
+        "retry_count": 237,
+        "successful_runs": 119,
+        "timeouts": 68,
+        "total_runs": 200
+      },
+      "scenario": "engine-concurrency"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 10",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "redis-saturation",
+        "system_behavior": "stalls"
+      },
+      "metrics": {
+        "avg_latency_ms": 26966.01,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 7,
+          "rate_limit": 2,
+          "timeout": 58,
+          "unknown": 133
+        },
+        "failed_runs": 67,
+        "latency_p95_ms": 47063.35,
+        "max_latency_ms": 62949,
+        "retry_count": 235,
+        "successful_runs": 133,
+        "timeouts": 58,
+        "total_runs": 200
+      },
+      "scenario": "redis-saturation"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 10",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "llm-degradation-delay",
+        "system_behavior": "stalls"
+      },
+      "metrics": {
+        "avg_latency_ms": 25885.445,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 12,
+          "timeout": 64,
+          "unknown": 124
+        },
+        "failed_runs": 76,
+        "latency_p95_ms": 47101.74999999999,
+        "max_latency_ms": 62456,
+        "retry_count": 246,
+        "successful_runs": 124,
+        "timeouts": 64,
+        "total_runs": 200
+      },
+      "scenario": "llm-degradation-delay"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 10",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "llm-degradation-timeout",
+        "system_behavior": "stalls"
+      },
+      "metrics": {
+        "avg_latency_ms": 26540.04,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 12,
+          "timeout": 66,
+          "unknown": 122
+        },
+        "failed_runs": 78,
+        "latency_p95_ms": 44741.79999999999,
+        "max_latency_ms": 64576,
+        "retry_count": 243,
+        "successful_runs": 122,
+        "timeouts": 66,
+        "total_runs": 200
+      },
+      "scenario": "llm-degradation-timeout"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 10",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "llm-degradation-unavailable",
+        "system_behavior": "stalls"
+      },
+      "metrics": {
+        "avg_latency_ms": 27293.515,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 10,
+          "timeout": 63,
+          "unknown": 127
+        },
+        "failed_runs": 73,
+        "latency_p95_ms": 47723.74999999999,
+        "max_latency_ms": 68684,
+        "retry_count": 246,
+        "successful_runs": 127,
+        "timeouts": 63,
+        "total_runs": 200
+      },
+      "scenario": "llm-degradation-unavailable"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 5",
+        "data_integrity": "safe",
+        "first_failure_type": "internal",
+        "scenario": "failure-injection-engine-stop",
+        "system_behavior": "recovers"
+      },
+      "metrics": {
+        "avg_latency_ms": 21068.895,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 7,
+          "timeout": 36,
+          "unknown": 157
+        },
+        "failed_runs": 43,
+        "latency_p95_ms": 41733.700000000004,
+        "max_latency_ms": 70868,
+        "retry_count": 173,
+        "successful_runs": 157,
+        "timeouts": 36,
+        "total_runs": 200
+      },
+      "scenario": "failure-injection-engine-stop"
+    },
+    {
+      "analysis": {
+        "breaking_point": "concurrency 20",
+        "data_integrity": "safe",
+        "first_failure_type": "timeout",
+        "scenario": "failure-injection-redis-stop",
+        "system_behavior": "recovers"
+      },
+      "metrics": {
+        "avg_latency_ms": 18187.16,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "internal": 3,
+          "timeout": 34,
+          "unknown": 163
+        },
+        "failed_runs": 37,
+        "latency_p95_ms": 35845.15,
+        "max_latency_ms": 43254,
+        "retry_count": 163,
+        "successful_runs": 163,
+        "timeouts": 34,
+        "total_runs": 200
+      },
+      "scenario": "failure-injection-redis-stop"
+    }
+  ],
+  "started_at": "2026-04-25T23:33:00.357030+00:00"
+}

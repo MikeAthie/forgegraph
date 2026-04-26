@@ -1,0 +1,34 @@
+{
+  "base_url": "http://localhost:8000",
+  "completed_at": "2026-04-26T01:16:10.792361+00:00",
+  "graph_version_id": "f2cde181-3f99-4ea4-a89f-2c096a134533",
+  "output_dir": "logs\\stress\\gateway-validation-timeout-v2",
+  "results": [
+    {
+      "analysis": {
+        "breaking_point": "concurrency 5",
+        "data_integrity": "safe",
+        "first_failure_type": "connection",
+        "scenario": "llm-degradation-timeout",
+        "system_behavior": "degrades"
+      },
+      "metrics": {
+        "avg_latency_ms": 2865.3,
+        "duplicate_node_execution_count": 0,
+        "error_types": {
+          "connection": 9,
+          "unknown": 1
+        },
+        "failed_runs": 9,
+        "latency_p95_ms": 3610.999999999999,
+        "max_latency_ms": 4043,
+        "retry_count": 19,
+        "successful_runs": 1,
+        "timeouts": 0,
+        "total_runs": 10
+      },
+      "scenario": "llm-degradation-timeout"
+    }
+  ],
+  "started_at": "2026-04-26T01:15:50.929239+00:00"
+}

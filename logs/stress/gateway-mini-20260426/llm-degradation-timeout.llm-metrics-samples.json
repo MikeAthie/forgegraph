@@ -1,0 +1,200 @@
+[
+  {
+    "ts": "2026-04-26T01:54:40.7246861Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:40.9848302Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:41.2516683Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:41.5169660Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:41.7795118Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 63,
+    "llm_failures": 3,
+    "avg_latency_ms": 3672.5396825396824,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:45.8496452Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:46.1142435Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:46.3777276Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:46.6446922Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:46.9115068Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:47.1757838Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:47.4391095Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:47.7032422Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:51.7796211Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:52.0455941Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:52.3128435Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:52.5769524Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  },
+  {
+    "ts": "2026-04-26T01:54:52.8428665Z",
+    "scenario": "llm-degradation-timeout",
+    "llm_requests": 0,
+    "llm_failures": 0,
+    "avg_latency_ms": 0,
+    "queue_depth": 0,
+    "fallback_count": 0,
+    "circuit_open": false,
+    "circuit_open_until": null
+  }
+]

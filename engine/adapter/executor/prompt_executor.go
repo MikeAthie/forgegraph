@@ -61,6 +61,12 @@ type LLMRequest struct {
 	// APIKey is an optional direct key override (rare; prefer CredentialID)
 	APIKey string
 
+	// LLMMode records managed vs BYOK routing for gateway observability.
+	LLMMode string
+
+	// CredentialSource records managed vs BYOK credential ownership for observability.
+	CredentialSource string
+
 	// Tools exposes provider-native tool calling when supported.
 	Tools []ToolSpec
 
@@ -69,6 +75,9 @@ type LLMRequest struct {
 
 	// StructuredOutput requests provider-native JSON schema output.
 	StructuredOutput *StructuredOutputSpec
+
+	// Metadata carries execution context for observability.
+	Metadata map[string]string
 }
 
 // LLMMessage represents a single message in a chat conversation
@@ -96,6 +105,14 @@ type LLMResponse struct {
 
 	// StructuredData contains parsed structured output when requested.
 	StructuredData any
+
+	// Gateway metadata records provider behavior without changing prompt output.
+	Provider         string
+	LatencyMS        int64
+	FallbackUsed     bool
+	ErrorType        string
+	LLMMode          string
+	CredentialSource string
 }
 
 type ToolSpec struct {
@@ -264,6 +281,7 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 
 	// Get credential id (optional)
 	credentialID, _ := node.Config["credential_id"].(string)
+	provider = ResolveLLMProviderForAccess(runCtx, provider, credentialID)
 	if provider == "" && credentialID == "" {
 		provider = "openai"
 	}
@@ -304,7 +322,9 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		SystemPrompt: systemPrompt,
 		CredentialID: credentialID,
 		TenantID:     port.TenantIDFrom(ctx),
+		Metadata:     BuildLLMRequestMetadata(runCtx, node.ID),
 	}
+	ApplyLLMAccessToRequest(runCtx, request)
 	if provider == "openai" {
 		if schemaRaw, ok := node.Config["output_schema"].(map[string]any); ok && len(schemaRaw) > 0 {
 			request.StructuredOutput = &StructuredOutputSpec{
@@ -407,6 +427,14 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		"raw_response": response.Content,
 		"model":        response.Model,
 		"provider":     provider,
+		"llm_metadata": map[string]any{
+			"llm_mode":          responseLLMMode(runCtx, response),
+			"provider":          response.Provider,
+			"credential_source": response.CredentialSource,
+			"fallback_used":     response.FallbackUsed,
+			"error_type":        response.ErrorType,
+			"latency_ms":        response.LatencyMS,
+		},
 	}
 	if response.StructuredData != nil {
 		output["structured_response"] = response.StructuredData

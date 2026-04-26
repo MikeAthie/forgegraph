@@ -7,11 +7,13 @@ import time
 from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from redis import Redis
 from redis.exceptions import RedisError
 
+from application.services.run_liveness import reconcile_stale_runs
 from application.services.runtime_transport_metrics import (
     record_transport_event,
     update_transport_health,
@@ -121,6 +123,27 @@ class Command(BaseCommand):
             help="Emit a warning when backlog exists but the consumer makes no progress.",
         )
         parser.add_argument(
+            "--watchdog-backlog-threshold",
+            type=int,
+            default=0,
+            help=(
+                "Exit for supervisor restart when backlog reaches this threshold and the "
+                "consumer is not making progress. Defaults to SLO_QUEUE_MAX_DEPTH."
+            ),
+        )
+        parser.add_argument(
+            "--liveness-reconcile-interval-seconds",
+            type=int,
+            default=0,
+            help="How often to reconcile stalled runs from this backend-owned worker.",
+        )
+        parser.add_argument(
+            "--stale-run-after-seconds",
+            type=int,
+            default=0,
+            help="Override the run liveness timeout used by the periodic reconciler.",
+        )
+        parser.add_argument(
             "--stream-retention-seconds",
             type=int,
             default=86400,
@@ -151,6 +174,23 @@ class Command(BaseCommand):
         lag_warning_threshold = max(int(options["lag_warning_threshold"]), 1)
         lag_warning_threshold_ms = max(int(options["lag_warning_threshold_ms"]), 1)
         no_progress_threshold_seconds = max(int(options["no_progress_threshold_seconds"]), 1)
+        watchdog_backlog_threshold = int(options.get("watchdog_backlog_threshold") or 0)
+        if watchdog_backlog_threshold <= 0:
+            watchdog_backlog_threshold = int(getattr(settings, "SLO_QUEUE_MAX_DEPTH", 500))
+        liveness_reconcile_interval_seconds = int(
+            options.get("liveness_reconcile_interval_seconds") or 0
+        )
+        if liveness_reconcile_interval_seconds <= 0:
+            liveness_reconcile_interval_seconds = int(
+                getattr(settings, "RUN_LIVENESS_RECONCILE_INTERVAL_SECONDS", 15)
+            )
+        stale_run_after_seconds = int(options.get("stale_run_after_seconds") or 0) or int(
+            getattr(
+                settings,
+                "RUN_ENGINE_STALLED_TIMEOUT_SECONDS",
+                getattr(settings, "RUN_LIVENESS_TIMEOUT_SECONDS", 60),
+            )
+        )
         stream_retention_seconds = max(int(options.get("stream_retention_seconds", 86400)), 0)
         stream_hard_maxlen = max(int(options.get("stream_hard_maxlen", 100000)), 0)
         once = bool(options["once"])
@@ -167,6 +207,7 @@ class Command(BaseCommand):
 
         last_lag_log_at = 0.0
         last_progress_at = time.monotonic()
+        last_liveness_reconcile_at = 0.0
         while True:
             try:
                 saw_messages, made_progress = self._consume_once(
@@ -208,7 +249,20 @@ class Command(BaseCommand):
                     last_progress_at=last_progress_at,
                     no_progress_threshold_seconds=no_progress_threshold_seconds,
                 )
+                self._exit_if_watchdog_backlog_stalled(
+                    lag_snapshot=lag_snapshot,
+                    last_progress_at=last_progress_at,
+                    no_progress_threshold_seconds=no_progress_threshold_seconds,
+                    watchdog_backlog_threshold=watchdog_backlog_threshold,
+                )
                 last_lag_log_at = now
+
+            if (
+                liveness_reconcile_interval_seconds > 0
+                and now - last_liveness_reconcile_at >= liveness_reconcile_interval_seconds
+            ):
+                self._reconcile_liveness(stale_run_after_seconds=stale_run_after_seconds)
+                last_liveness_reconcile_at = now
 
             if once:
                 return
@@ -647,6 +701,7 @@ class Command(BaseCommand):
 
         update_transport_health(
             pending=pending,
+            lag=lag,
             backlog=backlog,
             consumer_idle_ms=consumer_idle_ms,
             oldest_pending_idle_ms=oldest_pending_idle_ms,
@@ -724,6 +779,50 @@ class Command(BaseCommand):
             progress_age_seconds=progress_age_seconds,
             no_progress_threshold_seconds=no_progress_threshold_seconds,
             status="warning",
+        )
+
+    def _exit_if_watchdog_backlog_stalled(
+        self,
+        *,
+        lag_snapshot: ConsumerLagSnapshot,
+        last_progress_at: float,
+        no_progress_threshold_seconds: int,
+        watchdog_backlog_threshold: int,
+    ) -> None:
+        if watchdog_backlog_threshold <= 0 or lag_snapshot.backlog < watchdog_backlog_threshold:
+            return
+
+        progress_age_seconds = int(max(time.monotonic() - last_progress_at, 0))
+        if progress_age_seconds < no_progress_threshold_seconds:
+            return
+
+        log_event(
+            logger,
+            logging.ERROR,
+            "runtime_intent_watchdog_triggered",
+            stream=RUNTIME_INTENT_STREAM,
+            dead_letter_stream=RUNTIME_INTENT_DEAD_LETTER_STREAM,
+            backlog=lag_snapshot.backlog,
+            pending=lag_snapshot.pending,
+            lag=lag_snapshot.lag,
+            progress_age_seconds=progress_age_seconds,
+            watchdog_backlog_threshold=watchdog_backlog_threshold,
+            recovery_action="process_exit_for_supervisor_restart",
+        )
+        raise SystemExit(75)
+
+    def _reconcile_liveness(self, *, stale_run_after_seconds: int) -> None:
+        result = reconcile_stale_runs(stale_after_seconds=stale_run_after_seconds)
+        if result.scanned <= 0 and result.reconciled <= 0:
+            return
+
+        log_event(
+            logger,
+            logging.WARNING if result.reconciled else logging.INFO,
+            "run_liveness_periodic_reconcile",
+            stale_after_seconds=stale_run_after_seconds,
+            scanned=result.scanned,
+            reconciled=result.reconciled,
         )
 
     def _consumer_idle_ms(self, *, redis_client: Redis) -> int:

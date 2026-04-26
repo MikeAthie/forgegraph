@@ -18,6 +18,11 @@ from adapters.gateways.grpc_engine_client import (
 )
 from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.engine_selection import resolve_engine_callback_url, select_engine_target
+from application.services.llm_access import (
+    LLMAccessValidationError,
+    engine_input_with_llm_access,
+    engine_llm_access_from_graph,
+)
 from application.services.metrics import record_run_completed, record_run_started
 from application.services.run_liveness import (
     reconcile_stale_runs,
@@ -148,7 +153,17 @@ class Command(BaseCommand):
             self._fail_run(entry, run, f"Tool execution dispatch blocked: {exc}")
             return
 
-        credential_errors = validate_prompt_credentials(prepared_graph, user)
+        try:
+            llm_access = engine_llm_access_from_graph(prepared_graph, user)
+        except LLMAccessValidationError as exc:
+            self._fail_run(entry, run, f"LLM access is invalid: {exc.details}")
+            return
+
+        credential_errors = validate_prompt_credentials(
+            prepared_graph,
+            user,
+            llm_access=llm_access,
+        )
         if credential_errors:
             self._fail_run(entry, run, "Prompt credentials are missing or invalid.")
             return
@@ -164,11 +179,12 @@ class Command(BaseCommand):
 
         try:
             target = select_engine_target(run_id=str(run.id))
+            engine_input_json = engine_input_with_llm_access(run.input_json, llm_access)
             with get_engine_client(callback_url, host=target.host, port=target.port) as engine:
                 engine.start_run(
                     run_id=run.id,
                     graph_json=outbound_graph,
-                    input_json=run.input_json,
+                    input_json=engine_input_json,
                     memory_config_json=memory_config_json,
                     tenant_id=tenant_id,
                     session_id=session_id,

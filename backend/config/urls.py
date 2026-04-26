@@ -15,11 +15,20 @@ from drf_spectacular.views import (
 )
 
 from adapters.api.health.readiness import build_readiness_payload
+from application.services.backend_watchdog import evaluate_backend_watchdog
 
 
 def health_check(request: HttpRequest) -> JsonResponse:
     """Health check endpoint."""
-    return JsonResponse({"status": "ok"})
+    watchdog = evaluate_backend_watchdog()
+    status_code = 200 if watchdog.healthy else 503
+    return JsonResponse(
+        {
+            "status": "ok" if watchdog.healthy else "unhealthy",
+            "watchdog": watchdog.as_payload(),
+        },
+        status=status_code,
+    )
 
 
 def readiness_check(request: HttpRequest) -> JsonResponse:

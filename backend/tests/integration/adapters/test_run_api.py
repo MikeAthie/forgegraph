@@ -16,8 +16,10 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 
+from application.services.llm_access import LLMAccessConfig, resolve_llm_access_for_dispatch
 from application.services.run_liveness import reconcile_stale_runs
 from application.services.run_snapshots import RunSnapshot, get_snapshot, set_snapshot
+from infrastructure.crypto.encryption import encrypt_api_key
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
@@ -781,7 +783,7 @@ class TestRunStart:
             format="json",
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_201_CREATED, response.data
         assert "data" in response.data
         run_data = response.data["data"]
         assert run_data["graph_version_id"] == str(version.id)
@@ -791,6 +793,184 @@ class TestRunStart:
 
         created_run_id = run_data["id"]
         assert Run.objects.filter(id=created_run_id, owner=user, graph_version=version).exists()
+
+    def test_start_run_rejects_byok_without_credential_id(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="BYOK Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {
+                "graph_version_id": str(version.id),
+                "llm_mode": "byok",
+                "provider": "openai",
+                "input_json": {},
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "VALIDATION_ERROR"
+        assert any(
+            detail["field"] == "credential_id" for detail in response.data["error"]["details"]
+        )
+
+    def test_start_run_rejects_raw_byok_api_key(self, authenticated_client, user):
+        graph = Graph.objects.create(owner=user, name="BYOK Raw Key Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {
+                "graph_version_id": str(version.id),
+                "llm_mode": "byok",
+                "provider": "openai",
+                "api_key": "sk-test-byok-123",
+                "input_json": {},
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "VALIDATION_ERROR"
+        assert any(detail["field"] == "api_key" for detail in response.data["error"]["details"])
+
+    def test_start_run_byok_dispatches_referenced_key_ephemerally(
+        self, authenticated_client, user, mock_engine_client, settings
+    ):
+        settings.RUN_START_RATE_LIMIT_PER_MIN = 0
+        settings.OPENAI_API_KEY = ""
+        credential = APIKey.objects.create(
+            organization=user.default_organization,
+            user=user,
+            provider="openai",
+            name=f"byok-{uuid4()}",
+            encrypted_key=encrypt_api_key("sk-test-byok-123"),
+        )
+        graph = Graph.objects.create(owner=user, name="BYOK Prompt Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [
+                    {
+                        "id": "prompt1",
+                        "type": "prompt",
+                        "name": "Prompt",
+                        "config": {
+                            "provider": "openai",
+                            "prompt_template": "Hello",
+                        },
+                    }
+                ],
+                "edges": [],
+            },
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {
+                "graph_version_id": str(version.id),
+                "llm_mode": "byok",
+                "provider": "openai",
+                "credential_id": str(credential.id),
+                "input_json": {"hello": "world"},
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        run_data = response.data["data"]
+        assert run_data["llm_access"] == {
+            "llm_mode": "byok",
+            "provider": "openai",
+            "credential_id": str(credential.id),
+            "api_key_present": True,
+        }
+
+        run = Run.objects.get(id=run_data["id"])
+        assert run.input_json == {"hello": "world"}
+        dispatch_graph = run.dispatch_graph_json
+        assert isinstance(dispatch_graph, dict)
+        metadata = dispatch_graph["metadata"]
+        assert isinstance(metadata, dict)
+        access = metadata["llm_access"]
+        assert isinstance(access, dict)
+        assert access["llm_mode"] == "byok"
+        assert access["api_key_present"] is True
+        assert access["credential_id"] == str(credential.id)
+        assert "api_key" not in access
+        assert "api_key_encrypted" not in access
+
+        start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
+        assert len(start_calls) == 1
+        engine_input = start_calls[0][1]["input_json"]
+        assert engine_input["hello"] == "world"
+        assert engine_input["_forgegraph_llm_access"] == {
+            "llm_mode": "byok",
+            "provider": "openai",
+            "credential_id": str(credential.id),
+            "api_key": "sk-test-byok-123",
+        }
+
+        credential.encrypted_key = encrypt_api_key("sk-test-byok-rotated")
+        credential.save(update_fields=["encrypted_key"])
+
+        resolved_after_rotation = resolve_llm_access_for_dispatch(
+            LLMAccessConfig(
+                llm_mode="byok",
+                provider="openai",
+                credential_id=str(credential.id),
+            ),
+            user,
+        )
+        assert resolved_after_rotation.api_key == "sk-test-byok-rotated"
+
+    def test_start_run_blocks_managed_limit_exceeded(self, authenticated_client, user, settings):
+        settings.RUN_START_RATE_LIMIT_PER_MIN = 0
+        settings.MANAGED_LLM_MAX_CALLS_PER_RUN = 1
+        settings.OPENAI_API_KEY = "managed-key"
+        graph = Graph.objects.create(owner=user, name="Managed Limit Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={
+                "nodes": [
+                    {
+                        "id": "prompt1",
+                        "type": "prompt",
+                        "name": "Prompt 1",
+                        "config": {"provider": "openai", "prompt_template": "One"},
+                    },
+                    {
+                        "id": "prompt2",
+                        "type": "prompt",
+                        "name": "Prompt 2",
+                        "config": {"provider": "openai", "prompt_template": "Two"},
+                    },
+                ],
+                "edges": [],
+            },
+        )
+
+        response = authenticated_client.post(
+            "/api/runs/start",
+            {
+                "graph_version_id": str(version.id),
+                "llm_mode": "managed",
+                "provider": "openai",
+                "input_json": {},
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert response.data["error"]["code"] == "MANAGED_LIMIT_EXCEEDED"
+        assert response.data["error"]["details"][0]["reason"] == "managed_max_llm_calls_per_run"
 
     def test_post_runs_alias_creates_run(self, authenticated_client, user):
         graph = Graph.objects.create(owner=user, name="My Graph Alias")
@@ -1265,7 +1445,7 @@ class TestRunStart:
             format="json",
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_201_CREATED, response.data
         run = Run.objects.get(id=response.data["data"]["id"])
         assert isinstance(run.dispatch_graph_json, dict)
 

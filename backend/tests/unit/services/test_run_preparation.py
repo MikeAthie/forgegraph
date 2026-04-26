@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from django.utils import timezone
 
+from application.services.llm_access import LLMAccessConfig
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     RunPreparationError,
@@ -181,6 +182,39 @@ def test_validate_prompt_credentials_allows_openai_fallback_key(settings) -> Non
     }
 
     errors = validate_prompt_credentials(graph_json, owner)
+    assert errors == []
+
+
+def test_validate_prompt_credentials_allows_run_level_byok(settings) -> None:
+    owner = User.objects.create_user(email="owner-byok@example.com", password="password123")
+    ensure_default_organization(owner)
+    settings.OPENAI_API_KEY = ""
+    graph_json: dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "prompt-1",
+                "type": "prompt",
+                "name": "Prompt",
+                "config": {
+                    "provider": "openai",
+                    "prompt_template": "Hello",
+                },
+            }
+        ],
+        "edges": [],
+    }
+
+    errors = validate_prompt_credentials(
+        graph_json,
+        owner,
+        llm_access=LLMAccessConfig(
+            llm_mode="byok",
+            provider="openai",
+            credential_id="run-level-openai",
+            api_key="sk-test-byok",
+        ),
+    )
+
     assert errors == []
 
 

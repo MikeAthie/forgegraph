@@ -67,7 +67,11 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
         "prepare_graph_for_engine",
         _unexpected_prepare_graph_for_engine,
     )
-    monkeypatch.setattr(process_run_queue, "validate_prompt_credentials", lambda graph, owner: [])
+    monkeypatch.setattr(
+        process_run_queue,
+        "validate_prompt_credentials",
+        lambda graph, owner, **kwargs: [],
+    )
     monkeypatch.setattr(
         process_run_queue, "resolve_engine_callback_url", lambda run_id: "http://callback"
     )

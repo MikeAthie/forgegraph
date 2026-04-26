@@ -603,6 +603,56 @@ func TestPromptExecutor_Execute_PreservesRetryableDiagnostics(t *testing.T) {
 	}
 }
 
+func TestPromptExecutor_Execute_AppliesRunLevelBYOKAccess(t *testing.T) {
+	mockClient := &testMockLLMClient{
+		response: &LLMResponse{
+			Content: "response",
+			Model:   "claude-3-sonnet",
+		},
+	}
+
+	executor := NewPromptExecutor(mockClient)
+	node := &entity.Node{
+		ID:   "prompt_byok",
+		Type: string(value.NodeTypePrompt),
+		Config: map[string]any{
+			"prompt_template": "Hello",
+			"model":           "claude-3-sonnet",
+		},
+	}
+	ctx := port.WithRunContext(context.Background(), &port.RunContext{
+		RunID: "run-1",
+		LLMAccess: port.LLMAccessConfig{
+			Mode:     port.LLMModeBYOK,
+			Provider: "anthropic",
+			APIKey:   "sk-test-byok",
+		},
+	})
+
+	result, err := executor.Execute(ctx, node, entity.NewState())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if mockClient.received == nil {
+		t.Fatal("expected request to be received")
+	}
+	if mockClient.received.Provider != "anthropic" {
+		t.Fatalf("provider = %q, want anthropic", mockClient.received.Provider)
+	}
+	if mockClient.received.APIKey != "sk-test-byok" {
+		t.Fatalf("api key was not passed through BYOK access")
+	}
+	if mockClient.received.CredentialID != "" {
+		t.Fatalf("credential_id = %q, want empty for BYOK", mockClient.received.CredentialID)
+	}
+	if mockClient.received.Metadata["llm_mode"] != port.LLMModeBYOK {
+		t.Fatalf("llm_mode metadata = %q, want byok", mockClient.received.Metadata["llm_mode"])
+	}
+}
+
 func TestPromptExecutor_Execute_TemplateSubstitution(t *testing.T) {
 	mockClient := &testMockLLMClient{
 		response: &LLMResponse{Content: "response"},

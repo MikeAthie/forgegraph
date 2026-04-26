@@ -496,7 +496,11 @@ def test_process_run_queue_enriches_persisted_dispatch_graph_without_mutating_so
             )
         ),
     )
-    monkeypatch.setattr(process_run_queue, "validate_prompt_credentials", lambda graph, owner: [])
+    monkeypatch.setattr(
+        process_run_queue,
+        "validate_prompt_credentials",
+        lambda graph, owner, **kwargs: [],
+    )
     monkeypatch.setattr(
         process_run_queue, "resolve_engine_callback_url", lambda run_id: "http://callback"
     )
