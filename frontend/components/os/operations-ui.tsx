@@ -82,8 +82,8 @@ export const statusTone = (status: string) => {
 
 const toneClasses: Record<string, string> = {
   emerald:
-    "border-emerald-800/15 bg-emerald-50 text-emerald-900 dark:border-emerald-200/20 dark:bg-emerald-500/10 dark:text-emerald-100",
-  slate: "border-slate-900/10 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200",
+    "border-emerald-800/15 bg-emerald-50 text-emerald-900 dark:border-emerald-200/20 dark:bg-emerald-500/12 dark:text-emerald-100",
+  slate: "border-slate-900/10 bg-white/90 text-slate-700 dark:border-white/10 dark:bg-white/6 dark:text-slate-200",
   amber:
     "border-amber-800/15 bg-amber-50 text-amber-900 dark:border-amber-200/20 dark:bg-amber-500/10 dark:text-amber-100",
   rose: "border-rose-800/15 bg-rose-50 text-rose-900 dark:border-rose-200/20 dark:bg-rose-500/10 dark:text-rose-100",
@@ -125,7 +125,7 @@ export function MetricCard({
   tone?: "slate" | "emerald" | "amber" | "rose" | "cyan";
 }) {
   return (
-    <Card className="rounded-[1.5rem] border-slate-900/10 bg-white/85 shadow-[0_20px_60px_-38px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950/65">
+    <Card className="rounded-[1.75rem] border-slate-900/12 bg-white/92 shadow-[0_28px_80px_-46px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-slate-950/72">
       <CardContent className="flex items-start justify-between gap-4 px-5 py-5">
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">{eyebrow}</p>
@@ -149,7 +149,7 @@ export function Surface({ className, children, ...props }: HTMLAttributes<HTMLDi
   return (
     <section
       className={cn(
-        "rounded-[1.75rem] border border-slate-900/10 bg-white/82 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.4)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/62",
+        "rounded-[2rem] border border-slate-900/10 bg-white/90 shadow-[0_32px_90px_-56px_rgba(15,23,42,0.32)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70",
         className,
       )}
       {...props}
@@ -171,19 +171,19 @@ export function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-b border-slate-900/8 px-6 py-5 dark:border-white/8 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex flex-col gap-4 border-b border-slate-900/8 px-6 py-6 dark:border-white/8 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">{eyebrow}</p>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">{eyebrow}</p>
         ) : null}
         <h2
-          className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
+          className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
           style={{ fontFamily: "var(--font-serif)" }}
         >
           {title}
         </h2>
         {description ? (
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">{description}</p>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">{description}</p>
         ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
@@ -206,14 +206,16 @@ export function Panel({
 }) {
   return (
     <Surface className={className}>
-      <div className="flex items-start justify-between gap-4 border-b border-slate-900/8 px-5 py-4 dark:border-white/8">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-900/8 px-6 py-5 dark:border-white/8">
         <div>
-          <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-50">{title}</h3>
-          {description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
+          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-950 dark:text-slate-50">
+            {title}
+          </h3>
+          {description ? <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="px-5 py-4">{children}</div>
+      <div className="px-6 py-5">{children}</div>
     </Surface>
   );
 }
@@ -232,7 +234,7 @@ export function KeyValueGrid({
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8"
+          className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
         >
           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{item.label}</p>
           <div className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">{item.value}</div>
@@ -316,12 +318,12 @@ export function InspectorPanel({
   return (
     <div className="sticky top-[6.5rem] space-y-4">
       <Surface className="overflow-hidden">
-        <div className="border-b border-slate-900/8 px-5 py-5 dark:border-white/8">
+        <div className="border-b border-slate-900/8 px-6 py-6 dark:border-white/8">
           <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Inspection</p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{title}</h3>
-          {subtitle ? <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{subtitle}</p> : null}
+          <h3 className="mt-3 text-xl font-semibold text-slate-950 dark:text-slate-50">{title}</h3>
+          {subtitle ? <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{subtitle}</p> : null}
         </div>
-        <div className="space-y-5 px-5 py-5">
+        <div className="space-y-5 px-6 py-6">
           {sections.map((section) => (
             <div key={section.title}>
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -382,6 +384,45 @@ export function EmptyBlock({ title, description }: { title: string; description:
     <div className="rounded-[1.25rem] border border-dashed border-slate-900/12 bg-[var(--panel-muted)] px-5 py-8 text-center dark:border-white/12">
       <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</p>
       <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+export function MicroExplanation({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={cn("text-xs leading-5 text-slate-500 dark:text-slate-400", className)}>{children}</p>;
+}
+
+export function WhyBlock({
+  title = "Why this?",
+  reasons,
+  className,
+}: {
+  title?: string;
+  reasons: string[];
+  className?: string;
+}) {
+  if (!reasons.length) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-[1.35rem] border border-sky-800/12 bg-sky-50/80 px-4 py-4 dark:border-sky-200/15 dark:bg-sky-500/10",
+        className,
+      )}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800/80 dark:text-sky-100/75">
+        {title}
+      </p>
+      <ul className="mt-3 space-y-2">
+        {reasons.map((reason) => (
+          <li key={reason} className="flex gap-2 text-sm leading-6 text-sky-950/85 dark:text-sky-50/85">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+            <span>{reason}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

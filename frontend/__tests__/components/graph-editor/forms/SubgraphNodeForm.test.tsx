@@ -68,9 +68,9 @@ describe("SubgraphNodeForm", () => {
     it("should render with empty config", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/subgraph reference/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/graph id/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/version/i)).toBeInTheDocument();
+      expect(screen.getByText(/reusable operating model reference/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/operating model id/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/saved version/i)).toBeInTheDocument();
       expect(screen.getByText(/input mapping/i)).toBeInTheDocument();
       expect(screen.getByText(/output mapping/i)).toBeInTheDocument();
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("SubgraphNodeForm", () => {
 
       expect(
         screen.getByText(
-          /execute another graph as a node within this workflow. this enables modular, reusable agent components/i,
+          /run another operating model as one step inside this advanced operating model. this enables modular, reusable company capabilities/i,
         ),
       ).toBeInTheDocument();
     });
@@ -106,14 +106,14 @@ describe("SubgraphNodeForm", () => {
     it("should render graph ID input", () => {
       renderWithConfig();
 
-      expect(screen.getByLabelText(/graph id/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/operating model id/i)).toBeInTheDocument();
     });
 
     it("should call onChange when graph ID is modified", async () => {
       const user = setupUser();
       renderWithConfig();
 
-      const graphIdInput = screen.getByLabelText(/graph id/i);
+      const graphIdInput = screen.getByLabelText(/operating model id/i);
       await user.type(graphIdInput, "graph_123");
 
       await waitFor(() => {
@@ -125,13 +125,13 @@ describe("SubgraphNodeForm", () => {
     it("should have appropriate placeholder", () => {
       renderWithConfig();
 
-      expect(screen.getByPlaceholderText("graph_abc123")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("model_abc123")).toBeInTheDocument();
     });
 
     it("should have monospace font class", () => {
       renderWithConfig();
 
-      const graphIdInput = screen.getByLabelText(/graph id/i);
+      const graphIdInput = screen.getByLabelText(/operating model id/i);
       expect(graphIdInput).toHaveClass("font-mono");
     });
   });
@@ -161,7 +161,7 @@ describe("SubgraphNodeForm", () => {
 
       expect(screen.getByRole("link")).toHaveAttribute("href", "/graphs/graph_old");
 
-      const graphIdInput = screen.getByLabelText(/graph id/i);
+      const graphIdInput = screen.getByLabelText(/operating model id/i);
       await user.clear(graphIdInput);
       await user.type(graphIdInput, "graph_new");
 
@@ -175,14 +175,14 @@ describe("SubgraphNodeForm", () => {
     it("should render version input", () => {
       renderWithConfig();
 
-      expect(screen.getByLabelText(/version/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/saved version/i)).toBeInTheDocument();
     });
 
     it("should call onChange when version is modified", async () => {
       const user = setupUser();
       renderWithConfig();
 
-      const versionInput = screen.getByLabelText(/version/i);
+      const versionInput = screen.getByLabelText(/saved version/i);
       await user.type(versionInput, "v2.0.0");
 
       await waitFor(() => {
@@ -208,14 +208,14 @@ describe("SubgraphNodeForm", () => {
     it("should render KeyValueEditor for input mapping", () => {
       renderWithConfig();
 
-      expect(screen.getByTestId("key-value-editor-Subgraph input key")).toBeInTheDocument();
+      expect(screen.getByTestId("key-value-editor-Reusable model input key")).toBeInTheDocument();
     });
 
     it("should call onChange when input mapping is updated", async () => {
       const user = setupUser();
       renderWithConfig();
 
-      const addButton = screen.getByTestId("add-mapping-Subgraph input key");
+      const addButton = screen.getByTestId("add-mapping-Reusable model input key");
       await user.click(addButton);
 
       await waitFor(() => {
@@ -233,7 +233,7 @@ describe("SubgraphNodeForm", () => {
       };
       renderWithConfig(config);
 
-      const mappingDisplay = screen.getByTestId("mapping-display-Subgraph input key");
+      const mappingDisplay = screen.getByTestId("mapping-display-Reusable model input key");
       expect(mappingDisplay.textContent).toContain("query");
       expect(mappingDisplay.textContent).toContain("context");
     });
@@ -241,7 +241,7 @@ describe("SubgraphNodeForm", () => {
     it("should display description for input mapping", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/map values from parent state to subgraph inputs/i)).toBeInTheDocument();
+      expect(screen.getByText(/map parent company state into the reusable model inputs/i)).toBeInTheDocument();
     });
   });
 
@@ -282,7 +282,7 @@ describe("SubgraphNodeForm", () => {
     it("should display description for output mapping", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/map subgraph outputs back to parent state/i)).toBeInTheDocument();
+      expect(screen.getByText(/map reusable model outputs back to parent company state/i)).toBeInTheDocument();
     });
   });
 
@@ -303,7 +303,7 @@ describe("SubgraphNodeForm", () => {
     it("should show output mapping example", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/sub_result/, { selector: "code" })).toBeInTheDocument();
+      expect(screen.getByText(/campaign_summary/, { selector: "code" })).toBeInTheDocument();
       expect(screen.getByText(/output.final/, { selector: "code" })).toBeInTheDocument();
     });
   });
@@ -312,9 +312,11 @@ describe("SubgraphNodeForm", () => {
     it("should display version pinning warning", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/version pinning recommended/i)).toBeInTheDocument();
+      expect(screen.getByText(/saved version pinning recommended/i)).toBeInTheDocument();
       expect(
-        screen.getByText(/pin to a specific version for production workflows to ensure consistent behavior/i),
+        screen.getByText(
+          /pin to a specific saved version for production operating models to ensure consistent behavior/i,
+        ),
       ).toBeInTheDocument();
     });
 
@@ -344,7 +346,7 @@ describe("SubgraphNodeForm", () => {
     it("should display section headers", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/^subgraph reference$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^reusable operating model reference$/i)).toBeInTheDocument();
       expect(screen.getByText(/^data mapping$/i)).toBeInTheDocument();
     });
 
@@ -367,7 +369,7 @@ describe("SubgraphNodeForm", () => {
     it("should mark graph ID as required", () => {
       renderWithConfig();
 
-      const graphIdLabel = screen.getByText(/graph id/i, { selector: "label" });
+      const graphIdLabel = screen.getByText(/operating model id/i, { selector: "label" });
       expect(graphIdLabel).toBeInTheDocument();
     });
 
@@ -375,7 +377,7 @@ describe("SubgraphNodeForm", () => {
       renderWithConfig();
 
       // Version field should not have required indicator
-      const versionLabel = screen.getByText(/version/i, { selector: "label" });
+      const versionLabel = screen.getByText(/saved version/i, { selector: "label" });
       expect(versionLabel).toBeInTheDocument();
     });
   });
@@ -390,7 +392,7 @@ describe("SubgraphNodeForm", () => {
       };
       renderWithConfig(config);
 
-      const graphIdInput = screen.getByLabelText(/graph id/i);
+      const graphIdInput = screen.getByLabelText(/operating model id/i);
       await user.clear(graphIdInput);
       await user.type(graphIdInput, "new_graph");
 

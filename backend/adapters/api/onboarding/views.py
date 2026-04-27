@@ -34,6 +34,11 @@ MILESTONE_DEFINITIONS: list[dict[str, Any]] = [
         "label": "Start a run",
         "description": "Launch your first run from a template.",
     },
+    {
+        "key": "company_first_run_explained",
+        "label": "Complete the guided first run",
+        "description": "See the first company creation, workspace, and deliverable walkthrough.",
+    },
 ]
 
 

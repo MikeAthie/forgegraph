@@ -57,7 +57,7 @@ describe("AdminIndexPage", () => {
     expect(screen.getByText(/governance remains available as a legacy route/i)).toBeInTheDocument();
     expect(screen.getByText("Workspace configuration")).toBeInTheDocument();
     expect(screen.getByText("Governance controls")).toBeInTheDocument();
-    expect(screen.getByText("Organization")).toBeInTheDocument();
+    expect(screen.getByText("Workspace Access")).toBeInTheDocument();
     expect(screen.getByText("Identity")).toBeInTheDocument();
     expect(screen.getByText("Billing")).toBeInTheDocument();
     expect(screen.getByText("Operations")).toBeInTheDocument();

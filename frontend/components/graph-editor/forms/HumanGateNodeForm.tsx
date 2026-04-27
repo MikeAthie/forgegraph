@@ -72,8 +72,8 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
         <h3 className="text-sm font-medium">Approval Configuration</h3>
 
         <p className="text-sm text-muted-foreground">
-          Pause the workflow and wait for human approval before proceeding. The reviewer can approve, reject, or modify
-          the data.
+          Pause the company flow and wait for human approval before proceeding. The reviewer can approve, reject, or
+          modify the data.
         </p>
 
         <FormField
@@ -165,7 +165,7 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium">Show context</div>
-              <div className="text-xs text-muted-foreground">Display upstream node outputs to the reviewer</div>
+              <div className="text-xs text-muted-foreground">Display upstream step outputs to the reviewer</div>
             </div>
             <Switch
               checked={gateConfig.show_context ?? true}
@@ -180,8 +180,8 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
             <div>
               <p className="font-medium">Auto-approval warning</p>
               <p className="mt-1">
-                The workflow will continue automatically if not reviewed within {gateConfig.timeout_hours || 24} hours.
-                Ensure this is acceptable for your use case.
+                The company flow will continue automatically if not reviewed within {gateConfig.timeout_hours || 24}{" "}
+                hours. Ensure this is acceptable for your use case.
               </p>
             </div>
           </div>

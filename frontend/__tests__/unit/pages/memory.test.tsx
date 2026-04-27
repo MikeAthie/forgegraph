@@ -215,7 +215,7 @@ describe("Memory Browser Page", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /^workflow$/i }));
+      await user.click(screen.getByRole("button", { name: /^operating model$/i }));
       await flushPromises();
     });
 

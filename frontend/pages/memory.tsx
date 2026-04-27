@@ -274,7 +274,7 @@ export default function MemoryBrowserPage() {
             <MetricCard
               eyebrow="Scopes"
               value={String(visibleScopes)}
-              delta="Workflow, execution, and session slices"
+              delta="Operating-model, operation, and session slices"
               icon={<BookCopy className="h-4 w-4" />}
             />
             <MetricCard

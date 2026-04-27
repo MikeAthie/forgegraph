@@ -145,7 +145,7 @@ describe("AuthContext", () => {
         expect(loginResult.success).toBe(true);
         expect(result.current.user).toEqual({ id: "1", email: "test@example.com" });
         expect(result.current.isAuthenticated).toBe(true);
-        expect(mockPush).toHaveBeenCalledWith("/overview");
+        expect(mockPush).toHaveBeenCalledWith("/companies");
       });
     });
 

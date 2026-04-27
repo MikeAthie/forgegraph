@@ -220,13 +220,13 @@ function WizardButton({ buttonRef, onBeforeStart }: WizardButtonProps) {
     <button
       ref={buttonRef}
       type="button"
-      aria-label="Agent Wizard"
+      aria-label="Operating Model Wizard"
       onClick={() => {
         onBeforeStart?.();
         startWizard(false);
       }}
       disabled={state.isActive}
-      title="Open Agent Wizard (Ctrl+W / Ctrl+Shift+W)"
+      title="Open Operating Model Wizard (Ctrl+W / Ctrl+Shift+W)"
       className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
     >
       <Wand2 aria-hidden="true" className="h-4 w-4" />
@@ -1276,16 +1276,16 @@ export function GraphEditor({
 
       const executableNodes = draftNodes.filter((node) => node.type !== NOTE_NODE_TYPE);
 
-      // Validation: Cannot save empty graph
+      // Validation: Cannot save empty operating model
       if (executableNodes.length === 0) {
-        showError("Cannot save empty graph", "Add at least one node to the graph");
+        showError("Cannot save empty operating model", "Add at least one step to the operating model");
         return false;
       }
 
-      // Validation: Must have at least one output node
+      // Validation: Must have at least one deliverable step
       const hasOutputNode = executableNodes.some((node) => node.type === NODE_TYPES.OUTPUT);
       if (!hasOutputNode) {
-        showError("Graph needs an output node", "Add an Output node to define the graph's result");
+        showError("Operating model needs a deliverable step", "Add a Final Deliverable step to define the result");
         return false;
       }
       if (executableNodes.length > 0) {
@@ -1590,7 +1590,7 @@ export function GraphEditor({
   const handleWizardComplete = useCallback(
     async (payload: AgentWizardCompletePayload) => {
       const materialized = applyAgentBlueprint(payload.blueprint);
-      showSuccess("Agent workflow added", `${payload.blueprint.name} was added as a real agent flow.`);
+      showSuccess("AI worker flow added", `${payload.blueprint.name} was added as a real operating-model flow.`);
 
       if (!payload.runTest) {
         return;
@@ -1601,7 +1601,7 @@ export function GraphEditor({
         return;
       }
 
-      showInfo("Starting test run", "Saving workflow and launching a test run...");
+      showInfo("Starting test operation", "Saving the operating model and launching a test operation...");
 
       let versionId = currentVersionId;
 
@@ -1701,7 +1701,7 @@ export function GraphEditor({
             <div
               ref={palettePanelRef}
               role="complementary"
-              aria-label="Node palette panel"
+              aria-label="Step palette panel"
               tabIndex={-1}
               className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
             >
@@ -1726,7 +1726,7 @@ export function GraphEditor({
             >
               <ReactFlow
                 className="bg-background"
-                aria-label="Graph canvas"
+                aria-label="Operating model canvas"
                 nodes={nodes}
                 edges={typedEdges}
                 onNodesChange={onNodesChange}
@@ -1805,7 +1805,7 @@ export function GraphEditor({
                   </button>
                   <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
                     <select
-                      aria-label="Version"
+                      aria-label="Saved version"
                       value={currentVersionId ?? ""}
                       disabled={loadingVersion || saving || availableVersions.length === 0}
                       onChange={(e) => void handleSelectVersion(e.target.value)}
@@ -1840,10 +1840,10 @@ export function GraphEditor({
                       </button>
                       <button
                         type="button"
-                        aria-label={runDisabledReason ?? "Run workflow"}
+                        aria-label={runDisabledReason ?? "Launch test operation"}
                         onClick={() => void handleRunWorkflow()}
                         disabled={Boolean(runDisabledReason)}
-                        title={runDisabledReason ?? "Run workflow"}
+                        title={runDisabledReason ?? "Launch test operation"}
                         className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
                         {startingRun ? "Starting..." : <Play aria-hidden="true" className="h-4 w-4" />}
@@ -1867,7 +1867,7 @@ export function GraphEditor({
                     className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
                   >
                     <Plus className="h-4 w-4" />
-                    Add Node
+                    Add Step
                   </button>
                 </Panel>
               </ReactFlow>
@@ -1886,7 +1886,7 @@ export function GraphEditor({
               {overlayRunId && (
                 <div className="border-b border-border bg-muted/30 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-foreground">Execution</h3>
+                    <h3 className="text-sm font-semibold text-foreground">Operation</h3>
                     <button
                       type="button"
                       onClick={handleExitExecutionView}
@@ -1897,7 +1897,7 @@ export function GraphEditor({
                   </div>
 
                   {overlayRunLoading && !overlayRun && (
-                    <p className="text-xs text-muted-foreground">Loading execution trace...</p>
+                    <p className="text-xs text-muted-foreground">Loading operation detail...</p>
                   )}
 
                   {overlayRunError && <p className="text-xs text-destructive whitespace-pre-wrap">{overlayRunError}</p>}
@@ -1909,7 +1909,7 @@ export function GraphEditor({
                           Status: <span className="font-medium text-foreground">{String(overlayRun.status)}</span>
                         </span>
                         <Link href={`/runs/${overlayRun.id}`} className="text-primary hover:underline">
-                          Open run
+                          Open operation
                         </Link>
                       </div>
 
@@ -1935,12 +1935,12 @@ export function GraphEditor({
                       </div>
 
                       <div className="pt-3 border-t border-border space-y-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase">Node trace</p>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">Department activity</p>
 
                         {!selectedNodeId ? (
-                          <p className="text-xs text-muted-foreground">Select a node to inspect its execution.</p>
+                          <p className="text-xs text-muted-foreground">Select a step to inspect its activity.</p>
                         ) : overlaySelectedNodeRuns.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No trace records for this node.</p>
+                          <p className="text-xs text-muted-foreground">No activity records for this step.</p>
                         ) : (
                           <div className="space-y-2">
                             {overlaySelectedNodeRuns.map((nodeRun) => {
@@ -1960,7 +1960,7 @@ export function GraphEditor({
 
                                   <details open>
                                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                                      Response
+                                      Deliverable / response
                                     </summary>
                                     <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
                                       {formatJsonForDisplay(nodeRun.output_json)}
@@ -1969,7 +1969,7 @@ export function GraphEditor({
 
                                   <details open={String(nodeRun.status) === "failed"}>
                                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                                      Failure
+                                      Needs attention
                                     </summary>
                                     <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
                                       {formatJsonForDisplay(nodeRun.error_json)}

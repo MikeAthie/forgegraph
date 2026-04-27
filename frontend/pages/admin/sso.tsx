@@ -30,7 +30,7 @@ const defaultConfig: SsoProviderConfig = {
   enabled: false,
   status: {
     state: "unavailable",
-    message: "No SSO provider is configured for this organization yet.",
+    message: "No SSO provider is configured for this workspace yet.",
   },
 };
 
@@ -159,7 +159,7 @@ export default function AdminSsoPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <IdentityStatusCard
               title="SSO status"
-              description="Auth0 sign-in availability for this organization."
+              description="Auth0 sign-in availability for this workspace."
               status={config.status}
               secondaryDetail={config.enabled ? "Provider is enabled." : "Provider is disabled."}
             />
@@ -169,7 +169,7 @@ export default function AdminSsoPage() {
               status={
                 tokenInfo?.status ?? {
                   state: "unavailable",
-                  message: "No SCIM token has been issued for this organization yet.",
+                  message: "No SCIM token has been issued for this workspace yet.",
                 }
               }
               secondaryDetail={
@@ -201,7 +201,7 @@ export default function AdminSsoPage() {
           <Card>
             <CardHeader>
               <CardTitle>Auth0 Provider</CardTitle>
-              <CardDescription>Connect an Auth0 OIDC application for this organization.</CardDescription>
+              <CardDescription>Connect an Auth0 OIDC application for this workspace.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField label="Issuer URL" required htmlFor="issuer_url">
@@ -331,7 +331,7 @@ export default function AdminSsoPage() {
 
               <div className="flex justify-between gap-3">
                 <Button variant="outline" onClick={() => router.push("/admin/organization")}>
-                  Back to Organization
+                  Back to Workspace Access
                 </Button>
                 <Button onClick={handleRotateToken} disabled={rotating}>
                   {rotating ? (

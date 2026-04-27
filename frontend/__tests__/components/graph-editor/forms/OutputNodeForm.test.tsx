@@ -45,7 +45,7 @@ describe("OutputNodeForm", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
       expect(screen.getByText(/output configuration/i)).toBeInTheDocument();
-      expect(screen.getByText(/output mapping/i)).toBeInTheDocument();
+      expect(screen.getByText(/deliverable mapping/i)).toBeInTheDocument();
       expect(screen.getByTestId("agent-fields")).toBeInTheDocument();
       expect(screen.getByTestId("key-value-editor")).toBeInTheDocument();
     });
@@ -69,8 +69,10 @@ describe("OutputNodeForm", () => {
     it("should display helpful description", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(screen.getByText(/define what data to extract as the final output of your workflow/i)).toBeInTheDocument();
-      expect(screen.getByText(/map output field names to state paths/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/define what data to expose as the final deliverable from this operating model/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/map deliverable fields to state paths/i)).toBeInTheDocument();
     });
   });
 
@@ -127,7 +129,7 @@ describe("OutputNodeForm", () => {
     it("should display description for output mapping", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(screen.getByText(/map output keys to values from the workflow state/i)).toBeInTheDocument();
+      expect(screen.getByText(/map deliverable keys to values from the operating state/i)).toBeInTheDocument();
     });
 
     it("should display state path examples section", () => {
@@ -140,21 +142,21 @@ describe("OutputNodeForm", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
       expect(screen.getByText(/node.prompt_1.output/)).toBeInTheDocument();
-      expect(screen.getByText(/output from a prompt node/i)).toBeInTheDocument();
+      expect(screen.getByText(/output from an ai worker step/i)).toBeInTheDocument();
     });
 
     it("should show example for nested data path", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
       expect(screen.getByText(/node.http_1.output.data/)).toBeInTheDocument();
-      expect(screen.getByText(/nested data from http response/i)).toBeInTheDocument();
+      expect(screen.getByText(/nested data from a tool response/i)).toBeInTheDocument();
     });
 
     it("should show example for input reference", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
       expect(screen.getByText(/input.userId/)).toBeInTheDocument();
-      expect(screen.getByText(/original graph input/i)).toBeInTheDocument();
+      expect(screen.getByText(/original company input/i)).toBeInTheDocument();
     });
   });
 
@@ -314,13 +316,13 @@ describe("OutputNodeForm", () => {
     it("should explain workflow output purpose", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(screen.getByText(/define what data to extract as the final output/i)).toBeInTheDocument();
+      expect(screen.getByText(/define what data to expose as the final deliverable/i)).toBeInTheDocument();
     });
 
     it("should explain mapping functionality", () => {
       render(<OutputNodeForm {...defaultProps} />);
 
-      expect(screen.getByText(/map output keys to values from the workflow state/i)).toBeInTheDocument();
+      expect(screen.getByText(/map deliverable keys to values from the operating state/i)).toBeInTheDocument();
     });
   });
 

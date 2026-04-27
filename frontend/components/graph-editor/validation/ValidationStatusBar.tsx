@@ -15,7 +15,7 @@ export interface ValidationStatusBarProps {
 }
 
 /**
- * Status bar showing validation status at the bottom of the graph editor
+ * Status bar showing validation status at the bottom of the advanced operating model editor
  */
 export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, className }: ValidationStatusBarProps) {
   const { isValid, errors, warnings, isStatusBarExpanded, setStatusBarExpanded } = useValidation();
@@ -32,7 +32,7 @@ export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, clas
       >
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-emerald-500" />
-          <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Graph Valid</span>
+          <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Operating Model Ready</span>
         </div>
       </div>
     );

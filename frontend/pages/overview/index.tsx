@@ -58,7 +58,7 @@ export default function OverviewPage() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load organization dashboard."));
+          setError(getApiErrorMessage(err, "Failed to load command ops."));
         }
       } finally {
         if (!cancelled) {
@@ -88,9 +88,9 @@ export default function OverviewPage() {
     const attentionItems: AttentionItem[] = [
       ...failedExecutions.slice(0, 2).map((execution) => ({
         id: `failed-${execution.id}`,
-        title: `${execution.workflow_name} is broken`,
-        detail: `Execution ${execution.id.slice(0, 8)} failed${execution.duration_ms ? ` after ${execution.duration_ms}ms` : ""}. Inspect the trace and choose whether to replay or intervene.`,
-        owner: "Execution trace",
+        title: `${execution.workflow_name} needs attention`,
+        detail: `Operation ${execution.id.slice(0, 8)} failed${execution.duration_ms ? ` after ${execution.duration_ms}ms` : ""}. Inspect the operation and choose whether to retry or intervene.`,
+        owner: "Operation detail",
         tone: "rose" as const,
         href: `/executions/${execution.id}`,
         action: "Inspect failure",
@@ -112,7 +112,7 @@ export default function OverviewPage() {
         id: `task-${task.id}`,
         title: `${task.title} is blocked`,
         detail: `${task.summary} Current priority is ${task.priority}.`,
-        owner: "Task control",
+        owner: "Activity",
         tone: "amber" as const,
         href: task.execution_id ? `/executions/${task.execution_id}` : "/tasks",
         action: "Open task",
@@ -125,18 +125,18 @@ export default function OverviewPage() {
         label: "Control plane",
         value: attentionItems.some((item) => item.tone === "rose") ? "Degraded" : "Responsive",
         detail: attentionItems.some((item) => item.tone === "rose")
-          ? "There is at least one failed execution in the visible window."
+          ? "There is at least one failed operation in the visible window."
           : "No critical failures are currently projected.",
         status: attentionItems.some((item) => item.tone === "rose") ? "failed" : "active",
       },
       {
         id: "agents",
-        label: "Active agents",
+        label: "Active departments",
         value: `${overview.summary.active_agent_count} live`,
         detail:
           overview.active_agents.filter((agent) => agent.status === "attention").length > 0
-            ? `${overview.active_agents.filter((agent) => agent.status === "attention").length} agent${overview.active_agents.filter((agent) => agent.status === "attention").length === 1 ? "" : "s"} flagged for review.`
-            : "No agent is currently in an attention state.",
+            ? `${overview.active_agents.filter((agent) => agent.status === "attention").length} department${overview.active_agents.filter((agent) => agent.status === "attention").length === 1 ? "" : "s"} flagged for review.`
+            : "No department is currently in an attention state.",
         status: overview.active_agents.some((agent) => agent.status === "attention") ? "paused" : "active",
       },
       {
@@ -146,8 +146,8 @@ export default function OverviewPage() {
           overview.summary.pending_decision_count > 0 ? `${overview.summary.pending_decision_count} pending` : "Clear",
         detail:
           overview.summary.pending_decision_count > 0
-            ? "Human review is currently the limiting factor for at least one run."
-            : "No run is waiting on operator approval.",
+            ? "Human review is currently the limiting factor for at least one operation."
+            : "No operation is waiting on operator approval.",
         status: overview.summary.pending_decision_count > 0 ? "paused" : "active",
       },
       {
@@ -173,7 +173,7 @@ export default function OverviewPage() {
       ...overview.active_agents.slice(0, 2).map((agent) => ({
         id: `agent-${agent.id}`,
         title: `${agent.display_name} is ${agent.status === "attention" ? "awaiting review" : "actively supervising work"}`,
-        detail: agentTaskMap.get(agent.id) ?? "No projected task summary is currently attached to this agent.",
+        detail: agentTaskMap.get(agent.id) ?? "No projected task summary is currently attached to this department.",
         time: formatDateTime(agent.last_seen_at),
         tone: agent.status === "attention" ? ("amber" as const) : ("emerald" as const),
       })),
@@ -186,13 +186,13 @@ export default function OverviewPage() {
       })),
       ...overview.recent_executions.slice(0, 2).map((execution) => ({
         id: `execution-${execution.id}`,
-        title: `${execution.workflow_name} ${execution.status === "failed" ? "failed" : execution.status === "running" ? "is running" : "completed"}`,
+        title: `${execution.workflow_name} operation ${execution.status === "failed" ? "needs attention" : execution.status === "running" ? "is running" : "completed"}`,
         detail:
           execution.status === "failed"
-            ? "The failure should be reviewed before replaying the run."
+            ? "The failure should be reviewed before replaying the operation."
             : execution.status === "running"
-              ? "The run is still moving through its planned steps."
-              : "The run finished without requiring immediate intervention.",
+              ? "The operation is still moving through its planned steps."
+              : "The operation finished without requiring immediate intervention.",
         time: formatDateTime(execution.started_at),
         tone: execution.status === "failed" ? ("rose" as const) : ("cyan" as const),
       })),
@@ -214,7 +214,7 @@ export default function OverviewPage() {
     overview && derived ? (
       <InspectorPanel
         title={overview.organization.name}
-        subtitle="This surface should answer the first operator questions immediately: what is happening, what needs attention, and where to act next."
+        subtitle="This surface should answer the first operator questions immediately: what is happening across companies, what needs attention, and where to act next."
         sections={[
           {
             title: "Immediate posture",
@@ -278,7 +278,7 @@ export default function OverviewPage() {
       <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <Panel
-            title="Operational command"
+            title="Command Ops"
             description="Summary first, inspection second, logs last. This page should tell an operator what is happening and where to act in under ten seconds."
             action={
               overview?.generated_at ? (
@@ -299,9 +299,9 @@ export default function OverviewPage() {
                 icon={<Siren className="h-4 w-4" />}
               />
               <MetricCard
-                eyebrow="Active agents"
+                eyebrow="Active departments"
                 value={overview ? formatCompactNumber(overview.summary.active_agent_count) : "0"}
-                delta="Agent identities currently attached to live work"
+                delta="Departments currently attached to live work"
                 icon={<BrainCircuit className="h-4 w-4" />}
               />
               <MetricCard
@@ -394,7 +394,7 @@ export default function OverviewPage() {
                   ) : (
                     <EmptyBlock
                       title="Nothing urgent is waiting"
-                      description="No failed runs, blocked tasks, or approval bottlenecks are currently dominating the system."
+                      description="No failed operations, blocked tasks, or approval bottlenecks are currently dominating the system."
                     />
                   )}
                 </Panel>
@@ -429,12 +429,12 @@ export default function OverviewPage() {
 
               <div className="grid gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
                 <Panel
-                  title="Active agents"
-                  description="Who is currently doing work, what they are focused on, and how much cost they are carrying."
+                  title="Active departments"
+                  description="Which departments are currently doing work, what they are focused on, and how much cost they are carrying."
                   action={
                     <Button asChild variant="outline" className="rounded-full">
                       <Link href="/agents">
-                        Open supervision
+                        Open departments
                         <ArrowRight className="h-4 w-4" />
                       </Link>
                     </Button>
@@ -468,19 +468,19 @@ export default function OverviewPage() {
                     </div>
                   ) : (
                     <EmptyBlock
-                      title="No active agents"
-                      description="Agents will appear here once the registry sees active work or attention states."
+                      title="No active departments"
+                      description="Departments will appear here once the system sees active work or attention states."
                     />
                   )}
                 </Panel>
 
                 <Panel
-                  title="Blocked tasks"
+                  title="Department activity needing help"
                   description="Work that is currently stalled by approval, failure, or missing operator action."
                   action={
                     <Button asChild variant="outline" className="rounded-full">
                       <Link href="/tasks">
-                        Open tasks
+                        Open activity
                         <ArrowRight className="h-4 w-4" />
                       </Link>
                     </Button>
@@ -524,11 +524,11 @@ export default function OverviewPage() {
               <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
                 <Panel
                   title="Pending decisions"
-                  description="Inbox items that should be resolvable without opening raw logs."
+                  description="Approval items that should be resolvable without opening raw logs."
                   action={
                     <Button asChild variant="outline" className="rounded-full">
                       <Link href="/inbox">
-                        Open inbox
+                        Open approvals
                         <ArrowRight className="h-4 w-4" />
                       </Link>
                     </Button>
@@ -553,7 +553,7 @@ export default function OverviewPage() {
                                 {String(
                                   decision.context_json?.summary ??
                                     decision.context_json?.prompt_message ??
-                                    "Operator approval required before this execution can continue.",
+                                    "Operator approval required before this operation can continue.",
                                 )}
                               </p>
                             </div>
@@ -572,7 +572,7 @@ export default function OverviewPage() {
                   )}
                 </Panel>
 
-                <Panel title="Cost summary" description="Spend, mix, and margin for the current operating window.">
+                <Panel title="Usage and budget" description="Spend, mix, and margin for the current operating window.">
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -623,12 +623,12 @@ export default function OverviewPage() {
                       columns={2}
                       items={[
                         {
-                          label: "Active agent spend",
+                          label: "Active department spend",
                           value: formatCurrency(derived.totalAgentCost),
                         },
                         {
-                          label: "Execution window",
-                          value: `${formatCompactNumber(overview.summary.execution_count_24h)} runs in 24h`,
+                          label: "Operating window",
+                          value: `${formatCompactNumber(overview.summary.execution_count_24h)} operations in 24h`,
                         },
                       ]}
                     />

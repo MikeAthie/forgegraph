@@ -106,7 +106,7 @@ describe("Header", () => {
       expect(screen.queryByRole("link", { name: /tasks/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /memory/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /runs/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /workflows/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /advanced/i })).not.toBeInTheDocument();
     });
 
     it("should have correct href for Sign in button", () => {
@@ -147,8 +147,8 @@ describe("Header", () => {
       expect(screen.getByRole("link", { name: /^agents$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^tasks$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^memory$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^runs$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^workflows$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^operations$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^advanced$/i })).toBeInTheDocument();
     });
 
     it("should not display Sign in/Get started buttons when authenticated", () => {
@@ -179,8 +179,8 @@ describe("Header", () => {
       expect(screen.getByRole("link", { name: /^agents$/i })).toHaveAttribute("href", "/agents");
       expect(screen.getByRole("link", { name: /^tasks$/i })).toHaveAttribute("href", "/tasks");
       expect(screen.getByRole("link", { name: /^memory$/i })).toHaveAttribute("href", "/memory");
-      expect(screen.getByRole("link", { name: /^runs$/i })).toHaveAttribute("href", "/runs");
-      expect(screen.getByRole("link", { name: /^workflows$/i })).toHaveAttribute("href", "/workflows");
+      expect(screen.getByRole("link", { name: /^operations$/i })).toHaveAttribute("href", "/runs");
+      expect(screen.getByRole("link", { name: /^advanced$/i })).toHaveAttribute("href", "/workflows");
     });
   });
 
@@ -208,7 +208,7 @@ describe("Header", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Account")).toBeInTheDocument();
-        expect(screen.getByText("Admin & Governance")).toBeInTheDocument();
+        expect(screen.getByText("Settings & Governance")).toBeInTheDocument();
         expect(screen.getByText("Sign out")).toBeInTheDocument();
       });
     });
@@ -221,10 +221,10 @@ describe("Header", () => {
       await user.click(dropdownTrigger);
 
       await waitFor(() => {
-        expect(screen.getByText("Admin & Governance")).toBeInTheDocument();
+        expect(screen.getByText("Settings & Governance")).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("Admin & Governance"));
+      await user.click(screen.getByText("Settings & Governance"));
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith("/admin");

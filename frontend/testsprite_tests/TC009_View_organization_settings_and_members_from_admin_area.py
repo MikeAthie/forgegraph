@@ -55,10 +55,10 @@ async def run_test():
         elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
         await asyncio.sleep(3); await elem.click()
         
-        # -> Wait for the sign-in to complete, then navigate to /admin and verify organization settings and members list render.
+        # -> Wait for the sign-in to complete, then navigate to /admin and verify Workspace Access and the members list render.
         await page.goto("http://localhost:3000/admin")
         
-        # -> Click the 'Open' control for the Organization settings to view organization details and the members list.
+        # -> Click the 'Open' control for Workspace Access to view workspace details and the members list.
         frame = context.pages[-1]
         # Click element
         elem = frame.locator('xpath=/html/body/div/div/div/div[2]/div/main/div/div/div/div/div[2]/section/div[2]/div/div/div/a').nth(0)

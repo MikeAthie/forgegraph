@@ -20,7 +20,7 @@ const listRuns = [
   {
     id: succeededRunId,
     graph_id: "workflow-execution-001",
-    graph_name: "E2E Execution Visibility",
+    graph_name: "Revenue Operating Pulse",
     graph_version_id: "workflow-execution-version-001",
     graph_version: 3,
     status: "succeeded",
@@ -40,7 +40,7 @@ const listRuns = [
   {
     id: failedRunId,
     graph_id: "workflow-execution-002",
-    graph_name: "Failure escalation",
+    graph_name: "Creative Recovery Drill",
     graph_version_id: "workflow-execution-version-002",
     graph_version: 4,
     status: "failed",
@@ -64,7 +64,7 @@ const succeededDetail = {
   owner_id: "owner-execution-001",
   thread_id: null,
   graph_id: "workflow-execution-001",
-  graph_name: "E2E Execution Visibility",
+  graph_name: "Revenue Operating Pulse",
   graph_version_id: "workflow-execution-version-001",
   graph_version: 3,
   status: "succeeded",
@@ -74,7 +74,7 @@ const succeededDetail = {
   started_at: "2026-04-01T11:48:00.000Z",
   ended_at: "2026-04-01T11:49:05.000Z",
   input_json: {
-    request: "Run the workflow and summarize the result.",
+    request: "Run the company operation and summarize the result.",
   },
   output_json: {
     ok: true,
@@ -132,7 +132,7 @@ const pausedDetail = {
   ...succeededDetail,
   id: pausedRunId,
   graph_id: "workflow-execution-003",
-  graph_name: "E2E Human Gate",
+  graph_name: "Finance Approval Gate",
   graph_version_id: "workflow-execution-version-003",
   graph_version: 2,
   status: "paused",
@@ -239,60 +239,60 @@ async function mockExecutionApis(
   });
 }
 
-test.describe("Execution Visibility", () => {
-  test("shows a seeded execution in the visibility screen and opens detail", async ({ page, request }, testInfo) => {
+test.describe("Operation Visibility", () => {
+  test("shows a seeded operation in the visibility screen and opens detail", async ({ page, request }, testInfo) => {
     const user = createTestUser(testInfo, "executions");
     await ensureUserRegistered(request, user);
     await mockExecutionApis(page);
 
     await openAuthenticatedPage(page, user, "/runs");
 
-    await expect(page.getByRole("heading", { name: /distributed trace for humans/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /e2e execution visibility/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /recent company operations/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /revenue operating pulse/i })).toBeVisible();
 
-    const executionDetailHref = await page.getByRole("link", { name: /open execution detail/i }).getAttribute("href");
+    const executionDetailHref = await page.getByRole("link", { name: /open operation detail/i }).getAttribute("href");
     expect(executionDetailHref).toBe(`/executions/${succeededRunId}`);
     await page.goto(executionDetailHref!);
 
     await expect(page).toHaveURL(new RegExp(`/executions/${succeededRunId}$`));
-    await expect(page.getByRole("heading", { name: /structured execution trace/i })).toBeVisible();
-    await expect(page.getByText(/execution flow/i)).toBeVisible();
-    await expect(page.getByText(/execution state/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation trace/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /department activity/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation state/i })).toBeVisible();
     await expect(page.getByText(/"ok": true/i).first()).toBeVisible();
   });
 
-  test("shows paused executions with human gate context", async ({ page, request }, testInfo) => {
+  test("shows paused operations with approval gate context", async ({ page, request }, testInfo) => {
     const user = createTestUser(testInfo, "executions-paused");
     await ensureUserRegistered(request, user);
     await mockExecutionApis(page);
 
     await openAuthenticatedPage(page, user, `/executions/${pausedRunId}`);
 
-    await expect(page.getByRole("heading", { name: /structured execution trace/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /^human gate$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation trace/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^approval gate$/i })).toBeVisible();
     await expect(page.getByText("Please review this run.", { exact: true })).toBeVisible();
   });
 
-  test("surfaces status badges across executions", async ({ page, request }, testInfo) => {
+  test("surfaces status badges across operations", async ({ page, request }, testInfo) => {
     const user = createTestUser(testInfo, "executions-status");
     await ensureUserRegistered(request, user);
     await mockExecutionApis(page);
 
     await openAuthenticatedPage(page, user, "/executions");
 
-    await expect(page.getByRole("heading", { name: /distributed trace for humans/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /recent company operations/i })).toBeVisible();
     await expect(page.getByText(/^succeeded$/i).first()).toBeVisible();
     await expect(page.getByText(/^failed$/i).first()).toBeVisible();
   });
 
-  test("shows an empty state when no executions exist", async ({ page, request }, testInfo) => {
+  test("shows an empty state when no operations exist", async ({ page, request }, testInfo) => {
     const user = createTestUser(testInfo, "executions-empty");
     await ensureUserRegistered(request, user);
     await mockExecutionApis(page, { runs: [] });
 
     await openAuthenticatedPage(page, user, "/executions");
 
-    await expect(page.getByText(/no executions available/i)).toBeVisible();
+    await expect(page.getByText(/no operations available/i)).toBeVisible();
   });
 
   test("shows an error for a non-existent execution", async ({ page, request }, testInfo) => {

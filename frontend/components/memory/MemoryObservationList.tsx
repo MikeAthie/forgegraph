@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 
 const SCOPE_OPTIONS = [
   { value: "all", label: "All scopes" },
-  { value: "graph", label: "Workflow" },
-  { value: "run", label: "Execution" },
+  { value: "graph", label: "Operating Model" },
+  { value: "run", label: "Operation" },
   { value: "session", label: "Session" },
 ] as const;
 
@@ -93,7 +93,8 @@ export function MemoryObservationList({
           <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{modeLabel}</p>
           <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">Observation ledger</h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Search explicit memory records, skim recency, and pivot across workflow, execution, or session scopes.
+            Search explicit memory records, skim recency, and pivot across operating-model, operation, or session
+            scopes.
           </p>
         </div>
         <Button variant="outline" className="rounded-full" onClick={onRefresh} disabled={loading}>

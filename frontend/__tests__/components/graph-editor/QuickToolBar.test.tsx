@@ -93,7 +93,7 @@ describe("QuickToolBar", () => {
     expect(screen.getByText("Slack Alerts")).toBeInTheDocument();
     expect(screen.getByText("Notion Page Upsert")).toBeInTheDocument();
     // "More" button opens the browse dialog
-    expect(screen.getByRole("button", { name: /browse integration tools/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /browse tool actions/i })).toBeInTheDocument();
   });
 
   it("calls onSelectPackage when a featured tool is clicked", async () => {
@@ -120,8 +120,8 @@ describe("QuickToolBar", () => {
 
     render(<QuickToolBar marketplaceNodes={packages} onSelectPackage={onSelectPackage} />);
 
-    await user.click(screen.getByRole("button", { name: /browse integration tools/i }));
-    const search = screen.getByRole("textbox", { name: /search integration tools/i });
+    await user.click(screen.getByRole("button", { name: /browse tool actions/i }));
+    const search = screen.getByRole("textbox", { name: /search tool actions/i });
     await user.type(search, "gmail");
     await user.click(screen.getByRole("button", { name: /gmail send email/i }));
 
@@ -161,6 +161,6 @@ describe("QuickToolBar", () => {
     render(<QuickToolBar marketplaceNodes={packages} onSelectPackage={jest.fn()} />);
 
     expect(screen.queryByRole("button", { name: /add template only integration node/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/no runtime-ready tools yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no runtime-ready tool actions yet/i)).toBeInTheDocument();
   });
 });

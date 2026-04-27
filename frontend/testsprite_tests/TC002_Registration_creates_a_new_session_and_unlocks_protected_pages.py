@@ -25,8 +25,8 @@ async def run_test():
         await expect(page.get_by_text("Registration successful! Please sign in with your new account.")).to_be_visible()
 
         await login(page, email, password)
-        await page.goto(f"{BASE_URL}/graphs")
-        await expect(page.get_by_text("Manage definitions and revisions")).to_be_visible()
+        await page.goto(f"{BASE_URL}/companies")
+        await expect(page.get_by_text("Operate AI-driven companies")).to_be_visible()
     finally:
         await close_browser(pw, browser, context)
 

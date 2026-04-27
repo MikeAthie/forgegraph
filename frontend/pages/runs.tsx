@@ -35,7 +35,7 @@ export default function RunsPage() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load executions."));
+          setError(getApiErrorMessage(err, "Failed to load operations."));
         }
       } finally {
         if (!cancelled) {
@@ -69,8 +69,8 @@ export default function RunsPage() {
         inspector={
           selectedExecution ? (
             <InspectorPanel
-              title="Execution summary"
-              subtitle="Executions are the immutable runtime backbone. Use the detail screen to inspect input, output, step sequence, and reasoning."
+              title="Operation summary"
+              subtitle="Operations are surfaced here in company language first. Open the detail view for department activity, deliverables, and technical diagnostics."
               sections={[
                 {
                   title: "Status",
@@ -91,9 +91,9 @@ export default function RunsPage() {
       >
         <div className="space-y-6">
           <SectionHeader
-            eyebrow="Execution visibility"
-            title="Distributed trace for humans"
-            description="This screen keeps executions structured and readable. The operator can understand where a task moved, how long it took, and which run to inspect in depth."
+            eyebrow="Operations"
+            title="Recent company operations"
+            description="Review recent operations, understand status quickly, and open the full detail view when you need department-level diagnostics."
           />
 
           {error ? (
@@ -108,12 +108,12 @@ export default function RunsPage() {
             </div>
           ) : !selectedExecution ? (
             <EmptyBlock
-              title="No executions available"
-              description="Execution history will appear here when workflows are run."
+              title="No operations available"
+              description="Operation history will appear here after companies begin running work."
             />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[0.76fr_1.24fr]">
-              <Panel title="Execution list" description="Recent workflow executions with summary-first metadata.">
+              <Panel title="Operation list" description="Recent operations with summary-first metadata.">
                 <SelectionList
                   items={runs}
                   selectedId={selectedExecution.id}
@@ -128,12 +128,12 @@ export default function RunsPage() {
                       <StatusBadge status={String(run.status)} />
                     </div>
                   )}
-                  renderBody={(run) => `Version ${run.graph_version} · started ${formatDateTime(run.started_at)}`}
+                  renderBody={(run) => `Saved version ${run.graph_version} · started ${formatDateTime(run.started_at)}`}
                   renderMeta={(run) => <span className="text-xs">{formatDuration(run.duration_ms)}</span>}
                   empty={
                     <EmptyBlock
-                      title="No execution history"
-                      description="Once the runtime starts processing work, executions will appear here."
+                      title="No operation history"
+                      description="Once companies start operating, their operations will appear here."
                     />
                   }
                 />
@@ -145,7 +145,7 @@ export default function RunsPage() {
                   description="Top-level summary before drilling into the full step sequence."
                   action={
                     <Button asChild className="rounded-full">
-                      <Link href={`/executions/${selectedExecution.id}`}>Open execution detail</Link>
+                      <Link href={`/executions/${selectedExecution.id}`}>Open operation detail</Link>
                     </Button>
                   }
                 >
@@ -153,14 +153,14 @@ export default function RunsPage() {
                     columns={2}
                     items={[
                       { label: "Status", value: <StatusBadge status={String(selectedExecution.status)} /> },
-                      { label: "Workflow revision", value: `v${selectedExecution.graph_version}` },
+                      { label: "Saved version", value: `v${selectedExecution.graph_version}` },
                       { label: "Started", value: formatDateTime(selectedExecution.started_at) },
                       { label: "Duration", value: formatDuration(selectedExecution.duration_ms) },
                     ]}
                   />
                 </Panel>
 
-                <Panel title="Execution state" description="Readout for queueing, runtime timing, and memory activity.">
+                <Panel title="Operation state" description="Readout for queueing, runtime timing, and memory activity.">
                   <KeyValueGrid
                     columns={2}
                     items={[

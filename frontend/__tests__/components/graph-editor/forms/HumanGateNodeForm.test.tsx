@@ -85,7 +85,9 @@ describe("HumanGateNodeForm", () => {
     it("should display helpful description", () => {
       renderWithConfig();
 
-      expect(screen.getByText(/pause the workflow and wait for human approval before proceeding/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/pause the company flow and wait for human approval before proceeding/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -323,7 +325,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig();
 
       expect(screen.getByText(/^show context$/i)).toBeInTheDocument();
-      expect(screen.getByText(/display upstream node outputs to the reviewer/i)).toBeInTheDocument();
+      expect(screen.getByText(/display upstream step outputs to the reviewer/i)).toBeInTheDocument();
     });
 
     it("should call onChange when show context is toggled", async () => {
@@ -355,7 +357,7 @@ describe("HumanGateNodeForm", () => {
       renderWithConfig(config);
 
       expect(screen.getByText(/auto-approval warning/i)).toBeInTheDocument();
-      expect(screen.getByText(/the workflow will continue automatically if not reviewed/i)).toBeInTheDocument();
+      expect(screen.getByText(/the company flow will continue automatically if not reviewed/i)).toBeInTheDocument();
     });
 
     it("should not display warning when auto-approve is disabled", () => {

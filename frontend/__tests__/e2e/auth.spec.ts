@@ -29,7 +29,7 @@ test.describe("Authentication Flow", () => {
   test("navigates to the login page from the landing screen", async ({ page }) => {
     await page.getByRole("link", { name: /sign in/i }).click();
     await expect(page).toHaveURL("/login");
-    await expect(page.getByText(/sign in to your account to continue/i)).toBeVisible();
+    await expect(page.getByText(/sign in to continue operating your companies/i)).toBeVisible();
   });
 });
 
@@ -60,7 +60,7 @@ test.describe("User Registration", () => {
 
   test("shows the post-registration sign-in banner", async ({ page }) => {
     await page.goto("/login?registered=true");
-    await expect(page.getByText(/registration successful!/i)).toBeVisible();
+    await expect(page.getByText(/account created\./i)).toBeVisible();
   });
 
   test("navigates to login from the register screen", async ({ page }) => {
@@ -106,17 +106,19 @@ test.describe("User Login", () => {
       await login(page, seededUser);
     });
 
-    test("opens the organization dashboard for an authenticated session", async ({ page }) => {
-      await expect(page).toHaveURL("/overview");
-      await expect(page.getByRole("heading", { name: /organization dashboard/i })).toBeVisible();
+    test("opens the operating shell for an authenticated session", async ({ page }) => {
+      await expect(page).toHaveURL("/companies");
+      await expect(page.getByRole("heading", { name: /operate ai-driven companies/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^companies$/i })).toBeVisible();
     });
 
-    test("shows the OS navigation instead of builder-first links", async ({ page }) => {
-      await expect(page.getByRole("link", { name: /^dashboard$/i })).toBeVisible();
-      await expect(page.getByRole("link", { name: /^agents$/i })).toBeVisible();
-      await expect(page.getByRole("link", { name: /^inbox$/i })).toBeVisible();
-      await expect(page.getByRole("link", { name: /^memory$/i })).toBeVisible();
-      await expect(page.getByRole("link", { name: /^workflows$/i })).toBeVisible();
+    test("shows the company-first shell navigation instead of builder-first links", async ({ page }) => {
+      await expect(page.getByRole("link", { name: /^companies$/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^command ops$/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^departments$/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^approvals$/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^knowledge$/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^advanced$/i })).toBeVisible();
     });
 
     test("shows the signed-in user control in the shell header", async ({ page }) => {
@@ -139,14 +141,14 @@ test.describe("User Logout", () => {
     await page.getByRole("button", { name: seededUser.email }).click();
     await page.waitForURL("/login");
 
-    await page.goto("/overview");
+    await page.goto("/companies");
     await expect(page).toHaveURL("/login");
   });
 });
 
 test.describe("Protected Routes", () => {
-  test("redirects unauthenticated users away from the dashboard", async ({ page }) => {
-    await page.goto("/overview");
+  test("redirects unauthenticated users away from companies", async ({ page }) => {
+    await page.goto("/companies");
     await expect(page).toHaveURL("/login");
   });
 

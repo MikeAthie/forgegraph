@@ -11,7 +11,7 @@ import { ExternalLink } from "lucide-react";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
 /**
- * Subgraph node specific configuration
+ * Reusable operating model step configuration
  */
 interface SubgraphConfig extends AgentConfig, AdvancedConfig {
   graph_id?: string;
@@ -51,22 +51,23 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
 
       <Separator />
 
-      {/* Subgraph Configuration */}
+      {/* Reusable operating model configuration */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium">Subgraph Reference</h3>
+        <h3 className="text-sm font-medium">Reusable Operating Model Reference</h3>
 
         <p className="text-sm text-muted-foreground">
-          Execute another graph as a node within this workflow. This enables modular, reusable agent components.
+          Run another operating model as one step inside this advanced operating model. This enables modular, reusable
+          company capabilities.
         </p>
 
         <div className="grid grid-cols-2 gap-4">
-          <FormField label="Graph ID" htmlFor="graph-id" description="ID of the graph to execute" required>
+          <FormField label="Operating Model ID" htmlFor="graph-id" description="ID of the model to run" required>
             <div className="flex gap-2">
               <Input
                 id="graph-id"
                 value={subgraphConfig.graph_id || ""}
                 onChange={(e) => handleChange("graph_id", e.target.value)}
-                placeholder="graph_abc123"
+                placeholder="model_abc123"
                 className="text-sm font-mono"
               />
               {subgraphConfig.graph_id && (
@@ -82,7 +83,7 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
             </div>
           </FormField>
 
-          <FormField label="Version" htmlFor="graph-version" description="Specific version (blank = latest)">
+          <FormField label="Saved Version" htmlFor="graph-version" description="Specific version (blank = latest)">
             <Input
               id="graph-version"
               value={subgraphConfig.graph_version || ""}
@@ -97,21 +98,21 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
 
         <h4 className="text-sm font-medium">Data Mapping</h4>
 
-        <FormField label="Input Mapping" description="Map values from parent state to subgraph inputs">
+        <FormField label="Input Mapping" description="Map parent company state into the reusable model inputs">
           <KeyValueEditor
             value={subgraphConfig.input_mapping || {}}
             onChange={(mapping) => handleChange("input_mapping", mapping)}
-            keyPlaceholder="Subgraph input key"
+            keyPlaceholder="Reusable model input key"
             valuePlaceholder="Parent state path"
           />
         </FormField>
 
-        <FormField label="Output Mapping" description="Map subgraph outputs back to parent state">
+        <FormField label="Output Mapping" description="Map reusable model outputs back to parent company state">
           <KeyValueEditor
             value={subgraphConfig.output_mapping || {}}
             onChange={(mapping) => handleChange("output_mapping", mapping)}
             keyPlaceholder="Parent state key"
-            valuePlaceholder="Subgraph output path"
+            valuePlaceholder="Reusable model output path"
           />
         </FormField>
 
@@ -123,17 +124,17 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
               <code className="bg-muted px-1 rounded">node.prompt_1.output</code>
             </li>
             <li>
-              Output: <code className="bg-muted px-1 rounded">sub_result</code> ←{" "}
+              Output: <code className="bg-muted px-1 rounded">campaign_summary</code> ←{" "}
               <code className="bg-muted px-1 rounded">output.final</code>
             </li>
           </ul>
         </div>
 
         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-600 dark:text-amber-400">
-          <p className="font-medium">Version pinning recommended</p>
+          <p className="font-medium">Saved version pinning recommended</p>
           <p className="mt-1">
-            Pin to a specific version for production workflows to ensure consistent behavior when the referenced graph
-            is updated.
+            Pin to a specific saved version for production operating models to ensure consistent behavior when the
+            referenced model is updated.
           </p>
         </div>
       </div>

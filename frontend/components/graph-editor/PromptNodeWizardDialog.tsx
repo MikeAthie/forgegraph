@@ -344,12 +344,12 @@ export function PromptNodeWizardDialog({
 
       return (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">Review the prompt content before adding the node.</div>
+          <div className="text-sm text-muted-foreground">Review the prompt content before adding the step.</div>
           {existingPrompt ? (
             <div className="rounded-lg border border-border bg-muted/10 p-3 text-sm">
               <div className="font-medium text-foreground">{existingPrompt.title}</div>
               <div className="text-xs text-muted-foreground mt-1">
-                This node will embed the prompt content for execution.
+                This step will embed the prompt content for execution.
               </div>
             </div>
           ) : (

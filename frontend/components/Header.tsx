@@ -30,8 +30,8 @@ export default function Header() {
     { href: "/agents", label: "Agents" },
     { href: "/tasks", label: "Tasks" },
     { href: "/memory", label: "Memory" },
-    { href: "/runs", label: "Runs" },
-    { href: "/workflows", label: "Workflows" },
+    { href: "/runs", label: "Operations" },
+    { href: "/workflows", label: "Advanced" },
   ] as const;
 
   const canManageOrg = user?.organization_role === "owner" || user?.organization_role === "admin";
@@ -205,7 +205,7 @@ export default function Header() {
                     }}
                     className="cursor-pointer"
                   >
-                    Admin & Governance
+                    Settings & Governance
                   </DropdownMenuItem>
                   {canManageOrg && (
                     <DropdownMenuItem
@@ -248,7 +248,7 @@ export default function Header() {
                       }}
                       className="cursor-pointer"
                     >
-                      Audit logs
+                      Activity log
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />

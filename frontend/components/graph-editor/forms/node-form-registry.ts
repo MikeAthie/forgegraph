@@ -50,8 +50,8 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   agent: {
     component: AgentNodeForm,
     info: {
-      label: "Agent",
-      description: "Run a bounded model-to-tool loop inside one node",
+      label: "AI Worker",
+      description: "Run a bounded model-to-tool loop inside one step",
       icon: "Bot",
       category: "processing",
       color: "#0ea5e9",
@@ -60,8 +60,8 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   prompt: {
     component: PromptNodeForm,
     info: {
-      label: "Prompt",
-      description: "Send prompts to LLM models and process responses",
+      label: "Prompted Worker",
+      description: "Send prompts to an intelligence provider and process the response",
       icon: "MessageSquare",
       category: "processing",
       color: "#8b5cf6", // purple
@@ -80,7 +80,7 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   transform: {
     component: TransformNodeForm,
     info: {
-      label: "Transform",
+      label: "Data Transform",
       description: "Transform data using JavaScript expressions",
       icon: "Shuffle",
       category: "processing",
@@ -90,8 +90,8 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   output: {
     component: OutputNodeForm,
     info: {
-      label: "Output",
-      description: "Define the final output of the workflow",
+      label: "Final Deliverable",
+      description: "Define the final deliverable of the operating model",
       icon: "LogOut",
       category: "output",
       color: "#10b981", // green
@@ -170,7 +170,7 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   tool: {
     component: ToolNodeForm,
     info: {
-      label: "Tool",
+      label: "Tool Action",
       description: "Execute tools and external functions",
       icon: "Wrench",
       category: "integration",
@@ -180,8 +180,8 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   subgraph: {
     component: SubgraphNodeForm,
     info: {
-      label: "Subgraph",
-      description: "Execute another graph as a nested workflow",
+      label: "Reusable Model",
+      description: "Execute another operating model as a reusable step",
       icon: "Workflow",
       category: "integration",
       color: "#0ea5e9", // sky
@@ -190,7 +190,7 @@ export const nodeFormRegistry: Record<string, NodeFormEntry> = {
   human_gate: {
     component: HumanGateNodeForm,
     info: {
-      label: "Human Gate",
+      label: "Approval Gate",
       description: "Pause for human review and approval",
       icon: "UserCheck",
       category: "control",

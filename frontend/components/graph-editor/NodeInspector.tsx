@@ -145,7 +145,7 @@ export function NodeInspector({
           </div>
 
           <div className="space-y-2 pt-3 border-t border-border">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Graph Structure</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Structural Role</h4>
 
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-muted-foreground">Mark source as Trigger (START)</label>
@@ -190,7 +190,7 @@ export function NodeInspector({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              These settings create special START → node and node → END edges when you save.
+              These settings create special START → step and step → END edges when you save.
             </p>
           </div>
 
@@ -219,7 +219,7 @@ export function NodeInspector({
               placeholder='Example: vars.status == "done"'
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              Edge conditions influence routing when no explicit next_nodes are emitted.
+              Edge conditions influence routing when no explicit next steps are emitted.
             </p>
           </div>
         </div>
@@ -231,7 +231,7 @@ export function NodeInspector({
     // Show graph info when no node is selected
     return (
       <div className="p-4">
-        <h3 className="text-sm font-semibold text-foreground mb-4">Graph Info</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Operating Model Info</h3>
 
         {editingMetadata ? (
           <div className="space-y-4">
@@ -311,7 +311,7 @@ export function NodeInspector({
 
         <div className="mt-6 pt-4 border-t border-border">
           <p className="text-xs text-muted-foreground">
-            Select a node on the canvas to view and edit its configuration.
+            Select a step on the canvas to view and edit its configuration.
           </p>
         </div>
       </div>
@@ -343,7 +343,7 @@ export function NodeInspector({
             value={(nodeData.label as string) ?? ""}
             onChange={(e) => onUpdateNode(selectedNode.id, { label: e.target.value })}
             className="text-sm font-semibold h-8"
-            aria-label="Node name"
+            aria-label="Step name"
           />
           <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary capitalize">
             {nodeType.replace("_", " ")}
@@ -362,7 +362,7 @@ export function NodeInspector({
       </div>
 
       <div className="space-y-0">
-        {/* Node ID (read-only) */}
+        {/* Step ID (read-only) */}
         <div className="pb-3">
           <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">ID</label>
           <p className="text-xs text-muted-foreground font-mono break-all">{selectedNode.id}</p>
@@ -393,7 +393,7 @@ export function NodeInspector({
 
         {!isNote && (
           <CollapsibleSection
-            title="Graph Structure"
+            title="Structural Role"
             defaultOpen={false}
             badge={isTrigger || isEnd ? "configured" : undefined}
           >
@@ -448,7 +448,7 @@ export function NodeInspector({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Triggers create an entry edge from START → this node. End nodes create an exit edge from this node → END.
+              Triggers create an entry edge from START → this step. End steps create an exit edge from this step → END.
             </p>
           </CollapsibleSection>
         )}
@@ -600,7 +600,7 @@ function NoteNodeConfig({ text, onChange }: { text: string; onChange: (text: str
         <Textarea
           value={text}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Write a note to document this part of the workflow..."
+          placeholder="Write a note to document this part of the operating model..."
           rows={6}
           className="text-sm"
         />
@@ -1881,7 +1881,7 @@ function HumanGateNodeConfig({
         {promptError ? (
           <p className="mt-1 text-xs text-destructive">{promptError}</p>
         ) : (
-          <p className="mt-1 text-xs text-muted-foreground">Message shown to the reviewer when the workflow pauses</p>
+          <p className="mt-1 text-xs text-muted-foreground">Message shown to the reviewer when the company pauses</p>
         )}
       </div>
 

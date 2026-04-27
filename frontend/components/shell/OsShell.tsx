@@ -35,81 +35,94 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: "/overview", label: "Dashboard", icon: Gauge, section: "operate" },
-  { href: "/agents", label: "Agents", icon: BrainCircuit, section: "operate" },
-  { href: "/tasks", label: "Tasks", icon: Waypoints, section: "operate" },
-  { href: "/inbox", label: "Inbox", icon: BellRing, section: "operate" },
-  { href: "/memory", label: "Memory", icon: BookCopy, section: "operate" },
-  { href: "/accounting", label: "Accounting", icon: HandCoins, section: "operate" },
-  { href: "/library", label: "Marketplace", icon: LibraryBig, section: "build" },
-  { href: "/workflows", label: "Workflows", icon: FolderTree, section: "build" },
+  { href: "/companies", label: "Companies", icon: Building2, section: "operate" },
+  { href: "/overview", label: "Command Ops", icon: Gauge, section: "operate" },
+  { href: "/agents", label: "Departments", icon: BrainCircuit, section: "operate" },
+  { href: "/tasks", label: "Activity", icon: Waypoints, section: "operate" },
+  { href: "/inbox", label: "Approvals", icon: BellRing, section: "operate" },
+  { href: "/memory", label: "Knowledge", icon: BookCopy, section: "operate" },
+  { href: "/accounting", label: "Usage", icon: HandCoins, section: "operate" },
+  { href: "/library", label: "Assets", icon: LibraryBig, section: "build" },
+  { href: "/workflows", label: "Advanced", icon: FolderTree, section: "build" },
   { href: "/settings", label: "Settings", icon: ShieldCheck, section: "build" },
 ];
 
 const pageMeta = (pathname: string) => {
+  if (pathname.startsWith("/companies/new")) {
+    return {
+      title: "Create Company",
+      description: "Build an AI-driven company with departments, capabilities, autonomy policy, and AI access mode.",
+    };
+  }
+  if (pathname.startsWith("/companies")) {
+    return {
+      title: "Company Workspace",
+      description: "Operate a company, review current operations, inspect deliverables, and make command decisions.",
+    };
+  }
   if (pathname.startsWith("/overview")) {
     return {
-      title: "Organization Dashboard",
-      description: "Active agents, open work, pending approvals, cost, and risk across the organization.",
+      title: "Command Ops",
+      description: "See company posture, active work, approvals, usage, and attention points from one command surface.",
     };
   }
   if (pathname.startsWith("/agents")) {
     return {
-      title: "Agent Supervision",
-      description: "Inspect agent state, decisions, memory, and interventions without dropping into raw logs.",
+      title: "Departments",
+      description: "Understand the departments and AI workers currently shaping company work.",
     };
   }
   if (pathname.startsWith("/tasks")) {
     return {
-      title: "Task Control",
-      description: "Track units of work across agents, current step ownership, and waiting states.",
+      title: "Department Activity",
+      description: "Track work in motion, blocked work, and the next operator action.",
     };
   }
   if (pathname.startsWith("/inbox") || pathname.startsWith("/approvals")) {
     return {
-      title: "Human-in-the-loop Inbox",
-      description: "Review consequential actions, edit before approval, and understand operational impact.",
+      title: "Approvals",
+      description: "Review consequential company decisions with context before work resumes.",
     };
   }
   if (pathname.startsWith("/accounting")) {
     return {
-      title: "Accounting",
-      description: "Economic posture for the AI organization, from daily spend to workflow profitability.",
+      title: "Usage And Budget",
+      description: "Track AI usage, spend concentration, and company operating limits.",
     };
   }
   if (pathname.startsWith("/library") || pathname.startsWith("/prompts")) {
     return {
-      title: "Prompt Marketplace",
-      description: "Reusable prompts, governed components, and visibility controls across teams.",
+      title: "Assets And Playbooks",
+      description: "Reusable prompts, templates, and governed building blocks for company operations.",
     };
   }
   if (pathname.startsWith("/workflows") || pathname.startsWith("/graphs")) {
     return {
-      title: "Workflow Workspace",
-      description: "Definitions, revisions, and execution visibility for the builder workspace.",
+      title: "Advanced Operating Model Editor",
+      description: "Advanced operating-model authoring for expert users. This is not the primary company experience.",
     };
   }
   if (pathname.startsWith("/executions") || pathname.startsWith("/runs")) {
     return {
-      title: "Execution Visibility",
-      description: "Follow a task as it moves across agents, tools, and decisions.",
+      title: "Operation Detail",
+      description: "Inspect one operation, its department activity, deliverables, and decision points.",
     };
   }
   if (pathname.startsWith("/memory")) {
     return {
-      title: "Memory Inspection",
-      description: "Recent context, long-term knowledge, and retrieval quality across the system.",
+      title: "Company Knowledge",
+      description: "Inspect retained knowledge, context, and memory quality for the operating company.",
     };
   }
   if (pathname.startsWith("/settings") || pathname.startsWith("/admin")) {
     return {
-      title: "Settings",
-      description: "Identity, governance, marketplace operations, and administrative controls.",
+      title: "Operating Environment",
+      description: "Configure identity, AI access, governance, and support controls for the workspace.",
     };
   }
   return {
     title: "ForgeGraph",
-    description: "Operating system for AI-native organizations.",
+    description: "AI Company Operating System.",
   };
 };
 
@@ -167,7 +180,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
       <div className="flex min-h-screen">
         <aside className="hidden w-[18.5rem] shrink-0 border-r border-sidebar-border bg-sidebar/95 px-5 py-5 backdrop-blur-2xl lg:flex lg:flex-col">
           <Link
-            href="/overview"
+            href="/companies"
             className="glass-panel flex items-center gap-3 rounded-[1.5rem] border border-sidebar-border px-4 py-4"
           >
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground">
@@ -175,23 +188,23 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
             </div>
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">ForgeGraph</p>
-              <p className="truncate text-base font-semibold text-sidebar-foreground">AI Organization OS</p>
+              <p className="truncate text-base font-semibold text-sidebar-foreground">AI Company OS</p>
             </div>
           </Link>
 
           <div className="mt-6 rounded-[1.5rem] border border-sidebar-border bg-sidebar-accent px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Scope</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Workspace</p>
             <button
               type="button"
               className="mt-3 flex w-full items-center justify-between rounded-2xl border border-sidebar-border bg-white/80 px-3 py-2 text-left text-sm dark:bg-white/5"
             >
               <span className="truncate font-medium">
-                {user?.default_organization_id ? "Default organization" : "Personal workspace"}
+                {user?.default_organization_id ? "Company workspace" : "Personal workspace"}
               </span>
               <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
             </button>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Summaries first, traces on demand. State is the primary interface.
+              Create companies, launch operations, and intervene only when the company needs you.
             </p>
           </div>
 
@@ -199,7 +212,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
             {(["operate", "build"] as const).map((section) => (
               <div key={section}>
                 <p className="px-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                  {section === "operate" ? "Operate" : "Build"}
+                  {section === "operate" ? "Operate" : "Advanced"}
                 </p>
                 <nav className="mt-2 space-y-1.5">
                   {items
@@ -248,10 +261,11 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
               Operating posture
             </p>
             <p className="mt-3 text-lg font-semibold" style={{ fontFamily: "var(--font-serif)" }}>
-              Digital company, not chatbot.
+              Company first. Engine second.
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-300 dark:text-slate-300">
-              Agents, tasks, memory, costs, and approvals stay inspectable from the same shell.
+              The shell should always answer four things: what the company is doing, what it produced, what is blocked,
+              and what to do next.
             </p>
           </div>
         </aside>

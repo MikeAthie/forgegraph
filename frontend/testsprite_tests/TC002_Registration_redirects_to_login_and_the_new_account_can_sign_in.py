@@ -55,13 +55,13 @@ async def run_test():
         elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div[3]/input').nth(0)
         await asyncio.sleep(3); await elem.fill('Aa1StrongPass1!')
         
-        # -> Click the 'Create account' button to submit the registration, wait for the page to navigate/settle, then verify redirect and success message. After that, sign in with the new credentials and navigate to /workflows (or use the Workflows nav) to confirm protected access.
+        # -> Click the 'Create account' button to submit the registration, wait for the page to navigate/settle, then verify redirect and success message. After that, sign in with the new credentials and navigate to /companies to confirm protected access.
         frame = context.pages[-1]
         # Click element
         elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
         await asyncio.sleep(3); await elem.click()
         
-        # -> Enter the newly registered email and password on the login form and submit sign in. After login, navigate to /workflows (or use the Workflows nav) and verify the workflows/graphs list page is displayed.
+        # -> Enter the newly registered email and password on the login form and submit sign in. After login, navigate to /companies and verify the company workspace list page is displayed.
         frame = context.pages[-1]
         # Input text
         elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/div/input').nth(0)

@@ -18,6 +18,7 @@ class TestOnboardingMilestones:
         assert "select_template" in keys
         assert "attach_credential" in keys
         assert "run_template" in keys
+        assert "company_first_run_explained" in keys
 
     def test_complete_milestone(self, authenticated_client):
         response = authenticated_client.post(

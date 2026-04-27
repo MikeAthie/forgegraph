@@ -28,6 +28,7 @@ import {
   type NodeRunItem,
   type RunDetail,
 } from "@/lib/api";
+import { getDepartmentTaskLabel, translateRunStatus } from "@/lib/company-workspace";
 
 const formatTracePayload = (value: unknown) => {
   if (value === null || value === undefined) {
@@ -560,20 +561,20 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
 
   const inspector = selectedStep ? (
     <InspectorPanel
-      title={selectedStep.node_id}
+      title={getDepartmentTaskLabel(selectedStep, null)}
       subtitle="The inspector keeps canonical input and output adjacent to a short summary so the operator can inspect only when needed."
       sections={[
         {
-          title: "Step metadata",
+          title: "Department activity metadata",
           content: (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span>Status</span>
-                <StatusBadge status={selectedStep.status} />
+                <StatusBadge status={translateRunStatus(String(selectedStep.status))} />
               </div>
               <div className="flex items-center justify-between">
-                <span>Type</span>
-                <span>{selectedStep.node_type}</span>
+                <span>Activity</span>
+                <span>{getDepartmentTaskLabel(selectedStep, null)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Duration</span>
@@ -611,9 +612,9 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
       <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
-            eyebrow="Workflow execution"
-            title="Execution trace"
-            description="Failures, decisions, and bottlenecks come first. Routine step noise stays collapsed until the operator explicitly expands it."
+            eyebrow="Operation detail"
+            title="Operation trace"
+            description="Failures, decisions, and bottlenecks come first. Routine department activity stays collapsed until the operator explicitly expands it."
             action={
               <div className="flex items-center gap-2">
                 <StatusBadge
@@ -621,7 +622,7 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                   label={liveStatus === "active" ? "Live updates" : liveStatus === "pending" ? "Connecting" : "Offline"}
                 />
                 <Button asChild variant="outline" className="rounded-full">
-                  <Link href="/executions">Back to executions</Link>
+                  <Link href="/executions">Back to operations</Link>
                 </Button>
               </div>
             }
@@ -663,10 +664,10 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                   </div>
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Failure point
+                      Attention point
                     </p>
                     <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
-                      {failedStep ? failedStep.node_id : "No failure detected"}
+                      {failedStep ? getDepartmentTaskLabel(failedStep, null) : "No failure detected"}
                     </p>
                   </div>
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -675,7 +676,7 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                     </p>
                     <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
                       {bottleneckStep
-                        ? `${bottleneckStep.node_id} · ${formatDuration(bottleneckStep.duration_ms)}`
+                        ? `${getDepartmentTaskLabel(bottleneckStep, null)} · ${formatDuration(bottleneckStep.duration_ms)}`
                         : "No bottleneck flagged"}
                     </p>
                   </div>
@@ -683,16 +684,20 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
               </Panel>
 
               <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
-                <Panel title="Attention points" description="The steps that matter most to an operator right now.">
+                <Panel
+                  title="Attention points"
+                  description="The department activity that matters most to an operator right now."
+                >
                   {failedStep || decisionStep || bottleneckStep ? (
                     <div className="space-y-3">
                       {failedStep ? (
                         <div className="rounded-[1.2rem] border border-rose-800/12 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold">Failure</p>
+                              <p className="text-sm font-semibold">Needs attention</p>
                               <p className="mt-2 text-sm leading-7">
-                                {failedStep.node_id} failed. Inspect this step first before replaying the run.
+                                {getDepartmentTaskLabel(failedStep, null)} needs attention. Inspect this activity before
+                                replaying the operation.
                               </p>
                             </div>
                             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -703,7 +708,8 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                         <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 px-4 py-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
                           <p className="text-sm font-semibold">Decision boundary</p>
                           <p className="mt-2 text-sm leading-7">
-                            {decisionStep.node_id} is waiting on a human decision or approval boundary.
+                            {getDepartmentTaskLabel(decisionStep, null)} is waiting on a human decision or approval
+                            boundary.
                           </p>
                         </div>
                       ) : null}
@@ -713,8 +719,9 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                             <div>
                               <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Bottleneck</p>
                               <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                                {bottleneckStep.node_id} consumed {formatDuration(bottleneckStep.duration_ms)} and is
-                                materially slower than the rest of the trace.
+                                {getDepartmentTaskLabel(bottleneckStep, null)} consumed{" "}
+                                {formatDuration(bottleneckStep.duration_ms)} and is materially slower than the rest of
+                                the operation.
                               </p>
                             </div>
                             <Clock3 className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />
@@ -730,7 +737,10 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                   )}
                 </Panel>
 
-                <Panel title="Execution posture" description="Operator-oriented summary of the current run state.">
+                <Panel
+                  title="Operation posture"
+                  description="Operator-oriented summary of the current operation state."
+                >
                   <KeyValueGrid
                     columns={2}
                     items={[
@@ -756,8 +766,8 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
               </div>
 
               <Panel
-                title="Trace sequence"
-                description="Routine steps are collapsed by default so the operator can focus on failures, decisions, and bottlenecks first."
+                title="Department activity"
+                description="Routine activity is collapsed by default so the operator can focus on failures, decisions, and bottlenecks first."
                 action={
                   run.node_runs.length > 3 ? (
                     <Button
@@ -768,12 +778,12 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                     >
                       {showAllSteps ? (
                         <>
-                          Collapse noise
+                          Collapse routine activity
                           <ChevronUp className="h-4 w-4" />
                         </>
                       ) : (
                         <>
-                          Show all steps
+                          Show all activity
                           <ChevronDown className="h-4 w-4" />
                         </>
                       )}
@@ -786,8 +796,8 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                     {!showAllSteps && traceState.hiddenRoutineCount > 0 ? (
                       <div className="flex items-center gap-2 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 text-sm text-slate-600 dark:border-white/8 dark:text-slate-300">
                         <Filter className="h-4 w-4" />
-                        {traceState.hiddenRoutineCount} routine step{traceState.hiddenRoutineCount === 1 ? "" : "s"}{" "}
-                        collapsed.
+                        {traceState.hiddenRoutineCount} routine activit
+                        {traceState.hiddenRoutineCount === 1 ? "y" : "ies"} collapsed.
                       </div>
                     ) : null}
 
@@ -819,10 +829,10 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                  {step.node_id}
+                                  {getDepartmentTaskLabel(step, null)}
                                 </p>
-                                <StatusBadge status={step.status} />
-                                <StatusBadge status="pending" label={step.node_type} />
+                                <StatusBadge status={translateRunStatus(String(step.status))} />
+                                <StatusBadge status="pending" label="department activity" />
                                 {isDecision ? <StatusBadge status="paused" label="decision" /> : null}
                                 {isBottleneck ? <StatusBadge status="pending" label="bottleneck" /> : null}
                               </div>
@@ -856,7 +866,7 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                               {tone === "rose" ? (
                                 <div className="rounded-2xl border border-rose-800/15 bg-rose-50 px-3 py-2 text-rose-900 dark:border-rose-200/20 dark:bg-rose-500/10 dark:text-rose-100">
                                   <p className="text-[11px] uppercase tracking-[0.16em]">Failure</p>
-                                  <p className="mt-1 text-xs">Execution requires intervention here.</p>
+                                  <p className="mt-1 text-xs">This activity requires intervention here.</p>
                                 </div>
                               ) : null}
                             </div>
@@ -867,14 +877,14 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                   </div>
                 ) : (
                   <EmptyBlock
-                    title="No steps available"
-                    description="This execution has not emitted any node-level steps yet."
+                    title="No activity available"
+                    description="This operation has not emitted any department activity yet."
                   />
                 )}
               </Panel>
 
               <div className="grid gap-6 2xl:grid-cols-2">
-                <Panel title="Execution state" description="Canonical timing, queue status, and memory posture.">
+                <Panel title="Operation state" description="Canonical timing, queue status, and memory posture.">
                   <KeyValueGrid
                     columns={2}
                     items={[
@@ -886,19 +896,22 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                   />
                 </Panel>
 
-                <Panel title="Human gate" description="Decision context stays readable and close to the main trace.">
+                <Panel
+                  title="Approval gate"
+                  description="Decision context stays readable and close to the main operation trace."
+                >
                   {run.paused_node_id ? (
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                       <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
                         {run.pause_payload?.node_name ?? run.paused_node_id}
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                        {run.pause_payload?.prompt_message ?? "Execution is waiting on human approval."}
+                        {run.pause_payload?.prompt_message ?? "This operation is waiting on human approval."}
                       </p>
                       <div className="mt-4">
                         <Button asChild size="sm" className="rounded-full">
                           <Link href="/inbox">
-                            Open inbox
+                            Open approvals
                             <ArrowRight className="h-4 w-4" />
                           </Link>
                         </Button>
@@ -906,8 +919,8 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                     </div>
                   ) : (
                     <EmptyBlock
-                      title="No active human gate"
-                      description="This execution is not currently paused for approval."
+                      title="No active approval gate"
+                      description="This operation is not currently paused for approval."
                     />
                   )}
                 </Panel>

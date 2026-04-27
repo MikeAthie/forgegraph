@@ -18,8 +18,8 @@ type SettingsArea = {
 
 const SETTINGS_AREAS: SettingsArea[] = [
   {
-    title: "Organization",
-    description: "Members, roles, default ownership, and tenant structure.",
+    title: "Workspace Access",
+    description: "Members, roles, default ownership, and workspace structure.",
     href: "/admin/organization",
     accessLabel: "All signed-in users",
     section: "workspace",
@@ -27,7 +27,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
   },
   {
     title: "Credentials",
-    description: "Manage provider credentials and OAuth connections used by workflows and agents.",
+    description: "Manage provider credentials and OAuth connections used by company operations and AI workers.",
     href: "/credentials",
     accessLabel: "Workspace operators",
     section: "workspace",
@@ -35,7 +35,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
   },
   {
     title: "Identity",
-    description: "SSO and SCIM configuration for organization-wide access control.",
+    description: "SSO and SCIM configuration for workspace-wide access control.",
     href: "/admin/sso",
     accessLabel: "Owner and admin",
     section: "governance",
@@ -110,7 +110,7 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
               },
               {
                 title: "Scope",
-                content: user?.default_organization_id ? "Organization settings" : "Personal workspace settings",
+                content: user?.default_organization_id ? "Workspace settings" : "Personal workspace settings",
               },
               {
                 title: "Current role",
@@ -126,7 +126,7 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
             title={mode === "settings" ? "Configure the operating environment" : "Govern the operating environment"}
             description={
               mode === "settings"
-                ? "Settings should be a truthful home for credentials, organization configuration, identity, billing, and policy controls."
+                ? "Settings should be a truthful home for credentials, workspace access, identity, billing, and policy controls."
                 : "Governance remains available as a legacy route, but it now follows the same settings structure and language."
             }
           />

@@ -30,7 +30,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push("/overview");
+      router.push("/companies");
     }
   }, [loading, isAuthenticated, router]);
 
@@ -114,7 +114,9 @@ export default function RegisterPage() {
         <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-2xl font-bold">Create account</CardTitle>
-            <CardDescription className="text-base mt-1">Get started with ForgeGraph for free</CardDescription>
+            <CardDescription className="text-base mt-1">
+              Start building and operating AI-driven companies
+            </CardDescription>
           </CardHeader>
 
           <CardContent className="pt-4">

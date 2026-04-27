@@ -19,7 +19,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">ForgeGraph</p>
-              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">AI Organization OS</p>
+              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">AI Company OS</p>
             </div>
           </Link>
           <div className="flex items-center gap-2">
@@ -45,11 +45,11 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                 className="mt-4 max-w-3xl text-5xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
                 style={{ fontFamily: "var(--font-serif)" }}
               >
-                Sign in to supervise agents, decisions, memory, and cost from one operating surface.
+                Sign in to create and operate AI-driven companies from one workspace.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
-                ForgeGraph opens on organizational state, not on builder chrome. Authentication should feel aligned with
-                that product posture.
+                ForgeGraph opens on company work, approvals, deliverables, and operating controls instead of raw graph
+                tooling.
               </p>
             </section>
 

@@ -85,7 +85,7 @@ describe("AdminBillingPage", () => {
       expect(screen.getByText(/plan entitlements/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/runtime guardrails/i)).toBeInTheDocument();
+    expect(screen.getByText(/operating guardrails/i)).toBeInTheDocument();
     expect(screen.getByText(/^1\. Plan entitlement$/i)).toBeInTheDocument();
     expect(screen.getByText(/^2\. Tenant quota$/i)).toBeInTheDocument();
     expect(screen.getByText(/^3\. Budget$/i)).toBeInTheDocument();

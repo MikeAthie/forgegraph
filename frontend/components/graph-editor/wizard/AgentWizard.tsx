@@ -88,7 +88,7 @@ function buildBlueprintFromState(stepData: Record<string, unknown>): AgentWizard
   const outputData = (stepData.output as WizardOutputData | undefined) ?? {};
 
   const seed: AgentWizardPresetSeed = {
-    agentLabel: roleData.agentLabel?.trim() || "Agent Node",
+    agentLabel: roleData.agentLabel?.trim() || "AI Worker Step",
     instructions: roleData.instructions?.trim() || "",
     system_prompt: roleData.systemPrompt?.trim() || undefined,
     provider: roleData.provider || "openai",
@@ -118,8 +118,8 @@ function StartNodeStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Choose a starter if you want seeded tools and instructions, or continue with a blank agent setup and define the
-        flow step by step.
+        Choose a starter if you want seeded tools and instructions, or continue with a blank AI worker setup and define
+        the operating model step by step.
       </p>
 
       <div className="space-y-2">
@@ -156,9 +156,9 @@ function StartNodeStep() {
           <>
             <Bot className="w-5 h-5 text-muted-foreground shrink-0" />
             <div>
-              <p className="text-sm font-medium">Blank agent setup</p>
+              <p className="text-sm font-medium">Blank AI worker setup</p>
               <p className="text-xs text-muted-foreground">
-                The wizard will create a real agent node plus an output node when you finish.
+                The wizard will create a real AI worker step plus a deliverable step when you finish.
               </p>
             </div>
           </>
@@ -207,7 +207,7 @@ function PresetButton({
 function RoleStep() {
   const { setCanProceed, state, setStepData } = useWizard();
   const initial = (state.stepData.role as WizardRoleData | undefined) ?? {};
-  const [agentLabel, setAgentLabel] = useState(initial.agentLabel || "Agent Node");
+  const [agentLabel, setAgentLabel] = useState(initial.agentLabel || "AI Worker Step");
   const [instructions, setInstructions] = useState(initial.instructions || "");
   const [systemPrompt, setSystemPrompt] = useState(initial.systemPrompt || "");
   const [provider, setProvider] = useState(initial.provider || "openai");
@@ -248,19 +248,19 @@ function RoleStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Define the actual runtime behavior for the new agent node. These values become the node config the engine
-        executes.
+        Define the actual runtime behavior for the new AI worker step. These values become the advanced step config the
+        engine executes.
       </p>
 
       <div className="space-y-4">
         <div>
           <label htmlFor="agent-label" className="text-sm font-medium">
-            Agent Label <span className="text-destructive">*</span>
+            Step Label <span className="text-destructive">*</span>
           </label>
           <Input
             id="agent-label"
             type="text"
-            placeholder="Customer Support Agent"
+            placeholder="Customer Success Department"
             value={agentLabel}
             onChange={(event) => setAgentLabel(event.target.value)}
             className="mt-1"
@@ -418,7 +418,7 @@ function ToolsStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Configure the exact tools the agent is allowed to call. The runtime enforces this list.
+        Configure the exact tools this AI worker is allowed to call. The runtime enforces this list.
       </p>
 
       <div>
@@ -449,7 +449,7 @@ function ToolsStep() {
           className="mt-1 resize-none font-mono text-sm"
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          These tools stop the run with an approval-required outcome before execution.
+          These tools pause the operation with an approval-required outcome before execution.
         </p>
       </div>
 
@@ -477,19 +477,19 @@ function MemoryStep() {
     {
       id: "none" as const,
       label: "No Memory",
-      description: "Create a simple agent-plus-output flow.",
+      description: "Create a simple AI-worker-plus-deliverable flow.",
       icon: FileOutput,
     },
     {
       id: "session" as const,
       label: "Session Memory",
-      description: "Keep the flow simple now. Add persistent storage later if you need it.",
+      description: "Keep the operating model simple now. Add persistent storage later if you need it.",
       icon: Brain,
     },
     {
       id: "persistent" as const,
       label: "Persistent Memory",
-      description: "Add memory load/store nodes around the agent.",
+      description: "Add memory load/store steps around the AI worker.",
       icon: Brain,
     },
   ];
@@ -497,8 +497,8 @@ function MemoryStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Choose whether the wizard should wrap the agent with memory nodes. Persistent mode adds explicit memory
-        read/write steps to the graph.
+        Choose whether the wizard should wrap the AI worker with memory steps. Persistent mode adds explicit memory
+        read/write steps to the operating model.
       </p>
 
       <div className="space-y-2">
@@ -547,16 +547,19 @@ function OutputStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Define the key exposed by the final output node. The wizard will map the agent final answer into this field.
+        Define the key exposed by the final deliverable step. The wizard will map the AI worker&apos;s final answer into
+        this field.
       </p>
 
       <div className="p-4 border rounded-lg flex items-center gap-3 border-emerald-500/50 bg-emerald-500/10">
         <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
         <div>
           <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-            Output node will be created automatically
+            Deliverable step will be created automatically
           </p>
-          <p className="text-xs text-muted-foreground">You do not need to add an Output node manually anymore.</p>
+          <p className="text-xs text-muted-foreground">
+            You do not need to add a final deliverable step manually anymore.
+          </p>
         </div>
       </div>
 
@@ -604,7 +607,7 @@ function ReviewStep() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
-        Review the workflow the wizard will generate. Finish to create the nodes on the canvas.
+        Review the operating model the wizard will generate. Finish to create the steps on the canvas.
       </p>
 
       <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
@@ -613,7 +616,7 @@ function ReviewStep() {
           <span>{preset?.name || "Custom"}</span>
         </div>
         <div className="flex justify-between items-center text-sm">
-          <span className="text-muted-foreground">Agent label</span>
+          <span className="text-muted-foreground">Step label</span>
           <span>{roleData.agentLabel || "Missing"}</span>
         </div>
         <div className="flex justify-between items-center text-sm">
@@ -621,7 +624,7 @@ function ReviewStep() {
           <span>{roleData.model || "Missing"}</span>
         </div>
         <div className="flex justify-between items-center text-sm">
-          <span className="text-muted-foreground">Allowed tools</span>
+          <span className="text-muted-foreground">Allowed tool actions</span>
           <span>{tools.length}</span>
         </div>
         <div className="flex justify-between items-center text-sm">
@@ -629,16 +632,16 @@ function ReviewStep() {
           <span className="capitalize">{memoryData.type || "none"}</span>
         </div>
         <div className="flex justify-between items-center text-sm">
-          <span className="text-muted-foreground">Output key</span>
+          <span className="text-muted-foreground">Deliverable key</span>
           <span>{outputData.outputKey || "response"}</span>
         </div>
       </div>
 
       {!isValid && (
         <div className="p-3 border border-destructive/50 bg-destructive/10 rounded-lg space-y-2">
-          <p className="text-sm font-medium text-destructive">The agent setup is incomplete.</p>
+          <p className="text-sm font-medium text-destructive">The AI worker setup is incomplete.</p>
           <ul className="text-xs text-destructive/80 list-disc list-inside space-y-1">
-            {!roleData.agentLabel?.trim() && <li>Add an agent label.</li>}
+            {!roleData.agentLabel?.trim() && <li>Add a step label.</li>}
             {!roleData.instructions?.trim() && <li>Add task instructions.</li>}
             {!roleData.model?.trim() && <li>Select a model.</li>}
             {tools.length === 0 && <li>Add at least one allowed tool.</li>}
@@ -652,8 +655,8 @@ function ReviewStep() {
         <div className="flex items-center gap-2 p-3 border border-emerald-500/50 bg-emerald-500/10 rounded-lg">
           <Sparkles className="w-5 h-5 text-emerald-500" />
           <div>
-            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Agent flow ready</p>
-            <p className="text-xs text-muted-foreground">Finish to add a real agent workflow to the canvas.</p>
+            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">AI worker flow ready</p>
+            <p className="text-xs text-muted-foreground">Finish to add a real AI worker flow to the canvas.</p>
           </div>
         </div>
       )}
@@ -718,7 +721,7 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Agent Wizard"
+      aria-label="Operating Model Wizard"
       className={cn("fixed inset-0 z-50 flex items-center justify-center", className)}
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleExit} />

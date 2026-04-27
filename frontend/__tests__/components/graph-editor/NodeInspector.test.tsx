@@ -47,11 +47,11 @@ describe("NodeInspector", () => {
     jest.clearAllMocks();
   });
 
-  describe("No Node Selected - Graph Info Display", () => {
-    it("should display 'Graph Info' header when no node is selected", () => {
+  describe("No Node Selected - Operating Model Info Display", () => {
+    it("should display 'Operating Model Info' header when no node is selected", () => {
       render(<NodeInspector {...defaultProps} />);
 
-      expect(screen.getByText("Graph Info")).toBeInTheDocument();
+      expect(screen.getByText("Operating Model Info")).toBeInTheDocument();
     });
 
     it("should display graph name", () => {
@@ -83,7 +83,7 @@ describe("NodeInspector", () => {
     it("should display helper text about selecting nodes", () => {
       render(<NodeInspector {...defaultProps} />);
 
-      expect(screen.getByText("Select a node on the canvas to view and edit its configuration.")).toBeInTheDocument();
+      expect(screen.getByText("Select a step on the canvas to view and edit its configuration.")).toBeInTheDocument();
     });
   });
 
@@ -196,7 +196,7 @@ describe("NodeInspector", () => {
       render(<NodeInspector {...defaultProps} selectedNode={promptNode} />);
 
       // The redesigned header shows a name input and a type badge instead of "Node Config"
-      expect(screen.getByRole("textbox", { name: /node name/i })).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: /step name/i })).toBeInTheDocument();
       expect(screen.getByDisplayValue("My Prompt Node")).toBeInTheDocument();
       expect(screen.getByText("prompt")).toBeInTheDocument();
     });

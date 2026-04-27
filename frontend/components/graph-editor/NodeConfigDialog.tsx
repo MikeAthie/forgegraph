@@ -29,14 +29,14 @@ export interface NodeFormProps {
  * Node type display info
  */
 const NODE_TYPE_INFO: Record<string, { label: string; color: string; icon: string }> = {
-  [NODE_TYPES.AGENT]: { label: "Agent", color: "bg-sky-500", icon: "A" },
-  [NODE_TYPES.PROMPT]: { label: "Prompt", color: "bg-violet-500", icon: "P" },
+  [NODE_TYPES.AGENT]: { label: "AI Worker", color: "bg-sky-500", icon: "A" },
+  [NODE_TYPES.PROMPT]: { label: "Prompted Worker", color: "bg-violet-500", icon: "P" },
   [NODE_TYPES.HTTP]: { label: "HTTP", color: "bg-blue-500", icon: "H" },
-  [NODE_TYPES.TRANSFORM]: { label: "Transform", color: "bg-amber-500", icon: "T" },
-  [NODE_TYPES.OUTPUT]: { label: "Output", color: "bg-emerald-500", icon: "O" },
+  [NODE_TYPES.TRANSFORM]: { label: "Data Transform", color: "bg-amber-500", icon: "T" },
+  [NODE_TYPES.OUTPUT]: { label: "Final Deliverable", color: "bg-emerald-500", icon: "O" },
   [NODE_TYPES.BRANCH]: { label: "Branch", color: "bg-orange-500", icon: "B" },
   [NODE_TYPES.MERGE]: { label: "Merge", color: "bg-cyan-500", icon: "M" },
-  [NODE_TYPES.HUMAN_GATE]: { label: "Human Gate", color: "bg-rose-500", icon: "G" },
+  [NODE_TYPES.HUMAN_GATE]: { label: "Approval Gate", color: "bg-rose-500", icon: "G" },
   [NODE_TYPES.MEMORY]: { label: "Memory", color: "bg-indigo-500", icon: "M" },
   [NODE_TYPES.OBSERVATION_SAVE]: {
     label: "Observation Save",
@@ -58,8 +58,8 @@ const NODE_TYPE_INFO: Record<string, { label: string; color: string; icon: strin
     color: "bg-violet-700",
     icon: "TL",
   },
-  [NODE_TYPES.TOOL]: { label: "Tool", color: "bg-teal-500", icon: "T" },
-  [NODE_TYPES.SUBGRAPH]: { label: "Subgraph", color: "bg-purple-500", icon: "S" },
+  [NODE_TYPES.TOOL]: { label: "Tool Action", color: "bg-teal-500", icon: "T" },
+  [NODE_TYPES.SUBGRAPH]: { label: "Reusable Model", color: "bg-purple-500", icon: "S" },
 };
 
 export interface NodeConfigDialogProps {
@@ -78,7 +78,7 @@ export interface NodeConfigDialogProps {
 function DefaultNodeForm({ config, onChange }: NodeFormProps) {
   return (
     <div className="py-4">
-      <p className="text-sm text-muted-foreground">Configure this node using the inspector panel after creation.</p>
+      <p className="text-sm text-muted-foreground">Configure this step using the inspector panel after creation.</p>
       <pre className="mt-4 p-3 bg-muted rounded-md text-xs overflow-auto max-h-48">
         {JSON.stringify(config, null, 2)}
       </pre>
@@ -182,9 +182,9 @@ export function NodeConfigDialog({
                 {typeInfo.icon}
               </div>
               <div className="flex-1">
-                <DialogTitle className="text-lg">Configure {typeInfo.label} Node</DialogTitle>
+                <DialogTitle className="text-lg">Configure {typeInfo.label} Step</DialogTitle>
                 <DialogDescription className="text-sm">
-                  Set up the node configuration before adding it to your workflow.
+                  Set up this advanced operating-model step before adding it to the canvas.
                 </DialogDescription>
               </div>
             </div>
@@ -193,7 +193,7 @@ export function NodeConfigDialog({
           {/* Node Label */}
           <div className="px-1">
             <label className="text-sm font-medium" htmlFor="node-label">
-              Node Label
+              Step Label
             </label>
             <input
               id="node-label"
@@ -234,7 +234,7 @@ export function NodeConfigDialog({
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={hasErrors}>
-              Add Node
+              Add Step
             </Button>
           </DialogFooter>
         </DialogContent>
