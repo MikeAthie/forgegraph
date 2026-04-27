@@ -17,30 +17,28 @@ test.beforeAll(async ({ request }, testInfo) => {
   await ensureUserRegistered(request, seededUser);
 });
 
-test.describe("Workflow Definitions", () => {
+test.describe("Advanced Operating Models", () => {
   test.beforeEach(async ({ page }) => {
     await login(page, seededUser);
   });
 
-  test("shows the workflow workspace page", async ({ page }) => {
+  test("shows the advanced operating model workspace page", async ({ page }) => {
     await gotoWithRetry(page, "/workflows");
 
-    await expect(
-      page.getByRole("heading", { name: /definitions, revisions, and execution visibility/i }),
-    ).toBeVisible();
-    await expect(page.getByRole("link", { name: /open editor/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /manage operating models and saved versions/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /new operating model/i })).toBeVisible();
   });
 
   test("keeps the legacy /graphs route available", async ({ page }) => {
     await gotoWithRetry(page, "/graphs");
 
-    await expect(page.getByRole("heading", { name: /manage definitions and revisions/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^new workflow$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /manage operating models and saved versions/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^new operating model$/i })).toBeVisible();
   });
 
-  test("validates workflow creation requires a name", async ({ page }) => {
+  test("validates advanced operating model creation requires a name", async ({ page }) => {
     await gotoWithRetry(page, "/graphs");
-    await page.getByRole("button", { name: /^new workflow$/i }).click();
+    await page.getByRole("button", { name: /^new operating model$/i }).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -49,11 +47,11 @@ test.describe("Workflow Definitions", () => {
     await expect(dialog.getByText(/name is required/i)).toBeVisible();
   });
 
-  test("creates a workflow and opens the editor", async ({ page }) => {
+  test("creates an operating model and opens the editor", async ({ page }) => {
     const graphName = createGraphName("E2E Workflow");
 
     await gotoWithRetry(page, "/graphs");
-    await page.getByRole("button", { name: /^new workflow$/i }).click();
+    await page.getByRole("button", { name: /^new operating model$/i }).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -64,14 +62,14 @@ test.describe("Workflow Definitions", () => {
 
     await expectGraphEditorOpen(page);
     await expect(page.getByRole("heading", { name: graphName, exact: true })).toBeVisible();
-    await expect(page.getByText(/workflow editor/i)).toBeVisible();
+    await expect(page.getByText(/advanced operating model editor/i)).toBeVisible();
   });
 
-  test("edits a workflow from the definitions list", async ({ page }) => {
+  test("edits an operating model from the list", async ({ page }) => {
     const graphName = createGraphName("E2E Workflow Edit");
 
     await gotoWithRetry(page, "/graphs");
-    await page.getByRole("button", { name: /^new workflow$/i }).click();
+    await page.getByRole("button", { name: /^new operating model$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
     await page
       .getByRole("dialog")
@@ -87,7 +85,7 @@ test.describe("Workflow Definitions", () => {
     await graphCard.getByRole("button", { name: /^edit$/i }).click();
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText(/edit workflow definition/i)).toBeVisible();
+    await expect(dialog.getByText(/edit advanced operating model/i)).toBeVisible();
 
     const updatedName = createGraphName("E2E Workflow Updated");
     await page.locator("#edit-graph-name").fill(updatedName);
@@ -97,11 +95,11 @@ test.describe("Workflow Definitions", () => {
     await expect(page.getByRole("link", { name: updatedName })).toBeVisible();
   });
 
-  test("deletes a workflow definition with confirmation", async ({ page }) => {
+  test("deletes an operating model with confirmation", async ({ page }) => {
     const graphName = createGraphName("E2E Workflow Delete");
 
     await gotoWithRetry(page, "/graphs");
-    await page.getByRole("button", { name: /^new workflow$/i }).click();
+    await page.getByRole("button", { name: /^new operating model$/i }).click();
     await page.locator("#create-graph-name").fill(graphName);
     await page
       .getByRole("dialog")

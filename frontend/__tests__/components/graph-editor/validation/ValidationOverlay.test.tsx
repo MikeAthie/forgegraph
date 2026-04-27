@@ -74,8 +74,8 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.getByText("Add Start Node")).toBeInTheDocument();
-      expect(screen.getByText("Click to add entry point")).toBeInTheDocument();
+      expect(screen.getByText("Add Entry Step")).toBeInTheDocument();
+      expect(screen.getByText("Click to add the operating entry point")).toBeInTheDocument();
     });
 
     it("should not show start node indicator when hasStartNode is true", () => {
@@ -93,7 +93,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.queryByText("Add Start Node")).not.toBeInTheDocument();
+      expect(screen.queryByText("Add Entry Step")).not.toBeInTheDocument();
     });
 
     it("should not show start node indicator when NO_START_NODE error is absent", () => {
@@ -107,7 +107,7 @@ describe("ValidationOverlay", () => {
         <ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />,
       );
 
-      expect(screen.queryByText("Add Start Node")).not.toBeInTheDocument();
+      expect(screen.queryByText("Add Entry Step")).not.toBeInTheDocument();
       expect(container.firstChild).toBeNull();
     });
 
@@ -152,7 +152,7 @@ describe("ValidationOverlay", () => {
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
       // Alert icon should be present (using lucide-react AlertCircle)
-      expect(screen.getByText("Add Start Node").closest("button")).toBeInTheDocument();
+      expect(screen.getByText("Add Entry Step").closest("button")).toBeInTheDocument();
     });
 
     it("should apply amber styling to start node indicator", () => {
@@ -174,7 +174,7 @@ describe("ValidationOverlay", () => {
         <ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />,
       );
 
-      const button = screen.getByRole("button", { name: /Add Start Node/i });
+      const button = screen.getByRole("button", { name: /Add Entry Step/i });
       expect(button).toHaveClass("border-amber-500/50", "bg-amber-500/10");
     });
   });
@@ -197,8 +197,8 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.getByText("Add Output Node")).toBeInTheDocument();
-      expect(screen.getByText("Click to define result")).toBeInTheDocument();
+      expect(screen.getByText("Add Deliverable Step")).toBeInTheDocument();
+      expect(screen.getByText("Click to define the final deliverable")).toBeInTheDocument();
     });
 
     it("should not show output node indicator when hasOutputNode is true", () => {
@@ -216,7 +216,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.queryByText("Add Output Node")).not.toBeInTheDocument();
+      expect(screen.queryByText("Add Deliverable Step")).not.toBeInTheDocument();
     });
 
     it("should not show output node indicator when NO_OUTPUT_NODE error is absent", () => {
@@ -230,7 +230,7 @@ describe("ValidationOverlay", () => {
         <ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />,
       );
 
-      expect(screen.queryByText("Add Output Node")).not.toBeInTheDocument();
+      expect(screen.queryByText("Add Deliverable Step")).not.toBeInTheDocument();
       expect(container.firstChild).toBeNull();
     });
 
@@ -274,7 +274,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const button = screen.getByRole("button", { name: /Add Output Node/i });
+      const button = screen.getByRole("button", { name: /Add Deliverable Step/i });
       expect(button).toHaveClass("border-rose-500/50", "bg-rose-500/10");
     });
   });
@@ -302,8 +302,8 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.getByText("Add Start Node")).toBeInTheDocument();
-      expect(screen.getByText("Add Output Node")).toBeInTheDocument();
+      expect(screen.getByText("Add Entry Step")).toBeInTheDocument();
+      expect(screen.getByText("Add Deliverable Step")).toBeInTheDocument();
     });
 
     it("should position both indicators correctly when both are shown", () => {
@@ -354,7 +354,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const button = screen.getByRole("button", { name: /Add Start Node/i });
+      const button = screen.getByRole("button", { name: /Add Entry Step/i });
       await user.click(button);
 
       expect(mockOnAddStartNode).toHaveBeenCalledTimes(1);
@@ -378,7 +378,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const button = screen.getByRole("button", { name: /Add Output Node/i });
+      const button = screen.getByRole("button", { name: /Add Deliverable Step/i });
       await user.click(button);
 
       expect(mockOnAddOutputNode).toHaveBeenCalledTimes(1);
@@ -402,7 +402,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay />);
 
-      const button = screen.getByRole("button", { name: /Add Start Node/i });
+      const button = screen.getByRole("button", { name: /Add Entry Step/i });
       await user.click(button);
 
       // Should not throw error
@@ -427,7 +427,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const button = screen.getByRole("button", { name: /Add Start Node/i });
+      const button = screen.getByRole("button", { name: /Add Entry Step/i });
       await user.click(button);
       await user.click(button);
       await user.click(button);
@@ -458,8 +458,8 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const startButton = screen.getByRole("button", { name: /Add Start Node/i });
-      const outputButton = screen.getByRole("button", { name: /Add Output Node/i });
+      const startButton = screen.getByRole("button", { name: /Add Entry Step/i });
+      const outputButton = screen.getByRole("button", { name: /Add Deliverable Step/i });
 
       await user.click(startButton);
       await user.click(outputButton);
@@ -520,8 +520,8 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.getByText("Add Start Node")).toBeInTheDocument();
-      expect(screen.queryByText("Add Output Node")).not.toBeInTheDocument();
+      expect(screen.getByText("Add Entry Step")).toBeInTheDocument();
+      expect(screen.queryByText("Add Deliverable Step")).not.toBeInTheDocument();
     });
 
     it("should handle empty errors array", () => {
@@ -656,7 +656,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const button = screen.getByRole("button", { name: /Add Start Node/i });
+      const button = screen.getByRole("button", { name: /Add Entry Step/i });
       expect(button).toHaveClass("hover:bg-amber-500/20");
     });
   });
@@ -679,7 +679,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      const button = screen.getByRole("button", { name: /Add Start Node/i });
+      const button = screen.getByRole("button", { name: /Add Entry Step/i });
       expect(button).toHaveAttribute("type", "button");
     });
 
@@ -700,7 +700,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.getByRole("button", { name: /Add Start Node/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Add Entry Step/i })).toBeInTheDocument();
     });
 
     it("should have accessible button text for output indicator", () => {
@@ -720,7 +720,7 @@ describe("ValidationOverlay", () => {
 
       render(<ValidationOverlay onAddStartNode={mockOnAddStartNode} onAddOutputNode={mockOnAddOutputNode} />);
 
-      expect(screen.getByRole("button", { name: /Add Output Node/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Add Deliverable Step/i })).toBeInTheDocument();
     });
   });
 });

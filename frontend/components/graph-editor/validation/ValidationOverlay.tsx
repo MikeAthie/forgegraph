@@ -12,7 +12,7 @@ export interface ValidationOverlayProps {
 }
 
 /**
- * Validation overlay that shows indicators for missing start/end nodes
+ * Validation overlay that shows indicators for missing entry/deliverable steps
  * Positioned on the canvas to guide users to fix validation issues
  */
 export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }: ValidationOverlayProps) {
@@ -40,8 +40,8 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
               <AlertCircle className="w-6 h-6 text-amber-500" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Add Start Node</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Click to add entry point</p>
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Add Entry Step</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Click to add the operating entry point</p>
             </div>
             <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-amber-500/50 group-hover:border-amber-500 transition-colors">
               <Plus className="w-4 h-4 text-amber-500" />
@@ -62,8 +62,8 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
               <AlertCircle className="w-6 h-6 text-rose-500" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-rose-600 dark:text-rose-400">Add Output Node</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Click to define result</p>
+              <p className="text-sm font-medium text-rose-600 dark:text-rose-400">Add Deliverable Step</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Click to define the final deliverable</p>
             </div>
             <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-rose-500/50 group-hover:border-rose-500 transition-colors">
               <Plus className="w-4 h-4 text-rose-500" />

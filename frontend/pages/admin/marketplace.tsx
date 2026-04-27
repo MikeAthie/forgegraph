@@ -262,11 +262,11 @@ export default function MarketplaceAdminPage() {
           <Card className="max-w-2xl">
             <CardHeader>
               <CardTitle>Marketplace</CardTitle>
-              <CardDescription>Organization admins can manage marketplace packages.</CardDescription>
+              <CardDescription>Workspace admins can manage marketplace packages.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button variant="outline" onClick={() => void router.push("/admin/organization")}>
-                Back to Organization
+                Back to Workspace Access
               </Button>
             </CardContent>
           </Card>

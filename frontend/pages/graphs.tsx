@@ -66,7 +66,7 @@ export default function GraphsPage() {
       const data = await graphsApi.list();
       setGraphs(data);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load workflows."));
+      setError(getApiErrorMessage(err, "Failed to load advanced operating models."));
     } finally {
       setLoading(false);
     }
@@ -106,10 +106,10 @@ export default function GraphsPage() {
         name: createForm.name.trim(),
         description: createForm.description.trim(),
       });
-      showSuccess("Workflow created");
+      showSuccess("Operating model created");
       await router.push(`/workflows/${created.id}`);
     } catch (err: unknown) {
-      setCreateError(getApiErrorMessage(err, "Failed to create workflow."));
+      setCreateError(getApiErrorMessage(err, "Failed to create the operating model."));
     } finally {
       setIsCreating(false);
     }
@@ -144,9 +144,9 @@ export default function GraphsPage() {
       });
       setGraphs((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
       setEditingGraph(null);
-      showSuccess("Workflow updated", `"${updated.name}" has been saved.`);
+      showSuccess("Operating model updated", `"${updated.name}" has been saved.`);
     } catch (err: unknown) {
-      setEditError(getApiErrorMessage(err, "Failed to update workflow."));
+      setEditError(getApiErrorMessage(err, "Failed to update the operating model."));
     } finally {
       setIsSavingEdit(false);
     }
@@ -162,7 +162,7 @@ export default function GraphsPage() {
       const data = await graphsApi.listVersions(graph.id);
       setVersions(data);
     } catch (err: unknown) {
-      setVersionsError(getApiErrorMessage(err, "Failed to load revisions."));
+      setVersionsError(getApiErrorMessage(err, "Failed to load saved versions."));
     } finally {
       setVersionsLoading(false);
     }
@@ -177,7 +177,7 @@ export default function GraphsPage() {
     try {
       await graphsApi.delete(graph.id);
       setGraphs((prev) => prev.filter((g) => g.id !== graph.id));
-      showSuccess("Workflow deleted", `"${graph.name}" has been removed.`);
+      showSuccess("Operating model deleted", `"${graph.name}" has been removed.`);
     } catch (err: unknown) {
       showError("Delete failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.delete));
     }
@@ -188,17 +188,16 @@ export default function GraphsPage() {
       <DashboardLayout
         inspector={
           <InspectorPanel
-            title="Builder workspace"
-            subtitle="Workflow definitions remain fully supported, but they are intentionally secondary to the operating surfaces."
+            title="Advanced operating models"
+            subtitle="Company workspaces remain primary. This area is for editing the underlying operating model."
             sections={[
               {
                 title: "What lives here",
-                content: "Definitions, revisions, and editor entry points.",
+                content: "Operating model definitions, saved versions, and the advanced editor.",
               },
               {
                 title: "What does not",
-                content:
-                  "Runtime supervision, cost posture, approval handling, and memory inspection stay outside the builder workspace.",
+                content: "Company launch, command ops, approvals, and deliverables stay outside this advanced area.",
               },
             ]}
           />
@@ -206,9 +205,9 @@ export default function GraphsPage() {
       >
         <div className="flex flex-col gap-6">
           <SectionHeader
-            eyebrow="Workflow definitions"
-            title="Manage definitions and revisions"
-            description="The builder workspace remains available for authoring and versioning, but it no longer defines the top-level product mental model."
+            eyebrow="Advanced Mode"
+            title="Manage operating models and saved versions"
+            description="Edit the underlying operating model here. The company workspace remains the primary customer-facing experience."
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -221,11 +220,11 @@ export default function GraphsPage() {
                   Refresh
                 </Button>
                 <Button variant="outline" className="rounded-full" asChild>
-                  <Link href="/onboarding">Use template</Link>
+                  <Link href="/companies/new">Company builder</Link>
                 </Button>
                 <Button className="rounded-full" onClick={openCreate}>
                   <Plus aria-hidden="true" />
-                  New workflow
+                  New operating model
                 </Button>
               </div>
             }
@@ -241,27 +240,27 @@ export default function GraphsPage() {
             <div className="flex items-center justify-center py-16">
               <div className="flex items-center space-x-3 text-muted-foreground">
                 <Spinner size="md" />
-                <span className="text-sm">Loading workflows...</span>
+                <span className="text-sm">Loading operating models...</span>
               </div>
             </div>
           ) : sortedGraphs.length === 0 ? (
-            <Panel title="Definitions" description="No workflow definitions exist yet.">
+            <Panel title="Operating models" description="No advanced operating models exist yet.">
               <EmptyState
                 className="py-16"
-                title="No workflows yet"
-                description="Create your first workflow definition to start building supervised automations."
+                title="No operating models yet"
+                description="Create a company first, or start an advanced operating model directly if you need low-level control."
                 action={
                   <div className="flex flex-wrap gap-2">
-                    <Button onClick={openCreate}>Create a workflow</Button>
+                    <Button onClick={openCreate}>Create operating model</Button>
                     <Button variant="outline" asChild>
-                      <Link href="/onboarding">Use template</Link>
+                      <Link href="/companies/new">Use company builder</Link>
                     </Button>
                   </div>
                 }
               />
             </Panel>
           ) : (
-            <Panel title="Definitions" description="Current workflow definitions and revision counts.">
+            <Panel title="Operating models" description="Current advanced operating models and saved version counts.">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {sortedGraphs.map((graph) => (
                   <Card
@@ -311,13 +310,13 @@ export default function GraphsPage() {
                           className="flex-1 min-w-[6rem] rounded-full"
                           onClick={() => void openVersions(graph)}
                         >
-                          Versions
+                          Saved versions
                         </Button>
                         <ConfirmButton
                           variant="destructive"
                           size="sm"
                           title={`Delete "${graph.name}"`}
-                          description="This will permanently delete the workflow definition and all its revisions. This action cannot be undone."
+                          description="This will permanently delete the operating model and all saved versions. This action cannot be undone."
                           confirmText="Delete"
                           onConfirm={() => handleDelete(graph)}
                         >
@@ -336,8 +335,8 @@ export default function GraphsPage() {
         <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create workflow definition</DialogTitle>
-              <DialogDescription>Give the workflow a name and optional description.</DialogDescription>
+              <DialogTitle>Create advanced operating model</DialogTitle>
+              <DialogDescription>Give the operating model a name and optional description.</DialogDescription>
             </DialogHeader>
 
             {createError && (
@@ -363,7 +362,7 @@ export default function GraphsPage() {
                   value={createForm.description}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                   disabled={isCreating}
-                  placeholder="What is this workflow responsible for?"
+                  placeholder="What company work is this operating model responsible for?"
                   rows={3}
                 />
               </FormField>
@@ -391,8 +390,8 @@ export default function GraphsPage() {
         <Dialog open={Boolean(editingGraph)} onOpenChange={(open) => !isSavingEdit && !open && setEditingGraph(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit workflow definition</DialogTitle>
-              <DialogDescription>Update the workflow name and description.</DialogDescription>
+              <DialogTitle>Edit advanced operating model</DialogTitle>
+              <DialogDescription>Update the operating model name and description.</DialogDescription>
             </DialogHeader>
 
             {editError && (
@@ -447,8 +446,8 @@ export default function GraphsPage() {
         >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Revisions {versionsGraph && `— ${versionsGraph.name}`}</DialogTitle>
-              <DialogDescription>View saved revisions for this workflow definition.</DialogDescription>
+              <DialogTitle>Saved versions {versionsGraph && `— ${versionsGraph.name}`}</DialogTitle>
+              <DialogDescription>View saved versions for this advanced operating model.</DialogDescription>
             </DialogHeader>
 
             {versionsError && (
@@ -460,10 +459,10 @@ export default function GraphsPage() {
             {versionsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner size="md" />
-                <span className="ml-3 text-sm text-muted-foreground">Loading versions...</span>
+                <span className="ml-3 text-sm text-muted-foreground">Loading saved versions...</span>
               </div>
             ) : versions.length === 0 ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">No versions yet.</div>
+              <div className="py-6 text-center text-sm text-muted-foreground">No saved versions yet.</div>
             ) : (
               <div className="overflow-x-auto max-h-64">
                 <table className="min-w-full divide-y divide-border">
@@ -503,7 +502,7 @@ export default function GraphsPage() {
             <DialogFooter>
               {versionsGraph && (
                 <Button variant="outline" asChild>
-                  <Link href={`/workflows/${versionsGraph.id}`}>Open workflow</Link>
+                  <Link href={`/workflows/${versionsGraph.id}`}>Open advanced editor</Link>
                 </Button>
               )}
               <Button onClick={closeVersions} disabled={versionsLoading}>

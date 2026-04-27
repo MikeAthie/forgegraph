@@ -104,7 +104,7 @@ export default function OrganizationPage() {
       setRole(response.role);
       setGovernance(response.governance);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load organization details."));
+      setError(getApiErrorMessage(err, "Failed to load workspace access details."));
     } finally {
       setLoading(false);
     }
@@ -194,8 +194,8 @@ export default function OrganizationPage() {
       <DashboardLayout>
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <h1 className="text-2xl sm:text-3xl font-semibold">Organization</h1>
-            <p className="text-sm text-muted-foreground">Manage your organization profile and member access.</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold">Workspace Access</h1>
+            <p className="text-sm text-muted-foreground">Manage your company workspace profile and member access.</p>
           </div>
 
           {error && (
@@ -207,13 +207,13 @@ export default function OrganizationPage() {
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Spinner className="h-5 w-5" />
-              Loading organization...
+              Loading workspace access...
             </div>
           ) : organization ? (
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
               <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="text-base">Organization details</CardTitle>
+                  <CardTitle className="text-base">Workspace details</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
                   <div>
@@ -221,7 +221,7 @@ export default function OrganizationPage() {
                     <p className="mt-1 text-sm font-semibold">{organization.name}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase">Organization ID</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Workspace ID</p>
                     <p className="mt-1 text-xs font-mono text-muted-foreground">{organization.id}</p>
                   </div>
                   <div>
@@ -285,9 +285,7 @@ export default function OrganizationPage() {
             <Alert className="border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-100">
               <ShieldCheck className="h-4 w-4" />
               <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  Memory retention changes and exported memory reporting are restricted to owner and admin roles.
-                </span>
+                <span>Knowledge retention changes and exported reporting are restricted to owner and admin roles.</span>
                 <Link href="/admin/operations" className="inline-flex items-center gap-1 text-sm font-medium">
                   Review policies and retention
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -408,7 +406,7 @@ export default function OrganizationPage() {
                             variant="destructive"
                             size="sm"
                             title={`Remove ${member.email}?`}
-                            description="This member will lose access to the organization."
+                            description="This member will lose access to the workspace."
                             onConfirm={() => handleRemove(member)}
                             disabled={updatingMemberId === member.user_id}
                           >

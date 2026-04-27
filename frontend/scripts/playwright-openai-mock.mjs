@@ -258,7 +258,7 @@ const CONSULTING_CASE_LIBRARY = {
         {
           step: "Add dispatcher-focused training sessions.",
           owner: "Enablement lead",
-          expected_outcome: "Reduce confusion in the new workflow.",
+          expected_outcome: "Reduce confusion in the new operating model.",
         },
         {
           step: "Collect frontline complaints by workflow step.",
@@ -826,7 +826,7 @@ function buildMarketingPatch(stage, currentState) {
           company: "ForgeGraph Digital Marketing Co",
           objective: next.goal,
           primary_channel: "linkedin",
-          audience: "B2B operators evaluating AI workflow tooling",
+          audience: "B2B operators evaluating AI company operations tooling",
           positioning: `Iteration ${pass} message focused on replayable execution and observability.`,
           content_pillars: ["reliability", "traceability", "measurable campaign loops"],
         },
@@ -839,7 +839,7 @@ function buildMarketingPatch(stage, currentState) {
           channel: "linkedin",
           format: "post",
           headline: `Replayable growth loop v${pass}`,
-          body: `Launch ForgeGraph's replayable workflow story with observable execution, resilient retries, and clear operator trust signals in pass ${pass}.`,
+          body: `Launch ForgeGraph's replayable operating story with observable execution, resilient retries, and clear operator trust signals in pass ${pass}.`,
           iteration: pass,
           reviewed: false,
           department: "content",
@@ -877,7 +877,7 @@ function buildMarketingPatch(stage, currentState) {
 
 function extractAllowedTools(prompt) {
   const marker = "Allowed tools:\n";
-  const nextMarker = "\n\nCurrent workflow state:";
+  const nextMarker = "\n\nCurrent operating state:";
   const start = prompt.indexOf(marker);
   if (start === -1) return [];
   const end = prompt.indexOf(nextMarker, start);

@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push("/overview");
+      router.push("/companies");
     }
   }, [loading, isAuthenticated, router]);
 
@@ -125,7 +125,7 @@ export default function LoginPage() {
         <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-            <CardDescription className="text-base mt-1">Sign in to your account to continue</CardDescription>
+            <CardDescription className="text-base mt-1">Sign in to continue operating your companies</CardDescription>
           </CardHeader>
 
           <CardContent className="pt-4">
@@ -138,7 +138,7 @@ export default function LoginPage() {
                     d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <AlertDescription>Registration successful! Please sign in with your new account.</AlertDescription>
+                <AlertDescription>Account created. Sign in to open your company workspace.</AlertDescription>
               </Alert>
             )}
 

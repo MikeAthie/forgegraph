@@ -38,12 +38,12 @@ const estimateImpact = (approval: ApprovalTask | null) => {
       risk === "high"
         ? "This decision can materially change customer-facing or financial behavior."
         : risk === "medium"
-          ? "This decision affects a meaningful workflow branch and should include operator guidance."
+          ? "This decision affects a meaningful operating path and should include operator guidance."
           : "This is a contained decision with limited downstream impact.",
     blastRadius:
       requiredFields > 0
-        ? `${requiredFields} required field${requiredFields === 1 ? "" : "s"} will be carried into the resumed execution.`
-        : "The execution will resume immediately after the decision is recorded.",
+        ? `${requiredFields} required field${requiredFields === 1 ? "" : "s"} will be carried into the resumed operation.`
+        : "The operation will resume immediately after the decision is recorded.",
   };
 };
 
@@ -111,8 +111,8 @@ export default function ApprovalsPage() {
       showSuccess(
         approved ? "Decision approved" : "Decision rejected",
         approved
-          ? "Execution resumed with operator approval."
-          : "Execution stayed paused after the rejection was recorded.",
+          ? "The operation resumed with operator approval."
+          : "The operation stayed paused after the rejection was recorded.",
       );
 
       const remaining = tasks.filter((task) => task.id !== selectedApproval.id);
@@ -164,9 +164,9 @@ export default function ApprovalsPage() {
       <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
-            eyebrow="Human-in-the-loop inbox"
+            eyebrow="Approvals"
             title="Decide with context, not with logs"
-            description="This is the primary review surface for consequential agent actions. The operator should understand the request, the cost, and the consequence before choosing approve or reject."
+            description="This is the primary review surface for consequential company actions. The operator should understand the request, the cost, and the consequence before choosing approve or reject."
             action={
               <div className="flex flex-wrap items-center gap-2">
                 {(["pending", "approved", "rejected", "all"] as const).map((status) => (
@@ -211,7 +211,7 @@ export default function ApprovalsPage() {
               <MetricCard
                 eyebrow="Cost implication"
                 value={formatCurrency(impact.cost)}
-                delta="Estimated additional spend if the selected run resumes"
+                delta="Estimated additional spend if the selected operation resumes"
                 icon={<HandCoins className="h-4 w-4" />}
                 tone="rose"
               />
@@ -247,7 +247,7 @@ export default function ApprovalsPage() {
                   )}
                   renderBody={(task) => {
                     const taskImpact = estimateImpact(task);
-                    return `${task.node_name} · ${taskImpact.risk} risk · ${task.prompt_message || "Approval required before execution resumes."}`;
+                    return `${task.node_name} · ${taskImpact.risk} risk · ${task.prompt_message || "Approval required before the operation resumes."}`;
                   }}
                   renderMeta={(task) => {
                     const taskImpact = estimateImpact(task);
@@ -278,7 +278,7 @@ export default function ApprovalsPage() {
                   action={
                     <Button asChild variant="outline" className="rounded-full">
                       <Link href={`/executions/${selectedApproval.run_id}`}>
-                        Open execution
+                        Open operation detail
                         <ArrowRight className="h-4 w-4" />
                       </Link>
                     </Button>
@@ -298,7 +298,7 @@ export default function ApprovalsPage() {
                         Proposed action
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        Resume <span className="font-medium">{selectedApproval.graph_name}</span> at{" "}
+                        Resume <span className="font-medium">{selectedApproval.graph_name}</span> with{" "}
                         <span className="font-medium">{selectedApproval.node_name}</span> after a human decision is
                         recorded.
                       </p>
@@ -309,7 +309,7 @@ export default function ApprovalsPage() {
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
                         {selectedApproval.payload?.prompt_message ??
-                          "The run reached a human gate. An operator decision is required before the next step is allowed to execute."}
+                          "The operation reached an approval gate. An operator decision is required before the next department can continue."}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -345,7 +345,7 @@ export default function ApprovalsPage() {
                         {formatCurrency(impact.cost)}
                       </p>
                       <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                        Estimated incremental spend if the run resumes from this point.
+                        Estimated incremental spend if the operation resumes from this point.
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -359,14 +359,15 @@ export default function ApprovalsPage() {
                     <div className="rounded-[1.2rem] border border-emerald-800/12 bg-emerald-50 px-4 py-4 text-emerald-950 dark:border-emerald-200/15 dark:bg-emerald-500/10 dark:text-emerald-100">
                       <p className="text-[11px] uppercase tracking-[0.18em]">If approved</p>
                       <p className="mt-2 text-sm leading-7">
-                        The execution resumes immediately at the paused node and carries any operator notes forward.
+                        The operation resumes immediately at the paused department activity and carries any operator
+                        notes forward.
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-rose-800/12 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
                       <p className="text-[11px] uppercase tracking-[0.18em]">If rejected</p>
                       <p className="mt-2 text-sm leading-7">
-                        The rejection is recorded and the run remains paused so a human can choose the next intervention
-                        path.
+                        The rejection is recorded and the operation remains paused so a human can choose the next
+                        intervention path.
                       </p>
                     </div>
                   </div>

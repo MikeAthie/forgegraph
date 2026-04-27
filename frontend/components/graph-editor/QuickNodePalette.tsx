@@ -106,7 +106,7 @@ export function QuickNodePalette({
       {/* Header */}
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-violet-500" />
-        <h4 className="text-sm font-medium text-foreground">Quick Nodes</h4>
+        <h4 className="text-sm font-medium text-foreground">Quick Steps</h4>
       </div>
 
       {/* Search */}
@@ -115,7 +115,7 @@ export function QuickNodePalette({
           type="text"
           name="preset-search"
           autoComplete="off"
-          aria-label="Search quick node presets"
+          aria-label="Search quick step presets"
           placeholder="Search presets…"
           value={searchQuery}
           onChange={(e) => {

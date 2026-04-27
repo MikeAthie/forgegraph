@@ -104,9 +104,9 @@ export default function AuditLogsPage() {
       <DashboardLayout>
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <h1 className="text-2xl sm:text-3xl font-semibold">Audit Logs</h1>
+            <h1 className="text-2xl sm:text-3xl font-semibold">Activity Log</h1>
             <p className="text-sm text-muted-foreground">
-              Search the operator trail across runs, credentials, identity, retention, and curated memory.
+              Search the operator trail across operations, credentials, access, retention, and curated knowledge.
             </p>
           </div>
 
@@ -122,12 +122,12 @@ export default function AuditLogsPage() {
                 <Input
                   value={actionFilter}
                   onChange={(event) => setActionFilter(event.target.value)}
-                  placeholder="Action (e.g., run.started)"
+                  placeholder="Action (e.g., operation.started)"
                 />
                 <Input
                   value={resourceFilter}
                   onChange={(event) => setResourceFilter(event.target.value)}
-                  placeholder="Resource type (e.g., run)"
+                  placeholder="Resource type (e.g., operation)"
                 />
                 <Input
                   value={resourceIdFilter}

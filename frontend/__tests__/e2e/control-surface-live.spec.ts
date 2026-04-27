@@ -20,12 +20,14 @@ test.describe("Frontend Control Surface Live Backend", () => {
     ]);
 
     await login(page, user);
+    await page.goto("/overview");
+    await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: /organization overview/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /^active agents$/i })).toBeVisible();
-    await expect(page.getByText(/^token cost today$/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: /ops conductor/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /billing sentinel/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^command ops$/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^active departments$/i })).toBeVisible();
+    await expect(page.getByText(/^cost today$/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /ops conductor/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /billing sentinel/i }).first()).toBeVisible();
     await expect(
       page.getByText(/ops conductor is waiting for a decision in vendor payment review/i).first(),
     ).toBeVisible();
@@ -45,7 +47,7 @@ test.describe("Frontend Control Surface Live Backend", () => {
     await page.goto("/inbox");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: /review consequential agent decisions/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /decide with context, not with logs/i })).toBeVisible();
     await expect(page.getByText(fixture.approval.promptMessage, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: new RegExp(fixture.approval.graphName, "i") })).toBeVisible();
   });
@@ -63,8 +65,8 @@ test.describe("Frontend Control Surface Live Backend", () => {
     await page.goto(`/executions/${fixture.runIds.failed}`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: /structured execution trace/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /write_ticket/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation trace/i })).toBeVisible();
     await expect(page.getByText(/escalation api rejected the payload/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /department activity/i })).toBeVisible();
   });
 });

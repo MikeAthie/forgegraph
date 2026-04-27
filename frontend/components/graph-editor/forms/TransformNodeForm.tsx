@@ -92,13 +92,13 @@ return {
           <p className="font-medium">Available variables:</p>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
             <li>
-              <code className="bg-muted px-1 rounded">state</code> - Current workflow state
+              <code className="bg-muted px-1 rounded">state</code> - Current operating state
             </li>
             <li>
-              <code className="bg-muted px-1 rounded">input</code> - Graph input data
+              <code className="bg-muted px-1 rounded">input</code> - Company input data
             </li>
             <li>
-              <code className="bg-muted px-1 rounded">node.&lt;id&gt;.output</code> - Output from specific node
+              <code className="bg-muted px-1 rounded">node.&lt;id&gt;.output</code> - Output from a specific step
             </li>
           </ul>
         </div>

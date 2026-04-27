@@ -159,20 +159,20 @@ export function NodePalette({
 
   return (
     <div className="p-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3">Add Nodes</h3>
+      <h3 className="text-sm font-semibold text-foreground mb-3">Add Steps</h3>
 
       <div className="mb-4">
         <Input
           ref={searchInputRef}
           type="text"
-          placeholder="Search nodes..."
+          placeholder="Search steps..."
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
             setActiveSearchIndex(0);
           }}
           onKeyDown={handleSearchKeyDown}
-          aria-label="Search nodes"
+          aria-label="Search steps"
           data-testid="palette-query-input"
         />
         {searchQuery.trim() && searchNavigableItems.length > 0 && (
@@ -188,12 +188,12 @@ export function NodePalette({
       </div>
 
       <p className="text-xs text-muted-foreground mb-4">
-        {hasSelectedNode ? "Click to add connected to selected node" : "Click to add a node to the canvas"}
+        {hasSelectedNode ? "Click to add connected to the selected step" : "Click to add a step to the operating model"}
       </p>
 
       <div className="space-y-4">
         {filteredItems.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">No nodes match &quot;{searchQuery}&quot;</p>
+          <p className="text-sm text-muted-foreground text-center py-4">No steps match &quot;{searchQuery}&quot;</p>
         ) : null}
 
         {!searchQuery.trim() && (
@@ -322,7 +322,7 @@ export function NodePalette({
             </kbd>
           </div>
           <div className="flex justify-between">
-            <span>Search nodes</span>
+            <span>Search steps</span>
             <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
               Ctrl+Shift+F
             </kbd>
@@ -370,7 +370,7 @@ export function NodePalette({
             </kbd>
           </div>
           <div className="flex justify-between">
-            <span>Delete node</span>
+            <span>Delete step</span>
             <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
               Delete
             </kbd>

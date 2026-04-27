@@ -144,7 +144,6 @@ export default defineConfig({
     "**/graphs.spec.ts",
     "**/jackie-workflow.spec.ts",
     "**/marketplace-runtime.spec.ts",
-    "**/onboarding.spec.ts",
     "**/prompts.spec.ts",
   ],
   fullyParallel: true,

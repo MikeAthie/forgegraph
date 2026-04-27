@@ -117,13 +117,13 @@ describe("NodeConfigDialog", () => {
     it("should display correct label for Prompt node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Prompt Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Prompted Worker Step");
     });
 
     it("should display correct label for HTTP node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure HTTP Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure HTTP Step");
     });
 
     it("should display correct label for Transform node", () => {
@@ -131,25 +131,25 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Transform Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Data Transform Step");
     });
 
     it("should display correct label for Output node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.OUTPUT} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Output Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Final Deliverable Step");
     });
 
     it("should display correct label for Branch node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.BRANCH} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Branch Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Branch Step");
     });
 
     it("should display correct label for Merge node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.MERGE} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Merge Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Merge Step");
     });
 
     it("should display correct label for Human Gate node", () => {
@@ -157,19 +157,19 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HUMAN_GATE} onSave={mockOnSave} />,
       );
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Human Gate Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Approval Gate Step");
     });
 
     it("should display correct label for Memory node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.MEMORY} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Memory Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Memory Step");
     });
 
     it("should display correct label for Tool node", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TOOL} onSave={mockOnSave} />);
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Tool Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Tool Action Step");
     });
 
     it("should display correct label for Subgraph node", () => {
@@ -177,7 +177,7 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.SUBGRAPH} onSave={mockOnSave} />,
       );
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Subgraph Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure Reusable Model Step");
     });
 
     it("should display correct icon badge with color for Prompt node", () => {
@@ -254,7 +254,7 @@ describe("NodeConfigDialog", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
       expect(screen.getByTestId("dialog-description")).toHaveTextContent(
-        "Set up the node configuration before adding it to your workflow.",
+        "Set up this advanced operating-model step before adding it to the canvas.",
       );
     });
   });
@@ -263,15 +263,15 @@ describe("NodeConfigDialog", () => {
     it("should initialize label with node type label", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
-      expect(labelInput).toHaveValue("Prompt");
+      const labelInput = screen.getByLabelText(/step label/i);
+      expect(labelInput).toHaveValue("Prompted Worker");
     });
 
     it("should allow editing node label", async () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.clear(labelInput);
       await user.type(labelInput, "My Custom HTTP Node");
 
@@ -282,7 +282,7 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Extra");
 
       // Try to close - should show confirmation dialog
@@ -298,19 +298,19 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
-      const labelInput = screen.getByLabelText(/node label/i);
-      expect(labelInput).toHaveAttribute("placeholder", "Transform");
+      const labelInput = screen.getByLabelText(/step label/i);
+      expect(labelInput).toHaveAttribute("placeholder", "Data Transform");
     });
 
     it("should trim whitespace from label on save", async () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.clear(labelInput);
       await user.type(labelInput, "  My Node  ");
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith(expect.any(Object), "My Node");
@@ -320,10 +320,10 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.HTTP} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.clear(labelInput);
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith(expect.any(Object), "HTTP");
@@ -334,7 +334,7 @@ describe("NodeConfigDialog", () => {
     it("should render DefaultNodeForm when no FormComponent is provided", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      expect(screen.getByText("Configure this node using the inspector panel after creation.")).toBeInTheDocument();
+      expect(screen.getByText("Configure this step using the inspector panel after creation.")).toBeInTheDocument();
     });
 
     it("should render DefaultNodeForm with config preview", () => {
@@ -376,7 +376,7 @@ describe("NodeConfigDialog", () => {
 
       expect(screen.getByLabelText("Custom Field")).toBeInTheDocument();
       expect(
-        screen.queryByText("Configure this node using the inspector panel after creation."),
+        screen.queryByText("Configure this step using the inspector panel after creation."),
       ).not.toBeInTheDocument();
     });
 
@@ -417,7 +417,7 @@ describe("NodeConfigDialog", () => {
       const updateButton = screen.getByRole("button", { name: /update config/i });
       await user.click(updateButton);
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith({ updated: true }, expect.any(String));
@@ -528,7 +528,7 @@ describe("NodeConfigDialog", () => {
         />,
       );
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       expect(saveButton).not.toBeDisabled();
 
       const addErrorButton = screen.getByRole("button", { name: /add error/i });
@@ -556,7 +556,7 @@ describe("NodeConfigDialog", () => {
         />,
       );
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       expect(saveButton).toBeDisabled();
 
       // Try to click disabled button
@@ -584,7 +584,7 @@ describe("NodeConfigDialog", () => {
         />,
       );
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       const addErrorButton = screen.getByRole("button", { name: /add error/i });
       const clearErrorsButton = screen.getByRole("button", { name: /clear errors/i });
 
@@ -612,7 +612,7 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Modified");
 
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -652,7 +652,7 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Modified");
 
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -669,7 +669,7 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Modified");
 
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -685,7 +685,7 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Modified");
 
       const backdrop = screen.getByTestId("dialog-backdrop");
@@ -710,7 +710,7 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Modified");
 
       await user.keyboard("{Escape}");
@@ -736,11 +736,11 @@ describe("NodeConfigDialog", () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledTimes(1);
-      expect(mockOnSave).toHaveBeenCalledWith({}, "Prompt");
+      expect(mockOnSave).toHaveBeenCalledWith({}, "Prompted Worker");
     });
 
     it("should call onSave with updated config", async () => {
@@ -762,7 +762,7 @@ describe("NodeConfigDialog", () => {
       const setUrlButton = screen.getByRole("button", { name: /set url/i });
       await user.click(setUrlButton);
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith({ url: "https://api.example.com" }, "HTTP");
@@ -774,11 +774,11 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.TRANSFORM} onSave={mockOnSave} />,
       );
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.clear(labelInput);
       await user.type(labelInput, "Data Transformer");
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith({}, "Data Transformer");
@@ -797,17 +797,17 @@ describe("NodeConfigDialog", () => {
         />,
       );
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
-      expect(mockOnSave).toHaveBeenCalledWith(promptConfig, "Prompt");
+      expect(mockOnSave).toHaveBeenCalledWith(promptConfig, "Prompted Worker");
     });
 
     it("should call onClose after successful save", async () => {
       const user = setupUser();
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalled();
@@ -844,7 +844,7 @@ describe("NodeConfigDialog", () => {
       const setConfigButton = screen.getByRole("button", { name: /set complex config/i });
       await user.click(setConfigButton);
 
-      const saveButton = screen.getByRole("button", { name: /add node/i });
+      const saveButton = screen.getByRole("button", { name: /add step/i });
       await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith(
@@ -869,8 +869,8 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
-      const labelInput = screen.getByLabelText(/node label/i);
-      expect(labelInput).toHaveValue("Prompt");
+      const labelInput = screen.getByLabelText(/step label/i);
+      expect(labelInput).toHaveValue("Prompted Worker");
     });
 
     it("should reset config when dialog is reopened", async () => {
@@ -972,7 +972,7 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />,
       );
 
-      const labelInput = screen.getByLabelText(/node label/i);
+      const labelInput = screen.getByLabelText(/step label/i);
       await user.type(labelInput, " Modified");
 
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -1009,7 +1009,7 @@ describe("NodeConfigDialog", () => {
         <NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={"unknown_type" as any} onSave={mockOnSave} />,
       );
 
-      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure unknown_type Node");
+      expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure unknown_type Step");
 
       // Should use fallback icon and color
       const badge = container.querySelector(".bg-gray-500");
@@ -1020,7 +1020,7 @@ describe("NodeConfigDialog", () => {
     it("should handle undefined initialConfig", () => {
       render(<NodeConfigDialog isOpen={true} onClose={mockOnClose} nodeType={NODE_TYPES.PROMPT} onSave={mockOnSave} />);
 
-      expect(screen.getByText("Configure this node using the inspector panel after creation.")).toBeInTheDocument();
+      expect(screen.getByText("Configure this step using the inspector panel after creation.")).toBeInTheDocument();
     });
 
     it("should handle empty initialConfig object", () => {
@@ -1034,7 +1034,7 @@ describe("NodeConfigDialog", () => {
         />,
       );
 
-      expect(screen.getByText("Configure this node using the inspector panel after creation.")).toBeInTheDocument();
+      expect(screen.getByText("Configure this step using the inspector panel after creation.")).toBeInTheDocument();
     });
 
     it("should handle rapid open/close cycles", () => {

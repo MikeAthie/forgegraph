@@ -194,7 +194,7 @@ describe("Runs pages", () => {
 
       render(<RunsPage />);
 
-      expect(screen.getByText("Distributed trace for humans")).toBeInTheDocument();
+      expect(screen.getByText("Recent company operations")).toBeInTheDocument();
       expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
     });
 
@@ -203,7 +203,7 @@ describe("Runs pages", () => {
 
       await renderRunsPage();
 
-      expect(screen.getByText(/no executions available/i)).toBeInTheDocument();
+      expect(screen.getByText(/no operations available/i)).toBeInTheDocument();
     });
 
     it("renders executions and selects the most recent one by default", async () => {
@@ -230,9 +230,9 @@ describe("Runs pages", () => {
 
       expect(screen.getAllByText("Revenue triage").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Nightly digest").length).toBeGreaterThan(0);
-      expect(screen.getByText(/workflow revision/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/saved version/i).length).toBeGreaterThan(0);
       expect(screen.getByText("v4")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /open execution detail/i })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: /open operation detail/i })).toHaveAttribute(
         "href",
         "/executions/run-new",
       );
@@ -292,7 +292,7 @@ describe("Runs pages", () => {
 
       render(<RunDetailPage />);
 
-      expect(screen.getByText("Execution trace")).toBeInTheDocument();
+      expect(screen.getByText("Operation trace")).toBeInTheDocument();
       expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
     });
 
@@ -324,16 +324,16 @@ describe("Runs pages", () => {
       await renderRunDetailPage();
 
       expect(api.runsApi.get).toHaveBeenCalledWith(runId);
-      expect(screen.getByText("Execution trace")).toBeInTheDocument();
-      expect(screen.getByText("Trace sequence")).toBeInTheDocument();
-      expect(screen.getByText("Human gate")).toBeInTheDocument();
+      expect(screen.getByText("Operation trace")).toBeInTheDocument();
+      expect(screen.getByText("Department activity")).toBeInTheDocument();
+      expect(screen.getByText("Approval gate")).toBeInTheDocument();
       expect(screen.getAllByText("Revenue triage").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("draft_reply").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("fetch_customer").length).toBeGreaterThan(0);
-      expect(screen.getByText(/execution requires intervention here/i)).toBeInTheDocument();
+      expect(screen.getAllByText("Analysis Skill").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Tool Action").length).toBeGreaterThan(0);
+      expect(screen.getByText(/this activity requires intervention here/i)).toBeInTheDocument();
       expect(screen.getByText(/model_timeout/i)).toBeInTheDocument();
       expect(screen.getByText(/provider timed out/i)).toBeInTheDocument();
-      expect(screen.getByText(/failure point/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/attention point/i).length).toBeGreaterThan(0);
     });
 
     it("renders paused runs in the human gate panel", async () => {
@@ -428,8 +428,7 @@ describe("Runs pages", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("send_summary")).toBeInTheDocument();
-        expect(screen.getAllByText(/succeeded/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Tool Action").length).toBeGreaterThan(1);
       });
     });
 

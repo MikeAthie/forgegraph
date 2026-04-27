@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await authApi.login(email, password);
         const userData = await authApi.getMe();
         setUser(userData);
-        router.push("/overview");
+        router.push("/companies");
         return { success: true };
       } catch (err: unknown) {
         const message =

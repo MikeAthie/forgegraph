@@ -1,8 +1,8 @@
 [
   {
     "id": "TC001",
-    "title": "Login grants access to protected graph listing",
-    "description": "Verifies a user can sign in, land in the authenticated app shell, and reach the protected workflow/graph listing using the current navigation model.",
+    "title": "Login grants access to the protected company list",
+    "description": "Verifies a user can sign in, land in the authenticated app shell, and reach the protected company list using the current navigation model.",
     "category": "Authentication and Session Flows",
     "steps": [
       {
@@ -23,11 +23,11 @@
       },
       {
         "type": "action",
-        "description": "After login, open the protected workflow listing by using the visible Workflows navigation item when present, or by navigating directly to /workflows or /graphs"
+        "description": "After login, open the protected company list by using the visible Companies navigation item when present, or by navigating directly to /companies"
       },
       {
         "type": "assertion",
-        "description": "Verify the protected workflow or graph listing page is displayed"
+        "description": "Verify the protected company listing page is displayed"
       }
     ],
     "priority": "High"
@@ -64,11 +64,11 @@
       },
       {
         "type": "action",
-        "description": "Navigate to /graphs"
+        "description": "Navigate to /companies"
       },
       {
         "type": "assertion",
-        "description": "Verify the graphs list page is displayed"
+        "description": "Verify the company list page is displayed"
       }
     ],
     "priority": "High"
@@ -313,8 +313,8 @@
   },
   {
     "id": "TC009",
-    "title": "View organization settings and members from admin area",
-    "description": "Verifies an org admin can navigate to the organization admin page and see organization settings and a members list rendered.",
+    "title": "View workspace access and members from admin area",
+    "description": "Verifies an admin can navigate to Workspace Access and see workspace details and a members list rendered.",
     "category": "Analytics, Onboarding, and Admin Surfaces",
     "steps": [
       {
@@ -339,11 +339,11 @@
       },
       {
         "type": "action",
-        "description": "Click the navigation control to open organization settings"
+        "description": "Click the navigation control to open Workspace Access"
       },
       {
         "type": "assertion",
-        "description": "Verify organization settings and members are displayed"
+        "description": "Verify workspace access details and members are displayed"
       }
     ],
     "priority": "Low"

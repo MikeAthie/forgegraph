@@ -55,7 +55,7 @@ async def run_test():
         elem = frame.locator('xpath=/html/body/div/div/div/main/div/div/div/div/div/div[2]/form/button').nth(0)
         await asyncio.sleep(3); await elem.click()
         
-        # -> Click the Workflows navigation item (index 818) to open the protected workflow/graph listing, then confirm the listing page is displayed.
+        # -> Click the Companies navigation item (or navigate directly) to open the protected company list, then confirm the listing page is displayed.
         frame = context.pages[-1]
         # Click element
         elem = frame.locator('xpath=/html/body/div/div/div/div[2]/aside/div[2]/div[2]/nav/a[2]').nth(0)

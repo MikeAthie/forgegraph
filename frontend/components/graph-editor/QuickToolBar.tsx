@@ -169,9 +169,9 @@ export function QuickToolBar({
             <Sparkles className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="leading-none">
-            <p className="text-xs font-semibold text-foreground">Quick Tools</p>
+            <p className="text-xs font-semibold text-foreground">Quick Actions</p>
             <p className="text-[10px] text-muted-foreground">
-              {hasSelectedNode ? "Adds and links from selected node" : "Adds standalone node"}
+              {hasSelectedNode ? "Adds and links from the selected step" : "Adds a standalone step"}
             </p>
           </div>
         </div>
@@ -183,7 +183,7 @@ export function QuickToolBar({
             <p className="hidden sm:block text-xs text-muted-foreground px-2">
               {marketplaceNodes.length === 0
                 ? "Install integrations in Marketplace to enable quick add."
-                : "No runtime-ready tools yet. Template-only or blocked packages stay in the palette."}
+                : "No runtime-ready tool actions yet. Template-only or blocked packages stay in the palette."}
             </p>
           )}
           {featured.map((pkg) => {
@@ -199,7 +199,7 @@ export function QuickToolBar({
                 type="button"
                 onClick={() => handleSelectPackage(pkg)}
                 title={`Add ${pkg.name}`}
-                aria-label={`Add ${pkg.name} integration node`}
+                aria-label={`Add ${pkg.name} tool action`}
                 data-testid={`quick-tool-${pkg.slug}`}
                 className="group flex shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-transparent bg-background/70 px-2 py-1.5 text-xs font-medium text-foreground transition-colors transition-transform transition-shadow hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 motion-reduce:transform-none motion-reduce:transition-none"
               >
@@ -218,7 +218,7 @@ export function QuickToolBar({
         <button
           type="button"
           onClick={() => setIsBrowseOpen(true)}
-          aria-label="Browse integration tools"
+          aria-label="Browse tool actions"
           data-testid="quick-tool-browse"
           className="flex shrink-0 touch-manipulation items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1"
         >
@@ -235,9 +235,9 @@ export function QuickToolBar({
       <Dialog open={isBrowseOpen} onOpenChange={setIsBrowseOpen}>
         <DialogContent className="max-w-3xl overscroll-contain">
           <DialogHeader>
-            <DialogTitle>Integration Tools</DialogTitle>
+            <DialogTitle>Tool Actions</DialogTitle>
             <DialogDescription>
-              Add installed runtime-ready marketplace tools to your graph with one click.
+              Add installed runtime-ready tool actions to your operating model with one click.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -247,7 +247,7 @@ export function QuickToolBar({
                 type="text"
                 name="integration-search"
                 autoComplete="off"
-                aria-label="Search integration tools"
+                aria-label="Search tool actions"
                 data-testid="quick-tool-search"
                 placeholder="Search integrations…"
                 value={searchQuery}

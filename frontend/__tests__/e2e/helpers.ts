@@ -2,6 +2,12 @@ import { execFileSync } from "child_process";
 import path from "path";
 
 import { expect, type APIRequestContext, type Locator, type Page, type TestInfo } from "@playwright/test";
+import {
+  buildCompanyGraphJson,
+  buildCompanyProfile,
+  type CompanyAIAccessMode,
+  type CompanyAutonomyMode,
+} from "../../lib/company-workspace";
 
 export type TestUser = {
   email: string;
@@ -80,6 +86,20 @@ export type FrontendControlPlaneFixture = {
     promptMessage: string;
     createdAt: string;
   };
+};
+
+export type CompanySeedOptions = {
+  name: string;
+  companyType?: string;
+  objective: string;
+  autonomyMode?: CompanyAutonomyMode;
+  aiAccessMode?: CompanyAIAccessMode;
+  operationBrief?: string;
+};
+
+export type CompanySeedResult = {
+  companyId: string;
+  versionId: string;
 };
 
 const TEST_PASSWORD = "ForgeGraphTest!12345";
@@ -170,13 +190,21 @@ export async function login(page: Page, user: TestUser): Promise<void> {
     });
   });
 
+  await page.route("**/api/auth/refresh", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ access: body.access }),
+    });
+  });
+
   await page.evaluate((token) => {
     window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
     (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
   }, body.access);
 
-  await page.goto("/overview");
-  await page.waitForURL(/\/overview(?:\?.*)?$/, { timeout: 20_000 });
+  await page.goto("/companies");
+  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 20_000 });
   await page.waitForLoadState("networkidle");
 }
 
@@ -233,6 +261,29 @@ export async function openBackendAuthenticatedPage(
   await page.context().clearCookies();
   await ensureUserRegistered(request, user);
   const token = await getAccessToken(request, user);
+
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "00000000-0000-0000-0000-00000000e2eb",
+        email: user.email,
+        created_at: new Date().toISOString(),
+        is_active: true,
+        default_organization_id: null,
+        organization_role: "owner",
+      }),
+    });
+  });
+
+  await page.route("**/api/auth/refresh", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ access: token }),
+    });
+  });
 
   await page.addInitScript((seededToken) => {
     window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", seededToken);
@@ -311,6 +362,45 @@ export async function getAccessToken(request: APIRequestContext, user: TestUser)
   return body.access as string;
 }
 
+export async function createCompanyViaApi(
+  request: APIRequestContext,
+  accessToken: string,
+  options: CompanySeedOptions,
+): Promise<CompanySeedResult> {
+  const profile = buildCompanyProfile({
+    companyName: options.name,
+    companyType: options.companyType ?? "General Company",
+    objective: options.objective,
+    autonomyMode: options.autonomyMode ?? "assisted",
+    aiAccessMode: options.aiAccessMode ?? "managed",
+  });
+
+  const graphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      name: profile.companyName,
+      description: profile.objective,
+    },
+  });
+  expect(graphResponse.ok()).toBeTruthy();
+  const graphBody = (await graphResponse.json()) as { data: { id: string } };
+  const companyId = graphBody.data.id;
+
+  const versionResponse = await request.post(`${API_BASE_URL}/api/graphs/${companyId}/versions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      graph_json: buildCompanyGraphJson(profile),
+    },
+  });
+  expect(versionResponse.ok()).toBeTruthy();
+  const versionBody = (await versionResponse.json()) as { data: { id: string } };
+
+  return {
+    companyId,
+    versionId: versionBody.data.id,
+  };
+}
+
 export function seedFrontendControlPlaneFixture(user: TestUser): FrontendControlPlaneFixture {
   const raw = execFileSync(
     "python",
@@ -327,7 +417,7 @@ export function seedFrontendControlPlaneFixture(user: TestUser): FrontendControl
 
 export async function createGraph(page: Page, graphName: string, description?: string): Promise<string> {
   await gotoWithRetry(page, "/graphs");
-  await page.getByRole("button", { name: /^new workflow$/i }).click();
+  await page.getByRole("button", { name: /^new operating model$/i }).click();
   await page.locator("#create-graph-name").fill(graphName);
   if (description) {
     await page.locator("#create-graph-description").fill(description);

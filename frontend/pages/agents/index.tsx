@@ -37,7 +37,7 @@ const summarizePurpose = (agent: AgentRegistryEntry) => {
   if (capabilities.length > 0) {
     return `Configured around ${capabilities.slice(0, 3).join(", ")} with ${agent.default_model || "an unspecified model"}.`;
   }
-  return `${agent.display_name} supervises workflow work with ${agent.default_model || "a model that has not been declared yet"}.`;
+  return `${agent.display_name} supports company work with ${agent.default_model || "a model that has not been declared yet"}.`;
 };
 
 const deriveWhyDoingThis = (
@@ -51,18 +51,16 @@ const deriveWhyDoingThis = (
   const policyKeys = Object.keys(agent.policy_snapshot_json ?? {});
 
   return {
-    objective:
-      currentTask?.summary ??
-      "No current task is projected. The agent is waiting for new work from its source workflow.",
+    objective: currentTask?.summary ?? "No current task is projected. This department is waiting for a new assignment.",
     trigger: pendingDecision?.decision_type
       ? `The current behavior is constrained by ${pendingDecision.decision_type}.`
       : currentTask
-        ? `The agent is acting because ${currentTask.title.toLowerCase()} is the current assigned unit of work.`
-        : "No active execution trigger is currently visible.",
+        ? `This department is acting because ${currentTask.title.toLowerCase()} is the current assigned unit of work.`
+        : "No active operation trigger is currently visible.",
     constraints:
       policyKeys.length > 0
         ? `Policy is shaping behavior through ${policyKeys.slice(0, 3).join(", ")}.`
-        : "No explicit policy snapshot has been projected for this agent yet.",
+        : "No explicit policy snapshot has been projected for this department yet.",
     memory: memoryHeadline
       ? `Recent memory indicates ${memoryHeadline}.`
       : "No recent memory item is currently influencing the visible behavior.",
@@ -99,7 +97,7 @@ export default function AgentsPage() {
         await loadSupervisionData();
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load agent supervision data."));
+          setError(getApiErrorMessage(err, "Failed to load department activity."));
         }
       } finally {
         if (!cancelled) {
@@ -189,9 +187,9 @@ export default function AgentsPage() {
     try {
       await runsApi.cancel(currentExecutionId);
       await loadSupervisionData();
-      showSuccess("Execution stopped", "The active execution was canceled from the supervision view.");
+      showSuccess("Operation stopped", "The active operation was canceled from the department view.");
     } catch (err: unknown) {
-      showError("Stop failed", getApiErrorMessage(err, "Failed to stop the active execution."));
+      showError("Stop failed", getApiErrorMessage(err, "Failed to stop the active operation."));
     } finally {
       setActionLoading(false);
     }
@@ -206,10 +204,10 @@ export default function AgentsPage() {
     try {
       const replayed = await runsApi.replay(currentExecutionId);
       await loadSupervisionData();
-      showSuccess("Replay started", "A replay was created from the latest execution state.");
+      showSuccess("Retry started", "A new operation was started from the latest saved state.");
       await router.push(`/executions/${replayed.id}`);
     } catch (err: unknown) {
-      showError("Replay failed", getApiErrorMessage(err, "Failed to replay the selected execution."));
+      showError("Retry failed", getApiErrorMessage(err, "Failed to retry the selected operation."));
     } finally {
       setActionLoading(false);
     }
@@ -218,7 +216,7 @@ export default function AgentsPage() {
   const inspector = selectedAgent ? (
     <InspectorPanel
       title={selectedAgent.display_name}
-      subtitle="The inspector keeps durable metadata, policy scope, and registry lineage visible while the center panel focuses on what the agent is doing and why."
+      subtitle="The inspector keeps durable metadata, policy scope, and lineage visible while the center panel focuses on what this department is doing and why."
       sections={[
         {
           title: "Registry lineage",
@@ -269,7 +267,7 @@ export default function AgentsPage() {
                 ))}
             </div>
           ) : (
-            "Capability metadata has not been projected for this agent yet."
+            "Capability metadata has not been projected for this department yet."
           ),
         },
       ]}
@@ -281,9 +279,9 @@ export default function AgentsPage() {
       <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
-            eyebrow="Agent detail"
-            title="Understand and control one agent at a time"
-            description="The center of gravity is the selected agent: current state, recent tasks, performance posture, cost, and a direct explanation of why the agent is behaving this way."
+            eyebrow="Department detail"
+            title="Understand and control one department at a time"
+            description="Focus on the selected department: current state, recent tasks, cost, and a plain-language explanation of why it is behaving this way."
           />
 
           {error ? (
@@ -297,13 +295,16 @@ export default function AgentsPage() {
               <Spinner size="lg" />
             </div>
           ) : !selectedAgent ? (
-            <EmptyBlock title="No agents available" description="The registry has not projected any agents yet." />
+            <EmptyBlock
+              title="No departments available"
+              description="No departments are projected in this workspace yet."
+            />
           ) : (
             <>
               <div className="grid gap-6 xl:grid-cols-[0.72fr_1.28fr]">
                 <Panel
-                  title="Agent registry"
-                  description="Select an agent to inspect its state, performance, and controls."
+                  title="Department roster"
+                  description="Select a department or AI worker to inspect its state, performance, and controls."
                 >
                   <SelectionList
                     items={agents}
@@ -323,8 +324,8 @@ export default function AgentsPage() {
                     renderMeta={(agent) => <span className="text-xs">{formatCurrency(agent.total_cost_usd)}</span>}
                     empty={
                       <EmptyBlock
-                        title="No agents found"
-                        description="Registry entries appear after agent nodes run in the control plane."
+                        title="No departments found"
+                        description="Departments appear here after company work starts flowing through the operating model."
                       />
                     }
                   />
@@ -333,13 +334,13 @@ export default function AgentsPage() {
                 <div className="space-y-6">
                   <Panel
                     title={selectedAgent.display_name}
-                    description="Current state and operator controls for the selected agent."
+                    description="Current state and operator controls for the selected department."
                     action={
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={selectedAgent.status} />
                         {currentExecutionId ? (
                           <Button asChild size="sm" variant="outline" className="rounded-full">
-                            <Link href={`/executions/${currentExecutionId}`}>Open execution</Link>
+                            <Link href={`/executions/${currentExecutionId}`}>Open operation detail</Link>
                           </Button>
                         ) : null}
                         {selectedAgent.pending_decisions > 0 ? (
@@ -355,7 +356,7 @@ export default function AgentsPage() {
                           onClick={() => void handleReplayExecution()}
                         >
                           <Play className="h-4 w-4" />
-                          Replay
+                          Retry
                         </Button>
                         <Button
                           size="sm"
@@ -364,7 +365,7 @@ export default function AgentsPage() {
                           onClick={() => void handleStopExecution()}
                         >
                           <Square className="h-4 w-4" />
-                          Stop execution
+                          Stop operation
                         </Button>
                       </div>
                     }
@@ -441,14 +442,14 @@ export default function AgentsPage() {
                       ) : (
                         <EmptyBlock
                           title="No explanation available"
-                          description="Select an agent to derive a readable explanation."
+                          description="Select a department to derive a readable explanation."
                         />
                       )}
                     </Panel>
 
                     <Panel
                       title="Current state"
-                      description="Short-term task context and recent memory relevant to the selected agent."
+                      description="Short-term task context and recent memory relevant to the selected department."
                     >
                       <KeyValueGrid
                         items={[
@@ -457,13 +458,13 @@ export default function AgentsPage() {
                             value: currentTask?.summary ?? "No active task context has been projected.",
                           },
                           {
-                            label: "Latest execution",
+                            label: "Latest operation",
                             value: currentExecutionId ? (
                               <Link href={`/executions/${currentExecutionId}`} className="underline underline-offset-4">
                                 {currentExecutionId.slice(0, 8)}
                               </Link>
                             ) : (
-                              "No recent execution linked"
+                              "No recent operation linked"
                             ),
                           },
                         ]}
@@ -484,7 +485,7 @@ export default function AgentsPage() {
                         {!memoryLoading && memory.length === 0 ? (
                           <EmptyBlock
                             title="No memory attached"
-                            description="When this agent saves or retrieves knowledge, it will surface here."
+                            description="When this department saves or retrieves knowledge, it will surface here."
                           />
                         ) : null}
                       </div>
@@ -492,7 +493,7 @@ export default function AgentsPage() {
                   </div>
 
                   <div className="grid gap-6 2xl:grid-cols-[1.04fr_0.96fr]">
-                    <Panel title="Recent tasks" description="Units of work recently assigned to this agent.">
+                    <Panel title="Recent tasks" description="Units of work recently assigned to this department.">
                       {agentTasks.length ? (
                         <div className="space-y-3">
                           {agentTasks.map((task) => (
@@ -532,14 +533,14 @@ export default function AgentsPage() {
                       ) : (
                         <EmptyBlock
                           title="No active tasks"
-                          description="This agent is not currently supervising any projected work."
+                          description="This department is not currently supervising any projected work."
                         />
                       )}
                     </Panel>
 
                     <Panel
                       title="Decision load"
-                      description="Recent decisions and operator pressure tied to this agent."
+                      description="Recent decisions and operator pressure tied to this department."
                     >
                       {agentDecisions.length ? (
                         <div className="space-y-3">
@@ -568,7 +569,7 @@ export default function AgentsPage() {
                       ) : (
                         <EmptyBlock
                           title="No recent decisions"
-                          description="Decision records tied to this agent will appear here when the agent reaches an approval or intervention boundary."
+                          description="Decision records tied to this department will appear here when it reaches an approval or intervention boundary."
                         />
                       )}
                     </Panel>

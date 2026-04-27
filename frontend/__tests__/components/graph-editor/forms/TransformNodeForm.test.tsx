@@ -379,21 +379,21 @@ describe("TransformNodeForm", () => {
       renderWithConfig();
 
       expect(screen.getByText("state", { selector: "code" })).toBeInTheDocument();
-      expect(screen.getByText(/current workflow state/i)).toBeInTheDocument();
+      expect(screen.getByText(/current operating state/i)).toBeInTheDocument();
     });
 
     it("should display input variable documentation", () => {
       renderWithConfig();
 
       expect(screen.getByText("input", { selector: "code" })).toBeInTheDocument();
-      expect(screen.getByText(/graph input data/i)).toBeInTheDocument();
+      expect(screen.getByText(/company input data/i)).toBeInTheDocument();
     });
 
     it("should display node output variable documentation", () => {
       renderWithConfig();
 
       expect(screen.getByText(/node\.<id>\.output/, { selector: "code" })).toBeInTheDocument();
-      expect(screen.getByText(/output from specific node/i)).toBeInTheDocument();
+      expect(screen.getByText(/output from a specific step/i)).toBeInTheDocument();
     });
   });
 

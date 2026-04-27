@@ -44,7 +44,7 @@ jest.mock("@/lib/graph-validator", () => ({
           {
             errorCode: error.code,
             label: "Connect",
-            description: "Connect this node to the workflow",
+            description: "Connect this step to the operating model",
           },
           {
             errorCode: error.code,
@@ -82,7 +82,7 @@ describe("ValidationStatusBar", () => {
         <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
-      expect(screen.getByText("Graph Valid")).toBeInTheDocument();
+      expect(screen.getByText("Operating Model Ready")).toBeInTheDocument();
     });
 
     it("should apply emerald styling when graph is valid", () => {
@@ -462,7 +462,7 @@ describe("ValidationStatusBar", () => {
           code: ValidationErrorCode.NO_OUTPUT_NODE,
           severity: "error",
           message: "Graph needs an output node",
-          suggestion: "Add an Output node to define the workflow result",
+          suggestion: "Add a Final Deliverable step to define the result",
         },
       ];
 
@@ -930,7 +930,7 @@ describe("ValidationStatusBar", () => {
         <ValidationStatusBar onFocusNode={mockOnFocusNode} onFocusEdge={mockOnFocusEdge} onQuickFix={mockOnQuickFix} />,
       );
 
-      expect(screen.getByText("Graph Valid")).toBeInTheDocument();
+      expect(screen.getByText("Operating Model Ready")).toBeInTheDocument();
     });
 
     it("should handle undefined callback props", () => {

@@ -35,7 +35,7 @@ export default function GraphDetailPage() {
   const loadGraph = useCallback(async () => {
     if (!graphId) {
       setGraph(null);
-      setError("Missing workflow id.");
+      setError("Missing operating model id.");
       setLoading(false);
       return;
     }
@@ -47,7 +47,7 @@ export default function GraphDetailPage() {
       setGraph(graphData);
       setActiveVersion(versionData);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load workflow."));
+      setError(getApiErrorMessage(err, "Failed to load the advanced operating model."));
     } finally {
       setLoading(false);
     }
@@ -126,7 +126,7 @@ export default function GraphDetailPage() {
       try {
         const updated = await graphsApi.update(graphId, { name, description });
         setGraph((prev) => (prev ? { ...prev, name: updated.name, description: updated.description } : null));
-        showSuccess("Workflow info updated");
+        showSuccess("Operating model info updated");
       } catch (err: unknown) {
         showError("Update failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
         throw err;
@@ -142,7 +142,7 @@ export default function GraphDetailPage() {
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center space-x-3 text-muted-foreground">
               <Spinner size="md" />
-              <span className="text-sm">Loading workflow...</span>
+              <span className="text-sm">Loading advanced operating model...</span>
             </div>
           </div>
         </div>
@@ -157,16 +157,16 @@ export default function GraphDetailPage() {
           <main className="flex-1 flex items-center justify-center">
             <div className="bg-card rounded-lg border border-border p-10 text-center max-w-md shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">
-                {error ? "Error Loading Workflow" : "Workflow Not Found"}
+                {error ? "Error Loading Operating Model" : "Operating Model Not Found"}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {error ?? "The workflow may have been deleted or you may not have access."}
+                {error ?? "The operating model may have been deleted or you may not have access."}
               </p>
               <Link
                 href="/workflows"
                 className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/90"
               >
-                Back to workflows
+                Back to advanced mode
               </Link>
             </div>
           </main>
@@ -184,13 +184,13 @@ export default function GraphDetailPage() {
             href="/workflows"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            ← Back
+            ← Back to advanced mode
           </Link>
           <div className="h-4 w-px bg-border" />
           <h1 aria-label={graph.name} className="text-sm font-semibold text-foreground truncate">
             {graph.name}
           </h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground">Workflow Editor</span>
+          <span className="hidden sm:inline text-xs text-muted-foreground">Advanced Operating Model Editor</span>
         </div>
 
         {/* Editor */}

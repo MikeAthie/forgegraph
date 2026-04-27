@@ -9,24 +9,24 @@ export default function Document() {
         <link rel="apple-touch-icon" href="/favicon.svg" />
 
         {/* Primary Meta Tags */}
-        <meta name="title" content="ForgeGraph - Build AI Agents Visually" />
+        <meta name="title" content="ForgeGraph - AI Company Operating System" />
         <meta
           name="description"
-          content="Create powerful AI agents without the complexity. Visual workflow builder that lets you design, test, and deploy AI automation in minutes."
+          content="Create and operate AI-driven companies with shared objectives, departments, operations, approvals, deliverables, and command controls."
         />
         <meta
           name="keywords"
-          content="AI agents, workflow automation, AI builder, no-code AI, visual programming, LLM automation, AI workflows"
+          content="AI company operating system, AI operations, autonomous company, company workspace, AI departments, AI deliverables"
         />
         <meta name="author" content="ForgeGraph" />
 
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://forgegraph.dev/" />
-        <meta property="og:title" content="ForgeGraph - Build AI Agents Visually" />
+        <meta property="og:title" content="ForgeGraph - AI Company Operating System" />
         <meta
           property="og:description"
-          content="Create powerful AI agents without the complexity. Visual workflow builder that lets you design, test, and deploy AI automation in minutes."
+          content="Create and operate AI-driven companies with company workspaces, operations, approvals, and deliverables."
         />
         <meta property="og:image" content="https://forgegraph.dev/og-image.png" />
         <meta property="og:site_name" content="ForgeGraph" />
@@ -34,15 +34,15 @@ export default function Document() {
         {/* Twitter */}
         <meta property="twitter:card" content="summary_large_image" />
         <meta property="twitter:url" content="https://forgegraph.dev/" />
-        <meta property="twitter:title" content="ForgeGraph - Build AI Agents Visually" />
+        <meta property="twitter:title" content="ForgeGraph - AI Company Operating System" />
         <meta
           property="twitter:description"
-          content="Create powerful AI agents without the complexity. Visual workflow builder that lets you design, test, and deploy AI automation in minutes."
+          content="Create and operate AI-driven companies with company workspaces, operations, approvals, and deliverables."
         />
         <meta property="twitter:image" content="https://forgegraph.dev/og-image.png" />
 
         {/* Theme */}
-        <meta name="theme-color" content="#6366f1" />
+        <meta name="theme-color" content="#0f172a" />
 
         {/* Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />

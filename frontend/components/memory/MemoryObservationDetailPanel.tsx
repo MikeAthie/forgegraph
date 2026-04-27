@@ -94,8 +94,8 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
                   columns={1}
                   items={[
                     { label: "Observation ID", value: observation.id },
-                    { label: "Workflow", value: observation.graph_id ?? "None" },
-                    { label: "Execution", value: observation.run_id ?? "None" },
+                    { label: "Operating Model", value: observation.graph_id ?? "None" },
+                    { label: "Operation", value: observation.run_id ?? "None" },
                     { label: "Session", value: observation.session_id ?? "None" },
                     { label: "Agent", value: observation.agent_id ?? "None" },
                     { label: "Chunk", value: observation.memory_chunk_id ?? "None" },

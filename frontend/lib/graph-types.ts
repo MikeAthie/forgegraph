@@ -400,14 +400,14 @@ export interface NodeTypeInfo {
 export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
   {
     type: NODE_TYPES.AGENT,
-    label: "Agent",
-    description: "Run a model-to-tool loop inside one workflow node",
+    label: "AI Worker",
+    description: "Run a model-to-tool loop inside one operating-model step",
     enabled: true,
   },
   {
     type: NODE_TYPES.PROMPT,
-    label: "Prompt",
-    description: "Call an LLM with a prompt template",
+    label: "Prompted Worker",
+    description: "Call an intelligence provider with a prompt template",
     enabled: true,
   },
   {
@@ -418,14 +418,14 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
   },
   {
     type: NODE_TYPES.TRANSFORM,
-    label: "Transform",
+    label: "Data Transform",
     description: "Transform data with an expression",
     enabled: true,
   },
   {
     type: NODE_TYPES.OUTPUT,
-    label: "Output",
-    description: "Define the final output of the workflow",
+    label: "Final Deliverable",
+    description: "Define the final deliverable of the operating model",
     enabled: true,
   },
   {
@@ -442,7 +442,7 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
   },
   {
     type: NODE_TYPES.HUMAN_GATE,
-    label: "Human Gate",
+    label: "Approval Gate",
     description: "Pause for human approval",
     enabled: true,
   },
@@ -478,14 +478,14 @@ export const PHASE2_NODE_TYPES: NodeTypeInfo[] = [
   },
   {
     type: NODE_TYPES.TOOL,
-    label: "Tool",
+    label: "Tool Action",
     description: "Call a tool from the tool registry",
     enabled: true,
   },
   {
     type: NODE_TYPES.SUBGRAPH,
-    label: "Subgraph",
-    description: "Run another graph inline",
+    label: "Reusable Model",
+    description: "Run another operating model inline",
     enabled: true,
   },
 ];

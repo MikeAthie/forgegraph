@@ -91,8 +91,8 @@ describe("NodePalette", () => {
     it("should render palette header and description", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      expect(screen.getByText("Add Nodes")).toBeInTheDocument();
-      expect(screen.getByText("Click to add a node to the canvas")).toBeInTheDocument();
+      expect(screen.getByText("Add Steps")).toBeInTheDocument();
+      expect(screen.getByText("Click to add a step to the operating model")).toBeInTheDocument();
     });
 
     it("should render all node types from PHASE2_NODE_TYPES", () => {
@@ -149,7 +149,7 @@ describe("NodePalette", () => {
       expect(screen.getByText("Open wizard")).toBeInTheDocument();
       expect(screen.getByText("Save")).toBeInTheDocument();
       expect(screen.getByText("Select all")).toBeInTheDocument();
-      expect(screen.getByText("Delete node")).toBeInTheDocument();
+      expect(screen.getByText("Delete step")).toBeInTheDocument();
       expect(screen.getByText("Ctrl+W")).toBeInTheDocument();
       expect(screen.getByText("Ctrl+S")).toBeInTheDocument();
       expect(screen.getByText("Ctrl+A")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("NodePalette", () => {
     it("should render Prompt node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const promptButton = screen.getByRole("button", { name: /^prompt$/i });
+      const promptButton = screen.getByRole("button", { name: /^prompted worker$/i });
       expect(promptButton).not.toBeDisabled();
     });
 
@@ -176,14 +176,14 @@ describe("NodePalette", () => {
     it("should render Transform node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const transformButton = screen.getByRole("button", { name: /^transform$/i });
+      const transformButton = screen.getByRole("button", { name: /^data transform$/i });
       expect(transformButton).not.toBeDisabled();
     });
 
     it("should render Output node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const outputButton = screen.getByRole("button", { name: /^output$/i });
+      const outputButton = screen.getByRole("button", { name: /^final deliverable$/i });
       expect(outputButton).not.toBeDisabled();
     });
 
@@ -206,7 +206,7 @@ describe("NodePalette", () => {
     it("should render Human Gate node type as enabled", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const humanGateButton = screen.getByRole("button", { name: /^human gate$/i });
+      const humanGateButton = screen.getByRole("button", { name: /^approval gate$/i });
       expect(humanGateButton).not.toBeDisabled();
     });
   });
@@ -216,7 +216,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const promptButton = screen.getByRole("button", { name: /^prompt$/i });
+      const promptButton = screen.getByRole("button", { name: /^prompted worker$/i });
       await user.click(promptButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
@@ -238,7 +238,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const transformButton = screen.getByRole("button", { name: /^transform$/i });
+      const transformButton = screen.getByRole("button", { name: /^data transform$/i });
       await user.click(transformButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
@@ -249,7 +249,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const outputButton = screen.getByRole("button", { name: /^output$/i });
+      const outputButton = screen.getByRole("button", { name: /^final deliverable$/i });
       await user.click(outputButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
@@ -260,7 +260,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} hasSelectedNode={true} />);
 
-      const promptButton = screen.getByRole("button", { name: /^prompt$/i });
+      const promptButton = screen.getByRole("button", { name: /^prompted worker$/i });
       await user.click(promptButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
@@ -281,7 +281,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const humanGateButton = screen.getByRole("button", { name: /^human gate$/i });
+      const humanGateButton = screen.getByRole("button", { name: /^approval gate$/i });
       await user.click(humanGateButton);
 
       expect(mockOnAddNode).toHaveBeenCalledTimes(1);
@@ -292,7 +292,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const promptButton = screen.getByRole("button", { name: /^prompt$/i });
+      const promptButton = screen.getByRole("button", { name: /^prompted worker$/i });
       await user.click(promptButton);
       await user.click(promptButton);
       await user.click(promptButton);
@@ -304,7 +304,7 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
+      const searchInput = screen.getByRole("textbox", { name: /search steps/i });
       await user.type(searchInput, "http");
       await user.keyboard("{Enter}");
 
@@ -315,10 +315,10 @@ describe("NodePalette", () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      await user.click(screen.getByRole("button", { name: /^prompt$/i }));
+      await user.click(screen.getByRole("button", { name: /^prompted worker$/i }));
 
       expect(screen.getByText("Recently used")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /^recent prompt$/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^recent prompted worker$/i })).toBeInTheDocument();
     });
   });
 
@@ -389,18 +389,18 @@ describe("NodePalette", () => {
     it("should display node descriptions in correct format", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      expect(screen.getByText("Call an LLM with a prompt template")).toBeInTheDocument();
+      expect(screen.getByText("Call an intelligence provider with a prompt template")).toBeInTheDocument();
       expect(screen.getByText("Make an HTTP request to an external API")).toBeInTheDocument();
       expect(screen.getByText("Transform data with an expression")).toBeInTheDocument();
-      expect(screen.getByText("Define the final output of the workflow")).toBeInTheDocument();
+      expect(screen.getByText("Define the final deliverable of the operating model")).toBeInTheDocument();
     });
 
     it("should show badges in search results", async () => {
       const user = setupUser();
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
-      const searchInput = screen.getByRole("textbox", { name: /search nodes/i });
-      await user.type(searchInput, "prompt");
+      const searchInput = screen.getByRole("textbox", { name: /search steps/i });
+      await user.type(searchInput, "prompted");
 
       expect(screen.getAllByText("Credential").length).toBeGreaterThan(0);
       expect(screen.getAllByText("LLM").length).toBeGreaterThan(0);
@@ -410,7 +410,7 @@ describe("NodePalette", () => {
       render(<NodePalette onAddNode={mockOnAddNode} />);
 
       expect(screen.getByText("Recommended")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /^recommended prompt$/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^recommended prompted worker$/i })).toBeInTheDocument();
     });
 
     it("shows blocked marketplace packages as unavailable", () => {

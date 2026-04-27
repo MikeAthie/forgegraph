@@ -135,9 +135,9 @@ function renderGraphEditor() {
 }
 
 async function addPromptNodeViaWizard(user: ReturnType<typeof userEvent.setup>, task = "Write a short response.") {
-  // Scope to the node palette panel to avoid matching QuickToolBar buttons
-  const palette = screen.getByRole("complementary", { name: /node palette panel/i });
-  await actClick(user, within(palette).getByRole("button", { name: /^prompt$/i }));
+  // Scope to the step palette panel to avoid matching QuickToolBar buttons
+  const palette = screen.getByRole("complementary", { name: /step palette panel/i });
+  await actClick(user, within(palette).getByRole("button", { name: /^prompted worker$/i }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
@@ -150,14 +150,20 @@ async function addPromptNodeViaWizard(user: ReturnType<typeof userEvent.setup>, 
 }
 
 async function addNodeViaConfigDialog(user: ReturnType<typeof userEvent.setup>, label: RegExp) {
-  // Scope to the node palette panel to avoid matching QuickToolBar buttons
-  const palette = screen.getByRole("complementary", { name: /node palette panel/i });
+  // Scope to the step palette panel to avoid matching QuickToolBar buttons
+  const palette = screen.getByRole("complementary", { name: /step palette panel/i });
   await actClick(user, within(palette).getByRole("button", { name: label }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
 
-  await actClick(user, dialogScope.getByRole("button", { name: /add node/i }));
+  if (label.test("HTTP")) {
+    fireEvent.change(dialogScope.getByLabelText(/url/i), {
+      target: { value: "https://api.example.com/endpoint" },
+    });
+  }
+
+  await actClick(user, dialogScope.getByRole("button", { name: /add step/i }));
 
   await waitFor(() => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -165,7 +171,7 @@ async function addNodeViaConfigDialog(user: ReturnType<typeof userEvent.setup>, 
 }
 
 async function addAgentNodeViaDialog(user: ReturnType<typeof userEvent.setup>) {
-  await actClick(user, screen.getByRole("button", { name: /^agent$/i }));
+  await actClick(user, screen.getByRole("button", { name: /^ai worker$/i }));
 
   const dialog = await screen.findByRole("dialog");
   const dialogScope = within(dialog);
@@ -179,7 +185,7 @@ async function addAgentNodeViaDialog(user: ReturnType<typeof userEvent.setup>) {
     target: { value: "crm.lookup" },
   });
 
-  await actClick(user, dialogScope.getByRole("button", { name: /add node/i }));
+  await actClick(user, dialogScope.getByRole("button", { name: /add step/i }));
 
   await waitFor(() => {
     expect(screen.getByTestId("reactflow")).toBeInTheDocument();
@@ -227,7 +233,7 @@ describe("GraphEditor", () => {
 
     const flow = screen.getByTestId("reactflow");
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(1);
-    expect(within(flow).getByRole("button", { name: /^agent$/i })).toBeInTheDocument();
+    expect(within(flow).getByRole("button", { name: /^ai worker$/i })).toBeInTheDocument();
   });
 
   it("should show agent trace details in execution overlay", async () => {
@@ -340,7 +346,7 @@ describe("GraphEditor", () => {
     await actClick(userEvent.setup(), within(flow).getByRole("button", { name: /Support Agent/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Node trace/i)).toBeInTheDocument();
+      expect(screen.getByText(/Department activity/i)).toBeInTheDocument();
       expect(screen.getByText(/Final answer/i)).toBeInTheDocument();
       expect(screen.getAllByText(/crm_lookup/i).length).toBeGreaterThan(0);
     });
@@ -374,7 +380,7 @@ describe("GraphEditor", () => {
     expect(within(flow).getAllByTestId(/node-/)).toHaveLength(2);
     expect(within(flow).getAllByTestId(/edge-/)).toHaveLength(1);
 
-    await actClick(user, within(flow).getByRole("button", { name: /prompt node/i }));
+    await actClick(user, within(flow).getByRole("button", { name: /prompted worker node/i }));
     fireEvent.keyDown(window, { key: "Delete" });
 
     expect(within(flow).queryAllByTestId(/edge-/)).toHaveLength(0);
@@ -395,9 +401,9 @@ describe("GraphEditor", () => {
     // Clear selection so the next node doesn't auto-connect.
     await actClick(user, screen.getByTestId("reactflow"));
 
-    await addNodeViaConfigDialog(user, /^output$/i);
+    await addNodeViaConfigDialog(user, /^final deliverable$/i);
 
-    const outputNodeButton = within(nodesContainer).getByRole("button", { name: /^output$/i });
+    const outputNodeButton = within(nodesContainer).getByRole("button", { name: /^final deliverable$/i });
     const outputTestId = outputNodeButton.getAttribute("data-testid") ?? "";
     const outputId = outputTestId.replace(/^node-/, "");
 
@@ -472,22 +478,22 @@ describe("GraphEditor", () => {
     expect(showInfo).toHaveBeenCalledWith("Connection blocked", "A node cannot connect to itself.");
   });
 
-  it("should open and close the agent wizard with keyboard shortcuts", async () => {
+  it("should open and close the operating model wizard with keyboard shortcuts", async () => {
     renderGraphEditor();
 
     fireEvent.keyDown(window, { key: "w", ctrlKey: true });
-    expect(await screen.findByRole("dialog", { name: /agent wizard/i })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /operating model wizard/i })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /agent wizard/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: /operating model wizard/i })).not.toBeInTheDocument();
     });
   });
 
   it("should expose accessible editor landmarks for keyboard navigation", () => {
     renderGraphEditor();
 
-    expect(screen.getByRole("complementary", { name: /node palette panel/i })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: /step palette panel/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /canvas panel/i })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: /inspector panel/i })).toBeInTheDocument();
   });
@@ -558,7 +564,7 @@ describe("GraphEditor", () => {
 
     renderGraphEditor();
 
-    expect(await screen.findByRole("button", { name: /add crm lookup integration node/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /add crm lookup tool action/i })).toBeInTheDocument();
   });
 
   it("should not show template-only packages in the quick toolbar", async () => {
@@ -618,8 +624,8 @@ describe("GraphEditor", () => {
     renderGraphEditor();
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /add template http integration node/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /add template http tool action/i })).not.toBeInTheDocument();
     });
-    expect(screen.getByText(/no runtime-ready tools yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no runtime-ready tool actions yet/i)).toBeInTheDocument();
   });
 });

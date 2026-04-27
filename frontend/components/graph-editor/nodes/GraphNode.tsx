@@ -208,7 +208,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
           type="button"
           onClick={handleDelete}
           className="absolute top-2 right-2 w-6 h-6 bg-destructive hover:bg-destructive/90 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-20"
-          aria-label="Delete node"
+          aria-label="Delete step"
         >
           <X className="w-3 h-3" />
         </button>

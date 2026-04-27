@@ -32,7 +32,7 @@ export default function WorkflowsPage() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load workflow workspace."));
+          setError(getApiErrorMessage(err, "Failed to load the advanced editor workspace."));
         }
       } finally {
         if (!cancelled) {
@@ -53,27 +53,30 @@ export default function WorkflowsPage() {
       <DashboardLayout
         inspector={
           <InspectorPanel
-            title="Builder workspace"
-            subtitle="Workflows remain fully supported, but they are now a secondary workspace under the operating shell."
+            title="Advanced editor"
+            subtitle="Operating-model authoring stays available here, but it is a secondary workspace under the company shell."
             sections={[
               {
                 title: "Mental model",
                 content:
-                  "Definitions and revisions live here. Operations happen from dashboard, agents, tasks, inbox, and accounting.",
+                  "Saved operating models live here. Company operations happen from companies, command ops, activity, approvals, and usage.",
               },
-              { title: "Compatibility", content: "Legacy graph routes remain available while the new IA settles in." },
+              {
+                title: "Compatibility",
+                content: "Legacy routes remain available while the company-first navigation settles in.",
+              },
             ]}
           />
         }
       >
         <div className="space-y-6">
           <SectionHeader
-            eyebrow="Workflow workspace"
-            title="Definitions, revisions, and execution visibility"
-            description="Authoring stays available for builder users, but the workspace is explicitly subordinate to system state."
+            eyebrow="Advanced"
+            title="Advanced operating models"
+            description="Edit saved operating models directly when you need expert-level control. Most users should create and operate companies from the main workspace."
             action={
               <Button asChild className="rounded-full">
-                <Link href="/graphs">Open editor</Link>
+                <Link href="/graphs">Open advanced editor</Link>
               </Button>
             }
           />
@@ -91,8 +94,8 @@ export default function WorkflowsPage() {
           ) : (
             <>
               <Panel
-                title="Workflow definitions"
-                description="Reusable authored definitions available to the organization."
+                title="Saved operating models"
+                description="Reusable operating-model definitions available to this workspace."
               >
                 {workflows.length ? (
                   <div className="grid gap-4 lg:grid-cols-2">
@@ -108,7 +111,7 @@ export default function WorkflowsPage() {
                               {workflow.description || "No description provided."}
                             </p>
                           </div>
-                          <StatusBadge status="pending" label={`${workflow.version_count} rev`} />
+                          <StatusBadge status="pending" label={`${workflow.version_count} saved`} />
                         </div>
                         <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                           <span>Updated {formatDateTime(workflow.updated_at)}</span>
@@ -116,7 +119,7 @@ export default function WorkflowsPage() {
                             href={`/graphs/${workflow.id}`}
                             className="text-slate-900 hover:underline dark:text-slate-50"
                           >
-                            Open definition
+                            Open model
                           </Link>
                         </div>
                       </div>
@@ -124,15 +127,15 @@ export default function WorkflowsPage() {
                   </div>
                 ) : (
                   <EmptyBlock
-                    title="No workflows defined"
-                    description="Create a workflow to start routing work through the builder workspace."
+                    title="No operating models saved"
+                    description="Create an operating model when you need direct advanced control."
                   />
                 )}
               </Panel>
 
               <Panel
-                title="Recent executions"
-                description="Visibility from the builder side without turning this into the primary runtime surface."
+                title="Recent operations"
+                description="A lightweight readout from the advanced side without turning this into the primary operating surface."
               >
                 {executions.length ? (
                   <div className="space-y-3">
@@ -154,8 +157,8 @@ export default function WorkflowsPage() {
                   </div>
                 ) : (
                   <EmptyBlock
-                    title="No recent executions"
-                    description="Execution history will appear here as workflows are run."
+                    title="No recent operations"
+                    description="Operation history will appear here after companies begin running work."
                   />
                 )}
               </Panel>

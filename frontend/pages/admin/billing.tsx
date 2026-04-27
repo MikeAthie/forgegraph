@@ -133,8 +133,8 @@ export default function AdminBillingPage() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Billing</h1>
-              <p className="text-sm text-muted-foreground">Choose a plan and manage your subscription.</p>
+              <h1 className="text-2xl font-semibold text-foreground">Usage And Billing</h1>
+              <p className="text-sm text-muted-foreground">Choose a plan and manage company operating usage.</p>
             </div>
             <Button asChild variant="outline">
               <Link href="/admin/operations">View policies and retention</Link>
@@ -150,7 +150,7 @@ export default function AdminBillingPage() {
           <Card>
             <CardHeader>
               <CardTitle>Current Subscription</CardTitle>
-              <CardDescription>Plan status and renewal information.</CardDescription>
+              <CardDescription>Plan status, renewal, and operating access information.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {subscription ? (
@@ -213,19 +213,19 @@ export default function AdminBillingPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Runtime guardrails</CardTitle>
-                <CardDescription>Use this stack when explaining why a run was blocked.</CardDescription>
+                <CardTitle>Operating Guardrails</CardTitle>
+                <CardDescription>Use this stack when explaining why an operation was blocked.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="rounded-xl border border-border/40 bg-muted/30 p-3">
                   <p className="font-medium">1. Plan entitlement</p>
                   <p className="mt-1 text-muted-foreground">
-                    Commercial ceiling from the active plan, such as max monthly runs or token volume.
+                    Commercial ceiling from the active plan, such as max monthly operations or token volume.
                   </p>
                 </div>
                 <div className="rounded-xl border border-border/40 bg-muted/30 p-3">
                   <p className="font-medium">2. Tenant quota</p>
-                  <p className="mt-1 text-muted-foreground">Operator-set token or cost cap for this organization.</p>
+                  <p className="mt-1 text-muted-foreground">Operator-set token or cost cap for this workspace.</p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     Tokens:{" "}
                     {quota?.quota?.monthly_token_limit != null

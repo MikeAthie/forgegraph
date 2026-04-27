@@ -54,8 +54,8 @@ type ExportAction = {
 const EXPORT_ACTIONS: ExportAction[] = [
   {
     key: "runs",
-    label: "Run traces",
-    description: "Redacted run-level payloads for support review.",
+    label: "Operation traces",
+    description: "Redacted operation-level payloads for support review.",
     type: "runs",
     kind: "retention",
   },
@@ -253,7 +253,7 @@ export default function AdminOperationsPage() {
       notices.push("Observation indexing is backlogged. Memory-backed runs can degrade until indexing catches up.");
     }
     if (data.metricsSummary.violations.queue_depth) {
-      notices.push("Queue depth is above the target. Operators should expect slower run starts.");
+      notices.push("Queue depth is above the target. Operators should expect slower operation starts.");
     }
     return notices;
   }, [data]);
@@ -437,7 +437,7 @@ export default function AdminOperationsPage() {
                         </p>
                       </div>
                       <div className="rounded-xl border border-border/50 bg-background/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Run logs</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Operation logs</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">
                           {formatDays(data.retention.run_logs_retention_days)}
                         </p>
@@ -490,7 +490,7 @@ export default function AdminOperationsPage() {
                             {cleanupPreview.runs_deleted + cleanupPreview.run_logs_deleted}
                           </p>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Runs plus run logs that are past retention.
+                            Operations plus operation logs that are past retention.
                           </p>
                         </div>
                         <div className="rounded-xl border border-border/50 bg-background/70 p-4">

@@ -70,14 +70,14 @@ export default function TasksPage() {
   const inspector = selectedTask ? (
     <InspectorPanel
       title={selectedTask.title}
-      subtitle="Task records are the operator-facing projection over execution, step, and decision state."
+      subtitle="Task records are the operator-facing projection over operation, department activity, and approval state."
       sections={[
         {
           title: "Routing",
           content: (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span>Execution</span>
+                <span>Operation</span>
                 <span className="truncate pl-4">{selectedTask.execution_id.slice(0, 8)}</span>
               </div>
               <div className="flex items-center justify-between">
@@ -119,9 +119,9 @@ export default function TasksPage() {
       <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
-            eyebrow="Task control"
-            title="Queue-first supervision"
-            description="Tasks are the units of work an operator can reason about. Each one summarizes what is happening now, where the execution is paused, and which execution to inspect next."
+            eyebrow="Activity"
+            title="Department activity at a glance"
+            description="Each task summarizes what is happening now, where work is blocked, and which operation to inspect next."
           />
 
           {error ? (
@@ -137,11 +137,11 @@ export default function TasksPage() {
           ) : !selectedTask ? (
             <EmptyBlock
               title="No tasks available"
-              description="Task projections will appear here when executions create operator-facing work."
+              description="Task projections will appear here when operations create operator-facing work."
             />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
-              <Panel title="Task queue" description="Select a task to inspect its current state and trace linkage.">
+              <Panel title="Activity queue" description="Select a task to inspect its current state and next action.">
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -192,12 +192,12 @@ export default function TasksPage() {
               <div className="space-y-6">
                 <Panel
                   title={selectedTask.title}
-                  description="Summary first, trace detail one click away."
+                  description="Summary first, deeper operation detail one click away."
                   action={
                     <div className="flex items-center gap-2">
                       <StatusBadge status={selectedTask.status} />
                       <Button asChild variant="outline" className="rounded-full">
-                        <Link href={`/executions/${selectedTask.execution_id}`}>Open execution</Link>
+                        <Link href={`/executions/${selectedTask.execution_id}`}>Open operation</Link>
                       </Button>
                     </div>
                   }
@@ -224,22 +224,23 @@ export default function TasksPage() {
 
                 <div className="grid gap-6 2xl:grid-cols-2">
                   <Panel
-                    title="Execution trace"
-                    description="The task is a projection; the execution remains the canonical trace backbone."
+                    title="Operation detail"
+                    description="Use the operation view when you need department-by-department detail."
                   >
                     <div className="space-y-3">
                       <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Execution linkage</p>
+                        <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Operation linkage</p>
                         <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                          This task is attached to execution{" "}
+                          This task is attached to operation{" "}
                           <span className="font-medium text-slate-900 dark:text-slate-50">
                             {selectedTask.execution_id}
                           </span>
-                          . Use the execution view to inspect step-level input, output, tools, and reasoning summaries.
+                          . Use the operation view to inspect department activity, tools, outputs, and technical
+                          summaries.
                         </p>
                       </div>
                       <Button asChild className="rounded-full">
-                        <Link href={`/executions/${selectedTask.execution_id}`}>Inspect distributed trace</Link>
+                        <Link href={`/executions/${selectedTask.execution_id}`}>Inspect operation detail</Link>
                       </Button>
                     </div>
                   </Panel>
