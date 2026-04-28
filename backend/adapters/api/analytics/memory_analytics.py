@@ -175,7 +175,11 @@ def _curated_memory_payload(tenant_id: str, start_date: date, end_date: date) ->
         "run_scope_total": active_qs.filter(scope="run").count(),
         "session_scope_total": active_qs.filter(scope="session").count(),
         "retrieval_runs_in_period": NodeRun.objects.filter(
-            run__owner__default_organization_id=tenant_uuid,
+            models.Q(run__organization_id=tenant_uuid)
+            | models.Q(
+                run__organization__isnull=True,
+                run__owner__default_organization_id=tenant_uuid,
+            ),
             node_type__in=["observation_search", "observation_context", "observation_timeline"],
             started_at__date__gte=start_date,
             started_at__date__lte=end_date,

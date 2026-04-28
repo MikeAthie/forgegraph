@@ -1,7 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp, Clock3, Filter } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Filter,
+  Inbox,
+  RotateCcw,
+  Square,
+} from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
@@ -29,6 +39,7 @@ import {
   type RunDetail,
 } from "@/lib/api";
 import { getDepartmentTaskLabel, translateRunStatus } from "@/lib/company-workspace";
+import { showError, showSuccess } from "@/lib/toast";
 
 const formatTracePayload = (value: unknown) => {
   if (value === null || value === undefined) {
@@ -177,6 +188,13 @@ const buildRunWebSocketUrl = (runId: string, ticket: string) => {
   return `${websocketOrigin}/ws/runs/${runId}/?ticket=${encodeURIComponent(ticket)}&event_level=default`;
 };
 
+const primaryActionButtonClass =
+  "rounded-full bg-white text-slate-950 shadow-[0_18px_38px_-24px_rgba(255,255,255,0.85)] hover:bg-slate-100 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-800";
+const secondaryActionButtonClass =
+  "rounded-full border-white/25 bg-white/10 text-white hover:bg-white/18 hover:text-white dark:border-slate-950/15 dark:bg-slate-950/8 dark:text-slate-950 dark:hover:bg-slate-950/12";
+const destructiveActionButtonClass =
+  "rounded-full bg-rose-500 text-white shadow-[0_18px_38px_-24px_rgba(244,63,94,0.85)] hover:bg-rose-400 dark:bg-rose-600 dark:hover:bg-rose-500";
+
 const sortNodeRuns = (nodeRuns: NodeRunItem[]) =>
   [...nodeRuns].sort((left, right) => {
     const leftTime = left.started_at ? new Date(left.started_at).getTime() : Number.MAX_SAFE_INTEGER;
@@ -274,6 +292,7 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
   const [liveStatus, setLiveStatus] = useState<"pending" | "active" | "offline">("pending");
   const [showAllSteps, setShowAllSteps] = useState(false);
   const [liveSummaries, setLiveSummaries] = useState<Record<string, string>>({});
+  const [actionLoading, setActionLoading] = useState<"cancel" | "replay" | null>(null);
   const reconnectAttemptRef = useRef(0);
   const hasConnectedOnceRef = useRef(false);
 
@@ -506,6 +525,47 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
     }
   }, [run?.node_runs, selectedStepId]);
 
+  const handleCancelOperation = useCallback(async () => {
+    if (!run || actionLoading) {
+      return;
+    }
+
+    setActionLoading("cancel");
+    try {
+      const updated = await runsApi.cancel(run.id);
+      setRun(updated);
+      showSuccess("Operation stopped", "The operation was canceled by the backend control plane.");
+    } catch (err: unknown) {
+      showError("Stop failed", getApiErrorMessage(err, "Unable to stop this operation."));
+    } finally {
+      setActionLoading(null);
+    }
+  }, [actionLoading, run]);
+
+  const handleReplayOperation = useCallback(async () => {
+    if (!run || actionLoading) {
+      return;
+    }
+
+    setActionLoading("replay");
+    try {
+      const replayed = await runsApi.replay(run.id);
+      showSuccess("Replay started", "A fresh operation has been queued from the saved input.");
+      await router.push(`/executions/${replayed.id}`);
+    } catch (err: unknown) {
+      showError("Replay failed", getApiErrorMessage(err, "Unable to replay this operation."));
+    } finally {
+      setActionLoading(null);
+    }
+  }, [actionLoading, router, run]);
+
+  const handleInspectStep = useCallback((stepId: string) => {
+    setSelectedStepId(stepId);
+    if (typeof document !== "undefined") {
+      document.getElementById("department-activity")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
   const selectedStep = useMemo(
     () => run?.node_runs.find((step) => step.id === selectedStepId) ?? run?.node_runs[0] ?? null,
     [run?.node_runs, selectedStepId],
@@ -558,6 +618,38 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
   const failedStep = traceState?.failedSteps[0] ?? null;
   const decisionStep = traceState?.decisionSteps[0] ?? null;
   const bottleneckStep = traceState?.bottleneckSteps[0] ?? null;
+  const normalizedRunStatus = String(run?.status ?? "").toLowerCase();
+  const hasFailedRun = normalizedRunStatus === "failed";
+  const canStopOperation = ["pending", "queued", "running", "resume_requested"].includes(normalizedRunStatus);
+  const isWaitingForApproval = normalizedRunStatus === "paused" || Boolean(run?.paused_node_id);
+  const canReplayOperation = Boolean(run) && !canStopOperation && !isWaitingForApproval;
+  const replayButtonLabel =
+    actionLoading === "replay"
+      ? "Replaying..."
+      : normalizedRunStatus === "succeeded"
+        ? "Run again"
+        : "Replay operation";
+  const actionTitle =
+    failedStep || hasFailedRun
+      ? "Failure needs review"
+      : isWaitingForApproval
+        ? "Approval needed"
+        : canStopOperation
+          ? "Operation is active"
+          : normalizedRunStatus === "succeeded"
+            ? "Operation completed"
+            : "Operation actions";
+  const actionDescription = failedStep
+    ? `${getDepartmentTaskLabel(failedStep, null)} failed. Inspect the failure first, then replay once the issue is understood.`
+    : hasFailedRun
+      ? "The operation failed without a highlighted department step. Review the trace, then replay once the issue is understood."
+      : isWaitingForApproval
+        ? "This operation is paused at an approval gate. Open the approval queue to decide the next step."
+        : canStopOperation
+          ? "Live work is in progress. Keep watching the trace or stop the operation if it is no longer valid."
+          : normalizedRunStatus === "succeeded"
+            ? "The run finished cleanly. Review the trace or replay it when you need the same operation again."
+            : "Use these controls before drilling into logs, timing, or department-level diagnostics.";
 
   const inspector = selectedStep ? (
     <InspectorPanel
@@ -615,17 +707,6 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
             eyebrow="Operation detail"
             title="Operation trace"
             description="Failures, decisions, and bottlenecks come first. Routine department activity stays collapsed until the operator explicitly expands it."
-            action={
-              <div className="flex items-center gap-2">
-                <StatusBadge
-                  status={liveStatus}
-                  label={liveStatus === "active" ? "Live updates" : liveStatus === "pending" ? "Connecting" : "Offline"}
-                />
-                <Button asChild variant="outline" className="rounded-full">
-                  <Link href="/executions">Back to operations</Link>
-                </Button>
-              </div>
-            }
           />
 
           {error ? (
@@ -640,6 +721,84 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
             </div>
           ) : (
             <>
+              <div className="rounded-[2rem] border border-slate-950/12 bg-slate-950 px-6 py-5 text-white shadow-[0_34px_90px_-58px_rgba(15,23,42,0.95)] dark:border-white/12 dark:bg-slate-100 dark:text-slate-950">
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-white/60 dark:text-slate-500">
+                        Operator action
+                      </p>
+                      <StatusBadge status={String(run.status)} />
+                      <StatusBadge
+                        status={liveStatus}
+                        label={
+                          liveStatus === "active" ? "Live updates" : liveStatus === "pending" ? "Connecting" : "Offline"
+                        }
+                      />
+                    </div>
+                    <h3
+                      className="mt-3 text-2xl font-semibold tracking-tight"
+                      style={{ fontFamily: "var(--font-serif)" }}
+                    >
+                      {actionTitle}
+                    </h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-7 text-white/68 dark:text-slate-600">
+                      {actionDescription}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    {failedStep ? (
+                      <Button
+                        type="button"
+                        className={primaryActionButtonClass}
+                        onClick={() => handleInspectStep(failedStep.id)}
+                      >
+                        Inspect failure
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+
+                    {isWaitingForApproval ? (
+                      <Button asChild className={primaryActionButtonClass}>
+                        <Link href="/inbox">
+                          <Inbox className="h-4 w-4" />
+                          Open approvals
+                        </Link>
+                      </Button>
+                    ) : null}
+
+                    {canStopOperation ? (
+                      <Button
+                        type="button"
+                        className={destructiveActionButtonClass}
+                        onClick={() => void handleCancelOperation()}
+                        disabled={actionLoading !== null}
+                      >
+                        <Square className="h-4 w-4" />
+                        {actionLoading === "cancel" ? "Stopping..." : "Stop operation"}
+                      </Button>
+                    ) : null}
+
+                    {canReplayOperation ? (
+                      <Button
+                        type="button"
+                        className={failedStep ? secondaryActionButtonClass : primaryActionButtonClass}
+                        onClick={() => void handleReplayOperation()}
+                        disabled={actionLoading !== null}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        {replayButtonLabel}
+                      </Button>
+                    ) : null}
+
+                    <Button asChild variant="outline" className={secondaryActionButtonClass}>
+                      <Link href="/executions">Back to operations</Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               <Panel
                 title={run.graph_name}
                 description="One-screen summary of what happened, what needs attention, and where the run slowed down."
@@ -765,123 +924,125 @@ export default function ExecutionDetailView({ routeParam }: ExecutionDetailViewP
                 </Panel>
               </div>
 
-              <Panel
-                title="Department activity"
-                description="Routine activity is collapsed by default so the operator can focus on failures, decisions, and bottlenecks first."
-                action={
-                  run.node_runs.length > 3 ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={() => setShowAllSteps((current) => !current)}
-                    >
-                      {showAllSteps ? (
-                        <>
-                          Collapse routine activity
-                          <ChevronUp className="h-4 w-4" />
-                        </>
-                      ) : (
-                        <>
-                          Show all activity
-                          <ChevronDown className="h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
-                  ) : null
-                }
-              >
-                {run.node_runs.length ? (
-                  <div className="space-y-4">
-                    {!showAllSteps && traceState.hiddenRoutineCount > 0 ? (
-                      <div className="flex items-center gap-2 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 text-sm text-slate-600 dark:border-white/8 dark:text-slate-300">
-                        <Filter className="h-4 w-4" />
-                        {traceState.hiddenRoutineCount} routine activit
-                        {traceState.hiddenRoutineCount === 1 ? "y" : "ies"} collapsed.
-                      </div>
-                    ) : null}
+              <div id="department-activity" className="scroll-mt-32">
+                <Panel
+                  title="Department activity"
+                  description="Routine activity is collapsed by default so the operator can focus on failures, decisions, and bottlenecks first."
+                  action={
+                    run.node_runs.length > 3 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={() => setShowAllSteps((current) => !current)}
+                      >
+                        {showAllSteps ? (
+                          <>
+                            Collapse routine activity
+                            <ChevronUp className="h-4 w-4" />
+                          </>
+                        ) : (
+                          <>
+                            Show all activity
+                            <ChevronDown className="h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    ) : null
+                  }
+                >
+                  {run.node_runs.length ? (
+                    <div className="space-y-4">
+                      {!showAllSteps && traceState.hiddenRoutineCount > 0 ? (
+                        <div className="flex items-center gap-2 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 text-sm text-slate-600 dark:border-white/8 dark:text-slate-300">
+                          <Filter className="h-4 w-4" />
+                          {traceState.hiddenRoutineCount} routine activit
+                          {traceState.hiddenRoutineCount === 1 ? "y" : "ies"} collapsed.
+                        </div>
+                      ) : null}
 
-                    {traceState.visibleSteps.map((step, index) => {
-                      const tone = statusTone(step.status);
-                      const traceStep = step.agent_trace?.steps?.[step.agent_trace.steps.length - 1] as
-                        | AgentTraceStep
-                        | undefined;
-                      const isBottleneck = traceState.bottleneckIds.has(step.id);
-                      const isDecision =
-                        step.status === "waiting" ||
-                        step.node_type === "human_gate" ||
-                        step.agent_trace?.approval_pending;
-                      const summaryKey = `${step.node_id}:${step.attempt}`;
+                      {traceState.visibleSteps.map((step, index) => {
+                        const tone = statusTone(step.status);
+                        const traceStep = step.agent_trace?.steps?.[step.agent_trace.steps.length - 1] as
+                          | AgentTraceStep
+                          | undefined;
+                        const isBottleneck = traceState.bottleneckIds.has(step.id);
+                        const isDecision =
+                          step.status === "waiting" ||
+                          step.node_type === "human_gate" ||
+                          step.agent_trace?.approval_pending;
+                        const summaryKey = `${step.node_id}:${step.attempt}`;
 
-                      return (
-                        <button
-                          key={step.id}
-                          type="button"
-                          onClick={() => setSelectedStepId(step.id)}
-                          className="w-full rounded-[1.3rem] border border-slate-900/8 bg-white/75 px-5 py-5 text-left transition-colors hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/8"
-                        >
-                          <div className="grid gap-4 xl:grid-cols-[3.5rem_minmax(0,1fr)_13rem]">
-                            <div className="flex items-start gap-3 xl:block">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-900/10 bg-[var(--panel-muted)] text-sm font-semibold dark:border-white/10">
-                                {index + 1}
-                              </div>
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                  {getDepartmentTaskLabel(step, null)}
-                                </p>
-                                <StatusBadge status={translateRunStatus(String(step.status))} />
-                                <StatusBadge status="pending" label="department activity" />
-                                {isDecision ? <StatusBadge status="paused" label="decision" /> : null}
-                                {isBottleneck ? <StatusBadge status="pending" label="bottleneck" /> : null}
-                              </div>
-                              <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                                {buildStepNarrative(step, liveSummaries[summaryKey])}
-                              </p>
-                              {traceStep ? (
-                                <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                                  {traceStep.tool ? `Tool ${traceStep.tool}` : "Reasoning step"} ·{" "}
-                                  {traceStep.finish_reason ?? traceStep.action ?? "Completed"}
-                                </p>
-                              ) : null}
-                            </div>
-                            <div className="grid gap-2 text-sm">
-                              <div className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
-                                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                                  Duration
-                                </p>
-                                <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
-                                  {formatDuration(step.duration_ms)}
-                                </p>
-                              </div>
-                              <div className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
-                                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                                  Started
-                                </p>
-                                <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
-                                  {formatDateTime(step.started_at)}
-                                </p>
-                              </div>
-                              {tone === "rose" ? (
-                                <div className="rounded-2xl border border-rose-800/15 bg-rose-50 px-3 py-2 text-rose-900 dark:border-rose-200/20 dark:bg-rose-500/10 dark:text-rose-100">
-                                  <p className="text-[11px] uppercase tracking-[0.16em]">Failure</p>
-                                  <p className="mt-1 text-xs">This activity requires intervention here.</p>
+                        return (
+                          <button
+                            key={step.id}
+                            type="button"
+                            onClick={() => setSelectedStepId(step.id)}
+                            className="w-full rounded-[1.3rem] border border-slate-900/8 bg-white/75 px-5 py-5 text-left transition-colors hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/8"
+                          >
+                            <div className="grid gap-4 xl:grid-cols-[3.5rem_minmax(0,1fr)_13rem]">
+                              <div className="flex items-start gap-3 xl:block">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-900/10 bg-[var(--panel-muted)] text-sm font-semibold dark:border-white/10">
+                                  {index + 1}
                                 </div>
-                              ) : null}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                    {getDepartmentTaskLabel(step, null)}
+                                  </p>
+                                  <StatusBadge status={translateRunStatus(String(step.status))} />
+                                  <StatusBadge status="pending" label="department activity" />
+                                  {isDecision ? <StatusBadge status="paused" label="decision" /> : null}
+                                  {isBottleneck ? <StatusBadge status="pending" label="bottleneck" /> : null}
+                                </div>
+                                <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                                  {buildStepNarrative(step, liveSummaries[summaryKey])}
+                                </p>
+                                {traceStep ? (
+                                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                                    {traceStep.tool ? `Tool ${traceStep.tool}` : "Reasoning step"} ·{" "}
+                                    {traceStep.finish_reason ?? traceStep.action ?? "Completed"}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="grid gap-2 text-sm">
+                                <div className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
+                                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                    Duration
+                                  </p>
+                                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
+                                    {formatDuration(step.duration_ms)}
+                                  </p>
+                                </div>
+                                <div className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
+                                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                    Started
+                                  </p>
+                                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
+                                    {formatDateTime(step.started_at)}
+                                  </p>
+                                </div>
+                                {tone === "rose" ? (
+                                  <div className="rounded-2xl border border-rose-800/15 bg-rose-50 px-3 py-2 text-rose-900 dark:border-rose-200/20 dark:bg-rose-500/10 dark:text-rose-100">
+                                    <p className="text-[11px] uppercase tracking-[0.16em]">Failure</p>
+                                    <p className="mt-1 text-xs">This activity requires intervention here.</p>
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <EmptyBlock
-                    title="No activity available"
-                    description="This operation has not emitted any department activity yet."
-                  />
-                )}
-              </Panel>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <EmptyBlock
+                      title="No activity available"
+                      description="This operation has not emitted any department activity yet."
+                    />
+                  )}
+                </Panel>
+              </div>
 
               <div className="grid gap-6 2xl:grid-cols-2">
                 <Panel title="Operation state" description="Canonical timing, queue status, and memory posture.">

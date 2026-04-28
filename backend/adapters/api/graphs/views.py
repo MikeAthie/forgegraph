@@ -118,6 +118,7 @@ class GraphListCreateView(APIView):
             result.append(
                 {
                     "id": graph.id,
+                    "organization_id": graph.organization_id,
                     "name": graph.name,
                     "description": graph.description,
                     "created_at": graph.created_at,
@@ -154,6 +155,7 @@ class GraphListCreateView(APIView):
             )
         graph = Graph.objects.create(
             owner=user,
+            organization=user.default_organization,
             name=serializer.validated_data["name"],
             description=serializer.validated_data.get("description", ""),
         )
@@ -162,6 +164,7 @@ class GraphListCreateView(APIView):
         graph_data = GraphListSerializer(
             {
                 "id": graph.id,
+                "organization_id": graph.organization_id,
                 "name": graph.name,
                 "description": graph.description,
                 "created_at": graph.created_at,
@@ -204,6 +207,7 @@ class GraphDetailView(APIView):
             {
                 "id": graph.id,
                 "owner_id": graph.owner_id,
+                "organization_id": graph.organization_id,
                 "name": graph.name,
                 "description": graph.description,
                 "created_at": graph.created_at,
@@ -254,6 +258,7 @@ class GraphDetailView(APIView):
         graph_data = GraphListSerializer(
             {
                 "id": graph.id,
+                "organization_id": graph.organization_id,
                 "name": graph.name,
                 "description": graph.description,
                 "created_at": graph.created_at,
@@ -468,12 +473,16 @@ class GraphVersionDetailView(APIView):
     def get(self, request: Request, graph_id: UUID, version_id: UUID) -> Response:
         """Get graph version details."""
         user = cast(User, request.user)
-        try:
-            version = GraphVersion.objects.select_related("graph").get(
-                id=version_id,
-                graph_id=graph_id,
-                graph__owner__default_organization_id=user.default_organization_id,
+        graph = Graph.objects.for_user(user).filter(id=graph_id).first()
+        if graph is None:
+            return error_response(
+                code="NOT_FOUND",
+                message=f"Graph version with id '{version_id}' not found for graph '{graph_id}'",
+                status=status.HTTP_404_NOT_FOUND,
             )
+
+        try:
+            version = graph.versions.get(id=version_id)
         except GraphVersion.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -511,11 +520,15 @@ class ExternalWorkflowCreateView(APIView):
         if not idempotency_key:
             return None
 
+        tenant_id = getattr(user, "default_organization_id", None)
         versions = GraphVersion.objects.select_related("graph").filter(
-            graph__owner_id=user.id,
             graph__external_source=external_source,
             external_idempotency_key=idempotency_key,
         )
+        if tenant_id:
+            versions = versions.filter(graph__organization_id=tenant_id)
+        else:
+            versions = versions.filter(graph__owner_id=user.id)
         if external_ref:
             versions = versions.filter(graph__external_ref=external_ref)
         return cast(GraphVersion | None, versions.order_by("-created_at").first())
@@ -691,13 +704,14 @@ class ExternalWorkflowCreateView(APIView):
                 if external_ref:
                     graph = (
                         Graph.objects.select_for_update()
-                        .filter(owner=user)
+                        .filter(organization=user.default_organization)
                         .filter(external_source=external_source, external_ref=external_ref)
                         .first()
                     )
                     if graph is None:
                         graph = Graph.objects.create(
                             owner=user,
+                            organization=user.default_organization,
                             name=name,
                             description=description,
                             external_source=external_source,
@@ -718,6 +732,7 @@ class ExternalWorkflowCreateView(APIView):
                 else:
                     graph = Graph.objects.create(
                         owner=user,
+                        organization=user.default_organization,
                         name=name,
                         description=description,
                         external_source=external_source,

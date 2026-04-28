@@ -17,6 +17,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Q
 
 from application.services.metrics import (
     record_ws_connected,
@@ -41,13 +42,21 @@ logger = logging.getLogger(__name__)
 
 
 async def _user_can_access_run(*, run_id: str, user_id: UUID, organization_id: str) -> bool:
+    org_uuid = UUID(organization_id)
     return bool(
         await database_sync_to_async(
             lambda: Run.objects.filter(
                 id=run_id,
-                owner__default_organization__id=UUID(organization_id),
-                owner__default_organization__memberships__user_id=user_id,
-            ).exists()
+            )
+            .filter(
+                Q(organization_id=org_uuid, organization__memberships__user_id=user_id)
+                | Q(
+                    organization__isnull=True,
+                    owner__default_organization_id=org_uuid,
+                    owner__default_organization__memberships__user_id=user_id,
+                )
+            )
+            .exists()
         )()
     )
 

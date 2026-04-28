@@ -1,9 +1,23 @@
+const apiProxyTarget = (
+  process.env.API_PROXY_TARGET ||
+  (/^https?:\/\//.test(process.env.NEXT_PUBLIC_API_URL || "") ? process.env.NEXT_PUBLIC_API_URL : "") ||
+  "http://localhost:8000"
+).replace(/\/$/, "");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   reactStrictMode: true,
   output: "standalone",
   poweredByHeader: false,
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${apiProxyTarget}/api/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

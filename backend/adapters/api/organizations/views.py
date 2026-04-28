@@ -3,20 +3,30 @@ from __future__ import annotations
 from typing import cast
 from uuid import UUID
 
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.organizations.serializers import (
+    OrganizationCreateSerializer,
+    OrganizationListItemSerializer,
     OrganizationMemberCreateSerializer,
     OrganizationMemberSerializer,
     OrganizationMemberUpdateSerializer,
     OrganizationSerializer,
+    OrganizationSwitchSerializer,
 )
 from adapters.api.responses import error_response, success_response
 from application.services.rbac import has_min_role
-from application.services.tenancy import get_default_membership
+from application.services.tenancy import (
+    create_organization_for_user,
+    ensure_default_organization,
+    get_default_membership,
+    get_memberships_for_user,
+    set_default_organization,
+)
 from infrastructure.orm.models import OrganizationMembership, User
 
 
@@ -53,23 +63,110 @@ def _role_capabilities() -> dict[str, dict[str, bool]]:
     }
 
 
+def _organization_list_item(member: OrganizationMembership) -> dict[str, object]:
+    return {
+        "id": member.organization_id,
+        "name": member.organization.name,
+        "created_at": member.organization.created_at,
+        "updated_at": member.organization.updated_at,
+        "role": member.role,
+        "is_default": member.is_default,
+        "joined_at": member.created_at,
+    }
+
+
+def _validation_error(serializer: object) -> Response:
+    serializer_errors = cast(dict[str, list[str]], getattr(serializer, "errors", {}))
+    return error_response(
+        code="VALIDATION_ERROR",
+        message="The request contains invalid fields",
+        status=status.HTTP_400_BAD_REQUEST,
+        details=[
+            {"field": field, "issue": ", ".join(str(error) for error in errors)}
+            for field, errors in serializer_errors.items()
+        ],
+    )
+
+
+class OrganizationListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        ensure_default_organization(user)
+        memberships = get_memberships_for_user(user)
+        data = OrganizationListItemSerializer(
+            [_organization_list_item(member) for member in memberships],
+            many=True,
+        ).data
+        return success_response(data)
+
+    def post(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        serializer = OrganizationCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer)
+
+        try:
+            membership = create_organization_for_user(
+                user,
+                name=serializer.validated_data["name"],
+                make_default=serializer.validated_data["make_default"],
+            )
+        except ValueError as exc:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message=str(exc),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return success_response(
+            OrganizationListItemSerializer(_organization_list_item(membership)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class OrganizationCurrentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        serializer = OrganizationSwitchSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer)
+
+        try:
+            membership = set_default_organization(
+                user,
+                serializer.validated_data["organization_id"],
+            )
+        except PermissionError:
+            return error_response(
+                code="FORBIDDEN",
+                message="You are not a member of that organization.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return success_response(
+            OrganizationListItemSerializer(_organization_list_item(membership)).data
+        )
+
+
 class OrganizationMeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         user = cast(User, request.user)
-        membership = get_default_membership(user)
-        if not membership:
-            return error_response(
-                code="NO_ORGANIZATION",
-                message="No default organization set for user.",
-                status=404,
-            )
+        membership = ensure_default_organization(user)
 
         org = membership.organization
         role_capabilities = _role_capabilities()
         payload = {
             "organization": OrganizationSerializer(org).data,
+            "organizations": OrganizationListItemSerializer(
+                [_organization_list_item(member) for member in get_memberships_for_user(user)],
+                many=True,
+            ).data,
             "role": membership.role,
             "governance": {
                 "current_role_capabilities": role_capabilities[membership.role],

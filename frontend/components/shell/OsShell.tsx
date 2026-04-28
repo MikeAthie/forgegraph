@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -6,19 +7,40 @@ import {
   BookCopy,
   BrainCircuit,
   Building2,
+  Check,
   ChevronsUpDown,
   FolderTree,
   Gauge,
   HandCoins,
   LibraryBig,
+  LogOut,
+  Loader2,
+  Plus,
   ShieldCheck,
+  UserCircle,
   Waypoints,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Badge, Button } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Input,
+} from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
-import { decisionsApi } from "@/lib/api";
+import { decisionsApi, getApiErrorMessage, organizationsApi, type OrganizationListItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type OsShellProps = {
@@ -136,8 +158,16 @@ const isActivePath = (pathname: string, href: string) => {
 
 export default function OsShell({ children, mainClassName }: OsShellProps) {
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, checkAuth } = useAuth();
   const [pendingDecisionCount, setPendingDecisionCount] = useState<number | null>(null);
+  const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
+  const [organizationsLoading, setOrganizationsLoading] = useState(false);
+  const [organizationActionId, setOrganizationActionId] = useState<string | null>(null);
+  const [organizationError, setOrganizationError] = useState<string | null>(null);
+  const [createOrganizationOpen, setCreateOrganizationOpen] = useState(false);
+  const [newOrganizationName, setNewOrganizationName] = useState("");
+  const [creatingOrganization, setCreatingOrganization] = useState(false);
+  const [createOrganizationError, setCreateOrganizationError] = useState<string | null>(null);
   const meta = useMemo(() => pageMeta(router.pathname), [router.pathname]);
 
   useEffect(() => {
@@ -169,6 +199,122 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
     };
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!isAuthenticated || process.env.NODE_ENV === "test") {
+      setOrganizations([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOrganizations = async () => {
+      setOrganizationsLoading(true);
+      try {
+        const data = await organizationsApi.list();
+        if (!cancelled) {
+          setOrganizations(data);
+          setOrganizationError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOrganizations([]);
+          setOrganizationError(getApiErrorMessage(error, "Could not load organizations."));
+        }
+      } finally {
+        if (!cancelled) {
+          setOrganizationsLoading(false);
+        }
+      }
+    };
+
+    void loadOrganizations();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, user?.default_organization_id]);
+
+  const currentOrganization = useMemo(
+    () =>
+      organizations.find((organization) => organization.id === user?.default_organization_id) ??
+      organizations.find((organization) => organization.is_default) ??
+      null,
+    [organizations, user?.default_organization_id],
+  );
+
+  const organizationLabel =
+    currentOrganization?.name ?? (user?.default_organization_id ? "Current organization" : "Personal organization");
+
+  const refreshOrganizationContext = useCallback(async () => {
+    await checkAuth();
+    if (router.isReady) {
+      await router.replace(router.asPath, undefined, { scroll: false });
+    }
+  }, [checkAuth, router]);
+
+  const handleSwitchOrganization = useCallback(
+    async (organizationId: string) => {
+      if (organizationId === user?.default_organization_id || organizationActionId) {
+        return;
+      }
+
+      setOrganizationActionId(organizationId);
+      setOrganizationError(null);
+      try {
+        const selected = await organizationsApi.switchCurrent(organizationId);
+        setOrganizations((current) =>
+          current.map((organization) => ({
+            ...organization,
+            is_default: organization.id === selected.id,
+          })),
+        );
+        await refreshOrganizationContext();
+      } catch (error) {
+        setOrganizationError(getApiErrorMessage(error, "Could not switch organization."));
+      } finally {
+        setOrganizationActionId(null);
+      }
+    },
+    [organizationActionId, refreshOrganizationContext, user?.default_organization_id],
+  );
+
+  const resetCreateOrganization = useCallback(() => {
+    setNewOrganizationName("");
+    setCreatingOrganization(false);
+    setCreateOrganizationError(null);
+  }, []);
+
+  const handleCreateOrganization = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const name = newOrganizationName.trim();
+      if (!name) {
+        setCreateOrganizationError("Organization name is required.");
+        return;
+      }
+
+      setCreatingOrganization(true);
+      setCreateOrganizationError(null);
+      try {
+        const created = await organizationsApi.create({ name, make_default: true });
+        setOrganizations((current) => [
+          created,
+          ...current
+            .filter((organization) => organization.id !== created.id)
+            .map((organization) => ({ ...organization, is_default: false })),
+        ]);
+        setCreateOrganizationOpen(false);
+        setOrganizationError(null);
+        resetCreateOrganization();
+        await refreshOrganizationContext();
+      } catch (error) {
+        setCreateOrganizationError(getApiErrorMessage(error, "Could not create organization."));
+      } finally {
+        setCreatingOrganization(false);
+      }
+    },
+    [newOrganizationName, refreshOrganizationContext, resetCreateOrganization],
+  );
+
   const items = navItems.map((item) => ({
     ...item,
     badge: item.href === "/inbox" ? pendingDecisionCount : item.badge,
@@ -178,43 +324,96 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
     <div className="min-h-screen text-foreground">
       <div className="fixed inset-0 -z-10 app-grid opacity-40" />
       <div className="flex min-h-screen">
-        <aside className="hidden w-[18.5rem] shrink-0 border-r border-sidebar-border bg-sidebar/95 px-5 py-5 backdrop-blur-2xl lg:flex lg:flex-col">
+        <aside className="hidden w-[18.5rem] shrink-0 border-r border-sidebar-border bg-sidebar/95 px-4 py-4 backdrop-blur-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:self-start lg:overflow-y-auto">
           <Link
             href="/companies"
-            className="glass-panel flex items-center gap-3 rounded-[1.5rem] border border-sidebar-border px-4 py-4"
+            className="glass-panel flex items-center gap-3 rounded-[1.25rem] border border-sidebar-border px-3.5 py-3"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground">
-              <Building2 className="h-5 w-5" />
-            </div>
+            <Image
+              src="/icon0.svg"
+              alt=""
+              width={40}
+              height={40}
+              priority
+              className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-sm"
+            />
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">ForgeGraph</p>
               <p className="truncate text-base font-semibold text-sidebar-foreground">AI Company OS</p>
             </div>
           </Link>
 
-          <div className="mt-6 rounded-[1.5rem] border border-sidebar-border bg-sidebar-accent px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Workspace</p>
-            <button
-              type="button"
-              className="mt-3 flex w-full items-center justify-between rounded-2xl border border-sidebar-border bg-white/80 px-3 py-2 text-left text-sm dark:bg-white/5"
-            >
-              <span className="truncate font-medium">
-                {user?.default_organization_id ? "Company workspace" : "Personal workspace"}
-              </span>
-              <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-            </button>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Create companies, launch operations, and intervene only when the company needs you.
+          <div className="mt-5 rounded-[1.25rem] border border-sidebar-border bg-sidebar-accent px-3.5 py-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Organization</p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="mt-2 flex w-full items-center justify-between rounded-xl border border-sidebar-border bg-white/80 px-3 py-1.5 text-left text-sm dark:bg-white/5"
+                >
+                  <span className="truncate font-medium">{organizationLabel}</span>
+                  {organizationsLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+                {organizations.length > 0 ? (
+                  organizations.map((organization) => {
+                    const selected =
+                      organization.id === user?.default_organization_id || organization.id === currentOrganization?.id;
+                    const switching = organizationActionId === organization.id;
+                    return (
+                      <DropdownMenuItem
+                        key={organization.id}
+                        disabled={switching}
+                        onSelect={() => void handleSwitchOrganization(organization.id)}
+                      >
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          {switching ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")} />
+                          )}
+                          <span className="truncate">{organization.name}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })
+                ) : (
+                  <DropdownMenuItem disabled>
+                    {organizationsLoading ? "Loading organizations" : "No organizations found"}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setCreateOrganizationError(null);
+                    setCreateOrganizationOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add organization
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <p className="mt-2 text-[13px] leading-5 text-muted-foreground">
+              Companies, operations, knowledge, and usage stay separated by organization.
             </p>
+            {organizationError ? <p className="mt-2 text-xs text-destructive">{organizationError}</p> : null}
           </div>
 
-          <div className="mt-8 space-y-6">
+          <div className="mt-6 space-y-4">
             {(["operate", "build"] as const).map((section) => (
               <div key={section}>
-                <p className="px-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                <p className="px-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   {section === "operate" ? "Operate" : "Advanced"}
                 </p>
-                <nav className="mt-2 space-y-1.5">
+                <nav className="mt-1.5 space-y-0.5">
                   {items
                     .filter((item) => item.section === section)
                     .map((item) => {
@@ -225,7 +424,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                           key={item.href}
                           href={item.href}
                           className={cn(
-                            "flex items-center justify-between rounded-2xl px-3.5 py-3 text-sm transition-colors",
+                            "flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm transition-colors",
                             active
                               ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-[0_20px_40px_-30px_rgba(15,23,42,0.85)]"
                               : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -255,20 +454,54 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
               </div>
             ))}
           </div>
-
-          <div className="mt-auto rounded-[1.75rem] border border-sidebar-border bg-[linear-gradient(180deg,rgba(24,38,62,0.96),rgba(24,38,62,0.88))] px-5 py-5 text-slate-100 dark:bg-[linear-gradient(180deg,rgba(237,241,245,0.14),rgba(237,241,245,0.08))]">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300 dark:text-slate-400">
-              Operating posture
-            </p>
-            <p className="mt-3 text-lg font-semibold" style={{ fontFamily: "var(--font-serif)" }}>
-              Company first. Engine second.
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-300 dark:text-slate-300">
-              The shell should always answer four things: what the company is doing, what it produced, what is blocked,
-              and what to do next.
-            </p>
-          </div>
         </aside>
+
+        <Dialog
+          open={createOrganizationOpen}
+          onOpenChange={(open) => {
+            setCreateOrganizationOpen(open);
+            if (!open) {
+              resetCreateOrganization();
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <form onSubmit={handleCreateOrganization} className="space-y-5">
+              <DialogHeader>
+                <DialogTitle>Add Organization</DialogTitle>
+                <DialogDescription>
+                  Create a separate operating space for companies, operations, knowledge, and usage.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Input
+                  autoFocus
+                  value={newOrganizationName}
+                  onChange={(event) => {
+                    setNewOrganizationName(event.target.value);
+                    setCreateOrganizationError(null);
+                  }}
+                  placeholder="Acme Operations"
+                />
+                {createOrganizationError ? <p className="text-sm text-destructive">{createOrganizationError}</p> : null}
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateOrganizationOpen(false)}
+                  disabled={creatingOrganization}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creatingOrganization}>
+                  {creatingOrganization ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Add organization
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-30 border-b border-slate-900/8 bg-[color-mix(in_srgb,var(--background)_82%,transparent)] backdrop-blur-2xl dark:border-white/8">
@@ -282,27 +515,101 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{meta.description}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-slate-900/10 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5"
-                  >
-                    {user?.default_organization_id ? "Organization scope" : "Personal scope"}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-slate-900/10 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5"
-                  >
-                    Last 24 hours
-                  </Badge>
+                  {isAuthenticated ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                        >
+                          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{organizationLabel}</span>
+                          {organizationsLoading ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                          ) : (
+                            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-72">
+                        <DropdownMenuLabel>Organization scope</DropdownMenuLabel>
+                        {organizations.length > 0 ? (
+                          organizations.map((organization) => {
+                            const selected =
+                              organization.id === user?.default_organization_id ||
+                              organization.id === currentOrganization?.id;
+                            const switching = organizationActionId === organization.id;
+                            return (
+                              <DropdownMenuItem
+                                key={organization.id}
+                                disabled={switching}
+                                onSelect={() => void handleSwitchOrganization(organization.id)}
+                              >
+                                <span className="flex min-w-0 flex-1 items-center gap-2">
+                                  {switching ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Check className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")} />
+                                  )}
+                                  <span className="truncate">{organization.name}</span>
+                                </span>
+                              </DropdownMenuItem>
+                            );
+                          })
+                        ) : (
+                          <DropdownMenuItem disabled>
+                            {organizationsLoading ? "Loading organizations" : "No organizations found"}
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            setCreateOrganizationError(null);
+                            setCreateOrganizationOpen(true);
+                          }}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add organization
+                        </DropdownMenuItem>
+                        {organizationError ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem disabled className="text-destructive">
+                              {organizationError}
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
                   <ThemeToggle />
                   {isAuthenticated ? (
-                    <Button
-                      variant="outline"
-                      className="rounded-full border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-white/5"
-                      onClick={() => void logout()}
-                    >
-                      {user?.email ?? "Sign out"}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex max-w-[16rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                        >
+                          <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{user?.email ?? "Account"}</span>
+                          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-72">
+                        <DropdownMenuLabel>
+                          <span className="block text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                            Signed in as
+                          </span>
+                          <span className="mt-1 block truncate font-normal">{user?.email ?? "Account"}</span>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => void logout()}>
+                          <LogOut className="h-4 w-4" />
+                          Sign out
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   ) : null}
                 </div>
               </div>

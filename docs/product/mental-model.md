@@ -1,13 +1,17 @@
 # Mental Model
 
-- Organization: the operating boundary
-- Workflow Definition: the authored automation asset
-- Workflow Revision: the immutable saved version of a workflow definition
-- Agent: a supervised autonomous actor with a persistent organization identity
-- Task: a projected unit of work attached to an execution and agent
-- Decision: an auditable branch, approval, or intervention
-- Memory: the inspectable knowledge layer
-- Cost: append-only accounting facts and aggregates
-- System State: time-scoped read models over all of the above
+Use the company model defined in [company-workspace-model.md](./company-workspace-model.md) and the translation rules in [ux-vocabulary.md](./ux-vocabulary.md).
 
-Everything in the OS view must drill down to canonical execution records.
+Current mental model:
+
+- Company: the primary operating entity
+- Business objective: the reason the company exists
+- Department: the functional unit that performs categories of work
+- Operating model: the structure that defines how the company works
+- Operation: a live or historical unit of company work
+- Task execution: a step inside an operation
+- Deliverable: the user-visible output from an operation
+- Approval: a required human decision
+- Budget and usage: the operating limits and spend posture
+
+Everything in the workspace should drill down to backend-authoritative company and operation state.

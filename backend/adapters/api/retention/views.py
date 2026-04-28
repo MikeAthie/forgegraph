@@ -30,6 +30,15 @@ from infrastructure.orm.models import (
 from .serializers import TenantRetentionPolicySerializer
 
 
+def _run_scope_filter(tenant_uuid: UUID, prefix: str = "") -> Q:
+    return Q(**{f"{prefix}organization_id": tenant_uuid}) | Q(
+        **{
+            f"{prefix}organization__isnull": True,
+            f"{prefix}owner__default_organization_id": tenant_uuid,
+        }
+    )
+
+
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
@@ -340,7 +349,7 @@ class RetentionExportView(APIView):
         if export_type == "runs":
             run_qs = (
                 Run.objects.select_related("graph_version", "graph_version__graph")
-                .filter(owner__default_organization_id=tenant_uuid)
+                .filter(_run_scope_filter(tenant_uuid))
                 .order_by("-started_at")
             )
             if date_range:
@@ -377,7 +386,7 @@ class RetentionExportView(APIView):
 
         if export_type == "run_events":
             run_events_qs = RunEvent.objects.filter(
-                run__owner__default_organization_id=tenant_uuid
+                _run_scope_filter(tenant_uuid, prefix="run__")
             ).order_by("-created_at")
             if date_range:
                 start_date, end_date = date_range
@@ -406,7 +415,7 @@ class RetentionExportView(APIView):
 
         if export_type == "node_runs":
             node_runs_qs = NodeRun.objects.filter(
-                run__owner__default_organization_id=tenant_uuid
+                _run_scope_filter(tenant_uuid, prefix="run__")
             ).order_by("-started_at")
             if date_range:
                 start_date, end_date = date_range

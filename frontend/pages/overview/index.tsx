@@ -42,6 +42,12 @@ type AttentionItem = {
   action: string;
 };
 
+const metricLinkClass =
+  "group block h-full rounded-[1.75rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950";
+
+const metricCardLinkClass =
+  "h-full transition-all duration-200 ease-out group-hover:-translate-y-0.5 group-hover:border-slate-900/20 group-hover:bg-white group-hover:shadow-[0_30px_70px_-48px_rgba(15,23,42,0.7)] dark:group-hover:border-white/20 dark:group-hover:bg-white/[0.07]";
+
 export default function OverviewPage() {
   const [overview, setOverview] = useState<OrganizationStateSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -287,48 +293,63 @@ export default function OverviewPage() {
             }
           >
             <div className="grid gap-4 xl:grid-cols-5">
-              <MetricCard
-                eyebrow="System health"
-                value={derived?.attentionItems.length ? "Attention" : "Stable"}
-                delta={
-                  derived?.attentionItems.length
-                    ? `${derived.attentionItems.length} item${derived.attentionItems.length === 1 ? "" : "s"} need action`
-                    : "No critical issues in the visible window"
-                }
-                tone={derived?.attentionItems.length ? "rose" : "emerald"}
-                icon={<Siren className="h-4 w-4" />}
-              />
-              <MetricCard
-                eyebrow="Active departments"
-                value={overview ? formatCompactNumber(overview.summary.active_agent_count) : "0"}
-                delta="Departments currently attached to live work"
-                icon={<BrainCircuit className="h-4 w-4" />}
-              />
-              <MetricCard
-                eyebrow="Blocked tasks"
-                value={derived ? formatCompactNumber(derived.blockedTasks.length) : "0"}
-                delta="Waiting or failed work that needs intervention"
-                tone={derived?.blockedTasks.length ? "amber" : "slate"}
-                icon={<Waypoints className="h-4 w-4" />}
-              />
-              <MetricCard
-                eyebrow="Pending decisions"
-                value={overview ? formatCompactNumber(overview.summary.pending_decision_count) : "0"}
-                delta="Inbox items ready for human review"
-                tone={overview?.summary.pending_decision_count ? "amber" : "slate"}
-                icon={<BellRing className="h-4 w-4" />}
-              />
-              <MetricCard
-                eyebrow="Cost today"
-                value={overview ? formatCurrency(overview.summary.total_cost_usd) : "$0"}
-                delta={
-                  derived
-                    ? `${formatCurrency(derived.profitToday)} projected profit after current cost`
-                    : "Economic posture"
-                }
-                tone="rose"
-                icon={<HandCoins className="h-4 w-4" />}
-              />
+              <Link href="#system-health" className={metricLinkClass} aria-label="Jump to system health">
+                <MetricCard
+                  className={metricCardLinkClass}
+                  eyebrow="System health"
+                  value={derived?.attentionItems.length ? "Attention" : "Stable"}
+                  delta={
+                    derived?.attentionItems.length
+                      ? `${derived.attentionItems.length} item${derived.attentionItems.length === 1 ? "" : "s"} need action`
+                      : "No critical issues in the visible window"
+                  }
+                  tone={derived?.attentionItems.length ? "rose" : "emerald"}
+                  icon={<Siren className="h-4 w-4" />}
+                />
+              </Link>
+              <Link href="#active-departments" className={metricLinkClass} aria-label="Jump to active departments">
+                <MetricCard
+                  className={metricCardLinkClass}
+                  eyebrow="Active departments"
+                  value={overview ? formatCompactNumber(overview.summary.active_agent_count) : "0"}
+                  delta="Departments currently attached to live work"
+                  icon={<BrainCircuit className="h-4 w-4" />}
+                />
+              </Link>
+              <Link href="#blocked-tasks" className={metricLinkClass} aria-label="Jump to blocked tasks">
+                <MetricCard
+                  className={metricCardLinkClass}
+                  eyebrow="Blocked tasks"
+                  value={derived ? formatCompactNumber(derived.blockedTasks.length) : "0"}
+                  delta="Waiting or failed work that needs intervention"
+                  tone={derived?.blockedTasks.length ? "amber" : "slate"}
+                  icon={<Waypoints className="h-4 w-4" />}
+                />
+              </Link>
+              <Link href="#pending-decisions" className={metricLinkClass} aria-label="Jump to pending decisions">
+                <MetricCard
+                  className={metricCardLinkClass}
+                  eyebrow="Pending decisions"
+                  value={overview ? formatCompactNumber(overview.summary.pending_decision_count) : "0"}
+                  delta="Inbox items ready for human review"
+                  tone={overview?.summary.pending_decision_count ? "amber" : "slate"}
+                  icon={<BellRing className="h-4 w-4" />}
+                />
+              </Link>
+              <Link href="#usage-budget" className={metricLinkClass} aria-label="Jump to usage and budget">
+                <MetricCard
+                  className={metricCardLinkClass}
+                  eyebrow="Cost today"
+                  value={overview ? formatCurrency(overview.summary.total_cost_usd) : "$0"}
+                  delta={
+                    derived
+                      ? `${formatCurrency(derived.profitToday)} projected profit after current cost`
+                      : "Economic posture"
+                  }
+                  tone="rose"
+                  icon={<HandCoins className="h-4 w-4" />}
+                />
+              </Link>
             </div>
           </Panel>
 
@@ -345,295 +366,310 @@ export default function OverviewPage() {
           ) : (
             <>
               <div className="grid gap-6 2xl:grid-cols-[1.18fr_0.82fr]">
-                <Panel
-                  title="Attention required"
-                  description="Critical and near-critical work that should pull operator focus first."
-                  action={
-                    <StatusBadge
-                      status={derived.attentionItems.length ? "failed" : "active"}
-                      label={derived.attentionItems.length ? `${derived.attentionItems.length} open` : "Clear"}
-                    />
-                  }
-                >
-                  {derived.attentionItems.length ? (
-                    <div className="space-y-3">
-                      {derived.attentionItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-900/10 bg-white dark:border-white/10 dark:bg-white/5">
-                                  {item.tone === "rose" ? overviewIcons.attention : overviewIcons.paused}
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                    {item.title}
-                                  </p>
-                                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                    {item.detail}
-                                  </p>
+                <div id="attention-required" className="scroll-mt-36">
+                  <Panel
+                    title="Attention required"
+                    description="Critical and near-critical work that should pull operator focus first."
+                    action={
+                      <StatusBadge
+                        status={derived.attentionItems.length ? "failed" : "active"}
+                        label={derived.attentionItems.length ? `${derived.attentionItems.length} open` : "Clear"}
+                      />
+                    }
+                  >
+                    {derived.attentionItems.length ? (
+                      <div className="space-y-3">
+                        {derived.attentionItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-3">
+                                  <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-900/10 bg-white dark:border-white/10 dark:bg-white/5">
+                                    {item.tone === "rose" ? overviewIcons.attention : overviewIcons.paused}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                      {item.title}
+                                    </p>
+                                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                      {item.detail}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <StatusBadge status={item.tone === "rose" ? "failed" : "paused"} label={item.owner} />
+                                <Button asChild size="sm" className="rounded-full">
+                                  <Link href={item.href}>
+                                    {item.action}
+                                    <ArrowRight className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <StatusBadge status={item.tone === "rose" ? "failed" : "paused"} label={item.owner} />
-                              <Button asChild size="sm" className="rounded-full">
-                                <Link href={item.href}>
-                                  {item.action}
-                                  <ArrowRight className="h-4 w-4" />
-                                </Link>
-                              </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyBlock
+                        title="Nothing urgent is waiting"
+                        description="No failed operations, blocked tasks, or approval bottlenecks are currently dominating the system."
+                      />
+                    )}
+                  </Panel>
+                </div>
+
+                <div id="system-health" className="scroll-mt-36">
+                  <Panel
+                    title="System health"
+                    description="Fast readout of the operating posture across control, humans, and economics."
+                  >
+                    <div className="space-y-3">
+                      {derived.systemHealth.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.label}</p>
+                              <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.detail}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.value}</p>
+                              <div className="mt-2">
+                                <StatusBadge status={item.status} />
+                              </div>
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <EmptyBlock
-                      title="Nothing urgent is waiting"
-                      description="No failed operations, blocked tasks, or approval bottlenecks are currently dominating the system."
-                    />
-                  )}
-                </Panel>
-
-                <Panel
-                  title="System health"
-                  description="Fast readout of the operating posture across control, humans, and economics."
-                >
-                  <div className="space-y-3">
-                    {derived.systemHealth.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.label}</p>
-                            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.detail}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.value}</p>
-                            <div className="mt-2">
-                              <StatusBadge status={item.status} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Panel>
+                  </Panel>
+                </div>
               </div>
 
               <div className="grid gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
-                <Panel
-                  title="Active departments"
-                  description="Which departments are currently doing work, what they are focused on, and how much cost they are carrying."
-                  action={
-                    <Button asChild variant="outline" className="rounded-full">
-                      <Link href="/agents">
-                        Open departments
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  }
-                >
-                  {overview.active_agents.length ? (
-                    <div className="space-y-3">
-                      {overview.active_agents.slice(0, 6).map((agent) => (
-                        <Link
-                          key={agent.id}
-                          href={`/agents?agent=${agent.id}`}
-                          className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-3">
-                              <p className="truncate text-sm font-semibold">{agent.display_name}</p>
-                              <StatusBadge status={agent.status} />
-                            </div>
-                            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                              {derived.agentTaskMap.get(agent.id) ?? "Awaiting the next available task."}
-                            </p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                              Cost
-                            </p>
-                            <p className="mt-2 text-sm font-semibold">{formatCurrency(agent.total_cost_usd)}</p>
-                          </div>
+                <div id="active-departments" className="scroll-mt-36">
+                  <Panel
+                    title="Active departments"
+                    description="Which departments are currently doing work, what they are focused on, and how much cost they are carrying."
+                    action={
+                      <Button asChild variant="outline" className="rounded-full">
+                        <Link href="/agents">
+                          Open departments
+                          <ArrowRight className="h-4 w-4" />
                         </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyBlock
-                      title="No active departments"
-                      description="Departments will appear here once the system sees active work or attention states."
-                    />
-                  )}
-                </Panel>
-
-                <Panel
-                  title="Department activity needing help"
-                  description="Work that is currently stalled by approval, failure, or missing operator action."
-                  action={
-                    <Button asChild variant="outline" className="rounded-full">
-                      <Link href="/tasks">
-                        Open activity
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  }
-                >
-                  {derived.blockedTasks.length ? (
-                    <div className="space-y-3">
-                      {derived.blockedTasks.map((task) => (
-                        <Link
-                          key={task.id}
-                          href={task.execution_id ? `/executions/${task.execution_id}` : "/tasks"}
-                          className="block rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
-                        >
-                          <div className="flex items-start justify-between gap-3">
+                      </Button>
+                    }
+                  >
+                    {overview.active_agents.length ? (
+                      <div className="space-y-3">
+                        {overview.active_agents.slice(0, 6).map((agent) => (
+                          <Link
+                            key={agent.id}
+                            href={`/agents?agent=${agent.id}`}
+                            className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
+                          >
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
-                                <p className="truncate text-sm font-semibold">{task.title}</p>
-                                <StatusBadge status={task.status} />
+                                <p className="truncate text-sm font-semibold">{agent.display_name}</p>
+                                <StatusBadge status={agent.status} />
                               </div>
                               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                {task.summary}
+                                {derived.agentTaskMap.get(agent.id) ?? "Awaiting the next available task."}
                               </p>
                             </div>
-                            <div className="shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
-                              <p>{task.priority} priority</p>
-                              <p className="mt-2">{formatDateTime(task.updated_at)}</p>
+                            <div className="shrink-0 text-right">
+                              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                Cost
+                              </p>
+                              <p className="mt-2 text-sm font-semibold">{formatCurrency(agent.total_cost_usd)}</p>
                             </div>
-                          </div>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyBlock
+                        title="No active departments"
+                        description="Departments will appear here once the system sees active work or attention states."
+                      />
+                    )}
+                  </Panel>
+                </div>
+
+                <div id="blocked-tasks" className="scroll-mt-36">
+                  <Panel
+                    title="Department activity needing help"
+                    description="Work that is currently stalled by approval, failure, or missing operator action."
+                    action={
+                      <Button asChild variant="outline" className="rounded-full">
+                        <Link href="/tasks">
+                          Open activity
+                          <ArrowRight className="h-4 w-4" />
                         </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyBlock
-                      title="No blocked tasks"
-                      description="Waiting and failed task projections are clear in the current window."
-                    />
-                  )}
-                </Panel>
+                      </Button>
+                    }
+                  >
+                    {derived.blockedTasks.length ? (
+                      <div className="space-y-3">
+                        {derived.blockedTasks.map((task) => (
+                          <Link
+                            key={task.id}
+                            href={task.execution_id ? `/executions/${task.execution_id}` : "/tasks"}
+                            className="block rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-3">
+                                  <p className="truncate text-sm font-semibold">{task.title}</p>
+                                  <StatusBadge status={task.status} />
+                                </div>
+                                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                  {task.summary}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
+                                <p>{task.priority} priority</p>
+                                <p className="mt-2">{formatDateTime(task.updated_at)}</p>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyBlock
+                        title="No blocked tasks"
+                        description="Waiting and failed task projections are clear in the current window."
+                      />
+                    )}
+                  </Panel>
+                </div>
               </div>
 
               <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
-                <Panel
-                  title="Pending decisions"
-                  description="Approval items that should be resolvable without opening raw logs."
-                  action={
-                    <Button asChild variant="outline" className="rounded-full">
-                      <Link href="/inbox">
-                        Open approvals
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  }
-                >
-                  {overview.pending_decisions.length ? (
-                    <div className="space-y-3">
-                      {overview.pending_decisions.slice(0, 5).map((decision) => (
-                        <div
-                          key={decision.id}
-                          className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-3">
-                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                  {decision.decision_type}
+                <div id="pending-decisions" className="scroll-mt-36">
+                  <Panel
+                    title="Pending decisions"
+                    description="Approval items that should be resolvable without opening raw logs."
+                    action={
+                      <Button asChild variant="outline" className="rounded-full">
+                        <Link href="/inbox">
+                          Open approvals
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    }
+                  >
+                    {overview.pending_decisions.length ? (
+                      <div className="space-y-3">
+                        {overview.pending_decisions.slice(0, 5).map((decision) => (
+                          <div
+                            key={decision.id}
+                            className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-3">
+                                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                    {decision.decision_type}
+                                  </p>
+                                  <StatusBadge status={decision.status} />
+                                </div>
+                                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                  {String(
+                                    decision.context_json?.summary ??
+                                      decision.context_json?.prompt_message ??
+                                      "Operator approval required before this operation can continue.",
+                                  )}
                                 </p>
-                                <StatusBadge status={decision.status} />
                               </div>
-                              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                {String(
-                                  decision.context_json?.summary ??
-                                    decision.context_json?.prompt_message ??
-                                    "Operator approval required before this operation can continue.",
-                                )}
-                              </p>
+                              <Button asChild size="sm" className="rounded-full">
+                                <Link href="/inbox">Decide</Link>
+                              </Button>
                             </div>
-                            <Button asChild size="sm" className="rounded-full">
-                              <Link href="/inbox">Decide</Link>
-                            </Button>
                           </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyBlock
+                        title="No pending decisions"
+                        description="The human-in-the-loop queue is currently clear."
+                      />
+                    )}
+                  </Panel>
+                </div>
+
+                <div id="usage-budget" className="scroll-mt-36">
+                  <Panel
+                    title="Usage and budget"
+                    description="Spend, mix, and margin for the current operating window."
+                  >
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Tracked cost
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {formatCurrency(overview.summary.total_cost_usd)}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Projected revenue
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {formatCurrency(derived.revenueToday)}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Projected profit
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {formatCurrency(derived.profitToday)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      {overview.accounting.cost_by_type.map((row) => (
+                        <div key={row.cost_type} className="space-y-2">
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="font-medium text-slate-900 capitalize dark:text-slate-100">
+                              {row.cost_type.replace(/_/g, " ")}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300">
+                              {formatCurrency(row.total_cost_usd)}
+                            </span>
+                          </div>
+                          <TrendBar
+                            value={row.total_cost_usd}
+                            total={Math.max(overview.summary.total_cost_usd, 1)}
+                            tone="rose"
+                          />
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <EmptyBlock
-                      title="No pending decisions"
-                      description="The human-in-the-loop queue is currently clear."
-                    />
-                  )}
-                </Panel>
-
-                <Panel title="Usage and budget" description="Spend, mix, and margin for the current operating window.">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Tracked cost
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCurrency(overview.summary.total_cost_usd)}
-                      </p>
+                    <div className="mt-4">
+                      <KeyValueGrid
+                        columns={2}
+                        items={[
+                          {
+                            label: "Active department spend",
+                            value: formatCurrency(derived.totalAgentCost),
+                          },
+                          {
+                            label: "Operating window",
+                            value: `${formatCompactNumber(overview.summary.execution_count_24h)} operations in 24h`,
+                          },
+                        ]}
+                      />
                     </div>
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Projected revenue
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCurrency(derived.revenueToday)}
-                      </p>
-                    </div>
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Projected profit
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCurrency(derived.profitToday)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4 space-y-4">
-                    {overview.accounting.cost_by_type.map((row) => (
-                      <div key={row.cost_type} className="space-y-2">
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="font-medium text-slate-900 capitalize dark:text-slate-100">
-                            {row.cost_type.replace(/_/g, " ")}
-                          </span>
-                          <span className="text-slate-600 dark:text-slate-300">
-                            {formatCurrency(row.total_cost_usd)}
-                          </span>
-                        </div>
-                        <TrendBar
-                          value={row.total_cost_usd}
-                          total={Math.max(overview.summary.total_cost_usd, 1)}
-                          tone="rose"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <KeyValueGrid
-                      columns={2}
-                      items={[
-                        {
-                          label: "Active department spend",
-                          value: formatCurrency(derived.totalAgentCost),
-                        },
-                        {
-                          label: "Operating window",
-                          value: `${formatCompactNumber(overview.summary.execution_count_24h)} operations in 24h`,
-                        },
-                      ]}
-                    />
-                  </div>
-                </Panel>
+                  </Panel>
+                </div>
               </div>
 
               <Panel title="What is happening" description="Short operational narrative for the visible window.">

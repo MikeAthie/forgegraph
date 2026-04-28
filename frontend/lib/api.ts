@@ -237,6 +237,8 @@ const API_PATHS = {
     export: "/api/retention/export",
   },
   orgs: {
+    listCreate: "/api/orgs/",
+    current: "/api/orgs/current",
     me: "/api/orgs/me",
     members: "/api/orgs/members",
     memberDetail: (userId: string) => `/api/orgs/members/${userId}`,
@@ -483,6 +485,7 @@ export const authApi = {
 
 export interface GraphListItem {
   id: string;
+  organization_id?: string | null;
   name: string;
   description: string;
   created_at: string;
@@ -505,6 +508,12 @@ export interface Organization {
   updated_at: string;
 }
 
+export interface OrganizationListItem extends Organization {
+  role: OrganizationMember["role"];
+  is_default: boolean;
+  joined_at: string;
+}
+
 export interface OrganizationMember {
   user_id: string;
   email: string;
@@ -523,6 +532,7 @@ export type OrganizationRoleCapabilities = {
 
 export type OrganizationMeResponse = {
   organization: Organization;
+  organizations: OrganizationListItem[];
   role: OrganizationMember["role"];
   governance: {
     current_role_capabilities: OrganizationRoleCapabilities;
@@ -653,6 +663,7 @@ export type MetricsSummary = {
 export interface GraphDetail {
   id: string;
   owner_id: string;
+  organization_id?: string | null;
   name: string;
   description: string;
   created_at: string;
@@ -1920,6 +1931,23 @@ export const auditLogsApi = {
 };
 
 export const organizationsApi = {
+  list: async (): Promise<OrganizationListItem[]> => {
+    const response = await api.get<ApiSuccessResponse<OrganizationListItem[]>>(API_PATHS.orgs.listCreate);
+    return response.data.data;
+  },
+
+  create: async (input: { name: string; make_default?: boolean }): Promise<OrganizationListItem> => {
+    const response = await api.post<ApiSuccessResponse<OrganizationListItem>>(API_PATHS.orgs.listCreate, input);
+    return response.data.data;
+  },
+
+  switchCurrent: async (organizationId: string): Promise<OrganizationListItem> => {
+    const response = await api.patch<ApiSuccessResponse<OrganizationListItem>>(API_PATHS.orgs.current, {
+      organization_id: organizationId,
+    });
+    return response.data.data;
+  },
+
   me: async (): Promise<OrganizationMeResponse> => {
     const response = await api.get<ApiSuccessResponse<OrganizationMeResponse>>(API_PATHS.orgs.me);
     return response.data.data;

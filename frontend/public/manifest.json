@@ -1,0 +1,64 @@
+{
+  "name": "ForgeGraph: AI Company Operating System",
+  "short_name": "ForgeGraph",
+  "description": "Create, operate, and supervise AI-driven companies with objectives, departments, operations, approvals, deliverables, memory, and usage controls.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon0.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon1.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "theme_color": "#1a2533",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "display_override": ["standalone", "browser"],
+  "orientation": "any",
+  "dir": "ltr",
+  "lang": "en-US",
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Create a company",
+      "short_name": "Create",
+      "description": "Open the ForgeGraph company builder.",
+      "url": "/companies/new",
+      "icons": [
+        {
+          "src": "/icon1.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Company workspace",
+      "short_name": "Companies",
+      "description": "Open your ForgeGraph company workspace.",
+      "url": "/companies",
+      "icons": [
+        {
+          "src": "/icon1.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

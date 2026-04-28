@@ -1,19 +1,16 @@
 # Product Vision
 
-ForgeGraph is an operating system for AI-native organizations.
+The current product source of truth lives in:
 
-The product is no longer framed as a workflow builder that can also monitor runtime activity. It is framed as a runtime operating environment that can also author workflow definitions.
+- [forgegraph-product-definition.md](./forgegraph-product-definition.md)
+- [company-workspace-model.md](./company-workspace-model.md)
+- [ux-vocabulary.md](./ux-vocabulary.md)
+- [autonomy-policy.md](./autonomy-policy.md)
 
-## Core Areas
+Vision summary:
 
-- Organization dashboard
-- Agent supervision
-- Workflow execution visibility
-- Human-in-the-loop inbox
-- Memory inspection
-- Accounting
-- Prompt and component marketplace
+ForgeGraph is an AI Company Operating System. The product should center company creation, company operations, and company command surfaces before any graph- or workflow-centric builder model.
 
-## Product Rule
+Product rule:
 
-If a surface forces the user to think in raw builder terms before they can understand organizational state, the surface is misframed.
+If a surface forces the user to think in raw engine or builder terms before they can understand company state, company work, or company decisions, the surface is misframed.

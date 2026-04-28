@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from django.db.models import Model, QuerySet
+from django.db.models import Model, Q, QuerySet
 
 from infrastructure.orm.models import (
     ApprovalTask,
@@ -23,6 +23,15 @@ from infrastructure.orm.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _run_scope_filter(tenant_uuid: UUID, prefix: str = "") -> Q:
+    return Q(**{f"{prefix}organization_id": tenant_uuid}) | Q(
+        **{
+            f"{prefix}organization__isnull": True,
+            f"{prefix}owner__default_organization_id": tenant_uuid,
+        }
+    )
 
 
 @dataclass
@@ -134,7 +143,7 @@ class DataRetentionService:
 
         if run_cutoff:
             runs_qs = Run.objects.filter(
-                owner__default_organization_id=tenant_uuid,
+                _run_scope_filter(tenant_uuid),
                 ended_at__isnull=False,
                 ended_at__lt=run_cutoff,
             )
@@ -151,19 +160,31 @@ class DataRetentionService:
             result.runs_deleted = self._delete_queryset(runs_qs, dry_run=dry_run)
 
         if log_cutoff:
-            log_filters = {
-                "run__owner__default_organization_id": tenant_uuid,
-                "run__ended_at__isnull": False,
-                "run__ended_at__lt": log_cutoff,
-            }
             run_exclusion = {}
             if run_cutoff:
                 run_exclusion = {"run__ended_at__lt": run_cutoff}
 
-            run_events_qs = RunEvent.objects.filter(**log_filters)
-            node_runs_qs = NodeRun.objects.filter(**log_filters)
-            run_checkpoints_qs = RunCheckpoint.objects.filter(**log_filters)
-            approval_tasks_qs = ApprovalTask.objects.filter(**log_filters)
+            log_scope = _run_scope_filter(tenant_uuid, prefix="run__")
+            run_events_qs = RunEvent.objects.filter(
+                log_scope,
+                run__ended_at__isnull=False,
+                run__ended_at__lt=log_cutoff,
+            )
+            node_runs_qs = NodeRun.objects.filter(
+                log_scope,
+                run__ended_at__isnull=False,
+                run__ended_at__lt=log_cutoff,
+            )
+            run_checkpoints_qs = RunCheckpoint.objects.filter(
+                log_scope,
+                run__ended_at__isnull=False,
+                run__ended_at__lt=log_cutoff,
+            )
+            approval_tasks_qs = ApprovalTask.objects.filter(
+                log_scope,
+                run__ended_at__isnull=False,
+                run__ended_at__lt=log_cutoff,
+            )
 
             if run_exclusion:
                 run_events_qs = run_events_qs.exclude(**run_exclusion)

@@ -115,12 +115,14 @@ class TestGraphModel:
 
         assert graph.description == ""
 
-    def test_graph_str_includes_name_and_owner(self, user):
-        """String representation should include name and owner email."""
+    def test_graph_str_includes_name_and_organization(self, user):
+        """String representation should include name and organization scope."""
         graph = Graph.objects.create(owner=user, name="My Workflow")
 
         assert "My Workflow" in str(graph)
-        assert user.email in str(graph)
+        assert graph.organization == user.default_organization
+        assert user.default_organization is not None
+        assert user.default_organization.name in str(graph)
 
     def test_graph_has_uuid_primary_key(self, user):
         """Graph should have UUID as primary key."""

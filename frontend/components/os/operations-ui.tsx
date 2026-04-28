@@ -117,15 +117,22 @@ export function MetricCard({
   delta,
   icon,
   tone = "slate",
+  className,
 }: {
   eyebrow: string;
   value: string;
   delta?: string;
   icon?: ReactNode;
   tone?: "slate" | "emerald" | "amber" | "rose" | "cyan";
+  className?: string;
 }) {
   return (
-    <Card className="rounded-[1.75rem] border-slate-900/12 bg-white/92 shadow-[0_28px_80px_-46px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-slate-950/72">
+    <Card
+      className={cn(
+        "rounded-[1.75rem] border-slate-900/12 bg-white/92 shadow-[0_28px_80px_-46px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-slate-950/72",
+        className,
+      )}
+    >
       <CardContent className="flex items-start justify-between gap-4 px-5 py-5">
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">{eyebrow}</p>
@@ -316,7 +323,7 @@ export function InspectorPanel({
   sections: Array<{ title: string; content: ReactNode }>;
 }) {
   return (
-    <div className="sticky top-[6.5rem] space-y-4">
+    <div className="sticky top-[7.5rem] z-10 max-h-[calc(100vh-8.5rem)] space-y-4 overflow-y-auto overscroll-contain pb-1">
       <Surface className="overflow-hidden">
         <div className="border-b border-slate-900/8 px-6 py-6 dark:border-white/8">
           <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Inspection</p>

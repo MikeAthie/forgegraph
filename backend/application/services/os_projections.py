@@ -54,10 +54,26 @@ def _organization_for_user(user: User) -> Organization:
     return user.default_organization  # type: ignore[return-value]
 
 
+def _graph_scope_filter(organization: Organization) -> models.Q:
+    return models.Q(organization_id=organization.id) | models.Q(
+        organization__isnull=True,
+        owner__default_organization_id=organization.id,
+    )
+
+
+def _run_scope_filter(organization: Organization, prefix: str = "") -> models.Q:
+    return models.Q(**{f"{prefix}organization_id": organization.id}) | models.Q(
+        **{
+            f"{prefix}organization__isnull": True,
+            f"{prefix}owner__default_organization_id": organization.id,
+        }
+    )
+
+
 def _workflow_queryset(organization: Organization) -> models.QuerySet[Graph]:
     return cast(
         models.QuerySet[Graph],
-        Graph.objects.filter(owner__default_organization_id=organization.id),
+        Graph.objects.filter(_graph_scope_filter(organization)),
     )
 
 
@@ -96,10 +112,14 @@ def _node_name(node: dict[str, Any]) -> str:
     ).strip()
 
 
-def _find_latest_node_run(graph: Graph, node_id: str) -> NodeRun | None:
+def _find_latest_node_run(
+    graph: Graph,
+    node_id: str,
+    organization: Organization,
+) -> NodeRun | None:
     return (
         NodeRun.objects.filter(
-            run__owner__default_organization_id=graph.owner.default_organization_id,
+            _run_scope_filter(organization, prefix="run__"),
             run__graph_version__graph=graph,
             node_id=node_id,
         )
@@ -161,9 +181,9 @@ def sync_agent_registry_for_organization(organization: Organization) -> list[Age
                 continue
 
             display_name = _node_name(node)
-            latest_run = _find_latest_node_run(graph, node_id)
+            latest_run = _find_latest_node_run(graph, node_id, organization)
             has_pending_decision = ApprovalTask.objects.filter(
-                run__owner__default_organization_id=organization.id,
+                _run_scope_filter(organization, prefix="run__"),
                 run__graph_version__graph=graph,
                 node_id=node_id,
                 status="pending",
@@ -241,7 +261,7 @@ def sync_task_records_for_organization(
     }
     node_runs = (
         NodeRun.objects.filter(
-            run__owner__default_organization_id=organization.id,
+            _run_scope_filter(organization, prefix="run__"),
         )
         .select_related("run__graph_version__graph")
         .order_by("-started_at", "-id")[:500]
@@ -303,7 +323,7 @@ def sync_decision_records_for_organization(
     active_ids: list[UUID] = []
 
     approvals = (
-        ApprovalTask.objects.filter(run__owner__default_organization_id=organization.id)
+        ApprovalTask.objects.filter(_run_scope_filter(organization, prefix="run__"))
         .select_related("run__graph_version__graph")
         .order_by("-created_at")
     )
@@ -333,9 +353,7 @@ def sync_decision_records_for_organization(
         )
         active_ids.append(decision.id)
 
-    policy_runs = Run.objects.filter(
-        owner__default_organization_id=organization.id,
-    ).exclude(error_message="")
+    policy_runs = Run.objects.filter(_run_scope_filter(organization)).exclude(error_message="")
     for run in policy_runs:
         decision_type = _policy_decision_type(run)
         if not decision_type:
@@ -718,7 +736,7 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
         status="pending",
     ).select_related("agent", "execution")[:8]
     recent_executions = (
-        Run.objects.filter(owner__default_organization_id=organization.id)
+        Run.objects.filter(_run_scope_filter(organization))
         .select_related("graph_version__graph")
         .order_by("-started_at")[:8]
     )
@@ -747,7 +765,7 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
                 organization=organization, status="pending"
             ).count(),
             "execution_count_24h": Run.objects.filter(
-                owner__default_organization_id=organization.id,
+                _run_scope_filter(organization),
                 started_at__gte=now - timedelta(hours=24),
             ).count(),
             "memory_observation_count": memory_count,
