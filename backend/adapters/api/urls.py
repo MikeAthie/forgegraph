@@ -8,6 +8,11 @@ from django.urls import include, path
 
 from adapters.api.auth.views import WSTicketView
 from adapters.api.graphs.views import GraphVersionCreateView
+from adapters.api.organizations.views import (
+    OrganizationCurrentView,
+    OrganizationListCreateView,
+    OrganizationMeView,
+)
 from adapters.api.runs.views import RunListView
 
 urlpatterns = [
@@ -23,6 +28,9 @@ urlpatterns = [
     path("engine/", include("adapters.api.engine.urls")),
     path("credentials/", include("adapters.api.credentials.urls")),
     path("integrations/", include("adapters.api.integrations.urls")),
+    path("orgs", OrganizationListCreateView.as_view(), name="org-list-create-top-level"),
+    path("orgs/current", OrganizationCurrentView.as_view(), name="org-current-top-level"),
+    path("orgs/me", OrganizationMeView.as_view(), name="org-me-top-level"),
     path("orgs/", include("adapters.api.organizations.urls")),
     path("graphs/", include("adapters.api.graphs.urls")),
     path("graph-versions", GraphVersionCreateView.as_view(), name="graph-version-create-top-level"),

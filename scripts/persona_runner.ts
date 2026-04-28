@@ -653,6 +653,8 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
   const interactionLog: InteractionLog = { steps: [] };
   const company = createCompanyState();
   const accessToken = "persona-carlos-token";
+  const organizationId = "a1111111-1111-4111-8111-111111111111";
+  const organizationName = "Operadora Horizonte";
   const objective = "i want to understand my business better and improve it";
   const operationBrief = "help me figure out what to do next this week";
 
@@ -669,7 +671,7 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
         email: "carlos.persona@example.com",
         created_at: new Date().toISOString(),
         is_active: true,
-        default_organization_id: null,
+        default_organization_id: organizationId,
         organization_role: "owner",
       }),
     });
@@ -680,6 +682,49 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ access: accessToken }),
+    });
+  });
+
+  await context.route(/\/api\/orgs\/?(?:\?.*)?$/, async (route: any) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          apiSuccess([
+            {
+              id: organizationId,
+              name: organizationName,
+              created_at: "2026-04-26T12:00:00.000Z",
+              updated_at: "2026-04-26T12:00:00.000Z",
+              role: "owner",
+              is_default: true,
+              joined_at: "2026-04-26T12:00:00.000Z",
+            },
+          ]),
+        ),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await context.route(/\/api\/orgs\/current(?:\?.*)?$/, async (route: any) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        apiSuccess({
+          id: organizationId,
+          name: organizationName,
+          created_at: "2026-04-26T12:00:00.000Z",
+          updated_at: "2026-04-26T12:00:00.000Z",
+          role: "owner",
+          is_default: true,
+          joined_at: "2026-04-26T12:00:00.000Z",
+        }),
+      ),
     });
   });
 

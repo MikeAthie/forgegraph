@@ -144,6 +144,7 @@ class WSTicketView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
+        membership = ensure_default_organization(cast(User, request.user))
         access_token = getattr(request, "auth", None)
         if access_token is None:
             return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -157,7 +158,7 @@ class WSTicketView(APIView):
                 "ticket": ticket,
                 "expires_in_seconds": expires_in,
                 "expires_at": (timezone.now() + timedelta(seconds=expires_in)).isoformat(),
-                "org_id": str(getattr(request.user, "default_organization_id", "") or ""),
+                "org_id": str(membership.organization_id),
             },
             status=status.HTTP_201_CREATED,
         )
@@ -169,7 +170,10 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        return Response(UserSerializer(request.user).data)
+        user = cast(User, request.user)
+        ensure_default_organization(user)
+        user.refresh_from_db()
+        return Response(UserSerializer(user).data)
 
 
 class TokenRefreshView(BaseTokenRefreshView):

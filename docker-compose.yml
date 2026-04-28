@@ -274,11 +274,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        API_PROXY_TARGET: ${API_PROXY_TARGET:-http://backend:8000}
     container_name: forgegraph-frontend
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      API_PROXY_TARGET: ${API_PROXY_TARGET:-http://backend:8000}
     depends_on:
       - backend
 

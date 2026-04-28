@@ -275,6 +275,8 @@ def get_tenant_id_for_user(user: User) -> str:
 
 
 def get_tenant_id_for_run(run: Run) -> str:
+    if run.organization_id:
+        return str(run.organization_id)
     return get_tenant_id_for_user(run.owner)
 
 
@@ -298,8 +300,13 @@ def _trace_metadata_from_graph(graph_json: dict[str, Any]) -> dict[str, str]:
 
 def run_queryset_for_user(user: User) -> models.QuerySet[Run]:
     tenant_id = get_tenant_id_for_user(user)
+    if not has_min_role(user, "viewer", tenant_id):
+        return Run.objects.none()
     tenant_uuid = UUID(tenant_id)
-    return Run.objects.filter(owner__default_organization_id=tenant_uuid)
+    return Run.objects.filter(
+        Q(organization_id=tenant_uuid)
+        | Q(organization__isnull=True, owner__default_organization_id=tenant_uuid)
+    )
 
 
 def _queue_payload(run: Run) -> dict[str, Any]:
@@ -544,7 +551,9 @@ def check_entitlements(user: User) -> Response | None:
     max_runs = entitlements.get("max_runs_per_month")
     if max_runs is not None:
         run_count = Run.objects.filter(
-            owner__default_organization_id=tenant_uuid, started_at__gte=month_start
+            Q(organization_id=tenant_uuid)
+            | Q(organization__isnull=True, owner__default_organization_id=tenant_uuid),
+            started_at__gte=month_start,
         ).count()
         if run_count >= int(max_runs):
             return error_response(
@@ -1143,7 +1152,8 @@ def _run_audit_metadata(
 
 def _tenant_active_run_count(tenant_uuid: UUID) -> int:
     return Run.objects.filter(
-        owner__default_organization_id=tenant_uuid,
+        Q(organization_id=tenant_uuid)
+        | Q(organization__isnull=True, owner__default_organization_id=tenant_uuid),
         status__in=["pending", "running", "paused", "resume_requested"],
     ).count()
 
@@ -1746,9 +1756,17 @@ class RunStartView(APIView):
             return active_guardrail_response
 
         try:
-            graph_version = GraphVersion.objects.select_related("graph").get(
-                id=graph_version_id,
-                graph__owner__default_organization_id=tenant_uuid,
+            graph_version = (
+                GraphVersion.objects.select_related("graph")
+                .filter(
+                    Q(graph__organization_id=tenant_uuid)
+                    | Q(
+                        graph__organization__isnull=True,
+                        graph__owner__default_organization_id=tenant_uuid,
+                    ),
+                    id=graph_version_id,
+                )
+                .get()
             )
         except GraphVersion.DoesNotExist:
             return error_response(
@@ -1833,6 +1851,7 @@ class RunStartView(APIView):
 
         run = Run.objects.create(
             owner=user,
+            organization=graph_version.graph.organization or user.default_organization,
             graph_version=graph_version,
             thread_id=thread_id,
             status="pending",
@@ -2201,6 +2220,7 @@ class RunInvokeView(APIView):
             with transaction.atomic():
                 run = Run.objects.create(
                     owner=user,
+                    organization=graph_version.graph.organization or user.default_organization,
                     graph_version=graph_version,
                     thread_id=thread_id,
                     status="pending",
@@ -2547,6 +2567,7 @@ class RunReplayView(APIView):
             with transaction.atomic():
                 replay_run = Run.objects.create(
                     owner=user,
+                    organization=graph_version.graph.organization or user.default_organization,
                     graph_version=graph_version,
                     thread_id=run.thread_id,
                     status="pending",

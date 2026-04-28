@@ -149,7 +149,14 @@ class GraphQuerySet(models.QuerySet["Graph"]):
     def for_user(self, user: User) -> GraphQuerySet:
         tenant_id = getattr(user, "default_organization_id", None)
         if tenant_id:
-            return self.filter(owner__default_organization_id=tenant_id)
+            if not OrganizationMembership.objects.filter(
+                user=user, organization_id=tenant_id
+            ).exists():
+                return self.none()
+            return self.filter(
+                models.Q(organization_id=tenant_id)
+                | models.Q(organization__isnull=True, owner__default_organization_id=tenant_id)
+            )
         return self.filter(owner=user)
 
 
@@ -173,8 +180,14 @@ class PromptTemplateQuerySet(models.QuerySet["PromptTemplate"]):
     def for_user(self, user: User) -> PromptTemplateQuerySet:
         tenant_id = getattr(user, "default_organization_id", None)
         if tenant_id:
+            if not OrganizationMembership.objects.filter(
+                user=user, organization_id=tenant_id
+            ).exists():
+                return self.public()
             return self.filter(
-                models.Q(owner__default_organization_id=tenant_id) | models.Q(visibility="public")
+                models.Q(organization_id=tenant_id)
+                | models.Q(organization__isnull=True, owner__default_organization_id=tenant_id)
+                | models.Q(visibility="public")
             )
         return self.filter(models.Q(owner=user) | models.Q(visibility="public"))
 
@@ -194,6 +207,13 @@ class Graph(models.Model):
         on_delete=models.CASCADE,
         related_name="graphs",
     )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="graphs",
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     external_source = models.CharField(max_length=64, blank=True, default="")
@@ -209,21 +229,41 @@ class Graph(models.Model):
                 fields=["owner", "external_source", "external_ref"],
                 condition=models.Q(external_ref__gt=""),
                 name="graphs_owner_source_external_ref_unique",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "external_source", "external_ref"],
+                condition=models.Q(organization__isnull=False, external_ref__gt=""),
+                name="graphs_org_source_external_ref_unique",
+            ),
         ]
         indexes = [
             models.Index(
                 fields=["owner", "external_source", "external_ref"],
                 name="graphs_external_ref_idx",
-            )
+            ),
+            models.Index(
+                fields=["organization", "updated_at"],
+                name="graphs_org_updated_idx",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.owner.email})"
+        organization = self.organization
+        scope = organization.name if organization is not None else self.owner.email
+        return f"{self.name} ({scope})"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         is_create = self._state.adding
         prev_updated = None
+        if not self.organization_id and self.owner_id:
+            self.organization_id = (
+                User.objects.filter(pk=self.owner_id)
+                .values_list(
+                    "default_organization_id",
+                    flat=True,
+                )
+                .first()
+            )
         if not is_create and self.pk:
             prev_updated = (
                 Graph.objects.filter(pk=self.pk).values_list("updated_at", flat=True).first()
@@ -770,6 +810,13 @@ class PromptTemplate(models.Model):
         null=True,
         blank=True,
     )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="prompt_templates",
+        null=True,
+        blank=True,
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default="other")
@@ -784,12 +831,24 @@ class PromptTemplate(models.Model):
     class Meta:
         db_table = "prompt_templates"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="prompt_templates_org_idx"),
+        ]
 
     def __str__(self) -> str:
         return self.title
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         is_create = self._state.adding
+        if not self.organization_id and self.owner_id:
+            self.organization_id = (
+                User.objects.filter(pk=self.owner_id)
+                .values_list(
+                    "default_organization_id",
+                    flat=True,
+                )
+                .first()
+            )
         super().save(*args, **kwargs)
 
         if is_create:
@@ -852,6 +911,13 @@ class Run(models.Model):
         on_delete=models.CASCADE,
         related_name="runs",
     )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="runs",
+    )
     thread_id = models.UUIDField(null=True, blank=True)
     graph_version = models.ForeignKey(
         GraphVersion,
@@ -890,6 +956,9 @@ class Run(models.Model):
             models.Index(fields=["owner", "started_at"], name="runs_owner_started_idx"),
             models.Index(fields=["owner", "status"], name="runs_owner_status_idx"),
             models.Index(fields=["owner", "thread_id"], name="runs_owner_thread_idx"),
+            models.Index(fields=["organization", "started_at"], name="runs_org_started_idx"),
+            models.Index(fields=["organization", "status"], name="runs_org_status_idx"),
+            models.Index(fields=["organization", "thread_id"], name="runs_org_thread_idx"),
             models.Index(fields=["trace_id"], name="runs_trace_id_idx"),
             models.Index(fields=["last_progress_at"], name="runs_progress_idx"),
             models.Index(fields=["recovery_state"], name="runs_recovery_state_idx"),
@@ -897,6 +966,25 @@ class Run(models.Model):
 
     def __str__(self) -> str:
         return f"Run {self.id} - {self.status}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self.organization_id:
+            if self.graph_version_id:
+                self.organization_id = (
+                    GraphVersion.objects.filter(pk=self.graph_version_id)
+                    .values_list("graph__organization_id", flat=True)
+                    .first()
+                )
+            if not self.organization_id and self.owner_id:
+                self.organization_id = (
+                    User.objects.filter(pk=self.owner_id)
+                    .values_list(
+                        "default_organization_id",
+                        flat=True,
+                    )
+                    .first()
+                )
+        super().save(*args, **kwargs)
 
     @property
     def duration_ms(self) -> int | None:

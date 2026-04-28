@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
 
+from infrastructure.orm.models import OrganizationMembership
+
 pytestmark = pytest.mark.django_db
 
 LOC_MEM_CACHE = {
@@ -71,6 +73,32 @@ def test_me_returns_current_user_with_jwt(api_client, user):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.data["email"] == user.email
+
+
+def test_me_creates_default_organization_when_missing(api_client, user):
+    User = get_user_model()
+    OrganizationMembership.objects.filter(user=user).delete()
+    User.objects.filter(pk=user.pk).update(default_organization=None)
+
+    login_response = api_client.post(
+        "/api/auth/login",
+        {"email": user.email, "password": "testpassword123"},
+        format="json",
+    )
+    access = login_response.data["access"]
+
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+    response = api_client.get("/api/auth/me")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["default_organization_id"]
+    assert response.data["organization_role"] == "owner"
+    assert OrganizationMembership.objects.filter(
+        user=user,
+        organization_id=response.data["default_organization_id"],
+        role="owner",
+        is_default=True,
+    ).exists()
 
 
 def test_refresh_rotates_and_blacklists_old_refresh(api_client, user):

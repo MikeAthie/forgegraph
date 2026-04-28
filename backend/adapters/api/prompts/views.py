@@ -26,6 +26,15 @@ from application.services.rbac import has_min_role
 from infrastructure.orm.models import PromptTemplate, User
 
 
+def _prompt_organization_filter(user: User) -> Q:
+    if not user.default_organization_id:
+        return Q(pk__isnull=True)
+    return Q(organization_id=user.default_organization_id) | Q(
+        organization__isnull=True,
+        owner__default_organization_id=user.default_organization_id,
+    )
+
+
 class PromptListCreateView(APIView):
     """List and create prompts."""
 
@@ -96,6 +105,7 @@ class PromptListCreateView(APIView):
             )
         prompt = PromptTemplate.objects.create(
             owner=user,
+            organization=user.default_organization,
             title=serializer.validated_data["title"],
             description=serializer.validated_data.get("description", ""),
             category=serializer.validated_data["category"],
@@ -132,20 +142,10 @@ class PromptDetailView(APIView):
 
     def get_object(self, prompt_id: UUID, user: User) -> PromptTemplate | None:
         """Get prompt if user has access."""
-        try:
-            prompt = cast(PromptTemplate, PromptTemplate.objects.get(id=prompt_id))
-            # User can access if they own it or it's public
-            if prompt.owner == user or prompt.visibility == "public":
-                return prompt
-            if (
-                prompt.owner
-                and user.default_organization_id
-                and prompt.owner.default_organization_id == user.default_organization_id
-            ):
-                return prompt
-            return None
-        except PromptTemplate.DoesNotExist:
-            return None
+        return cast(
+            PromptTemplate | None,
+            PromptTemplate.objects.for_user(user).filter(id=prompt_id).first(),
+        )
 
     def get(self, request: Request, prompt_id: UUID) -> Response:
         """Get prompt details."""
@@ -188,8 +188,8 @@ class PromptDetailView(APIView):
             )
         try:
             prompt = PromptTemplate.objects.get(
+                _prompt_organization_filter(user),
                 id=prompt_id,
-                owner__default_organization_id=user.default_organization_id,
             )
         except PromptTemplate.DoesNotExist:
             return error_response(
@@ -252,8 +252,8 @@ class PromptDetailView(APIView):
             )
         try:
             prompt = PromptTemplate.objects.get(
+                _prompt_organization_filter(user),
                 id=prompt_id,
-                owner__default_organization_id=user.default_organization_id,
             )
         except PromptTemplate.DoesNotExist:
             return error_response(
@@ -274,22 +274,8 @@ class PromptCloneView(APIView):
     def post(self, request: Request, prompt_id: UUID) -> Response:
         """Clone a prompt."""
         try:
-            original = PromptTemplate.objects.get(id=prompt_id)
-            # Can clone if owner or public
             user = cast(User, request.user)
-            if (
-                original.owner != user
-                and original.visibility != "public"
-                and (
-                    not original.owner
-                    or original.owner.default_organization_id != user.default_organization_id
-                )
-            ):
-                return error_response(
-                    code="NOT_FOUND",
-                    message=f"Prompt with id '{prompt_id}' not found or you do not have access to it",
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+            original = PromptTemplate.objects.for_user(user).get(id=prompt_id)
         except PromptTemplate.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",
@@ -336,8 +322,8 @@ class PromptPublishView(APIView):
             )
         try:
             prompt = PromptTemplate.objects.get(
+                _prompt_organization_filter(user),
                 id=prompt_id,
-                owner__default_organization_id=user.default_organization_id,
             )
         except PromptTemplate.DoesNotExist:
             return error_response(

@@ -14,6 +14,21 @@ class OrganizationSerializer(serializers.Serializer[Any]):
     updated_at = serializers.DateTimeField(read_only=True)
 
 
+class OrganizationListItemSerializer(OrganizationSerializer):
+    role = serializers.ChoiceField(choices=OrganizationMembership.ROLE_CHOICES)
+    is_default = serializers.BooleanField(read_only=True)
+    joined_at = serializers.DateTimeField(read_only=True)
+
+
+class OrganizationCreateSerializer(serializers.Serializer[Any]):
+    name = serializers.CharField(max_length=255, trim_whitespace=True)
+    make_default = serializers.BooleanField(required=False, default=True)
+
+
+class OrganizationSwitchSerializer(serializers.Serializer[Any]):
+    organization_id = serializers.UUIDField()
+
+
 class OrganizationMemberSerializer(serializers.Serializer[Any]):
     user_id = serializers.UUIDField(read_only=True)
     email = serializers.EmailField(read_only=True)

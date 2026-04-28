@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from application.services.credential_state import (
@@ -181,8 +182,12 @@ def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
             graph_version = (
                 GraphVersion.objects.select_related("graph")
                 .filter(
+                    Q(graph__organization_id=tenant_uuid)
+                    | Q(
+                        graph__organization__isnull=True,
+                        graph__owner__default_organization_id=tenant_uuid,
+                    ),
                     id=graph_version_id,
-                    graph__owner__default_organization_id=tenant_uuid,
                 )
                 .first()
             )
@@ -190,8 +195,12 @@ def expand_subgraphs(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
             graph_version = (
                 GraphVersion.objects.select_related("graph")
                 .filter(
+                    Q(graph__organization_id=tenant_uuid)
+                    | Q(
+                        graph__organization__isnull=True,
+                        graph__owner__default_organization_id=tenant_uuid,
+                    ),
                     graph_id=graph_id,
-                    graph__owner__default_organization_id=tenant_uuid,
                 )
                 .order_by("-version")
                 .first()

@@ -11,6 +11,7 @@ from uuid import UUID
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from infrastructure.orm.models import Run, RunQueueEntry
@@ -39,7 +40,9 @@ def enqueue_run(
     available_at: datetime | None = None,
     max_attempts: int | None = None,
 ) -> RunQueueEntry:
-    tenant_uuid = UUID(tenant_id) if tenant_id else run.owner.default_organization_id
+    tenant_uuid = run.organization_id or (UUID(tenant_id) if tenant_id else None)
+    if tenant_uuid is None:
+        tenant_uuid = run.owner.default_organization_id
     if tenant_uuid is None:
         tenant_uuid = UUID(str(run.owner_id))
 
@@ -64,7 +67,8 @@ def enqueue_run(
 
 def _active_tenant_run_count(tenant_id: UUID) -> int:
     return Run.objects.filter(
-        owner__default_organization_id=tenant_id,
+        Q(organization_id=tenant_id)
+        | Q(organization__isnull=True, owner__default_organization_id=tenant_id),
         status__in=["running", "paused", "resume_requested"],
     ).count()
 
