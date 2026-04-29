@@ -8,6 +8,7 @@
     "start": "next start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "terminology:check": "node ../scripts/frontend/check-terminology-boundary.mjs",
     "lint": "next lint",
     "test": "node --max-old-space-size=4096 node_modules/jest/bin/jest.js",
     "test:related": "node --max-old-space-size=4096 node_modules/jest/bin/jest.js --findRelatedTests",

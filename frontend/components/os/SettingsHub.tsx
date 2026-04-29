@@ -27,7 +27,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
   },
   {
     title: "Credentials",
-    description: "Manage provider credentials and OAuth connections used by company operations and AI workers.",
+    description: "Manage provider credentials and OAuth connections used by company operations and departments.",
     href: "/credentials",
     accessLabel: "Workspace operators",
     section: "workspace",

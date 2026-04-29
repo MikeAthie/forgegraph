@@ -1,16 +1,16 @@
 # Mental Model
 
-Use the company model defined in [company-workspace-model.md](./company-workspace-model.md) and the translation rules in [ux-vocabulary.md](./ux-vocabulary.md).
+Use the canonical product ontology in [canonical-ontology.md](./canonical-ontology.md). This document is a short operating summary only.
 
 Current mental model:
 
 - Company: the primary operating entity
 - Business objective: the reason the company exists
 - Department: the functional unit that performs categories of work
-- Operating model: the structure that defines how the company works
+- Advanced operating model: the expert structure that defines how the company works
 - Operation: a live or historical unit of company work
-- Task execution: a step inside an operation
-- Deliverable: the user-visible output from an operation
+- Task: a unit of work inside an operation
+- Deliverable: the user-visible result from an operation
 - Approval: a required human decision
 - Budget and usage: the operating limits and spend posture
 

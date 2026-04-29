@@ -142,7 +142,7 @@ export default function WorkflowsPage() {
                     {executions.map((execution) => (
                       <Link
                         key={execution.id}
-                        href={`/executions/${execution.id}`}
+                        href={`/runs/${execution.id}`}
                         className="flex items-start justify-between gap-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
                       >
                         <div>

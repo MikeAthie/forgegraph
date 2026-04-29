@@ -29,6 +29,9 @@ export JEST_CACHE_DIR="${ROOT}/frontend/.jest-cache"
 log_section "Frontend format"
 npm run format:check
 
+log_section "Frontend terminology boundary"
+npm run terminology:check
+
 log_section "Frontend lint"
 npm run lint
 

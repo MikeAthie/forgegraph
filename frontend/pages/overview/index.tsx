@@ -28,7 +28,9 @@ import {
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
-import { getApiErrorMessage, systemStateApi, type OrganizationStateSummary } from "@/lib/api";
+import { translateProductError } from "@/domain/errors";
+import { overviewRepository } from "@/domain/repositories";
+import type { OrganizationOverviewVM } from "@/domain/repositories/overviewRepository";
 
 const revenueMultiplier = 4.75;
 
@@ -49,7 +51,7 @@ const metricCardLinkClass =
   "h-full transition-all duration-200 ease-out group-hover:-translate-y-0.5 group-hover:border-slate-900/20 group-hover:bg-white group-hover:shadow-[0_30px_70px_-48px_rgba(15,23,42,0.7)] dark:group-hover:border-white/20 dark:group-hover:bg-white/[0.07]";
 
 export default function OverviewPage() {
-  const [overview, setOverview] = useState<OrganizationStateSummary | null>(null);
+  const [overview, setOverview] = useState<OrganizationOverviewVM | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,13 +60,13 @@ export default function OverviewPage() {
 
     const load = async () => {
       try {
-        const data = await systemStateApi.getOverview();
+        const data = await overviewRepository.get();
         if (!cancelled) {
           setOverview(data);
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load command ops."));
+          setError(translateProductError(err, "operation"));
         }
       } finally {
         if (!cancelled) {
@@ -85,34 +87,33 @@ export default function OverviewPage() {
       return null;
     }
 
-    const revenueToday = Math.round((overview.summary.total_cost_usd * revenueMultiplier + 1840) * 100) / 100;
-    const profitToday = revenueToday - overview.summary.total_cost_usd;
-    const totalAgentCost = overview.active_agents.reduce((sum, agent) => sum + agent.total_cost_usd, 0);
-    const blockedTasks = overview.active_tasks.filter((task) => task.status === "waiting" || task.status === "failed");
-    const failedExecutions = overview.recent_executions.filter((execution) => execution.status === "failed");
+    const revenueToday = Math.round((overview.summary.totalCostUsd * revenueMultiplier + 1840) * 100) / 100;
+    const profitToday = revenueToday - overview.summary.totalCostUsd;
+    const totalDepartmentCost = overview.activeDepartments.reduce(
+      (sum, department) => sum + department.totalCostUsd,
+      0,
+    );
+    const blockedTasks = overview.activeTasks.filter((task) => task.status === "paused" || task.status === "failed");
+    const failedOperations = overview.recentOperations.filter((operation) => operation.status === "failed");
 
     const attentionItems: AttentionItem[] = [
-      ...failedExecutions.slice(0, 2).map((execution) => ({
-        id: `failed-${execution.id}`,
-        title: `${execution.workflow_name} needs attention`,
-        detail: `Operation ${execution.id.slice(0, 8)} failed${execution.duration_ms ? ` after ${execution.duration_ms}ms` : ""}. Inspect the operation and choose whether to retry or intervene.`,
+      ...failedOperations.slice(0, 2).map((operation) => ({
+        id: `failed-${operation.id}`,
+        title: `${operation.companyName} needs attention`,
+        detail: `Operation ${operation.id.slice(0, 8)} failed${operation.durationMs ? ` after ${operation.durationMs}ms` : ""}. Inspect the operation and choose whether to retry or intervene.`,
         owner: "Operation detail",
         tone: "rose" as const,
-        href: `/executions/${execution.id}`,
+        href: `/runs/${operation.id}`,
         action: "Inspect failure",
       })),
-      ...overview.pending_decisions.slice(0, 2).map((decision) => ({
-        id: `decision-${decision.id}`,
-        title: `${decision.decision_type} needs a human`,
-        detail: String(
-          decision.context_json?.summary ??
-            decision.context_json?.prompt_message ??
-            "An operator decision is blocking progress and should be handled from the inbox.",
-        ),
-        owner: "Inbox",
+      ...overview.pendingApprovals.slice(0, 2).map((approval) => ({
+        id: `approval-${approval.id}`,
+        title: `${approval.label} needs a human`,
+        detail: approval.promptMessage,
+        owner: "Approvals",
         tone: "amber" as const,
-        href: "/inbox",
-        action: "Review decision",
+        href: "/approvals",
+        action: "Review approval",
       })),
       ...blockedTasks.slice(0, 2).map((task) => ({
         id: `task-${task.id}`,
@@ -120,7 +121,7 @@ export default function OverviewPage() {
         detail: `${task.summary} Current priority is ${task.priority}.`,
         owner: "Activity",
         tone: "amber" as const,
-        href: task.execution_id ? `/executions/${task.execution_id}` : "/tasks",
+        href: task.operationId ? `/runs/${task.operationId}` : "/tasks",
         action: "Open task",
       })),
     ].slice(0, 6);
@@ -136,82 +137,90 @@ export default function OverviewPage() {
         status: attentionItems.some((item) => item.tone === "rose") ? "failed" : "active",
       },
       {
-        id: "agents",
+        id: "departments",
         label: "Active departments",
-        value: `${overview.summary.active_agent_count} live`,
+        value: `${overview.summary.activeDepartmentCount} live`,
         detail:
-          overview.active_agents.filter((agent) => agent.status === "attention").length > 0
-            ? `${overview.active_agents.filter((agent) => agent.status === "attention").length} department${overview.active_agents.filter((agent) => agent.status === "attention").length === 1 ? "" : "s"} flagged for review.`
+          overview.activeDepartments.filter((department) => department.status === "attention").length > 0
+            ? `${overview.activeDepartments.filter((department) => department.status === "attention").length} department${overview.activeDepartments.filter((department) => department.status === "attention").length === 1 ? "" : "s"} flagged for review.`
             : "No department is currently in an attention state.",
-        status: overview.active_agents.some((agent) => agent.status === "attention") ? "paused" : "active",
+        status: overview.activeDepartments.some((department) => department.status === "attention")
+          ? "paused"
+          : "active",
       },
       {
-        id: "decisions",
-        label: "Decision queue",
-        value:
-          overview.summary.pending_decision_count > 0 ? `${overview.summary.pending_decision_count} pending` : "Clear",
+        id: "approvals",
+        label: "Approval queue",
+        value: overview.summary.pendingApprovalCount > 0 ? `${overview.summary.pendingApprovalCount} pending` : "Clear",
         detail:
-          overview.summary.pending_decision_count > 0
+          overview.summary.pendingApprovalCount > 0
             ? "Human review is currently the limiting factor for at least one operation."
             : "No operation is waiting on operator approval.",
-        status: overview.summary.pending_decision_count > 0 ? "paused" : "active",
+        status: overview.summary.pendingApprovalCount > 0 ? "paused" : "active",
       },
       {
         id: "cost",
         label: "Cost posture",
-        value: formatCurrency(overview.summary.total_cost_usd),
+        value: formatCurrency(overview.summary.totalCostUsd),
         detail:
-          overview.summary.total_cost_usd > 250
+          overview.summary.totalCostUsd > 250
             ? "Spend is elevated and should be compared with current business impact."
             : "Spend is inside the expected daily operating band.",
-        status: overview.summary.total_cost_usd > 250 ? "paused" : "active",
+        status: overview.summary.totalCostUsd > 250 ? "paused" : "active",
       },
     ];
 
-    const agentTaskMap = new Map<string, string>();
-    overview.active_tasks.forEach((task) => {
-      if (task.agent_id && !agentTaskMap.has(task.agent_id)) {
-        agentTaskMap.set(task.agent_id, task.summary);
+    const departmentTaskMap = new Map<string, string>();
+    overview.activeTasks.forEach((task) => {
+      if (task.departmentId && !departmentTaskMap.has(task.departmentId)) {
+        departmentTaskMap.set(task.departmentId, task.summary);
       }
     });
 
     const activity = [
-      ...overview.active_agents.slice(0, 2).map((agent) => ({
-        id: `agent-${agent.id}`,
-        title: `${agent.display_name} is ${agent.status === "attention" ? "awaiting review" : "actively supervising work"}`,
-        detail: agentTaskMap.get(agent.id) ?? "No projected task summary is currently attached to this department.",
-        time: formatDateTime(agent.last_seen_at),
-        tone: agent.status === "attention" ? ("amber" as const) : ("emerald" as const),
+      ...overview.activeDepartments.slice(0, 2).map((department) => ({
+        id: `department-${department.id}`,
+        title: `${department.name} is ${department.status === "attention" ? "awaiting review" : "actively supervising work"}`,
+        detail:
+          departmentTaskMap.get(department.id) ?? "No projected task summary is currently attached to this department.",
+        time: formatDateTime(department.lastSeenAt),
+        tone: department.status === "attention" ? ("amber" as const) : ("emerald" as const),
       })),
       ...blockedTasks.slice(0, 2).map((task) => ({
         id: `blocked-${task.id}`,
         title: `${task.title} is blocked`,
         detail: task.summary,
-        time: formatDateTime(task.updated_at),
+        time: formatDateTime(task.updatedAt),
         tone: "amber" as const,
       })),
-      ...overview.recent_executions.slice(0, 2).map((execution) => ({
-        id: `execution-${execution.id}`,
-        title: `${execution.workflow_name} operation ${execution.status === "failed" ? "needs attention" : execution.status === "running" ? "is running" : "completed"}`,
+      ...overview.recentOperations.slice(0, 2).map((operation) => ({
+        id: `operation-${operation.id}`,
+        title: `${operation.companyName} operation ${
+          operation.status === "failed"
+            ? "needs attention"
+            : operation.status === "running"
+              ? "is running"
+              : "completed"
+        }`,
         detail:
-          execution.status === "failed"
+          operation.status === "failed"
             ? "The failure should be reviewed before replaying the operation."
-            : execution.status === "running"
+            : operation.status === "running"
               ? "The operation is still moving through its planned steps."
               : "The operation finished without requiring immediate intervention.",
-        time: formatDateTime(execution.started_at),
-        tone: execution.status === "failed" ? ("rose" as const) : ("cyan" as const),
+        time: formatDateTime(operation.startedAt),
+        tone: operation.status === "failed" ? ("rose" as const) : ("cyan" as const),
       })),
     ].slice(0, 6);
 
     return {
       revenueToday,
       profitToday,
-      totalAgentCost,
+      totalDepartmentCost,
       blockedTasks,
       attentionItems,
       systemHealth,
-      agentTaskMap,
+      departmentTaskMap,
       activity,
     };
   }, [overview]);
@@ -238,17 +247,17 @@ export default function OverviewPage() {
                   <span>{derived.blockedTasks.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Pending decisions</span>
-                  <span>{overview.summary.pending_decision_count}</span>
+                  <span>Pending approvals</span>
+                  <span>{overview.summary.pendingApprovalCount}</span>
                 </div>
               </div>
             ),
           },
           {
             title: "Recent memory",
-            content: overview.memory.recent_topics.length ? (
+            content: overview.memory.recentTopics.length ? (
               <div className="flex flex-wrap gap-2">
-                {overview.memory.recent_topics.map((topic) => (
+                {overview.memory.recentTopics.map((topic) => (
                   <StatusBadge key={topic} status="pending" label={topic} />
                 ))}
               </div>
@@ -262,7 +271,7 @@ export default function OverviewPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span>Tracked cost</span>
-                  <span>{formatCurrency(overview.summary.total_cost_usd)}</span>
+                  <span>{formatCurrency(overview.summary.totalCostUsd)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Projected revenue</span>
@@ -287,8 +296,8 @@ export default function OverviewPage() {
             title="Command Ops"
             description="Summary first, inspection second, logs last. This page should tell an operator what is happening and where to act in under ten seconds."
             action={
-              overview?.generated_at ? (
-                <StatusBadge status="active" label={`Updated ${formatDateTime(overview.generated_at)}`} />
+              overview?.generatedAt ? (
+                <StatusBadge status="active" label={`Updated ${formatDateTime(overview.generatedAt)}`} />
               ) : null
             }
           >
@@ -311,7 +320,7 @@ export default function OverviewPage() {
                 <MetricCard
                   className={metricCardLinkClass}
                   eyebrow="Active departments"
-                  value={overview ? formatCompactNumber(overview.summary.active_agent_count) : "0"}
+                  value={overview ? formatCompactNumber(overview.summary.activeDepartmentCount) : "0"}
                   delta="Departments currently attached to live work"
                   icon={<BrainCircuit className="h-4 w-4" />}
                 />
@@ -326,13 +335,13 @@ export default function OverviewPage() {
                   icon={<Waypoints className="h-4 w-4" />}
                 />
               </Link>
-              <Link href="#pending-decisions" className={metricLinkClass} aria-label="Jump to pending decisions">
+              <Link href="#pending-approvals" className={metricLinkClass} aria-label="Jump to pending approvals">
                 <MetricCard
                   className={metricCardLinkClass}
-                  eyebrow="Pending decisions"
-                  value={overview ? formatCompactNumber(overview.summary.pending_decision_count) : "0"}
-                  delta="Inbox items ready for human review"
-                  tone={overview?.summary.pending_decision_count ? "amber" : "slate"}
+                  eyebrow="Pending approvals"
+                  value={overview ? formatCompactNumber(overview.summary.pendingApprovalCount) : "0"}
+                  delta="Approvals ready for human review"
+                  tone={overview?.summary.pendingApprovalCount ? "amber" : "slate"}
                   icon={<BellRing className="h-4 w-4" />}
                 />
               </Link>
@@ -340,7 +349,7 @@ export default function OverviewPage() {
                 <MetricCard
                   className={metricCardLinkClass}
                   eyebrow="Cost today"
-                  value={overview ? formatCurrency(overview.summary.total_cost_usd) : "$0"}
+                  value={overview ? formatCurrency(overview.summary.totalCostUsd) : "$0"}
                   delta={
                     derived
                       ? `${formatCurrency(derived.profitToday)} projected profit after current cost`
@@ -459,35 +468,35 @@ export default function OverviewPage() {
                     description="Which departments are currently doing work, what they are focused on, and how much cost they are carrying."
                     action={
                       <Button asChild variant="outline" className="rounded-full">
-                        <Link href="/agents">
+                        <Link href="/departments">
                           Open departments
                           <ArrowRight className="h-4 w-4" />
                         </Link>
                       </Button>
                     }
                   >
-                    {overview.active_agents.length ? (
+                    {overview.activeDepartments.length ? (
                       <div className="space-y-3">
-                        {overview.active_agents.slice(0, 6).map((agent) => (
+                        {overview.activeDepartments.slice(0, 6).map((department) => (
                           <Link
-                            key={agent.id}
-                            href={`/agents?agent=${agent.id}`}
+                            key={department.id}
+                            href={`/departments?department=${department.id}`}
                             className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
-                                <p className="truncate text-sm font-semibold">{agent.display_name}</p>
-                                <StatusBadge status={agent.status} />
+                                <p className="truncate text-sm font-semibold">{department.name}</p>
+                                <StatusBadge status={department.status} />
                               </div>
                               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                {derived.agentTaskMap.get(agent.id) ?? "Awaiting the next available task."}
+                                {derived.departmentTaskMap.get(department.id) ?? "Awaiting the next available task."}
                               </p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                                 Cost
                               </p>
-                              <p className="mt-2 text-sm font-semibold">{formatCurrency(agent.total_cost_usd)}</p>
+                              <p className="mt-2 text-sm font-semibold">{formatCurrency(department.totalCostUsd)}</p>
                             </div>
                           </Link>
                         ))}
@@ -519,7 +528,7 @@ export default function OverviewPage() {
                         {derived.blockedTasks.map((task) => (
                           <Link
                             key={task.id}
-                            href={task.execution_id ? `/executions/${task.execution_id}` : "/tasks"}
+                            href={task.operationId ? `/runs/${task.operationId}` : "/tasks"}
                             className="block rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -534,7 +543,7 @@ export default function OverviewPage() {
                               </div>
                               <div className="shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
                                 <p>{task.priority} priority</p>
-                                <p className="mt-2">{formatDateTime(task.updated_at)}</p>
+                                <p className="mt-2">{formatDateTime(task.updatedAt)}</p>
                               </div>
                             </div>
                           </Link>
@@ -551,44 +560,40 @@ export default function OverviewPage() {
               </div>
 
               <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
-                <div id="pending-decisions" className="scroll-mt-36">
+                <div id="pending-approvals" className="scroll-mt-36">
                   <Panel
-                    title="Pending decisions"
+                    title="Pending approvals"
                     description="Approval items that should be resolvable without opening raw logs."
                     action={
                       <Button asChild variant="outline" className="rounded-full">
-                        <Link href="/inbox">
+                        <Link href="/approvals">
                           Open approvals
                           <ArrowRight className="h-4 w-4" />
                         </Link>
                       </Button>
                     }
                   >
-                    {overview.pending_decisions.length ? (
+                    {overview.pendingApprovals.length ? (
                       <div className="space-y-3">
-                        {overview.pending_decisions.slice(0, 5).map((decision) => (
+                        {overview.pendingApprovals.slice(0, 5).map((approval) => (
                           <div
-                            key={decision.id}
+                            key={approval.id}
                             className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-3">
                                   <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                    {decision.decision_type}
+                                    {approval.label}
                                   </p>
-                                  <StatusBadge status={decision.status} />
+                                  <StatusBadge status={approval.status} />
                                 </div>
                                 <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                  {String(
-                                    decision.context_json?.summary ??
-                                      decision.context_json?.prompt_message ??
-                                      "Operator approval required before this operation can continue.",
-                                  )}
+                                  {approval.promptMessage}
                                 </p>
                               </div>
                               <Button asChild size="sm" className="rounded-full">
-                                <Link href="/inbox">Decide</Link>
+                                <Link href="/approvals">Decide</Link>
                               </Button>
                             </div>
                           </div>
@@ -596,7 +601,7 @@ export default function OverviewPage() {
                       </div>
                     ) : (
                       <EmptyBlock
-                        title="No pending decisions"
+                        title="No pending approvals"
                         description="The human-in-the-loop queue is currently clear."
                       />
                     )}
@@ -614,7 +619,7 @@ export default function OverviewPage() {
                           Tracked cost
                         </p>
                         <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                          {formatCurrency(overview.summary.total_cost_usd)}
+                          {formatCurrency(overview.summary.totalCostUsd)}
                         </p>
                       </div>
                       <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -635,19 +640,19 @@ export default function OverviewPage() {
                       </div>
                     </div>
                     <div className="mt-4 space-y-4">
-                      {overview.accounting.cost_by_type.map((row) => (
-                        <div key={row.cost_type} className="space-y-2">
+                      {overview.costByType.map((row) => (
+                        <div key={row.type} className="space-y-2">
                           <div className="flex items-center justify-between gap-3 text-sm">
                             <span className="font-medium text-slate-900 capitalize dark:text-slate-100">
-                              {row.cost_type.replace(/_/g, " ")}
+                              {row.type.replace(/_/g, " ")}
                             </span>
                             <span className="text-slate-600 dark:text-slate-300">
-                              {formatCurrency(row.total_cost_usd)}
+                              {formatCurrency(row.totalCostUsd)}
                             </span>
                           </div>
                           <TrendBar
-                            value={row.total_cost_usd}
-                            total={Math.max(overview.summary.total_cost_usd, 1)}
+                            value={row.totalCostUsd}
+                            total={Math.max(overview.summary.totalCostUsd, 1)}
                             tone="rose"
                           />
                         </div>
@@ -659,11 +664,11 @@ export default function OverviewPage() {
                         items={[
                           {
                             label: "Active department spend",
-                            value: formatCurrency(derived.totalAgentCost),
+                            value: formatCurrency(derived.totalDepartmentCost),
                           },
                           {
                             label: "Operating window",
-                            value: `${formatCompactNumber(overview.summary.execution_count_24h)} operations in 24h`,
+                            value: `${formatCompactNumber(overview.summary.operationCount24h)} operations in 24h`,
                           },
                         ]}
                       />

@@ -135,7 +135,7 @@ export default function Home() {
                 Create and operate AI-driven companies that do real work.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
-                ForgeGraph is not a chatbot and not a graph editor first. It is a company workspace for objectives,
+                ForgeGraph is not a chatbot and not an advanced editor first. It is a company workspace for objectives,
                 departments, operations, approvals, deliverables, and operating controls.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">

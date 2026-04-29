@@ -167,7 +167,7 @@ export default function PromptsPage() {
 
   useEffect(() => {
     let isActive = true;
-    const run = async () => {
+    const loadPrompts = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -183,7 +183,7 @@ export default function PromptsPage() {
       }
     };
 
-    void run();
+    void loadPrompts();
     return () => {
       isActive = false;
     };

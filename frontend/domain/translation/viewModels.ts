@@ -1,0 +1,229 @@
+import type { RunMemoryActivitySummary, RunLLMAccess } from "@/lib/api";
+import type {
+  CompanyAIAccessMode,
+  CompanyAutonomyMode,
+  CompanyDepartment,
+  CompanyFailure,
+  CompanyProfile,
+} from "@/lib/company-workspace";
+
+export type OperationStatusVM = "queued" | "running" | "completed" | "failed" | "paused";
+
+export type TaskStatusVM = "queued" | "running" | "completed" | "failed" | "paused" | "skipped";
+
+export type DepartmentActivityStatusVM = "active" | "waiting" | "idle";
+
+export type DepartmentVM = CompanyDepartment & {
+  status?: TaskStatusVM;
+  name?: string;
+  role?: string;
+  purpose?: string;
+  currentFocus?: string;
+  activityStatus?: DepartmentActivityStatusVM;
+  activeTaskCount?: number;
+  pendingDecisionCount?: number;
+  totalCostUsd?: number;
+  defaultModel?: string | null;
+  lastOperationId?: string | null;
+};
+
+export type DeliverableVM = {
+  id: string;
+  operationId: string;
+  title: string;
+  preview: string;
+  content: string | null;
+  ready: boolean;
+  createdAt: string | null;
+  sourceDepartmentName?: string | null;
+};
+
+export type TaskVM = {
+  id: string;
+  operationId?: string | null;
+  agentId?: string | null;
+  departmentId?: string | null;
+  departmentName: string;
+  title: string;
+  status: TaskStatusVM;
+  priority?: string | null;
+  summary: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  durationMs: number | null;
+  attempt?: number | null;
+  currentStepId?: string | null;
+  requiresApproval?: boolean;
+  toolName?: string | null;
+  resultPreview?: string | null;
+  issuePreview?: string | null;
+};
+
+export type OperationFailureVM = Omit<CompanyFailure, "technicalDetails"> & {
+  detailsForSupport?: string | null;
+};
+
+export type OperationVM = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  setupVersionId: string;
+  setupVersion: number;
+  status: OperationStatusVM;
+  queueStatus: string | null;
+  attempts: number;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationMs: number | null;
+  brief: string;
+  currentDepartmentName: string;
+  tasks: TaskVM[];
+  deliverable: DeliverableVM;
+  failure: OperationFailureVM | null;
+  memoryActivity?: RunMemoryActivitySummary | null;
+  aiAccess?: RunLLMAccess | null;
+};
+
+export type CompanyVM = {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  setupVersionId: string | null;
+  setupVersion: number | null;
+  setupVersionCount: number;
+  profile: CompanyProfile;
+  departments: DepartmentVM[];
+  status: string;
+  pendingApprovalCount: number;
+  operationCount: number;
+  latestOperation: OperationVM | null;
+};
+
+export type CompanyWorkspaceVM = {
+  company: CompanyVM | null;
+  operations: OperationVM[];
+  pendingApprovalCount: number;
+};
+
+export type ApprovalRiskVM = "low" | "medium" | "high";
+
+export type ApprovalVM = {
+  id: string;
+  operationId: string;
+  operationName: string;
+  companyName: string;
+  agentId?: string | null;
+  departmentId: string;
+  departmentName: string;
+  status: "pending" | "approved" | "rejected";
+  promptMessage: string;
+  requiredFields: string[];
+  result: Record<string, unknown> | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  estimatedCost: number;
+  risk: ApprovalRiskVM;
+  consequence: string;
+  blastRadius: string;
+};
+
+export type CompanyCreateInputVM = {
+  profile: CompanyProfile;
+  operationBrief: string;
+  launchFirstOperation: boolean;
+  byokApiKey?: string;
+};
+
+export type CompanyUpdateInputVM = {
+  companyId: string;
+  currentProfile: CompanyProfile;
+  objective: string;
+  autonomyMode: CompanyAutonomyMode;
+  aiAccessMode: CompanyAIAccessMode;
+  paused: boolean;
+};
+
+export type OperationLaunchInputVM = {
+  setupVersionId: string;
+  profile: CompanyProfile;
+  objective: string;
+  autonomyMode: CompanyAutonomyMode;
+  aiAccessMode: CompanyAIAccessMode;
+  operationBrief: string;
+};
+
+export type OperationRefVM = {
+  id: string;
+  name: string;
+  status: OperationStatusVM;
+  role: string;
+  currentStage: string;
+  startedAt: string | null;
+};
+
+export type DepartmentProposalVM = {
+  id: string;
+  description: string;
+  status: "awaiting approval" | "accepted" | "rejected";
+  operation: OperationRefVM | null;
+  createdAt: string;
+};
+
+export type DepartmentBlockerVM = {
+  id: string;
+  description: string;
+  status: "waiting" | "failed";
+  operation: OperationRefVM | null;
+};
+
+export type DepartmentFocusVM = {
+  objective: string;
+  reasoning: string;
+};
+
+export type DepartmentActivityVM = {
+  department: DepartmentVM;
+  focus: DepartmentFocusVM;
+  proposals: DepartmentProposalVM[];
+  tasks: TaskVM[];
+  operations: OperationRefVM[];
+  blockers: DepartmentBlockerVM[];
+  approvals: ApprovalVM[];
+};
+
+export type CostBreakdownVM = {
+  id: string;
+  label: string;
+  totalCostUsd: number;
+  entryCount: number;
+};
+
+export type DepartmentCostVM = {
+  id: string;
+  displayName: string;
+  status: string;
+  totalCostUsd: number;
+};
+
+export type AccountingLedgerEntryVM = {
+  id: string;
+  sourceLabel: string;
+  provider: string;
+  model: string;
+  usageLabel: string;
+  quantity: number;
+  costType: string;
+  totalCostUsd: number;
+  occurredAt: string;
+};
+
+export type AccountingOverviewVM = {
+  organizationId: string;
+  totalCostUsd: number;
+  costByType: CostBreakdownVM[];
+  topDepartments: DepartmentCostVM[];
+};

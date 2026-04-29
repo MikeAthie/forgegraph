@@ -1,5 +1,7 @@
 # Runtime Invariants
 
+> Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
+
 This file is the single canonical runtime contract for ForgeGraph.
 
 If any other document, prompt, plan, or historical note conflicts with this file, this file wins.

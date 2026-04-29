@@ -1,5 +1,7 @@
 # State Ownership Contract
 
+> Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
+
 > Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
 > This document elaborates state ownership details but does not override the runtime invariants.
 

@@ -15,14 +15,16 @@ import {
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Spinner } from "@/components/ui";
-import { accountingApi, getApiErrorMessage, type AccountingOverview, type CostLedgerEntry } from "@/lib/api";
+import { translateProductError } from "@/domain/errors";
+import { accountingRepository } from "@/domain/repositories";
+import type { AccountingLedgerEntryVM, AccountingOverviewVM } from "@/domain/translation/viewModels";
 
 const weeklyMultiplier = 5.4;
 const monthlyMultiplier = 22.6;
 
 export default function AccountingPage() {
-  const [overview, setOverview] = useState<AccountingOverview | null>(null);
-  const [ledger, setLedger] = useState<CostLedgerEntry[]>([]);
+  const [overview, setOverview] = useState<AccountingOverviewVM | null>(null);
+  const [ledger, setLedger] = useState<AccountingLedgerEntryVM[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,14 +33,17 @@ export default function AccountingPage() {
 
     const load = async () => {
       try {
-        const [overviewData, ledgerData] = await Promise.all([accountingApi.getOverview(), accountingApi.listLedger()]);
+        const [overviewData, ledgerData] = await Promise.all([
+          accountingRepository.getOverview(),
+          accountingRepository.listLedger(),
+        ]);
         if (!cancelled) {
           setOverview(overviewData);
           setLedger(ledgerData.slice(0, 12));
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load accounting data."));
+          setError(translateProductError(err, "accounting"));
         }
       } finally {
         if (!cancelled) {
@@ -59,7 +64,7 @@ export default function AccountingPage() {
       return null;
     }
 
-    const today = overview.total_cost_usd;
+    const today = overview.totalCostUsd;
     const week = Math.round(today * weeklyMultiplier * 100) / 100;
     const month = Math.round(today * monthlyMultiplier * 100) / 100;
     const revenueToday = Math.round((today * 4.8 + 1900) * 100) / 100;
@@ -73,8 +78,8 @@ export default function AccountingPage() {
       revenueMonth,
       profitToday: revenueToday - today,
       profitMonth: revenueMonth - month,
-      maxTypeCost: Math.max(...overview.cost_by_type.map((entry) => entry.total_cost_usd), 1),
-      maxAgentCost: Math.max(...overview.top_agents.map((agent) => agent.total_cost_usd), 1),
+      maxTypeCost: Math.max(...overview.costByType.map((entry) => entry.totalCostUsd), 1),
+      maxDepartmentCost: Math.max(...overview.topDepartments.map((department) => department.totalCostUsd), 1),
     };
   }, [overview]);
 
@@ -190,30 +195,28 @@ export default function AccountingPage() {
               <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
                 <Panel title="Cost breakdown" description="Cost by source type with a small trend indication.">
                   <div className="space-y-4">
-                    {overview.cost_by_type.length ? (
-                      overview.cost_by_type.map((entry) => (
+                    {overview.costByType.length ? (
+                      overview.costByType.map((entry) => (
                         <div
-                          key={entry.cost_type}
+                          key={entry.id}
                           className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                {entry.cost_type}
-                              </p>
+                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{entry.label}</p>
                               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                {entry.entry_count} ledger entries
+                                {entry.entryCount} ledger entries
                               </p>
                             </div>
                             <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                              {formatCurrency(entry.total_cost_usd)}
+                              {formatCurrency(entry.totalCostUsd)}
                             </p>
                           </div>
                           <div className="mt-3">
                             <TrendBar
-                              value={entry.total_cost_usd}
+                              value={entry.totalCostUsd}
                               total={financials.maxTypeCost}
-                              tone={entry.cost_type === "llm" ? "rose" : "cyan"}
+                              tone={entry.label === "llm" ? "rose" : "cyan"}
                             />
                           </div>
                         </div>
@@ -227,34 +230,38 @@ export default function AccountingPage() {
                   </div>
                 </Panel>
 
-                <Panel title="By agent" description="Ranked operator view of where spend is concentrating.">
+                <Panel title="By department" description="Ranked operator view of where spend is concentrating.">
                   <div className="space-y-4">
-                    {overview.top_agents.length ? (
-                      overview.top_agents.map((agent) => (
+                    {overview.topDepartments.length ? (
+                      overview.topDepartments.map((department) => (
                         <div
-                          key={agent.id}
+                          key={department.id}
                           className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                {agent.display_name}
+                                {department.displayName}
                               </p>
-                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{agent.status}</p>
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{department.status}</p>
                             </div>
                             <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                              {formatCurrency(agent.total_cost_usd)}
+                              {formatCurrency(department.totalCostUsd)}
                             </p>
                           </div>
                           <div className="mt-3">
-                            <TrendBar value={agent.total_cost_usd} total={financials.maxAgentCost} tone="rose" />
+                            <TrendBar
+                              value={department.totalCostUsd}
+                              total={financials.maxDepartmentCost}
+                              tone="rose"
+                            />
                           </div>
                         </div>
                       ))
                     ) : (
                       <EmptyBlock
-                        title="No agent spend yet"
-                        description="Agent spend rollups appear once usage is attached to registry entries."
+                        title="No department spend yet"
+                        description="Department spend rollups appear once usage is attached to accounting records."
                       />
                     )}
                   </div>
@@ -279,28 +286,26 @@ export default function AccountingPage() {
                           <tr key={entry.id} className="bg-white/70 dark:bg-white/3">
                             <td className="px-4 py-4 text-sm">
                               <div>
-                                <p className="font-medium text-slate-950 dark:text-slate-50">
-                                  {entry.agent_id ?? entry.workflow_revision_id ?? "Shared infrastructure"}
-                                </p>
+                                <p className="font-medium text-slate-950 dark:text-slate-50">{entry.sourceLabel}</p>
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                   {entry.provider} · {entry.model}
                                 </p>
                               </div>
                             </td>
                             <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">
-                              {entry.quantity.toLocaleString()} {entry.cost_type}
+                              {entry.quantity.toLocaleString()} {entry.usageLabel}
                             </td>
                             <td className="px-4 py-4 text-sm font-medium text-slate-950 dark:text-slate-50">
-                              {formatCurrency(entry.total_cost_usd)}
+                              {formatCurrency(entry.totalCostUsd)}
                             </td>
                             <td className="px-4 py-4 text-sm">
                               <StatusBadge
-                                status={entry.total_cost_usd > 1 ? "paused" : "active"}
-                                label={entry.total_cost_usd > 1 ? "Up" : "Flat"}
+                                status={entry.totalCostUsd > 1 ? "paused" : "active"}
+                                label={entry.totalCostUsd > 1 ? "Up" : "Flat"}
                               />
                             </td>
                             <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">
-                              {formatDateTime(entry.occurred_at)}
+                              {formatDateTime(entry.occurredAt)}
                             </td>
                           </tr>
                         ))}
@@ -310,7 +315,7 @@ export default function AccountingPage() {
                 ) : (
                   <EmptyBlock
                     title="Ledger is empty"
-                    description="Ledger entries will appear here after accounting jobs run against usage facts."
+                    description="Ledger entries will appear here after accounting jobs process usage facts."
                   />
                 )}
               </Panel>

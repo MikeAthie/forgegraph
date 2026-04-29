@@ -1,4 +1,9 @@
-"""Deprecation headers for legacy builder-first API surfaces."""
+"""API-only deprecation headers for legacy builder-first surfaces.
+
+These headers are for integrators and observability. Primary UX must translate
+these routes through the product terminology boundary instead of showing them to
+users.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +17,7 @@ class ApiDeprecationMiddleware:
 
     LEGACY_PREFIXES = ("/api/graphs", "/api/runs", "/api/approvals")
     SUNSET_AT = "2026-12-31T00:00:00Z"
-    DOC_LINK = '</docs/product/terminology-and-renames.md>; rel="deprecation"'
+    DOC_LINK = '</docs/product/canonical-ontology.md>; rel="deprecation"'
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response

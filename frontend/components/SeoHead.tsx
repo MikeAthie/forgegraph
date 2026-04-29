@@ -38,7 +38,7 @@ function buildJsonLd(config: Required<Pick<SeoConfig, "title" | "description">> 
         knowsAbout: [
           "AI company operations",
           "AI-driven companies",
-          "agent workflows",
+          "AI operating models",
           "company memory",
           "human approvals",
           "AI usage controls",

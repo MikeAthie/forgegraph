@@ -1,5 +1,7 @@
 # System Invariants
 
+> Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
+
 > Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is the canonical runtime contract.
 > This document is broader system guidance. If it conflicts with runtime behavior, `runtime-invariants.md` wins.
 

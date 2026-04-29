@@ -1,10 +1,10 @@
 # ForgeGraph Product Definition
 
-This document is the product source of truth for the frontend rebuild.
+Canonical terminology lives in [canonical-ontology.md](./canonical-ontology.md). This document defines the product promise.
 
 ForgeGraph is an AI Company Operating System.
 
-Users do not come to ForgeGraph to create graphs. They come to ForgeGraph to create and operate AI-driven companies that execute real work against defined objectives.
+Users come to ForgeGraph to create and operate AI-driven companies that perform real work against defined objectives.
 
 ## Product Definition
 
@@ -26,32 +26,32 @@ The intended user feeling is:
 
 - A company creation and operating system for AI-driven work
 - A workspace for setting objectives, defining departments, assigning skills and tools, and launching operations
-- A command layer for monitoring status, approvals, failures, outputs, and budget
+- A command layer for monitoring status, approvals, failures, deliverables, and budget
 - A system for operating real business functions, not just generating answers
 
 ## What ForgeGraph Is Not
 
 - Not a chatbot
-- Not a graph editor first
-- Not a raw workflow runner
+- Not an internal builder first
+- Not a raw automation runner
 - Not a consulting answer generator
 
 ## Core Product Doctrine
 
 - The company is the primary product object.
-- The operating model is the primary configuration object.
+- The company setup is the primary configuration object.
 - Operations are the primary unit of active work.
-- Deliverables are the primary output object.
-- Autonomy is an execution policy, not just a visual setting.
+- Deliverables are the primary result object.
+- Autonomy is an operation policy, not just a visual setting.
 - AI access mode is a product choice, not a low-level provider configuration screen.
-- Backend-owned state is authoritative for company status, operations, approvals, liveness, outputs, and recovery.
+- Backend-owned state is authoritative for company status, operations, approvals, liveness, deliverables, and recovery.
 
 ## Experience Rules
 
-- The default mental model must be company-first, not graph-first.
+- The default mental model must be company-first.
 - The default entry point should help the user create or operate a company, not edit raw topology.
 - Build surfaces should explain how the company works in business language before exposing engine structure.
-- Operate surfaces should summarize state, risks, outputs, and required decisions before exposing traces or logs.
+- Operate surfaces should summarize state, risks, deliverables, and required approvals before exposing traces or logs.
 - If a UI element exposes engine language directly, it must be translated into company language.
 
 ## Core User Scenarios
@@ -68,7 +68,7 @@ Detailed flows live in [company-workspace-model.md](./company-workspace-model.md
 
 Alpha should not prioritize:
 
-- complex graph editor UI
+- complex advanced-builder UI
 - advanced RBAC
 - billing UI
 - multi-page dashboards
@@ -83,4 +83,4 @@ These docs are successful when:
 - internal engine terms are consistently translated into company language
 - the create, continue, and command-ops scenarios are explicit
 - autonomy and AI access are handled as product concepts
-- nothing frames ForgeGraph as starting life as a graph editor
+- nothing frames ForgeGraph as starting from an internal builder

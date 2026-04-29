@@ -101,11 +101,11 @@ describe("Header", () => {
       render(<Header />);
 
       expect(screen.queryByRole("link", { name: /overview/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /inbox/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /agents/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /tasks/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /memory/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /runs/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /approvals/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /departments/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /activity/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /knowledge/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /operations/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /advanced/i })).not.toBeInTheDocument();
     });
 
@@ -143,12 +143,12 @@ describe("Header", () => {
       render(<Header />);
 
       expect(screen.getByRole("link", { name: /^overview$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^inbox$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^agents$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^tasks$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^memory$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^approvals$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^departments$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^activity$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^knowledge$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^operations$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^advanced$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^advanced operating models$/i })).toBeInTheDocument();
     });
 
     it("should not display Sign in/Get started buttons when authenticated", () => {
@@ -175,12 +175,12 @@ describe("Header", () => {
       render(<Header />);
 
       expect(screen.getByRole("link", { name: /^overview$/i })).toHaveAttribute("href", "/overview");
-      expect(screen.getByRole("link", { name: /^inbox$/i })).toHaveAttribute("href", "/inbox");
-      expect(screen.getByRole("link", { name: /^agents$/i })).toHaveAttribute("href", "/agents");
-      expect(screen.getByRole("link", { name: /^tasks$/i })).toHaveAttribute("href", "/tasks");
-      expect(screen.getByRole("link", { name: /^memory$/i })).toHaveAttribute("href", "/memory");
+      expect(screen.getByRole("link", { name: /^approvals$/i })).toHaveAttribute("href", "/approvals");
+      expect(screen.getByRole("link", { name: /^departments$/i })).toHaveAttribute("href", "/departments");
+      expect(screen.getByRole("link", { name: /^activity$/i })).toHaveAttribute("href", "/tasks");
+      expect(screen.getByRole("link", { name: /^knowledge$/i })).toHaveAttribute("href", "/memory");
       expect(screen.getByRole("link", { name: /^operations$/i })).toHaveAttribute("href", "/runs");
-      expect(screen.getByRole("link", { name: /^advanced$/i })).toHaveAttribute("href", "/workflows");
+      expect(screen.getByRole("link", { name: /^advanced operating models$/i })).toHaveAttribute("href", "/workflows");
     });
   });
 
@@ -384,6 +384,32 @@ describe("Header", () => {
 
       const dropdownTrigger = screen.getByRole("button", { name: /user@example.com/i });
       expect(dropdownTrigger).toBeInTheDocument();
+    });
+
+    it("should expose the active page in navigation", () => {
+      mockUseRouter.mockReturnValue({
+        push: mockPush,
+        replace: jest.fn(),
+        prefetch: jest.fn(),
+        pathname: "/departments",
+        query: {},
+        asPath: "/departments",
+      } as any);
+      mockUseAuth.mockReturnValue({
+        user: { id: "1", email: "user@example.com" },
+        isAuthenticated: true,
+        loading: false,
+        error: null,
+        login: jest.fn(),
+        register: jest.fn(),
+        logout: mockLogout,
+        checkAuth: jest.fn(),
+        clearError: jest.fn(),
+      });
+
+      render(<Header />);
+
+      expect(screen.getByRole("link", { name: /^departments$/i, current: "page" })).toBeInTheDocument();
     });
   });
 });

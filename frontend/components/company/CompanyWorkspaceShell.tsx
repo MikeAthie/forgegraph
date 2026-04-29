@@ -18,41 +18,23 @@ import {
   formatDateTime,
 } from "@/components/os/operations-ui";
 import { Alert, AlertDescription, Button, Input, Spinner, Textarea } from "@/components/ui";
+import { onboardingApi } from "@/lib/api";
+import { companyRepository } from "@/domain/repositories";
+import { getOperationAiAccess } from "@/domain/repositories/operationRepository";
+import { translateProductError } from "@/domain/errors";
+import type { CompanyVM, DepartmentVM, OperationFailureVM, OperationVM, TaskStatusVM } from "@/domain/translation";
 import {
-  approvalsApi,
-  getApiErrorMessage,
-  graphsApi,
-  onboardingApi,
-  runsApi,
-  type GraphDetail,
-  type RunDetail,
-  type RunListItem,
-} from "@/lib/api";
-import {
-  buildCompanyGraphJson,
   buildCompanyProfile,
-  buildOperationInput,
   getDepartmentExplanation,
-  getCompanyProfileFromGraph,
-  getCompanyStatus,
-  getCurrentDepartmentLabel,
-  getDepartmentProgress,
-  summarizeDeliverable,
-  translateFailure,
-  translateRunStatus,
   type CompanyAIAccessMode,
   type CompanyAutonomyMode,
-  type CompanyProfile,
 } from "@/lib/company-workspace";
-import type { GraphVersion } from "@/lib/graph-types";
 import { showError, showSuccess } from "@/lib/toast";
 
 type CompanyWorkspaceShellProps = {
   companyId: string;
-  company: GraphDetail | null;
-  latestVersion: GraphVersion | null;
-  operations: RunListItem[];
-  operationDetails: RunDetail[];
+  company: CompanyVM | null;
+  operations: OperationVM[];
   pendingApprovalCount: number;
   loading: boolean;
   error: string | null;
@@ -60,7 +42,7 @@ type CompanyWorkspaceShellProps = {
   questMode?: boolean;
 };
 
-function getProgressTone(status: "pending" | "running" | "completed" | "failed") {
+function getProgressTone(status: TaskStatusVM | undefined) {
   switch (status) {
     case "completed":
       return { dot: "bg-emerald-500", line: "bg-emerald-300/70 dark:bg-emerald-500/30", title: "Handed off" };
@@ -78,13 +60,13 @@ function getProgressTone(status: "pending" | "running" | "completed" | "failed")
 }
 
 function describeOperationMomentum(
-  progress: Array<{ label: string; status: "pending" | "running" | "completed" | "failed" }>,
+  progress: Array<{ label: string; status?: TaskStatusVM }>,
   currentDepartment: string,
   userStatus: "queued" | "running" | "completed" | "failed" | "paused",
 ) {
   const activeStep = progress.find((step) => step.status === "running");
   const failedStep = progress.find((step) => step.status === "failed");
-  const nextStep = progress.find((step) => step.status === "pending");
+  const nextStep = progress.find((step) => step.status === "queued");
 
   if (failedStep) {
     return `${failedStep.label} needs attention before the operation can continue.`;
@@ -103,18 +85,8 @@ function describeOperationMomentum(
   return "The company is preparing this operation to begin.";
 }
 
-function OperationsList({
-  runs,
-  runDetails,
-  latestVersion,
-}: {
-  runs: RunListItem[];
-  runDetails: RunDetail[];
-  latestVersion: GraphVersion | null;
-}) {
-  const detailMap = new Map(runDetails.map((run) => [run.id, run]));
-
-  if (!runs.length) {
+function OperationsList({ operations, departments }: { operations: OperationVM[]; departments: DepartmentVM[] }) {
+  if (!operations.length) {
     return (
       <EmptyBlock
         title="No operations yet"
@@ -125,35 +97,44 @@ function OperationsList({
 
   return (
     <div className="space-y-4">
-      {runs.map((run) => {
-        const detail = detailMap.get(run.id);
-        const progress = detail ? getDepartmentProgress(detail, latestVersion?.graph_json ?? null) : [];
-        const currentDepartment = detail
-          ? getCurrentDepartmentLabel(detail, latestVersion?.graph_json ?? null)
-          : "Queued";
-        const currentDepartmentExplanation = getDepartmentExplanation(
-          currentDepartment,
-          latestVersion?.graph_json ?? null,
-        );
-        const deliverablePreview = detail
-          ? summarizeDeliverable(detail)
-          : "Deliverable will appear once this operation finishes.";
-        const userStatus = translateRunStatus(String(run.status));
+      {operations.map((operation) => {
+        const tasksByDepartmentId = new Map(operation.tasks.map((task) => [task.departmentId, task]));
+        const progress = departments.length
+          ? departments.map((department) => ({
+              ...department,
+              status: tasksByDepartmentId.get(department.id)?.status ?? department.status ?? "queued",
+            }))
+          : operation.tasks.map((task) => ({
+              id: task.departmentId ?? task.id,
+              label: task.departmentName,
+              responsibility: task.summary,
+              tools: [],
+              category: "department" as const,
+              status: task.status,
+            }));
+        const currentDepartment = operation.currentDepartmentName || "Queued";
+        const currentDepartmentExplanation =
+          progress.find((department) => department.label === currentDepartment)?.responsibility ??
+          getDepartmentExplanation(currentDepartment);
+        const deliverablePreview = operation.deliverable.preview;
+        const userStatus = operation.status;
         const momentum = describeOperationMomentum(progress, currentDepartment, userStatus);
 
         return (
           <div
-            key={run.id}
+            key={operation.id}
             className="rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] px-5 py-5 dark:border-white/8"
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                    Operation {run.id.slice(0, 8)}
+                    Operation {operation.id.slice(0, 8)}
                   </p>
                   <StatusBadge status={userStatus} label={userStatus} />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Started {formatDateTime(run.started_at)}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Started {formatDateTime(operation.startedAt)}
+                  </p>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
                   Current department:{" "}
@@ -164,7 +145,7 @@ function OperationsList({
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button asChild size="sm" className="rounded-full">
-                  <Link href={`/executions/${run.id}`}>Inspect operation</Link>
+                  <Link href={`/runs/${operation.id}`}>Inspect operation</Link>
                 </Button>
               </div>
             </div>
@@ -178,7 +159,7 @@ function OperationsList({
                   progress.map((step, index) => {
                     const tone = getProgressTone(step.status);
                     return (
-                      <div key={`${run.id}-${step.label}`} className="grid grid-cols-[1rem_1fr] gap-3">
+                      <div key={`${operation.id}-${step.label}`} className="grid grid-cols-[1rem_1fr] gap-3">
                         <div className="flex flex-col items-center pt-1">
                           <span className={`h-3 w-3 rounded-full ${tone.dot}`} />
                           {index < progress.length - 1 ? <span className={`mt-2 h-full w-px ${tone.line}`} /> : null}
@@ -190,9 +171,7 @@ function OperationsList({
                               {tone.title}
                             </p>
                           </div>
-                          <MicroExplanation className="mt-2">
-                            {getDepartmentExplanation(step.label, latestVersion?.graph_json ?? null)}
-                          </MicroExplanation>
+                          <MicroExplanation className="mt-2">{step.responsibility}</MicroExplanation>
                         </div>
                       </div>
                     );
@@ -216,13 +195,7 @@ function OperationsList({
   );
 }
 
-function FailureCard({
-  failure,
-  onRetry,
-}: {
-  failure: NonNullable<ReturnType<typeof translateFailure>>;
-  onRetry: () => Promise<void>;
-}) {
+function FailureCard({ failure, onRetry }: { failure: OperationFailureVM; onRetry: () => Promise<void> }) {
   return (
     <div className="rounded-[1.3rem] border border-rose-800/12 bg-rose-50/80 px-4 py-4 dark:border-rose-200/15 dark:bg-rose-500/10">
       <div className="flex items-start justify-between gap-3">
@@ -256,11 +229,11 @@ function FailureCard({
           </Button>
         </div>
       </div>
-      {failure.technicalDetails ? (
+      {failure.detailsForSupport ? (
         <details className="mt-4 rounded-2xl border border-rose-800/12 bg-white/80 px-4 py-3 text-sm dark:border-rose-200/15 dark:bg-white/5">
-          <summary className="cursor-pointer font-medium text-rose-900 dark:text-rose-100">Technical details</summary>
+          <summary className="cursor-pointer font-medium text-rose-900 dark:text-rose-100">Support details</summary>
           <pre className="mt-3 whitespace-pre-wrap text-xs leading-6 text-rose-900/80 dark:text-rose-100/80">
-            {failure.technicalDetails}
+            {failure.detailsForSupport}
           </pre>
         </details>
       ) : null}
@@ -271,9 +244,7 @@ function FailureCard({
 export function CompanyWorkspaceShell({
   companyId,
   company,
-  latestVersion,
   operations,
-  operationDetails,
   pendingApprovalCount,
   loading,
   error,
@@ -281,23 +252,16 @@ export function CompanyWorkspaceShell({
   questMode = false,
 }: CompanyWorkspaceShellProps) {
   const router = useRouter();
-  const profile = useMemo(
-    () =>
-      getCompanyProfileFromGraph(company ?? { name: "Company", description: "" }, latestVersion?.graph_json ?? null),
-    [company, latestVersion?.graph_json],
-  );
+  const profile = useMemo(() => company?.profile ?? buildCompanyProfile({ companyName: "Company" }), [company]);
   const [launching, setLaunching] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [savingObjective, setSavingObjective] = useState(false);
   const [savingCompanyState, setSavingCompanyState] = useState(false);
   const [companyPaused, setCompanyPaused] = useState(profile.companyStatus === "Paused by operator");
   const [operationBrief, setOperationBrief] = useState(
-    "Run the next operating cycle and produce a useful deliverable.",
+    "Start the next operating cycle and produce a useful deliverable.",
   );
-  const companyStatus = useMemo(
-    () => getCompanyStatus(operationDetails.length ? operationDetails : operations, pendingApprovalCount),
-    [operationDetails, operations, pendingApprovalCount],
-  );
+  const companyStatus = company?.status ?? "Ready to launch";
   const [editableObjective, setEditableObjective] = useState(profile.objective);
   const [editableAutonomyMode, setEditableAutonomyMode] = useState<CompanyAutonomyMode>(profile.autonomyMode);
   const [editableAIAccessMode, setEditableAIAccessMode] = useState<CompanyAIAccessMode>(profile.aiAccessMode);
@@ -334,7 +298,7 @@ export function CompanyWorkspaceShell({
         }
 
         if (typeof window !== "undefined") {
-          const storedPhase = window.sessionStorage.getItem(`forgegraph:first-run-quest:${companyId}`);
+          const storedPhase = window.sessionStorage.getItem(`forgegraph:first-operation-quest:${companyId}`);
           if (storedPhase === "deliverable" || storedPhase === "done") {
             setQuestPhase(storedPhase);
           }
@@ -354,24 +318,21 @@ export function CompanyWorkspaceShell({
 
   const displayedCompanyStatus = companyPaused ? "Paused by operator" : companyStatus;
 
-  const latestFailedRun = useMemo(
-    () => operationDetails.find((run) => translateRunStatus(String(run.status)) === "failed") ?? null,
-    [operationDetails],
+  const latestFailedOperation = useMemo(
+    () => operations.find((operation) => operation.status === "failed") ?? null,
+    [operations],
   );
-  const failure = useMemo(
-    () => (latestFailedRun ? translateFailure(latestFailedRun, latestVersion?.graph_json ?? null) : null),
-    [latestFailedRun, latestVersion?.graph_json],
-  );
+  const failure = latestFailedOperation?.failure ?? null;
   const latestCompletedOutputs = useMemo(
     () =>
-      operationDetails
-        .filter((run) => translateRunStatus(String(run.status)) === "completed")
+      operations
+        .filter((operation) => operation.status === "completed")
         .slice(0, 3)
-        .map((run) => ({
-          id: run.id,
-          preview: summarizeDeliverable(run),
+        .map((operation) => ({
+          id: operation.id,
+          preview: operation.deliverable.preview,
         })),
-    [operationDetails],
+    [operations],
   );
   const workspaceGuideActive = questMode && !questMilestoneComplete && questPhase === "workspace";
   const deliverableGuideActive =
@@ -403,8 +364,8 @@ export function CompanyWorkspaceShell({
     [],
   );
   const runningOperation = useMemo(
-    () => operationDetails.find((run) => translateRunStatus(String(run.status)) === "running") ?? null,
-    [operationDetails],
+    () => operations.find((operation) => operation.status === "running") ?? null,
+    [operations],
   );
   const nextAction = useMemo(() => {
     if (failure) {
@@ -438,7 +399,7 @@ export function CompanyWorkspaceShell({
     if (runningOperation) {
       return {
         title: "Work is already in motion",
-        body: `${getCurrentDepartmentLabel(runningOperation, latestVersion?.graph_json ?? null)} is actively working right now. Review progress or let the company finish this cycle.`,
+        body: `${runningOperation.currentDepartmentName} is actively working right now. Review progress or let the company finish this cycle.`,
         tone: "sky" as const,
       };
     }
@@ -447,13 +408,13 @@ export function CompanyWorkspaceShell({
       body: "The last deliverable is ready. Launch the next operation when you want the company to keep moving.",
       tone: "emerald" as const,
     };
-  }, [companyPaused, failure, latestVersion?.graph_json, operations.length, pendingApprovalCount, runningOperation]);
+  }, [companyPaused, failure, operations.length, pendingApprovalCount, runningOperation]);
 
   const finishQuest = async (reason: "skip" | "complete") => {
     setQuestMilestoneComplete(true);
     setQuestPhase("done");
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(`forgegraph:first-run-quest:${companyId}`, "done");
+      window.sessionStorage.setItem(`forgegraph:first-operation-quest:${companyId}`, "done");
     }
     try {
       await onboardingApi.complete("company_first_run_explained", {
@@ -472,12 +433,12 @@ export function CompanyWorkspaceShell({
   const advanceWorkspaceQuest = () => {
     setQuestPhase("deliverable");
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(`forgegraph:first-run-quest:${companyId}`, "deliverable");
+      window.sessionStorage.setItem(`forgegraph:first-operation-quest:${companyId}`, "deliverable");
     }
   };
 
   const handleLaunchOperation = async () => {
-    if (!latestVersion) {
+    if (!company?.setupVersionId) {
       showError("Company setup is incomplete", "Finish creating the company before launching an operation.");
       return;
     }
@@ -488,47 +449,36 @@ export function CompanyWorkspaceShell({
 
     setLaunching(true);
     try {
-      await runsApi.start({
-        graph_version_id: latestVersion.id,
-        llm_mode: editableAIAccessMode,
-        provider: profile.intelligenceProvider,
-        credential_id: profile.byokCredentialId ?? undefined,
-        input_json: buildOperationInput(
-          buildCompanyProfile({
-            ...profile,
-            objective: editableObjective,
-            autonomyMode: editableAutonomyMode,
-            aiAccessMode: editableAIAccessMode,
-          }),
-          operationBrief,
-        ),
+      await companyRepository.launchOperation({
+        setupVersionId: company.setupVersionId,
+        profile,
+        objective: editableObjective,
+        autonomyMode: editableAutonomyMode,
+        aiAccessMode: editableAIAccessMode,
+        operationBrief,
       });
       showSuccess("Operation launched", "The company is now running the next operation.");
       await onRefresh();
     } catch (launchError: unknown) {
-      showError("Operation failed to launch", getApiErrorMessage(launchError, "Unable to start the operation."));
+      showError("Operation failed to launch", translateProductError(launchError, "operation"));
     } finally {
       setLaunching(false);
     }
   };
 
   const handleRetryFailedOperation = async () => {
-    if (!latestFailedRun) {
+    if (!latestFailedOperation) {
       showError("Nothing to retry", "No failed operation is currently available.");
       return;
     }
 
     setRetrying(true);
     try {
-      await runsApi.replay(latestFailedRun.id, {
-        llm_mode: editableAIAccessMode,
-        provider: profile.intelligenceProvider,
-        credential_id: profile.byokCredentialId ?? undefined,
-      });
+      await companyRepository.retryOperation(latestFailedOperation.id, getOperationAiAccess(profile));
       showSuccess("Retry started", "The failed operation has been requeued.");
       await onRefresh();
     } catch (retryError: unknown) {
-      showError("Retry failed", getApiErrorMessage(retryError, "Unable to retry the failed operation."));
+      showError("Retry failed", translateProductError(retryError, "operation"));
     } finally {
       setRetrying(false);
     }
@@ -541,34 +491,25 @@ export function CompanyWorkspaceShell({
 
     setSavingObjective(true);
     try {
-      await graphsApi.update(company.id, {
-        name: profile.companyName,
-        description: editableObjective,
+      await companyRepository.saveSettings({
+        companyId: company.id,
+        currentProfile: profile,
+        objective: editableObjective,
+        autonomyMode: editableAutonomyMode,
+        aiAccessMode: editableAIAccessMode,
+        paused: companyPaused,
       });
-
-      if (latestVersion) {
-        const nextProfile: CompanyProfile = buildCompanyProfile({
-          ...profile,
-          objective: editableObjective,
-          autonomyMode: editableAutonomyMode,
-          aiAccessMode: editableAIAccessMode,
-          companyStatus: companyPaused ? "Paused by operator" : companyStatus,
-        });
-        const nextGraphJson = buildCompanyGraphJson(nextProfile);
-        await graphsApi.createVersion(company.id, { graph_json: nextGraphJson });
-      }
-
       showSuccess("Company updated", "The objective and operating settings were saved.");
       await onRefresh();
     } catch (saveError: unknown) {
-      showError("Update failed", getApiErrorMessage(saveError, "Unable to update the company objective."));
+      showError("Update failed", translateProductError(saveError, "company"));
     } finally {
       setSavingObjective(false);
     }
   };
 
   const handleToggleCompanyPause = async () => {
-    if (!company || !latestVersion) {
+    if (!company?.setupVersionId) {
       showError("No operating model available", "Save a company operating model before changing company state.");
       return;
     }
@@ -576,15 +517,14 @@ export function CompanyWorkspaceShell({
     const nextPaused = !companyPaused;
     setSavingCompanyState(true);
     try {
-      const nextProfile = buildCompanyProfile({
-        ...profile,
+      await companyRepository.setPaused({
+        companyId: company.id,
+        currentProfile: profile,
         objective: editableObjective,
         autonomyMode: editableAutonomyMode,
         aiAccessMode: editableAIAccessMode,
-        companyStatus: nextPaused ? "Paused by operator" : "Ready to launch",
+        paused: nextPaused,
       });
-      const nextGraphJson = buildCompanyGraphJson(nextProfile);
-      await graphsApi.createVersion(company.id, { graph_json: nextGraphJson });
       setCompanyPaused(nextPaused);
       showSuccess(
         nextPaused ? "Company paused" : "Company resumed",
@@ -594,10 +534,7 @@ export function CompanyWorkspaceShell({
       );
       await onRefresh();
     } catch (saveError: unknown) {
-      showError(
-        nextPaused ? "Pause failed" : "Resume failed",
-        getApiErrorMessage(saveError, "Unable to update the company operating state."),
-      );
+      showError(nextPaused ? "Pause failed" : "Resume failed", translateProductError(saveError, "company"));
     } finally {
       setSavingCompanyState(false);
     }
@@ -641,11 +578,11 @@ export function CompanyWorkspaceShell({
                 title: "Debug",
                 content: (
                   <details className="text-sm">
-                    <summary className="cursor-pointer font-medium">Show internal identifiers</summary>
+                    <summary className="cursor-pointer font-medium">Show support identifiers</summary>
                     <div className="mt-3 space-y-2 text-xs leading-6">
-                      <div>Graph ID: {companyId}</div>
-                      <div>Version ID: {latestVersion?.id ?? "None"}</div>
-                      <div>Latest run ID: {operations[0]?.id ?? "None"}</div>
+                      <div>Company ID: {companyId}</div>
+                      <div>Setup version ID: {company?.setupVersionId ?? "None"}</div>
+                      <div>Latest operation ID: {operations[0]?.id ?? "None"}</div>
                     </div>
                   </details>
                 ),
@@ -657,7 +594,7 @@ export function CompanyWorkspaceShell({
         <div className="space-y-6">
           <QuestGuide
             active={workspaceGuideActive}
-            title="Guided first run"
+            title="Guided first operation"
             steps={workspaceQuestSteps}
             onSkip={() => {
               void finishQuest("skip");
@@ -666,7 +603,7 @@ export function CompanyWorkspaceShell({
           />
           <QuestGuide
             active={deliverableGuideActive}
-            title="Guided first run"
+            title="Guided first operation"
             steps={deliverableQuestSteps}
             onSkip={() => {
               void finishQuest("skip");
@@ -791,7 +728,7 @@ export function CompanyWorkspaceShell({
                       <MicroExplanation className="mt-2">
                         {editableAIAccessMode === "managed"
                           ? "Managed means ForgeGraph handles the AI access so you can operate immediately."
-                          : "BYOK means the company runs on your own AI access."}
+                          : "BYOK means the company operates on your own AI access."}
                       </MicroExplanation>
                     </div>
                   </div>
@@ -802,10 +739,10 @@ export function CompanyWorkspaceShell({
                 <div data-guide-id="company-operations-panel">
                   <Panel
                     title="Operations"
-                    description="Current and recent operations translated from runs into company language."
+                    description="Current and recent operations shown in company language."
                     className="operations-panel"
                   >
-                    <OperationsList runs={operations} runDetails={operationDetails} latestVersion={latestVersion} />
+                    <OperationsList operations={operations} departments={company.departments} />
                   </Panel>
                 </div>
 
@@ -840,7 +777,7 @@ export function CompanyWorkspaceShell({
                           </Button>
                         ) : pendingApprovalCount > 0 ? (
                           <Button asChild size="sm" className="rounded-full">
-                            <Link href="/inbox">Review approvals</Link>
+                            <Link href="/approvals">Review approvals</Link>
                           </Button>
                         ) : companyPaused ? (
                           <Button size="sm" className="rounded-full" onClick={() => void handleToggleCompanyPause()}>
@@ -866,9 +803,7 @@ export function CompanyWorkspaceShell({
                         Active operations
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCompactNumber(
-                          operations.filter((run) => translateRunStatus(String(run.status)) === "running").length,
-                        )}
+                        {formatCompactNumber(operations.filter((operation) => operation.status === "running").length)}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -876,9 +811,7 @@ export function CompanyWorkspaceShell({
                         Failed operations
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCompactNumber(
-                          operations.filter((run) => translateRunStatus(String(run.status)) === "failed").length,
-                        )}
+                        {formatCompactNumber(operations.filter((operation) => operation.status === "failed").length)}
                       </p>
                     </div>
                     <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -918,7 +851,7 @@ export function CompanyWorkspaceShell({
                             ]
                           : runningOperation
                             ? [
-                                `${getCurrentDepartmentLabel(runningOperation, latestVersion?.graph_json ?? null)} is actively working right now.`,
+                                `${runningOperation.currentDepartmentName} is actively working right now.`,
                                 "The command surface shifts toward monitoring until the operation finishes or something needs your intervention.",
                               ]
                             : [
@@ -980,7 +913,7 @@ export function CompanyWorkspaceShell({
                           </div>
                           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                             {editableAutonomyMode === "manual"
-                              ? "Nothing meaningful runs forward without you."
+                              ? "Nothing meaningful moves forward without you."
                               : editableAutonomyMode === "autonomous"
                                 ? "The company keeps moving on its own until a limit or failure stops it."
                                 : "The company works on its own and pauses only at key decision points."}
@@ -1010,7 +943,7 @@ export function CompanyWorkspaceShell({
                           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                             {editableAIAccessMode === "managed"
                               ? "Managed uses ForgeGraph's AI access so you can keep operating immediately."
-                              : "BYOK uses your own API key and is best when you want the company to run on your AI access."}
+                              : "BYOK uses your own API key and is best when you want the company to operate on your AI access."}
                           </p>
                         </div>
                       </div>
@@ -1024,7 +957,7 @@ export function CompanyWorkspaceShell({
                           className="mt-2"
                           value={operationBrief}
                           onChange={(event) => setOperationBrief(event.target.value)}
-                          placeholder="Run the next company operation..."
+                          placeholder="Start the next company operation..."
                         />
                         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                           Use one clear instruction. The company will turn it into work across the selected departments.
@@ -1044,7 +977,7 @@ export function CompanyWorkspaceShell({
                           data-testid="company-retry-operation-button"
                           variant="outline"
                           onClick={() => void handleRetryFailedOperation()}
-                          disabled={retrying || !latestFailedRun}
+                          disabled={retrying || !latestFailedOperation}
                         >
                           {retrying ? <Spinner size="xs" className="mr-2" /> : <RotateCcw className="h-4 w-4" />}
                           Retry failed operation
@@ -1096,7 +1029,7 @@ export function CompanyWorkspaceShell({
                                 Deliverable from operation {item.id.slice(0, 8)}
                               </p>
                               <Button asChild size="sm" variant="outline" className="rounded-full">
-                                <Link href={`/executions/${item.id}`}>Open</Link>
+                                <Link href={`/runs/${item.id}`}>Open</Link>
                               </Button>
                             </div>
                             <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.preview}</p>

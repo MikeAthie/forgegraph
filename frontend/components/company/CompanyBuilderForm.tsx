@@ -16,13 +16,13 @@ import {
   WhyBlock,
 } from "@/components/os/operations-ui";
 import { Alert, AlertDescription, Button, Input, Spinner, Textarea } from "@/components/ui";
-import { credentialsApi, getApiErrorMessage, graphsApi, onboardingApi, runsApi } from "@/lib/api";
+import { onboardingApi } from "@/lib/api";
+import { companyRepository } from "@/domain/repositories";
+import { translateProductError } from "@/domain/errors";
 import {
   buildSuggestedSetupReasons,
   buildTeamCompositionReasons,
-  buildCompanyGraphJson,
   buildCompanyProfile,
-  buildOperationInput,
   companyPresets,
   companySkillCatalog,
   getSkillExplanation,
@@ -39,9 +39,9 @@ const autonomyOptions: Array<{
   label: string;
   description: string;
 }> = [
-  { id: "manual", label: "Manual", description: "Nothing runs without explicit approval." },
+  { id: "manual", label: "Manual", description: "Nothing moves forward without explicit approval." },
   { id: "assisted", label: "Assisted", description: "Recommended for alpha. The company pauses at key checkpoints." },
-  { id: "autonomous", label: "Autonomous", description: "Runs continuously within budget and safety limits." },
+  { id: "autonomous", label: "Autonomous", description: "Keeps operating within budget and safety limits." },
 ];
 
 const aiAccessOptions: Array<{
@@ -50,7 +50,7 @@ const aiAccessOptions: Array<{
   description: string;
 }> = [
   { id: "managed", label: "Managed", description: "Use ForgeGraph-managed model access with simple limits." },
-  { id: "byok", label: "BYOK", description: "Use your own AI access when you want ForgeGraph to run on your key." },
+  { id: "byok", label: "BYOK", description: "Use your own AI access when you want ForgeGraph to operate on your key." },
 ];
 
 const objectiveHintExamples = [
@@ -84,7 +84,7 @@ const builderSteps = [
     id: "policy",
     label: "Policy",
     title: "Choose operating rules",
-    description: "Decide how independently the company should run and how it will access AI.",
+    description: "Decide how independently the company should operate and how it will access AI.",
   },
   {
     id: "launch",
@@ -126,7 +126,7 @@ function getAutonomyModeSummary(mode: CompanyAutonomyMode): string {
 function getAiAccessModeSummary(mode: CompanyAIAccessMode): string {
   return mode === "managed"
     ? "Managed uses ForgeGraph's AI access so you can launch immediately."
-    : "BYOK uses your own API key so the company runs on your AI access.";
+    : "BYOK uses your own API key so the company operates on your AI access.";
 }
 
 function getStepError(
@@ -179,7 +179,7 @@ function getDepartmentBenefitSummary(department: CompanyDepartment): string {
     case "operations-desk":
       return "Keeps work moving so you get an answer faster instead of losing time in handoffs.";
     case "delivery-management":
-      return "Turns the plan into something usable and keeps execution from slipping.";
+      return "Turns the plan into something usable and keeps delivery from slipping.";
     case "client-success":
       return "Packages the result so you can share it, use it, or follow through on it immediately.";
     case "research-analysis":
@@ -525,45 +525,16 @@ export function CompanyBuilderForm() {
     setError(null);
 
     try {
-      let credentialId: string | null = null;
-      if (aiAccessMode === "byok" && byokApiKey.trim()) {
-        const credential = await credentialsApi.create({
-          provider: "openai",
-          name: `${companyName.trim()} BYOK`,
-          api_key: byokApiKey.trim(),
-        });
-        credentialId = credential.id;
-      }
-
-      const profile = buildCompanyProfile({
-        ...reviewProfile,
-        byokCredentialId: credentialId,
+      const profile = buildCompanyProfile(reviewProfile);
+      const created = await companyRepository.create({
+        profile,
+        operationBrief,
+        launchFirstOperation,
+        byokApiKey,
       });
 
-      const graph = await graphsApi.create({
-        name: profile.companyName,
-        description: profile.objective,
-      });
-
-      const graphJson = buildCompanyGraphJson(profile);
-      const version = await graphsApi.createVersion(graph.id, { graph_json: graphJson });
-
-      if (launchFirstOperation) {
-        try {
-          await runsApi.start({
-            graph_version_id: version.id,
-            llm_mode: profile.aiAccessMode,
-            provider: profile.intelligenceProvider,
-            credential_id: credentialId ?? undefined,
-            input_json: buildOperationInput(profile, operationBrief),
-          });
-          showSuccess("Company launched", "Your first operation is now running.");
-        } catch (runError: unknown) {
-          showError(
-            "Company created, first operation did not launch",
-            getApiErrorMessage(runError, "The company is ready, but the first operation needs another attempt."),
-          );
-        }
+      if (launchFirstOperation && created.firstOperation) {
+        showSuccess("Company launched", "Your first operation is now active.");
       } else {
         showSuccess("Company created", "The company shell is ready. Launch the first operation when you are ready.");
       }
@@ -576,11 +547,11 @@ export function CompanyBuilderForm() {
           : undefined;
 
       await router.push({
-        pathname: `/companies/${graph.id}`,
+        pathname: `/companies/${created.companyId}`,
         query: nextQuery,
       });
     } catch (saveError: unknown) {
-      setError(getApiErrorMessage(saveError, "Failed to create the company workspace."));
+      setError(translateProductError(saveError, "company"));
     } finally {
       setSaving(false);
     }
@@ -971,7 +942,7 @@ export function CompanyBuilderForm() {
                   <div className="mt-4 rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
                     <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Bring your own key</p>
                     <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                      Enter one API key if you want the company to run on your own AI access.
+                      Enter one API key if you want the company to operate on your own AI access.
                     </p>
                     <Input
                       data-testid="company-byok-api-key-input"
@@ -1126,7 +1097,7 @@ export function CompanyBuilderForm() {
         <div className="space-y-6">
           <QuestGuide
             active={questModeEnabled}
-            title="Guided first run"
+            title="Guided first operation"
             steps={questSteps}
             onSkip={() => {
               void dismissQuestMode("skip");

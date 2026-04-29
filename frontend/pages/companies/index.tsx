@@ -14,31 +14,23 @@ import {
   formatDateTime,
 } from "@/components/os/operations-ui";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
-import { approvalsApi, getApiErrorMessage, graphsApi, runsApi, type GraphListItem, type RunListItem } from "@/lib/api";
-import { getCompanyProfileFromGraph, getCompanyStatus, translateRunStatus } from "@/lib/company-workspace";
-import type { GraphVersion } from "@/lib/graph-types";
+import { companyRepository } from "@/domain/repositories";
+import type { CompanyVM } from "@/domain/translation";
+import { translateProductError } from "@/domain/errors";
 import { cn } from "@/lib/utils";
-
-type CompanyListState = {
-  graph: GraphListItem;
-  latestVersion: GraphVersion | null;
-  operations: RunListItem[];
-  pendingApprovals: number;
-};
 
 type CompanyFilter = "all" | "operating" | "attention";
 
-function isCompanyOperating(company: CompanyListState): boolean {
-  return company.operations.some((run) => translateRunStatus(String(run.status)) === "running");
+function isCompanyOperating(company: CompanyVM): boolean {
+  return company.latestOperation?.status === "running";
 }
 
-function needsAttention(company: CompanyListState): boolean {
-  const status = getCompanyStatus(company.operations, company.pendingApprovals);
-  return status === "Needs attention" || status === "Awaiting approval";
+function needsAttention(company: CompanyVM): boolean {
+  return company.status === "Needs attention" || company.status === "Awaiting approval";
 }
 
 export default function CompaniesIndexPage() {
-  const [companies, setCompanies] = useState<CompanyListState[]>([]);
+  const [companies, setCompanies] = useState<CompanyVM[]>([]);
   const [activeFilter, setActiveFilter] = useState<CompanyFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,33 +40,13 @@ export default function CompaniesIndexPage() {
 
     const load = async () => {
       try {
-        const [graphs, runs, approvals] = await Promise.all([
-          graphsApi.list(),
-          runsApi.list(),
-          approvalsApi.list("pending"),
-        ]);
-        const versions = await Promise.all(graphs.map((graph) => graphsApi.getLatestVersion(graph.id)));
-
+        const data = await companyRepository.list();
         if (!cancelled) {
-          setCompanies(
-            graphs.map((graph, index) => {
-              const graphRuns = runs
-                .filter((run) => run.graph_id === graph.id)
-                .sort((a, b) => (b.started_at ?? "").localeCompare(a.started_at ?? ""));
-              const graphRunIds = new Set(graphRuns.map((run) => run.id));
-              const pendingApprovals = approvals.filter((approval) => graphRunIds.has(approval.run_id)).length;
-              return {
-                graph,
-                latestVersion: versions[index] ?? null,
-                operations: graphRuns,
-                pendingApprovals,
-              };
-            }),
-          );
+          setCompanies(data);
         }
       } catch (loadError: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(loadError, "Failed to load companies."));
+          setError(translateProductError(loadError, "company"));
         }
       } finally {
         if (!cancelled) {
@@ -242,17 +214,14 @@ export default function CompaniesIndexPage() {
                   filteredCompanies.length ? (
                     <div className="grid gap-4 lg:grid-cols-2">
                       {filteredCompanies.map((company) => {
-                        const profile = getCompanyProfileFromGraph(
-                          company.graph,
-                          company.latestVersion?.graph_json ?? null,
-                        );
-                        const status = getCompanyStatus(company.operations, company.pendingApprovals);
-                        const latestOperation = company.operations[0];
+                        const profile = company.profile;
+                        const status = company.status;
+                        const latestOperation = company.latestOperation;
 
                         return (
                           <Link
-                            key={company.graph.id}
-                            href={`/companies/${company.graph.id}`}
+                            key={company.id}
+                            href={`/companies/${company.id}`}
                             className="group rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-5 py-5 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-900/18 hover:bg-white hover:shadow-[0_24px_56px_-42px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/8 dark:hover:border-white/18 dark:hover:bg-white/[0.07] dark:hover:shadow-[0_24px_56px_-42px_rgba(0,0,0,0.75)] dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
                           >
                             <div className="flex items-start justify-between gap-4">
@@ -292,13 +261,13 @@ export default function CompaniesIndexPage() {
                                 status={profile.aiAccessMode === "managed" ? "active" : "paused"}
                                 label={profile.aiAccessMode === "managed" ? "Managed" : "BYOK"}
                               />
-                              <StatusBadge status="pending" label={`${company.operations.length} operations`} />
+                              <StatusBadge status="pending" label={`${company.operationCount} operations`} />
                             </div>
 
                             <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500 transition-colors group-hover:text-slate-600 dark:text-slate-400 dark:group-hover:text-slate-300">
                               <span>
                                 {latestOperation
-                                  ? `Latest activity ${formatDateTime(latestOperation.started_at)}`
+                                  ? `Latest activity ${formatDateTime(latestOperation.startedAt)}`
                                   : "No operations yet"}
                               </span>
                               <span className="inline-flex items-center gap-1 font-medium text-slate-900 transition-colors group-hover:text-slate-950 dark:text-slate-50 dark:group-hover:text-white">

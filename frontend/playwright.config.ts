@@ -137,7 +137,7 @@ const workerCount =
 
 export default defineConfig({
   testDir: "./__tests__",
-  testMatch: ["**/e2e/*.spec.ts", "**/consulting/specs/*.spec.ts"],
+  testMatch: ["**/e2e/**/*.spec.ts", "**/consulting/specs/*.spec.ts"],
   testIgnore: [
     "**/agent-authoring.spec.ts",
     "**/graph-editor.spec.ts",

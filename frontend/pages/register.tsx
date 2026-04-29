@@ -97,7 +97,7 @@ export default function RegisterPage() {
   if (loading) {
     return (
       <AuthLayout>
-        <Spinner size="lg" />
+        <Spinner size="lg" label="Loading account creation" />
       </AuthLayout>
     );
   }
@@ -132,6 +132,8 @@ export default function RegisterPage() {
                   id="email"
                   name="email"
                   type="email"
+                  autoComplete="username"
+                  aria-invalid={Boolean(displayError)}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -151,6 +153,8 @@ export default function RegisterPage() {
                   id="password"
                   name="password"
                   type="password"
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(displayError)}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -165,6 +169,8 @@ export default function RegisterPage() {
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(displayError)}
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

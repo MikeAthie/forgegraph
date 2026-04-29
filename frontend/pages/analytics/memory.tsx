@@ -181,8 +181,8 @@ export default function MemoryAnalyticsPage() {
                   Signal, not noise.
                 </h1>
                 <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  Monitor how memory tiers perform across runs, costs, and storage saturation. Snapshot refreshed on
-                  demand.
+                  Monitor how memory tiers perform across operations, costs, and storage saturation. Snapshot refreshed
+                  on demand.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -322,7 +322,7 @@ export default function MemoryAnalyticsPage() {
                       <span className="font-medium">{formatNumber(usage?.curated_memory.pending_index_total)}</span>
                     </div>
                     <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      Retrieval runs this period: {formatNumber(usage?.curated_memory.retrieval_runs_in_period)}
+                      Retrieval operations this period: {formatNumber(usage?.curated_memory.retrieval_runs_in_period)}
                     </div>
                     <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                       Search queries this period: {formatNumber(performance?.vector.search_queries)}
@@ -447,7 +447,7 @@ export default function MemoryAnalyticsPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">GC last run</span>
+                        <span className="text-muted-foreground">GC last operation</span>
                         <span className="font-semibold">
                           {performance?.maintenance.memory_gc_last_run_at
                             ? formatDate(performance.maintenance.memory_gc_last_run_at)
@@ -482,7 +482,7 @@ export default function MemoryAnalyticsPage() {
                     <p className="text-xs uppercase tracking-widest text-muted-foreground">Configured windows</p>
                     <div className="mt-2 space-y-2 text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Runs</span>
+                        <span className="text-muted-foreground">Operations</span>
                         <span className="font-semibold">
                           {usage?.retention.runs_retention_days != null
                             ? `${usage.retention.runs_retention_days} days`
@@ -490,7 +490,7 @@ export default function MemoryAnalyticsPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Run logs</span>
+                        <span className="text-muted-foreground">Operation logs</span>
                         <span className="font-semibold">
                           {usage?.retention.run_logs_retention_days != null
                             ? `${usage.retention.run_logs_retention_days} days`
