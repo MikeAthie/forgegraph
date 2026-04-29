@@ -38,6 +38,7 @@ urlpatterns = [
     path("analytics/", include("adapters.api.analytics.urls")),
     path("billing/", include("adapters.api.billing.urls")),
     path("memory/", include("adapters.api.memory.urls")),
+    path("reports/", include("adapters.api.reports.urls")),
     path("prompts/", include("adapters.api.prompts.urls")),
     path("templates/", include("adapters.api.templates.urls")),
     path("marketplace/", include("adapters.api.marketplace.urls")),

@@ -14,7 +14,11 @@ const customJestConfig = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   testMatch: ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],
-  testPathIgnorePatterns: ["<rootDir>/__tests__/e2e/", "<rootDir>/__tests__/consulting/"],
+  testPathIgnorePatterns: [
+    "<rootDir>/__tests__/e2e/",
+    "<rootDir>/__tests__/consulting/",
+    "<rootDir>/__tests__/.*/fixtures/",
+  ],
   modulePathIgnorePatterns: ["<rootDir>/.next/"],
   cacheDirectory: process.env.JEST_CACHE_DIR || path.join(__dirname, ".jest-cache"),
   collectCoverageFrom: [
