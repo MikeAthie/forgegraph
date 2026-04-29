@@ -1,5 +1,7 @@
 # Run Event Contract
 
+> Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
+
 > Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
 
 `Run` and `RunEvent` remain canonical runtime facts.

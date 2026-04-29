@@ -20,7 +20,11 @@ export function FormField({ label, htmlFor, error, description, required, classN
       </Label>
       {children}
       {description && !error && <p className="text-xs text-muted-foreground">{description}</p>}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

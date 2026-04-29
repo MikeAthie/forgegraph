@@ -330,7 +330,7 @@ export function getDepartmentExplanation(label: string, graphJson?: GraphJson | 
     return configuredDescription.trim();
   }
 
-  return "Handles one part of the company workflow.";
+  return "Handles one part of the company operation.";
 }
 
 export function getSkillExplanation(skill: string): string {

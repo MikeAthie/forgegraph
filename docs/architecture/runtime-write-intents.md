@@ -1,5 +1,7 @@
 # Runtime Write Intents
 
+> Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
+
 This document extends [runtime-invariants.md](./runtime-invariants.md). If anything here conflicts with that file, `runtime-invariants.md` wins.
 
 ## Purpose

@@ -13,6 +13,9 @@ require_command npm
 log_section "Frontend format"
 npm run format:check
 
+log_section "Frontend terminology boundary"
+npm run terminology:check
+
 log_section "Frontend lint"
 npm run lint
 
@@ -21,4 +24,3 @@ npm test
 
 log_section "Frontend build"
 npm run build
-

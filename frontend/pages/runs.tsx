@@ -16,11 +16,13 @@ import {
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
-import { getApiErrorMessage, runsApi, type RunListItem } from "@/lib/api";
+import { operationRepository } from "@/domain/repositories";
+import { translateProductError } from "@/domain/errors";
+import type { OperationVM } from "@/domain/translation";
 
 export default function RunsPage() {
   const router = useRouter();
-  const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [operations, setOperations] = useState<OperationVM[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,13 +31,13 @@ export default function RunsPage() {
 
     const load = async () => {
       try {
-        const data = await runsApi.list();
+        const data = await operationRepository.list();
         if (!cancelled) {
-          setRuns(data.sort((a, b) => (b.started_at ?? "").localeCompare(a.started_at ?? "")));
+          setOperations(data);
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load operations."));
+          setError(translateProductError(err, "operation"));
         }
       } finally {
         if (!cancelled) {
@@ -51,38 +53,38 @@ export default function RunsPage() {
     };
   }, []);
 
-  const selectedExecutionId =
-    typeof router.query.execution === "string"
-      ? router.query.execution
-      : runs.length > 0
-        ? (runs[0]?.id ?? null)
+  const selectedOperationId =
+    typeof router.query.operation === "string"
+      ? router.query.operation
+      : operations.length > 0
+        ? (operations[0]?.id ?? null)
         : null;
 
-  const selectedExecution = useMemo(
-    () => runs.find((run) => run.id === selectedExecutionId) ?? runs[0] ?? null,
-    [runs, selectedExecutionId],
+  const selectedOperation = useMemo(
+    () => operations.find((operation) => operation.id === selectedOperationId) ?? operations[0] ?? null,
+    [operations, selectedOperationId],
   );
 
   return (
     <ProtectedRoute>
       <DashboardLayout
         inspector={
-          selectedExecution ? (
+          selectedOperation ? (
             <InspectorPanel
               title="Operation summary"
               subtitle="Operations are surfaced here in company language first. Open the detail view for department activity, deliverables, and technical diagnostics."
               sections={[
                 {
                   title: "Status",
-                  content: <StatusBadge status={String(selectedExecution.status)} />,
+                  content: <StatusBadge status={selectedOperation.status} />,
                 },
                 {
                   title: "Duration",
-                  content: formatDuration(selectedExecution.duration_ms),
+                  content: formatDuration(selectedOperation.durationMs),
                 },
                 {
                   title: "Started",
-                  content: formatDateTime(selectedExecution.started_at),
+                  content: formatDateTime(selectedOperation.startedAt),
                 },
               ]}
             />
@@ -106,30 +108,32 @@ export default function RunsPage() {
             <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
               <Spinner size="lg" />
             </div>
-          ) : !selectedExecution ? (
+          ) : !selectedOperation ? (
             <EmptyBlock
               title="No operations available"
-              description="Operation history will appear here after companies begin running work."
+              description="Operation history will appear here after companies begin active work."
             />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[0.76fr_1.24fr]">
               <Panel title="Operation list" description="Recent operations with summary-first metadata.">
                 <SelectionList
-                  items={runs}
-                  selectedId={selectedExecution.id}
-                  onSelect={(run) => {
-                    void router.replace({ pathname: "/executions", query: { execution: run.id } }, undefined, {
+                  items={operations}
+                  selectedId={selectedOperation.id}
+                  onSelect={(operation) => {
+                    void router.replace({ pathname: "/runs", query: { operation: operation.id } }, undefined, {
                       shallow: true,
                     });
                   }}
-                  renderTitle={(run) => (
+                  renderTitle={(operation) => (
                     <div className="flex items-center gap-3">
-                      <span>{run.graph_name}</span>
-                      <StatusBadge status={String(run.status)} />
+                      <span>{operation.companyName}</span>
+                      <StatusBadge status={operation.status} />
                     </div>
                   )}
-                  renderBody={(run) => `Saved version ${run.graph_version} · started ${formatDateTime(run.started_at)}`}
-                  renderMeta={(run) => <span className="text-xs">{formatDuration(run.duration_ms)}</span>}
+                  renderBody={(operation) =>
+                    `Saved setup ${operation.setupVersion} · started ${formatDateTime(operation.startedAt)}`
+                  }
+                  renderMeta={(operation) => <span className="text-xs">{formatDuration(operation.durationMs)}</span>}
                   empty={
                     <EmptyBlock
                       title="No operation history"
@@ -141,21 +145,21 @@ export default function RunsPage() {
 
               <div className="space-y-6">
                 <Panel
-                  title={selectedExecution.graph_name}
+                  title={selectedOperation.companyName}
                   description="Top-level summary before drilling into the full step sequence."
                   action={
                     <Button asChild className="rounded-full">
-                      <Link href={`/executions/${selectedExecution.id}`}>Open operation detail</Link>
+                      <Link href={`/runs/${selectedOperation.id}`}>Open operation detail</Link>
                     </Button>
                   }
                 >
                   <KeyValueGrid
                     columns={2}
                     items={[
-                      { label: "Status", value: <StatusBadge status={String(selectedExecution.status)} /> },
-                      { label: "Saved version", value: `v${selectedExecution.graph_version}` },
-                      { label: "Started", value: formatDateTime(selectedExecution.started_at) },
-                      { label: "Duration", value: formatDuration(selectedExecution.duration_ms) },
+                      { label: "Status", value: <StatusBadge status={selectedOperation.status} /> },
+                      { label: "Saved setup", value: `v${selectedOperation.setupVersion}` },
+                      { label: "Started", value: formatDateTime(selectedOperation.startedAt) },
+                      { label: "Duration", value: formatDuration(selectedOperation.durationMs) },
                     ]}
                   />
                 </Panel>
@@ -164,15 +168,15 @@ export default function RunsPage() {
                   <KeyValueGrid
                     columns={2}
                     items={[
-                      { label: "Queue status", value: selectedExecution.queue_status ?? "Not queued" },
-                      { label: "Attempts", value: selectedExecution.queue_attempts ?? 0 },
+                      { label: "Queue status", value: selectedOperation.queueStatus ?? "Not queued" },
+                      { label: "Attempts", value: selectedOperation.attempts },
                       {
                         label: "Memory activity",
-                        value: selectedExecution.memory_activity?.has_activity ? "Active" : "None",
+                        value: selectedOperation.memoryActivity?.has_activity ? "Active" : "None",
                       },
                       {
                         label: "Retrieved observations",
-                        value: selectedExecution.memory_activity?.retrieved_observation_count ?? 0,
+                        value: selectedOperation.memoryActivity?.retrieved_observation_count ?? 0,
                       },
                     ]}
                   />

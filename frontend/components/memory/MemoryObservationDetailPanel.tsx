@@ -1,4 +1,4 @@
-import type { MemoryObservation } from "@/lib/api";
+import type { MemoryObservationVM } from "@/domain/repositories/memoryRepository";
 import { EmptyBlock, KeyValueGrid, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
 import { Spinner } from "@/components/ui";
 
@@ -16,7 +16,7 @@ const toLabelCase = (value: string) => {
 interface MemoryObservationDetailPanelProps {
   error: string | null;
   loading: boolean;
-  observation: MemoryObservation | null;
+  observation: MemoryObservationVM | null;
 }
 
 export function MemoryObservationDetailPanel({ error, loading, observation }: MemoryObservationDetailPanelProps) {
@@ -61,18 +61,14 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
                   </h2>
                   <StatusBadge status="pending" label={toLabelCase(observation.scope)} />
                   <StatusBadge
-                    status={observation.is_deleted ? "failed" : "active"}
+                    status={observation.isDeleted ? "failed" : "active"}
                     label={toLabelCase(observation.type)}
                   />
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {observation.topic_key ? (
-                  <StatusBadge status="pending" label={`Topic ${observation.topic_key}`} />
-                ) : null}
-                {observation.tool_name ? (
-                  <StatusBadge status="pending" label={`Tool ${observation.tool_name}`} />
-                ) : null}
+                {observation.topic ? <StatusBadge status="pending" label={`Topic ${observation.topic}`} /> : null}
+                {observation.toolName ? <StatusBadge status="pending" label={`Tool ${observation.toolName}`} /> : null}
               </div>
             </div>
 
@@ -94,11 +90,11 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
                   columns={1}
                   items={[
                     { label: "Observation ID", value: observation.id },
-                    { label: "Operating Model", value: observation.graph_id ?? "None" },
-                    { label: "Operation", value: observation.run_id ?? "None" },
-                    { label: "Session", value: observation.session_id ?? "None" },
-                    { label: "Agent", value: observation.agent_id ?? "None" },
-                    { label: "Chunk", value: observation.memory_chunk_id ?? "None" },
+                    { label: "Company", value: observation.companyId ?? "None" },
+                    { label: "Operation", value: observation.operationId ?? "None" },
+                    { label: "Session", value: observation.sessionId ?? "None" },
+                    { label: "Department", value: observation.departmentId ?? "None" },
+                    { label: "Chunk", value: observation.chunkId ?? "None" },
                   ]}
                 />
               </div>
@@ -108,10 +104,10 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Timeline</p>
               <div className="mt-4 space-y-4">
                 {[
-                  { label: "Recorded", value: observation.created_at },
-                  { label: "Updated", value: observation.updated_at },
-                  { label: "Last seen", value: observation.last_seen_at },
-                  ...(observation.deleted_at ? [{ label: "Deleted", value: observation.deleted_at }] : []),
+                  { label: "Recorded", value: observation.createdAt },
+                  { label: "Updated", value: observation.updatedAt },
+                  { label: "Last seen", value: observation.lastSeenAt },
+                  ...(observation.deletedAt ? [{ label: "Deleted", value: observation.deletedAt }] : []),
                 ].map((item, index, items) => (
                   <div key={`${item.label}-${item.value}`} className="flex gap-3">
                     <div className="flex flex-col items-center">

@@ -182,7 +182,7 @@ describe("Analytics pages", () => {
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getAllByText("3").length).toBeGreaterThan(0);
-    expect(screen.getByText(/retrieval runs this period: 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/retrieval operations this period: 6/i)).toBeInTheDocument();
     expect(screen.getByText(/search queries this period: 0/i)).toBeInTheDocument();
     expect(screen.getByText(/index queue errors/i)).toBeInTheDocument();
     expect(screen.getByText(/retention posture/i)).toBeInTheDocument();

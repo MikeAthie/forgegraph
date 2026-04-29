@@ -1,5 +1,5 @@
-import ExecutionDetailView from "@/components/os/ExecutionDetailView";
+import OperationDetailView from "@/components/os/OperationDetailView";
 
-export default function RunDetailPage() {
-  return <ExecutionDetailView routeParam="runId" />;
+export default function OperationDetailPage() {
+  return <OperationDetailView routeParam="runId" />;
 }

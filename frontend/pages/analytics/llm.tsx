@@ -243,7 +243,7 @@ export default function LLMAnalyticsPage() {
           {budget?.over_budget ? (
             <Alert variant="destructive">
               <AlertDescription>
-                Monthly LLM budget exceeded. Runs will be blocked until the next cycle or budget update.
+                Monthly LLM budget exceeded. Operations will be blocked until the next cycle or budget update.
               </AlertDescription>
             </Alert>
           ) : budget?.warning ? (

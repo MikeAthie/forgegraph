@@ -14,7 +14,7 @@ export const SITE_KEYWORDS = [
   "company command center",
   "AI approvals",
   "AI business operations",
-  "agent workflow operations",
+  "AI operating models",
 ];
 
 export const SOCIAL_IMAGE_PATH = "/og-image.png";
@@ -75,34 +75,44 @@ const APP_ROUTE_SEO: Record<string, RouteSeo> = {
     noIndex: true,
   },
   "/workflows": {
-    title: "Workflows - ForgeGraph",
-    description: "Manage workflow definitions and revisions behind ForgeGraph company operations.",
+    title: "Advanced Operating Models - ForgeGraph",
+    description: "Manage advanced operating models behind ForgeGraph company operations.",
     noIndex: true,
   },
   "/workflows/[workflowId]": {
-    title: "Workflow Editor - ForgeGraph",
-    description: "Edit a ForgeGraph workflow definition used by company operations.",
+    title: "Advanced Operating Model Editor - ForgeGraph",
+    description: "Edit an advanced operating model used by company operations.",
     noIndex: true,
   },
   "/runs": {
     title: "Operations - ForgeGraph",
-    description: "Review ForgeGraph operation history, status, node execution, approvals, and deliverables.",
+    description: "Review ForgeGraph operation history, status, department activity, approvals, and deliverables.",
     noIndex: true,
   },
   "/runs/[runId]": {
     title: "Operation Detail - ForgeGraph",
+    description: "Inspect one ForgeGraph operation, including department activity, deliverables, traces, and memory.",
+    noIndex: true,
+  },
+  "/departments": {
+    title: "Departments - ForgeGraph",
     description:
-      "Inspect one ForgeGraph operation, including execution steps, deliverables, traces, and memory activity.",
+      "Review how ForgeGraph departments think, propose actions, join operations, and surface approval blockers.",
+    noIndex: true,
+  },
+  "/agents": {
+    title: "Departments - ForgeGraph",
+    description: "Legacy route that redirects to ForgeGraph departments.",
     noIndex: true,
   },
   "/executions": {
-    title: "Executions - ForgeGraph",
-    description: "Review backend-owned execution state and history for ForgeGraph operations.",
+    title: "Operations - ForgeGraph",
+    description: "Legacy route that redirects to ForgeGraph operations.",
     noIndex: true,
   },
   "/executions/[executionId]": {
-    title: "Execution Detail - ForgeGraph",
-    description: "Inspect backend-owned execution detail, node runs, events, and operation output.",
+    title: "Operation Detail - ForgeGraph",
+    description: "Legacy route that redirects to a ForgeGraph operation.",
     noIndex: true,
   },
   "/approvals": {

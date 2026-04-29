@@ -26,12 +26,12 @@ export default function Header() {
 
   const navItems = [
     { href: "/overview", label: "Overview" },
-    { href: "/inbox", label: "Inbox" },
-    { href: "/agents", label: "Agents" },
-    { href: "/tasks", label: "Tasks" },
-    { href: "/memory", label: "Memory" },
+    { href: "/approvals", label: "Approvals" },
+    { href: "/departments", label: "Departments" },
+    { href: "/tasks", label: "Activity" },
+    { href: "/memory", label: "Knowledge" },
     { href: "/runs", label: "Operations" },
-    { href: "/workflows", label: "Advanced" },
+    { href: "/workflows", label: "Advanced operating models" },
   ] as const;
 
   const canManageOrg = user?.organization_role === "owner" || user?.organization_role === "admin";
@@ -39,8 +39,8 @@ export default function Header() {
 
   const activeHref = (() => {
     if (router.pathname.startsWith("/overview")) return "/overview";
-    if (router.pathname.startsWith("/inbox") || router.pathname.startsWith("/approvals")) return "/inbox";
-    if (router.pathname.startsWith("/agents")) return "/agents";
+    if (router.pathname.startsWith("/inbox") || router.pathname.startsWith("/approvals")) return "/approvals";
+    if (router.pathname.startsWith("/agents") || router.pathname.startsWith("/departments")) return "/departments";
     if (router.pathname.startsWith("/tasks")) return "/tasks";
     if (router.pathname.startsWith("/memory")) return "/memory";
     if (router.pathname.startsWith("/runs") || router.pathname.startsWith("/executions")) return "/runs";
@@ -67,8 +67,7 @@ export default function Header() {
     }
   };
 
-  // Keep the approvals badge reasonably fresh without being noisy.
-  // (Runs/resumes update tasks server-side; this catches changes across tabs.)
+  // Operation and approval changes are projected server-side; this catches changes across tabs.
   useEffect(() => {
     if (!isAuthenticated) {
       setPendingApprovalsCount(null);
@@ -99,7 +98,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border supports-[backdrop-filter]:bg-background/60">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav aria-label="Primary navigation" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center gap-2">
             {isAuthenticated && (
@@ -119,10 +118,11 @@ export default function Header() {
                           void router.push(item.href);
                         }}
                         className={activeHref === item.href ? "bg-accent cursor-pointer" : "cursor-pointer"}
+                        aria-current={activeHref === item.href ? "page" : undefined}
                       >
                         <div className="flex w-full items-center justify-between gap-3">
                           <span>{item.label}</span>
-                          {item.href === "/inbox" && (pendingApprovalsCount ?? 0) > 0 && (
+                          {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
                             <Badge
                               variant="destructive"
                               className="h-5 min-w-5 px-1.5"
@@ -147,9 +147,13 @@ export default function Header() {
               <div className="hidden sm:ml-8 sm:flex sm:space-x-1">
                 {navItems.map((item) => (
                   <Button key={item.href} variant={activeHref === item.href ? "secondary" : "ghost"} asChild>
-                    <Link href={item.href} className="flex items-center gap-2">
+                    <Link
+                      href={item.href}
+                      aria-current={activeHref === item.href ? "page" : undefined}
+                      className="flex items-center gap-2"
+                    >
                       <span>{item.label}</span>
-                      {item.href === "/inbox" && (pendingApprovalsCount ?? 0) > 0 && (
+                      {item.href === "/approvals" && (pendingApprovalsCount ?? 0) > 0 && (
                         <Badge
                           variant="destructive"
                           className="h-5 min-w-5 px-1.5"
@@ -170,7 +174,11 @@ export default function Header() {
             {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
+                  <Button
+                    variant="outline"
+                    className="min-h-11 gap-2"
+                    aria-label={`Open account menu for ${user?.email ?? "account"}`}
+                  >
                     <span className="hidden sm:inline max-w-[150px] truncate">{user?.email}</span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"

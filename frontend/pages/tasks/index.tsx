@@ -15,11 +15,13 @@ import {
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
-import { getApiErrorMessage, tasksApi, type TaskRecord } from "@/lib/api";
+import { operationRepository } from "@/domain/repositories";
+import { translateProductError } from "@/domain/errors";
+import type { TaskVM } from "@/domain/translation";
 
 export default function TasksPage() {
   const router = useRouter();
-  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [tasks, setTasks] = useState<TaskVM[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,13 +30,13 @@ export default function TasksPage() {
 
     const load = async () => {
       try {
-        const data = await tasksApi.list();
+        const data = await operationRepository.listTasks();
         if (!cancelled) {
-          setTasks(data.sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")));
+          setTasks(data);
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, "Failed to load tasks."));
+          setError(translateProductError(err, "department"));
         }
       } finally {
         if (!cancelled) {
@@ -61,7 +63,7 @@ export default function TasksPage() {
   const groupedCounts = useMemo(
     () => ({
       running: tasks.filter((task) => task.status === "running").length,
-      waiting: tasks.filter((task) => task.status === "waiting" || task.status === "pending").length,
+      waiting: tasks.filter((task) => task.status === "paused" || task.status === "queued").length,
       failed: tasks.filter((task) => task.status === "failed").length,
     }),
     [tasks],
@@ -78,15 +80,11 @@ export default function TasksPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span>Operation</span>
-                <span className="truncate pl-4">{selectedTask.execution_id.slice(0, 8)}</span>
+                <span className="truncate pl-4">{selectedTask.operationId?.slice(0, 8) ?? "Unavailable"}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Current step</span>
-                <span className="truncate pl-4">{selectedTask.current_step_id?.slice(0, 8) ?? "Unavailable"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Decision</span>
-                <span className="truncate pl-4">{selectedTask.current_decision_id?.slice(0, 8) ?? "None"}</span>
+                <span>Department</span>
+                <span className="truncate pl-4">{selectedTask.departmentName}</span>
               </div>
             </div>
           ),
@@ -97,15 +95,15 @@ export default function TasksPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span>Started</span>
-                <span>{formatDateTime(selectedTask.started_at)}</span>
+                <span>{formatDateTime(selectedTask.startedAt)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Last change</span>
-                <span>{formatDateTime(selectedTask.updated_at)}</span>
+                <span>Duration</span>
+                <span>{selectedTask.durationMs == null ? "Pending" : `${selectedTask.durationMs}ms`}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Ended</span>
-                <span>{formatDateTime(selectedTask.ended_at)}</span>
+                <span>{formatDateTime(selectedTask.endedAt)}</span>
               </div>
             </div>
           ),
@@ -197,7 +195,7 @@ export default function TasksPage() {
                     <div className="flex items-center gap-2">
                       <StatusBadge status={selectedTask.status} />
                       <Button asChild variant="outline" className="rounded-full">
-                        <Link href={`/executions/${selectedTask.execution_id}`}>Open operation</Link>
+                        <Link href={`/runs/${selectedTask.operationId}`}>Open operation</Link>
                       </Button>
                     </div>
                   }
@@ -206,12 +204,12 @@ export default function TasksPage() {
                     columns={2}
                     items={[
                       { label: "Priority", value: selectedTask.priority },
-                      { label: "Current step", value: selectedTask.current_step_id?.slice(0, 8) ?? "Unavailable" },
+                      { label: "Department", value: selectedTask.departmentName },
                       {
                         label: "Decision gate",
-                        value: selectedTask.current_decision_id?.slice(0, 8) ?? "No active decision",
+                        value: selectedTask.requiresApproval ? "Waiting for approval" : "No active decision",
                       },
-                      { label: "Started", value: formatDateTime(selectedTask.started_at) },
+                      { label: "Started", value: formatDateTime(selectedTask.startedAt) },
                     ]}
                   />
                   <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -233,14 +231,14 @@ export default function TasksPage() {
                         <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
                           This task is attached to operation{" "}
                           <span className="font-medium text-slate-900 dark:text-slate-50">
-                            {selectedTask.execution_id}
+                            {selectedTask.operationId ?? "Unavailable"}
                           </span>
-                          . Use the operation view to inspect department activity, tools, outputs, and technical
+                          . Use the operation view to inspect department activity, tools, deliverables, and technical
                           summaries.
                         </p>
                       </div>
                       <Button asChild className="rounded-full">
-                        <Link href={`/executions/${selectedTask.execution_id}`}>Inspect operation detail</Link>
+                        <Link href={`/runs/${selectedTask.operationId}`}>Inspect operation detail</Link>
                       </Button>
                     </div>
                   </Panel>
@@ -252,9 +250,9 @@ export default function TasksPage() {
                     <KeyValueGrid
                       columns={1}
                       items={[
-                        { label: "Created", value: formatDateTime(selectedTask.created_at) },
-                        { label: "Last updated", value: formatDateTime(selectedTask.updated_at) },
-                        { label: "Ended", value: formatDateTime(selectedTask.ended_at) },
+                        { label: "Created", value: formatDateTime(selectedTask.createdAt) },
+                        { label: "Started", value: formatDateTime(selectedTask.startedAt) },
+                        { label: "Ended", value: formatDateTime(selectedTask.endedAt) },
                       ]}
                     />
                   </Panel>

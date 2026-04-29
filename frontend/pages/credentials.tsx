@@ -111,7 +111,7 @@ const OAUTH_PROVIDER_GUIDANCE: Record<OAuthIntegrationProvider, { scopeHint: str
     docsUrl: "https://developer.atlassian.com/cloud/jira/software/oauth-2-3lo-apps/",
   },
   linear: {
-    scopeHint: "Use read/write scopes depending on the workflow actions.",
+    scopeHint: "Use read/write scopes depending on the company operation actions.",
     docsUrl: "https://developers.linear.app/docs/oauth-authentication",
   },
   hubspot: {
@@ -397,7 +397,8 @@ export default function CredentialsPage() {
             <div>
               <h1 className="text-2xl font-semibold text-foreground">Credentials</h1>
               <p className="text-sm text-muted-foreground">
-                Securely store provider keys for multi-model execution. Keys are encrypted and never shown in full.
+                Securely store provider keys for multi-model company operations. Keys are encrypted and never shown in
+                full.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -520,7 +521,7 @@ export default function CredentialsPage() {
                   <p>
                     1. Service OAuth config ready: {oauthChecklist.serviceConfiguredCount} / {oauthChecklist.total}.
                   </p>
-                  <p>2. Connect account for each provider you plan to use in your graph.</p>
+                  <p>2. Connect account for each provider you plan to use in your company.</p>
                   <p>
                     Redirect URI configured in service:
                     <span className="mx-1 font-mono text-foreground">{oauthChecklist.redirectUri}</span>
@@ -675,7 +676,7 @@ export default function CredentialsPage() {
                           variant="destructive"
                           size="sm"
                           title="Delete credential?"
-                          description="This will remove the key and any runs using it will fail until replaced."
+                          description="This will remove the key and any operations using it will fail until replaced."
                           onConfirm={() => handleDelete(credential.id)}
                         >
                           Delete

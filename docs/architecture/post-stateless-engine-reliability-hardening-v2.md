@@ -1,5 +1,7 @@
 # Post-Stateless Engine Reliability Hardening v2
 
+> Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
+
 > Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
 > This document is an implementation plan and rollout record, not the source of truth for runtime semantics.
 

@@ -7,13 +7,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { MemoryObservationDetailPanel } from "@/components/memory/MemoryObservationDetailPanel";
 import { MemoryObservationList } from "@/components/memory/MemoryObservationList";
 import { InspectorPanel, MetricCard, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
-import {
-  getApiErrorMessage,
-  memoryApi,
-  organizationsApi,
-  type MemoryObservation,
-  type OrganizationRoleCapabilities,
-} from "@/lib/api";
+import { organizationsApi, type OrganizationRoleCapabilities } from "@/lib/api";
+import { translateProductError } from "@/domain/errors";
+import { memoryRepository } from "@/domain/repositories";
+import type { MemoryObservationVM, MemoryScopeVM } from "@/domain/repositories/memoryRepository";
 import { Alert, AlertDescription } from "@/components/ui";
 import { BookCopy, BrainCircuit, DatabaseZap, ShieldCheck } from "lucide-react";
 
@@ -48,12 +45,12 @@ export default function MemoryBrowserPage() {
   const [scopeFilter, setScopeFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  const [observations, setObservations] = useState<MemoryObservation[]>([]);
+  const [observations, setObservations] = useState<MemoryObservationVM[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
   const [selectedObservationId, setSelectedObservationId] = useState<string | null>(null);
-  const [selectedObservation, setSelectedObservation] = useState<MemoryObservation | null>(null);
+  const [selectedObservation, setSelectedObservation] = useState<MemoryObservationVM | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [governance, setGovernance] = useState<{
@@ -62,7 +59,7 @@ export default function MemoryBrowserPage() {
 
   const hasQuery = query.trim().length > 0;
   const hasTypeFilter = typeFilter !== "all";
-  const activeScope = scopeFilter === "all" ? undefined : scopeFilter;
+  const activeScope = scopeFilter === "all" ? undefined : (scopeFilter as MemoryScopeVM);
   const activeType = hasTypeFilter ? typeFilter : undefined;
   const isSearchMode = hasQuery || hasTypeFilter;
 
@@ -72,13 +69,13 @@ export default function MemoryBrowserPage() {
 
     try {
       const data = isSearchMode
-        ? await memoryApi.search({
+        ? await memoryRepository.search({
             query: hasQuery ? query.trim() : undefined,
             scope: activeScope,
             type: activeType,
             limit: RESULT_LIMIT,
           })
-        : await memoryApi.timeline({
+        : await memoryRepository.timeline({
             scope: activeScope,
             limit: RESULT_LIMIT,
           });
@@ -100,7 +97,7 @@ export default function MemoryBrowserPage() {
       setObservations([]);
       setSelectedObservationId(null);
       setSelectedObservation(null);
-      setListError(getApiErrorMessage(err, "Failed to load curated memory."));
+      setListError(translateProductError(err, "knowledge"));
     } finally {
       setListLoading(false);
     }
@@ -148,13 +145,13 @@ export default function MemoryBrowserPage() {
       setDetailError(null);
 
       try {
-        const detail = await memoryApi.get(selectedObservationId);
+        const detail = await memoryRepository.get(selectedObservationId);
         if (!cancelled) {
           setSelectedObservation(detail);
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setDetailError(getApiErrorMessage(err, "Failed to load observation detail."));
+          setDetailError(translateProductError(err, "knowledge"));
         }
       } finally {
         if (!cancelled) {
@@ -187,14 +184,14 @@ export default function MemoryBrowserPage() {
     () => new Set(observations.map((observation) => observation.scope)).size,
     [observations],
   );
-  const freshestSeenAt = observations[0]?.last_seen_at ?? selectedObservation?.last_seen_at ?? null;
+  const freshestSeenAt = observations[0]?.lastSeenAt ?? selectedObservation?.lastSeenAt ?? null;
 
   const handleQuerySearch = useCallback((value: string) => {
     const normalized = value.trim();
     setQuery((currentValue) => (currentValue === normalized ? currentValue : normalized));
   }, []);
 
-  const handleSelectObservation = useCallback((observation: MemoryObservation) => {
+  const handleSelectObservation = useCallback((observation: MemoryObservationVM) => {
     setSelectedObservation(observation);
     setDetailError(null);
     setSelectedObservationId(observation.id);
@@ -274,7 +271,7 @@ export default function MemoryBrowserPage() {
             <MetricCard
               eyebrow="Scopes"
               value={String(visibleScopes)}
-              delta="Operating-model, operation, and session slices"
+              delta="Company, operation, and session slices"
               icon={<BookCopy className="h-4 w-4" />}
             />
             <MetricCard

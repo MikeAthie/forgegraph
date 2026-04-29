@@ -215,7 +215,7 @@ describe("Memory Browser Page", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /^operating model$/i }));
+      await user.click(screen.getByRole("button", { name: /^company$/i }));
       await flushPromises();
     });
 
@@ -230,7 +230,7 @@ describe("Memory Browser Page", () => {
     await renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("Timeline exploded")).toBeInTheDocument();
+      expect(screen.getByText(/knowledge records could not be loaded/i)).toBeInTheDocument();
     });
   });
 });

@@ -59,13 +59,13 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/companies", label: "Companies", icon: Building2, section: "operate" },
   { href: "/overview", label: "Command Ops", icon: Gauge, section: "operate" },
-  { href: "/agents", label: "Departments", icon: BrainCircuit, section: "operate" },
+  { href: "/departments", label: "Departments", icon: BrainCircuit, section: "operate" },
   { href: "/tasks", label: "Activity", icon: Waypoints, section: "operate" },
-  { href: "/inbox", label: "Approvals", icon: BellRing, section: "operate" },
+  { href: "/approvals", label: "Approvals", icon: BellRing, section: "operate" },
   { href: "/memory", label: "Knowledge", icon: BookCopy, section: "operate" },
   { href: "/accounting", label: "Usage", icon: HandCoins, section: "operate" },
   { href: "/library", label: "Assets", icon: LibraryBig, section: "build" },
-  { href: "/workflows", label: "Advanced", icon: FolderTree, section: "build" },
+  { href: "/workflows", label: "Advanced operating models", icon: FolderTree, section: "build" },
   { href: "/settings", label: "Settings", icon: ShieldCheck, section: "build" },
 ];
 
@@ -88,10 +88,10 @@ const pageMeta = (pathname: string) => {
       description: "See company posture, active work, approvals, usage, and attention points from one command surface.",
     };
   }
-  if (pathname.startsWith("/agents")) {
+  if (pathname.startsWith("/agents") || pathname.startsWith("/departments")) {
     return {
       title: "Departments",
-      description: "Understand the departments and AI workers currently shaping company work.",
+      description: "Understand the departments currently shaping company work.",
     };
   }
   if (pathname.startsWith("/tasks")) {
@@ -149,7 +149,7 @@ const pageMeta = (pathname: string) => {
 };
 
 const isActivePath = (pathname: string, href: string) => {
-  if (href === "/inbox" && pathname.startsWith("/approvals")) return true;
+  if (href === "/approvals" && pathname.startsWith("/inbox")) return true;
   if (href === "/workflows" && pathname.startsWith("/graphs")) return true;
   if (href === "/settings" && pathname.startsWith("/admin")) return true;
   if (href === "/overview") return pathname === "/overview";
@@ -317,11 +317,17 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
 
   const items = navItems.map((item) => ({
     ...item,
-    badge: item.href === "/inbox" ? pendingDecisionCount : item.badge,
+    badge: item.href === "/approvals" ? pendingDecisionCount : item.badge,
   }));
 
   return (
     <div className="min-h-screen text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[1000] focus:rounded-full focus:bg-slate-950 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none dark:focus:bg-slate-100 dark:focus:text-slate-950"
+      >
+        Skip to main content
+      </a>
       <div className="fixed inset-0 -z-10 app-grid opacity-40" />
       <div className="flex min-h-screen">
         <aside className="hidden w-[18.5rem] shrink-0 border-r border-sidebar-border bg-sidebar/95 px-4 py-4 backdrop-blur-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:self-start lg:overflow-y-auto">
@@ -349,7 +355,8 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="mt-2 flex w-full items-center justify-between rounded-xl border border-sidebar-border bg-white/80 px-3 py-1.5 text-left text-sm dark:bg-white/5"
+                  aria-label={`Switch organization. Current organization: ${organizationLabel}`}
+                  className="mt-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-sidebar-border bg-white/80 px-3 py-2.5 text-left text-sm dark:bg-white/5"
                 >
                   <span className="truncate font-medium">{organizationLabel}</span>
                   {organizationsLoading ? (
@@ -413,7 +420,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                 <p className="px-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   {section === "operate" ? "Operate" : "Advanced"}
                 </p>
-                <nav className="mt-1.5 space-y-0.5">
+                <nav className="mt-1.5 space-y-0.5" aria-label={`${section} navigation`}>
                   {items
                     .filter((item) => item.section === section)
                     .map((item) => {
@@ -423,6 +430,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                         <Link
                           key={item.href}
                           href={item.href}
+                          aria-current={active ? "page" : undefined}
                           className={cn(
                             "flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm transition-colors",
                             active
@@ -474,8 +482,14 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
+                <label htmlFor="new-organization-name" className="text-sm font-medium text-foreground">
+                  Organization name
+                </label>
                 <Input
+                  id="new-organization-name"
                   autoFocus
+                  aria-describedby={createOrganizationError ? "new-organization-name-error" : undefined}
+                  autoComplete="organization"
                   value={newOrganizationName}
                   onChange={(event) => {
                     setNewOrganizationName(event.target.value);
@@ -483,7 +497,11 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                   }}
                   placeholder="Acme Operations"
                 />
-                {createOrganizationError ? <p className="text-sm text-destructive">{createOrganizationError}</p> : null}
+                {createOrganizationError ? (
+                  <p id="new-organization-name-error" role="alert" className="text-sm text-destructive">
+                    {createOrganizationError}
+                  </p>
+                ) : null}
               </div>
               <DialogFooter>
                 <Button
@@ -520,7 +538,8 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                          aria-label={`Switch organization. Current organization: ${organizationLabel}`}
+                          className="inline-flex min-h-11 max-w-[18rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
                         >
                           <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{organizationLabel}</span>
@@ -589,7 +608,8 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex max-w-[16rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                          aria-label={`Open account menu for ${user?.email ?? "account"}`}
+                          className="inline-flex min-h-11 max-w-[16rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
                         >
                           <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{user?.email ?? "Account"}</span>
@@ -614,7 +634,10 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                 </div>
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
+              <nav
+                aria-label="Mobile primary navigation"
+                className="grid grid-cols-2 gap-2 pb-1 sm:grid-cols-3 lg:hidden"
+              >
                 {items.map((item) => {
                   const Icon = item.icon;
                   const active = isActivePath(router.pathname, item.href);
@@ -622,24 +645,25 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                     <Link
                       key={item.href}
                       href={item.href}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm whitespace-nowrap",
+                        "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-3 py-2 text-center text-sm",
                         active
                           ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
                           : "border-slate-900/10 bg-white/75 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200",
                       )}
                     >
                       <Icon className="h-4 w-4" />
-                      {item.label}
+                      <span className="min-w-0 truncate">{item.label}</span>
                       {item.badge && item.badge > 0 ? <span>{item.badge}</span> : null}
                     </Link>
                   );
                 })}
-              </div>
+              </nav>
             </div>
           </header>
 
-          <main className="px-4 py-6 sm:px-6 lg:px-8">
+          <main id="main-content" tabIndex={-1} className="px-4 py-6 sm:px-6 lg:px-8">
             <div className={cn("mx-auto w-full max-w-[1680px]", mainClassName)}>{children}</div>
           </main>
         </div>

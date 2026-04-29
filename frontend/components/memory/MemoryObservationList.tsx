@@ -1,12 +1,12 @@
-import type { MemoryObservation } from "@/lib/api";
+import type { MemoryObservationVM } from "@/domain/repositories/memoryRepository";
 import { EmptyBlock, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
 import { Button, SearchInput, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 const SCOPE_OPTIONS = [
   { value: "all", label: "All scopes" },
-  { value: "graph", label: "Operating Model" },
-  { value: "run", label: "Operation" },
+  { value: "company", label: "Company" },
+  { value: "operation", label: "Operation" },
   { value: "session", label: "Session" },
 ] as const;
 
@@ -55,7 +55,7 @@ interface MemoryObservationListProps {
   availableTypes: string[];
   loading: boolean;
   modeLabel: string;
-  observations: MemoryObservation[];
+  observations: MemoryObservationVM[];
   queryDraft: string;
   selectedObservationId: string | null;
   typeFilter: string;
@@ -64,7 +64,7 @@ interface MemoryObservationListProps {
   onQuerySearch: (value: string) => void;
   onRefresh: () => void;
   onScopeChange: (value: string) => void;
-  onSelectObservation: (observation: MemoryObservation) => void;
+  onSelectObservation: (observation: MemoryObservationVM) => void;
   onTypeChange: (value: string) => void;
 }
 
@@ -93,8 +93,7 @@ export function MemoryObservationList({
           <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{modeLabel}</p>
           <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">Observation ledger</h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Search explicit memory records, skim recency, and pivot across operating-model, operation, or session
-            scopes.
+            Search explicit memory records, skim recency, and pivot across company, operation, or session scopes.
           </p>
         </div>
         <Button variant="outline" className="rounded-full" onClick={onRefresh} disabled={loading}>
@@ -190,7 +189,7 @@ export function MemoryObservationList({
                         <p className="text-sm font-semibold">{observation.title || "Untitled observation"}</p>
                         <StatusBadge status="pending" label={toLabelCase(observation.scope)} />
                         <StatusBadge
-                          status={observation.is_deleted ? "failed" : "active"}
+                          status={observation.isDeleted ? "failed" : "active"}
                           label={toLabelCase(observation.type)}
                         />
                       </div>
@@ -209,7 +208,7 @@ export function MemoryObservationList({
                         isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400",
                       )}
                     >
-                      {formatRelativeTime(observation.last_seen_at)}
+                      {formatRelativeTime(observation.lastSeenAt)}
                     </p>
                   </div>
 
@@ -219,9 +218,9 @@ export function MemoryObservationList({
                       isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400",
                     )}
                   >
-                    {observation.topic_key ? <span>Topic {observation.topic_key}</span> : null}
-                    {observation.tool_name ? <span>Tool {observation.tool_name}</span> : null}
-                    <span>Recorded {formatDateTime(observation.created_at)}</span>
+                    {observation.topic ? <span>Topic {observation.topic}</span> : null}
+                    {observation.toolName ? <span>Tool {observation.toolName}</span> : null}
+                    <span>Recorded {formatDateTime(observation.createdAt)}</span>
                   </div>
                 </div>
               </button>

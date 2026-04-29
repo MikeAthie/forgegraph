@@ -6,7 +6,7 @@ This document defines autonomy and AI access as product policies.
 
 Autonomy is not only a UI preference.
 
-Autonomy is an execution policy that controls when work can proceed automatically, when approvals are required, and what operating limits apply.
+Autonomy is an operation policy that controls when work can proceed automatically, when approvals are required, and what operating limits apply.
 
 The backend must remain authoritative for the resulting durable state, approvals, liveness, and recovery decisions.
 
@@ -14,7 +14,7 @@ The backend must remain authoritative for the resulting durable state, approvals
 
 ## Manual
 
-Nothing runs without explicit user approval.
+Nothing starts without explicit user approval.
 
 Characteristics:
 
@@ -37,7 +37,7 @@ Characteristics:
 
 ## Autonomous
 
-The system runs continuously within budget and safety limits.
+The company operates continuously within budget and safety limits.
 
 Characteristics:
 
@@ -57,7 +57,7 @@ It should define:
 - budget ceilings
 - tool access boundaries
 - time or volume limits
-- allowed unattended execution windows
+- allowed unattended operating windows
 
 ## UX Requirements
 

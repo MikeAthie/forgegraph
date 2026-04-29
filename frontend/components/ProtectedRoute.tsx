@@ -16,10 +16,10 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background" aria-live="polite">
         <div className="flex flex-col items-center space-y-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <Spinner size="lg" label="Loading workspace" />
+          <p className="text-sm text-muted-foreground">Loading workspace...</p>
         </div>
       </div>
     );
@@ -27,10 +27,10 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background" aria-live="polite">
         <div className="flex flex-col items-center space-y-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-muted-foreground">Redirecting to login...</p>
+          <Spinner size="lg" label="Redirecting to sign in" />
+          <p className="text-sm text-muted-foreground">Redirecting to sign in...</p>
         </div>
       </div>
     );
