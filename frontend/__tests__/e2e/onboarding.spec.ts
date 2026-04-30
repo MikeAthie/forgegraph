@@ -137,7 +137,7 @@ test.describe("Create and launch company", () => {
     await page.getByTestId("company-operation-brief-input").fill(operationBrief);
 
     await page.getByTestId("company-create-submit").click();
-    await page.waitForURL(/\/companies\/[a-f0-9-]+$/, { timeout: 20_000 });
+    await page.waitForURL(/\/companies\/[a-f0-9-]+(?:\?quest=1)?#command-ops$/, { timeout: 20_000 });
 
     expect(createdGraphPayload).toMatchObject({
       name: "Northstar Operating Co.",
@@ -163,6 +163,27 @@ test.describe("Create and launch company", () => {
     ).toBe(operationBrief);
 
     await expect(page.getByRole("heading", { name: /northstar operating co\./i }).first()).toBeVisible();
+    await expect(page.getByText(/we opened command ops/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /open command ops/i })).toBeVisible();
+    await expect(page.getByTestId("command-ops-panel")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^command ops$/i })).toBeVisible();
+    await expect(page.getByTestId("command-ops-system-message")).toContainText(
+      /i'm managing this company\. tell me what you want to achieve/i,
+    );
+    const commandOpsInput = page.getByTestId("operating-brief-input");
+    await expect(commandOpsInput).toBeVisible();
+    await expect(commandOpsInput).toBeFocused();
+    await expect(commandOpsInput).toHaveAttribute("placeholder", /Build a lead generation system/);
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByRole("button", { name: /open command ops/i }).click();
+    await expect(commandOpsInput).toBeFocused();
+
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/companies\/[a-f0-9-]+(?:\?quest=1)?#command-ops$/);
+    await expect(page.getByTestId("operating-brief-input")).toBeFocused();
+
     await expect(page.getByRole("heading", { name: /^operations$/i })).toBeVisible();
     await expect(page.getByText(/^operation 11111111/i)).toBeVisible();
     await expect(page.getByText(/current department:/i)).toBeVisible();
@@ -171,7 +192,7 @@ test.describe("Create and launch company", () => {
     await expect(
       page.getByText(/handed work forward|deliverable will appear once this operation finishes/i).first(),
     ).toBeVisible();
-    await expect(page.getByText(/show internal identifiers/i)).toBeVisible();
+    await expect(page.getByText(/show support identifiers/i)).toBeVisible();
     await expect(page.getByText(/graph id:/i)).not.toBeVisible();
     await expect(page.getByText(/version id:/i)).not.toBeVisible();
     await expect(page.getByText(/run id/i)).not.toBeVisible();

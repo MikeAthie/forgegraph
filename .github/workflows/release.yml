@@ -44,7 +44,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23.0"
+          go-version: "1.25.9"
           cache: true
 
       - uses: actions/setup-node@v4
@@ -54,13 +54,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Python audit tooling
-        run: python -m pip install --upgrade pip uv pip-audit
+        run: python -m pip install --upgrade pip uv
 
       - name: Backend dependency audit
         working-directory: backend
         run: |
-          python -m uv sync --dev
-          python -m uv run pip-audit
+          python -m uv sync --frozen --dev
+          python -m uv run --with pip-audit pip-audit
 
       - name: Engine dependency audit
         working-directory: engine
@@ -115,12 +115,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build and publish ${{ matrix.component }}
+      - name: Build ${{ matrix.component }} image
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          push: true
+          load: true
+          push: false
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.RELEASE_FRONTEND_API_URL }}
           tags: |
@@ -141,6 +142,11 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: "1"
+
+      - name: Publish ${{ matrix.component }} image
+        run: |
+          docker push "ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}"
+          docker push "ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.branch_tag }}"
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
@@ -198,6 +204,8 @@ jobs:
       ENGINE_PORT: "50051"
       READINESS_REQUIRE_ENGINE: "true"
       FORGEGRAPH_STRICT_RUNTIME_ENV: "true"
+      RUN_QUEUE_ENABLED: "true"
+      API_PROXY_TARGET: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v5
         with:
@@ -234,7 +242,7 @@ jobs:
             -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
             -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
             -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
-            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE -e RUN_QUEUE_ENABLED \
             "${BACKEND_IMAGE}"
 
       - name: Start engine
@@ -247,7 +255,9 @@ jobs:
 
       - name: Start frontend
         run: |
-          docker run -d --name forgegraph-frontend --network host "${FRONTEND_IMAGE}"
+          docker run -d --name forgegraph-frontend --network host \
+            -e API_PROXY_TARGET \
+            "${FRONTEND_IMAGE}"
 
       - name: Smoke release contract
         run: |

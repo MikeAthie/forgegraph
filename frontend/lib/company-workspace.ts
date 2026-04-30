@@ -1,5 +1,5 @@
 import { END_NODE_ID, NODE_TYPES, START_NODE_ID, type GraphJson } from "./graph-types";
-import type { GraphDetail, GraphListItem, NodeRunItem, RunDetail, RunListItem } from "./api";
+import type { GraphDetail, GraphListItem, NodeRunItem, OperatingBrief, RunDetail, RunListItem } from "./api";
 
 export type CompanyAutonomyMode = "manual" | "assisted" | "autonomous";
 export type CompanyAIAccessMode = "managed" | "byok";
@@ -599,8 +599,12 @@ export function buildCompanyGraphJson(profile: CompanyProfile): GraphJson {
   };
 }
 
-export function buildOperationInput(profile: CompanyProfile, operationBrief: string): Record<string, unknown> {
-  return {
+export function buildOperationInput(
+  profile: CompanyProfile,
+  operationBrief: string,
+  operatingBrief?: OperatingBrief | null,
+): Record<string, unknown> {
+  const input: Record<string, unknown> = {
     company_name: profile.companyName,
     company_type: profile.companyType,
     objective: profile.objective,
@@ -609,6 +613,10 @@ export function buildOperationInput(profile: CompanyProfile, operationBrief: str
     operation_brief: operationBrief.trim() || profile.objective,
     departments: profile.departments.map((department) => department.label),
   };
+  if (operatingBrief) {
+    input.operating_brief = operatingBrief;
+  }
+  return input;
 }
 
 export function translateRunStatus(status: string): "queued" | "running" | "completed" | "failed" | "paused" {

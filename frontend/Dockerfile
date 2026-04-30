@@ -1,11 +1,11 @@
-FROM node:20.19.5-alpine3.21 AS deps
+FROM node:20.19.5-alpine3.22 AS deps
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-FROM node:20.19.5-alpine3.21 AS builder
+FROM node:20.19.5-alpine3.22 AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build && npm prune --omit=dev
 
-FROM node:20.19.5-alpine3.21 AS runner
+FROM node:20.19.5-alpine3.22 AS runner
 
 WORKDIR /app
 

@@ -463,6 +463,7 @@ class TelegramWebhookView(APIView):
                 run=run,
                 graph_json=prepared_graph,
             )
+            prepared_graph = run_views._attach_operation_context_pack(run, prepared_graph)
         except ToolExecutionDispatchBlocked as exc:
             run.status = "failed"
             run.ended_at = timezone.now()
@@ -530,7 +531,9 @@ class TelegramWebhookView(APIView):
                     engine.start_run(
                         run_id=run.id,
                         graph_json=prepared_graph,
-                        input_json=input_json,
+                        input_json=run.input_json
+                        if isinstance(run.input_json, dict)
+                        else input_json,
                         memory_config_json=memory_config_json,
                         tenant_id=tenant_id,
                         session_id=session_id,

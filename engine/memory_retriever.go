@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,7 +59,7 @@ func (r *GrpcMemoryRetriever) Retrieve(ctx context.Context, request port.MemoryR
 		return port.MemoryRetrieveResponse{}, err
 	}
 	if resp.Error != "" {
-		return port.MemoryRetrieveResponse{}, fmt.Errorf(resp.Error)
+		return port.MemoryRetrieveResponse{}, errors.New(resp.Error)
 	}
 
 	chunks := make([]port.MemoryChunk, 0, len(resp.Chunks))
@@ -109,7 +110,7 @@ func (r *GrpcMemoryRetriever) SaveObservation(ctx context.Context, request port.
 		return port.Observation{}, err
 	}
 	if resp.GetError() != "" {
-		return port.Observation{}, fmt.Errorf(resp.GetError())
+		return port.Observation{}, errors.New(resp.GetError())
 	}
 	if resp.GetObservation() == nil {
 		return port.Observation{}, fmt.Errorf("memory service returned no observation")
@@ -139,7 +140,7 @@ func (r *GrpcMemoryRetriever) SearchObservations(ctx context.Context, request po
 		return nil, err
 	}
 	if resp.GetError() != "" {
-		return nil, fmt.Errorf(resp.GetError())
+		return nil, errors.New(resp.GetError())
 	}
 	return observationsFromProto(resp.GetObservations()), nil
 }
@@ -162,7 +163,7 @@ func (r *GrpcMemoryRetriever) GetContext(ctx context.Context, request port.Obser
 		return port.ObservationContextResponse{}, err
 	}
 	if resp.GetError() != "" {
-		return port.ObservationContextResponse{}, fmt.Errorf(resp.GetError())
+		return port.ObservationContextResponse{}, errors.New(resp.GetError())
 	}
 	return port.ObservationContextResponse{
 		Observations: observationsFromProto(resp.GetObservations()),
@@ -190,7 +191,7 @@ func (r *GrpcMemoryRetriever) GetTimeline(ctx context.Context, request port.Obse
 		return nil, err
 	}
 	if resp.GetError() != "" {
-		return nil, fmt.Errorf(resp.GetError())
+		return nil, errors.New(resp.GetError())
 	}
 	return observationsFromProto(resp.GetObservations()), nil
 }

@@ -139,6 +139,10 @@ const API_PATHS = {
   integrations: {
     httpTest: "/api/integrations/http/test",
   },
+  interaction: {
+    currentBrief: "/api/interaction/briefs/current",
+    events: "/api/interaction/events",
+  },
   runs: {
     list: "/api/runs/",
     detail: (runId: string) => `/api/runs/${runId}`,
@@ -1273,6 +1277,115 @@ export const onboardingApi = {
   },
 };
 
+export type PMAction = "EXECUTE" | "ASK_CLARIFICATION" | "ASSUME_AND_CONTINUE" | "BLOCK";
+
+export type InteractionEventType =
+  | "CREATE"
+  | "MODIFY"
+  | "CLARIFY"
+  | "CONSTRAINT"
+  | "PRIORITY_SHIFT"
+  | "APPROVE"
+  | "OVERRIDE";
+
+export type PriorityFrame = {
+  speed: number;
+  cost: number;
+  quality: number;
+  risk: number;
+};
+
+export type OperatingBriefAssumption = {
+  field: string;
+  value: unknown;
+  confidence: number;
+  created_at: string;
+};
+
+export type OperatingBriefClarification = {
+  question: string;
+  blocking: boolean;
+  related_field: string;
+};
+
+export type OperatingBrief = {
+  id: string | null;
+  organization_id: string | null;
+  company_id: string | null;
+  operation_id: string | null;
+  objective: string | null;
+  deliverable: string | null;
+  constraints: string[];
+  success_criteria: string[];
+  stakeholders: string[];
+  dependencies: string[];
+  assumptions: OperatingBriefAssumption[];
+  clarifications: OperatingBriefClarification[];
+  priority_frame: PriorityFrame;
+  autonomy_mode: "manual" | "assisted" | "autonomous" | string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type InteractionEvent = {
+  id: string;
+  brief_id: string;
+  company_id: string;
+  operation_id: string | null;
+  sequence: number;
+  type: InteractionEventType;
+  actor: "user" | "system" | string;
+  timestamp: string;
+  raw_input: string;
+  delta: Record<string, unknown>;
+  affected_fields: string[];
+  interpretation: Record<string, unknown>;
+  pm_action: PMAction | string;
+  plan_implications: InteractionPlanImplications;
+  created_at: string;
+};
+
+export type InteractionPlanImplications = {
+  execution_ready: boolean;
+  requires_plan_revision: boolean;
+  active_operation_id: string | null;
+  should_interrupt_active_operation: boolean;
+  affected_fields: string[];
+  blocking_clarifications: OperatingBriefClarification[];
+  summary: string;
+};
+
+export type InteractionInterpretation = {
+  intent_classification: InteractionEventType;
+  affected_fields: string[];
+  confidence: number;
+  rationale: string;
+};
+
+export type InteractionPMAction = {
+  action: PMAction;
+  rationale: string;
+};
+
+export type CurrentOperatingBriefResponse = {
+  brief: OperatingBrief;
+};
+
+export type InteractionEventResponse = {
+  brief: OperatingBrief;
+  event: InteractionEvent;
+  interpretation: InteractionInterpretation;
+  pm_action: InteractionPMAction;
+  plan_implications: InteractionPlanImplications;
+};
+
+export type InteractionEventInput = {
+  company_id: string;
+  operation_id?: string | null;
+  brief_id?: string | null;
+  input: string;
+};
+
 export type RunStatus = "pending" | "running" | "paused" | "succeeded" | "failed" | "canceled" | string;
 
 export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | string;
@@ -1750,6 +1863,26 @@ export const runsApi = {
 
   replay: async (runId: string, input?: ReplayRunInput): Promise<RunDetail> => {
     const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.replay(runId), input ?? {});
+    return response.data.data;
+  },
+};
+
+export const interactionApi = {
+  getCurrentBrief: async (companyId: string, operationId?: string | null): Promise<OperatingBrief> => {
+    const response = await api.get<ApiSuccessResponse<CurrentOperatingBriefResponse>>(
+      API_PATHS.interaction.currentBrief,
+      {
+        params: {
+          company_id: companyId,
+          ...(operationId ? { operation_id: operationId } : {}),
+        },
+      },
+    );
+    return response.data.data.brief;
+  },
+
+  submitEvent: async (input: InteractionEventInput): Promise<InteractionEventResponse> => {
+    const response = await api.post<ApiSuccessResponse<InteractionEventResponse>>(API_PATHS.interaction.events, input);
     return response.data.data;
   },
 };

@@ -46,7 +46,7 @@ export const operationRepository = {
       llm_mode: input.aiAccessMode,
       provider: profile.intelligenceProvider,
       credential_id: profile.byokCredentialId ?? undefined,
-      input_json: buildOperationInput(profile, input.operationBrief),
+      input_json: buildOperationInput(profile, input.operationBrief, input.operatingBrief),
     });
     return toOperationVM(operation);
   },

@@ -1,5 +1,6 @@
 import {
   buildCompanyGraphJson,
+  buildOperationInput,
   buildCompanyProfile,
   getCompanyProfileFromGraph,
   getCurrentDepartmentLabel,
@@ -23,6 +24,38 @@ describe("company-workspace helpers", () => {
     expect(graphJson.nodes.some((node) => node.type === "output")).toBe(true);
     expect(graphJson.nodes.filter((node) => node.type === "agent")).toHaveLength(profile.departments.length);
     expect(graphJson.edges.some((edge) => edge.from === "START")).toBe(true);
+  });
+
+  it("attaches the operating brief to launched operation input", () => {
+    const profile = buildCompanyProfile({
+      companyName: "Northstar Growth Co.",
+      objective: "Launch a repeatable growth program.",
+    });
+
+    const input = buildOperationInput(profile, "Start the next growth cycle.", {
+      id: "brief-1",
+      organization_id: "org-1",
+      company_id: "company-1",
+      operation_id: null,
+      objective: "Build a lead gen system",
+      deliverable: "Lead gen system",
+      constraints: ["Cannot use paid ads"],
+      success_criteria: [],
+      stakeholders: ["Enterprise clients"],
+      dependencies: [],
+      assumptions: [],
+      clarifications: [],
+      priority_frame: { speed: 0.9, cost: 0.3, quality: 0.5, risk: 0.5 },
+      autonomy_mode: "assisted",
+      created_at: "2026-04-26T12:00:00.000Z",
+      updated_at: "2026-04-26T12:00:00.000Z",
+    });
+
+    expect(input.operating_brief).toMatchObject({
+      objective: "Build a lead gen system",
+      constraints: ["Cannot use paid ads"],
+      stakeholders: ["Enterprise clients"],
+    });
   });
 
   it("reads company metadata first and falls back to graph information for legacy models", () => {

@@ -4,6 +4,17 @@
 # No framework dependencies allowed.
 
 from domain.entities.graph import Graph, GraphVersion
+from domain.entities.interaction import (
+    AssumptionItem,
+    AutonomyMode,
+    ClarificationItem,
+    InteractionActor,
+    InteractionEvent,
+    InteractionEventType,
+    OperatingBrief,
+    PriorityFrame,
+    ProjectManagerAction,
+)
 from domain.entities.memory_chunk import MemoryChunkEntity
 from domain.entities.memory_config import MemoryConfigEntity
 from domain.entities.memory_session import MemorySessionEntity
@@ -16,6 +27,15 @@ __all__ = [
     "User",
     "Graph",
     "GraphVersion",
+    "AssumptionItem",
+    "AutonomyMode",
+    "ClarificationItem",
+    "InteractionActor",
+    "InteractionEvent",
+    "InteractionEventType",
+    "OperatingBrief",
+    "PriorityFrame",
+    "ProjectManagerAction",
     "MemoryChunkEntity",
     "MemoryConfigEntity",
     "MemorySessionEntity",

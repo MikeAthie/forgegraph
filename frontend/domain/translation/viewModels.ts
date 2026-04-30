@@ -1,4 +1,4 @@
-import type { RunMemoryActivitySummary, RunLLMAccess } from "@/lib/api";
+import type { OperatingBrief, RunMemoryActivitySummary, RunLLMAccess } from "@/lib/api";
 import type {
   CompanyAIAccessMode,
   CompanyAutonomyMode,
@@ -154,6 +154,7 @@ export type OperationLaunchInputVM = {
   autonomyMode: CompanyAutonomyMode;
   aiAccessMode: CompanyAIAccessMode;
   operationBrief: string;
+  operatingBrief?: OperatingBrief | null;
 };
 
 export type OperationRefVM = {

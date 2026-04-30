@@ -44,21 +44,29 @@ test.describe("Company workspace UX", () => {
           llmMode: "managed",
         },
       ],
-      onStart: (input, currentState) => ({
-        id: "22222222-2222-4222-8222-222222222222",
-        status: "succeeded",
-        startedAt: "2026-04-26T10:00:00.000Z",
-        endedAt: "2026-04-26T10:03:00.000Z",
-        operationBrief: String(
-          input.input_json && typeof input.input_json === "object"
-            ? ((input.input_json as Record<string, unknown>).operation_brief ?? "Run the next company operation.")
-            : "Run the next company operation.",
-        ),
-        deliverable:
-          "Deliverable: refreshed follow-up queue, customer-ready summary, and a concise operating memo for the next cycle.",
-        currentNodeId: currentState.graphVersion.graph_json.nodes[0]?.id ?? null,
-        llmMode: "managed",
-      }),
+      onStart: (input, currentState) => {
+        const inputJson =
+          input.input_json && typeof input.input_json === "object" ? (input.input_json as Record<string, unknown>) : {};
+        const operatingBrief =
+          inputJson.operating_brief && typeof inputJson.operating_brief === "object"
+            ? (inputJson.operating_brief as Record<string, unknown>)
+            : {};
+        const stakeholders = Array.isArray(operatingBrief.stakeholders) ? operatingBrief.stakeholders : [];
+        const hasEnterpriseTarget = stakeholders.includes("Enterprise clients");
+
+        return {
+          id: "22222222-2222-4222-8222-222222222222",
+          status: "succeeded",
+          startedAt: "2026-04-26T10:00:00.000Z",
+          endedAt: "2026-04-26T10:03:00.000Z",
+          operationBrief: String(inputJson.operation_brief ?? "Run the next company operation."),
+          deliverable: hasEnterpriseTarget
+            ? "Deliverable: refreshed follow-up queue with the enterprise-client operating brief attached."
+            : "Deliverable: refreshed follow-up queue, customer-ready summary, and a concise operating memo for the next cycle.",
+          currentNodeId: currentState.graphVersion.graph_json.nodes[0]?.id ?? null,
+          llmMode: "managed",
+        };
+      },
     };
 
     await installCompanyWorkspaceMocks(page, state);
@@ -81,6 +89,22 @@ test.describe("Company workspace UX", () => {
         .first(),
     ).toBeVisible();
     await expect(page.getByText(/^stable$/i).first()).toBeVisible();
+    await expect(page.getByTestId("operating-brief-panel")).toBeVisible();
+
+    await page.getByTestId("operating-brief-input").fill("Actually target enterprise clients");
+    await page.getByTestId("operating-brief-submit-button").click();
+
+    await expect(page.getByText(/^enterprise clients$/i)).toBeVisible();
+    const pmResponse = page.getByTestId("command-ops-response-card");
+    await expect(pmResponse).toBeVisible();
+    await expect(pmResponse).toContainText(/i understand the objective as/i);
+    await expect(pmResponse).toContainText(/keep follow-up moving/i);
+    await expect(pmResponse).toContainText(/interpreted as/i);
+    await expect(pmResponse).toContainText(/before i proceed/i);
+    await expect(pmResponse).toContainText(/which channels are allowed or off-limits/i);
+    await expect(pmResponse.getByTestId("command-ops-response-next-step")).toContainText(
+      /recorded assumptions and can start a draft plan/i,
+    );
 
     await page
       .getByTestId("company-launch-operation-input")
@@ -89,9 +113,7 @@ test.describe("Company workspace UX", () => {
 
     await expect(
       page
-        .getByText(
-          /deliverable: refreshed follow-up queue, customer-ready summary, and a concise operating memo for the next cycle\./i,
-        )
+        .getByText(/deliverable: refreshed follow-up queue with the enterprise-client operating brief attached\./i)
         .first(),
     ).toBeVisible();
     await expect(page.getByText(/^operation 22222222/i)).toBeVisible();
@@ -221,14 +243,14 @@ test.describe("Company workspace UX", () => {
     await openBackendAuthenticatedPage(page, request, user, `/companies/${seed.companyId}`);
 
     await expect(page.getByText(/intelligence provider timed out/i)).toBeVisible();
-    await expect(page.getByText(/stopped because the intelligence provider did not answer in time/i)).toBeVisible();
+    await expect(page.getByText(/a department waited too long for an ai response/i)).toBeVisible();
     await expect(page.getByText(new RegExp(failedDepartmentLabel, "i")).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /^retry$/i })).toBeVisible();
     await expect(page.getByTestId("company-update-objective-button")).toBeVisible();
-    await expect(page.getByText(/technical details/i)).toBeVisible();
+    await expect(page.getByText(/support details/i)).toBeVisible();
     await expect(page.getByText(/llm timeout while waiting for provider response/i)).not.toBeVisible();
 
-    await page.getByText(/technical details/i).click();
+    await page.getByText(/support details/i).click();
 
     await expect(
       page.getByText(/llm timeout while waiting for provider response from the research synthesis step\./i),

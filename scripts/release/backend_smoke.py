@@ -7,7 +7,6 @@ import http.cookiejar
 import json
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 import uuid
 
@@ -32,6 +31,8 @@ def _request(
             return response.status, response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        return 0, str(exc.reason)
 
 
 def _wait_for_ok(url: str, *, opener: urllib.request.OpenerDirector, retries: int = 30) -> None:
@@ -45,21 +46,37 @@ def _wait_for_ok(url: str, *, opener: urllib.request.OpenerDirector, retries: in
     raise SystemExit(f"Smoke check failed for {url}: status={last_status}, body={last_body}")
 
 
-def _signed_callback_test(
+def _json_body(body: str, *, context: str) -> dict[str, object]:
+    try:
+        payload = json.loads(body or "{}")
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{context} returned invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"{context} returned a non-object JSON payload.")
+    return payload
+
+
+def _wrapped_data(body: str, *, context: str) -> dict[str, object]:
+    payload = _json_body(body, context=context)
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise SystemExit(f"{context} response is missing a data object.")
+    return data
+
+
+def _auth_headers(access_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+def _post_signed_callback(
     opener: urllib.request.OpenerDirector,
     *,
-    backend_url: str,
+    callback_url: str,
     callback_secret: str,
-) -> None:
-    callback_url = backend_url.rstrip("/") + "/api/runs/engine-events"
-    payload = {
-        "event_id": f"smoke-{uuid.uuid4()}",
-        "type": "run_started",
-        "run_id": str(uuid.uuid4()),
-        "tenant_id": str(uuid.uuid4()),
-    }
-    raw_body = json.dumps(payload).encode("utf-8")
-    timestamp_ms = str(int(time.time() * 1000))
+    payload: dict[str, object],
+) -> tuple[int, str]:
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    timestamp_ms = str(payload.get("timestamp") or int(time.time() * 1000))
     signature = hmac.new(
         callback_secret.encode("utf-8"),
         f"{timestamp_ms}.".encode("utf-8") + raw_body,
@@ -77,28 +94,78 @@ def _signed_callback_test(
     )
     try:
         with opener.open(request, timeout=15) as response:
-            status_code = response.status
+            return response.status, response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        status_code = exc.code
-    if status_code in {401, 403}:
-        raise SystemExit("Signed engine callback smoke check failed with unauthorized response.")
+        return exc.code, exc.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        return 0, str(exc.reason)
 
 
-def _authenticated_api_smoke(opener: urllib.request.OpenerDirector, *, backend_url: str) -> None:
+def _signed_callback_test(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    callback_secret: str,
+    run_id: str,
+    tenant_id: str,
+) -> None:
+    callback_url = backend_url.rstrip("/") + "/api/runs/engine-events"
+    payload = {
+        "event_id": f"smoke-{uuid.uuid4()}",
+        "type": "run_started",
+        "category": "state",
+        "run_id": run_id,
+        "tenant_id": tenant_id,
+        "timestamp": int(time.time() * 1000),
+    }
+    status_code, body = _post_signed_callback(
+        opener,
+        callback_url=callback_url,
+        callback_secret=callback_secret,
+        payload=payload,
+    )
+    if status_code != 200:
+        raise SystemExit(
+            "Signed engine callback smoke check failed: "
+            f"status={status_code}, body={body}"
+        )
+
+    status_code, body = _post_signed_callback(
+        opener,
+        callback_url=callback_url,
+        callback_secret=callback_secret,
+        payload=payload,
+    )
+    if status_code != 200:
+        raise SystemExit(
+            "Duplicate signed callback smoke check failed: "
+            f"status={status_code}, body={body}"
+        )
+    duplicate_payload = _wrapped_data(body, context="Duplicate callback smoke")
+    if duplicate_payload.get("duplicate") is not True:
+        raise SystemExit(f"Duplicate signed callback smoke check failed: body={body}")
+
+
+def _authenticated_api_smoke(
+    opener: urllib.request.OpenerDirector, *, backend_url: str
+) -> tuple[str, str]:
     email = f"smoke-{uuid.uuid4()}@example.com"
     password = "SmokePass!234"
     register_url = backend_url.rstrip("/") + "/api/auth/register"
     login_url = backend_url.rstrip("/") + "/api/auth/login"
     me_url = backend_url.rstrip("/") + "/api/auth/me"
+    org_me_url = backend_url.rstrip("/") + "/api/orgs/me"
 
-    status_code, _ = _request(
+    status_code, body = _request(
         opener,
         register_url,
         method="POST",
         data={"email": email, "password": password},
     )
     if status_code != 201:
-        raise SystemExit(f"Registration smoke check failed: status={status_code}")
+        raise SystemExit(f"Registration smoke check failed: status={status_code}, body={body}")
+    register_payload = _json_body(body, context="Registration smoke")
+    tenant_id = str(register_payload.get("default_organization_id") or "")
 
     status_code, body = _request(
         opener,
@@ -107,19 +174,99 @@ def _authenticated_api_smoke(opener: urllib.request.OpenerDirector, *, backend_u
         data={"email": email, "password": password},
     )
     if status_code != 200:
-        raise SystemExit(f"Login smoke check failed: status={status_code}")
-    login_payload = json.loads(body)
+        raise SystemExit(f"Login smoke check failed: status={status_code}, body={body}")
+    login_payload = _json_body(body, context="Login smoke")
     access_token = str(login_payload.get("access") or "")
     if not access_token:
         raise SystemExit("Login smoke check failed: missing access token.")
 
-    status_code, _ = _request(
+    status_code, body = _request(
         opener,
         me_url,
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers=_auth_headers(access_token),
     )
     if status_code != 200:
-        raise SystemExit(f"Authenticated API smoke check failed: status={status_code}")
+        raise SystemExit(
+            f"Authenticated API smoke check failed: status={status_code}, body={body}"
+        )
+    me_payload = _json_body(body, context="Authenticated API smoke")
+    tenant_id = str(me_payload.get("default_organization_id") or tenant_id)
+
+    status_code, body = _request(
+        opener,
+        org_me_url,
+        headers=_auth_headers(access_token),
+    )
+    if status_code == 200:
+        org_data = _wrapped_data(body, context="Organization API smoke")
+        organization = org_data.get("organization")
+        if isinstance(organization, dict):
+            tenant_id = str(organization.get("id") or tenant_id)
+
+    if not tenant_id:
+        raise SystemExit("Authenticated API smoke check failed: missing tenant id.")
+
+    return access_token, tenant_id
+
+
+def _create_smoke_run(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+) -> str:
+    headers = _auth_headers(access_token)
+    graph_url = backend_url.rstrip("/") + "/api/graphs/"
+
+    status_code, body = _request(
+        opener,
+        graph_url,
+        method="POST",
+        data={
+            "name": f"Release smoke {uuid.uuid4()}",
+            "description": "Release contract smoke graph",
+        },
+        headers=headers,
+    )
+    if status_code != 201:
+        raise SystemExit(f"Graph smoke check failed: status={status_code}, body={body}")
+    graph_data = _wrapped_data(body, context="Graph smoke")
+    graph_id = str(graph_data.get("id") or "")
+    if not graph_id:
+        raise SystemExit(f"Graph smoke check failed: missing graph id, body={body}")
+
+    graph_json = {
+        "nodes": [{"id": "output-1", "type": "output", "name": "Output", "config": {}}],
+        "edges": [{"id": "edge-1", "from": "START", "to": "output-1"}],
+    }
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + f"/api/graphs/{graph_id}/versions",
+        method="POST",
+        data={"graph_json": graph_json},
+        headers=headers,
+    )
+    if status_code != 201:
+        raise SystemExit(f"Graph version smoke check failed: status={status_code}, body={body}")
+    version_data = _wrapped_data(body, context="Graph version smoke")
+    graph_version_id = str(version_data.get("id") or "")
+    if not graph_version_id:
+        raise SystemExit(f"Graph version smoke check failed: missing version id, body={body}")
+
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + "/api/runs/start",
+        method="POST",
+        data={"graph_version_id": graph_version_id, "input_json": {"release_smoke": True}},
+        headers=headers,
+    )
+    if status_code != 201:
+        raise SystemExit(f"Run start smoke check failed: status={status_code}, body={body}")
+    run_data = _wrapped_data(body, context="Run start smoke")
+    run_id = str(run_data.get("id") or "")
+    if not run_id:
+        raise SystemExit(f"Run start smoke check failed: missing run id, body={body}")
+    return run_id
 
 
 def main() -> None:
@@ -133,11 +280,13 @@ def main() -> None:
     parser.add_argument("--skip-callback", action="store_true")
     args = parser.parse_args()
 
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+    )
 
     _wait_for_ok(args.backend_url.rstrip("/") + "/health", opener=opener)
     _wait_for_ok(args.backend_url.rstrip("/") + "/ready", opener=opener)
-    _authenticated_api_smoke(opener, backend_url=args.backend_url)
+    access_token, tenant_id = _authenticated_api_smoke(opener, backend_url=args.backend_url)
 
     if not args.skip_engine and args.engine_url:
         _wait_for_ok(args.engine_url.rstrip("/") + "/ready", opener=opener)
@@ -147,13 +296,24 @@ def main() -> None:
 
     if not args.skip_frontend and args.frontend_url:
         _wait_for_ok(args.frontend_url.rstrip("/") + "/", opener=opener)
+        _wait_for_ok(args.frontend_url.rstrip("/") + "/api/health/ready", opener=opener)
 
     if not args.skip_callback:
         if not args.callback_secret:
             raise SystemExit("--callback-secret is required unless --skip-callback is set.")
-        _signed_callback_test(opener, backend_url=args.backend_url, callback_secret=args.callback_secret)
+        run_id = _create_smoke_run(
+            opener,
+            backend_url=args.backend_url,
+            access_token=access_token,
+        )
+        _signed_callback_test(
+            opener,
+            backend_url=args.backend_url,
+            callback_secret=args.callback_secret,
+            run_id=run_id,
+            tenant_id=tenant_id,
+        )
 
 
 if __name__ == "__main__":
     main()
-
