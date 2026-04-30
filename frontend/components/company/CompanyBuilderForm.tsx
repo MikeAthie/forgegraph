@@ -233,6 +233,28 @@ function getExpectedDeliverablePreview(objective: string) {
   ];
 }
 
+function getCommandOpsHref(companyId: string, startQuest: boolean) {
+  return `/companies/${companyId}${startQuest ? "?quest=1" : ""}#command-ops`;
+}
+
+function focusCommandOpsInput() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const target = document.getElementById("command-ops");
+  const input = document.querySelector<HTMLTextAreaElement>('[data-testid="operating-brief-input"]');
+  if (!target || !input) {
+    return false;
+  }
+
+  target.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
+  window.setTimeout(() => {
+    input.focus({ preventScroll: true });
+  }, 80);
+  return true;
+}
+
 function BuilderCompanyMap({
   companyName,
   companyType,
@@ -532,24 +554,39 @@ export function CompanyBuilderForm() {
         launchFirstOperation,
         byokApiKey,
       });
+      const startQuest = launchFirstOperation && questModeEnabled;
+      const commandOpsHref = getCommandOpsHref(created.companyId, startQuest);
+      const openCommandOps = () => {
+        if (typeof window !== "undefined" && window.location.pathname === `/companies/${created.companyId}`) {
+          if (window.location.hash !== "#command-ops") {
+            window.history.replaceState(null, "", commandOpsHref);
+          }
+          if (focusCommandOpsInput()) {
+            return;
+          }
+        }
+        void router.push(commandOpsHref);
+      };
 
       if (launchFirstOperation && created.firstOperation) {
-        showSuccess("Company launched", "Your first operation is now active.");
+        showSuccess("Company launched", "We opened Command Ops. Use the Operating Brief there to steer the company.", {
+          action: {
+            label: "Open Command Ops",
+            onClick: openCommandOps,
+          },
+          duration: 12000,
+        });
       } else {
-        showSuccess("Company created", "The company shell is ready. Launch the first operation when you are ready.");
+        showSuccess("Company created", "We opened Command Ops. Start the first operation from that panel.", {
+          action: {
+            label: "Open Command Ops",
+            onClick: openCommandOps,
+          },
+          duration: 12000,
+        });
       }
 
-      const nextQuery =
-        launchFirstOperation && questModeEnabled
-          ? {
-              quest: "1",
-            }
-          : undefined;
-
-      await router.push({
-        pathname: `/companies/${created.companyId}`,
-        query: nextQuery,
-      });
+      await router.push(commandOpsHref);
     } catch (saveError: unknown) {
       setError(translateProductError(saveError, "company"));
     } finally {

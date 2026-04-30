@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -290,7 +291,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			}
 			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
 			return nil, domain.NewRetryableErrorWithDetails(
-				fmt.Errorf(errMsg),
+				errors.New(errMsg),
 				"rate limited",
 				"rate_limited",
 				retryAfterMs,
@@ -304,7 +305,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 		}
 		if resp.StatusCode >= 500 {
 			return nil, domain.NewRetryableErrorWithDetails(
-				fmt.Errorf(errMsg),
+				errors.New(errMsg),
 				"upstream server error",
 				"transient_http_5xx",
 				0,
@@ -315,7 +316,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			)
 		}
 
-		return nil, fmt.Errorf(errMsg)
+		return nil, errors.New(errMsg)
 	}
 
 	// Check HTTP status
@@ -329,7 +330,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			}
 			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
 			return nil, domain.NewRetryableErrorWithDetails(
-				fmt.Errorf(errMsg),
+				errors.New(errMsg),
 				"rate limited",
 				"rate_limited",
 				retryAfterMs,
@@ -343,7 +344,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 		}
 		if resp.StatusCode >= 500 {
 			return nil, domain.NewRetryableErrorWithDetails(
-				fmt.Errorf(errMsg),
+				errors.New(errMsg),
 				"upstream server error",
 				"transient_http_5xx",
 				0,
@@ -354,7 +355,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			)
 		}
 
-		return nil, fmt.Errorf(errMsg)
+		return nil, errors.New(errMsg)
 	}
 
 	// Extract response content
@@ -470,7 +471,7 @@ func (c *OpenAIClient) StreamComplete(
 			}
 			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
 			return nil, domain.NewRetryableErrorWithDetails(
-				fmt.Errorf(errMsg),
+				errors.New(errMsg),
 				"rate limited",
 				"rate_limited",
 				retryAfterMs,
@@ -484,7 +485,7 @@ func (c *OpenAIClient) StreamComplete(
 		}
 		if resp.StatusCode >= 500 {
 			return nil, domain.NewRetryableErrorWithDetails(
-				fmt.Errorf(errMsg),
+				errors.New(errMsg),
 				"upstream server error",
 				"transient_http_5xx",
 				0,
@@ -494,7 +495,7 @@ func (c *OpenAIClient) StreamComplete(
 				},
 			)
 		}
-		return nil, fmt.Errorf(errMsg)
+		return nil, errors.New(errMsg)
 	}
 
 	var content strings.Builder

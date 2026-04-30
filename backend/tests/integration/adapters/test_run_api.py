@@ -23,6 +23,7 @@ from infrastructure.crypto.encryption import encrypt_api_key
 from infrastructure.orm.models import (
     APIKey,
     ApprovalTask,
+    ContextPack,
     Graph,
     GraphVersion,
     LLMBudget,
@@ -1766,6 +1767,22 @@ class TestRunReplay:
             skipped_nodes=["right"],
             graph_json=graph_json,
         )
+        source_context_pack = ContextPack.objects.create(
+            organization=graph.organization,
+            company=graph,
+            operation=source_run,
+            scope_json={"source": "historical"},
+            asset_refs_json=[{"asset_id": "historical-source-context"}],
+            created_for="operation_planning",
+        )
+        source_run.dispatch_graph_json = {
+            **graph_json,
+            "metadata": {
+                "context_pack_id": str(source_context_pack.id),
+                "context_pack_mode": "fresh_at_dispatch",
+            },
+        }
+        source_run.save(update_fields=["dispatch_graph_json"])
 
         response = authenticated_client.post(
             f"/api/runs/{source_run.id}/replay",
@@ -1797,6 +1814,8 @@ class TestRunReplay:
         assert replay_event.payload["source_run_id"] == str(source_run.id)
         assert replay_event.payload["from_node_id"] == "branch"
         assert replay_event.payload["checkpoint_step"] == 8
+        assert replay_event.payload["context_pack_mode"] == "fresh_at_replay"
+        assert replay_event.payload["context_pack_id"] != str(source_context_pack.id)
 
         start_calls = [call for call in mock_engine_client.calls if call[0] == "start_run"]
         assert len(start_calls) == 1
@@ -1806,7 +1825,10 @@ class TestRunReplay:
         replay_metadata = replay_run.dispatch_graph_json.get("metadata")
         assert isinstance(replay_metadata, dict)
         assert "backend_attempt_id" not in replay_metadata
+        assert replay_metadata["context_pack_mode"] == "fresh_at_replay"
+        assert replay_metadata["context_pack_id"] != str(source_context_pack.id)
         assert "backend_attempt_id" in start_calls[0][1]["graph_json"]["metadata"]
+        assert start_calls[0][1]["graph_json"]["metadata"]["context_pack_mode"] == "fresh_at_replay"
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_replay_resolves_prompt_id_into_checkpoint_and_engine_payload(

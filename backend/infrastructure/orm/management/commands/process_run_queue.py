@@ -17,6 +17,7 @@ from adapters.gateways.grpc_engine_client import (
     GrpcEngineClient,
 )
 from adapters.ws.runs.broadcast import broadcast_run_updated
+from application.services.company_archive import ContextPackService
 from application.services.engine_selection import resolve_engine_callback_url, select_engine_target
 from application.services.llm_access import (
     LLMAccessValidationError,
@@ -65,6 +66,18 @@ def get_engine_client(
         port=port or settings.ENGINE_PORT,
         callback_url=callback_url,
     )
+
+
+def _run_has_context_pack(run: Any) -> bool:
+    input_json = run.input_json if isinstance(run.input_json, dict) else {}
+    if input_json.get("context_pack_id"):
+        return True
+    metadata = (
+        run.dispatch_graph_json.get("metadata")
+        if isinstance(run.dispatch_graph_json, dict)
+        else None
+    )
+    return isinstance(metadata, dict) and bool(metadata.get("context_pack_id"))
 
 
 class Command(BaseCommand):
@@ -149,6 +162,13 @@ class Command(BaseCommand):
                 run=run,
                 graph_json=prepared_graph,
             )
+            if not _run_has_context_pack(run):
+                _, outbound_with_context = ContextPackService().attach_context_pack_to_run(
+                    run=run,
+                    outbound_graph=outbound_graph,
+                )
+                run.save(update_fields=["dispatch_graph_json"])
+                outbound_graph = outbound_with_context or outbound_graph
         except ToolExecutionDispatchBlocked as exc:
             self._fail_run(entry, run, f"Tool execution dispatch blocked: {exc}")
             return

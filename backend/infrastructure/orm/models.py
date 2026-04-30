@@ -2140,6 +2140,821 @@ class DecisionRecord(models.Model):
         return f"{self.decision_type} ({self.status})"
 
 
+class OperatingBriefRecord(models.Model):
+    """Backend-owned current Living Operating Brief for a company or operation."""
+
+    AUTONOMY_MODE_CHOICES = [
+        ("manual", "Manual"),
+        ("assisted", "Assisted"),
+        ("autonomous", "Autonomous"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="operating_briefs",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="operating_briefs",
+    )
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="operating_briefs",
+    )
+    objective = models.TextField(null=True, blank=True)
+    deliverable = models.TextField(null=True, blank=True)
+    constraints_json = models.JSONField(default=list, blank=True)
+    success_criteria_json = models.JSONField(default=list, blank=True)
+    stakeholders_json = models.JSONField(default=list, blank=True)
+    dependencies_json = models.JSONField(default=list, blank=True)
+    assumptions_json = models.JSONField(default=list, blank=True)
+    clarifications_json = models.JSONField(default=list, blank=True)
+    priority_frame_json = models.JSONField(default=dict, blank=True)
+    autonomy_mode = models.CharField(
+        max_length=16,
+        choices=AUTONOMY_MODE_CHOICES,
+        default="assisted",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_operating_briefs",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_operating_briefs",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "operating_briefs"
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "company"],
+                condition=models.Q(operation__isnull=True),
+                name="operating_briefs_company_current_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "company", "operation"],
+                condition=models.Q(operation__isnull=False),
+                name="operating_briefs_operation_current_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "updated_at"], name="op_briefs_org_updated_idx"),
+            models.Index(fields=["company", "operation"], name="op_briefs_company_op_idx"),
+        ]
+
+    def __str__(self) -> str:
+        scope = self.operation_id or self.company_id
+        return f"OperatingBrief {scope}"
+
+
+class InteractionEventRecord(models.Model):
+    """Append-only interaction history used to derive and inspect brief mutations."""
+
+    EVENT_TYPE_CHOICES = [
+        ("CREATE", "Create"),
+        ("MODIFY", "Modify"),
+        ("CLARIFY", "Clarify"),
+        ("CONSTRAINT", "Constraint"),
+        ("PRIORITY_SHIFT", "Priority Shift"),
+        ("APPROVE", "Approve"),
+        ("OVERRIDE", "Override"),
+    ]
+    ACTOR_CHOICES = [
+        ("user", "User"),
+        ("system", "System"),
+    ]
+    ACTION_CHOICES = [
+        ("EXECUTE", "Execute"),
+        ("ASK_CLARIFICATION", "Ask Clarification"),
+        ("ASSUME_AND_CONTINUE", "Assume And Continue"),
+        ("BLOCK", "Block"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="interaction_events",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="interaction_events",
+    )
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="interaction_events",
+    )
+    brief = models.ForeignKey(
+        OperatingBriefRecord,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    sequence = models.PositiveIntegerField()
+    event_type = models.CharField(max_length=32, choices=EVENT_TYPE_CHOICES)
+    actor = models.CharField(max_length=16, choices=ACTOR_CHOICES)
+    actor_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interaction_events",
+    )
+    timestamp = models.DateTimeField()
+    raw_input = models.TextField(blank=True, default="")
+    delta_json = models.JSONField(default=dict, blank=True)
+    affected_fields_json = models.JSONField(default=list, blank=True)
+    interpretation_json = models.JSONField(default=dict, blank=True)
+    pm_action = models.CharField(max_length=32, choices=ACTION_CHOICES)
+    plan_implications_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "interaction_events"
+        ordering = ["brief", "sequence"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["brief", "sequence"],
+                name="interaction_events_brief_sequence_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="interaction_org_time_idx"),
+            models.Index(fields=["company", "created_at"], name="interaction_company_time_idx"),
+            models.Index(fields=["operation", "created_at"], name="interaction_operation_time_idx"),
+            models.Index(fields=["brief", "sequence"], name="interaction_brief_seq_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"InteractionEvent {self.event_type} #{self.sequence}"
+
+
+class Asset(models.Model):
+    """Company-owned artifact that can be reused as future knowledge."""
+
+    ASSET_TYPE_CHOICES = [
+        ("document", "Document"),
+        ("image", "Image"),
+        ("dataset", "Dataset"),
+        ("report", "Report"),
+        ("deliverable", "Deliverable"),
+        ("memo", "Memo"),
+        ("policy_source", "Policy Source"),
+    ]
+    CREATED_BY_TYPE_CHOICES = [
+        ("user", "User"),
+        ("agent", "Agent"),
+        ("system", "System"),
+        ("external", "External"),
+    ]
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("archived", "Archived"),
+        ("superseded", "Superseded"),
+        ("deleted", "Deleted"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="assets",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="assets",
+    )
+    title = models.CharField(max_length=255)
+    asset_type = models.CharField(max_length=32, choices=ASSET_TYPE_CHOICES)
+    source_key = models.CharField(max_length=512, blank=True, default="")
+    origin_operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="origin_assets",
+    )
+    origin_task = models.ForeignKey(
+        TaskRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="origin_assets",
+    )
+    origin_node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="origin_assets",
+    )
+    origin_deliverable_id = models.UUIDField(null=True, blank=True)
+    created_by_type = models.CharField(
+        max_length=16,
+        choices=CREATED_BY_TYPE_CHOICES,
+        default="system",
+    )
+    created_by_id = models.UUIDField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "company_assets"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "source_key"],
+                condition=models.Q(source_key__gt=""),
+                name="asset_company_source_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="asset_org_time_idx"),
+            models.Index(fields=["company", "status"], name="asset_comp_status_idx"),
+            models.Index(fields=["company", "asset_type"], name="asset_comp_type_idx"),
+            models.Index(fields=["origin_operation"], name="asset_origin_run_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.asset_type})"
+
+
+class AssetVersion(models.Model):
+    """Versioned content pointer for an asset."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="versions",
+    )
+    version_number = models.PositiveIntegerField()
+    content_uri = models.CharField(max_length=1024)
+    content_hash = models.CharField(max_length=64, blank=True, default="")
+    mime_type = models.CharField(max_length=128, blank=True, default="")
+    size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    provenance_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "asset_versions"
+        ordering = ["asset", "-version_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["asset", "version_number"],
+                name="asset_ver_asset_num_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["asset", "content_hash"],
+                condition=models.Q(content_hash__gt=""),
+                name="asset_ver_hash_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["asset", "version_number"], name="asset_ver_num_idx"),
+            models.Index(fields=["content_hash"], name="asset_ver_hash_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.asset_id} v{self.version_number}"
+
+
+class AssetExtract(models.Model):
+    """Searchable extraction from an exact asset version."""
+
+    EMBEDDING_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("indexed", "Indexed"),
+        ("failed", "Failed"),
+        ("skipped", "Skipped"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    asset_version = models.ForeignKey(
+        AssetVersion,
+        on_delete=models.CASCADE,
+        related_name="extracts",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="asset_extracts",
+    )
+    summary = models.TextField(null=True, blank=True)
+    text_content = models.TextField(null=True, blank=True)
+    chunks_json = models.JSONField(default=list, blank=True)
+    claims_json = models.JSONField(default=list, blank=True)
+    entities_json = models.JSONField(default=list, blank=True)
+    embedding_status = models.CharField(
+        max_length=16,
+        choices=EMBEDDING_STATUS_CHOICES,
+        default="pending",
+    )
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "asset_extracts"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["asset_version"],
+                name="asset_extract_ver_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["company", "embedding_status"], name="asset_ext_comp_stat_idx"),
+            models.Index(fields=["created_at"], name="asset_ext_created_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"AssetExtract {self.asset_version_id} ({self.embedding_status})"
+
+
+class ContextPack(models.Model):
+    """Bounded backend-prepared context for operation planning or execution."""
+
+    CREATED_FOR_CHOICES = [
+        ("operation_planning", "Operation Planning"),
+        ("task_execution", "Task Execution"),
+        ("review", "Review"),
+        ("decision", "Decision"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="context_packs",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="context_packs",
+    )
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="context_packs",
+    )
+    task = models.ForeignKey(
+        TaskRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="context_packs",
+    )
+    node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="context_packs",
+    )
+    department_id = models.CharField(max_length=255, blank=True, default="")
+    scope_json = models.JSONField(default=dict, blank=True)
+    brief_snapshot_json = models.JSONField(null=True, blank=True)
+    asset_refs_json = models.JSONField(default=list, blank=True)
+    memory_refs_json = models.JSONField(default=list, blank=True)
+    decision_refs_json = models.JSONField(default=list, blank=True)
+    policy_refs_json = models.JSONField(default=list, blank=True)
+    assumptions_json = models.JSONField(default=list, blank=True)
+    created_for = models.CharField(max_length=32, choices=CREATED_FOR_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "context_packs"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["company", "created_at"], name="ctx_pack_comp_time_idx"),
+            models.Index(fields=["operation", "created_at"], name="ctx_pack_run_time_idx"),
+            models.Index(fields=["task", "created_at"], name="ctx_pack_task_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ContextPack {self.id} ({self.created_for})"
+
+
+class EvidenceLink(models.Model):
+    """Trace that an asset/version/extract influenced work."""
+
+    USED_FOR_CHOICES = [
+        ("planning", "Planning"),
+        ("decision", "Decision"),
+        ("validation", "Validation"),
+        ("generation", "Generation"),
+        ("review", "Review"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="evidence_links",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="evidence_links",
+    )
+    context_pack = models.ForeignKey(
+        ContextPack,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="evidence_links",
+    )
+    asset_version = models.ForeignKey(
+        AssetVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    asset_extract = models.ForeignKey(
+        AssetExtract,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    usage_key = models.CharField(max_length=64, blank=True, default="")
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    task = models.ForeignKey(
+        TaskRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    decision = models.ForeignKey(
+        DecisionRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_links",
+    )
+    deliverable_id = models.UUIDField(null=True, blank=True)
+    used_for = models.CharField(max_length=16, choices=USED_FOR_CHOICES)
+    relevance_score = models.FloatField(null=True, blank=True)
+    reason = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "evidence_links"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "usage_key"],
+                condition=models.Q(usage_key__gt=""),
+                name="evid_company_usage_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["company", "created_at"], name="evid_comp_time_idx"),
+            models.Index(fields=["operation", "used_for"], name="evid_run_used_idx"),
+            models.Index(fields=["task", "used_for"], name="evid_task_used_idx"),
+            models.Index(fields=["decision", "used_for"], name="evid_dec_used_idx"),
+            models.Index(fields=["context_pack"], name="evid_context_idx"),
+            models.Index(fields=["company", "usage_key"], name="evid_comp_usage_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"EvidenceLink {self.asset_id} -> {self.used_for}"
+
+
+class PreferenceEvent(models.Model):
+    """Human feedback captured as structured learning data."""
+
+    ACTOR_TYPE_CHOICES = [
+        ("user", "User"),
+        ("admin", "Admin"),
+        ("reviewer", "Reviewer"),
+        ("system", "System"),
+    ]
+    EVENT_TYPE_CHOICES = [
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("edited", "Edited"),
+        ("overridden", "Overridden"),
+        ("clarified", "Clarified"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="preference_events",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="preference_events",
+    )
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preference_events",
+    )
+    task = models.ForeignKey(
+        TaskRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preference_events",
+    )
+    node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preference_events",
+    )
+    decision = models.ForeignKey(
+        DecisionRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preference_events",
+    )
+    approval_task = models.ForeignKey(
+        ApprovalTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preference_events",
+    )
+    context_pack = models.ForeignKey(
+        ContextPack,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preference_events",
+    )
+    actor_id = models.UUIDField(null=True, blank=True)
+    actor_type = models.CharField(max_length=16, choices=ACTOR_TYPE_CHOICES)
+    event_type = models.CharField(max_length=16, choices=EVENT_TYPE_CHOICES)
+    proposed_value_json = models.JSONField(null=True, blank=True)
+    final_value_json = models.JSONField(null=True, blank=True)
+    diff_json = models.JSONField(null=True, blank=True)
+    rationale = models.TextField(null=True, blank=True)
+    risk_level = models.FloatField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "preference_events"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["approval_task"],
+                condition=models.Q(approval_task__isnull=False),
+                name="pref_approval_task_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["company", "created_at"], name="pref_comp_time_idx"),
+            models.Index(fields=["operation", "created_at"], name="pref_run_time_idx"),
+            models.Index(fields=["task", "event_type"], name="pref_task_event_idx"),
+            models.Index(fields=["approval_task"], name="pref_approval_idx"),
+            models.Index(fields=["context_pack"], name="pref_context_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"PreferenceEvent {self.event_type} {self.id}"
+
+
+class OutcomeReview(models.Model):
+    """Post-delivery review of whether a decision or deliverable worked."""
+
+    CREATED_BY_TYPE_CHOICES = [
+        ("user", "User"),
+        ("agent", "Agent"),
+        ("system", "System"),
+        ("external", "External"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="outcome_reviews",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="outcome_reviews",
+    )
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outcome_reviews",
+    )
+    task = models.ForeignKey(
+        TaskRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outcome_reviews",
+    )
+    node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outcome_reviews",
+    )
+    decision = models.ForeignKey(
+        DecisionRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outcome_reviews",
+    )
+    deliverable_id = models.UUIDField(null=True, blank=True)
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outcome_reviews",
+    )
+    success_score = models.FloatField(null=True, blank=True)
+    success_metrics_json = models.JSONField(default=dict, blank=True)
+    human_feedback = models.TextField(null=True, blank=True)
+    issues_json = models.JSONField(default=list, blank=True)
+    root_cause = models.TextField(null=True, blank=True)
+    created_by_type = models.CharField(
+        max_length=16,
+        choices=CREATED_BY_TYPE_CHOICES,
+        default="user",
+    )
+    created_by_id = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "outcome_reviews"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["company", "created_at"], name="outcome_comp_time_idx"),
+            models.Index(fields=["operation", "created_at"], name="outcome_run_time_idx"),
+            models.Index(fields=["asset", "created_at"], name="outcome_asset_time_idx"),
+            models.Index(fields=["deliverable_id"], name="outcome_deliv_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"OutcomeReview {self.id}"
+
+
+class PolicyRule(models.Model):
+    """Learned or explicit company policy. Candidates require explicit promotion."""
+
+    SCOPE_TYPE_CHOICES = [
+        ("company", "Company"),
+        ("department", "Department"),
+        ("operation_type", "Operation Type"),
+        ("task_type", "Task Type"),
+        ("user", "User"),
+    ]
+    STATUS_CHOICES = [
+        ("candidate", "Candidate"),
+        ("active", "Active"),
+        ("deprecated", "Deprecated"),
+        ("rejected", "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="policy_rules",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="policy_rules",
+    )
+    scope_type = models.CharField(max_length=32, choices=SCOPE_TYPE_CHOICES, default="company")
+    scope_id = models.CharField(max_length=255, blank=True, default="")
+    title = models.CharField(max_length=255)
+    condition_json = models.JSONField(default=dict, blank=True)
+    recommendation_json = models.JSONField(default=dict, blank=True)
+    confidence = models.FloatField(
+        default=0.5,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="candidate")
+    supporting_preference_event_ids_json = models.JSONField(default=list, blank=True)
+    supporting_outcome_review_ids_json = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "policy_rules"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["company", "status"], name="policy_comp_status_idx"),
+            models.Index(fields=["company", "scope_type"], name="policy_comp_scope_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class EscalationRule(models.Model):
+    """Company rule for situations that should still ask humans."""
+
+    SCOPE_TYPE_CHOICES = PolicyRule.SCOPE_TYPE_CHOICES
+    TRIGGER_TYPE_CHOICES = [
+        ("high_cost", "High Cost"),
+        ("irreversible", "Irreversible"),
+        ("low_confidence", "Low Confidence"),
+        ("policy_conflict", "Policy Conflict"),
+        ("novel_case", "Novel Case"),
+        ("sensitive_asset", "Sensitive Asset"),
+    ]
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("deprecated", "Deprecated"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="escalation_rules",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="escalation_rules",
+    )
+    scope_type = models.CharField(max_length=32, choices=SCOPE_TYPE_CHOICES, default="company")
+    scope_id = models.CharField(max_length=255, blank=True, default="")
+    trigger_type = models.CharField(max_length=32, choices=TRIGGER_TYPE_CHOICES)
+    condition_json = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "escalation_rules"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["company", "status"], name="esc_comp_status_idx"),
+            models.Index(fields=["company", "trigger_type"], name="esc_comp_trigger_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.trigger_type} ({self.status})"
+
+
 class CostLedgerEntry(models.Model):
     """Append-only accounting fact table projected from runtime usage data."""
 

@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { AlertTriangle, ArrowRight, Bot, Building2, PauseCircle, PlayCircle, RotateCcw, Settings2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  FileText,
+  PauseCircle,
+  PlayCircle,
+  RotateCcw,
+  Send,
+  Settings2,
+} from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { QuestGuide } from "@/components/company/QuestGuide";
@@ -18,8 +28,9 @@ import {
   formatDateTime,
 } from "@/components/os/operations-ui";
 import { Alert, AlertDescription, Button, Input, Spinner, Textarea } from "@/components/ui";
+import type { InteractionEventResponse, OperatingBrief, OperatingBriefClarification } from "@/lib/api";
 import { onboardingApi } from "@/lib/api";
-import { companyRepository } from "@/domain/repositories";
+import { companyRepository, interactionRepository } from "@/domain/repositories";
 import { getOperationAiAccess } from "@/domain/repositories/operationRepository";
 import { translateProductError } from "@/domain/errors";
 import type { CompanyVM, DepartmentVM, OperationFailureVM, OperationVM, TaskStatusVM } from "@/domain/translation";
@@ -241,6 +252,223 @@ function FailureCard({ failure, onRetry }: { failure: OperationFailureVM; onRetr
   );
 }
 
+function formatAssumptionValue(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return "Not specified";
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function BriefList({ label, items, emptyLabel }: { label: string; items: string[]; emptyLabel: string }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {items.length ? (
+          items.map((item) => (
+            <span
+              key={`${label}-${item}`}
+              className="rounded-full border border-slate-900/10 bg-white/80 px-3 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-white/6 dark:text-slate-200"
+            >
+              {item}
+            </span>
+          ))
+        ) : (
+          <span className="text-sm text-slate-500 dark:text-slate-400">{emptyLabel}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PriorityFrameView({ brief }: { brief: OperatingBrief | null }) {
+  const priorities = brief?.priority_frame ?? { speed: 0.5, cost: 0.5, quality: 0.5, risk: 0.5 };
+  const items = [
+    { label: "Speed", value: priorities.speed },
+    { label: "Cost", value: priorities.cost },
+    { label: "Quality", value: priorities.quality },
+    { label: "Risk", value: priorities.risk },
+  ];
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label}>
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>{item.label}</span>
+            <span>{Math.round(item.value * 100)}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+            <div
+              className="h-full rounded-full bg-slate-950 dark:bg-slate-100"
+              style={{ width: `${Math.max(0, Math.min(item.value, 1)) * 100}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatInteractionLabel(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function responseClarifications(response: InteractionEventResponse): OperatingBriefClarification[] {
+  const blocking = response.plan_implications.blocking_clarifications.length
+    ? response.plan_implications.blocking_clarifications
+    : response.brief.clarifications.filter((item) => item.blocking);
+  if (blocking.length) {
+    return blocking.slice(0, 3);
+  }
+
+  const suggested: OperatingBriefClarification[] = [];
+  if (!response.brief.stakeholders.length) {
+    suggested.push({
+      question: "Who is the target customer?",
+      blocking: false,
+      related_field: "stakeholders",
+    });
+  }
+  if (!response.brief.constraints.length) {
+    suggested.push({
+      question: "Which channels are allowed or off-limits?",
+      blocking: false,
+      related_field: "constraints",
+    });
+  }
+  if (!response.brief.success_criteria.length) {
+    suggested.push({
+      question: "What result should define success?",
+      blocking: false,
+      related_field: "success_criteria",
+    });
+  }
+  return suggested.slice(0, 3);
+}
+
+function nextStepForResponse(response: InteractionEventResponse) {
+  if (response.pm_action.action === "ASK_CLARIFICATION") {
+    return "Answer the open question and I will update the brief before the company moves forward.";
+  }
+  if (response.pm_action.action === "EXECUTE") {
+    return "The brief is ready. Launch the operation when you want the company to start acting on it.";
+  }
+  if (response.pm_action.action === "BLOCK") {
+    return "I will hold company work until you change the brief or remove the blocking instruction.";
+  }
+  if (response.plan_implications.requires_plan_revision) {
+    return "I recorded the change for this active operation. Future planning can use it while current work continues from the state it already had.";
+  }
+  return "I recorded assumptions and can start a draft plan from this brief when you launch the next operation.";
+}
+
+function ProjectManagerResponseCard({ response }: { response: InteractionEventResponse }) {
+  const clarifications = responseClarifications(response);
+  const affectedFields = response.interpretation.affected_fields.length
+    ? response.interpretation.affected_fields.map(formatInteractionLabel).join(", ")
+    : "Operating Brief";
+  const confidence = Math.round(response.interpretation.confidence * 100);
+
+  return (
+    <div
+      data-testid="command-ops-response-card"
+      className="mt-4 rounded-[1.2rem] border border-slate-900/10 bg-white/85 px-4 py-4 dark:border-white/10 dark:bg-slate-950/35"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-slate-950">
+            <Bot className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Project Manager
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+              I understand the objective as: {response.brief.objective ?? "Not set yet"}
+            </p>
+          </div>
+        </div>
+        <StatusBadge status={response.pm_action.action} label={formatInteractionLabel(response.pm_action.action)} />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-[1rem] border border-slate-900/8 bg-slate-50 px-3 py-3 dark:border-white/8 dark:bg-white/5">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Interpreted As</p>
+          <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">
+            {formatInteractionLabel(response.interpretation.intent_classification)} - {confidence}%
+          </p>
+        </div>
+        <div className="rounded-[1rem] border border-slate-900/8 bg-slate-50 px-3 py-3 dark:border-white/8 dark:bg-white/5">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Deliverable</p>
+          <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">
+            {response.brief.deliverable ?? "Needs definition"}
+          </p>
+        </div>
+        <div className="rounded-[1rem] border border-slate-900/8 bg-slate-50 px-3 py-3 dark:border-white/8 dark:bg-white/5">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Changed</p>
+          <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">{affectedFields}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-[1rem] border border-amber-800/12 bg-amber-50/75 px-3 py-3 dark:border-amber-200/15 dark:bg-amber-500/10">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-900/80 dark:text-amber-100/80">
+          Before I Proceed
+        </p>
+        {clarifications.length ? (
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-950 dark:text-amber-100">
+            {clarifications.map((item) => (
+              <li key={`${item.related_field}-${item.question}`}>{item.question}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm leading-6 text-amber-950 dark:text-amber-100">
+            No blocking questions. I can proceed with the recorded assumptions.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-[1rem] border border-emerald-800/12 bg-emerald-50/75 px-3 py-3 dark:border-emerald-200/15 dark:bg-emerald-500/10">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-900/80 dark:text-emerald-100/80">
+          Next Step
+        </p>
+        <p
+          data-testid="command-ops-response-next-step"
+          className="mt-2 text-sm leading-6 text-emerald-950 dark:text-emerald-100"
+        >
+          {nextStepForResponse(response)}
+        </p>
+      </div>
+
+      <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">{response.plan_implications.summary}</p>
+    </div>
+  );
+}
+
+function focusOperatingBriefInput() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const input = document.querySelector<HTMLTextAreaElement>('[data-testid="operating-brief-input"]');
+  if (!input) {
+    return false;
+  }
+
+  input.focus({ preventScroll: true });
+  return true;
+}
+
 export function CompanyWorkspaceShell({
   companyId,
   company,
@@ -265,6 +493,13 @@ export function CompanyWorkspaceShell({
   const [editableObjective, setEditableObjective] = useState(profile.objective);
   const [editableAutonomyMode, setEditableAutonomyMode] = useState<CompanyAutonomyMode>(profile.autonomyMode);
   const [editableAIAccessMode, setEditableAIAccessMode] = useState<CompanyAIAccessMode>(profile.aiAccessMode);
+  const [operatingBrief, setOperatingBrief] = useState<OperatingBrief | null>(null);
+  const [operatingBriefInput, setOperatingBriefInput] = useState("");
+  const [operatingBriefLoading, setOperatingBriefLoading] = useState(false);
+  const [operatingBriefSubmitting, setOperatingBriefSubmitting] = useState(false);
+  const [operatingBriefError, setOperatingBriefError] = useState<string | null>(null);
+  const [latestPmAction, setLatestPmAction] = useState<string | null>(null);
+  const [latestInteractionResponse, setLatestInteractionResponse] = useState<InteractionEventResponse | null>(null);
   const [questMilestoneComplete, setQuestMilestoneComplete] = useState(false);
   const [questPhase, setQuestPhase] = useState<"workspace" | "deliverable" | "done">("workspace");
 
@@ -341,10 +576,10 @@ export function CompanyWorkspaceShell({
     () => [
       {
         id: "workspace",
-        targetId: "company-operations-panel",
-        title: "Watch your company operate.",
+        targetId: "company-command-ops-panel",
+        title: "Interact with your company here.",
         description:
-          "This area shows the work moving through departments so you can see what is happening right now and what comes next.",
+          "Command Ops is where you update the Operating Brief, launch operations, handle approvals, and keep the company moving.",
         placement: "left" as const,
       },
     ],
@@ -367,6 +602,63 @@ export function CompanyWorkspaceShell({
     () => operations.find((operation) => operation.status === "running") ?? null,
     [operations],
   );
+  const activeBriefOperation = useMemo(
+    () => operations.find((operation) => operation.status === "running" || operation.status === "paused") ?? null,
+    [operations],
+  );
+
+  useEffect(() => {
+    if (loading || typeof window === "undefined" || !router.asPath.includes("#command-ops")) {
+      return;
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      const target = document.getElementById("command-ops");
+      target?.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
+      if (!focusOperatingBriefInput()) {
+        target?.focus({ preventScroll: true });
+      }
+    }, 80);
+
+    return () => window.clearTimeout(scrollTimer);
+  }, [loading, router.asPath]);
+
+  useEffect(() => {
+    if (!company?.id) {
+      setOperatingBrief(null);
+      return;
+    }
+
+    let mounted = true;
+    setOperatingBriefLoading(true);
+    setOperatingBriefError(null);
+    void interactionRepository
+      .getCurrentBrief(company.id, activeBriefOperation?.id ?? null)
+      .then((brief) => {
+        if (!mounted) {
+          return;
+        }
+        setOperatingBrief(brief);
+        setLatestPmAction(null);
+        setLatestInteractionResponse(null);
+      })
+      .catch((briefError: unknown) => {
+        if (!mounted) {
+          return;
+        }
+        setOperatingBriefError(translateProductError(briefError, "company"));
+      })
+      .finally(() => {
+        if (mounted) {
+          setOperatingBriefLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeBriefOperation?.id, company?.id]);
+
   const nextAction = useMemo(() => {
     if (failure) {
       return {
@@ -456,6 +748,7 @@ export function CompanyWorkspaceShell({
         autonomyMode: editableAutonomyMode,
         aiAccessMode: editableAIAccessMode,
         operationBrief,
+        operatingBrief,
       });
       showSuccess("Operation launched", "The company is now running the next operation.");
       await onRefresh();
@@ -537,6 +830,40 @@ export function CompanyWorkspaceShell({
       showError(nextPaused ? "Pause failed" : "Resume failed", translateProductError(saveError, "company"));
     } finally {
       setSavingCompanyState(false);
+    }
+  };
+
+  const handleSubmitOperatingBrief = async () => {
+    if (!company) {
+      return;
+    }
+
+    const input = operatingBriefInput.trim();
+    if (!input) {
+      showError("Brief input is empty", "Add the operating change before updating the brief.");
+      return;
+    }
+
+    setOperatingBriefSubmitting(true);
+    setOperatingBriefError(null);
+    try {
+      const result = await interactionRepository.submitInput({
+        companyId: company.id,
+        operationId: activeBriefOperation?.id ?? null,
+        briefId: operatingBrief?.id ?? null,
+        text: input,
+      });
+      setOperatingBrief(result.brief);
+      setLatestPmAction(result.pm_action.action);
+      setLatestInteractionResponse(result);
+      setOperatingBriefInput("");
+      showSuccess("Operating brief updated", result.plan_implications.summary);
+    } catch (briefError: unknown) {
+      const message = translateProductError(briefError, "company");
+      setOperatingBriefError(message);
+      showError("Brief update failed", message);
+    } finally {
+      setOperatingBriefSubmitting(false);
     }
   };
 
@@ -746,304 +1073,495 @@ export function CompanyWorkspaceShell({
                   </Panel>
                 </div>
 
-                <Panel
-                  title="Command Ops"
-                  description="Company health, controls, and operational decisions from one command surface."
-                  className="command-ops-panel"
+                <div
+                  id="command-ops"
+                  data-guide-id="company-command-ops-panel"
+                  data-testid="command-ops-panel"
+                  tabIndex={-1}
+                  className="scroll-mt-24 focus:outline-none"
                 >
-                  <div
-                    className={`rounded-[1.35rem] border px-4 py-4 ${
-                      nextAction.tone === "rose"
-                        ? "border-rose-800/12 bg-rose-50/80 dark:border-rose-200/15 dark:bg-rose-500/10"
-                        : nextAction.tone === "amber"
-                          ? "border-amber-800/12 bg-amber-50/80 dark:border-amber-200/15 dark:bg-amber-500/10"
-                          : nextAction.tone === "sky"
-                            ? "border-sky-800/12 bg-sky-50/80 dark:border-sky-200/15 dark:bg-sky-500/10"
-                            : "border-emerald-800/12 bg-emerald-50/80 dark:border-emerald-200/15 dark:bg-emerald-500/10"
-                    }`}
+                  <Panel
+                    title="Command Ops"
+                    description="Interact with the company here: update the Operating Brief, launch work, handle approvals, and adjust controls."
+                    className="command-ops-panel"
                   >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                      Next best action
-                    </p>
-                    <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{nextAction.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">{nextAction.body}</p>
+                    <div
+                      className={`rounded-[1.35rem] border px-4 py-4 ${
+                        nextAction.tone === "rose"
+                          ? "border-rose-800/12 bg-rose-50/80 dark:border-rose-200/15 dark:bg-rose-500/10"
+                          : nextAction.tone === "amber"
+                            ? "border-amber-800/12 bg-amber-50/80 dark:border-amber-200/15 dark:bg-amber-500/10"
+                            : nextAction.tone === "sky"
+                              ? "border-sky-800/12 bg-sky-50/80 dark:border-sky-200/15 dark:bg-sky-500/10"
+                              : "border-emerald-800/12 bg-emerald-50/80 dark:border-emerald-200/15 dark:bg-emerald-500/10"
+                      }`}
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
+                        Next best action
+                      </p>
+                      <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{nextAction.title}</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">{nextAction.body}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          {failure ? (
+                            <Button
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => void handleRetryFailedOperation()}
+                            >
+                              Retry now
+                            </Button>
+                          ) : pendingApprovalCount > 0 ? (
+                            <Button asChild size="sm" className="rounded-full">
+                              <Link href="/approvals">Review approvals</Link>
+                            </Button>
+                          ) : companyPaused ? (
+                            <Button size="sm" className="rounded-full" onClick={() => void handleToggleCompanyPause()}>
+                              Resume company
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => void handleLaunchOperation()}
+                              disabled={launching}
+                            >
+                              Launch operation
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        {failure ? (
-                          <Button size="sm" className="rounded-full" onClick={() => void handleRetryFailedOperation()}>
-                            Retry now
-                          </Button>
-                        ) : pendingApprovalCount > 0 ? (
-                          <Button asChild size="sm" className="rounded-full">
-                            <Link href="/approvals">Review approvals</Link>
-                          </Button>
-                        ) : companyPaused ? (
-                          <Button size="sm" className="rounded-full" onClick={() => void handleToggleCompanyPause()}>
-                            Resume company
-                          </Button>
-                        ) : (
+                    </div>
+
+                    <div
+                      data-testid="command-ops-system-message"
+                      className="mt-4 rounded-[1.2rem] border border-sky-800/12 bg-sky-50/85 px-4 py-4 dark:border-sky-200/15 dark:bg-sky-500/10"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+                          <Bot className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-900/70 dark:text-sky-100/75">
+                            Project Manager
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-sky-950 dark:text-sky-50">
+                            I&apos;m managing this company. Tell me what you want to achieve, and I&apos;ll turn it into
+                            a plan.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      data-testid="operating-brief-panel"
+                      className="mt-5 rounded-[1.5rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 text-slate-950 dark:text-slate-50">
+                            <FileText className="h-4 w-4" />
+                            <p className="text-sm font-semibold">Operating Brief</p>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                            {activeBriefOperation
+                              ? `Scoped to operation ${activeBriefOperation.id.slice(0, 8)}`
+                              : "Scoped to the next company operation"}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          {operatingBriefLoading ? <StatusBadge status="pending" label="Loading" /> : null}
+                          {latestPmAction ? <StatusBadge status={latestPmAction} label={latestPmAction} /> : null}
+                          {operatingBrief?.autonomy_mode ? (
+                            <StatusBadge status={operatingBrief.autonomy_mode} label={operatingBrief.autonomy_mode} />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {operatingBriefError ? (
+                        <Alert variant="destructive" className="mt-4">
+                          <AlertDescription>{operatingBriefError}</AlertDescription>
+                        </Alert>
+                      ) : null}
+
+                      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-[1.1rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            Objective
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-200">
+                            {operatingBrief?.objective ?? "Not set"}
+                          </p>
+                        </div>
+                        <div className="rounded-[1.1rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            Deliverable
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-200">
+                            {operatingBrief?.deliverable ?? "Not set"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <BriefList
+                          label="Constraints"
+                          items={operatingBrief?.constraints ?? []}
+                          emptyLabel="No constraints recorded"
+                        />
+                        <BriefList
+                          label="Success Criteria"
+                          items={operatingBrief?.success_criteria ?? []}
+                          emptyLabel="No success criteria recorded"
+                        />
+                        <BriefList
+                          label="Stakeholders"
+                          items={operatingBrief?.stakeholders ?? []}
+                          emptyLabel="No stakeholders recorded"
+                        />
+                        <BriefList
+                          label="Dependencies"
+                          items={operatingBrief?.dependencies ?? []}
+                          emptyLabel="No dependencies recorded"
+                        />
+                      </div>
+
+                      <div className="mt-4 rounded-[1.1rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Priority Frame
+                        </p>
+                        <div className="mt-3">
+                          <PriorityFrameView brief={operatingBrief} />
+                        </div>
+                      </div>
+
+                      {operatingBrief?.clarifications.some((item) => item.blocking) ? (
+                        <div className="mt-4 rounded-[1.1rem] border border-amber-800/15 bg-amber-50/80 px-4 py-4 dark:border-amber-200/20 dark:bg-amber-500/10">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100/80">
+                            Blocking Clarifications
+                          </p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-950 dark:text-amber-100">
+                            {operatingBrief.clarifications
+                              .filter((item) => item.blocking)
+                              .map((item) => (
+                                <li key={`${item.related_field}-${item.question}`}>{item.question}</li>
+                              ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {operatingBrief?.assumptions.length ? (
+                        <div className="mt-4">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            Assumptions
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {operatingBrief.assumptions.slice(-3).map((item) => (
+                              <div
+                                key={`${item.field}-${item.created_at}`}
+                                className="rounded-[1rem] border border-slate-900/8 bg-white/70 px-3 py-3 text-sm dark:border-white/8 dark:bg-white/5"
+                              >
+                                <span className="font-medium text-slate-900 dark:text-slate-100">{item.field}: </span>
+                                <span className="text-slate-600 dark:text-slate-300">
+                                  {formatAssumptionValue(item.value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4">
+                        <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Update Brief
+                        </label>
+                        <Textarea
+                          data-testid="operating-brief-input"
+                          className="mt-2"
+                          rows={3}
+                          value={operatingBriefInput}
+                          onChange={(event) => setOperatingBriefInput(event.target.value)}
+                          placeholder={`Start by telling me what you want this company to achieve.
+
+Examples:
+- Build a lead generation system
+- Analyze my market and competitors
+- Create a content strategy`}
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          data-testid="operating-brief-submit-button"
+                          onClick={() => void handleSubmitOperatingBrief()}
+                          disabled={operatingBriefSubmitting || operatingBriefLoading}
+                        >
+                          {operatingBriefSubmitting ? (
+                            <Spinner size="xs" className="mr-2" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Update brief
+                        </Button>
+                      </div>
+
+                      {latestInteractionResponse ? (
+                        <ProjectManagerResponseCard response={latestInteractionResponse} />
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Active operations
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {formatCompactNumber(operations.filter((operation) => operation.status === "running").length)}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Failed operations
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {formatCompactNumber(operations.filter((operation) => operation.status === "failed").length)}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Pending approvals
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {formatCompactNumber(pendingApprovalCount)}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          AI mode and usage
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {editableAIAccessMode === "managed" ? "Managed" : "BYOK"}
+                        </p>
+                        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                          {operations.length} total operation{operations.length === 1 ? "" : "s"} recorded in this
+                          company workspace.
+                        </p>
+                      </div>
+                    </div>
+
+                    <WhyBlock
+                      title="Why you are seeing this"
+                      reasons={
+                        failure
+                          ? [
+                              "A department could not finish its part of the operation.",
+                              "Retrying is the fastest way to check whether the issue was temporary or whether the objective needs to change.",
+                            ]
+                          : pendingApprovalCount > 0
+                            ? [
+                                "The company reached a point where a human decision is required.",
+                                "Approvals are shown first because the operation cannot continue until you respond.",
+                              ]
+                            : runningOperation
+                              ? [
+                                  `${runningOperation.currentDepartmentName} is actively working right now.`,
+                                  "The command surface shifts toward monitoring until the operation finishes or something needs your intervention.",
+                                ]
+                              : [
+                                  "There is no blocked work right now, so the best next move is to launch another operation.",
+                                  "This area keeps the next decision visible instead of making you hunt through metrics.",
+                                ]
+                      }
+                      className="mt-5"
+                    />
+
+                    {failure ? (
+                      <div className="mt-5">
+                        <FailureCard failure={failure} onRetry={handleRetryFailedOperation} />
+                      </div>
+                    ) : null}
+
+                    <div
+                      id="company-controls"
+                      className="mt-5 rounded-[1.5rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                    >
+                      <div className="flex items-center gap-2 text-slate-950 dark:text-slate-50">
+                        <Settings2 className="h-4 w-4" />
+                        <p className="text-sm font-semibold">Controls</p>
+                      </div>
+
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            Objective
+                          </label>
+                          <Textarea
+                            className="mt-2"
+                            rows={4}
+                            value={editableObjective}
+                            onChange={(event) => setEditableObjective(event.target.value)}
+                          />
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                              Autonomy mode
+                            </label>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(["manual", "assisted", "autonomous"] as CompanyAutonomyMode[]).map((mode) => (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  onClick={() => setEditableAutonomyMode(mode)}
+                                  className={`rounded-full border px-3 py-2 text-sm transition-colors ${
+                                    editableAutonomyMode === mode
+                                      ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
+                                      : "border-slate-900/10 bg-white/80 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                                  }`}
+                                >
+                                  {mode}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                              {editableAutonomyMode === "manual"
+                                ? "Nothing meaningful moves forward without you."
+                                : editableAutonomyMode === "autonomous"
+                                  ? "The company keeps moving on its own until a limit or failure stops it."
+                                  : "The company works on its own and pauses only at key decision points."}
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                              AI access mode
+                            </label>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(["managed", "byok"] as CompanyAIAccessMode[]).map((mode) => (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  onClick={() => setEditableAIAccessMode(mode)}
+                                  className={`rounded-full border px-3 py-2 text-sm transition-colors ${
+                                    editableAIAccessMode === mode
+                                      ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
+                                      : "border-slate-900/10 bg-white/80 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                                  }`}
+                                >
+                                  {mode === "managed" ? "Managed" : "BYOK"}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                              {editableAIAccessMode === "managed"
+                                ? "Managed uses ForgeGraph's AI access so you can keep operating immediately."
+                                : "BYOK uses your own API key and is best when you want the company to operate on your AI access."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            Launch operation
+                          </label>
+                          <Input
+                            data-testid="company-launch-operation-input"
+                            className="mt-2"
+                            value={operationBrief}
+                            onChange={(event) => setOperationBrief(event.target.value)}
+                            placeholder="Start the next company operation..."
+                          />
+                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            Use one clear instruction. The company will turn it into work across the selected
+                            departments.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
                           <Button
-                            size="sm"
-                            className="rounded-full"
+                            data-testid="company-launch-operation-button"
                             onClick={() => void handleLaunchOperation()}
-                            disabled={launching}
+                            disabled={launching || companyPaused}
                           >
+                            {launching ? <Spinner size="xs" className="mr-2" /> : <PlayCircle className="h-4 w-4" />}
                             Launch operation
                           </Button>
+                          <Button
+                            data-testid="company-retry-operation-button"
+                            variant="outline"
+                            onClick={() => void handleRetryFailedOperation()}
+                            disabled={retrying || !latestFailedOperation}
+                          >
+                            {retrying ? <Spinner size="xs" className="mr-2" /> : <RotateCcw className="h-4 w-4" />}
+                            Retry failed operation
+                          </Button>
+                          <Button
+                            data-testid="company-update-objective-button"
+                            variant="outline"
+                            onClick={() => void handleSaveObjective()}
+                            disabled={savingObjective}
+                          >
+                            {savingObjective ? <Spinner size="xs" className="mr-2" /> : <Bot className="h-4 w-4" />}
+                            Update objective
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => void handleToggleCompanyPause()}
+                            disabled={savingCompanyState}
+                          >
+                            {savingCompanyState ? (
+                              <Spinner size="xs" className="mr-2" />
+                            ) : companyPaused ? (
+                              <PlayCircle className="h-4 w-4" />
+                            ) : (
+                              <PauseCircle className="h-4 w-4" />
+                            )}
+                            {companyPaused ? "Resume company" : "Pause company"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div data-guide-id="company-latest-outputs" className="mt-5">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Latest outputs
+                      </p>
+                      <MicroExplanation className="mt-2">
+                        Completed operations leave readable deliverables here so you can quickly decide whether to
+                        launch, refine, or retry.
+                      </MicroExplanation>
+                      <div className="mt-3 space-y-3">
+                        {latestCompletedOutputs.length ? (
+                          latestCompletedOutputs.map((item) => (
+                            <div
+                              key={item.id}
+                              className="rounded-[1.2rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                  Deliverable from operation {item.id.slice(0, 8)}
+                                </p>
+                                <Button asChild size="sm" variant="outline" className="rounded-full">
+                                  <Link href={`/runs/${item.id}`}>Open</Link>
+                                </Button>
+                              </div>
+                              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                {item.preview}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <EmptyBlock
+                            title="No deliverables yet"
+                            description="Completed operations will surface their latest outputs here."
+                          />
                         )}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Active operations
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCompactNumber(operations.filter((operation) => operation.status === "running").length)}
-                      </p>
-                    </div>
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Failed operations
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCompactNumber(operations.filter((operation) => operation.status === "failed").length)}
-                      </p>
-                    </div>
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Pending approvals
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {formatCompactNumber(pendingApprovalCount)}
-                      </p>
-                    </div>
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        AI mode and usage
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                        {editableAIAccessMode === "managed" ? "Managed" : "BYOK"}
-                      </p>
-                      <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                        {operations.length} total operation{operations.length === 1 ? "" : "s"} recorded in this company
-                        workspace.
-                      </p>
-                    </div>
-                  </div>
-
-                  <WhyBlock
-                    title="Why you are seeing this"
-                    reasons={
-                      failure
-                        ? [
-                            "A department could not finish its part of the operation.",
-                            "Retrying is the fastest way to check whether the issue was temporary or whether the objective needs to change.",
-                          ]
-                        : pendingApprovalCount > 0
-                          ? [
-                              "The company reached a point where a human decision is required.",
-                              "Approvals are shown first because the operation cannot continue until you respond.",
-                            ]
-                          : runningOperation
-                            ? [
-                                `${runningOperation.currentDepartmentName} is actively working right now.`,
-                                "The command surface shifts toward monitoring until the operation finishes or something needs your intervention.",
-                              ]
-                            : [
-                                "There is no blocked work right now, so the best next move is to launch another operation.",
-                                "This area keeps the next decision visible instead of making you hunt through metrics.",
-                              ]
-                    }
-                    className="mt-5"
-                  />
-
-                  {failure ? (
-                    <div className="mt-5">
-                      <FailureCard failure={failure} onRetry={handleRetryFailedOperation} />
-                    </div>
-                  ) : null}
-
-                  <div
-                    id="company-controls"
-                    className="mt-5 rounded-[1.5rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
-                  >
-                    <div className="flex items-center gap-2 text-slate-950 dark:text-slate-50">
-                      <Settings2 className="h-4 w-4" />
-                      <p className="text-sm font-semibold">Controls</p>
-                    </div>
-
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Objective
-                        </label>
-                        <Textarea
-                          className="mt-2"
-                          rows={4}
-                          value={editableObjective}
-                          onChange={(event) => setEditableObjective(event.target.value)}
-                        />
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                            Autonomy mode
-                          </label>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {(["manual", "assisted", "autonomous"] as CompanyAutonomyMode[]).map((mode) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                onClick={() => setEditableAutonomyMode(mode)}
-                                className={`rounded-full border px-3 py-2 text-sm transition-colors ${
-                                  editableAutonomyMode === mode
-                                    ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                                    : "border-slate-900/10 bg-white/80 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
-                                }`}
-                              >
-                                {mode}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                            {editableAutonomyMode === "manual"
-                              ? "Nothing meaningful moves forward without you."
-                              : editableAutonomyMode === "autonomous"
-                                ? "The company keeps moving on its own until a limit or failure stops it."
-                                : "The company works on its own and pauses only at key decision points."}
-                          </p>
-                        </div>
-
-                        <div>
-                          <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                            AI access mode
-                          </label>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {(["managed", "byok"] as CompanyAIAccessMode[]).map((mode) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                onClick={() => setEditableAIAccessMode(mode)}
-                                className={`rounded-full border px-3 py-2 text-sm transition-colors ${
-                                  editableAIAccessMode === mode
-                                    ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                                    : "border-slate-900/10 bg-white/80 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
-                                }`}
-                              >
-                                {mode === "managed" ? "Managed" : "BYOK"}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                            {editableAIAccessMode === "managed"
-                              ? "Managed uses ForgeGraph's AI access so you can keep operating immediately."
-                              : "BYOK uses your own API key and is best when you want the company to operate on your AI access."}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Launch operation
-                        </label>
-                        <Input
-                          data-testid="company-launch-operation-input"
-                          className="mt-2"
-                          value={operationBrief}
-                          onChange={(event) => setOperationBrief(event.target.value)}
-                          placeholder="Start the next company operation..."
-                        />
-                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                          Use one clear instruction. The company will turn it into work across the selected departments.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          data-testid="company-launch-operation-button"
-                          onClick={() => void handleLaunchOperation()}
-                          disabled={launching || companyPaused}
-                        >
-                          {launching ? <Spinner size="xs" className="mr-2" /> : <PlayCircle className="h-4 w-4" />}
-                          Launch operation
-                        </Button>
-                        <Button
-                          data-testid="company-retry-operation-button"
-                          variant="outline"
-                          onClick={() => void handleRetryFailedOperation()}
-                          disabled={retrying || !latestFailedOperation}
-                        >
-                          {retrying ? <Spinner size="xs" className="mr-2" /> : <RotateCcw className="h-4 w-4" />}
-                          Retry failed operation
-                        </Button>
-                        <Button
-                          data-testid="company-update-objective-button"
-                          variant="outline"
-                          onClick={() => void handleSaveObjective()}
-                          disabled={savingObjective}
-                        >
-                          {savingObjective ? <Spinner size="xs" className="mr-2" /> : <Bot className="h-4 w-4" />}
-                          Update objective
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => void handleToggleCompanyPause()}
-                          disabled={savingCompanyState}
-                        >
-                          {savingCompanyState ? (
-                            <Spinner size="xs" className="mr-2" />
-                          ) : companyPaused ? (
-                            <PlayCircle className="h-4 w-4" />
-                          ) : (
-                            <PauseCircle className="h-4 w-4" />
-                          )}
-                          {companyPaused ? "Resume company" : "Pause company"}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div data-guide-id="company-latest-outputs" className="mt-5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Latest outputs
-                    </p>
-                    <MicroExplanation className="mt-2">
-                      Completed operations leave readable deliverables here so you can quickly decide whether to launch,
-                      refine, or retry.
-                    </MicroExplanation>
-                    <div className="mt-3 space-y-3">
-                      {latestCompletedOutputs.length ? (
-                        latestCompletedOutputs.map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded-[1.2rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                Deliverable from operation {item.id.slice(0, 8)}
-                              </p>
-                              <Button asChild size="sm" variant="outline" className="rounded-full">
-                                <Link href={`/runs/${item.id}`}>Open</Link>
-                              </Button>
-                            </div>
-                            <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.preview}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <EmptyBlock
-                          title="No deliverables yet"
-                          description="Completed operations will surface their latest outputs here."
-                        />
-                      )}
-                    </div>
-                  </div>
-                </Panel>
+                  </Panel>
+                </div>
               </div>
             </>
           )}

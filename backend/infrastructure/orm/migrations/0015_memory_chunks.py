@@ -6,6 +6,18 @@ import pgvector.django
 from django.db import migrations, models
 
 
+class AddPostgresIndex(migrations.AddIndex):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        if schema_editor.connection.vendor != "postgresql":
+            return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        if schema_editor.connection.vendor != "postgresql":
+            return
+        super().database_backwards(app_label, schema_editor, from_state, to_state)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("orm", "0014_pgvector_setup"),
@@ -55,7 +67,7 @@ class Migration(migrations.Migration):
                 fields=["tenant_id", "session_id"], name="memory_chunks_session_idx"
             ),
         ),
-        migrations.AddIndex(
+        AddPostgresIndex(
             model_name="memorychunk",
             index=pgvector.django.IvfflatIndex(
                 fields=["embedding"],

@@ -19,6 +19,7 @@ from adapters.ws.runs.broadcast import (
     broadcast_node_run_updated,
     broadcast_run_updated,
 )
+from application.services.company_archive import ArchiveService
 from application.services.metrics import record_stale_attempt_ignored
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
@@ -664,6 +665,8 @@ def apply_set_run_status_intent(
                 safe_delete_snapshot(run_id)
 
             transaction.on_commit(delete_completed_run_snapshot)
+            if run.status == "succeeded":
+                _schedule_deliverable_archive(run_id=run.id)
 
     if run is not None:
         broadcast_run_updated(run)
@@ -823,6 +826,8 @@ def apply_upsert_node_run_intent(
             error_json=node_run.error_json,
         )
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
+        if node_run.status == "succeeded":
+            _schedule_deliverable_archive(run_id=run.id, node_run_id=node_run.id)
 
     if run is not None and node_run is not None:
         broadcast_node_run_updated(run=run, node_run=node_run)
@@ -835,6 +840,28 @@ def _load_run_for_update(run_id: UUID) -> Run:
         return Run.objects.select_for_update().select_related("owner").get(id=run_id)
     except Run.DoesNotExist as exc:
         raise RuntimeIntentError(f"run '{run_id}' not found") from exc
+
+
+def _schedule_deliverable_archive(*, run_id: UUID, node_run_id: UUID | None = None) -> None:
+    """Archive deliverable-shaped outputs after authoritative runtime writes commit."""
+
+    def archive_deliverables() -> None:
+        try:
+            run = Run.objects.select_related(
+                "organization",
+                "graph_version__graph__organization",
+            ).get(id=run_id)
+            node_run = None
+            if node_run_id is not None:
+                node_run = NodeRun.objects.filter(id=node_run_id, run=run).first()
+            ArchiveService().archive_deliverable_as_asset(run=run, node_run=node_run)
+        except Exception:
+            logger.exception(
+                "deliverable_archive_failed",
+                extra={"run_id": str(run_id), "node_run_id": str(node_run_id or "")},
+            )
+
+    transaction.on_commit(archive_deliverables)
 
 
 def mark_run_transport_failure(

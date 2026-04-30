@@ -3243,7 +3243,7 @@ func (s *Scheduler) validateStateSchema(ctx context.Context, rc *runContext, nod
 				WithError(errMsg).
 				WithDuration(durationMs),
 		)
-		s.setError(rc, domain.NewNodeError(node.ID, node.Type, fmt.Errorf(errMsg)))
+		s.setError(rc, domain.NewNodeError(node.ID, node.Type, errors.New(errMsg)))
 		return false
 	}
 

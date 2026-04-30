@@ -61,6 +61,8 @@ from adapters.ws.runs.broadcast import (
 from application.services.audit_log import record_audit_log
 from application.services.auth_state import validate_access_token
 from application.services.cloudevents import unwrap_engine_event
+from application.services.company_archive import ArchiveService, ContextPackService
+from application.services.company_learning import PreferenceEventService
 from application.services.engine_selection import (
     EngineAssignmentError,
     get_engine_target_by_id,
@@ -335,6 +337,41 @@ def _engine_input_for_llm_access(
     llm_access: LLMAccessConfig,
 ) -> dict[str, Any]:
     return engine_input_with_llm_access(input_json, llm_access)
+
+
+def _attach_operation_context_pack(
+    run: Run,
+    outbound_graph: dict[str, Any],
+    *,
+    context_pack_mode: str = "fresh_at_dispatch",
+) -> dict[str, Any]:
+    _, outbound_with_context = ContextPackService().attach_context_pack_to_run(
+        run=run,
+        outbound_graph=outbound_graph,
+        context_pack_mode=context_pack_mode,
+    )
+    run.save(update_fields=["dispatch_graph_json"])
+    return outbound_with_context or outbound_graph
+
+
+def _schedule_deliverable_archive(run_id: UUID, node_run_id: UUID | None = None) -> None:
+    def archive_deliverables() -> None:
+        try:
+            run = Run.objects.select_related(
+                "organization",
+                "graph_version__graph__organization",
+            ).get(id=run_id)
+            node_run = None
+            if node_run_id is not None:
+                node_run = NodeRun.objects.filter(id=node_run_id, run=run).first()
+            ArchiveService().archive_deliverable_as_asset(run=run, node_run=node_run)
+        except Exception:
+            logger.exception(
+                "deliverable_archive_failed",
+                extra={"run_id": str(run_id), "node_run_id": str(node_run_id or "")},
+            )
+
+    transaction.on_commit(archive_deliverables)
 
 
 def _llm_access_error_response(exc: LLMAccessValidationError) -> Response:
@@ -871,6 +908,26 @@ def _run_status_from_event(event_type: str, payload: dict[str, Any]) -> str | No
     return None
 
 
+_STATUS_HISTORY_EVENT_ORDER = {
+    "run_started": 10,
+    "run_paused": 20,
+    "run.resume_requested": 30,
+    "run_resumed": 40,
+    "run_completed": 90,
+    "run_failed": 90,
+    "run_canceled": 90,
+}
+_STATUS_HISTORY_STATUS_ORDER = {
+    "pending": 0,
+    "running": 10,
+    "paused": 20,
+    "resume_requested": 30,
+    "succeeded": 90,
+    "failed": 90,
+    "canceled": 90,
+}
+
+
 def _build_run_status_history(*, run: Run) -> list[str]:
     history: list[str] = []
 
@@ -883,12 +940,29 @@ def _build_run_status_history(*, run: Run) -> list[str]:
 
     append_status("pending")
 
-    event_rows = (
+    event_rows = list(
         RunEvent.objects.filter(run=run).order_by("created_at", "id").only("event_type", "payload")
     )
+    events: list[tuple[RunEvent, dict[str, Any], str | None]] = []
     for event_row in event_rows:
         payload = redact_payload(event_row.payload or {})
-        append_status(_run_status_from_event(event_row.event_type, payload))
+        payload_dict = payload if isinstance(payload, dict) else {}
+        events.append(
+            (event_row, payload_dict, _run_status_from_event(event_row.event_type, payload_dict))
+        )
+
+    for _, _, status_value in sorted(
+        events,
+        key=lambda item: (
+            item[0].created_at,
+            _STATUS_HISTORY_EVENT_ORDER.get(
+                item[0].event_type,
+                _STATUS_HISTORY_STATUS_ORDER.get(item[2] or "", 50),
+            ),
+            str(item[0].id),
+        ),
+    ):
+        append_status(status_value)
 
     append_status(str(run.status or "").strip() or None)
     return history
@@ -1868,6 +1942,7 @@ class RunStartView(APIView):
                 run=run,
                 graph_json=prepared_graph,
             )
+            outbound_graph = _attach_operation_context_pack(run, outbound_graph)
         except ToolExecutionDispatchBlocked as exc:
             run.status = "failed"
             run.ended_at = timezone.now()
@@ -1927,7 +2002,10 @@ class RunStartView(APIView):
             graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
-        engine_input_json = _engine_input_for_llm_access(input_json, llm_access)
+        engine_input_json = _engine_input_for_llm_access(
+            run.input_json if isinstance(run.input_json, dict) else input_json,
+            llm_access,
+        )
         try:
             with start_backend_span(
                 "runs.start",
@@ -2236,6 +2314,7 @@ class RunInvokeView(APIView):
                     run=run,
                     graph_json=graph_json,
                 )
+                outbound_graph = _attach_operation_context_pack(run, outbound_graph)
                 checkpoint_graph_json = pyjson.dumps(outbound_graph)
 
                 RunCheckpoint.objects.create(
@@ -2302,7 +2381,10 @@ class RunInvokeView(APIView):
             graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
-        engine_input_json = _engine_input_for_llm_access(input_json, llm_access)
+        engine_input_json = _engine_input_for_llm_access(
+            run.input_json if isinstance(run.input_json, dict) else input_json,
+            llm_access,
+        )
         try:
             with start_backend_span(
                 "runs.invoke",
@@ -2583,6 +2665,19 @@ class RunReplayView(APIView):
                     run=replay_run,
                     graph_json=prepared_graph,
                 )
+                outbound_graph = _attach_operation_context_pack(
+                    replay_run,
+                    outbound_graph,
+                    context_pack_mode="fresh_at_replay",
+                )
+                outbound_metadata = (
+                    outbound_graph.get("metadata") if isinstance(outbound_graph, dict) else {}
+                )
+                replay_context_pack_id = (
+                    str(outbound_metadata.get("context_pack_id") or "")
+                    if isinstance(outbound_metadata, dict)
+                    else ""
+                )
                 checkpoint_graph_json = pyjson.dumps(outbound_graph)
 
                 RunCheckpoint.objects.create(
@@ -2602,6 +2697,8 @@ class RunReplayView(APIView):
                         "source_run_id": str(run.id),
                         "from_node_id": node_id or None,
                         "checkpoint_step": checkpoint.step_index,
+                        "context_pack_id": replay_context_pack_id or None,
+                        "context_pack_mode": "fresh_at_replay",
                     },
                     trace_id=trace_metadata["trace_id"],
                     span_id=trace_metadata["span_id"],
@@ -2663,7 +2760,10 @@ class RunReplayView(APIView):
             graph_version.graph, user, session_id=session_id
         )
         tenant_id = get_tenant_id(request)
-        engine_input_json = _engine_input_for_llm_access(input_json, llm_access)
+        engine_input_json = _engine_input_for_llm_access(
+            replay_run.input_json if isinstance(replay_run.input_json, dict) else input_json,
+            llm_access,
+        )
         try:
             with start_backend_span(
                 "runs.replay",
@@ -3186,6 +3286,11 @@ class RunResumeView(APIView):
                 approval_task.result = input_json
                 approval_task.resolved_at = resume_requested_at
                 approval_task.save(update_fields=["status", "result", "resolved_at"])
+                PreferenceEventService().record_hitl_feedback(
+                    approval_task=approval_task,
+                    actor=user,
+                    final_value=input_json,
+                )
                 record_audit_log(
                     actor=user,
                     tenant_id=get_tenant_id_for_user(user),
@@ -3676,6 +3781,8 @@ class EngineRunEventsView(APIView):
                     "canceled",
                 }:
                     record_run_completed(run.status, run.duration_ms)
+                if state_mutation_enabled and event_type == "run_completed":
+                    _schedule_deliverable_archive(run.id)
 
                 _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
                 for summary_payload in final_run_stream_summaries:
@@ -3957,6 +4064,12 @@ class EngineRunEventsView(APIView):
                 _save_event(
                     "node_run.updated", _serialize_event_payload(redact_payload(node_payload))
                 )
+                if (
+                    state_mutation_enabled
+                    and event_type == "node_completed"
+                    and getattr(node_run, "id", None)
+                ):
+                    _schedule_deliverable_archive(run.id, node_run.id)
 
                 usage_payload = _extract_llm_usage_payload(
                     node_type=node_type,

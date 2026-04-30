@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import ANY
 
 import pytest
@@ -101,9 +102,12 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
     assert entry.status == "completed"
     assert len(engine_client.start_calls) == 1
 
-    graph_json = engine_client.start_calls[0]["graph_json"]
-    assert isinstance(graph_json, dict)
-    assert run.dispatch_graph_json == persisted_graph
+    graph_json = cast(dict[str, Any], engine_client.start_calls[0]["graph_json"])
+    run_dispatch_graph = cast(dict[str, Any], run.dispatch_graph_json)
+    run_metadata = cast(dict[str, Any], run_dispatch_graph["metadata"])
+    persisted_metadata = cast(dict[str, Any], persisted_graph["metadata"])
+    assert run_dispatch_graph["edges"] == persisted_graph["edges"]
+    assert run_dispatch_graph["nodes"] == persisted_graph["nodes"]
 
     assert graph_json["edges"] == persisted_graph["edges"]
     assert graph_json["nodes"] == [
@@ -120,5 +124,11 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
             "manifest_checksum": "pinned-checksum",
         },
         "backend_attempt_id": ANY,
+        "context_pack_id": ANY,
+        "context_pack": ANY,
+        "context_pack_mode": "fresh_at_dispatch",
     }
-    assert "backend_attempt_id" not in run.dispatch_graph_json["metadata"]
+    assert run_metadata["tool_resolution"] == persisted_metadata["tool_resolution"]
+    assert run_metadata["context_pack_id"] == graph_json["metadata"]["context_pack_id"]
+    assert run_metadata["context_pack_mode"] == "fresh_at_dispatch"
+    assert "backend_attempt_id" not in run_metadata

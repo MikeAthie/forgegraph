@@ -529,9 +529,17 @@ def test_process_run_queue_enriches_persisted_dispatch_graph_without_mutating_so
     outbound_graph = cast(dict[str, Any], engine_client.start_calls[0]["graph_json"])
     outbound_metadata = cast(dict[str, Any], outbound_graph["metadata"])
     persisted_metadata = cast(dict[str, Any], original_persisted_graph["metadata"])
+    run_dispatch_graph = cast(dict[str, Any], run.dispatch_graph_json)
+    run_metadata = cast(dict[str, Any], run_dispatch_graph["metadata"])
 
     assert persisted_graph == original_persisted_graph
-    assert run.dispatch_graph_json == original_persisted_graph
+    assert run_dispatch_graph["edges"] == original_persisted_graph["edges"]
+    assert run_dispatch_graph["nodes"] == original_persisted_graph["nodes"]
     assert "backend_attempt_id" not in persisted_metadata
+    assert "backend_attempt_id" not in run_metadata
+    assert run_metadata["tool_resolution"] == persisted_metadata["tool_resolution"]
+    assert run_metadata["context_pack_id"]
+    assert run_metadata["context_pack_mode"] == "fresh_at_dispatch"
     assert outbound_metadata["tool_resolution"] == persisted_metadata["tool_resolution"]
+    assert outbound_metadata["context_pack_id"] == run_metadata["context_pack_id"]
     assert "backend_attempt_id" in outbound_metadata

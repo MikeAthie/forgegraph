@@ -5,6 +5,7 @@ import type {
   GraphDetail,
   GraphListItem,
   NodeRunItem,
+  OperatingBrief,
   RunDetail,
   RunListItem,
   RunStatus,
@@ -46,6 +47,7 @@ export type CompanyWorkspaceMockState = {
   companyName: string;
   graphVersion: MinimalGraphVersion;
   operations: MockCompanyOperation[];
+  brief?: OperatingBrief;
   pendingApprovalCount?: number;
   approvals?: ApprovalTask[];
   onStart?: (input: Record<string, unknown>, state: CompanyWorkspaceMockState) => MockCompanyOperation;
@@ -287,6 +289,85 @@ function buildGraphDetail(state: CompanyWorkspaceMockState): GraphDetail {
   };
 }
 
+function buildDefaultOperatingBrief(state: CompanyWorkspaceMockState, operationId?: string | null): OperatingBrief {
+  const profile = state.graphVersion.graph_json.metadata?.company_profile;
+  const objective =
+    profile && typeof profile === "object" && "objective" in profile
+      ? String((profile as Record<string, unknown>).objective ?? "")
+      : String(state.graphVersion.graph_json.metadata?.description ?? "");
+
+  return {
+    id: null,
+    organization_id: "playwright-company-org",
+    company_id: state.companyId,
+    operation_id: operationId ?? null,
+    objective: objective || null,
+    deliverable: null,
+    constraints: [],
+    success_criteria: [],
+    stakeholders: [],
+    dependencies: [],
+    assumptions: [],
+    clarifications: [],
+    priority_frame: {
+      speed: 0.5,
+      cost: 0.5,
+      quality: 0.5,
+      risk: 0.5,
+    },
+    autonomy_mode: "assisted",
+    created_at: null,
+    updated_at: null,
+  };
+}
+
+function mutateOperatingBrief(
+  state: CompanyWorkspaceMockState,
+  text: string,
+  operationId?: string | null,
+): OperatingBrief {
+  const lower = text.toLowerCase();
+  const current = state.brief ?? buildDefaultOperatingBrief(state, operationId);
+  const brief: OperatingBrief = {
+    ...current,
+    id: current.id ?? "playwright-operating-brief",
+    operation_id: operationId ?? current.operation_id,
+    constraints: [...current.constraints],
+    success_criteria: [...current.success_criteria],
+    stakeholders: [...current.stakeholders],
+    dependencies: [...current.dependencies],
+    assumptions: [...current.assumptions],
+    clarifications: [...current.clarifications],
+    priority_frame: { ...current.priority_frame },
+    updated_at: "2026-04-26T12:00:00.000Z",
+  };
+
+  if (!brief.objective && text.trim()) {
+    brief.objective = text.trim();
+    brief.deliverable = text.replace(/^(build|create|launch)\s+/i, "").trim() || null;
+  }
+  if (lower.includes("enterprise")) {
+    brief.stakeholders = Array.from(new Set([...brief.stakeholders, "Enterprise clients"]));
+  }
+  if (lower.includes("paid ads")) {
+    brief.constraints = Array.from(new Set([...brief.constraints, "Cannot use paid ads"]));
+  }
+  if (lower.includes("speed")) {
+    brief.priority_frame = { ...brief.priority_frame, speed: 0.9, cost: lower.includes("cost") ? 0.3 : 0.5 };
+  }
+  brief.assumptions = [
+    ...brief.assumptions,
+    {
+      field: "context",
+      value: text,
+      confidence: 0.7,
+      created_at: "2026-04-26T12:00:00.000Z",
+    },
+  ];
+  state.brief = brief;
+  return brief;
+}
+
 function buildRunDetail(state: CompanyWorkspaceMockState, operation: MockCompanyOperation): RunDetail {
   const nodeRuns = buildNodeRuns(operation, state.graphVersion.graph_json);
   const pausedNodeId =
@@ -423,6 +504,88 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(apiSuccess(approvals)),
+    });
+  });
+
+  await page.route(/\/api\/interaction\/briefs\/current(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const operationId = url.searchParams.get("operation_id");
+    const brief = state.brief ?? buildDefaultOperatingBrief(state, operationId);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ brief })),
+    });
+  });
+
+  await page.route(/\/api\/interaction\/events(?:\?.*)?$/, async (route: Route) => {
+    const input = toInputRecord(route.request().postDataJSON());
+    const text = String(input.input ?? "");
+    const operationId = typeof input.operation_id === "string" ? input.operation_id : null;
+    const brief = mutateOperatingBrief(state, text, operationId);
+    const lower = text.toLowerCase();
+    const affectedFields = [
+      ...(lower.includes("enterprise") ? ["stakeholders"] : []),
+      ...(lower.includes("paid ads") ? ["constraints"] : []),
+      ...(lower.includes("speed") ? ["priority_frame"] : []),
+    ];
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify(
+        apiSuccess({
+          brief,
+          event: {
+            id: "playwright-interaction-event",
+            brief_id: brief.id ?? "playwright-operating-brief",
+            company_id: state.companyId,
+            operation_id: operationId,
+            sequence: 1,
+            type: lower.includes("paid ads") ? "CONSTRAINT" : lower.includes("speed") ? "PRIORITY_SHIFT" : "MODIFY",
+            actor: "user",
+            timestamp: "2026-04-26T12:00:00.000Z",
+            raw_input: text,
+            delta: {},
+            affected_fields: affectedFields,
+            interpretation: {},
+            pm_action: "ASSUME_AND_CONTINUE",
+            plan_implications: {
+              execution_ready: false,
+              requires_plan_revision: Boolean(operationId),
+              active_operation_id: operationId,
+              should_interrupt_active_operation: false,
+              affected_fields: affectedFields,
+              blocking_clarifications: [],
+              summary: "Brief updated; assumptions were recorded so work can continue without restarting.",
+            },
+            created_at: "2026-04-26T12:00:00.000Z",
+          },
+          interpretation: {
+            intent_classification: lower.includes("paid ads")
+              ? "CONSTRAINT"
+              : lower.includes("speed")
+                ? "PRIORITY_SHIFT"
+                : "MODIFY",
+            affected_fields: affectedFields,
+            confidence: 0.8,
+            rationale: "Mocked interaction interpretation.",
+          },
+          pm_action: {
+            action: "ASSUME_AND_CONTINUE",
+            rationale: "Mocked interaction decision.",
+          },
+          plan_implications: {
+            execution_ready: false,
+            requires_plan_revision: Boolean(operationId),
+            active_operation_id: operationId,
+            should_interrupt_active_operation: false,
+            affected_fields: affectedFields,
+            blocking_clarifications: [],
+            summary: "Brief updated; assumptions were recorded so work can continue without restarting.",
+          },
+        }),
+      ),
     });
   });
 
