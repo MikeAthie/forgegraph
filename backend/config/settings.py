@@ -22,6 +22,18 @@ if _override_env_file:
         _override_env_path = BASE_DIR.parent / _override_env_path
     load_dotenv(_override_env_path, override=True)
 
+_LEGACY_ENV_VAR_RENAMES = {
+    "SECRET_KEYS": "SECRET_KEY",
+    "ENGINE_CALLBACK_SECRETS": "ENGINE_CALLBACK_SECRET",
+}
+_legacy_env_vars_present = [
+    f"{legacy} is no longer supported; use {current}."
+    for legacy, current in _LEGACY_ENV_VAR_RENAMES.items()
+    if legacy in os.environ
+]
+if _legacy_env_vars_present:
+    raise ImproperlyConfigured(" ".join(_legacy_env_vars_present))
+
 
 def _get_bool_env(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
@@ -357,6 +369,12 @@ RUN_QUEUE_MAX_CONCURRENCY_PER_TENANT = int(
 )
 RUN_QUEUE_WORKER_LOCK_SECONDS = int(os.environ.get("RUN_QUEUE_WORKER_LOCK_SECONDS", "300"))
 RUN_QUEUE_RETRY_DELAY_SECONDS = int(os.environ.get("RUN_QUEUE_RETRY_DELAY_SECONDS", "30"))
+RUN_QUEUE_WORKER_HEARTBEAT_TTL_SECONDS = int(
+    os.environ.get(
+        "RUN_QUEUE_WORKER_HEARTBEAT_TTL_SECONDS",
+        str(max(RUN_QUEUE_WORKER_LOCK_SECONDS * 2, 120)),
+    )
+)
 
 # SLO thresholds (defaults)
 SLO_RUN_SUCCESS_RATE = float(os.environ.get("SLO_RUN_SUCCESS_RATE", "0.99"))

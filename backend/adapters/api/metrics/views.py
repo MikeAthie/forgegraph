@@ -4,6 +4,7 @@ Metrics API views.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
@@ -54,6 +55,27 @@ class MetricsSummaryView(APIView):
             oldest_pending_age_seconds = max(
                 0.0, (timezone.now() - oldest_pending.available_at).total_seconds()
             )
+        stalled_before = timezone.now() - timedelta(
+            seconds=max(
+                int(
+                    getattr(
+                        settings,
+                        "RUN_ENGINE_STALLED_TIMEOUT_SECONDS",
+                        getattr(settings, "RUN_LIVENESS_TIMEOUT_SECONDS", 60),
+                    )
+                ),
+                1,
+            )
+        )
+        stalled_runs = (
+            Run.objects.filter(status__in=["running", "resume_requested"])
+            .filter(
+                Q(last_progress_at__lt=stalled_before)
+                | Q(last_progress_at__isnull=True, started_at__lt=stalled_before)
+                | Q(status="resume_requested", resume_requested_at__lt=stalled_before)
+            )
+            .count()
+        )
         queue_by_tenant = (
             RunQueueEntry.objects.filter(status__in=["pending", "processing"])
             .values("tenant_id")
@@ -82,6 +104,7 @@ class MetricsSummaryView(APIView):
                 "latency_ms_p95": run_metrics.run_latency_ms_p95,
                 "window_size": run_metrics.window_size,
                 "active_total": active_runs,
+                "stalled_total": stalled_runs,
                 "liveness_reconciled_total": run_metrics.liveness_reconciled_total,
                 "liveness_reconciled_by_reason": run_metrics.liveness_reconciled_by_reason,
                 "stale_attempt_ignored_total": run_metrics.stale_attempt_ignored_total,
@@ -91,7 +114,9 @@ class MetricsSummaryView(APIView):
                 "pending": queue_pending,
                 "processing": queue_processing,
                 "total_depth": queue_total,
+                "backlog": queue_total,
                 "oldest_pending_age_seconds": oldest_pending_age_seconds,
+                "stalled_runs": stalled_runs,
                 "by_tenant": [
                     {
                         "tenant_id": str(item["tenant_id"]),

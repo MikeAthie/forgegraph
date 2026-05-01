@@ -20,14 +20,12 @@ jobs:
     outputs:
       owner_lc: ${{ steps.vars.outputs.owner_lc }}
       sha_tag: ${{ steps.vars.outputs.sha_tag }}
-      branch_tag: ${{ steps.vars.outputs.branch_tag }}
     steps:
       - id: vars
         shell: bash
         run: |
           echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
           echo "sha_tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          echo "branch_tag=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
 
   security-audit:
     needs: prepare
@@ -98,6 +96,21 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Verify immutable release checkout
+        shell: bash
+        run: |
+          if [[ "$(git rev-parse HEAD)" != "${{ github.event.workflow_run.head_sha }}" ]]; then
+            echo "Release checkout is not at workflow_run.head_sha." >&2
+            exit 1
+          fi
+          git diff --quiet
+          git diff --cached --quiet
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "Release checkout has untracked changes." >&2
+            git status --short >&2
+            exit 1
+          fi
+
       - name: Require frontend release API URL
         if: ${{ matrix.component == 'frontend' }}
         shell: bash
@@ -126,7 +139,6 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ vars.RELEASE_FRONTEND_API_URL }}
           tags: |
             ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}
-            ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.branch_tag }}
 
       - name: Generate SBOM for ${{ matrix.component }}
         uses: anchore/sbom-action@v0
@@ -136,7 +148,7 @@ jobs:
           output-file: sbom-${{ matrix.component }}.spdx.json
 
       - name: Scan ${{ matrix.component }} image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}
           severity: HIGH,CRITICAL
@@ -146,7 +158,6 @@ jobs:
       - name: Publish ${{ matrix.component }} image
         run: |
           docker push "ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.sha_tag }}"
-          docker push "ghcr.io/${{ needs.prepare.outputs.owner_lc }}/${{ matrix.image_name }}:${{ needs.prepare.outputs.branch_tag }}"
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
@@ -253,6 +264,17 @@ jobs:
             -e GRPC_PORT=50051 -e METRICS_PORT=9090 \
             "${ENGINE_IMAGE}"
 
+      - name: Start run queue worker
+        run: |
+          docker run -d --name forgegraph-run-queue --network host \
+            -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
+            -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
+            -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
+            -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE -e RUN_QUEUE_ENABLED \
+            "${BACKEND_IMAGE}" python manage.py process_run_queue --worker-id release-smoke-run-queue
+
       - name: Start frontend
         run: |
           docker run -d --name forgegraph-frontend --network host \
@@ -287,6 +309,7 @@ jobs:
         if: failure()
         run: |
           docker logs forgegraph-backend || true
+          docker logs forgegraph-run-queue || true
           docker logs forgegraph-engine || true
           docker logs forgegraph-frontend || true
 

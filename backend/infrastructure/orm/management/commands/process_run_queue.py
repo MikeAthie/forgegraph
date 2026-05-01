@@ -42,6 +42,7 @@ from application.services.run_queue import (
     get_run_queue_settings,
     mark_completed,
     mark_failed,
+    record_run_queue_worker_heartbeat,
     release_stale_entries,
 )
 from application.services.tenancy import get_tenant_id_for_user
@@ -108,6 +109,7 @@ class Command(BaseCommand):
             return
 
         queue_settings = get_run_queue_settings()
+        record_run_queue_worker_heartbeat(worker_id)
         self.stdout.write(
             self.style.SUCCESS(
                 f"Run queue worker '{worker_id}' starting (max_per_tenant={queue_settings.max_per_tenant})."
@@ -115,6 +117,7 @@ class Command(BaseCommand):
         )
 
         while True:
+            record_run_queue_worker_heartbeat(worker_id)
             release_stale_entries(lock_timeout_seconds=queue_settings.lock_timeout_seconds)
             reconcile_stale_runs()
             entry = claim_next_entry(worker_id=worker_id, settings_override=queue_settings)

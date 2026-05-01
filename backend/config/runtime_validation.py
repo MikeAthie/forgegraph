@@ -32,6 +32,7 @@ def collect_runtime_validation_errors(*, strict: bool | None = None) -> list[str
             "DB port": settings.DATABASES["default"].get("PORT", ""),
             "DB name": settings.DATABASES["default"].get("NAME", ""),
             "DB user": settings.DATABASES["default"].get("USER", ""),
+            "DB password": settings.DATABASES["default"].get("PASSWORD", ""),
         }
         for label, value in required_db_settings.items():
             if not str(value or "").strip():

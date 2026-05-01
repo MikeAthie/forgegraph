@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.utils import timezone
 from rest_framework import status
 
@@ -29,6 +31,13 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     )
     pending_run = Run.objects.create(owner=user, graph_version=version, status="pending")
     processing_run = Run.objects.create(owner=user, graph_version=version, status="pending")
+    Run.objects.create(
+        owner=user,
+        graph_version=version,
+        status="running",
+        started_at=timezone.now() - timedelta(minutes=10),
+        last_progress_at=timezone.now() - timedelta(minutes=10),
+    )
 
     RunQueueEntry.objects.create(
         run=pending_run,
@@ -70,6 +79,7 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["runs"]["started_total"] >= 1
     assert payload["runs"]["completed_total"] >= 2
     assert payload["runs"]["failed_total"] >= 1
+    assert payload["runs"]["stalled_total"] >= 1
     assert payload["runs"]["liveness_reconciled_total"] >= 1
     assert payload["runs"]["liveness_reconciled_by_reason"]["engine_stalled"] >= 1
     assert payload["runs"]["stale_attempt_ignored_total"] >= 1
@@ -79,6 +89,8 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert payload["queue"]["pending"] >= 1
     assert payload["queue"]["processing"] >= 1
     assert payload["queue"]["total_depth"] >= 2
+    assert payload["queue"]["backlog"] >= 2
+    assert payload["queue"]["stalled_runs"] >= 1
     assert "oldest_pending_age_seconds" in payload["queue"]
     assert "by_tenant" in payload["queue"]
     assert "websocket" in payload

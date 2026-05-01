@@ -4,17 +4,22 @@ Run queue services for background execution.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from infrastructure.orm.models import Run, RunQueueEntry
+
+logger = logging.getLogger(__name__)
+RUN_QUEUE_WORKER_HEARTBEAT_CACHE_KEY = "forgegraph:run_queue:worker_heartbeat"
 
 
 @dataclass(frozen=True)
@@ -24,12 +29,95 @@ class RunQueueSettings:
     retry_delay_seconds: int
 
 
+@dataclass(frozen=True)
+class RunQueueWorkerHealth:
+    active: bool
+    worker_id: str = ""
+    last_seen_at: datetime | None = None
+    age_seconds: float | None = None
+    error: str = ""
+
+
 def get_run_queue_settings() -> RunQueueSettings:
     return RunQueueSettings(
         max_per_tenant=int(getattr(settings, "RUN_QUEUE_MAX_CONCURRENCY_PER_TENANT", 5)),
         lock_timeout_seconds=int(getattr(settings, "RUN_QUEUE_WORKER_LOCK_SECONDS", 300)),
         retry_delay_seconds=int(getattr(settings, "RUN_QUEUE_RETRY_DELAY_SECONDS", 30)),
     )
+
+
+def run_queue_worker_heartbeat_ttl_seconds() -> int:
+    configured = int(
+        getattr(
+            settings,
+            "RUN_QUEUE_WORKER_HEARTBEAT_TTL_SECONDS",
+            max(get_run_queue_settings().lock_timeout_seconds * 2, 120),
+        )
+    )
+    return max(configured, 1)
+
+
+def record_run_queue_worker_heartbeat(worker_id: str) -> None:
+    cache.set(
+        RUN_QUEUE_WORKER_HEARTBEAT_CACHE_KEY,
+        {
+            "worker_id": str(worker_id or "").strip(),
+            "last_seen_at": timezone.now().isoformat(),
+        },
+        timeout=run_queue_worker_heartbeat_ttl_seconds(),
+    )
+
+
+def get_run_queue_worker_health(*, now: datetime | None = None) -> RunQueueWorkerHealth:
+    effective_now = now or timezone.now()
+    try:
+        payload = cache.get(RUN_QUEUE_WORKER_HEARTBEAT_CACHE_KEY)
+    except Exception as exc:
+        return RunQueueWorkerHealth(active=False, error=str(exc))
+
+    if not isinstance(payload, dict):
+        return RunQueueWorkerHealth(active=False)
+
+    raw_last_seen = str(payload.get("last_seen_at") or "")
+    try:
+        last_seen_at = datetime.fromisoformat(raw_last_seen)
+    except ValueError:
+        return RunQueueWorkerHealth(
+            active=False,
+            worker_id=str(payload.get("worker_id") or ""),
+            error="invalid heartbeat timestamp",
+        )
+
+    if timezone.is_naive(last_seen_at):
+        last_seen_at = timezone.make_aware(last_seen_at, timezone.get_current_timezone())
+    age_seconds = max(0.0, (effective_now - last_seen_at).total_seconds())
+    return RunQueueWorkerHealth(
+        active=age_seconds <= run_queue_worker_heartbeat_ttl_seconds(),
+        worker_id=str(payload.get("worker_id") or ""),
+        last_seen_at=last_seen_at,
+        age_seconds=age_seconds,
+    )
+
+
+def log_run_queue_worker_unavailable(*, run_id: UUID, tenant_id: str) -> RunQueueWorkerHealth:
+    health = get_run_queue_worker_health()
+    if health.active:
+        return health
+
+    logger.error(
+        "run_queue_worker_unavailable",
+        extra={
+            "run_id": str(run_id),
+            "tenant_id": tenant_id,
+            "queue_worker_last_seen_at": (
+                health.last_seen_at.isoformat() if health.last_seen_at else None
+            ),
+            "queue_worker_age_seconds": health.age_seconds,
+            "queue_worker_error": health.error,
+            "warning": "RUN_QUEUE_ENABLED=true but no active process_run_queue worker heartbeat was found.",
+        },
+    )
+    return health
 
 
 def enqueue_run(
