@@ -91,6 +91,9 @@ export_backend_ci_env() {
   export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1,testserver}"
   export ENCRYPTION_KEY="${ENCRYPTION_KEY:-31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI=}"
   export SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT:-false}"
+  export FORGEGRAPH_ALLOW_INSECURE_TRANSPORT="${FORGEGRAPH_ALLOW_INSECURE_TRANSPORT:-true}"
+  export ENGINE_CALLBACK_SECRET="${ENGINE_CALLBACK_SECRET:-ci-engine-callback-secret}"
+  export RUNTIME_TOOL_SECRET="${RUNTIME_TOOL_SECRET:-ci-runtime-tool-secret}"
 
   # On WSL with the repo mounted from Windows, keep uv's environment off /mnt/*
   # to avoid mutating a Windows-created .venv from Linux.

@@ -365,6 +365,45 @@ func TestToolExecutor_HTTPToolSubstitutesConfigParametersInURL(t *testing.T) {
 	}
 }
 
+func TestToolExecutor_HTTPToolExpandsEnvironmentVariablesInHeaders(t *testing.T) {
+	t.Setenv("RUNTIME_TOOL_SECRET", "runtime-tool-secret")
+
+	var receivedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	def := tool.Definition{
+		Name:    "test.http.header.env",
+		Version: "1.0.0",
+		Execution: tool.ExecutionConfig{
+			Type: "http",
+			HTTP: &tool.HTTPToolConfig{
+				URL:    server.URL,
+				Method: http.MethodGet,
+				Headers: map[string]string{
+					"Authorization": "Bearer ${RUNTIME_TOOL_SECRET}",
+				},
+			},
+		},
+		SideEffects: tool.SideEffectConfig{Type: "read", Idempotent: true},
+	}
+
+	result, err := NewToolExecutor().ExecuteToolCall(context.Background(), httpToolCall(def, nil))
+	if err != nil {
+		t.Fatalf("ExecuteToolCall() error = %v", err)
+	}
+	if result.Error != nil {
+		t.Fatalf("result.Error = %v", result.Error)
+	}
+	if receivedAuth != "Bearer runtime-tool-secret" {
+		t.Fatalf("Authorization = %s, want Bearer runtime-tool-secret", receivedAuth)
+	}
+}
+
 func TestToolExecutor_HTTPToolInjectsCredentialAuthorization(t *testing.T) {
 	var receivedAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

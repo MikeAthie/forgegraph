@@ -428,7 +428,7 @@ func (e *ToolExecutor) executeHTTPTool(
 		}
 	}
 	for k, v := range headers {
-		headers[k] = SubstituteTemplateWithExtras(v, nil, templateValues)
+		headers[k] = SubstituteTemplateWithExtras(os.ExpandEnv(v), nil, templateValues)
 	}
 	if strings.TrimSpace(apiKey) != "" && strings.TrimSpace(headers["Authorization"]) == "" {
 		headers["Authorization"] = "Bearer " + apiKey

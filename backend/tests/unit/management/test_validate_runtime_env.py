@@ -8,12 +8,24 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 
 
+def _read_env_example() -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw_line in (BACKEND_DIR.parent / ".env.example").read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
 def _runtime_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     env = os.environ.copy()
     env.pop("SECRET_KEYS", None)
     env.pop("ENGINE_CALLBACK_SECRETS", None)
+    env.update(_read_env_example())
     env["DJANGO_SETTINGS_MODULE"] = "config.settings"
-    env["FORGEGRAPH_ENV_FILE"] = ".env.example"
+    env["FORGEGRAPH_ENV_FILE"] = ""
     if extra:
         env.update(extra)
     return env
@@ -52,3 +64,50 @@ def test_legacy_engine_callback_secrets_env_var_is_rejected() -> None:
         "ENGINE_CALLBACK_SECRETS is no longer supported; use ENGINE_CALLBACK_SECRET."
         in result.stderr
     )
+
+
+def test_runtime_tool_secret_is_required() -> None:
+    result = _run_validate_runtime_env(_runtime_env({"RUNTIME_TOOL_SECRET": ""}))
+
+    assert result.returncode != 0
+    assert "RUNTIME_TOOL_SECRET must be configured" in result.stderr
+
+
+def test_runtime_tool_secret_must_not_match_engine_callback_secret() -> None:
+    result = _run_validate_runtime_env(
+        _runtime_env(
+            {
+                "ENGINE_CALLBACK_SECRET": "shared-secret",
+                "RUNTIME_TOOL_SECRET": "shared-secret",
+            }
+        )
+    )
+
+    assert result.returncode != 0
+    assert "RUNTIME_TOOL_SECRET must be distinct from ENGINE_CALLBACK_SECRET." in result.stderr
+
+
+def test_insecure_transport_flags_are_rejected_without_explicit_exception() -> None:
+    result = _run_validate_runtime_env(
+        _runtime_env(
+            {
+                "SECURE_SSL_REDIRECT": "false",
+                "SESSION_COOKIE_SECURE": "false",
+                "CSRF_COOKIE_SECURE": "false",
+                "AUTH_REFRESH_COOKIE_SECURE": "false",
+                "FORGEGRAPH_ALLOW_INSECURE_TRANSPORT": "false",
+            }
+        )
+    )
+
+    assert result.returncode != 0
+    assert "FORGEGRAPH_ALLOW_INSECURE_TRANSPORT=true" in result.stderr
+
+
+def test_query_access_tokens_are_rejected_in_strict_runtime() -> None:
+    result = _run_validate_runtime_env(
+        _runtime_env({"RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN": "true"})
+    )
+
+    assert result.returncode != 0
+    assert "RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN must be disabled" in result.stderr

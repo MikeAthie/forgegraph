@@ -6,7 +6,7 @@ import re
 import socket
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 
@@ -15,6 +15,7 @@ _DEFAULT_TIMEOUT_SECONDS = 10.0
 _DEFAULT_MAX_FETCH_CHARS = 12000
 _DEFAULT_MAX_SEARCH_RESULTS = 5
 _MAX_FETCH_BYTES = 512_000
+_MAX_REDIRECTS = 5
 
 _TEXT_CONTENT_TYPES = (
     "text/",
@@ -76,10 +77,9 @@ def fetch_public_web_content(
     timeout = _clamp_timeout(timeout_seconds)
     max_text = _clamp_max_chars(max_chars)
 
-    response = requests.get(
+    response = _fetch_public_url(
         normalized_url,
         timeout=timeout,
-        headers={"User-Agent": _USER_AGENT, "Accept": "text/html, text/plain, application/json"},
     )
     response.raise_for_status()
 
@@ -186,6 +186,30 @@ def _validate_public_url(raw_url: str) -> str:
 
     _ensure_public_host(hostname)
     return parsed.geturl()
+
+
+def _fetch_public_url(url: str, *, timeout: float) -> requests.Response:
+    current_url = _validate_public_url(url)
+    for _ in range(_MAX_REDIRECTS + 1):
+        response = requests.get(
+            current_url,
+            timeout=timeout,
+            headers={
+                "User-Agent": _USER_AGENT,
+                "Accept": "text/html, text/plain, application/json",
+            },
+            allow_redirects=False,
+        )
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return response
+
+        location = response.headers.get("Location", "").strip()
+        response.close()
+        if not location:
+            raise RuntimeToolError("Redirect response is missing a Location header.")
+        current_url = _validate_public_url(urljoin(current_url, location))
+
+    raise RuntimeToolError("Too many redirects.")
 
 
 def _ensure_public_host(hostname: str) -> None:

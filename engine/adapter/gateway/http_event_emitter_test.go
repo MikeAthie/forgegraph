@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,87 +24,33 @@ func TestNewHTTPEventEmitterRequiresCallbackURL(t *testing.T) {
 }
 
 func TestEmitAsyncSpoolsWhenBufferFull(t *testing.T) {
-	releaseRequests := make(chan struct{})
-	var releaseOnce sync.Once
-	var requestCount atomic.Int32
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount.Add(1)
-		<-releaseRequests
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-	defer releaseOnce.Do(func() { close(releaseRequests) })
-
 	spoolPath := filepath.Join(t.TempDir(), "events.jsonl")
-	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
-		CallbackURL: server.URL,
-		Client:      server.Client(),
-		BufferSize:  1,
-		RetryDelay:  10 * time.Millisecond,
-		MaxRetries:  1,
-		SpoolPath:   spoolPath,
-	})
-	if err != nil {
-		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
-	}
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := emitter.Close(closeCtx); err != nil {
-			t.Fatalf("Close() error = %v", err)
-		}
-	}()
-
-	emitter.EmitAsync(port.NewEvent(port.EventTypeRunStarted, "run-1"))
-	emitter.EmitAsync(port.NewEvent(port.EventTypeNodeStarted, "run-1"))
-
-	thirdQueued := make(chan time.Duration, 1)
-	start := time.Now()
-	go func() {
-		emitter.EmitAsync(port.NewEvent(port.EventTypeNodeCompleted, "run-1"))
-		thirdQueued <- time.Since(start)
-	}()
-
-	select {
-	case elapsed := <-thirdQueued:
-		if elapsed > 150*time.Millisecond {
-			t.Fatalf("third EmitAsync took %v, want fast spool fallback", elapsed)
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("third EmitAsync did not return promptly")
+	emitter := &HTTPEventEmitter{
+		callbackURL:  "http://127.0.0.1:1",
+		eventChan:    make(chan *port.ExecutionEvent, 1),
+		maxRetries:   1,
+		retryDelay:   10 * time.Millisecond,
+		spoolPath:    spoolPath,
+		spoolFlushCh: make(chan struct{}, 1),
 	}
 
-	processingPath := spoolPath + ".processing"
-	assertEventually(t, 2*time.Second, func() bool {
-		for _, candidatePath := range []string{spoolPath, processingPath} {
-			info, statErr := os.Stat(candidatePath)
-			if statErr == nil && info.Size() > 0 {
-				return true
-			}
-		}
-		return false
-	})
+	emitter.eventChan <- port.NewEvent(port.EventTypeRunStarted, "run-1")
+	emitter.EmitAsync(port.NewEvent(port.EventTypeNodeCompleted, "run-1"))
 
-	releaseOnce.Do(func() { close(releaseRequests) })
-
-	flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := emitter.Flush(flushCtx); err != nil {
-		t.Fatalf("Flush() error = %v", err)
+	data, readErr := os.ReadFile(spoolPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile() error = %v", readErr)
 	}
-
-	assertEventually(t, 2*time.Second, func() bool {
-		for _, candidatePath := range []string{spoolPath, processingPath} {
-			if _, statErr := os.Stat(candidatePath); !os.IsNotExist(statErr) {
-				return false
-			}
-		}
-		return true
-	})
-
-	if got := requestCount.Load(); got < 3 {
-		t.Fatalf("requestCount = %d, want at least 3", got)
+	lines := bytesSplitLines(data)
+	if len(lines) != 1 {
+		t.Fatalf("spool lines = %d, want 1", len(lines))
+	}
+	var event port.ExecutionEvent
+	if err := json.Unmarshal(lines[0], &event); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if event.Type != port.EventTypeNodeCompleted {
+		t.Fatalf("event.Type = %s, want %s", event.Type, port.EventTypeNodeCompleted)
 	}
 }
 

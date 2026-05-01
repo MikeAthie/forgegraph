@@ -10,6 +10,10 @@ from urllib.parse import urlparse
 from django.conf import settings
 
 
+def _is_enabled_setting(name: str) -> bool:
+    return bool(getattr(settings, name, False))
+
+
 def should_enforce_strict_runtime_validation() -> bool:
     return bool(getattr(settings, "FORGEGRAPH_STRICT_RUNTIME_ENV", False)) or (
         not bool(getattr(settings, "DEBUG", False))
@@ -48,6 +52,29 @@ def collect_runtime_validation_errors(*, strict: bool | None = None) -> list[str
         if not callback_secret:
             errors.append("ENGINE_CALLBACK_SECRET must be configured for production runtime.")
 
+        runtime_tool_secret = str(getattr(settings, "RUNTIME_TOOL_SECRET", "") or "").strip()
+        if not runtime_tool_secret:
+            errors.append("RUNTIME_TOOL_SECRET must be configured for runtime tool authentication.")
+        if runtime_tool_secret and callback_secret and runtime_tool_secret == callback_secret:
+            errors.append("RUNTIME_TOOL_SECRET must be distinct from ENGINE_CALLBACK_SECRET.")
+
+        allow_insecure_transport = _is_enabled_setting("FORGEGRAPH_ALLOW_INSECURE_TRANSPORT")
+        insecure_flags = []
+        if not _is_enabled_setting("SESSION_COOKIE_SECURE"):
+            insecure_flags.append("SESSION_COOKIE_SECURE")
+        if not _is_enabled_setting("CSRF_COOKIE_SECURE"):
+            insecure_flags.append("CSRF_COOKIE_SECURE")
+        if not _is_enabled_setting("AUTH_REFRESH_COOKIE_SECURE"):
+            insecure_flags.append("AUTH_REFRESH_COOKIE_SECURE")
+        if not _is_enabled_setting("SECURE_SSL_REDIRECT"):
+            insecure_flags.append("SECURE_SSL_REDIRECT")
+        if insecure_flags and not allow_insecure_transport:
+            joined = ", ".join(insecure_flags)
+            errors.append(
+                f"{joined} must be enabled, or FORGEGRAPH_ALLOW_INSECURE_TRANSPORT=true "
+                "must be set for local smoke tests behind non-public HTTP."
+            )
+
         engine_host = str(getattr(settings, "ENGINE_HOST", "") or "").strip()
         engine_port = str(getattr(settings, "ENGINE_PORT", "") or "").strip()
         if not engine_host or not engine_port:
@@ -64,5 +91,10 @@ def collect_runtime_validation_errors(*, strict: bool | None = None) -> list[str
                 errors.append(
                     "ENGINE_GRPC_TLS_SERVER_NAME must be configured when engine gRPC TLS is enabled."
                 )
+
+        if _is_enabled_setting("RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN"):
+            errors.append(
+                "RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN must be disabled for production runtime."
+            )
 
     return errors

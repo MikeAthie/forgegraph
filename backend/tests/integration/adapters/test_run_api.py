@@ -16,7 +16,9 @@ import pytest
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
+from rest_framework_simplejwt.tokens import AccessToken
 
+from application.services.auth_state import issue_ws_ticket
 from application.services.llm_access import LLMAccessConfig, resolve_llm_access_for_dispatch
 from application.services.run_liveness import reconcile_stale_runs
 from application.services.run_snapshots import RunSnapshot, get_snapshot, set_snapshot
@@ -2165,6 +2167,36 @@ class TestRunCancel:
         assert response.data["error"]["code"] == "NOT_FOUND"
 
 
+class TestRunEventStream:
+    def test_stream_rejects_query_access_token_by_default(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="Stream Token Guard Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+        access_token = str(AccessToken.for_user(user))
+
+        response = api_client.get(f"/api/runs/{run.id}/stream?token={access_token}")
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_stream_allows_short_lived_ticket(self, api_client, user):
+        graph = Graph.objects.create(owner=user, name="Stream Ticket Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+        ticket, _ = issue_ws_ticket(access_token=AccessToken.for_user(user), user=user)
+
+        response = api_client.get(f"/api/runs/{run.id}/stream?ticket={ticket}")
+
+        assert response.status_code == status.HTTP_200_OK
+        first_chunk = next(response.streaming_content).decode("utf-8")
+        response.close()
+        assert "event: connected" in first_chunk
+        assert str(run.id) in first_chunk
+
+
 class TestRunEvents:
     """Tests for POST /api/runs/{run_id}/events"""
 
@@ -3445,6 +3477,66 @@ class TestRunResume:
         assert snapshot.attempt_id == str(run.resume_attempt_id)
         assert snapshot.attempt_id != previous_snapshot.attempt_id
         assert resume_calls[0][1]["resume_attempt_id"] == snapshot.attempt_id
+
+    def test_resume_reverts_resume_requested_when_engine_rejects(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Resume Engine Reject Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="paused",
+            paused_node_id="gate",
+        )
+        task = ApprovalTask.objects.create(
+            run=run,
+            node_id="gate",
+            assignee=user,
+            status="pending",
+            payload={"prompt_message": "Please approve"},
+        )
+        previous_snapshot = RunSnapshot(
+            run_id=run.id,
+            last_completed_node="node_1",
+            next_node="gate",
+            attempt_id="attempt-before-resume",
+            updated_at=timezone.now() - timedelta(minutes=1),
+        )
+        set_snapshot(previous_snapshot)
+        mock_engine_client.resume_run_error = "resume_attempt_id is required in runtime intent mode"
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": {"approved": True}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"]["code"] == "ENGINE_ERROR"
+
+        resume_calls = [call for call in mock_engine_client.calls if call[0] == "resume_run"]
+        assert len(resume_calls) == 1
+        dispatched_attempt_id = resume_calls[0][1]["resume_attempt_id"]
+        assert isinstance(dispatched_attempt_id, str)
+        assert dispatched_attempt_id
+
+        run.refresh_from_db()
+        assert run.status == "paused"
+        assert run.resume_requested_at is None
+        assert run.resume_attempt_id is None
+
+        snapshot = get_snapshot(run.id)
+        assert snapshot is not None
+        assert snapshot.attempt_id == previous_snapshot.attempt_id
+        assert snapshot.last_completed_node == previous_snapshot.last_completed_node
+        assert snapshot.next_node == previous_snapshot.next_node
+
+        task.refresh_from_db()
+        assert task.status == "pending"
+        assert task.result is None
 
     def test_resume_calls_engine_and_marks_task_rejected(
         self, authenticated_client, mock_engine_client, user

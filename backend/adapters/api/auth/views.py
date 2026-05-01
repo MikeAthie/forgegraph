@@ -14,6 +14,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -34,6 +35,18 @@ from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import User
 
 UserModel = get_user_model()
+
+
+class DynamicScopedRateThrottle(ScopedRateThrottle):
+    """Scoped throttle that honors override_settings in tests and env-loaded rates in prod."""
+
+    def get_rate(self) -> str | None:
+        throttle_rates = cast(
+            dict[str, str | None],
+            settings.REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
+        )
+        self.THROTTLE_RATES = throttle_rates
+        return super().get_rate()
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -69,6 +82,8 @@ class RegisterView(APIView):
     """User registration endpoint."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [DynamicScopedRateThrottle]
+    throttle_scope = "auth_register"
 
     def post(self, request: Request) -> Response:
         serializer = RegisterSerializer(data=request.data)
@@ -91,6 +106,8 @@ class LoginView(BaseTokenObtainPairView):
     """User login endpoint (access token body + refresh token cookie)."""
 
     permission_classes = (AllowAny,)  # type: ignore[assignment]
+    throttle_classes = [DynamicScopedRateThrottle]
+    throttle_scope = "auth_login"
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         response = super().post(request, *args, **kwargs)
@@ -142,6 +159,8 @@ class WSTicketView(APIView):
     """Issue a short-lived, single-use WebSocket ticket."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [DynamicScopedRateThrottle]
+    throttle_scope = "auth_ws_ticket"
 
     def post(self, request: Request) -> Response:
         membership = ensure_default_organization(cast(User, request.user))
@@ -180,6 +199,8 @@ class TokenRefreshView(BaseTokenRefreshView):
     """Token refresh endpoint (access token body + refresh token cookie)."""
 
     permission_classes = (AllowAny,)  # type: ignore[assignment]
+    throttle_classes = [DynamicScopedRateThrottle]
+    throttle_scope = "auth_refresh"
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         refresh_cookie = request.COOKIES.get(settings.AUTH_REFRESH_COOKIE)

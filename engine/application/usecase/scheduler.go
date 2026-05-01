@@ -2852,6 +2852,14 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	}
 	resumeAttemptID, _ := decision["_forgegraph_resume_attempt_id"].(string)
 	delete(decision, "_forgegraph_resume_attempt_id")
+	activeAttemptID := strings.TrimSpace(resumeAttemptID)
+	if s.pauseIntentActiveMode() && activeAttemptID == "" {
+		return fmt.Errorf("resume_attempt_id is required in runtime intent mode")
+	}
+	resumeIntentCtx := ctx
+	if activeAttemptID != "" {
+		resumeIntentCtx = port.WithAttemptID(resumeIntentCtx, activeAttemptID)
+	}
 	llmAccessFromInput := extractLLMAccessFromInput(decision)
 
 	// Check if approved or rejected
@@ -2874,13 +2882,19 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			now := s.clock.Now()
 			nodeRun.EndedAt = &now
 			nodeRun.ErrorJSON = map[string]any{"message": errorMsg, "rejected": true}
-			s.repository.UpdateNodeRun(ctx, nodeRun)
+			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
+				return fmt.Errorf("failed to update rejected node run: %w", err)
+			}
 		}
 
 		// Mark run as failed
-		s.repository.SetRunEnded(ctx, runID, string(value.RunStatusFailed), nil, errorMsg)
+		if err := s.repository.SetRunEnded(resumeIntentCtx, runID, string(value.RunStatusFailed), nil, errorMsg); err != nil {
+			return fmt.Errorf("failed to mark rejected run failed: %w", err)
+		}
 		if !s.pauseIntentActiveMode() {
-			s.repository.ClearPauseState(ctx, runID)
+			if err := s.repository.ClearPauseState(ctx, runID); err != nil {
+				return fmt.Errorf("failed to clear rejected pause state: %w", err)
+			}
 		}
 		s.emitter.EmitAsync(port.NewEvent(port.EventTypeRunFailed, runID).WithTenantID(tenantID).WithError(errorMsg))
 		s.flushEmitter("run_failed")
@@ -2934,7 +2948,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			nodeRun.EndedAt = nil
 			nodeRun.OutputJSON = nil
 			nodeRun.ErrorJSON = nil
-			s.repository.UpdateNodeRun(ctx, nodeRun)
+			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
+				return fmt.Errorf("failed to update resumed agent node run: %w", err)
+			}
 		}
 	} else {
 		state.SetNodeOutput(nodeID, humanDecision)
@@ -2945,7 +2961,9 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			now := s.clock.Now()
 			nodeRun.EndedAt = &now
 			nodeRun.OutputJSON = map[string]any{"output": humanDecision}
-			s.repository.UpdateNodeRun(ctx, nodeRun)
+			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
+				return fmt.Errorf("failed to update resumed human gate node run: %w", err)
+			}
 		}
 	}
 
@@ -2978,6 +2996,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		state:            state,
 		graphJSON:        graphJSON,
 		tenantID:         tenantID,
+		attemptID:        activeAttemptID,
 		traceID:          traceCtx.TraceID,
 		traceparent:      traceCtx.Traceparent,
 		tracestate:       traceCtx.Tracestate,
@@ -3016,6 +3035,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	if rc.tenantID != "" {
 		rc.ctx = port.WithTenantID(rc.ctx, rc.tenantID)
 	}
+	rc.ctx = port.WithAttemptID(rc.ctx, rc.attemptID)
 
 	if s.isCheckpointingEnabled() {
 		if _, stepIndex, _, _, _, _, err := s.repository.LoadLatestCheckpoint(ctx, runID); err == nil {
@@ -3056,7 +3076,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	// Clear pause state and update run status
 	if s.pauseIntentActiveMode() {
 		if err := s.publishAckRunResumedIntent(
-			ctx,
+			resumeIntentCtx,
 			rc,
 			nodeID,
 			resumeAttemptID,
@@ -3065,8 +3085,12 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			return fmt.Errorf("failed to publish ack_run_resumed intent: %w", err)
 		}
 	} else {
-		s.repository.ClearPauseState(ctx, runID)
-		s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning))
+		if err := s.repository.ClearPauseState(ctx, runID); err != nil {
+			return fmt.Errorf("failed to clear pause state: %w", err)
+		}
+		if err := s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning)); err != nil {
+			return fmt.Errorf("failed to mark resumed run running: %w", err)
+		}
 	}
 
 	// Emit run resumed event

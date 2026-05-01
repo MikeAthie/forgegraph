@@ -16,6 +16,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.runs.views import get_engine_client
+from application.services.runtime_transport_observability import (
+    get_runtime_transport_observability_snapshot,
+)
 from config.runtime_validation import collect_runtime_validation_errors
 
 
@@ -73,6 +76,35 @@ def build_readiness_payload() -> tuple[dict[str, Any], int]:
             checks["engine"] = {
                 "ready": False,
                 "latency_ms": int((time.perf_counter() - engine_start) * 1000),
+                "error": str(exc),
+            }
+
+    if getattr(settings, "READINESS_REQUIRE_RUNTIME_TRANSPORT", False):
+        transport_start = time.perf_counter()
+        try:
+            transport = get_runtime_transport_observability_snapshot()
+            backlog_threshold = int(getattr(settings, "SLO_QUEUE_MAX_DEPTH", 500) or 0)
+            backlog_ready = backlog_threshold <= 0 or transport.backlog <= backlog_threshold
+            checks["runtime_transport"] = {
+                "ready": bool(
+                    transport.error == "" and transport.dead_letter_count == 0 and backlog_ready
+                ),
+                "latency_ms": int((time.perf_counter() - transport_start) * 1000),
+                "source": transport.source,
+                "stream_length": transport.stream_length,
+                "pending": transport.pending,
+                "lag": transport.lag,
+                "backlog": transport.backlog,
+                "backlog_threshold": backlog_threshold,
+                "dead_letter_count": transport.dead_letter_count,
+                "consumer_idle_ms": transport.consumer_idle_ms,
+                "oldest_pending_idle_ms": transport.oldest_pending_idle_ms,
+                "error": transport.error,
+            }
+        except Exception as exc:  # noqa: BLE001
+            checks["runtime_transport"] = {
+                "ready": False,
+                "latency_ms": int((time.perf_counter() - transport_start) * 1000),
                 "error": str(exc),
             }
 

@@ -21,10 +21,11 @@
         "max_chars": 12000
       },
       "http": {
-        "url": "http://backend:8000/api/runtime-tools/web-fetch?token=${ENGINE_CALLBACK_SECRET}",
+        "url": "${CONTROL_PLANE_URL}/api/runtime-tools/web-fetch",
         "method": "POST",
         "headers": {
-          "Accept": "application/json"
+          "Accept": "application/json",
+          "Authorization": "Bearer ${RUNTIME_TOOL_SECRET}"
         },
         "timeout_ms": 15000
       }
@@ -62,10 +63,11 @@
         "max_results": 5
       },
       "http": {
-        "url": "http://backend:8000/api/runtime-tools/web-search?token=${ENGINE_CALLBACK_SECRET}",
+        "url": "${CONTROL_PLANE_URL}/api/runtime-tools/web-search",
         "method": "POST",
         "headers": {
-          "Accept": "application/json"
+          "Accept": "application/json",
+          "Authorization": "Bearer ${RUNTIME_TOOL_SECRET}"
         },
         "timeout_ms": 15000
       }

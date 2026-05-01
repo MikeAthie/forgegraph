@@ -18,8 +18,10 @@ from application.services.runtime_web_tools import (
 
 
 def _is_authorized(request: Request) -> bool:
-    expected = str(getattr(settings, "ENGINE_CALLBACK_SECRET", "") or "").strip()
-    provided = str(request.query_params.get("token") or "").strip()
+    expected = str(getattr(settings, "RUNTIME_TOOL_SECRET", "") or "").strip()
+    authorization = str(request.headers.get("Authorization") or "").strip()
+    scheme, _, credential = authorization.partition(" ")
+    provided = credential.strip() if scheme.lower() == "bearer" else ""
     return bool(expected) and hmac.compare_digest(expected, provided)
 
 
@@ -38,6 +40,7 @@ def _extract_payload(request: Request) -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 class RuntimeWebFetchView(APIView):
+    authentication_classes: list[type] = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -60,6 +63,7 @@ class RuntimeWebFetchView(APIView):
 
 
 class RuntimeWebSearchView(APIView):
+    authentication_classes: list[type] = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:

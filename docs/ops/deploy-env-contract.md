@@ -11,6 +11,9 @@ Production deployments require managed secret injection and explicit environment
 - `FRONTEND_URL`
 - `ENGINE_HOST`, `ENGINE_PORT`
 - `ENGINE_CALLBACK_SECRET`
+- `RUNTIME_TOOL_SECRET` (must be distinct from `ENGINE_CALLBACK_SECRET`)
+- secure public transport: `SECURE_SSL_REDIRECT=true`, `SESSION_COOKIE_SECURE=true`,
+  `CSRF_COOKIE_SECURE=true`, and `AUTH_REFRESH_COOKIE_SECURE=true`
 
 Unsupported legacy names:
 
@@ -29,6 +32,7 @@ Optional but required when enabled:
 - `ENGINE_RUN_STATE_MODE=control-plane-http`
 - `CONTROL_PLANE_URL`
 - `ENGINE_CALLBACK_SECRET`
+- `RUNTIME_TOOL_SECRET`
 - `GRPC_PORT`
 - `METRICS_PORT`
 
@@ -48,5 +52,8 @@ The frontend image is environment-specific at build time because `NEXT_PUBLIC_AP
 - production secrets must come from a managed secret store, not committed `.env` files
 - `.env.example` must pass `FORGEGRAPH_ENV_FILE=.env.example python manage.py validate_runtime_env --strict`
 - runtime validation must fail startup when required production variables are missing
-- callback secrets must be rotated on a defined cadence and updated on backend + engine together
+- callback and runtime-tool secrets must be rotated on a defined cadence and updated on backend + engine together
+- `FORGEGRAPH_ALLOW_INSECURE_TRANSPORT=true` is only allowed for local or release smoke tests behind non-public HTTP; production must leave it unset/false
+- `RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN` must stay unset/false in production; browser streams must use short-lived tickets instead of access tokens in URLs
 - queued run execution must not be enabled unless run queue worker heartbeat and metrics are visible
+- release readiness must require runtime transport (`READINESS_REQUIRE_RUNTIME_TRANSPORT=true`) and fail when runtime intent backlog or dead-letter count is nonzero/outside SLO
