@@ -6,11 +6,19 @@ Release order is:
 
 1. full CI passes
 2. dependency audit passes
-3. images are built, scanned, and published
+3. images are built from the exact CI commit SHA, scanned, and published
 4. migration contract runs
 5. services are deployed
 6. smoke checks pass
 7. release metadata is recorded
+
+## Integrity Rule
+
+- release checkout must be exactly `workflow_run.head_sha`
+- release image tags must use `sha-<commit>` only
+- branch image tags are not release artifacts and must not be deployed
+- the build must fail if the checkout has uncommitted or staged changes
+- deploy commands must reference the immutable `sha-<commit>` backend, engine, and frontend images
 
 ## Migration rule
 
@@ -28,10 +36,10 @@ Release smoke must verify:
 - engine `/metrics`
 - frontend root page availability
 - backend authenticated API call
+- workflow creation, version creation, run start, and run dispatch to `running`
 - signed engine callback path
 
 ## Promotion rule
 
 - do not promote or mark a release healthy until smoke passes
 - if smoke fails, retain the prior image set as the active rollback target
-

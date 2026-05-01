@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from application.services.run_queue import (
     RunQueueSettings,
     claim_next_entry,
     enqueue_run,
+    get_run_queue_worker_health,
     mark_failed,
+    record_run_queue_worker_heartbeat,
     release_stale_entries,
 )
 from infrastructure.orm.models import Graph, GraphVersion, Run
@@ -131,3 +134,21 @@ def test_claim_next_entry_defers_then_recovers_after_tenant_capacity_frees(user)
     assert claimed.id == entry.id
     assert claimed.status == "processing"
     assert claimed.locked_by == "worker-2"
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "run-queue-heartbeat",
+        }
+    },
+    RUN_QUEUE_WORKER_HEARTBEAT_TTL_SECONDS=60,
+)
+def test_run_queue_worker_heartbeat_reports_active_worker() -> None:
+    record_run_queue_worker_heartbeat("worker-a")
+    health = get_run_queue_worker_health()
+
+    assert health.active is True
+    assert health.worker_id == "worker-a"
+    assert health.last_seen_at is not None

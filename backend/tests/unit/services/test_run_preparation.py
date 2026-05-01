@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from django.utils import timezone
 
-from application.services.llm_access import LLMAccessConfig
+from application.services.llm_access import LLMAccessConfig, engine_input_with_llm_access
 from application.services.run_preparation import (
     PromptTemplateResolutionError,
     RunPreparationError,
@@ -25,6 +25,24 @@ from infrastructure.orm.models import (
 )
 
 pytestmark = pytest.mark.django_db
+
+
+def test_engine_dispatch_input_does_not_mutate_run_input_json() -> None:
+    run_input = {
+        "goal": "launch",
+        "_forgegraph_llm_access": {"provider": "stale"},
+    }
+
+    engine_input = engine_input_with_llm_access(
+        run_input,
+        LLMAccessConfig(llm_mode="managed", provider="openai"),
+    )
+
+    assert run_input == {
+        "goal": "launch",
+        "_forgegraph_llm_access": {"provider": "stale"},
+    }
+    assert engine_input == {"goal": "launch"}
 
 
 def test_resolve_prompt_templates_replaces_prompt_id_with_content() -> None:

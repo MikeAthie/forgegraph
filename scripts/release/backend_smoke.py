@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import hmac
 import hashlib
+import hmac
 import http.cookiejar
 import json
 import time
@@ -112,10 +112,14 @@ def _signed_callback_test(
     callback_url = backend_url.rstrip("/") + "/api/runs/engine-events"
     payload = {
         "event_id": f"smoke-{uuid.uuid4()}",
-        "type": "run_started",
-        "category": "state",
+        "type": "node_stream_chunk",
+        "category": "observability",
         "run_id": run_id,
         "tenant_id": tenant_id,
+        "node_id": "release-smoke-observability",
+        "node_type": "output",
+        "attempt": 1,
+        "output": {"chunk": "release smoke callback", "chunk_index": 0},
         "timestamp": int(time.time() * 1000),
     }
     status_code, body = _post_signed_callback(
@@ -214,7 +218,7 @@ def _create_smoke_run(
     *,
     backend_url: str,
     access_token: str,
-) -> str:
+) -> tuple[str, str]:
     headers = _auth_headers(access_token)
     graph_url = backend_url.rstrip("/") + "/api/graphs/"
 
@@ -266,7 +270,60 @@ def _create_smoke_run(
     run_id = str(run_data.get("id") or "")
     if not run_id:
         raise SystemExit(f"Run start smoke check failed: missing run id, body={body}")
-    return run_id
+    initial_status = str(run_data.get("status") or "")
+    return run_id, initial_status
+
+
+def _get_run_status(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+    run_id: str,
+) -> str:
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + f"/api/runs/{run_id}",
+        headers=_auth_headers(access_token),
+    )
+    if status_code != 200:
+        raise SystemExit(f"Run detail smoke check failed: status={status_code}, body={body}")
+    run_data = _wrapped_data(body, context="Run detail smoke")
+    return str(run_data.get("status") or "")
+
+
+def _wait_for_run_dispatch(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+    run_id: str,
+    initial_status: str,
+    timeout_seconds: int = 60,
+) -> None:
+    terminal_failure_statuses = {"failed", "canceled"}
+    dispatched_statuses = {"running", "succeeded", "paused", "resume_requested"}
+    last_status = initial_status
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+        if last_status in dispatched_statuses:
+            return
+        if last_status in terminal_failure_statuses:
+            raise SystemExit(f"Run dispatch smoke check failed: run ended as {last_status}.")
+
+        time.sleep(2)
+        last_status = _get_run_status(
+            opener,
+            backend_url=backend_url,
+            access_token=access_token,
+            run_id=run_id,
+        )
+
+    raise SystemExit(
+        "Run dispatch smoke check timed out: "
+        f"run_id={run_id}, last_status={last_status}"
+    )
 
 
 def main() -> None:
@@ -301,10 +358,17 @@ def main() -> None:
     if not args.skip_callback:
         if not args.callback_secret:
             raise SystemExit("--callback-secret is required unless --skip-callback is set.")
-        run_id = _create_smoke_run(
+        run_id, initial_status = _create_smoke_run(
             opener,
             backend_url=args.backend_url,
             access_token=access_token,
+        )
+        _wait_for_run_dispatch(
+            opener,
+            backend_url=args.backend_url,
+            access_token=access_token,
+            run_id=run_id,
+            initial_status=initial_status,
         )
         _signed_callback_test(
             opener,

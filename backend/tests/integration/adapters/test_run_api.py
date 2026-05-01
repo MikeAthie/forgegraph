@@ -5,6 +5,7 @@ Tests run history and run detail endpoints for Phase 4 observability MVP.
 """
 
 import json
+import logging
 import time
 from datetime import timedelta
 from decimal import Decimal
@@ -1312,8 +1313,19 @@ class TestRunStart:
         assert second.data["error"]["code"] == "RATE_LIMITED"
         assert second.data["error"]["details"][0]["limit"] == 1
 
-    @override_settings(RUN_QUEUE_ENABLED=True)
-    def test_start_run_queues_when_enabled(self, authenticated_client, mock_engine_client, user):
+    @override_settings(
+        RUN_QUEUE_ENABLED=True,
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "run-queue-worker-unavailable",
+            }
+        },
+    )
+    def test_start_run_queues_when_enabled(
+        self, authenticated_client, mock_engine_client, user, caplog
+    ):
+        caplog.set_level(logging.ERROR, logger="application.services.run_queue")
         graph = Graph.objects.create(owner=user, name="Queued Graph")
         version = GraphVersion.objects.create(
             graph=graph, version=1, graph_json={"nodes": [], "edges": []}
@@ -1327,6 +1339,9 @@ class TestRunStart:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["meta"]["queued"] is True
+        assert response.data["meta"]["queue_worker_active"] is False
+        assert response.data["meta"]["queue_warning"] == "run_queue_worker_unavailable"
+        assert "run_queue_worker_unavailable" in caplog.text
         run_data = response.data["data"]
         assert run_data["status"] == "pending"
         assert run_data["queue_status"] == "pending"

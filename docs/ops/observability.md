@@ -13,7 +13,7 @@ Backend signals:
 
 - run lifecycle totals by outcome
 - stale reconciliation totals by `recovery_reason`
-- queue depth and oldest pending age
+- queue backlog, oldest pending age, stalled runs, and queue worker heartbeat warnings
 - WebSocket connection failures and dropped messages
 - callback authentication failures
 - API request volume, 5xx totals, and latency percentiles
@@ -28,7 +28,7 @@ Engine signals:
 Operator thresholds:
 
 - `engine_stalled` or `resume_timeout` reconciliations above baseline require investigation
-- queue depth above `SLO_QUEUE_MAX_DEPTH` or oldest pending age above one liveness window is actionable
+- queue backlog above `SLO_QUEUE_MAX_DEPTH`, oldest pending age above one liveness window, stalled queued runs, or missing queue worker heartbeat is actionable
 - any sustained callback auth failures indicate secret drift or an attack path
 - sustained backend 5xx or readiness failures block production promotion
 

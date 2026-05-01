@@ -122,7 +122,7 @@ from application.services.run_preparation import (
     upsert_memory_session,
     validate_prompt_credentials,
 )
-from application.services.run_queue import enqueue_run
+from application.services.run_queue import enqueue_run, log_run_queue_worker_unavailable
 from application.services.run_snapshots import (
     RunSnapshot,
     get_snapshot,
@@ -323,6 +323,20 @@ def _queue_payload(run: Run) -> dict[str, Any]:
         "queue_status": entry.status,
         "queue_attempts": entry.attempts,
         "queue_available_at": entry.available_at,
+    }
+
+
+def _queue_response_meta(*, run: Run, tenant_id: str) -> dict[str, Any]:
+    health = log_run_queue_worker_unavailable(run_id=run.id, tenant_id=tenant_id)
+    return {
+        "queued": True,
+        "queue_worker_active": health.active,
+        "queue_worker_id": health.worker_id or None,
+        "queue_worker_last_seen_at": (
+            health.last_seen_at.isoformat() if health.last_seen_at else None
+        ),
+        "queue_worker_age_seconds": health.age_seconds,
+        "queue_warning": None if health.active else "run_queue_worker_unavailable",
     }
 
 
@@ -1993,7 +2007,9 @@ class RunStartView(APIView):
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
             return success_response(
-                serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
+                serialized_data,
+                status=status.HTTP_201_CREATED,
+                meta=_queue_response_meta(run=run, tenant_id=tenant_id),
             )
 
         # Send run to the engine
@@ -2373,7 +2389,9 @@ class RunInvokeView(APIView):
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
             return success_response(
-                serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
+                serialized_data,
+                status=status.HTTP_201_CREATED,
+                meta=_queue_response_meta(run=run, tenant_id=tenant_id),
             )
 
         callback_url = resolve_engine_callback_url(run_id=str(run.id))
@@ -2752,7 +2770,12 @@ class RunReplayView(APIView):
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
             return success_response(
-                serialized_data, status=status.HTTP_201_CREATED, meta={"queued": True}
+                serialized_data,
+                status=status.HTTP_201_CREATED,
+                meta=_queue_response_meta(
+                    run=replay_run,
+                    tenant_id=get_tenant_id_for_user(user),
+                ),
             )
 
         callback_url = resolve_engine_callback_url(run_id=str(replay_run.id))
