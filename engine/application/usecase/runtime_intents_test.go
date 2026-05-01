@@ -3,6 +3,9 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -66,6 +69,288 @@ func (p *recordingRuntimeIntentPublisher) LastByIntentType(intentType string) *p
 		}
 	}
 	return nil
+}
+
+func (p *recordingRuntimeIntentPublisher) All() []*port.RuntimeIntentEnvelope {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	result := make([]*port.RuntimeIntentEnvelope, 0, len(p.intents))
+	for _, intent := range p.intents {
+		cloned := *intent
+		cloned.Payload = cloneMapAny(intent.Payload)
+		result = append(result, &cloned)
+	}
+	return result
+}
+
+type repositoryAttemptCall struct {
+	method    string
+	attemptID string
+}
+
+type recordingAttemptRepository struct {
+	*mockRepository
+
+	mu    sync.Mutex
+	calls []repositoryAttemptCall
+
+	updateNodeRunErr error
+}
+
+func newRecordingAttemptRepository(base *mockRepository) *recordingAttemptRepository {
+	return &recordingAttemptRepository{mockRepository: base}
+}
+
+func (r *recordingAttemptRepository) record(method string, ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, repositoryAttemptCall{
+		method:    method,
+		attemptID: port.AttemptIDFrom(ctx),
+	})
+}
+
+func (r *recordingAttemptRepository) attemptsFor(method string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	attempts := make([]string, 0)
+	for _, call := range r.calls {
+		if call.method == method {
+			attempts = append(attempts, call.attemptID)
+		}
+	}
+	return attempts
+}
+
+func (r *recordingAttemptRepository) UpdateNodeRun(ctx context.Context, nodeRun *entity.NodeRun) error {
+	r.record("UpdateNodeRun", ctx)
+	if r.updateNodeRunErr != nil {
+		return r.updateNodeRunErr
+	}
+	return r.mockRepository.UpdateNodeRun(ctx, nodeRun)
+}
+
+func (r *recordingAttemptRepository) SetRunEnded(ctx context.Context, runID string, status string, output map[string]any, errorMsg string) error {
+	r.record("SetRunEnded", ctx)
+	return r.mockRepository.SetRunEnded(ctx, runID, status, output, errorMsg)
+}
+
+func (r *recordingAttemptRepository) SaveCheckpoint(ctx context.Context, runID, nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
+	r.record("SaveCheckpoint", ctx)
+	return r.mockRepository.SaveCheckpoint(ctx, runID, nodeID, stepIndex, stateSnapshot, completedNodes, skippedNodes, graphJSON)
+}
+
+func requireAllAttemptIDs(t *testing.T, intents []*port.RuntimeIntentEnvelope, attemptID string) {
+	t.Helper()
+	for _, intent := range intents {
+		if strings.TrimSpace(intent.AttemptID) == "" {
+			t.Fatalf("intent %s has empty attempt_id", intent.IntentType)
+		}
+		if intent.AttemptID != attemptID {
+			t.Fatalf("intent %s attempt_id = %q, want %q", intent.IntentType, intent.AttemptID, attemptID)
+		}
+	}
+}
+
+func requireRepositoryAttempts(t *testing.T, repo *recordingAttemptRepository, method string, attemptID string) {
+	t.Helper()
+	attempts := repo.attemptsFor(method)
+	if len(attempts) == 0 {
+		t.Fatalf("expected repository method %s to be called", method)
+	}
+	for _, observed := range attempts {
+		if observed != attemptID {
+			t.Fatalf("%s attempt_id = %q, want %q; all=%v", method, observed, attemptID, attempts)
+		}
+	}
+}
+
+func seedPausedHumanGateRun(t *testing.T, repo *mockRepository, runID string, graphJSON string) {
+	t.Helper()
+	if err := repo.UpdateRunStatus(context.Background(), runID, string(value.RunStatusPaused)); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	if err := repo.SavePauseState(
+		context.Background(),
+		runID,
+		"gate",
+		map[string]any{"input.ticket": "FG-1"},
+		nil,
+		nil,
+		graphJSON,
+		"tenant-1",
+	); err != nil {
+		t.Fatalf("seed pause state: %v", err)
+	}
+	if err := repo.CreateNodeRun(context.Background(), &entity.NodeRun{
+		ID:        fmt.Sprintf("%s-gate-1", runID),
+		RunID:     runID,
+		NodeID:    "gate",
+		NodeType:  string(value.NodeTypeHumanGate),
+		Status:    string(value.NodeRunStatusWaiting),
+		Attempt:   1,
+		StartedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed node run: %v", err)
+	}
+}
+
+func TestSchedulerResumeRunRequiresResumeAttemptInRuntimeIntentMode(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	publisher := &recordingRuntimeIntentPublisher{}
+	engine.Scheduler.SetRuntimeIntentPublisher(publisher, RuntimeWriteModePauseIntents)
+
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{ID: "gate", Type: string(value.NodeTypeHumanGate), Name: "Gate", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "gate", To: "output"}},
+	)
+	seedPausedHumanGateRun(t, engine.Repo, "run-resume-requires-attempt", graphJSON)
+
+	err := engine.Scheduler.ResumeRun(
+		context.Background(),
+		"run-resume-requires-attempt",
+		"gate",
+		`{"approved":true}`,
+	)
+
+	if err == nil {
+		t.Fatal("expected resume without backend attempt id to fail")
+	}
+	if !strings.Contains(err.Error(), "resume_attempt_id is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if publisher.Count() != 0 {
+		t.Fatalf("expected no runtime intents without resume attempt, got %d", publisher.Count())
+	}
+}
+
+func TestSchedulerResumeRunPropagatesResumeAttemptToRuntimeIntents(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	publisher := &recordingRuntimeIntentPublisher{}
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	engine.Scheduler.repository = recordingRepo
+	engine.Scheduler.SetRuntimeIntentPublisher(publisher, RuntimeWriteModePauseIntents)
+
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-resume-attempt-propagated"
+	resumeAttemptID := "resume-attempt-1"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{ID: "gate", Type: string(value.NodeTypeHumanGate), Name: "Gate", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "gate", To: "output"}},
+	)
+	seedPausedHumanGateRun(t, engine.Repo, runID, graphJSON)
+
+	engine.ResumeRun(
+		runID,
+		"gate",
+		fmt.Sprintf(`{"approved":true,"feedback":"ship it","_forgegraph_resume_attempt_id":%q}`, resumeAttemptID),
+	)
+	engine.AwaitBlockedAttempt(runID, "output", 1)
+	engine.Release(runID, "output")
+	engine.AwaitRunStatus(runID, string(value.RunStatusSucceeded))
+
+	if publisher.CountByIntentType("ack_run_resumed") != 1 {
+		t.Fatalf("expected one ack_run_resumed intent, got %d", publisher.CountByIntentType("ack_run_resumed"))
+	}
+	if publisher.CountByIntentType("node_completed") != 1 {
+		t.Fatalf("expected one node_completed intent, got %d", publisher.CountByIntentType("node_completed"))
+	}
+	requireAllAttemptIDs(t, publisher.All(), resumeAttemptID)
+	requireRepositoryAttempts(t, recordingRepo, "UpdateNodeRun", resumeAttemptID)
+	requireRepositoryAttempts(t, recordingRepo, "SaveCheckpoint", resumeAttemptID)
+	requireRepositoryAttempts(t, recordingRepo, "SetRunEnded", resumeAttemptID)
+
+	resumedEvent := engine.Bus.All()
+	foundRunResumed := false
+	for _, observed := range resumedEvent {
+		if observed.Event.Type == port.EventTypeRunResumed {
+			foundRunResumed = true
+			if observed.Event.AttemptID != resumeAttemptID {
+				t.Fatalf("run_resumed event attempt_id = %q, want %q", observed.Event.AttemptID, resumeAttemptID)
+			}
+		}
+	}
+	if !foundRunResumed {
+		t.Fatal("expected run_resumed event")
+	}
+}
+
+func TestSchedulerResumeRunRejectionUsesResumeAttempt(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	publisher := &recordingRuntimeIntentPublisher{}
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	engine.Scheduler.repository = recordingRepo
+	engine.Scheduler.SetRuntimeIntentPublisher(publisher, RuntimeWriteModePauseIntents)
+
+	runID := "run-resume-rejected-attempt"
+	resumeAttemptID := "resume-attempt-rejected"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{{ID: "gate", Type: string(value.NodeTypeHumanGate), Name: "Gate", Config: map[string]any{}}},
+		nil,
+	)
+	seedPausedHumanGateRun(t, engine.Repo, runID, graphJSON)
+
+	err := engine.Scheduler.ResumeRun(
+		context.Background(),
+		runID,
+		"gate",
+		fmt.Sprintf(`{"approved":false,"feedback":"needs changes","_forgegraph_resume_attempt_id":%q}`, resumeAttemptID),
+	)
+	if err != nil {
+		t.Fatalf("ResumeRun rejected path failed: %v", err)
+	}
+
+	requireRepositoryAttempts(t, recordingRepo, "UpdateNodeRun", resumeAttemptID)
+	requireRepositoryAttempts(t, recordingRepo, "SetRunEnded", resumeAttemptID)
+	if publisher.Count() != 0 {
+		t.Fatalf("expected rejected resume to use repository intents only, got scheduler-published intents=%d", publisher.Count())
+	}
+	if status := engine.Repo.getRunStatus(runID); status != string(value.RunStatusFailed) {
+		t.Fatalf("run status = %q, want failed", status)
+	}
+}
+
+func TestSchedulerResumeRunPropagatesRepositoryWriteFailure(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	recordingRepo.updateNodeRunErr = errors.New("publish upsert_node_run failed")
+	engine.Scheduler.repository = recordingRepo
+	engine.Scheduler.SetRuntimeIntentPublisher(&recordingRuntimeIntentPublisher{}, RuntimeWriteModePauseIntents)
+
+	runID := "run-resume-write-failure"
+	resumeAttemptID := "resume-attempt-write-failure"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{ID: "gate", Type: string(value.NodeTypeHumanGate), Name: "Gate", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "gate", To: "output"}},
+	)
+	seedPausedHumanGateRun(t, engine.Repo, runID, graphJSON)
+
+	err := engine.Scheduler.ResumeRun(
+		context.Background(),
+		runID,
+		"gate",
+		fmt.Sprintf(`{"approved":true,"_forgegraph_resume_attempt_id":%q}`, resumeAttemptID),
+	)
+
+	if err == nil {
+		t.Fatal("expected repository write failure")
+	}
+	if !strings.Contains(err.Error(), "failed to update resumed human gate node run") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	requireRepositoryAttempts(t, recordingRepo, "UpdateNodeRun", resumeAttemptID)
 }
 
 func TestSchedulerPauseIntentActiveModePublishesWithoutLegacyPauseWrites(t *testing.T) {

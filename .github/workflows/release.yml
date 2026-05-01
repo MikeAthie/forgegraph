@@ -208,12 +208,15 @@ jobs:
       ALLOWED_HOSTS: "127.0.0.1,localhost"
       ENCRYPTION_KEY: "31w_1yyrCRlD_5Uyp9iofvy68W9T1ty9W81BbBlkbWI="
       SECURE_SSL_REDIRECT: "false"
+      FORGEGRAPH_ALLOW_INSECURE_TRANSPORT: "true"
       ENGINE_CALLBACK_SECRET: release-shared-secret
+      RUNTIME_TOOL_SECRET: release-runtime-tool-secret
       ENGINE_CALLBACK_URL: http://127.0.0.1:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://127.0.0.1:8000
       ENGINE_HOST: 127.0.0.1
       ENGINE_PORT: "50051"
       READINESS_REQUIRE_ENGINE: "true"
+      READINESS_REQUIRE_RUNTIME_TRANSPORT: "true"
       FORGEGRAPH_STRICT_RUNTIME_ENV: "true"
       RUN_QUEUE_ENABLED: "true"
       API_PROXY_TARGET: http://127.0.0.1:8000
@@ -240,9 +243,12 @@ jobs:
             -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
             -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
             -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
-            -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FORGEGRAPH_ALLOW_INSECURE_TRANSPORT \
+            -e ENGINE_CALLBACK_SECRET -e RUNTIME_TOOL_SECRET \
+            -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
             -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
             -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            -e READINESS_REQUIRE_RUNTIME_TRANSPORT \
             "${BACKEND_IMAGE}" bash -lc "python manage.py validate_runtime_env --strict && python manage.py migrate --noinput && python manage.py collectstatic --noinput"
 
       - name: Start backend
@@ -251,15 +257,19 @@ jobs:
             -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
             -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
             -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
-            -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FORGEGRAPH_ALLOW_INSECURE_TRANSPORT \
+            -e ENGINE_CALLBACK_SECRET -e RUNTIME_TOOL_SECRET \
+            -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
             -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
-            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE -e RUN_QUEUE_ENABLED \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            -e READINESS_REQUIRE_RUNTIME_TRANSPORT -e RUN_QUEUE_ENABLED \
             "${BACKEND_IMAGE}"
 
       - name: Start engine
         run: |
           docker run -d --name forgegraph-engine --network host \
-            -e CONTROL_PLANE_URL -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL \
+            -e CONTROL_PLANE_URL -e ENGINE_CALLBACK_SECRET -e RUNTIME_TOOL_SECRET \
+            -e ENGINE_CALLBACK_URL \
             -e ENGINE_RUN_STATE_MODE=control-plane-http \
             -e GRPC_PORT=50051 -e METRICS_PORT=9090 \
             "${ENGINE_IMAGE}"
@@ -270,10 +280,27 @@ jobs:
             -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
             -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
             -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
-            -e ENGINE_CALLBACK_SECRET -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FORGEGRAPH_ALLOW_INSECURE_TRANSPORT \
+            -e ENGINE_CALLBACK_SECRET -e RUNTIME_TOOL_SECRET \
+            -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
             -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
-            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE -e RUN_QUEUE_ENABLED \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            -e READINESS_REQUIRE_RUNTIME_TRANSPORT -e RUN_QUEUE_ENABLED \
             "${BACKEND_IMAGE}" python manage.py process_run_queue --worker-id release-smoke-run-queue
+
+      - name: Start runtime intent worker
+        run: |
+          docker run -d --name forgegraph-runtime-intents --network host \
+            -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
+            -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
+            -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
+            -e FORGEGRAPH_ALLOW_INSECURE_TRANSPORT \
+            -e ENGINE_CALLBACK_SECRET -e RUNTIME_TOOL_SECRET \
+            -e ENGINE_CALLBACK_URL -e ENGINE_HOST -e ENGINE_PORT \
+            -e FRONTEND_URL='${{ vars.RELEASE_FRONTEND_API_URL }}' \
+            -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
+            -e READINESS_REQUIRE_RUNTIME_TRANSPORT -e RUN_QUEUE_ENABLED \
+            "${BACKEND_IMAGE}" python manage.py process_runtime_write_intents --consumer release-smoke-runtime-intents
 
       - name: Start frontend
         run: |

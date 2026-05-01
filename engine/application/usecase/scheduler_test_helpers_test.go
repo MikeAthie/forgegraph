@@ -295,6 +295,11 @@ func (r *mockRepository) GetNodeRun(ctx context.Context, runID, nodeID string) (
 	key := fmt.Sprintf("%s-%s", runID, nodeID)
 	nodeRun, ok := r.nodeRuns[key]
 	if !ok {
+		for _, candidate := range r.nodeRuns {
+			if candidate.RunID == runID && candidate.NodeID == nodeID {
+				return cloneNodeRunEntity(candidate), nil
+			}
+		}
 		return nil, fmt.Errorf("node run not found")
 	}
 	return cloneNodeRunEntity(nodeRun), nil

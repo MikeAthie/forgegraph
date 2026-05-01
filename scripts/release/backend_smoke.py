@@ -25,7 +25,9 @@ def _request(
         merged_headers.update(headers)
     if data is not None:
         body = json.dumps(data).encode("utf-8")
-    request = urllib.request.Request(url, data=body, headers=merged_headers, method=method)
+    request = urllib.request.Request(
+        url, data=body, headers=merged_headers, method=method
+    )
     try:
         with opener.open(request, timeout=15) as response:
             return response.status, response.read().decode("utf-8")
@@ -35,7 +37,9 @@ def _request(
         return 0, str(exc.reason)
 
 
-def _wait_for_ok(url: str, *, opener: urllib.request.OpenerDirector, retries: int = 30) -> None:
+def _wait_for_ok(
+    url: str, *, opener: urllib.request.OpenerDirector, retries: int = 30
+) -> None:
     last_status = None
     last_body = ""
     for _ in range(retries):
@@ -43,7 +47,9 @@ def _wait_for_ok(url: str, *, opener: urllib.request.OpenerDirector, retries: in
         if 200 <= int(last_status) < 300:
             return
         time.sleep(2)
-    raise SystemExit(f"Smoke check failed for {url}: status={last_status}, body={last_body}")
+    raise SystemExit(
+        f"Smoke check failed for {url}: status={last_status}, body={last_body}"
+    )
 
 
 def _json_body(body: str, *, context: str) -> dict[str, object]:
@@ -167,7 +173,9 @@ def _authenticated_api_smoke(
         data={"email": email, "password": password},
     )
     if status_code != 201:
-        raise SystemExit(f"Registration smoke check failed: status={status_code}, body={body}")
+        raise SystemExit(
+            f"Registration smoke check failed: status={status_code}, body={body}"
+        )
     register_payload = _json_body(body, context="Registration smoke")
     tenant_id = str(register_payload.get("default_organization_id") or "")
 
@@ -251,21 +259,30 @@ def _create_smoke_run(
         headers=headers,
     )
     if status_code != 201:
-        raise SystemExit(f"Graph version smoke check failed: status={status_code}, body={body}")
+        raise SystemExit(
+            f"Graph version smoke check failed: status={status_code}, body={body}"
+        )
     version_data = _wrapped_data(body, context="Graph version smoke")
     graph_version_id = str(version_data.get("id") or "")
     if not graph_version_id:
-        raise SystemExit(f"Graph version smoke check failed: missing version id, body={body}")
+        raise SystemExit(
+            f"Graph version smoke check failed: missing version id, body={body}"
+        )
 
     status_code, body = _request(
         opener,
         backend_url.rstrip("/") + "/api/runs/start",
         method="POST",
-        data={"graph_version_id": graph_version_id, "input_json": {"release_smoke": True}},
+        data={
+            "graph_version_id": graph_version_id,
+            "input_json": {"release_smoke": True},
+        },
         headers=headers,
     )
     if status_code != 201:
-        raise SystemExit(f"Run start smoke check failed: status={status_code}, body={body}")
+        raise SystemExit(
+            f"Run start smoke check failed: status={status_code}, body={body}"
+        )
     run_data = _wrapped_data(body, context="Run start smoke")
     run_id = str(run_data.get("id") or "")
     if not run_id:
@@ -287,9 +304,30 @@ def _get_run_status(
         headers=_auth_headers(access_token),
     )
     if status_code != 200:
-        raise SystemExit(f"Run detail smoke check failed: status={status_code}, body={body}")
+        raise SystemExit(
+            f"Run detail smoke check failed: status={status_code}, body={body}"
+        )
     run_data = _wrapped_data(body, context="Run detail smoke")
     return str(run_data.get("status") or "")
+
+
+def _get_run_detail(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+    run_id: str,
+) -> dict[str, object]:
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + f"/api/runs/{run_id}",
+        headers=_auth_headers(access_token),
+    )
+    if status_code != 200:
+        raise SystemExit(
+            f"Run detail smoke check failed: status={status_code}, body={body}"
+        )
+    return _wrapped_data(body, context="Run detail smoke")
 
 
 def _wait_for_run_dispatch(
@@ -310,7 +348,9 @@ def _wait_for_run_dispatch(
         if last_status in dispatched_statuses:
             return
         if last_status in terminal_failure_statuses:
-            raise SystemExit(f"Run dispatch smoke check failed: run ended as {last_status}.")
+            raise SystemExit(
+                f"Run dispatch smoke check failed: run ended as {last_status}."
+            )
 
         time.sleep(2)
         last_status = _get_run_status(
@@ -326,8 +366,237 @@ def _wait_for_run_dispatch(
     )
 
 
+def _wait_for_run_status(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+    run_id: str,
+    expected_statuses: set[str],
+    timeout_seconds: int = 90,
+) -> dict[str, object]:
+    terminal_failure_statuses = {"failed", "canceled"}
+    deadline = time.time() + timeout_seconds
+    last_detail: dict[str, object] = {}
+
+    while time.time() < deadline:
+        last_detail = _get_run_detail(
+            opener,
+            backend_url=backend_url,
+            access_token=access_token,
+            run_id=run_id,
+        )
+        status_value = str(last_detail.get("status") or "")
+        if status_value in expected_statuses:
+            return last_detail
+        if status_value in terminal_failure_statuses:
+            raise SystemExit(
+                "Run status smoke check failed: "
+                f"run_id={run_id}, status={status_value}, "
+                f"error={last_detail.get('error_message')}"
+            )
+        time.sleep(2)
+
+    raise SystemExit(
+        "Run status smoke check timed out: "
+        f"run_id={run_id}, expected={sorted(expected_statuses)}, last_detail={last_detail}"
+    )
+
+
+def _runtime_dead_letter_count(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+) -> int | None:
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + "/api/metrics/summary",
+        headers=_auth_headers(access_token),
+    )
+    if status_code != 200:
+        return None
+    metrics = _wrapped_data(body, context="Metrics smoke")
+    runtime_transport = metrics.get("runtime_transport")
+    if not isinstance(runtime_transport, dict):
+        return None
+    try:
+        return int(runtime_transport.get("dead_letter_count") or 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _create_human_gate_smoke_run(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+) -> str:
+    headers = _auth_headers(access_token)
+    graph_url = backend_url.rstrip("/") + "/api/graphs/"
+
+    status_code, body = _request(
+        opener,
+        graph_url,
+        method="POST",
+        data={
+            "name": f"Release human gate smoke {uuid.uuid4()}",
+            "description": "Release smoke graph for human-gate resume",
+        },
+        headers=headers,
+    )
+    if status_code != 201:
+        raise SystemExit(
+            f"Human gate graph smoke check failed: status={status_code}, body={body}"
+        )
+    graph_data = _wrapped_data(body, context="Human gate graph smoke")
+    graph_id = str(graph_data.get("id") or "")
+    if not graph_id:
+        raise SystemExit(
+            f"Human gate graph smoke check failed: missing graph id, body={body}"
+        )
+
+    graph_json = {
+        "nodes": [
+            {
+                "id": "gate",
+                "type": "human_gate",
+                "name": "Release approval",
+                "config": {
+                    "prompt_message": "Approve release smoke",
+                    "required_fields": ["ticket"],
+                },
+            },
+            {"id": "output", "type": "output", "name": "Output", "config": {}},
+        ],
+        "edges": [{"id": "edge-gate-output", "from": "gate", "to": "output"}],
+    }
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + f"/api/graphs/{graph_id}/versions",
+        method="POST",
+        data={"graph_json": graph_json},
+        headers=headers,
+    )
+    if status_code != 201:
+        raise SystemExit(
+            f"Human gate graph version smoke check failed: status={status_code}, body={body}"
+        )
+    version_data = _wrapped_data(body, context="Human gate graph version smoke")
+    graph_version_id = str(version_data.get("id") or "")
+    if not graph_version_id:
+        raise SystemExit(
+            f"Human gate graph version smoke check failed: missing version id, body={body}"
+        )
+
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + "/api/runs/start",
+        method="POST",
+        data={
+            "graph_version_id": graph_version_id,
+            "input_json": {"release_smoke": True},
+        },
+        headers=headers,
+    )
+    if status_code != 201:
+        raise SystemExit(
+            f"Human gate run start smoke check failed: status={status_code}, body={body}"
+        )
+    run_data = _wrapped_data(body, context="Human gate run start smoke")
+    run_id = str(run_data.get("id") or "")
+    if not run_id:
+        raise SystemExit(
+            f"Human gate run start smoke check failed: missing run id, body={body}"
+        )
+    return run_id
+
+
+def _human_gate_resume_smoke(
+    opener: urllib.request.OpenerDirector,
+    *,
+    backend_url: str,
+    access_token: str,
+) -> None:
+    dead_letters_before = _runtime_dead_letter_count(
+        opener,
+        backend_url=backend_url,
+        access_token=access_token,
+    )
+    if dead_letters_before is not None and dead_letters_before > 0:
+        raise SystemExit(
+            "Human gate resume smoke check failed: runtime intent dead-letter count "
+            f"is already nonzero ({dead_letters_before})."
+        )
+
+    run_id = _create_human_gate_smoke_run(
+        opener,
+        backend_url=backend_url,
+        access_token=access_token,
+    )
+    paused_detail = _wait_for_run_status(
+        opener,
+        backend_url=backend_url,
+        access_token=access_token,
+        run_id=run_id,
+        expected_statuses={"paused"},
+    )
+    paused_node_id = str(paused_detail.get("paused_node_id") or "gate")
+
+    status_code, body = _request(
+        opener,
+        backend_url.rstrip("/") + f"/api/runs/{run_id}/resume",
+        method="POST",
+        data={
+            "node_id": paused_node_id,
+            "input_json": {
+                "approved": True,
+                "feedback": "release smoke approved",
+                "fields": {"ticket": "RELEASE-SMOKE"},
+            },
+        },
+        headers=_auth_headers(access_token),
+    )
+    if status_code != 200:
+        raise SystemExit(
+            f"Human gate resume smoke check failed: status={status_code}, body={body}"
+        )
+    resume_data = _wrapped_data(body, context="Human gate resume smoke")
+    if resume_data.get("resumed") is not True:
+        raise SystemExit(f"Human gate resume smoke check failed: body={body}")
+
+    _wait_for_run_status(
+        opener,
+        backend_url=backend_url,
+        access_token=access_token,
+        run_id=run_id,
+        expected_statuses={"succeeded"},
+    )
+    dead_letters_after = _runtime_dead_letter_count(
+        opener,
+        backend_url=backend_url,
+        access_token=access_token,
+    )
+    if dead_letters_after is not None and dead_letters_after > 0:
+        raise SystemExit(
+            "Human gate resume smoke check failed: runtime intent dead-letter count "
+            f"is nonzero after smoke ({dead_letters_after})."
+        )
+    if (
+        dead_letters_before is not None
+        and dead_letters_after is not None
+        and dead_letters_after > dead_letters_before
+    ):
+        raise SystemExit(
+            "Human gate resume smoke check failed: runtime intent dead-letter count "
+            f"increased from {dead_letters_before} to {dead_letters_after}."
+        )
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backend/frontend/engine release smoke test.")
+    parser = argparse.ArgumentParser(
+        description="Backend/frontend/engine release smoke test."
+    )
     parser.add_argument("--backend-url", required=True)
     parser.add_argument("--frontend-url")
     parser.add_argument("--engine-url")
@@ -343,7 +612,9 @@ def main() -> None:
 
     _wait_for_ok(args.backend_url.rstrip("/") + "/health", opener=opener)
     _wait_for_ok(args.backend_url.rstrip("/") + "/ready", opener=opener)
-    access_token, tenant_id = _authenticated_api_smoke(opener, backend_url=args.backend_url)
+    access_token, tenant_id = _authenticated_api_smoke(
+        opener, backend_url=args.backend_url
+    )
 
     if not args.skip_engine and args.engine_url:
         _wait_for_ok(args.engine_url.rstrip("/") + "/ready", opener=opener)
@@ -357,7 +628,9 @@ def main() -> None:
 
     if not args.skip_callback:
         if not args.callback_secret:
-            raise SystemExit("--callback-secret is required unless --skip-callback is set.")
+            raise SystemExit(
+                "--callback-secret is required unless --skip-callback is set."
+            )
         run_id, initial_status = _create_smoke_run(
             opener,
             backend_url=args.backend_url,
@@ -376,6 +649,13 @@ def main() -> None:
             callback_secret=args.callback_secret,
             run_id=run_id,
             tenant_id=tenant_id,
+        )
+
+    if not args.skip_engine:
+        _human_gate_resume_smoke(
+            opener,
+            backend_url=args.backend_url,
+            access_token=access_token,
         )
 
 

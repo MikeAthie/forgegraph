@@ -4,6 +4,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from application.services.run_snapshots import RunSnapshot, set_snapshot
@@ -171,6 +172,77 @@ class TestEngineRunApi:
         run.refresh_from_db()
         assert run.status == "resume_requested"
 
+    def test_direct_runtime_state_writes_rejected_by_default(self, api_client):
+        user = User.objects.create_user(
+            email="engine-direct-writes@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Engine Direct Write Guard Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "gate", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+
+        checkpoint_payload = {
+            "node_id": "node_a",
+            "step_index": 1,
+            "state_snapshot": {"vars": {"alpha": 1}},
+            "completed_nodes": ["node_a"],
+            "skipped_nodes": [],
+            "graph_json": json.dumps({"nodes": [{"id": "node_a"}], "edges": []}),
+        }
+        body, headers = _signed_json_request("test-secret", checkpoint_payload)
+        response = api_client.generic(
+            "PUT",
+            f"/api/engine/runs/{run.id}/checkpoint",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+        assert response.status_code == 403
+
+        pause_payload = {
+            "paused_node_id": "gate",
+            "state_snapshot": {"input.ticket": "FG-123"},
+            "completed_nodes": [],
+            "skipped_nodes": [],
+            "graph_json": json.dumps(version.graph_json),
+        }
+        body, headers = _signed_json_request("test-secret", pause_payload)
+        response = api_client.generic(
+            "PUT",
+            f"/api/engine/runs/{run.id}/pause-state",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+        assert response.status_code == 403
+
+        node_payload = {
+            "node_type": "prompt",
+            "status": "running",
+            "attempt": 1,
+            "started_at": timezone.now().isoformat(),
+        }
+        body, headers = _signed_json_request("test-secret", node_payload)
+        response = api_client.generic(
+            "PUT",
+            f"/api/engine/runs/{run.id}/node-runs/node_1",
+            body,
+            content_type="application/json",
+            **headers,
+        )
+        assert response.status_code == 403
+
+        run.refresh_from_db()
+        assert run.paused_node_id is None
+        assert run.pause_state_json is None
+        assert not RunCheckpoint.objects.filter(run=run).exists()
+        assert not NodeRun.objects.filter(run=run).exists()
+
+    @override_settings(ENGINE_DIRECT_RUNTIME_WRITES_ENABLED=True)
     def test_checkpoint_upsert_preserves_newer_step(self, api_client):
         user = User.objects.create_user(
             email="engine-checkpoint@example.com", password="password123"
@@ -230,6 +302,7 @@ class TestEngineRunApi:
         assert response.data["data"]["step_index"] == 2
         assert response.data["data"]["completed_nodes"] == ["node_a"]
 
+    @override_settings(ENGINE_DIRECT_RUNTIME_WRITES_ENABLED=True)
     def test_pause_state_round_trip_preserves_graph_json(self, api_client):
         user = User.objects.create_user(
             email="engine-pause-state@example.com",
@@ -351,6 +424,7 @@ class TestEngineRunApi:
         assert response.data["data"]["next_node"] == "node_b"
         assert response.data["data"]["attempt_id"] == "attempt-9"
 
+    @override_settings(ENGINE_DIRECT_RUNTIME_WRITES_ENABLED=True)
     def test_node_run_upsert_and_latest_lookup(self, api_client):
         user = User.objects.create_user(email="engine-node-run@example.com", password="password123")
         graph = Graph.objects.create(owner=user, name="Node Run Graph")

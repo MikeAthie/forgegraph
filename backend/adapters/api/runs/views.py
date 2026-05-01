@@ -59,7 +59,11 @@ from adapters.ws.runs.broadcast import (
     broadcast_run_updated,
 )
 from application.services.audit_log import record_audit_log
-from application.services.auth_state import validate_access_token
+from application.services.auth_state import (
+    consume_ws_ticket,
+    is_access_jti_revoked,
+    validate_access_token,
+)
 from application.services.cloudevents import unwrap_engine_event
 from application.services.company_archive import ArchiveService, ContextPackService
 from application.services.company_learning import PreferenceEventService
@@ -4547,6 +4551,28 @@ def _get_user_from_request(request: Request) -> User | None:
     user = getattr(request, "user", None)
     if user and getattr(user, "is_authenticated", False):
         return cast(User, user)
+
+    ticket = str(request.query_params.get("ticket") or "").strip()
+    if ticket:
+        ticket_payload = consume_ws_ticket(ticket)
+        if not isinstance(ticket_payload, dict):
+            return None
+        permissions = ticket_payload.get("permissions")
+        if isinstance(permissions, list) and "runs:view" not in permissions:
+            return None
+        access_jti = str(ticket_payload.get("access_jti") or "").strip()
+        if access_jti and is_access_jti_revoked(access_jti):
+            return None
+        ticket_user_id = str(ticket_payload.get("user_id") or "").strip()
+        if not ticket_user_id:
+            return None
+        try:
+            return User.objects.get(id=ticket_user_id)
+        except User.DoesNotExist:
+            return None
+
+    if not getattr(settings, "RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN", False):
+        return None
 
     token = request.query_params.get("token")
     if not token:

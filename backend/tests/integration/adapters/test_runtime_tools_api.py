@@ -4,8 +4,10 @@ from unittest.mock import Mock, patch
 
 from django.test import override_settings
 
+RUNTIME_TOOL_AUTH = {"HTTP_AUTHORIZATION": "Bearer runtime-tool-secret"}
 
-@override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+
+@override_settings(RUNTIME_TOOL_SECRET="runtime-tool-secret")
 def test_runtime_web_fetch_requires_token(client):
     response = client.post(
         "/api/runtime-tools/web-fetch",
@@ -16,7 +18,21 @@ def test_runtime_web_fetch_requires_token(client):
     assert response.status_code == 401
 
 
-@override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+@override_settings(
+    ENGINE_CALLBACK_SECRET="engine-callback-secret",
+    RUNTIME_TOOL_SECRET="runtime-tool-secret",
+)
+def test_runtime_web_fetch_rejects_engine_callback_query_token(client):
+    response = client.post(
+        "/api/runtime-tools/web-fetch?token=engine-callback-secret",
+        data={"input": {"url": "https://example.com"}},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 401
+
+
+@override_settings(RUNTIME_TOOL_SECRET="runtime-tool-secret")
 def test_runtime_web_fetch_returns_extracted_text(client):
     mock_response = Mock()
     mock_response.status_code = 200
@@ -32,9 +48,10 @@ def test_runtime_web_fetch_returns_extracted_text(client):
 
     with patch("application.services.runtime_web_tools.requests.get", return_value=mock_response):
         response = client.post(
-            "/api/runtime-tools/web-fetch?token=test-secret",
+            "/api/runtime-tools/web-fetch",
             data={"input": {"url": "https://example.com/article"}},
             content_type="application/json",
+            **RUNTIME_TOOL_AUTH,
         )
 
     assert response.status_code == 200
@@ -45,19 +62,41 @@ def test_runtime_web_fetch_returns_extracted_text(client):
     assert payload["truncated"] is False
 
 
-@override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+@override_settings(RUNTIME_TOOL_SECRET="runtime-tool-secret")
 def test_runtime_web_fetch_blocks_localhost_targets(client):
     response = client.post(
-        "/api/runtime-tools/web-fetch?token=test-secret",
+        "/api/runtime-tools/web-fetch",
         data={"input": {"url": "http://localhost:8000/private"}},
         content_type="application/json",
+        **RUNTIME_TOOL_AUTH,
     )
 
     assert response.status_code == 400
     assert "not allowed" in response.json()["detail"].lower()
 
 
-@override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+@override_settings(RUNTIME_TOOL_SECRET="runtime-tool-secret")
+def test_runtime_web_fetch_blocks_redirects_to_localhost(client):
+    redirect_response = Mock()
+    redirect_response.status_code = 302
+    redirect_response.headers = {"Location": "http://127.0.0.1:8000/private"}
+    redirect_response.close.return_value = None
+
+    with patch(
+        "application.services.runtime_web_tools.requests.get", return_value=redirect_response
+    ):
+        response = client.post(
+            "/api/runtime-tools/web-fetch",
+            data={"input": {"url": "https://example.com/redirect"}},
+            content_type="application/json",
+            **RUNTIME_TOOL_AUTH,
+        )
+
+    assert response.status_code == 400
+    assert "private or local network" in response.json()["detail"].lower()
+
+
+@override_settings(RUNTIME_TOOL_SECRET="runtime-tool-secret")
 def test_runtime_web_search_returns_filtered_results(client):
     mock_response = Mock()
     mock_response.status_code = 200
@@ -72,7 +111,7 @@ def test_runtime_web_search_returns_filtered_results(client):
 
     with patch("application.services.runtime_web_tools.requests.get", return_value=mock_response):
         response = client.post(
-            "/api/runtime-tools/web-search?token=test-secret",
+            "/api/runtime-tools/web-search",
             data={
                 "input": {
                     "query": "forgegraph runtime tools",
@@ -82,6 +121,7 @@ def test_runtime_web_search_returns_filtered_results(client):
                 "config": {"max_results": 5},
             },
             content_type="application/json",
+            **RUNTIME_TOOL_AUTH,
         )
 
     assert response.status_code == 200
@@ -91,10 +131,10 @@ def test_runtime_web_search_returns_filtered_results(client):
     assert payload["results"][0]["title"] == "Alpha Result"
 
 
-@override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+@override_settings(RUNTIME_TOOL_SECRET="runtime-tool-secret")
 def test_runtime_web_search_rejects_conflicting_domain_filters(client):
     response = client.post(
-        "/api/runtime-tools/web-search?token=test-secret",
+        "/api/runtime-tools/web-search",
         data={
             "input": {
                 "query": "forgegraph",
@@ -103,6 +143,7 @@ def test_runtime_web_search_rejects_conflicting_domain_filters(client):
             }
         },
         content_type="application/json",
+        **RUNTIME_TOOL_AUTH,
     )
 
     assert response.status_code == 400

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import SupportsInt, cast
 from uuid import UUID
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -259,6 +260,12 @@ def _reject_engine_durable_write() -> Response:
     )
 
 
+def _reject_engine_durable_write_if_disabled() -> Response | None:
+    if bool(getattr(settings, "ENGINE_DIRECT_RUNTIME_WRITES_ENABLED", False)):
+        return None
+    return _reject_engine_durable_write()
+
+
 class EngineCredentialDetailView(APIView):
     permission_classes = [AllowAny]
 
@@ -405,6 +412,9 @@ class EngineRunPauseStateView(APIView):
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
             return auth_error
+        write_error = _reject_engine_durable_write_if_disabled()
+        if write_error is not None:
+            return write_error
 
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):
@@ -452,6 +462,9 @@ class EngineRunPauseStateView(APIView):
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
             return auth_error
+        write_error = _reject_engine_durable_write_if_disabled()
+        if write_error is not None:
+            return write_error
 
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):
@@ -490,6 +503,9 @@ class EngineRunCheckpointView(APIView):
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
             return auth_error
+        write_error = _reject_engine_durable_write_if_disabled()
+        if write_error is not None:
+            return write_error
 
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):
@@ -557,6 +573,9 @@ class EngineRunCheckpointView(APIView):
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
             return auth_error
+        write_error = _reject_engine_durable_write_if_disabled()
+        if write_error is not None:
+            return write_error
 
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):
@@ -606,6 +625,9 @@ class EngineRunSnapshotView(APIView):
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
             return auth_error
+        write_error = _reject_engine_durable_write_if_disabled()
+        if write_error is not None:
+            return write_error
 
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):
@@ -667,6 +689,9 @@ class EngineRunNodeRunDetailView(APIView):
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
             return auth_error
+        write_error = _reject_engine_durable_write_if_disabled()
+        if write_error is not None:
+            return write_error
 
         run = _get_run_or_404(run_id)
         if isinstance(run, Response):

@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -13,6 +15,25 @@ LOC_MEM_CACHE = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "auth-tests",
     }
+}
+LOGIN_THROTTLE_CACHE = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "auth-login-throttle-tests",
+    }
+}
+
+_REST_FRAMEWORK = cast(dict[str, Any], settings.REST_FRAMEWORK)
+_DEFAULT_THROTTLE_RATES = cast(
+    dict[str, str],
+    _REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
+)
+THROTTLED_AUTH_REST_FRAMEWORK = {
+    **_REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_RATES": {
+        **_DEFAULT_THROTTLE_RATES,
+        "auth_login": "2/min",
+    },
 }
 
 
@@ -53,6 +74,24 @@ def test_login_returns_tokens(api_client, user):
     refresh_cookie = response.cookies.get(settings.AUTH_REFRESH_COOKIE)
     assert refresh_cookie is not None
     assert refresh_cookie.value
+
+
+@override_settings(CACHES=LOGIN_THROTTLE_CACHE, REST_FRAMEWORK=THROTTLED_AUTH_REST_FRAMEWORK)
+def test_login_is_throttled(api_client, user):
+    for _ in range(2):
+        response = api_client.post(
+            "/api/auth/login",
+            {"email": user.email, "password": "wrong-password"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    response = api_client.post(
+        "/api/auth/login",
+        {"email": user.email, "password": "wrong-password"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
 
 
 def test_me_requires_authentication(api_client, user):
