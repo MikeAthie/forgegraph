@@ -234,6 +234,7 @@ class GrpcEngineClient(IEngineClient):
                 input_json=json.dumps(engine_input_json) if engine_input_json else "{}",
                 traceparent=traceparent or "",
                 tracestate=tracestate or "",
+                resume_attempt_id=resume_attempt_id or "",
             )
 
             logger.info(f"Resuming run {run_id} from node {node_id}")

@@ -93,6 +93,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "adapters.api.security_middleware.ApiRequestSizeLimitMiddleware",
     "adapters.api.metrics_middleware.RequestMetricsMiddleware",
     "adapters.api.deprecation_middleware.ApiDeprecationMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -268,6 +269,9 @@ AUTH_REGISTER_THROTTLE_RATE = os.environ.get("AUTH_REGISTER_THROTTLE_RATE", "20/
 AUTH_LOGIN_THROTTLE_RATE = os.environ.get("AUTH_LOGIN_THROTTLE_RATE", "10/min")
 AUTH_REFRESH_THROTTLE_RATE = os.environ.get("AUTH_REFRESH_THROTTLE_RATE", "60/min")
 AUTH_WS_TICKET_THROTTLE_RATE = os.environ.get("AUTH_WS_TICKET_THROTTLE_RATE", "120/min")
+API_ANON_THROTTLE_RATE = os.environ.get("API_ANON_THROTTLE_RATE", "120/min")
+API_USER_THROTTLE_RATE = os.environ.get("API_USER_THROTTLE_RATE", "1200/min")
+API_REQUEST_MAX_BYTES = int(os.environ.get("API_REQUEST_MAX_BYTES", str(1024 * 1024)))
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -282,10 +286,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_THROTTLE_RATES": {
+        "anon": API_ANON_THROTTLE_RATE,
+        "user": API_USER_THROTTLE_RATE,
         "auth_register": AUTH_REGISTER_THROTTLE_RATE,
         "auth_login": AUTH_LOGIN_THROTTLE_RATE,
         "auth_refresh": AUTH_REFRESH_THROTTLE_RATE,
@@ -390,9 +400,39 @@ RUN_QUEUE_WORKER_HEARTBEAT_TTL_SECONDS = int(
 )
 
 # SLO thresholds (defaults)
+FORGEGRAPH_RELEASE_TIER = os.environ.get("FORGEGRAPH_RELEASE_TIER", "beta")
+SLO_EVALUATION_WINDOW_SECONDS = int(os.environ.get("SLO_EVALUATION_WINDOW_SECONDS", "3600"))
+SLO_API_AVAILABILITY_BETA = float(os.environ.get("SLO_API_AVAILABILITY_BETA", "0.995"))
+SLO_API_AVAILABILITY_PRODUCTION = float(os.environ.get("SLO_API_AVAILABILITY_PRODUCTION", "0.999"))
 SLO_RUN_SUCCESS_RATE = float(os.environ.get("SLO_RUN_SUCCESS_RATE", "0.99"))
 SLO_RUN_P95_LATENCY_MS = int(os.environ.get("SLO_RUN_P95_LATENCY_MS", "60000"))
 SLO_QUEUE_MAX_DEPTH = int(os.environ.get("SLO_QUEUE_MAX_DEPTH", "500"))
+SLO_API_P95_LATENCY_MS = int(os.environ.get("SLO_API_P95_LATENCY_MS", "5000"))
+SLO_WEBSOCKET_SEND_P95_LATENCY_MS = int(os.environ.get("SLO_WEBSOCKET_SEND_P95_LATENCY_MS", "2000"))
+SLO_RUNTIME_INTENT_PROCESSING_P95_MS = int(
+    os.environ.get("SLO_RUNTIME_INTENT_PROCESSING_P95_MS", "1000")
+)
+SLO_WEBSOCKET_DELIVERY_P95_MS = int(os.environ.get("SLO_WEBSOCKET_DELIVERY_P95_MS", "2000"))
+SLO_APPROVAL_TO_RESUME_P95_MS = int(os.environ.get("SLO_APPROVAL_TO_RESUME_P95_MS", "5000"))
+SLO_TASK_PROJECTION_LAG_P95_MS = int(os.environ.get("SLO_TASK_PROJECTION_LAG_P95_MS", "2000"))
+SLO_DEAD_LETTER_VISIBILITY_SECONDS = int(os.environ.get("SLO_DEAD_LETTER_VISIBILITY_SECONDS", "30"))
+SLO_SILENT_TASK_LOSS_MAX = int(os.environ.get("SLO_SILENT_TASK_LOSS_MAX", "0"))
+SLO_RUNTIME_INTENT_BACKLOG_WARNING = int(os.environ.get("SLO_RUNTIME_INTENT_BACKLOG_WARNING", "50"))
+SLO_DEAD_LETTER_SPIKE_THRESHOLD = int(os.environ.get("SLO_DEAD_LETTER_SPIKE_THRESHOLD", "1"))
+SLO_CALLBACK_AUTH_FAILURE_THRESHOLD = int(
+    os.environ.get("SLO_CALLBACK_AUTH_FAILURE_THRESHOLD", "0")
+)
+SLO_WS_SLOW_DISCONNECT_THRESHOLD = int(os.environ.get("SLO_WS_SLOW_DISCONNECT_THRESHOLD", "0"))
+SLO_RATE_LIMIT_BREACH_THRESHOLD = int(os.environ.get("SLO_RATE_LIMIT_BREACH_THRESHOLD", "0"))
+SLO_LLM_QUEUE_DEPTH_THRESHOLD = int(os.environ.get("SLO_LLM_QUEUE_DEPTH_THRESHOLD", "25"))
+SLO_LLM_TIMEOUT_THRESHOLD = int(os.environ.get("SLO_LLM_TIMEOUT_THRESHOLD", "0"))
+SLO_COST_ANOMALY_USD_PER_WINDOW = float(os.environ.get("SLO_COST_ANOMALY_USD_PER_WINDOW", "100.0"))
+
+# Run WebSocket scaling guardrails.
+RUN_WS_MAX_CONNECTIONS_PER_ORG = int(os.environ.get("RUN_WS_MAX_CONNECTIONS_PER_ORG", "250"))
+RUN_WS_MAX_CONNECTIONS_PER_USER = int(os.environ.get("RUN_WS_MAX_CONNECTIONS_PER_USER", "20"))
+RUN_WS_HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("RUN_WS_HEARTBEAT_INTERVAL_SECONDS", "12"))
+RUN_WS_SEND_TIMEOUT_SECONDS = float(os.environ.get("RUN_WS_SEND_TIMEOUT_SECONDS", "2.0"))
 
 # Backend watchdog thresholds. The Docker healthcheck consumes /health and restarts
 # the process when this watchdog reports an unhealthy state.

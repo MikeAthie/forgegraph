@@ -37,6 +37,18 @@ const PRODUCT_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
     message: "Some required information is missing. Review the company setup and try again.",
   },
   {
+    pattern: /401|403|forbidden|permission|unauthori[sz]ed/i,
+    message: "The backend rejected this approval decision. Refresh your session or ask an admin to grant access.",
+  },
+  {
+    pattern: /404|not found/i,
+    message: "This approval is no longer available in the backend.",
+  },
+  {
+    pattern: /409|conflict|already resolved|different decision/i,
+    message: "The backend has already recorded a different decision for this approval.",
+  },
+  {
     pattern: /approval|paused|human/i,
     message: "The operation is waiting for an approval before the next department can continue.",
   },
@@ -52,6 +64,28 @@ function extractRawMessage(error: unknown): string {
   }
   if (typeof error === "string") {
     return error;
+  }
+  const response = (error as { response?: { status?: number; data?: unknown } } | null)?.response;
+  if (response) {
+    const data = response.data as
+      | {
+          detail?: unknown;
+          message?: unknown;
+          error?: unknown;
+        }
+      | undefined;
+    const nestedError =
+      data && typeof data.error === "object" && data.error !== null
+        ? (data.error as { message?: unknown; detail?: unknown; code?: unknown })
+        : null;
+    const message =
+      nestedError?.message ?? nestedError?.detail ?? nestedError?.code ?? data?.detail ?? data?.message ?? data?.error;
+    if (typeof message === "string" && message.trim()) {
+      return `${response.status ?? ""} ${message}`.trim();
+    }
+    if (response.status) {
+      return String(response.status);
+    }
   }
   return "";
 }

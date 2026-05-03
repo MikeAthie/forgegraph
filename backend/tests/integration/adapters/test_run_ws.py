@@ -48,6 +48,10 @@ def _ws(user: User, url: str) -> WebsocketCommunicator:
     return communicator
 
 
+async def _connect(communicator: WebsocketCommunicator) -> tuple[bool, int | str | None]:
+    return cast(tuple[bool, int | str | None], await communicator.connect(timeout=5))
+
+
 @database_sync_to_async
 def _create_run_for_user(*, user: User, status: str = "running") -> str:
     graph = Graph.objects.create(owner=user, name="My Graph")
@@ -120,7 +124,7 @@ async def test_run_ws_rejects_unauthenticated_user(user):
     run_id = await _create_run_for_user(user=user)
 
     communicator = WebsocketCommunicator(application, f"/ws/runs/{run_id}/")
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
 
     assert connected is False
     await communicator.disconnect()
@@ -133,7 +137,7 @@ async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
 
     _, ticket = await _issue_ticket_via_api(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
     assert connected is True
 
     first = await communicator.receive_json_from()
@@ -180,7 +184,7 @@ async def test_run_ws_default_subscription_drops_verbose_messages(user):
 
     _, ticket = await _issue_ticket_via_api(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
     assert connected is True
 
     await communicator.receive_json_from()
@@ -213,6 +217,93 @@ async def test_run_ws_default_subscription_drops_verbose_messages(user):
 
 @pytest.mark.asyncio
 @override_settings(CACHES=LOC_MEM_CACHE)
+async def test_run_ws_filters_by_requested_event_type(user):
+    run_id = await _create_run_for_user(user=user)
+
+    _, ticket = await _issue_ticket_via_api(user)
+    communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}&event_types=run_completed")
+    connected, _ = await _connect(communicator)
+    assert connected is True
+
+    await communicator.receive_json_from()
+
+    channel_layer = get_channel_layer()
+    assert channel_layer is not None
+
+    await channel_layer.group_send(
+        run_event_group_name(run_id=str(run_id), level=EVENT_LEVEL_MINIMAL),
+        {
+            "type": "broadcast.message",
+            "message": {
+                "event_id": "evt-filter-running",
+                "type": "run.updated",
+                "run_id": str(run_id),
+                "level": "minimal",
+                "run": {
+                    "id": str(run_id),
+                    "status": "running",
+                    "started_at": None,
+                    "ended_at": None,
+                    "duration_ms": None,
+                    "output_json": None,
+                    "error_message": "",
+                },
+            },
+        },
+    )
+    assert await communicator.receive_nothing(timeout=0.1) is True
+
+    await channel_layer.group_send(
+        run_event_group_name(run_id=str(run_id), level=EVENT_LEVEL_MINIMAL),
+        {
+            "type": "broadcast.message",
+            "message": {
+                "event_id": "evt-filter-completed",
+                "type": "run.updated",
+                "run_id": str(run_id),
+                "level": "minimal",
+                "run": {
+                    "id": str(run_id),
+                    "status": "succeeded",
+                    "started_at": None,
+                    "ended_at": None,
+                    "duration_ms": None,
+                    "output_json": None,
+                    "error_message": "",
+                },
+            },
+        },
+    )
+
+    message = await communicator.receive_json_from()
+    assert message["type"] == "run_completed"
+    assert message["event_id"] == "evt-filter-completed"
+    await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@override_settings(CACHES=LOC_MEM_CACHE)
+async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
+    run_id = await _create_run_for_user(user=user)
+
+    _, ticket = await _issue_ticket_via_api(user)
+    communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}&last_event_id=evt-old")
+    connected, _ = await _connect(communicator)
+    assert connected is True
+
+    connected_message = await communicator.receive_json_from()
+    assert connected_message["payload"]["resync_required"] is True
+    assert connected_message["payload"]["last_seen_event_id"] == "evt-old"
+
+    await communicator.send_json_to({"type": "resync"})
+    resync = await communicator.receive_json_from()
+    assert resync["type"] == "resync_required"
+    assert resync["payload"]["replay_supported"] is False
+    await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@override_settings(CACHES=LOC_MEM_CACHE)
 async def test_run_ws_verbose_subscription_receives_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -221,7 +312,7 @@ async def test_run_ws_verbose_subscription_receives_verbose_messages(user):
         user,
         f"/ws/runs/{run_id}/?ticket={ticket}&event_level=verbose",
     )
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
     assert connected is True
 
     connected_message = await communicator.receive_json_from()
@@ -265,9 +356,33 @@ async def test_run_ws_allows_same_org_member(user):
 
     _, ticket = await _issue_ticket_for_user(member)
     communicator = _ws(member, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
     assert connected is True
     await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@override_settings(
+    CACHES=LOC_MEM_CACHE,
+    RUN_WS_MAX_CONNECTIONS_PER_USER=1,
+    RUN_WS_MAX_CONNECTIONS_PER_ORG=10,
+)
+async def test_run_ws_enforces_user_connection_limit(user):
+    run_id = await _create_run_for_user(user=user)
+
+    _, first_ticket = await _issue_ticket_for_user(user)
+    first = _ws(user, f"/ws/runs/{run_id}/?ticket={first_ticket}")
+    connected, _ = await _connect(first)
+    assert connected is True
+    await first.receive_json_from()
+
+    _, second_ticket = await _issue_ticket_for_user(user)
+    second = _ws(user, f"/ws/runs/{run_id}/?ticket={second_ticket}")
+    connected, _ = await _connect(second)
+    assert connected is False
+
+    await second.disconnect()
+    await first.disconnect()
 
 
 @pytest.mark.asyncio
@@ -277,7 +392,7 @@ async def test_run_ws_rejects_cross_org_user(user):
 
     _, ticket = await _issue_ticket_for_user(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
     assert connected is False
     await communicator.disconnect()
 
@@ -290,12 +405,12 @@ async def test_run_ws_ticket_is_single_use(user):
     _, ticket = await _issue_ticket_for_user(user)
 
     first = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await first.connect()
+    connected, _ = await _connect(first)
     assert connected is True
     await first.disconnect()
 
     second = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await second.connect()
+    connected, _ = await _connect(second)
     assert connected is False
     await second.disconnect()
 
@@ -309,6 +424,6 @@ async def test_run_ws_rejects_ticket_when_access_token_revoked(user):
     await _revoke_access(access)
 
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
-    connected, _ = await communicator.connect()
+    connected, _ = await _connect(communicator)
     assert connected is False
     await communicator.disconnect()

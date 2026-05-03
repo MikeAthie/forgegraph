@@ -9,7 +9,19 @@ import type {
 
 export type OperationStatusVM = "queued" | "running" | "completed" | "failed" | "paused";
 
-export type TaskStatusVM = "queued" | "running" | "completed" | "failed" | "paused" | "skipped";
+export type TaskStatusVM =
+  | "created"
+  | "queued"
+  | "claimed"
+  | "running"
+  | "paused"
+  | "waiting_for_decision"
+  | "retry_scheduled"
+  | "completed"
+  | "failed"
+  | "dead_lettered"
+  | "cancelled"
+  | "skipped";
 
 export type DepartmentActivityStatusVM = "active" | "waiting" | "idle";
 
@@ -54,11 +66,39 @@ export type TaskVM = {
   updatedAt?: string | null;
   durationMs: number | null;
   attempt?: number | null;
+  attemptCount?: number | null;
   currentStepId?: string | null;
+  currentDecisionId?: string | null;
+  lifecycleTaskId?: string | null;
   requiresApproval?: boolean;
   toolName?: string | null;
   resultPreview?: string | null;
   issuePreview?: string | null;
+  retryMetadata?: Record<string, unknown> | null;
+  latestRetry?: {
+    operation_type?: string;
+    attempt_number?: number;
+    max_attempts?: number;
+    retry_delay_ms?: number;
+    retry_reason?: string;
+    last_error?: string;
+    next_scheduled_at?: string | null;
+    terminal_fallback?: string;
+    retry_class?: string;
+    status?: string;
+  } | null;
+  deadLetter?: {
+    reason?: string;
+    attempt_count?: number;
+    last_error?: string;
+    recovery_options?: string[];
+    status?: string;
+    intent_id?: string | null;
+    acknowledged_at?: string | null;
+  } | null;
+  staleEventCount?: number;
+  lateEventCount?: number;
+  recoveryOptions?: string[];
 };
 
 export type OperationFailureVM = Omit<CompanyFailure, "technicalDetails"> & {

@@ -7,7 +7,10 @@ from __future__ import annotations
 import time
 from collections import Counter, deque
 from dataclasses import dataclass
+from datetime import datetime
 from threading import Lock
+from typing import Any
+from uuid import UUID
 
 from django.utils import timezone
 
@@ -35,7 +38,11 @@ class WebSocketMetricsSnapshot:
     connection_failures_total: int
     messages_sent_total: int
     messages_dropped_total: int
+    messages_filtered_total: int
+    slow_client_disconnects_total: int
     message_rate_per_minute: float
+    send_latency_ms_p50: float | None
+    send_latency_ms_p95: float | None
     generated_at: str
 
 
@@ -57,6 +64,7 @@ _lock = Lock()
 _counters: Counter[str] = Counter()
 _latencies_ms: deque[int] = deque(maxlen=1000)
 _ws_message_timestamps: deque[float] = deque(maxlen=5000)
+_ws_send_latencies_ms: deque[int] = deque(maxlen=5000)
 _api_latencies_ms: deque[int] = deque(maxlen=2000)
 _api_timeout_like_timestamps: deque[float] = deque(maxlen=5000)
 _api_timeout_threshold_ms = 5000
@@ -105,6 +113,8 @@ def record_api_request(
     duration_ms: int,
     timeout_like: bool = False,
     timeout_threshold_ms: int | None = None,
+    path: str = "",
+    method: str = "",
 ) -> None:
     now_ts = time.time()
     with _lock:
@@ -118,6 +128,27 @@ def record_api_request(
             _counters["api_timeout_like_requests_total"] += 1
             _api_timeout_like_timestamps.append(now_ts)
         _api_latencies_ms.append(max(duration_ms, 0))
+    if path:
+        record_service_metric_sample(
+            metric_name="api_request_duration_ms",
+            source="backend_middleware",
+            value=max(duration_ms, 0),
+            unit="ms",
+            dimensions={
+                "path": path,
+                "method": method.upper(),
+                "status_code": int(status_code),
+                "timeout_like": bool(timeout_like),
+            },
+        )
+        if status_code == 429:
+            record_service_metric_sample(
+                metric_name="api_rate_limit_breach",
+                source="backend_middleware",
+                value=1,
+                unit="count",
+                dimensions={"path": path, "method": method.upper()},
+            )
 
 
 def _prune_api_timeout_like_timestamps(now_ts: float) -> None:
@@ -145,17 +176,33 @@ def record_ws_connection_failure() -> None:
         _counters["ws_connection_failures_total"] += 1
 
 
-def record_ws_message_sent() -> None:
+def record_ws_message_sent(*, duration_ms: int | None = None) -> None:
     now_ts = time.time()
     with _lock:
         _counters["ws_messages_sent_total"] += 1
         _ws_message_timestamps.append(now_ts)
+        if duration_ms is not None:
+            _ws_send_latencies_ms.append(max(duration_ms, 0))
         _prune_ws_message_timestamps(now_ts)
 
 
-def record_ws_message_dropped() -> None:
+def record_ws_message_dropped(reason: str = "unknown") -> None:
+    normalized_reason = str(reason or "unknown").strip().lower() or "unknown"
     with _lock:
         _counters["ws_messages_dropped_total"] += 1
+        _counters[f"ws_messages_dropped_reason:{normalized_reason}"] += 1
+
+
+def record_ws_message_filtered() -> None:
+    with _lock:
+        _counters["ws_messages_filtered_total"] += 1
+
+
+def record_ws_slow_client_disconnect(reason: str = "send_timeout") -> None:
+    normalized_reason = str(reason or "send_timeout").strip().lower() or "send_timeout"
+    with _lock:
+        _counters["ws_slow_client_disconnects_total"] += 1
+        _counters[f"ws_slow_client_disconnect_reason:{normalized_reason}"] += 1
 
 
 def _percentile(values: list[int], percentile: float) -> float | None:
@@ -170,6 +217,37 @@ def _percentile(values: list[int], percentile: float) -> float | None:
     d0 = sorted_vals[f] * (c - k)
     d1 = sorted_vals[c] * (k - f)
     return float(d0 + d1)
+
+
+def record_service_metric_sample(
+    *,
+    metric_name: str,
+    source: str,
+    value: float,
+    unit: str = "",
+    dimensions: dict[str, Any] | None = None,
+    organization_id: UUID | str | None = None,
+    run_id: UUID | str | None = None,
+    observed_at: datetime | None = None,
+) -> None:
+    """Persist a backend-owned metric sample without making telemetry request-critical."""
+
+    try:
+        from infrastructure.orm.models import ServiceMetricSample
+
+        ServiceMetricSample.objects.create(
+            metric_name=str(metric_name or "").strip(),
+            source=str(source or "").strip() or "unknown",
+            organization_id=organization_id,
+            run_id=run_id,
+            value=float(value),
+            unit=str(unit or "").strip(),
+            dimensions=dimensions or {},
+            observed_at=observed_at or timezone.now(),
+        )
+    except Exception:
+        # Metrics must never break user-facing requests or runtime execution.
+        return
 
 
 def get_run_metrics_snapshot() -> RunMetricsSnapshot:
@@ -221,14 +299,21 @@ def get_websocket_metrics_snapshot() -> WebSocketMetricsSnapshot:
         connection_failures = int(_counters.get("ws_connection_failures_total", 0))
         messages_sent = int(_counters.get("ws_messages_sent_total", 0))
         messages_dropped = int(_counters.get("ws_messages_dropped_total", 0))
+        messages_filtered = int(_counters.get("ws_messages_filtered_total", 0))
+        slow_client_disconnects = int(_counters.get("ws_slow_client_disconnects_total", 0))
         recent_messages = len(_ws_message_timestamps)
+        send_latencies = list(_ws_send_latencies_ms)
 
     return WebSocketMetricsSnapshot(
         active_connections=active_connections,
         connection_failures_total=connection_failures,
         messages_sent_total=messages_sent,
         messages_dropped_total=messages_dropped,
+        messages_filtered_total=messages_filtered,
+        slow_client_disconnects_total=slow_client_disconnects,
         message_rate_per_minute=float(recent_messages),
+        send_latency_ms_p50=_percentile(send_latencies, 0.5),
+        send_latency_ms_p95=_percentile(send_latencies, 0.95),
         generated_at=timezone.now().isoformat(),
     )
 

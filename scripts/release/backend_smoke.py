@@ -128,11 +128,13 @@ def _signed_callback_test(
         "output": {"chunk": "release smoke callback", "chunk_index": 0},
         "timestamp": int(time.time() * 1000),
     }
+    duplicate_payload = dict(payload)
+    duplicate_payload["timestamp"] = int(time.time() * 1000) + 1
     status_code, body = _post_signed_callback(
         opener,
         callback_url=callback_url,
         callback_secret=callback_secret,
-        payload=payload,
+        payload=duplicate_payload,
     )
     if status_code != 200:
         raise SystemExit(

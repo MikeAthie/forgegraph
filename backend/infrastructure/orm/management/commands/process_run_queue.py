@@ -45,6 +45,11 @@ from application.services.run_queue import (
     record_run_queue_worker_heartbeat,
     release_stale_entries,
 )
+from application.services.task_lifecycle import (
+    mark_run_tasks_terminal,
+    record_retry_operation,
+    transition_task_lifecycle,
+)
 from application.services.tenancy import get_tenant_id_for_user
 from application.services.tool_executions import (
     ToolExecutionDispatchBlocked,
@@ -138,6 +143,19 @@ class Command(BaseCommand):
         tenant_id = get_tenant_id_for_user(user)
         session_id = str(run.thread_id) if run.thread_id else None
         graph_version = run.graph_version
+        for lifecycle_task in run.task_lifecycle_records.exclude(
+            status__in=["completed", "failed", "dead_lettered", "cancelled"]
+        ):
+            transition_task_lifecycle(
+                run=run,
+                node_id=lifecycle_task.source_node_id,
+                node_type=lifecycle_task.node_type,
+                to_status="claimed",
+                attempt_number=max(lifecycle_task.current_attempt, entry.attempts or 1),
+                source="run_queue_worker",
+                idempotency_key=f"task:{run.id}:{lifecycle_task.source_node_id}:claimed:{entry.id}:{entry.attempts}",
+                reason=f"claimed by run queue worker {entry.locked_by}",
+            )
 
         checkpoint = None
         try:
@@ -237,6 +255,19 @@ class Command(BaseCommand):
             record_run_started()
             broadcast_run_updated(run)
             mark_completed(entry)
+        for lifecycle_task in run.task_lifecycle_records.exclude(
+            status__in=["completed", "failed", "dead_lettered", "cancelled"]
+        ):
+            transition_task_lifecycle(
+                run=run,
+                node_id=lifecycle_task.source_node_id,
+                node_type=lifecycle_task.node_type,
+                to_status="queued",
+                attempt_number=max(lifecycle_task.current_attempt, entry.attempts or 1),
+                source="run_queue_worker",
+                idempotency_key=f"task:{run.id}:{lifecycle_task.source_node_id}:engine_dispatched:{entry.id}:{entry.attempts}",
+                reason="run dispatched to engine; waiting for node-level lifecycle",
+            )
 
     def _fail_run(
         self, entry: RunQueueEntry, run: Any, message: str, retryable: bool = False
@@ -245,6 +276,27 @@ class Command(BaseCommand):
             run.error_message = message
             run.save(update_fields=["error_message"])
             mark_failed(entry, error_message=message, retryable=True)
+            for lifecycle_task in run.task_lifecycle_records.exclude(
+                status__in=["completed", "failed", "dead_lettered", "cancelled"]
+            ):
+                record_retry_operation(
+                    run=run,
+                    operation_type="run_queue_dispatch",
+                    idempotency_key=f"retry:{run.id}:{lifecycle_task.source_node_id}:queue:{entry.attempts}",
+                    attempt_number=max(entry.attempts, 1),
+                    max_attempts=max(entry.max_attempts, 1),
+                    retry_delay_ms=get_run_queue_settings().retry_delay_seconds * 1000,
+                    retry_reason=message,
+                    last_error=message,
+                    owning_component="backend_run_queue",
+                    retry_class="transport",
+                    terminal_fallback="dead_letter",
+                    node_id=lifecycle_task.source_node_id,
+                    node_type=lifecycle_task.node_type,
+                    parent_attempt_number=max(entry.attempts - 1, 1)
+                    if entry.attempts > 1
+                    else None,
+                )
             return
 
         now = timezone.now()
@@ -254,6 +306,12 @@ class Command(BaseCommand):
         run.ended_at = now
         run.error_message = message
         run.save(update_fields=["status", "started_at", "ended_at", "error_message"])
+        mark_run_tasks_terminal(
+            run=run,
+            status_value="failed",
+            source="run_queue_worker",
+            reason=message,
+        )
         record_run_completed("failed", run.duration_ms)
         broadcast_run_updated(run)
         mark_failed(entry, error_message=message, retryable=False)

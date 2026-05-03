@@ -730,7 +730,14 @@ func (s *Scheduler) StartRun(
 
 	// Update run status to running
 	if err := s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning)); err != nil {
-		log.Printf("Failed to update run status: %v", err)
+		s.activeRuns.Delete(runID)
+		if rc.runSpan != nil {
+			rc.runSpan.RecordError(err)
+			rc.runSpan.End()
+		}
+		rc.cancel()
+		close(rc.workChan)
+		return fmt.Errorf("critical run start state write failed: %w", err)
 	}
 
 	// Emit run started/resumed event
@@ -902,7 +909,8 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 		SpanID:    nodeTrace.SpanID,
 	}
 	if err := s.repository.CreateNodeRun(nodeCtx, nodeRun); err != nil {
-		log.Printf("Failed to create node run: %v", err)
+		s.setError(rc, fmt.Errorf("failed to persist node start for node %s: %w", nodeID, err))
+		return
 	}
 	if node.Type == string(value.NodeTypeTool) {
 		if err := s.publishToolExecutionStatusIntent(rc.intentContext(context.Background()), rc, node, "tool_execution_started", "", nil); err != nil {
@@ -985,7 +993,10 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			if len(pausePayload) > 0 {
 				nodeRun.OutputJSON = map[string]any{"pause_payload": pausePayload}
 			}
-			s.repository.UpdateNodeRun(nodeCtx, nodeRun)
+			if err := s.repository.UpdateNodeRun(nodeCtx, nodeRun); err != nil {
+				s.setError(rc, fmt.Errorf("failed to persist pause node state for node %s: %w", nodeID, err))
+				return
+			}
 
 			// Save state snapshot for durable resume
 			stateSnapshot := rc.state.Snapshot()
@@ -1000,7 +1011,7 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 			}
 			rc.pendingMu.Unlock()
 
-			s.repository.SavePauseState(
+			if err := s.repository.SavePauseState(
 				rc.intentContext(context.Background()),
 				rc.runID,
 				nodeID,
@@ -1009,8 +1020,14 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 				skippedNodes,
 				rc.graphJSON,
 				rc.tenantID,
-			)
-			s.repository.UpdateRunStatus(rc.intentContext(context.Background()), rc.runID, string(value.RunStatusPaused))
+			); err != nil {
+				s.setError(rc, fmt.Errorf("failed to persist pause state for node %s: %w", nodeID, err))
+				return
+			}
+			if err := s.repository.UpdateRunStatus(rc.intentContext(context.Background()), rc.runID, string(value.RunStatusPaused)); err != nil {
+				s.setError(rc, fmt.Errorf("failed to mark run paused for node %s: %w", nodeID, err))
+				return
+			}
 
 			// Emit pause event with the pause payload
 			pauseEvent := rc.newEventFromContext(nodeCtx, port.EventTypeRunPaused).
@@ -1071,6 +1088,11 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 				)
 			})
 		}
+		if s.runtimeIntentPublisher != nil {
+			execCtx = port.WithRetryRecorder(execCtx, func(recordCtx context.Context, record port.RetryRecord) error {
+				return s.publishRunRetryOperationIntent(rc.intentContext(recordCtx), rc, node, record)
+			})
+		}
 
 		s.hooks.beforeNodeExecute(rc.runID, node.ID)
 		result, err := executor.Execute(execCtx, node, rc.state)
@@ -1098,6 +1120,30 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 
 		// Emit retry event
 		if attempt < policy.MaxAttempts {
+			// Calculate backoff before sleeping so the backend can own the
+			// retry record and operators can see the next scheduled time.
+			backoff := s.calculateBackoff(policy, attempt)
+			if retryAfterMs := domain.RetryAfterMsFromError(err); retryAfterMs > backoff {
+				backoff = retryAfterMs
+			}
+			nextAttempt := baseAttempt + attempt
+			maxAttempt := baseAttempt + policy.MaxAttempts - 1
+			if err := s.publishRetryOperationIntent(
+				rc.intentContext(context.Background()),
+				rc,
+				node,
+				"node_execution",
+				nextAttempt,
+				maxAttempt,
+				backoff,
+				fmt.Sprintf("retry scheduled for node %s", node.ID),
+				err,
+				s.retryClassForNodeError(node, err),
+				"fail_run",
+			); err != nil {
+				return nil, fmt.Errorf("failed to record retry operation for node %s: %w", node.ID, err)
+			}
+
 			s.emitter.EmitAsync(
 				rc.newEventFromContext(execCtx, port.EventTypeNodeRetrying).
 					WithNode(node.ID, node.Type, node.Name).
@@ -1105,17 +1151,30 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 					WithAttemptID(rc.attemptID).
 					WithError(err.Error()),
 			)
-
-			// Calculate backoff
-			backoff := s.calculateBackoff(policy, attempt)
-			if retryAfterMs := domain.RetryAfterMsFromError(err); retryAfterMs > backoff {
-				backoff = retryAfterMs
-			}
 			select {
 			case <-rc.ctx.Done():
 				return nil, rc.ctx.Err()
 			case <-s.clock.After(time.Duration(backoff) * time.Millisecond):
 			}
+		}
+	}
+
+	if lastErr != nil && domain.IsRetryable(lastErr) {
+		maxAttempt := baseAttempt + policy.MaxAttempts - 1
+		if err := s.publishRetryOperationIntent(
+			rc.intentContext(context.Background()),
+			rc,
+			node,
+			"node_execution",
+			maxAttempt,
+			maxAttempt,
+			0,
+			fmt.Sprintf("retry exhausted for node %s", node.ID),
+			lastErr,
+			s.retryClassForNodeError(node, lastErr),
+			"dead_letter",
+		); err != nil {
+			return nil, fmt.Errorf("failed to record retry exhaustion for node %s: %w", node.ID, err)
 		}
 	}
 
@@ -1167,7 +1226,10 @@ func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node 
 	nodeRun.Status = string(value.NodeRunStatusFailed)
 	nodeRun.SetEnded(s.clock.Now())
 	nodeRun.ErrorJSON = errorPayload
-	s.repository.UpdateNodeRun(ctx, nodeRun)
+	if err := s.repository.UpdateNodeRun(ctx, nodeRun); err != nil {
+		s.setError(rc, fmt.Errorf("failed to persist node failure for node %s: %w", node.ID, err))
+		return false
+	}
 
 	failedEvent := rc.newEventFromContext(ctx, port.EventTypeNodeFailed).
 		WithNode(node.ID, node.Type, node.Name).
@@ -1215,13 +1277,19 @@ func (s *Scheduler) handleNodeFailure(ctx context.Context, rc *runContext, node 
 		}
 	}
 
-	s.repository.UpdateNodeRun(ctx, nodeRun)
+	if err := s.repository.UpdateNodeRun(ctx, nodeRun); err != nil {
+		s.setError(rc, fmt.Errorf("failed to persist handled node failure for node %s: %w", node.ID, err))
+		return false
+	}
+
+	if err := s.saveCheckpoint(rc, node.ID, nextNodes, nodeRun.Attempt); err != nil {
+		s.setError(rc, fmt.Errorf("failed to commit checkpoint for handled node failure %s: %w", node.ID, err))
+		return false
+	}
 
 	for _, nextNodeID := range nextNodes {
 		s.decrementAndEnqueue(rc, nextNodeID)
 	}
-
-	s.saveCheckpoint(rc, node.ID, nextNodes, nodeRun.Attempt)
 	return true
 }
 
@@ -1376,7 +1444,10 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 			nodeRun.Status = string(value.NodeRunStatusFailed)
 			nodeRun.SetEnded(s.clock.Now())
 			nodeRun.ErrorJSON = map[string]any{"error": directiveErr.Error()}
-			s.repository.UpdateNodeRun(ctx, nodeRun)
+			if err := s.repository.UpdateNodeRun(ctx, nodeRun); err != nil {
+				s.setError(rc, fmt.Errorf("failed to persist invalid routing failure for node %s: %w", nodeID, err))
+				return
+			}
 
 			s.emitter.EmitAsync(
 				rc.newEventFromContext(ctx, port.EventTypeNodeFailed).
@@ -1429,7 +1500,29 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 	if len(nodeOutput) > 0 {
 		nodeRun.OutputJSON = nodeOutput
 	}
-	s.repository.UpdateNodeRun(ctx, nodeRun)
+
+	stateDelta, deletedKeys := computeStateDelta(nodeRun.InputJSON, rc.state.Snapshot())
+	if len(stateDelta) > 0 {
+		if nodeRun.OutputJSON == nil {
+			nodeRun.OutputJSON = map[string]any{}
+		}
+		nodeRun.OutputJSON["state_delta"] = stateDelta
+	}
+	if len(deletedKeys) > 0 {
+		if nodeRun.OutputJSON == nil {
+			nodeRun.OutputJSON = map[string]any{}
+		}
+		nodeRun.OutputJSON["deleted_state_keys"] = deletedKeys
+	}
+	if err := s.repository.UpdateNodeRun(ctx, nodeRun); err != nil {
+		s.setError(rc, fmt.Errorf("failed to persist node completion for node %s: %w", nodeID, err))
+		return
+	}
+
+	if err := s.saveCheckpoint(rc, nodeID, nextNodes, nodeRun.Attempt); err != nil {
+		s.setError(rc, fmt.Errorf("failed to commit checkpoint for node %s: %w", nodeID, err))
+		return
+	}
 
 	// Emit node completed
 	completedEvent := rc.newEventFromContext(ctx, port.EventTypeNodeCompleted).
@@ -1446,23 +1539,6 @@ func (s *Scheduler) handleNodeSuccess(ctx context.Context, rc *runContext, node 
 
 	// Trigger summarization if configured
 	s.maybeTriggerSummarization(rc, node)
-
-	stateDelta, deletedKeys := computeStateDelta(nodeRun.InputJSON, rc.state.Snapshot())
-	if len(stateDelta) > 0 {
-		if nodeRun.OutputJSON == nil {
-			nodeRun.OutputJSON = map[string]any{}
-		}
-		nodeRun.OutputJSON["state_delta"] = stateDelta
-	}
-	if len(deletedKeys) > 0 {
-		if nodeRun.OutputJSON == nil {
-			nodeRun.OutputJSON = map[string]any{}
-		}
-		nodeRun.OutputJSON["deleted_state_keys"] = deletedKeys
-	}
-	s.repository.UpdateNodeRun(ctx, nodeRun)
-
-	s.saveCheckpoint(rc, nodeID, nextNodes, nodeRun.Attempt)
 }
 
 func (s *Scheduler) maybeTriggerSummarization(rc *runContext, node *entity.Node) {
@@ -1585,29 +1661,38 @@ func (s *Scheduler) buildCheckpointSnapshot(rc *runContext, stepIndex int) (map[
 	return checkpointPayload, completedNodes, skippedNodes
 }
 
-func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string, nextNodes []string, attempt int) {
+func (s *Scheduler) saveCheckpoint(rc *runContext, nodeID string, nextNodes []string, attempt int) error {
 	if !s.isCheckpointingEnabled() {
-		return
+		return nil
 	}
 
 	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
 	if s.config.CheckpointMode == CheckpointModeBatch {
 		if !s.shouldSaveBatchCheckpoint(rc, stepIndex) {
-			return
+			return s.publishNodeCompletedIntent(rc.intentContext(context.Background()), rc, nodeID, nextNodes, attempt)
 		}
 	}
 	checkpointPayload, completedNodes, skippedNodes := s.buildCheckpointSnapshot(rc, stepIndex)
 
 	if err := s.repository.SaveCheckpoint(rc.intentContext(context.Background()), rc.runID, nodeID, stepIndex, checkpointPayload, completedNodes, skippedNodes, rc.graphJSON); err != nil {
-		log.Printf("Failed to save checkpoint for run %s: %v", rc.runID, err)
+		return fmt.Errorf("save checkpoint: %w", err)
 	}
 	if err := s.publishNodeCompletedIntent(rc.intentContext(context.Background()), rc, nodeID, nextNodes, attempt); err != nil {
-		log.Printf("Failed to publish node_completed intent for run %s: %v", rc.runID, err)
-		return
+		return fmt.Errorf("publish node_completed intent: %w", err)
 	}
 	rc.checkpointMu.Lock()
 	rc.lastCheckpointAt = s.clock.Now()
 	rc.checkpointMu.Unlock()
+	return nil
+}
+
+func deterministicRuntimeIntentID(intentType string, runID string, attemptID string, payload map[string]any) string {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		body = []byte(fmt.Sprintf("%v", payload))
+	}
+	seed := strings.Join([]string{intentType, runID, attemptID, string(body)}, "\x00")
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
 func (s *Scheduler) publishNodeCompletedIntent(
@@ -1625,18 +1710,19 @@ func (s *Scheduler) publishNodeCompletedIntent(
 	if len(nextNodes) > 0 {
 		nextNode = nextNodes[0]
 	}
+	payload := map[string]any{
+		"node_id":   nodeID,
+		"attempt":   attempt,
+		"next_node": nextNode,
+	}
 	intent := &port.RuntimeIntentEnvelope{
-		IntentID:   uuid.NewString(),
+		IntentID:   deterministicRuntimeIntentID("node_completed", rc.runID, rc.attemptID, payload),
 		IntentType: "node_completed",
 		RunID:      rc.runID,
 		AttemptID:  rc.attemptID,
 		TraceID:    rc.traceID,
 		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
-		Payload: map[string]any{
-			"node_id":   nodeID,
-			"attempt":   attempt,
-			"next_node": nextNode,
-		},
+		Payload:    payload,
 	}
 	return s.runtimeIntentPublisher.Publish(ctx, intent)
 }
@@ -1684,7 +1770,7 @@ func (s *Scheduler) publishToolExecutionStatusIntent(
 		}
 	}
 	intent := &port.RuntimeIntentEnvelope{
-		IntentID:   uuid.NewString(),
+		IntentID:   deterministicRuntimeIntentID(intentType, rc.runID, rc.attemptID, payload),
 		IntentType: intentType,
 		RunID:      rc.runID,
 		AttemptID:  rc.attemptID,
@@ -1711,35 +1797,36 @@ func (s *Scheduler) publishPauseRunIntent(
 	stepIndex := int(atomic.AddInt64(&rc.checkpointSeq, 1))
 	checkpointPayload, completedNodes, skippedNodes := s.buildCheckpointSnapshot(rc, stepIndex)
 
+	payload := map[string]any{
+		"node_id":       node.ID,
+		"node_type":     node.Type,
+		"node_name":     node.Name,
+		"node_attempt":  nodeRun.Attempt,
+		"pause_payload": pausePayload,
+		"checkpoint": map[string]any{
+			"node_id":         node.ID,
+			"step_index":      stepIndex,
+			"state_snapshot":  checkpointPayload,
+			"completed_nodes": completedNodes,
+			"skipped_nodes":   skippedNodes,
+			"graph_json":      rc.graphJSON,
+		},
+		"pause_state": map[string]any{
+			"state_snapshot":  rc.state.Snapshot(),
+			"completed_nodes": completedNodes,
+			"skipped_nodes":   skippedNodes,
+			"graph_json":      rc.graphJSON,
+			"tenant_id":       rc.tenantID,
+		},
+	}
 	intent := &port.RuntimeIntentEnvelope{
-		IntentID:   uuid.NewString(),
+		IntentID:   deterministicRuntimeIntentID("pause_run", rc.runID, rc.attemptID, payload),
 		IntentType: "pause_run",
 		RunID:      rc.runID,
 		AttemptID:  rc.attemptID,
 		TraceID:    rc.traceID,
 		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
-		Payload: map[string]any{
-			"node_id":       node.ID,
-			"node_type":     node.Type,
-			"node_name":     node.Name,
-			"node_attempt":  nodeRun.Attempt,
-			"pause_payload": pausePayload,
-			"checkpoint": map[string]any{
-				"node_id":         node.ID,
-				"step_index":      stepIndex,
-				"state_snapshot":  checkpointPayload,
-				"completed_nodes": completedNodes,
-				"skipped_nodes":   skippedNodes,
-				"graph_json":      rc.graphJSON,
-			},
-			"pause_state": map[string]any{
-				"state_snapshot":  rc.state.Snapshot(),
-				"completed_nodes": completedNodes,
-				"skipped_nodes":   skippedNodes,
-				"graph_json":      rc.graphJSON,
-				"tenant_id":       rc.tenantID,
-			},
-		},
+		Payload:    payload,
 	}
 	if err := s.runtimeIntentPublisher.Publish(ctx, intent); err != nil {
 		atomic.AddInt64(&rc.checkpointSeq, -1)
@@ -1766,19 +1853,202 @@ func (s *Scheduler) publishAckRunResumedIntent(
 	if activeAttemptID == "" {
 		activeAttemptID = rc.attemptID
 	}
+	payload := map[string]any{
+		"node_id":           nodeID,
+		"resume_attempt_id": activeAttemptID,
+		"resolution":        resolution,
+	}
 	intent := &port.RuntimeIntentEnvelope{
-		IntentID:   uuid.NewString(),
+		IntentID:   deterministicRuntimeIntentID("ack_run_resumed", rc.runID, activeAttemptID, payload),
 		IntentType: "ack_run_resumed",
 		RunID:      rc.runID,
 		AttemptID:  activeAttemptID,
 		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
 		TraceID:    rc.traceID,
-		Payload: map[string]any{
-			"node_id":    nodeID,
-			"resolution": resolution,
-		},
+		Payload:    payload,
 	}
 	return s.runtimeIntentPublisher.Publish(ctx, intent)
+}
+
+func (s *Scheduler) publishRetryOperationIntent(
+	ctx context.Context,
+	rc *runContext,
+	node *entity.Node,
+	operationType string,
+	attemptNumber int,
+	maxAttempts int,
+	retryDelayMs int,
+	retryReason string,
+	lastErr error,
+	retryClass string,
+	terminalFallback string,
+) error {
+	return s.publishRetryOperationIntentInternal(
+		ctx,
+		rc,
+		node,
+		operationType,
+		attemptNumber,
+		maxAttempts,
+		retryDelayMs,
+		retryReason,
+		lastErr,
+		retryClass,
+		terminalFallback,
+		nil,
+		true,
+	)
+}
+
+func (s *Scheduler) publishRunRetryOperationIntent(
+	ctx context.Context,
+	rc *runContext,
+	node *entity.Node,
+	record port.RetryRecord,
+) error {
+	return s.publishRetryOperationIntentInternal(
+		ctx,
+		rc,
+		node,
+		record.OperationType,
+		record.AttemptNumber,
+		record.MaxAttempts,
+		record.RetryDelayMs,
+		record.RetryReason,
+		record.LastError,
+		record.RetryClass,
+		record.TerminalFallback,
+		record.Metadata,
+		false,
+	)
+}
+
+func (s *Scheduler) publishRetryOperationIntentInternal(
+	ctx context.Context,
+	rc *runContext,
+	node *entity.Node,
+	operationType string,
+	attemptNumber int,
+	maxAttempts int,
+	retryDelayMs int,
+	retryReason string,
+	lastErr error,
+	retryClass string,
+	terminalFallback string,
+	metadata map[string]any,
+	linkTask bool,
+) error {
+	if s.runtimeIntentPublisher == nil || rc == nil {
+		return nil
+	}
+	if strings.TrimSpace(operationType) == "" {
+		operationType = "runtime_retry"
+	}
+	if attemptNumber <= 0 {
+		attemptNumber = 1
+	}
+	if maxAttempts < attemptNumber {
+		maxAttempts = attemptNumber
+	}
+	if retryClass == "" {
+		retryClass = "transport"
+	}
+	if terminalFallback == "" {
+		terminalFallback = "fail_run"
+	}
+	idempotencyKey := strings.Join(
+		[]string{
+			"engine",
+			rc.runID,
+			"",
+			operationType,
+			strconv.Itoa(attemptNumber),
+			terminalFallback,
+		},
+		":",
+	)
+	if node != nil {
+		idempotencyKey = strings.Join(
+			[]string{
+				"engine",
+				rc.runID,
+				node.ID,
+				operationType,
+				strconv.Itoa(attemptNumber),
+				terminalFallback,
+			},
+			":",
+		)
+	}
+	payload := map[string]any{
+		"operation_type":    operationType,
+		"idempotency_key":   idempotencyKey,
+		"attempt_number":    attemptNumber,
+		"max_attempts":      maxAttempts,
+		"retry_delay_ms":    retryDelayMs,
+		"retry_reason":      retryReason,
+		"last_error":        "",
+		"owning_component":  "engine",
+		"retry_class":       retryClass,
+		"terminal_fallback": terminalFallback,
+	}
+	if linkTask && node != nil {
+		payload["node_id"] = node.ID
+		payload["node_type"] = node.Type
+	}
+	if linkTask && attemptNumber > 1 {
+		payload["parent_attempt_number"] = attemptNumber - 1
+	}
+	if retryDelayMs > 0 {
+		payload["next_scheduled_at"] = s.clock.Now().Add(time.Duration(retryDelayMs) * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	}
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	if node != nil {
+		metadata["node_id"] = node.ID
+		metadata["node_type"] = node.Type
+		metadata["node_name"] = node.Name
+	}
+	if lastErr != nil {
+		payload["last_error"] = lastErr.Error()
+		metadata["error_class"] = fmt.Sprintf("%T", lastErr)
+		if retryCode := domain.RetryCodeFromError(lastErr); retryCode != "" {
+			metadata["retry_code"] = retryCode
+		}
+		if retryAfterMs := domain.RetryAfterMsFromError(lastErr); retryAfterMs > 0 {
+			metadata["retry_after_ms"] = retryAfterMs
+		}
+		if details := domain.RetryDetailsFromError(lastErr); len(details) > 0 {
+			metadata["retry_details"] = details
+		}
+	}
+	if len(metadata) > 0 {
+		payload["metadata"] = metadata
+	}
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   deterministicRuntimeIntentID("record_retry_operation", rc.runID, rc.attemptID, payload),
+		IntentType: "record_retry_operation",
+		RunID:      rc.runID,
+		AttemptID:  rc.attemptID,
+		TraceID:    rc.traceID,
+		Timestamp:  s.clock.Now().UTC().Format(time.RFC3339Nano),
+		Payload:    payload,
+	}
+	return s.runtimeIntentPublisher.Publish(ctx, intent)
+}
+
+func (s *Scheduler) retryClassForNodeError(node *entity.Node, err error) string {
+	if node != nil {
+		switch node.Type {
+		case string(value.NodeTypePrompt), string(value.NodeTypeAgent):
+			return "llm_backpressure"
+		}
+	}
+	if code := domain.RetryCodeFromError(err); strings.Contains(code, "duplicate") {
+		return "duplicate_intent"
+	}
+	return "transport"
 }
 
 func (s *Scheduler) shouldSaveBatchCheckpoint(rc *runContext, stepIndex int) bool {
@@ -2639,7 +2909,10 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 			SpanID:    nodeTrace.SpanID,
 		}
 		nodeRun.SetEnded(s.clock.Now())
-		s.repository.CreateNodeRun(nodeCtx, nodeRun)
+		if err := s.repository.CreateNodeRun(nodeCtx, nodeRun); err != nil {
+			s.setError(rc, fmt.Errorf("failed to persist skipped node state for node %s: %w", nodeID, err))
+			return
+		}
 
 		// Emit skipped event
 		skippedEvent := rc.newEventFromContext(nodeCtx, port.EventTypeNodeSkipped).
@@ -2652,6 +2925,9 @@ func (s *Scheduler) markSkipped(rc *runContext, nodeID string) {
 
 	// Recursively skip children that have only this as parent
 	for _, edge := range rc.plan.GetOutgoingEdges(nodeID) {
+		if rc.ctx.Err() != nil {
+			return
+		}
 		// Only auto-skip if this is the only incoming edge.
 		// Otherwise, treat this skipped node as "logically complete" for dependency tracking.
 		if rc.plan.GetIndegree(edge.To) == 1 {
@@ -2687,8 +2963,14 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 		output = s.extractFinalOutput(rc)
 	}
 
-	// Update run in database
-	s.repository.SetRunEnded(rc.intentContext(context.Background()), rc.runID, string(finalStatus), output, errorMsg)
+	// Update run in database before emitting any terminal event.
+	if err := s.repository.SetRunEnded(rc.intentContext(context.Background()), rc.runID, string(finalStatus), output, errorMsg); err != nil {
+		log.Printf("Critical terminal state write failed for run %s: %v", rc.runID, err)
+		if rc.runSpan != nil {
+			rc.runSpan.RecordError(err)
+		}
+		return
+	}
 
 	// Persist session memory snapshot on completion/cancel.
 	if rc.messageBuffer != nil && rc.sessionID != "" {
@@ -2815,23 +3097,31 @@ func (s *Scheduler) CancelRun(runID string) error {
 	rc := val.(*runContext)
 	rc.cancel()
 
-	s.repository.UpdateRunStatus(rc.intentContext(context.Background()), runID, string(value.RunStatusCanceled))
+	if err := s.repository.UpdateRunStatus(rc.intentContext(context.Background()), runID, string(value.RunStatusCanceled)); err != nil {
+		return fmt.Errorf("failed to persist run cancellation: %w", err)
+	}
 	s.emitter.EmitAsync(rc.newEvent(port.EventTypeRunCanceled))
 	s.flushEmitter("run_canceled")
 
 	return nil
 }
 
-// ResumeRun resumes a paused run after human gate approval/rejection
-func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string, traceContext ...string) error {
+// ResumeRun resumes a paused run after human gate approval/rejection.
+func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON string, resumeArgs ...string) error {
+	resumeAttemptID := ""
 	traceparent := ""
 	tracestate := ""
-	if len(traceContext) > 0 {
-		traceparent = traceContext[0]
+	if len(resumeArgs) == 1 {
+		resumeAttemptID = strings.TrimSpace(resumeArgs[0])
+	} else if len(resumeArgs) == 2 {
+		traceparent = resumeArgs[0]
+		tracestate = resumeArgs[1]
+	} else if len(resumeArgs) >= 3 {
+		resumeAttemptID = strings.TrimSpace(resumeArgs[0])
+		traceparent = resumeArgs[1]
+		tracestate = resumeArgs[2]
 	}
-	if len(traceContext) > 1 {
-		tracestate = traceContext[1]
-	}
+
 	// Load pause state
 	pausedNodeID, stateSnapshot, completedNodes, skippedNodes, graphJSON, tenantID, err := s.repository.LoadPauseState(ctx, runID)
 	if err != nil {
@@ -2850,7 +3140,10 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			return fmt.Errorf("invalid input JSON: %w", err)
 		}
 	}
-	resumeAttemptID, _ := decision["_forgegraph_resume_attempt_id"].(string)
+	hiddenResumeAttemptID, _ := decision["_forgegraph_resume_attempt_id"].(string)
+	if resumeAttemptID == "" {
+		resumeAttemptID = strings.TrimSpace(hiddenResumeAttemptID)
+	}
 	delete(decision, "_forgegraph_resume_attempt_id")
 	activeAttemptID := strings.TrimSpace(resumeAttemptID)
 	if s.pauseIntentActiveMode() && activeAttemptID == "" {
@@ -2943,28 +3236,8 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 	}
 	if isAgentPause {
 		state.Set("node."+nodeID+".approval_decision", humanDecision)
-		if nodeRun != nil {
-			nodeRun.Status = string(value.NodeRunStatusRunning)
-			nodeRun.EndedAt = nil
-			nodeRun.OutputJSON = nil
-			nodeRun.ErrorJSON = nil
-			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
-				return fmt.Errorf("failed to update resumed agent node run: %w", err)
-			}
-		}
 	} else {
 		state.SetNodeOutput(nodeID, humanDecision)
-
-		// Update human gate node run to succeeded
-		if nodeRun != nil {
-			nodeRun.Status = string(value.NodeRunStatusSucceeded)
-			now := s.clock.Now()
-			nodeRun.EndedAt = &now
-			nodeRun.OutputJSON = map[string]any{"output": humanDecision}
-			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
-				return fmt.Errorf("failed to update resumed human gate node run: %w", err)
-			}
-		}
 	}
 
 	// Create a detached run context for resumed execution.
@@ -3082,14 +3355,70 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			resumeAttemptID,
 			humanDecision,
 		); err != nil {
+			s.activeRuns.Delete(runID)
+			if rc.runSpan != nil {
+				rc.runSpan.RecordError(err)
+				rc.runSpan.End()
+			}
+			rc.cancel()
+			close(rc.workChan)
 			return fmt.Errorf("failed to publish ack_run_resumed intent: %w", err)
 		}
 	} else {
 		if err := s.repository.ClearPauseState(ctx, runID); err != nil {
+			s.activeRuns.Delete(runID)
+			if rc.runSpan != nil {
+				rc.runSpan.RecordError(err)
+				rc.runSpan.End()
+			}
+			rc.cancel()
+			close(rc.workChan)
 			return fmt.Errorf("failed to clear pause state: %w", err)
 		}
 		if err := s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning)); err != nil {
+			s.activeRuns.Delete(runID)
+			if rc.runSpan != nil {
+				rc.runSpan.RecordError(err)
+				rc.runSpan.End()
+			}
+			rc.cancel()
+			close(rc.workChan)
 			return fmt.Errorf("failed to mark resumed run running: %w", err)
+		}
+	}
+
+	if nodeRun != nil {
+		if isAgentPause {
+			nodeRun.Status = string(value.NodeRunStatusRunning)
+			nodeRun.EndedAt = nil
+			nodeRun.OutputJSON = nil
+			nodeRun.ErrorJSON = nil
+			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
+				s.activeRuns.Delete(runID)
+				if rc.runSpan != nil {
+					rc.runSpan.RecordError(err)
+					rc.runSpan.End()
+				}
+				rc.cancel()
+				close(rc.workChan)
+				return fmt.Errorf("failed to update resumed agent node run: %w", err)
+			}
+		} else {
+			nodeRun.Status = string(value.NodeRunStatusSucceeded)
+			now := s.clock.Now()
+			nodeRun.EndedAt = &now
+			nodeRun.OutputJSON = map[string]any{"output": humanDecision}
+			nodeRun.ErrorJSON = nil
+			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
+				s.activeRuns.Delete(runID)
+				if rc.runSpan != nil {
+					rc.runSpan.RecordError(err)
+					rc.runSpan.End()
+				}
+				rc.cancel()
+				close(rc.workChan)
+				return fmt.Errorf("failed to update resumed human gate node run: %w", err)
+			}
 		}
 	}
 
@@ -3259,7 +3588,10 @@ func (s *Scheduler) validateStateSchema(ctx context.Context, rc *runContext, nod
 			"error":  errMsg,
 			"issues": issues,
 		}
-		s.repository.UpdateNodeRun(ctx, nodeRun)
+		if err := s.repository.UpdateNodeRun(ctx, nodeRun); err != nil {
+			s.setError(rc, fmt.Errorf("failed to persist strict schema failure for node %s: %w", node.ID, err))
+			return false
+		}
 
 		s.emitter.EmitAsync(
 			rc.newEventFromContext(ctx, port.EventTypeNodeFailed).

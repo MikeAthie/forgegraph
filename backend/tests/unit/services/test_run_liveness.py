@@ -134,6 +134,7 @@ def test_apply_recovery_policy_records_checkpoint_context():
     assert event.payload["checkpoint_updated_at"] == checkpoint.updated_at.isoformat()
 
 
+@override_settings(RUN_QUEUE_ENABLED=False)
 def test_reconcile_stale_runs_fails_resume_policy_when_queue_is_disabled():
     stale_time = timezone.now() - timedelta(minutes=10)
     run = _make_run(status="running", last_progress_at=stale_time)

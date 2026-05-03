@@ -83,6 +83,22 @@ func (p *recordingRuntimeIntentPublisher) All() []*port.RuntimeIntentEnvelope {
 	return result
 }
 
+type failingRuntimeIntentPublisher struct {
+	intentType string
+	err        error
+}
+
+func (p failingRuntimeIntentPublisher) Publish(ctx context.Context, intent *port.RuntimeIntentEnvelope) error {
+	_ = ctx
+	if intent != nil && (p.intentType == "" || intent.IntentType == p.intentType) {
+		if p.err != nil {
+			return p.err
+		}
+		return errors.New("runtime intent publish failed")
+	}
+	return nil
+}
+
 type repositoryAttemptCall struct {
 	method    string
 	attemptID string
@@ -94,7 +110,11 @@ type recordingAttemptRepository struct {
 	mu    sync.Mutex
 	calls []repositoryAttemptCall
 
-	updateNodeRunErr error
+	updateRunStatusErr error
+	createNodeRunErr   error
+	updateNodeRunErr   error
+	saveCheckpointErr  error
+	setRunEndedErr     error
 }
 
 func newRecordingAttemptRepository(base *mockRepository) *recordingAttemptRepository {
@@ -122,6 +142,22 @@ func (r *recordingAttemptRepository) attemptsFor(method string) []string {
 	return attempts
 }
 
+func (r *recordingAttemptRepository) UpdateRunStatus(ctx context.Context, runID, status string) error {
+	r.record("UpdateRunStatus", ctx)
+	if r.updateRunStatusErr != nil {
+		return r.updateRunStatusErr
+	}
+	return r.mockRepository.UpdateRunStatus(ctx, runID, status)
+}
+
+func (r *recordingAttemptRepository) CreateNodeRun(ctx context.Context, nodeRun *entity.NodeRun) error {
+	r.record("CreateNodeRun", ctx)
+	if r.createNodeRunErr != nil {
+		return r.createNodeRunErr
+	}
+	return r.mockRepository.CreateNodeRun(ctx, nodeRun)
+}
+
 func (r *recordingAttemptRepository) UpdateNodeRun(ctx context.Context, nodeRun *entity.NodeRun) error {
 	r.record("UpdateNodeRun", ctx)
 	if r.updateNodeRunErr != nil {
@@ -132,11 +168,17 @@ func (r *recordingAttemptRepository) UpdateNodeRun(ctx context.Context, nodeRun 
 
 func (r *recordingAttemptRepository) SetRunEnded(ctx context.Context, runID string, status string, output map[string]any, errorMsg string) error {
 	r.record("SetRunEnded", ctx)
+	if r.setRunEndedErr != nil {
+		return r.setRunEndedErr
+	}
 	return r.mockRepository.SetRunEnded(ctx, runID, status, output, errorMsg)
 }
 
 func (r *recordingAttemptRepository) SaveCheckpoint(ctx context.Context, runID, nodeID string, stepIndex int, stateSnapshot map[string]any, completedNodes []string, skippedNodes []string, graphJSON string) error {
 	r.record("SaveCheckpoint", ctx)
+	if r.saveCheckpointErr != nil {
+		return r.saveCheckpointErr
+	}
 	return r.mockRepository.SaveCheckpoint(ctx, runID, nodeID, stepIndex, stateSnapshot, completedNodes, skippedNodes, graphJSON)
 }
 
@@ -192,6 +234,221 @@ func seedPausedHumanGateRun(t *testing.T, repo *mockRepository, runID string, gr
 		StartedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("seed node run: %v", err)
+	}
+}
+
+func makeGraphJSONWithMetadata(nodes []entity.Node, edges []entity.Edge, metadata map[string]any) string {
+	graph := entity.Graph{
+		Nodes:    nodes,
+		Edges:    edges,
+		Metadata: metadata,
+	}
+	data, _ := json.Marshal(graph)
+	return string(data)
+}
+
+func waitForSchedulerInactive(t *testing.T, scheduler *Scheduler, runID string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !scheduler.IsRunActive(runID) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("run %s remained active", runID)
+}
+
+func TestSchedulerStartRunFailsClosedWhenRunStartWriteFails(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	recordingRepo.updateRunStatusErr = errors.New("backend unavailable on start")
+	engine.Scheduler.repository = recordingRepo
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"prepared": true}), nil
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-start-write-fails-closed"
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "start", To: "output"}},
+		map[string]any{"backend_attempt_id": "attempt-start-fails-closed"},
+	)
+
+	err := engine.Scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "tenant-1", "")
+	if err == nil {
+		t.Fatal("expected start to fail when backend cannot persist running state")
+	}
+	if !strings.Contains(err.Error(), "critical run start state write failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if transformExec.getExecuteCount() != 0 {
+		t.Fatalf("expected no node execution after start state write failure, got %d", transformExec.getExecuteCount())
+	}
+	if engine.Scheduler.IsRunActive(runID) {
+		t.Fatalf("run should not remain active after start state write failure")
+	}
+}
+
+func TestSchedulerNodeStartWriteFailureStopsBeforeExecutor(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	recordingRepo.createNodeRunErr = errors.New("backend unavailable on node start")
+	engine.Scheduler.repository = recordingRepo
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"prepared": true}), nil
+	})
+	outputExec := engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-node-start-write-fails-closed"
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "start", To: "output"}},
+		map[string]any{"backend_attempt_id": "attempt-node-start-fails-closed"},
+	)
+
+	engine.StartRun(runID, graphJSON, "{}")
+	snapshot := engine.AwaitRunStatus(runID, string(value.RunStatusFailed))
+	if !strings.Contains(snapshot.Error, "failed to persist node start") {
+		t.Fatalf("expected typed node-start persistence failure, got %q", snapshot.Error)
+	}
+	if transformExec.getExecuteCount() != 0 {
+		t.Fatalf("expected transform executor not to run, got %d", transformExec.getExecuteCount())
+	}
+	if outputExec.getExecuteCount() != 0 {
+		t.Fatalf("expected downstream output not to run, got %d", outputExec.getExecuteCount())
+	}
+	if countEvents(engine.Bus.All(), port.EventTypeNodeStarted) != 0 {
+		t.Fatalf("expected no node_started event before backend node-start commit")
+	}
+}
+
+func TestSchedulerCheckpointWriteFailureStopsDownstreamExecution(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	recordingRepo.saveCheckpointErr = errors.New("backend unavailable on checkpoint")
+	engine.Scheduler.repository = recordingRepo
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"prepared": true}), nil
+	})
+	outputExec := engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-checkpoint-write-fails-closed"
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "start", To: "output"}},
+		map[string]any{"backend_attempt_id": "attempt-checkpoint-fails-closed"},
+	)
+
+	engine.StartRun(runID, graphJSON, "{}")
+	engine.AwaitBlockedAttempt(runID, "start", 1)
+	engine.Release(runID, "start")
+	snapshot := engine.AwaitRunStatus(runID, string(value.RunStatusFailed))
+	if !strings.Contains(snapshot.Error, "failed to commit checkpoint") {
+		t.Fatalf("expected checkpoint failure, got %q", snapshot.Error)
+	}
+	if transformExec.getNodeExecuteCount("start") != 1 {
+		t.Fatalf("expected start to run once, got %d", transformExec.getNodeExecuteCount("start"))
+	}
+	if outputExec.getExecuteCount() != 0 {
+		t.Fatalf("expected downstream output not to run after checkpoint failure, got %d", outputExec.getExecuteCount())
+	}
+}
+
+func TestSchedulerCompletionWriteFailureDoesNotEmitCompletedEvent(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	recordingRepo := newRecordingAttemptRepository(engine.Repo)
+	recordingRepo.setRunEndedErr = errors.New("backend unavailable on completion")
+	engine.Scheduler.repository = recordingRepo
+
+	outputExec := engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-completion-write-fails-closed"
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}}},
+		nil,
+		map[string]any{"backend_attempt_id": "attempt-completion-fails-closed"},
+	)
+
+	engine.StartRun(runID, graphJSON, "{}")
+	engine.AwaitBlockedAttempt(runID, "output", 1)
+	engine.Release(runID, "output")
+	waitForSchedulerInactive(t, engine.Scheduler, runID)
+
+	if outputExec.getExecuteCount() != 1 {
+		t.Fatalf("expected output to execute once, got %d", outputExec.getExecuteCount())
+	}
+	if countEvents(engine.Bus.All(), port.EventTypeRunCompleted) != 0 {
+		t.Fatalf("expected no run_completed event when backend completion write fails")
+	}
+	if status := engine.Repo.getRunStatus(runID); status != string(value.RunStatusRunning) {
+		t.Fatalf("run status = %q, want running because completion was not backend-committed", status)
+	}
+}
+
+func TestSchedulerResumeAckFailureStopsBeforeDownstreamExecution(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	engine.Scheduler.SetRuntimeIntentPublisher(
+		failingRuntimeIntentPublisher{
+			intentType: "ack_run_resumed",
+			err:        errors.New("backend unavailable on resume ack"),
+		},
+		RuntimeWriteModePauseIntents,
+	)
+
+	outputExec := engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-resume-ack-fails-closed"
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{
+			{ID: "gate", Type: string(value.NodeTypeHumanGate), Name: "Gate", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "gate", To: "output"}},
+		map[string]any{"backend_attempt_id": "attempt-resume-ack-fails-closed"},
+	)
+	seedPausedHumanGateRun(t, engine.Repo, runID, graphJSON)
+
+	err := engine.Scheduler.ResumeRun(
+		context.Background(),
+		runID,
+		"gate",
+		`{"approved":true,"_forgegraph_resume_attempt_id":"resume-attempt-ack-down"}`,
+	)
+	if err == nil {
+		t.Fatal("expected resume ack failure")
+	}
+	if !strings.Contains(err.Error(), "failed to publish ack_run_resumed intent") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if outputExec.getExecuteCount() != 0 {
+		t.Fatalf("expected downstream output not to run after resume ack failure, got %d", outputExec.getExecuteCount())
+	}
+	if countEvents(engine.Bus.All(), port.EventTypeRunResumed) != 0 {
+		t.Fatalf("expected no run_resumed event before backend resume ack commit")
 	}
 }
 
@@ -529,6 +786,122 @@ func TestSchedulerBlocksAutomaticRetryForUnsafeToolExecution(t *testing.T) {
 	}
 	if status := engine.Repo.getRunStatus(runID); status != string(value.RunStatusFailed) {
 		t.Fatalf("run status = %q", status)
+	}
+}
+
+func TestSchedulerRecordsRetryOperationBeforeRetryDelay(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	publisher := &recordingRuntimeIntentPublisher{}
+	engine.Scheduler.SetRuntimeIntentPublisher(publisher, RuntimeWriteModePauseIntents)
+
+	var attempts int
+	engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		attempts++
+		return nil, domain.NewRetryableError(context.DeadlineExceeded, "transient backend transport failure")
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-record-retry-operation"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{
+				ID:     "retry",
+				Type:   string(value.NodeTypeTransform),
+				Name:   "Retry",
+				Config: map[string]any{},
+				RetryPolicy: &entity.RetryPolicy{
+					MaxAttempts:     2,
+					BackoffMs:       5000,
+					BackoffStrategy: "fixed",
+				},
+			},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "retry", To: "output"}},
+	)
+
+	engine.StartRun(runID, graphJSON, "{}")
+	engine.AwaitBlockedAttempt(runID, "retry", 1)
+	engine.Release(runID, "retry")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for publisher.CountByIntentType("record_retry_operation") == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	intent := publisher.LastByIntentType("record_retry_operation")
+	if intent == nil {
+		t.Fatal("expected record_retry_operation intent")
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts before retry delay = %d, want 1", attempts)
+	}
+	if intent.Payload["node_id"] != "retry" {
+		t.Fatalf("node_id = %#v", intent.Payload["node_id"])
+	}
+	if fmt.Sprint(intent.Payload["attempt_number"]) != "2" {
+		t.Fatalf("attempt_number = %#v", intent.Payload["attempt_number"])
+	}
+	if fmt.Sprint(intent.Payload["parent_attempt_number"]) != "1" {
+		t.Fatalf("parent_attempt_number = %#v", intent.Payload["parent_attempt_number"])
+	}
+	if fmt.Sprint(intent.Payload["max_attempts"]) != "2" {
+		t.Fatalf("max_attempts = %#v", intent.Payload["max_attempts"])
+	}
+	if fmt.Sprint(intent.Payload["retry_delay_ms"]) != "5000" {
+		t.Fatalf("retry_delay_ms = %#v", intent.Payload["retry_delay_ms"])
+	}
+	if intent.Payload["terminal_fallback"] != "fail_run" {
+		t.Fatalf("terminal_fallback = %#v", intent.Payload["terminal_fallback"])
+	}
+}
+
+func TestSchedulerFailsClosedWhenRetryOperationCannotBeRecorded(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	engine.Scheduler.SetRuntimeIntentPublisher(
+		failingRuntimeIntentPublisher{intentType: "record_retry_operation"},
+		RuntimeWriteModePauseIntents,
+	)
+
+	var attempts int
+	engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		attempts++
+		return nil, domain.NewRetryableError(context.DeadlineExceeded, "transient backend transport failure")
+	})
+	engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	runID := "run-retry-record-fails-closed"
+	graphJSON := makeGraphJSON(
+		[]entity.Node{
+			{
+				ID:     "retry",
+				Type:   string(value.NodeTypeTransform),
+				Name:   "Retry",
+				Config: map[string]any{},
+				RetryPolicy: &entity.RetryPolicy{
+					MaxAttempts:     3,
+					BackoffMs:       1,
+					BackoffStrategy: "fixed",
+				},
+			},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "retry", To: "output"}},
+	)
+
+	engine.StartRun(runID, graphJSON, "{}")
+	engine.AwaitBlockedAttempt(runID, "retry", 1)
+	engine.Release(runID, "retry")
+	engine.AwaitRunStatus(runID, string(value.RunStatusFailed))
+
+	if attempts != 1 {
+		t.Fatalf("attempts after retry record failure = %d, want 1", attempts)
+	}
+	if _, ok := engine.Repo.nodeRuns[fmt.Sprintf("%s-output-1", runID)]; ok {
+		t.Fatal("downstream output node executed after retry record failure")
 	}
 }
 

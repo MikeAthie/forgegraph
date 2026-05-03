@@ -27,7 +27,15 @@ from application.services.run_liveness import recovery_state_for_status, touch_r
 from application.services.run_snapshots import delete_snapshot, get_snapshot
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.crypto.encryption import decrypt_api_key, encrypt_api_key
-from infrastructure.orm.models import APIKey, MemoryEntry, NodeRun, NodeRunCache, Run, RunCheckpoint
+from infrastructure.orm.models import (
+    APIKey,
+    MemoryEntry,
+    NodeRun,
+    NodeRunCache,
+    Run,
+    RunCheckpoint,
+    RuntimeIntentOutcome,
+)
 from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
@@ -118,10 +126,12 @@ def _refresh_oauth_access_token_if_needed(key: APIKey, tenant_id: str) -> APIKey
 def _verify_engine_request(request: Request) -> Response | None:
     timestamp_header = request.headers.get("X-Forgegraph-Timestamp", "")
     signature_header = request.headers.get("X-Forgegraph-Signature", "")
-    ok, reason = s2s.verify_request(
+    ok, reason = s2s.verify_request_once(
         timestamp_ms=timestamp_header,
         signature=signature_header,
         body=request.body or b"",
+        method=request.method or "",
+        path=request.path,
     )
     if ok:
         return None
@@ -369,6 +379,41 @@ class EngineRunDetailView(APIView):
         if isinstance(run, Response):
             return run
         return _reject_engine_durable_write()
+
+
+class EngineRuntimeIntentOutcomeView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, intent_id: UUID) -> Response:
+        auth_error = _verify_engine_request(request)
+        if auth_error is not None:
+            return auth_error
+
+        outcome = (
+            RuntimeIntentOutcome.objects.filter(intent_id=intent_id).select_related("run").first()
+        )
+        if outcome is None:
+            return error_response(
+                code="RUNTIME_INTENT_PENDING",
+                message="Runtime intent outcome is not available yet.",
+                status=404,
+            )
+
+        return success_response(
+            {
+                "intent_id": str(outcome.intent_id),
+                "run_id": str(outcome.run_id) if outcome.run_id else None,
+                "intent_type": outcome.intent_type,
+                "attempt_id": outcome.attempt_id,
+                "outcome": outcome.outcome,
+                "reason": outcome.reason,
+                "error_class": outcome.error_class,
+                "trace_id": outcome.trace_id,
+                "stream_message_id": outcome.stream_message_id,
+                "processed_at": outcome.processed_at.isoformat(),
+                "updated_at": outcome.updated_at.isoformat(),
+            }
+        )
 
 
 class EngineRunPauseStateView(APIView):

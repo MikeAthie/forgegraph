@@ -28,6 +28,7 @@ from infrastructure.orm.models import (
     NodeRun,
     Organization,
     Run,
+    TaskLifecycleRecord,
     TaskRecord,
     TenantPolicy,
     User,
@@ -35,7 +36,16 @@ from infrastructure.orm.models import (
 
 ACTIVE_RUN_STATUSES = {"pending", "running", "paused"}
 ATTENTION_RUN_STATUSES = {"failed"}
-TASK_ACTIVE_STATUSES = {"pending", "running", "waiting"}
+TASK_ACTIVE_STATUSES = {
+    "created",
+    "queued",
+    "claimed",
+    "running",
+    "paused",
+    "waiting",
+    "waiting_for_decision",
+    "retry_scheduled",
+}
 DECIMAL_ZERO = Decimal("0")
 
 
@@ -220,11 +230,15 @@ def sync_agent_registry_for_organization(organization: Organization) -> list[Age
 
 def _task_status_from(node_run: NodeRun) -> str:
     if node_run.status == "waiting":
-        return "waiting"
+        return "waiting_for_decision"
     run_status = str(node_run.run.status)
     if run_status == "canceled":
-        return "canceled"
-    if node_run.status in {"pending", "running", "succeeded", "failed"}:
+        return "cancelled"
+    if node_run.status == "pending":
+        return "queued"
+    if node_run.status == "succeeded":
+        return "completed"
+    if node_run.status in {"running", "failed"}:
         return node_run.status
     return run_status
 
@@ -251,6 +265,35 @@ def _task_summary(node_run: NodeRun, agent: AgentRegistryEntry | None) -> str:
     return f"{actor} is scheduled in {workflow_name}."
 
 
+def _lifecycle_task_summary(task: TaskLifecycleRecord) -> str:
+    if task.summary:
+        return task.summary
+    if task.status == "waiting_for_decision":
+        return f"{task.title} is waiting for a human decision."
+    if task.status == "retry_scheduled":
+        return f"{task.title} has a bounded retry scheduled."
+    if task.status == "dead_lettered":
+        return f"{task.title} is dead-lettered and needs operator recovery."
+    return f"{task.title} is {task.status.replace('_', ' ')}."
+
+
+def _task_dead_letter_summary(task: TaskLifecycleRecord) -> dict[str, Any] | None:
+    dead_letter = task.dead_letters.order_by("-created_at").first()
+    if dead_letter is None:
+        return None
+    return {
+        "id": str(dead_letter.id),
+        "status": dead_letter.status,
+        "reason": dead_letter.reason,
+        "attempt_count": dead_letter.attempt_count,
+        "last_error": dead_letter.last_error,
+        "recovery_options": dead_letter.recovery_options,
+        "acknowledged_at": dead_letter.acknowledged_at.isoformat()
+        if dead_letter.acknowledged_at
+        else None,
+    }
+
+
 def sync_task_records_for_organization(
     organization: Organization,
     agents: list[AgentRegistryEntry] | None = None,
@@ -268,12 +311,47 @@ def sync_task_records_for_organization(
     )
     active_ids: list[UUID] = []
 
+    lifecycle_tasks = (
+        TaskLifecycleRecord.objects.filter(
+            organization=organization,
+        )
+        .select_related("run__graph_version__graph", "current_node_run")
+        .order_by("-updated_at", "-created_at")[:500]
+    )
+    for lifecycle_task in lifecycle_tasks:
+        run = lifecycle_task.run
+        agent = agents_by_key.get((str(run.graph_version.graph_id), lifecycle_task.source_node_id))
+        task, _ = TaskRecord.objects.update_or_create(
+            organization=organization,
+            external_key=lifecycle_task.external_key,
+            defaults={
+                "execution": run,
+                "lifecycle_task": lifecycle_task,
+                "agent": agent,
+                "source_node_id": lifecycle_task.source_node_id,
+                "title": lifecycle_task.title,
+                "status": lifecycle_task.status,
+                "priority": lifecycle_task.priority,
+                "summary": _lifecycle_task_summary(lifecycle_task),
+                "current_step": lifecycle_task.current_node_run,
+                "current_decision": lifecycle_task.current_decision,
+                "started_at": lifecycle_task.started_at,
+                "ended_at": lifecycle_task.ended_at,
+            },
+        )
+        active_ids.append(task.id)
+
     for node_run in node_runs:
         run = node_run.run
         agent = agents_by_key.get((str(run.graph_version.graph_id), node_run.node_id))
         if agent is None and node_run.node_type != "agent":
             continue
         external_key = f"{run.id}:{node_run.node_id}"
+        if TaskLifecycleRecord.objects.filter(
+            organization=organization,
+            external_key=external_key,
+        ).exists():
+            continue
         title = f"{agent.display_name if agent else node_run.node_id} task"
         task, _ = TaskRecord.objects.update_or_create(
             organization=organization,
@@ -293,7 +371,10 @@ def sync_task_records_for_organization(
         )
         active_ids.append(task.id)
 
-    TaskRecord.objects.filter(organization=organization).exclude(id__in=active_ids).delete()
+    TaskRecord.objects.filter(
+        organization=organization,
+        lifecycle_task__isnull=True,
+    ).exclude(id__in=active_ids).delete()
     return list(
         TaskRecord.objects.filter(organization=organization)
         .select_related("agent", "execution", "current_step", "current_decision")
@@ -341,6 +422,8 @@ def sync_decision_records_for_organization(
             defaults={
                 "execution": run,
                 "task": task,
+                "task_lifecycle": approval.task_lifecycle
+                or (task.lifecycle_task if task else None),
                 "agent": agent,
                 "decision_type": "human_approval",
                 "status": approval.status,
@@ -415,6 +498,10 @@ def sync_decision_records_for_organization(
     for task in TaskRecord.objects.filter(organization=organization):
         task.current_decision = pending_decisions.get((str(task.execution_id), task.source_node_id))
         task.save(update_fields=["current_decision", "updated_at"])
+        if task.lifecycle_task_id and task.current_decision_id:
+            TaskLifecycleRecord.objects.filter(id=task.lifecycle_task_id).update(
+                current_decision_id=task.current_decision_id
+            )
 
     return list(
         DecisionRecord.objects.filter(organization=organization)
@@ -603,6 +690,7 @@ def agent_summary(agent: AgentRegistryEntry) -> dict[str, Any]:
 
 
 def task_summary(task: TaskRecord) -> dict[str, Any]:
+    lifecycle_task = task.lifecycle_task if task.lifecycle_task_id else None
     return {
         "id": str(task.id),
         "organization_id": str(task.organization_id),
@@ -612,9 +700,18 @@ def task_summary(task: TaskRecord) -> dict[str, Any]:
         "status": task.status,
         "priority": task.priority,
         "summary": task.summary,
+        "lifecycle_task_id": str(task.lifecycle_task_id) if task.lifecycle_task_id else None,
         "source_node_id": task.source_node_id,
         "current_step_id": str(task.current_step_id) if task.current_step_id else None,
         "current_decision_id": str(task.current_decision_id) if task.current_decision_id else None,
+        "attempt_count": lifecycle_task.current_attempt if lifecycle_task is not None else None,
+        "retry_metadata": lifecycle_task.retry_metadata if lifecycle_task is not None else {},
+        "dead_letter": _task_dead_letter_summary(lifecycle_task)
+        if lifecycle_task is not None
+        else None,
+        "stale_event_count": lifecycle_task.stale_event_count if lifecycle_task is not None else 0,
+        "late_event_count": lifecycle_task.late_event_count if lifecycle_task is not None else 0,
+        "recovery_options": lifecycle_task.recovery_options if lifecycle_task is not None else [],
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "ended_at": task.ended_at.isoformat() if task.ended_at else None,
         "created_at": task.created_at.isoformat(),
@@ -628,6 +725,9 @@ def decision_summary(decision: DecisionRecord) -> dict[str, Any]:
         "organization_id": str(decision.organization_id),
         "execution_id": str(decision.execution_id) if decision.execution_id else None,
         "task_id": str(decision.task_id) if decision.task_id else None,
+        "task_lifecycle_id": str(decision.task_lifecycle_id)
+        if decision.task_lifecycle_id
+        else None,
         "agent_id": str(decision.agent_id) if decision.agent_id else None,
         "decision_type": decision.decision_type,
         "status": decision.status,

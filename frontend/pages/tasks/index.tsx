@@ -62,9 +62,11 @@ export default function TasksPage() {
 
   const groupedCounts = useMemo(
     () => ({
-      running: tasks.filter((task) => task.status === "running").length,
-      waiting: tasks.filter((task) => task.status === "paused" || task.status === "queued").length,
-      failed: tasks.filter((task) => task.status === "failed").length,
+      running: tasks.filter((task) => task.status === "running" || task.status === "claimed").length,
+      waiting: tasks.filter((task) =>
+        ["created", "queued", "paused", "waiting_for_decision", "retry_scheduled"].includes(task.status),
+      ).length,
+      failed: tasks.filter((task) => ["failed", "dead_lettered", "cancelled"].includes(task.status)).length,
     }),
     [tasks],
   );
@@ -85,6 +87,25 @@ export default function TasksPage() {
               <div className="flex items-center justify-between">
                 <span>Department</span>
                 <span className="truncate pl-4">{selectedTask.departmentName}</span>
+              </div>
+            </div>
+          ),
+        },
+        {
+          title: "Lifecycle",
+          content: (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span>Canonical state</span>
+                <StatusBadge status={selectedTask.status} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Attempt count</span>
+                <span>{selectedTask.attemptCount ?? selectedTask.attempt ?? 1}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Lifecycle ID</span>
+                <span className="truncate pl-4">{selectedTask.lifecycleTaskId?.slice(0, 8) ?? "Unavailable"}</span>
               </div>
             </div>
           ),
@@ -176,7 +197,14 @@ export default function TasksPage() {
                       <StatusBadge status={task.status} />
                     </div>
                   )}
-                  renderBody={(task) => task.summary}
+                  renderBody={(task) => (
+                    <div className="space-y-1">
+                      <p>{task.summary}</p>
+                      {task.deadLetter?.recovery_options?.length ? (
+                        <p className="text-xs">Recovery: {task.deadLetter.recovery_options.join(", ")}</p>
+                      ) : null}
+                    </div>
+                  )}
                   renderMeta={(task) => <span className="text-xs uppercase tracking-[0.16em]">{task.priority}</span>}
                   empty={
                     <EmptyBlock
@@ -209,6 +237,11 @@ export default function TasksPage() {
                         label: "Decision gate",
                         value: selectedTask.requiresApproval ? "Waiting for approval" : "No active decision",
                       },
+                      { label: "Attempts", value: selectedTask.attemptCount ?? selectedTask.attempt ?? 1 },
+                      {
+                        label: "Stale / late events",
+                        value: `${selectedTask.staleEventCount ?? 0} / ${selectedTask.lateEventCount ?? 0}`,
+                      },
                       { label: "Started", value: formatDateTime(selectedTask.startedAt) },
                     ]}
                   />
@@ -218,6 +251,42 @@ export default function TasksPage() {
                     </p>
                     <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">{selectedTask.summary}</p>
                   </div>
+                  {selectedTask.latestRetry ? (
+                    <div className="mt-4 rounded-[1.2rem] border border-amber-900/15 bg-amber-50 px-4 py-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
+                      <p className="text-[11px] uppercase tracking-[0.18em]">Retry schedule</p>
+                      <p className="mt-2 text-sm leading-7">
+                        {selectedTask.latestRetry.retry_reason || "Retry is scheduled"} · attempt{" "}
+                        {selectedTask.latestRetry.attempt_number ?? "?"} of{" "}
+                        {selectedTask.latestRetry.max_attempts ?? "?"}
+                        {selectedTask.latestRetry.next_scheduled_at
+                          ? ` · next ${formatDateTime(selectedTask.latestRetry.next_scheduled_at)}`
+                          : ""}
+                      </p>
+                    </div>
+                  ) : null}
+                  {selectedTask.deadLetter ? (
+                    <div className="mt-4 rounded-[1.2rem] border border-rose-900/15 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
+                      <p className="text-[11px] uppercase tracking-[0.18em]">Dead-lettered</p>
+                      <p className="mt-2 text-sm leading-7">
+                        {selectedTask.deadLetter.reason || "Task was moved to dead letter."}
+                        {selectedTask.deadLetter.last_error ? ` Last error: ${selectedTask.deadLetter.last_error}` : ""}
+                      </p>
+                      {selectedTask.deadLetter.recovery_options?.length ? (
+                        <p className="mt-2 text-xs">Recovery: {selectedTask.deadLetter.recovery_options.join(", ")}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {(selectedTask.staleEventCount ?? 0) > 0 || (selectedTask.lateEventCount ?? 0) > 0 ? (
+                    <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Rejected lifecycle events
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
+                        Stale: {selectedTask.staleEventCount ?? 0} · Late: {selectedTask.lateEventCount ?? 0}. The
+                        backend preserved these events without mutating current task state.
+                      </p>
+                    </div>
+                  ) : null}
                 </Panel>
 
                 <div className="grid gap-6 2xl:grid-cols-2">

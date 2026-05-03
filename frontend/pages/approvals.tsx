@@ -17,9 +17,10 @@ import {
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner, Textarea } from "@/components/ui";
-import { approvalRepository } from "@/domain/repositories";
+import { approvalRepository, operationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { ApprovalVM } from "@/domain/translation";
+import { useRunLiveUpdates } from "@/hooks/useRunLiveUpdates";
 import { showSuccess } from "@/lib/toast";
 
 const estimateImpact = (approval: ApprovalVM | null) => {
@@ -36,6 +37,47 @@ const estimateImpact = (approval: ApprovalVM | null) => {
   };
 };
 
+type DecisionState = "pending" | "submitting" | "accepted" | "rejected" | "failed_to_resume" | "resumed" | null;
+
+const decisionStateLabel = (state: DecisionState) => {
+  switch (state) {
+    case "submitting":
+      return "Submitting";
+    case "accepted":
+      return "Accepted by backend";
+    case "rejected":
+      return "Rejected by backend";
+    case "failed_to_resume":
+      return "Failed to resume";
+    case "resumed":
+      return "Operation resumed";
+    case "pending":
+      return "Pending";
+    default:
+      return "Pending";
+  }
+};
+
+const decisionStateStatus = (state: DecisionState) => {
+  if (state === "failed_to_resume" || state === "rejected") {
+    return "failed";
+  }
+  if (state === "accepted" || state === "resumed") {
+    return "active";
+  }
+  return "paused";
+};
+
+const approvalStatusToDecisionState = (status?: ApprovalVM["status"] | null): DecisionState => {
+  if (status === "approved") {
+    return "accepted";
+  }
+  if (status === "rejected") {
+    return "rejected";
+  }
+  return status === "pending" ? "pending" : null;
+};
+
 export default function ApprovalsPage() {
   const router = useRouter();
   const [approvals, setApprovals] = useState<ApprovalVM[]>([]);
@@ -44,6 +86,7 @@ export default function ApprovalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [editNotes, setEditNotes] = useState("");
+  const [decisionState, setDecisionState] = useState<DecisionState>(null);
 
   const loadApprovals = useCallback(async () => {
     setError(null);
@@ -76,7 +119,21 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     setEditNotes("");
+    setDecisionState(approvalStatusToDecisionState(selectedApproval?.status));
   }, [selectedApproval?.id]);
+
+  useRunLiveUpdates(selectedApproval?.operationId, async () => {
+    if (!selectedApproval) {
+      return;
+    }
+    const operationState = await operationRepository.getBackendState(selectedApproval.operationId);
+    if (operationState.status === "resume_requested" && operationState.recoveryState === "resume_dispatch_failed") {
+      setDecisionState("failed_to_resume");
+    } else if (["running", "succeeded"].includes(operationState.status)) {
+      setDecisionState("resumed");
+    }
+    await loadApprovals();
+  });
 
   const impact = estimateImpact(selectedApproval);
   const pendingCount = approvals.filter((approval) => approval.status === "pending").length;
@@ -90,25 +147,24 @@ export default function ApprovalsPage() {
     }
 
     setSubmitting(true);
+    setDecisionState("submitting");
     setError(null);
 
     try {
-      await approvalRepository.decide(selectedApproval, approved, editNotes || undefined);
+      const result = await approvalRepository.decide(selectedApproval, approved, editNotes || undefined);
+      setDecisionState(approved ? "accepted" : "rejected");
 
       showSuccess(
         approved ? "Decision approved" : "Decision rejected",
-        approved
-          ? "The operation resumed with operator approval."
-          : "The operation stayed paused after the rejection was recorded.",
+        result.duplicate
+          ? "The backend returned the already-recorded decision."
+          : "The backend recorded the decision and will drive the next operation state.",
       );
 
-      const remaining = approvals.filter((approval) => approval.id !== selectedApproval.id);
       await loadApprovals();
-      if (remaining[0]?.id) {
-        void router.replace({ pathname: "/approvals", query: { item: remaining[0].id } }, undefined, { shallow: true });
-      }
     } catch (err: unknown) {
       setError(translateProductError(err, "approval"));
+      setDecisionState("pending");
     } finally {
       setSubmitting(false);
     }
@@ -366,6 +422,17 @@ export default function ApprovalsPage() {
                   title="Operator response"
                   description="Action should stay visible and immediate, not hidden behind logs."
                 >
+                  <div className="mb-4 flex flex-wrap items-center gap-3">
+                    <StatusBadge
+                      status={decisionStateStatus(decisionState)}
+                      label={decisionStateLabel(decisionState)}
+                    />
+                    {decisionState === "accepted" ? (
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        Waiting for the backend-owned resume acknowledgement.
+                      </span>
+                    ) : null}
+                  </div>
                   <Textarea
                     rows={6}
                     value={editNotes}
@@ -379,7 +446,7 @@ export default function ApprovalsPage() {
                       disabled={submitting || selectedApproval.status !== "pending"}
                       onClick={() => void handleDecision(true)}
                     >
-                      {editNotes.trim() ? "Approve with notes" : "Approve"}
+                      {submitting ? "Submitting..." : editNotes.trim() ? "Approve with notes" : "Approve"}
                     </Button>
                     <Button
                       variant="outline"
@@ -387,7 +454,7 @@ export default function ApprovalsPage() {
                       disabled={submitting || selectedApproval.status !== "pending"}
                       onClick={() => void handleDecision(false)}
                     >
-                      Reject
+                      {submitting ? "Submitting..." : "Reject"}
                     </Button>
                     {selectedApproval.status !== "pending" ? (
                       <StatusBadge status={selectedApproval.status} label="Read only" />

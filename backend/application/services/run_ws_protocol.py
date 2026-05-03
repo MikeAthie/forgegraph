@@ -12,6 +12,7 @@ def build_ws_public_message(
     *,
     run_id: str,
     trace_id: str = "",
+    event_id: str = "",
     payload: dict[str, Any] | None = None,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
@@ -20,6 +21,7 @@ def build_ws_public_message(
         "timestamp": timestamp or timezone.now().isoformat(),
         "trace_id": trace_id,
         "run_id": run_id,
+        "event_id": event_id,
         "payload": payload or {},
     }
 
@@ -31,6 +33,7 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
             "timestamp": str(message.get("timestamp") or timezone.now().isoformat()),
             "trace_id": str(message.get("trace_id") or ""),
             "run_id": str(message.get("run_id") or ""),
+            "event_id": str(message.get("event_id") or ""),
             "payload": dict(message.get("payload") or {}),
         }
 
@@ -46,12 +49,14 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
         or ""
     )
     timestamp = str(message.get("timestamp") or timezone.now().isoformat())
+    event_id = str(message.get("event_id") or "")
 
     if message_type == "connected":
         return build_ws_public_message(
             "connection_established",
             run_id=run_id,
             trace_id=trace_id,
+            event_id=event_id,
             timestamp=timestamp,
             payload={
                 "event_level": str(message.get("level") or ""),
@@ -66,6 +71,7 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
             event_type,
             run_id=run_id,
             trace_id=trace_id,
+            event_id=event_id,
             timestamp=timestamp,
             payload={
                 "status": status,
@@ -81,6 +87,7 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
             event_type,
             run_id=run_id,
             trace_id=trace_id,
+            event_id=event_id,
             timestamp=timestamp,
             payload={
                 "status": status,
@@ -100,6 +107,7 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
             public_type,
             run_id=run_id,
             trace_id=trace_id,
+            event_id=event_id,
             timestamp=timestamp,
             payload=stream_payload,
         )
@@ -109,6 +117,7 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
             "error",
             run_id=run_id,
             trace_id=trace_id,
+            event_id=event_id,
             timestamp=timestamp,
             payload={
                 "code": "run_schema_validation",
@@ -120,6 +129,7 @@ def normalize_ws_public_message(message: dict[str, Any]) -> dict[str, Any] | Non
         message_type,
         run_id=run_id,
         trace_id=trace_id,
+        event_id=event_id,
         timestamp=timestamp,
         payload=_legacy_payload_for_unknown_message(message),
     )

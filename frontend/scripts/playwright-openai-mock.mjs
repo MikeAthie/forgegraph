@@ -1,6 +1,63 @@
 import http from "node:http";
 
 const port = Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT ?? "8011");
+const defaultControls = {
+  responseDelayMs: Math.max(0, Number(process.env.PLAYWRIGHT_LLM_MOCK_DELAY_MS ?? "0")),
+  maxInFlight: Math.max(0, Number(process.env.PLAYWRIGHT_LLM_MOCK_MAX_IN_FLIGHT ?? "0")),
+  errorMode: (process.env.PLAYWRIGHT_LLM_MOCK_ERROR_MODE ?? "off").toLowerCase(),
+};
+let controls = { ...defaultControls };
+let inFlightCompletions = 0;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function applyBackpressureControls(response) {
+  if (controls.maxInFlight > 0 && inFlightCompletions >= controls.maxInFlight) {
+    json(
+      response,
+      429,
+      { error: { message: "playwright mock backpressure", type: "rate_limit" } },
+      { "Retry-After": "1" },
+    );
+    return false;
+  }
+
+  inFlightCompletions += 1;
+  if (controls.responseDelayMs > 0) {
+    await sleep(controls.responseDelayMs);
+  }
+
+  if (controls.errorMode === "rate_limit" || controls.errorMode === "backpressure") {
+    json(
+      response,
+      429,
+      { error: { message: "playwright mock rate limited", type: "rate_limit" } },
+      { "Retry-After": "1" },
+    );
+    inFlightCompletions -= 1;
+    return false;
+  }
+
+  if (controls.errorMode === "unavailable") {
+    json(response, 503, { error: { message: "playwright mock unavailable", type: "server_error" } });
+    inFlightCompletions -= 1;
+    return false;
+  }
+
+  if (controls.errorMode === "timeout") {
+    setTimeout(
+      () => {
+        inFlightCompletions = Math.max(0, inFlightCompletions - 1);
+      },
+      Math.max(controls.responseDelayMs, 1000),
+    );
+    return false;
+  }
+
+  return true;
+}
 
 const CONSULTING_CASE_LIBRARY = {
   growth_high_acquisition_low_retention: {
@@ -1094,6 +1151,42 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "GET" && request.url === "/control") {
+    json(response, 200, {
+      ...controls,
+      inFlightCompletions,
+    });
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/control") {
+    let body = "";
+    request.setEncoding("utf8");
+    for await (const chunk of request) {
+      body += chunk;
+    }
+    const payload = body ? JSON.parse(body) : {};
+    controls = {
+      responseDelayMs:
+        payload.responseDelayMs === undefined
+          ? controls.responseDelayMs
+          : Math.max(0, Number(payload.responseDelayMs || 0)),
+      maxInFlight:
+        payload.maxInFlight === undefined ? controls.maxInFlight : Math.max(0, Number(payload.maxInFlight || 0)),
+      errorMode:
+        payload.errorMode === undefined ? controls.errorMode : String(payload.errorMode || "off").toLowerCase(),
+    };
+    json(response, 200, controls);
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/control/reset") {
+    controls = { ...defaultControls };
+    inFlightCompletions = 0;
+    json(response, 200, controls);
+    return;
+  }
+
   if (request.method === "GET" && request.url === "/v1/models") {
     json(response, 200, {
       data: [{ id: "playwright-consulting-mock" }],
@@ -1108,42 +1201,51 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === "POST" && request.url === "/v1/chat/completions") {
+    const canRespond = await applyBackpressureControls(response);
+    if (!canRespond) {
+      return;
+    }
+
     let body = "";
     request.setEncoding("utf8");
-    for await (const chunk of request) {
-      body += chunk;
-    }
+    try {
+      for await (const chunk of request) {
+        body += chunk;
+      }
 
-    const payload = body ? JSON.parse(body) : {};
-    const prompt = extractPrompt(payload.messages);
-    const model = typeof payload.model === "string" && payload.model ? payload.model : "gpt-4.1-mini";
+      const payload = body ? JSON.parse(body) : {};
+      const prompt = extractPrompt(payload.messages);
+      const model = typeof payload.model === "string" && payload.model ? payload.model : "gpt-4.1-mini";
 
-    if (prompt.includes("You are executing inside a ForgeGraph agent node.")) {
-      json(response, 200, handleAgentPrompt(prompt, model));
+      if (prompt.includes("You are executing inside a ForgeGraph agent node.")) {
+        json(response, 200, handleAgentPrompt(prompt, model));
+        return;
+      }
+
+      if (prompt.includes("BEGIN_EXECUTION_STATE_JSON") && prompt.includes("END_EXECUTION_STATE_JSON")) {
+        json(response, 200, handleMarketingPrompt(prompt, model));
+        return;
+      }
+
+      if (prompt.includes("Solve this business problem in one response.") && prompt.includes("Input JSON:")) {
+        json(response, 200, handleConsultingBaselinePrompt(prompt, model));
+        return;
+      }
+
+      if (
+        prompt.includes("Current execution state JSON:") &&
+        prompt.includes("Context JSON:") &&
+        prompt.includes("Stage:")
+      ) {
+        json(response, 200, handleConsultingStagePrompt(prompt, model));
+        return;
+      }
+
+      json(response, 200, buildChatCompletion("Mock response from the Playwright OpenAI server.", model));
       return;
+    } finally {
+      inFlightCompletions = Math.max(0, inFlightCompletions - 1);
     }
-
-    if (prompt.includes("BEGIN_EXECUTION_STATE_JSON") && prompt.includes("END_EXECUTION_STATE_JSON")) {
-      json(response, 200, handleMarketingPrompt(prompt, model));
-      return;
-    }
-
-    if (prompt.includes("Solve this business problem in one response.") && prompt.includes("Input JSON:")) {
-      json(response, 200, handleConsultingBaselinePrompt(prompt, model));
-      return;
-    }
-
-    if (
-      prompt.includes("Current execution state JSON:") &&
-      prompt.includes("Context JSON:") &&
-      prompt.includes("Stage:")
-    ) {
-      json(response, 200, handleConsultingStagePrompt(prompt, model));
-      return;
-    }
-
-    json(response, 200, buildChatCompletion("Mock response from the Playwright OpenAI server.", model));
-    return;
   }
 
   json(response, 404, { error: "not found", path: request.url });

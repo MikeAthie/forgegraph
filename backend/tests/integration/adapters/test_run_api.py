@@ -2518,6 +2518,96 @@ class TestEngineRunEvents:
         assert run_projection.pause_state_json is None
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_resumed_event_is_idempotent_after_resume_ack_intent(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Acked Resume Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "human_gate_1", "type": "human_gate"}], "edges": []},
+        )
+        resume_attempt_id = uuid4()
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="running",
+            paused_node_id=None,
+            pause_state_json=None,
+            resume_requested_at=None,
+            resume_attempt_id=None,
+        )
+        set_snapshot(
+            RunSnapshot(
+                run_id=run.id,
+                last_completed_node="human_gate_1",
+                next_node="final_output",
+                attempt_id=str(resume_attempt_id),
+                updated_at=timezone.now(),
+            )
+        )
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-resume-acked-idempotent",
+                "type": "run_resumed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+                "attempt_id": str(resume_attempt_id),
+                "output": {
+                    "approved": True,
+                    "resume_attempt_id": str(resume_attempt_id),
+                },
+            }
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        run.refresh_from_db()
+        assert run.status == "running"
+        assert run.paused_node_id is None
+        assert run.pause_state_json is None
+        assert run.resume_attempt_id is None
+        assert RunEvent.objects.filter(run=run, event_type="run_resumed").exists()
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_run_resumed_rejects_missing_resume_attempt(
+        self, signed_engine_event_post, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Missing Resume Attempt Graph")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [{"id": "human_gate_1", "type": "human_gate"}], "edges": []},
+        )
+        run = Run.objects.create(
+            owner=user,
+            graph_version=version,
+            status="resume_requested",
+            paused_node_id="human_gate_1",
+            pause_state_json={"prompt_message": "Approve draft"},
+            resume_requested_at=timezone.now() - timedelta(minutes=2),
+            resume_attempt_id=uuid4(),
+        )
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-resume-missing-attempt",
+                "type": "run_resumed",
+                "run_id": str(run.id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+                "output": {"approved": True},
+            }
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "resume_attempt_id" in response.data["detail"]
+        run.refresh_from_db()
+        assert run.status == "resume_requested"
+        assert run.resume_attempt_id is not None
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_run_resumed_rejects_invalid_transition_from_paused(
         self, signed_engine_event_post, user
     ):
@@ -2803,11 +2893,21 @@ class TestEngineRunEvents:
         started_at = run.started_at
         assert run.status == "running"
 
+        second_timestamp_ms = timestamp_ms + 1
+        payload["timestamp"] = second_timestamp_ms
+        second_body = json.dumps(payload)
+        second_signature = s2s.build_signature(
+            "test-secret", str(second_timestamp_ms), second_body.encode("utf-8")
+        )
+        second_headers = {
+            "HTTP_X_FORGEGRAPH_TIMESTAMP": str(second_timestamp_ms),
+            "HTTP_X_FORGEGRAPH_SIGNATURE": second_signature,
+        }
         response = api_client.post(
             "/api/runs/engine-events",
-            data=body,
+            data=second_body,
             content_type="application/json",
-            **headers,
+            **second_headers,
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["data"]["duplicate"] is True
@@ -3478,7 +3578,7 @@ class TestRunResume:
         assert snapshot.attempt_id != previous_snapshot.attempt_id
         assert resume_calls[0][1]["resume_attempt_id"] == snapshot.attempt_id
 
-    def test_resume_reverts_resume_requested_when_engine_rejects(
+    def test_resume_records_failed_to_resume_when_engine_rejects(
         self, authenticated_client, mock_engine_client, user
     ):
         graph = Graph.objects.create(owner=user, name="Resume Engine Reject Graph")
@@ -3524,19 +3624,21 @@ class TestRunResume:
         assert dispatched_attempt_id
 
         run.refresh_from_db()
-        assert run.status == "paused"
-        assert run.resume_requested_at is None
-        assert run.resume_attempt_id is None
+        assert run.status == "resume_requested"
+        assert run.recovery_state == "resume_dispatch_failed"
+        assert run.recovery_reason == "engine_rejected_resume"
+        assert run.resume_requested_at is not None
+        assert str(run.resume_attempt_id) == dispatched_attempt_id
 
         snapshot = get_snapshot(run.id)
         assert snapshot is not None
-        assert snapshot.attempt_id == previous_snapshot.attempt_id
+        assert snapshot.attempt_id == dispatched_attempt_id
         assert snapshot.last_completed_node == previous_snapshot.last_completed_node
         assert snapshot.next_node == previous_snapshot.next_node
 
         task.refresh_from_db()
-        assert task.status == "pending"
-        assert task.result is None
+        assert task.status == "approved"
+        assert task.result == {"approved": True}
 
     def test_resume_calls_engine_and_marks_task_rejected(
         self, authenticated_client, mock_engine_client, user
@@ -3615,6 +3717,37 @@ class TestRunResume:
 
         resume_calls = [call for call in mock_engine_client.calls if call[0] == "resume_run"]
         assert len(resume_calls) == 1
+
+    def test_resume_rejects_conflicting_duplicate_decision_payload(
+        self, authenticated_client, mock_engine_client, user
+    ):
+        graph = Graph.objects.create(owner=user, name="Resume Conflict Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(
+            owner=user, graph_version=version, status="paused", paused_node_id="gate"
+        )
+        ApprovalTask.objects.create(
+            run=run,
+            node_id="gate",
+            assignee=user,
+            status="approved",
+            result={"approved": True, "feedback": "Ship it"},
+            resolved_at=timezone.now(),
+            payload={"prompt_message": "Please approve"},
+        )
+
+        response = authenticated_client.post(
+            f"/api/runs/{run.id}/resume",
+            {"node_id": "gate", "input_json": {"approved": False, "feedback": "Hold"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "DECISION_CONFLICT"
+        assert "already been resolved differently" in response.data["error"]["message"]
+        assert not [call for call in mock_engine_client.calls if call[0] == "resume_run"]
 
     def test_resume_rejects_when_budget_exceeded(
         self, authenticated_client, mock_engine_client, user

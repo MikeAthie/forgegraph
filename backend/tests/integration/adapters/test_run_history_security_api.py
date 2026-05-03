@@ -73,8 +73,8 @@ def test_start_run_rejects_oversized_input(authenticated_client, user):
         {"graph_version_id": str(version.id), "input_json": {"payload": "x" * 300}},
         format="json",
     )
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.data["error"]["code"] == "VALIDATION_ERROR"
+    assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    assert response.json()["error"]["code"] == "REQUEST_TOO_LARGE"
 
 
 @override_settings(RUN_MAX_ACTIVE_PER_TENANT=1)

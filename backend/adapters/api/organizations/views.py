@@ -19,6 +19,7 @@ from adapters.api.organizations.serializers import (
     OrganizationSwitchSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.audit_log import record_audit_log
 from application.services.rbac import has_min_role
 from application.services.tenancy import (
     create_organization_for_user,
@@ -273,6 +274,17 @@ class OrganizationMembersView(APIView):
             role=role,
             is_default=False,
         )
+        record_audit_log(
+            actor=user,
+            tenant_id=str(membership.organization_id),
+            action="org.member_added",
+            resource_type="organization_membership",
+            resource_id=str(member.id),
+            metadata={
+                "target_user_id": str(target_user.id),
+                "role": role,
+            },
+        )
 
         return success_response(
             OrganizationMemberSerializer(
@@ -346,6 +358,17 @@ class OrganizationMemberDetailView(APIView):
 
         target.role = new_role
         target.save(update_fields=["role"])
+        record_audit_log(
+            actor=user,
+            tenant_id=str(membership.organization_id),
+            action="org.member_role_updated",
+            resource_type="organization_membership",
+            resource_id=str(target.id),
+            metadata={
+                "target_user_id": str(target.user_id),
+                "role": new_role,
+            },
+        )
 
         return success_response(
             OrganizationMemberSerializer(
@@ -402,5 +425,19 @@ class OrganizationMemberDetailView(APIView):
         if target.user.default_organization_id == membership.organization_id:
             User.objects.filter(pk=target.user_id).update(default_organization=None)
 
+        target_id = str(target.id)
+        target_user_id = str(target.user_id)
+        target_role = target.role
         target.delete()
+        record_audit_log(
+            actor=user,
+            tenant_id=str(membership.organization_id),
+            action="org.member_removed",
+            resource_type="organization_membership",
+            resource_id=target_id,
+            metadata={
+                "target_user_id": target_user_id,
+                "role": target_role,
+            },
+        )
         return success_response({"deleted": True})

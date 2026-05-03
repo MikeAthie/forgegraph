@@ -17,6 +17,14 @@ class SCIMServiceUser:
     tenant_id: str
 
     @property
+    def pk(self) -> str:
+        return f"scim:{self.tenant_id}"
+
+    @property
+    def id(self) -> str:
+        return self.pk
+
+    @property
     def is_authenticated(self) -> bool:
         return True
 

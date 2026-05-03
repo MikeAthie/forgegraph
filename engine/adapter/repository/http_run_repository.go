@@ -404,7 +404,7 @@ func (r *HTTPRunRepository) publishIntent(
 		return fmt.Errorf("runtime intent attempt_id is required")
 	}
 	intent := &port.RuntimeIntentEnvelope{
-		IntentID:   uuid.NewString(),
+		IntentID:   deterministicIntentID(intentType, runID, attemptID, payload),
 		IntentType: intentType,
 		RunID:      runID,
 		AttemptID:  attemptID,
@@ -413,6 +413,15 @@ func (r *HTTPRunRepository) publishIntent(
 		Payload:    payload,
 	}
 	return r.intentPublisher.Publish(ctx, intent)
+}
+
+func deterministicIntentID(intentType string, runID string, attemptID string, payload map[string]any) string {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		body = []byte(fmt.Sprintf("%v", payload))
+	}
+	seed := strings.Join([]string{intentType, runID, attemptID, string(body)}, "\x00")
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
 func (r *HTTPRunRepository) updateRun(ctx context.Context, runID string, payload map[string]any) error {

@@ -74,11 +74,16 @@ def mock_engine_client():
 @pytest.fixture
 def signed_engine_event_post(api_client):
     """Post a signed engine callback through the real S2S endpoint."""
+    last_timestamp_ms = 0
 
     def _post(
         payload: dict[str, object], *, secret: str = "test-secret", timestamp_ms: int | None = None
     ):
+        nonlocal last_timestamp_ms
         callback_timestamp = timestamp_ms or int(time.time() * 1000)
+        if timestamp_ms is None and callback_timestamp <= last_timestamp_ms:
+            callback_timestamp = last_timestamp_ms + 1
+        last_timestamp_ms = callback_timestamp
         body = json.dumps(payload)
         signature = s2s.build_signature(secret, str(callback_timestamp), body.encode("utf-8"))
         return api_client.post(

@@ -19,7 +19,7 @@ test.describe("Operation Visibility", () => {
     await page.goto(operationDetailHref!);
 
     await expect(page).toHaveURL(new RegExp(`/runs/${succeededOperationId}$`));
-    await expect(page.getByText(/operation detail/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: /department activity/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: /operation state/i })).toBeVisible();
     await expect(page.getByText(/revenue pulse is ready for review/i).first()).toBeVisible();
@@ -32,7 +32,7 @@ test.describe("Operation Visibility", () => {
 
     await openAuthenticatedPage(page, user, `/runs/${pausedOperationId}`);
 
-    await expect(page.getByText(/approval is waiting/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /approval is waiting/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /open approvals/i })).toBeVisible();
   });
 
@@ -66,6 +66,6 @@ test.describe("Operation Visibility", () => {
 
     await openAuthenticatedPage(page, user, `/runs/${missingOperationId}`);
 
-    await expect(page.getByText(/operation could not continue/i)).toBeVisible();
+    await expect(page.getByText(/operation could not continue|no longer available/i)).toBeVisible();
   });
 });

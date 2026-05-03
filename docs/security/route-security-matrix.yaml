@@ -1,0 +1,3921 @@
+version: 1
+description: Authoritative production route security matrix for ForgeGraph API and run websocket routes.
+scope:
+  include:
+  - /api/**
+  - /api/v1/**
+  - /ws/runs/<uuid:run_id>/
+  exclude:
+  - health
+  - ready
+  - schema
+  - docs
+  - redoc
+  - test-only routes
+defaults:
+  jwt:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    rate_limited: 429
+  engine_signed:
+    missing_signature: 401
+    invalid_signature: 401
+    stale_timestamp: 401
+    exact_replay: 401
+  websocket_ticket:
+    missing_ticket: disconnect
+    wrong_org: disconnect
+routes:
+- id: accounting
+  names:
+  - accounting-overview
+  paths:
+  - /api/accounting
+  - /api/v1/accounting
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: accounting-ledger
+  names:
+  - accounting-ledger
+  paths:
+  - /api/accounting/ledger
+  - /api/v1/accounting/ledger
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: agents
+  names:
+  - agent-list
+  paths:
+  - /api/agents
+  - /api/v1/agents
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: agents-agent-id
+  names:
+  - agent-detail
+  paths:
+  - /api/agents/<uuid:agent_id>
+  - /api/v1/agents/<uuid:agent_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-llm-budget
+  names:
+  - llm-analytics-budget
+  paths:
+  - /api/analytics/llm/budget
+  - /api/v1/analytics/llm/budget
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-llm-costs
+  names:
+  - llm-analytics-costs
+  paths:
+  - /api/analytics/llm/costs
+  - /api/v1/analytics/llm/costs
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-llm-export
+  names:
+  - llm-analytics-export
+  paths:
+  - /api/analytics/llm/export
+  - /api/v1/analytics/llm/export
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-llm-quota
+  names:
+  - llm-analytics-quota
+  paths:
+  - /api/analytics/llm/quota
+  - /api/v1/analytics/llm/quota
+  methods:
+  - GET
+  - PUT
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-llm-usage
+  names:
+  - llm-analytics-usage
+  paths:
+  - /api/analytics/llm/usage
+  - /api/v1/analytics/llm/usage
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-memory-costs
+  names:
+  - memory-analytics-costs
+  paths:
+  - /api/analytics/memory/costs
+  - /api/v1/analytics/memory/costs
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-memory-export
+  names:
+  - memory-analytics-export
+  paths:
+  - /api/analytics/memory/export
+  - /api/v1/analytics/memory/export
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-memory-performance
+  names:
+  - memory-analytics-performance
+  paths:
+  - /api/analytics/memory/performance
+  - /api/v1/analytics/memory/performance
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: analytics-memory-usage
+  names:
+  - memory-analytics-usage
+  paths:
+  - /api/analytics/memory/usage
+  - /api/v1/analytics/memory/usage
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: approvals
+  names:
+  - approval-list
+  paths:
+  - /api/approvals
+  - /api/v1/approvals
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: approvals-approval-id
+  names:
+  - approval-detail
+  paths:
+  - /api/approvals/<uuid:approval_id>
+  - /api/v1/approvals/<uuid:approval_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: approvals-count
+  names:
+  - approval-count
+  paths:
+  - /api/approvals/count
+  - /api/v1/approvals/count
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: archive-assets
+  names:
+  - archive-assets
+  paths:
+  - /api/archive/assets
+  - /api/v1/archive/assets
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: archive-assets-asset-id
+  names:
+  - archive-asset-detail
+  paths:
+  - /api/archive/assets/<uuid:asset_id>
+  - /api/v1/archive/assets/<uuid:asset_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: archive-assets-asset-id-versions
+  names:
+  - archive-asset-versions
+  paths:
+  - /api/archive/assets/<uuid:asset_id>/versions
+  - /api/v1/archive/assets/<uuid:asset_id>/versions
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: archive-context-packs-context-pack-id
+  names:
+  - archive-context-pack-detail
+  paths:
+  - /api/archive/context-packs/<uuid:context_pack_id>
+  - /api/v1/archive/context-packs/<uuid:context_pack_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: archive-evidence-links
+  names:
+  - archive-evidence-links
+  paths:
+  - /api/archive/evidence-links
+  - /api/v1/archive/evidence-links
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: audit-logs
+  names:
+  - audit-log-list
+  paths:
+  - /api/audit-logs
+  - /api/v1/audit-logs
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-login
+  names:
+  - auth-login
+  paths:
+  - /api/auth/login
+  - /api/v1/auth/login
+  methods:
+  - POST
+  auth_surface: public
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-logout
+  names:
+  - auth-logout
+  paths:
+  - /api/auth/logout
+  - /api/v1/auth/logout
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-me
+  names:
+  - auth-me
+  paths:
+  - /api/auth/me
+  - /api/v1/auth/me
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-refresh
+  names:
+  - auth-refresh
+  paths:
+  - /api/auth/refresh
+  - /api/v1/auth/refresh
+  methods:
+  - POST
+  auth_surface: public
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-register
+  names:
+  - auth-register
+  paths:
+  - /api/auth/register
+  - /api/v1/auth/register
+  methods:
+  - POST
+  auth_surface: public
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-sso-auth0-callback
+  names:
+  - sso-auth0-callback
+  paths:
+  - /api/auth/sso/auth0/callback
+  - /api/v1/auth/sso/auth0/callback
+  methods:
+  - POST
+  auth_surface: public
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-sso-auth0-login
+  names:
+  - sso-auth0-login
+  paths:
+  - /api/auth/sso/auth0/login
+  - /api/v1/auth/sso/auth0/login
+  methods:
+  - GET
+  auth_surface: public
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-sso-provider
+  names:
+  - sso-provider
+  paths:
+  - /api/auth/sso/provider
+  - /api/v1/auth/sso/provider
+  methods:
+  - GET
+  - PUT
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: auth-ws-ticket
+  names:
+  - auth-ws-ticket
+  paths:
+  - /api/auth/ws-ticket
+  - /api/v1/auth/ws-ticket
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: billing-checkout
+  names:
+  - billing-checkout
+  paths:
+  - /api/billing/checkout
+  - /api/v1/billing/checkout
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: billing-plans
+  names:
+  - billing-plans
+  paths:
+  - /api/billing/plans
+  - /api/v1/billing/plans
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: billing-portal
+  names:
+  - billing-portal
+  paths:
+  - /api/billing/portal
+  - /api/v1/billing/portal
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: billing-subscription
+  names:
+  - billing-subscription
+  paths:
+  - /api/billing/subscription
+  - /api/v1/billing/subscription
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: billing-webhook
+  names:
+  - billing-webhook
+  paths:
+  - /api/billing/webhook
+  - /api/v1/billing/webhook
+  methods:
+  - POST
+  auth_surface: provider_signed
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: provider_webhook
+  request_size_limit: api_default
+- id: credentials
+  names:
+  - credentials-list
+  paths:
+  - /api/credentials
+  - /api/v1/credentials
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: credential.created
+- id: credentials-credential-id
+  names:
+  - credentials-detail
+  paths:
+  - /api/credentials/<uuid:credential_id>
+  - /api/v1/credentials/<uuid:credential_id>
+  methods:
+  - DELETE
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: credential.deleted
+- id: credentials-credential-id-revoke
+  names:
+  - credentials-revoke
+  paths:
+  - /api/credentials/<uuid:credential_id>/revoke
+  - /api/v1/credentials/<uuid:credential_id>/revoke
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: credential.revoked
+- id: credentials-credential-id-rotate
+  names:
+  - credentials-rotate
+  paths:
+  - /api/credentials/<uuid:credential_id>/rotate
+  - /api/v1/credentials/<uuid:credential_id>/rotate
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: credential.rotated
+- id: credentials-oauth-callback
+  names:
+  - credentials-oauth-callback
+  paths:
+  - /api/credentials/oauth/callback
+  - /api/v1/credentials/oauth/callback
+  methods:
+  - POST
+  auth_surface: public
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: credentials-oauth-providers
+  names:
+  - credentials-oauth-providers
+  paths:
+  - /api/credentials/oauth/providers
+  - /api/v1/credentials/oauth/providers
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: credentials-oauth-providers-provider
+  names:
+  - credentials-oauth-provider-config
+  paths:
+  - /api/credentials/oauth/providers/<str:provider>
+  - /api/v1/credentials/oauth/providers/<str:provider>
+  methods:
+  - GET
+  - PUT
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: credentials-oauth-start
+  names:
+  - credentials-oauth-start
+  paths:
+  - /api/credentials/oauth/start
+  - /api/v1/credentials/oauth/start
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: decisions
+  names:
+  - decision-list
+  paths:
+  - /api/decisions
+  - /api/v1/decisions
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: decisions-decision-id
+  names:
+  - decision-detail
+  paths:
+  - /api/decisions/<uuid:decision_id>
+  - /api/v1/decisions/<uuid:decision_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: decisions-count
+  names:
+  - decision-count
+  paths:
+  - /api/decisions/count
+  - /api/v1/decisions/count
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: engine-credentials-credential-id
+  names:
+  - engine-credential-detail
+  paths:
+  - /api/engine/credentials/<uuid:credential_id>
+  - /api/v1/engine/credentials/<uuid:credential_id>
+  methods:
+  - GET
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-memory-entries
+  names:
+  - engine-memory-entry
+  paths:
+  - /api/engine/memory/entries
+  - /api/v1/engine/memory/entries
+  methods:
+  - DELETE
+  - GET
+  - PUT
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-node-cache-cache-key
+  names:
+  - engine-node-cache-detail
+  paths:
+  - /api/engine/node-cache/<str:cache_key>
+  - /api/v1/engine/node-cache/<str:cache_key>
+  methods:
+  - GET
+  - PUT
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runs-run-id
+  names:
+  - engine-run-detail
+  paths:
+  - /api/engine/runs/<uuid:run_id>
+  - /api/v1/engine/runs/<uuid:run_id>
+  methods:
+  - GET
+  - PATCH
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runs-run-id-checkpoint
+  names:
+  - engine-run-checkpoint
+  paths:
+  - /api/engine/runs/<uuid:run_id>/checkpoint
+  - /api/v1/engine/runs/<uuid:run_id>/checkpoint
+  methods:
+  - DELETE
+  - GET
+  - PUT
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runs-run-id-node-runs
+  names:
+  - engine-run-node-run-list
+  paths:
+  - /api/engine/runs/<uuid:run_id>/node-runs
+  - /api/v1/engine/runs/<uuid:run_id>/node-runs
+  methods:
+  - GET
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runs-run-id-node-runs-node-id
+  names:
+  - engine-run-node-run-detail
+  paths:
+  - /api/engine/runs/<uuid:run_id>/node-runs/<str:node_id>
+  - /api/v1/engine/runs/<uuid:run_id>/node-runs/<str:node_id>
+  methods:
+  - GET
+  - PUT
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runs-run-id-pause-state
+  names:
+  - engine-run-pause-state
+  paths:
+  - /api/engine/runs/<uuid:run_id>/pause-state
+  - /api/v1/engine/runs/<uuid:run_id>/pause-state
+  methods:
+  - DELETE
+  - GET
+  - PUT
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runs-run-id-snapshot
+  names:
+  - engine-run-snapshot
+  paths:
+  - /api/engine/runs/<uuid:run_id>/snapshot
+  - /api/v1/engine/runs/<uuid:run_id>/snapshot
+  methods:
+  - DELETE
+  - GET
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: engine-runtime-intents-intent-id
+  names:
+  - engine-runtime-intent-outcome
+  paths:
+  - /api/engine/runtime-intents/<uuid:intent_id>
+  - /api/v1/engine/runtime-intents/<uuid:intent_id>
+  methods:
+  - GET
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: executions
+  names:
+  - run-list
+  paths:
+  - /api/executions
+  - /api/v1/executions
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: executions-run-id
+  names:
+  - run-detail
+  paths:
+  - /api/executions/<uuid:run_id>
+  - /api/v1/executions/<uuid:run_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: executions-run-id-cancel
+  names:
+  - run-cancel
+  paths:
+  - /api/executions/<uuid:run_id>/cancel
+  - /api/v1/executions/<uuid:run_id>/cancel
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: run.canceled
+- id: executions-run-id-events
+  names:
+  - run-events
+  paths:
+  - /api/executions/<uuid:run_id>/events
+  - /api/v1/executions/<uuid:run_id>/events
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: executions-run-id-replay
+  names:
+  - run-replay
+  paths:
+  - /api/executions/<uuid:run_id>/replay
+  - /api/v1/executions/<uuid:run_id>/replay
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: run.replayed
+- id: executions-run-id-resume
+  names:
+  - run-resume
+  paths:
+  - /api/executions/<uuid:run_id>/resume
+  - /api/v1/executions/<uuid:run_id>/resume
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: run.resume_requested
+- id: executions-run-id-stream
+  names:
+  - run-stream
+  paths:
+  - /api/executions/<uuid:run_id>/stream
+  - /api/v1/executions/<uuid:run_id>/stream
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: executions-engine-events
+  names:
+  - run-engine-events
+  paths:
+  - /api/executions/engine-events
+  - /api/v1/executions/engine-events
+  methods:
+  - POST
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: executions-invoke
+  names:
+  - run-invoke
+  paths:
+  - /api/executions/invoke
+  - /api/v1/executions/invoke
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: run_input
+- id: executions-start
+  names:
+  - run-start
+  paths:
+  - /api/executions/start
+  - /api/v1/executions/start
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: run_input
+- id: graph-versions
+  names:
+  - graph-version-create-top-level
+  paths:
+  - /api/graph-versions
+  - /api/v1/graph-versions
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs
+  names:
+  - graph-list-create
+  paths:
+  - /api/graphs
+  - /api/v1/graphs
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-graph-id
+  names:
+  - graph-detail
+  paths:
+  - /api/graphs/<uuid:graph_id>
+  - /api/v1/graphs/<uuid:graph_id>
+  methods:
+  - DELETE
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-graph-id-memory-config
+  names:
+  - graph-memory-config
+  paths:
+  - /api/graphs/<uuid:graph_id>/memory-config
+  - /api/v1/graphs/<uuid:graph_id>/memory-config
+  methods:
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-graph-id-versions
+  names:
+  - graph-version-list-create
+  paths:
+  - /api/graphs/<uuid:graph_id>/versions
+  - /api/v1/graphs/<uuid:graph_id>/versions
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-graph-id-versions-version-id
+  names:
+  - graph-version-detail
+  paths:
+  - /api/graphs/<uuid:graph_id>/versions/<uuid:version_id>
+  - /api/v1/graphs/<uuid:graph_id>/versions/<uuid:version_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-graph-id-versions-latest
+  names:
+  - graph-version-latest
+  paths:
+  - /api/graphs/<uuid:graph_id>/versions/latest
+  - /api/v1/graphs/<uuid:graph_id>/versions/latest
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-external-workflows
+  names:
+  - graph-external-workflow-create
+  paths:
+  - /api/graphs/external-workflows
+  - /api/v1/graphs/external-workflows
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-validate
+  names:
+  - graph-validate
+  paths:
+  - /api/graphs/validate
+  - /api/v1/graphs/validate
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: graphs-versions
+  names:
+  - graph-version-create
+  paths:
+  - /api/graphs/versions
+  - /api/v1/graphs/versions
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: integrations-http-test
+  names:
+  - http-node-test
+  paths:
+  - /api/integrations/http/test
+  - /api/v1/integrations/http/test
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: integrations-telegram-webhook-graph-version-id
+  names:
+  - telegram-webhook
+  paths:
+  - /api/integrations/telegram/webhook/<uuid:graph_version_id>
+  - /api/v1/integrations/telegram/webhook/<uuid:graph_version_id>
+  methods:
+  - POST
+  auth_surface: provider_signed
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: provider_webhook
+  request_size_limit: api_default
+- id: integrations-webhook-graph-version-id
+  names:
+  - generic-webhook
+  paths:
+  - /api/integrations/webhook/<uuid:graph_version_id>
+  - /api/v1/integrations/webhook/<uuid:graph_version_id>
+  methods:
+  - POST
+  auth_surface: provider_signed
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: provider_webhook
+  request_size_limit: api_default
+- id: integrations-whatsapp-webhook-graph-version-id
+  names:
+  - whatsapp-webhook
+  paths:
+  - /api/integrations/whatsapp/webhook/<uuid:graph_version_id>
+  - /api/v1/integrations/whatsapp/webhook/<uuid:graph_version_id>
+  methods:
+  - POST
+  auth_surface: provider_signed
+  required_role: none
+  org_scope: none
+  expected:
+    unauthenticated: 200
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: skip
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: provider_webhook
+  request_size_limit: api_default
+- id: interaction-briefs-current
+  names:
+  - interaction-brief-current
+  paths:
+  - /api/interaction/briefs/current
+  - /api/v1/interaction/briefs/current
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: interaction-events
+  names:
+  - interaction-event-create
+  paths:
+  - /api/interaction/events
+  - /api/v1/interaction/events
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: learning-outcome-reviews
+  names:
+  - learning-outcome-reviews
+  paths:
+  - /api/learning/outcome-reviews
+  - /api/v1/learning/outcome-reviews
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: learning-policy-rules
+  names:
+  - learning-policy-rules
+  paths:
+  - /api/learning/policy-rules
+  - /api/v1/learning/policy-rules
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: learning-policy-rules-policy-rule-id-promote
+  names:
+  - learning-policy-promote
+  paths:
+  - /api/learning/policy-rules/<uuid:policy_rule_id>/promote
+  - /api/v1/learning/policy-rules/<uuid:policy_rule_id>/promote
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: learning-policy-rules-policy-rule-id-reject
+  names:
+  - learning-policy-reject
+  paths:
+  - /api/learning/policy-rules/<uuid:policy_rule_id>/reject
+  - /api/v1/learning/policy-rules/<uuid:policy_rule_id>/reject
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: learning-preference-events
+  names:
+  - learning-preference-events
+  paths:
+  - /api/learning/preference-events
+  - /api/v1/learning/preference-events
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: marketplace-installed
+  names:
+  - marketplace-installed
+  paths:
+  - /api/marketplace/installed
+  - /api/v1/marketplace/installed
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: marketplace-packages
+  names:
+  - marketplace-packages
+  paths:
+  - /api/marketplace/packages
+  - /api/v1/marketplace/packages
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: marketplace-packages-package-slug-install
+  names:
+  - marketplace-install
+  paths:
+  - /api/marketplace/packages/<slug:package_slug>/install
+  - /api/v1/marketplace/packages/<slug:package_slug>/install
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: marketplace-releases
+  names:
+  - marketplace-releases
+  paths:
+  - /api/marketplace/releases
+  - /api/v1/marketplace/releases
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: marketplace-releases-release-id-review
+  names:
+  - marketplace-release-review
+  paths:
+  - /api/marketplace/releases/<uuid:release_id>/review
+  - /api/v1/marketplace/releases/<uuid:release_id>/review
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: marketplace.release_reviewed
+- id: marketplace-runtime-manifest-preview
+  names:
+  - marketplace-runtime-manifest-preview
+  paths:
+  - /api/marketplace/runtime-manifest-preview
+  - /api/v1/marketplace/runtime-manifest-preview
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: marketplace-runtime-manifests
+  names:
+  - marketplace-runtime-manifests
+  paths:
+  - /api/marketplace/runtime-manifests
+  - /api/v1/marketplace/runtime-manifests
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-gc
+  names:
+  - memory-gc
+  paths:
+  - /api/memory/gc
+  - /api/v1/memory/gc
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-observations
+  names:
+  - memory-observation-list
+  paths:
+  - /api/memory/observations
+  - /api/v1/memory/observations
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-observations-observation-id
+  names:
+  - memory-observation-detail
+  paths:
+  - /api/memory/observations/<uuid:observation_id>
+  - /api/v1/memory/observations/<uuid:observation_id>
+  methods:
+  - DELETE
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-observations-context
+  names:
+  - memory-observation-context
+  paths:
+  - /api/memory/observations/context
+  - /api/v1/memory/observations/context
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-observations-search
+  names:
+  - memory-observation-search
+  paths:
+  - /api/memory/observations/search
+  - /api/v1/memory/observations/search
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-observations-timeline
+  names:
+  - memory-observation-timeline
+  paths:
+  - /api/memory/observations/timeline
+  - /api/v1/memory/observations/timeline
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: memory-usage
+  names:
+  - memory-usage
+  paths:
+  - /api/memory/usage
+  - /api/v1/memory/usage
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: metrics-summary
+  names:
+  - metrics-summary
+  paths:
+  - /api/metrics/summary
+  - /api/v1/metrics/summary
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: metrics-slo
+  names:
+  - metrics-slo
+  paths:
+  - /api/metrics/slo
+  - /api/v1/metrics/slo
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: onboarding-milestones
+  names:
+  - onboarding-milestones
+  paths:
+  - /api/onboarding/milestones
+  - /api/v1/onboarding/milestones
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operator-dead-letters
+  names:
+  - operator-dead-letters
+  paths:
+  - /api/operator/dead-letters
+  - /api/v1/operator/dead-letters
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operator-org-load
+  names:
+  - operator-org-load
+  paths:
+  - /api/operator/org-load
+  - /api/v1/operator/org-load
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operator-runs-run-id-force-cancel
+  names:
+  - operator-force-cancel-run
+  paths:
+  - /api/operator/runs/<uuid:run_id>/force-cancel
+  - /api/v1/operator/runs/<uuid:run_id>/force-cancel
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.run_force_cancelled
+- id: operator-runs-run-id-force-fail
+  names:
+  - operator-force-fail-run
+  paths:
+  - /api/operator/runs/<uuid:run_id>/force-fail
+  - /api/v1/operator/runs/<uuid:run_id>/force-fail
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.run_force_failed
+- id: operator-runs-run-id-force-rehydrate
+  names:
+  - operator-force-rehydrate-run
+  paths:
+  - /api/operator/runs/<uuid:run_id>/force-rehydrate
+  - /api/v1/operator/runs/<uuid:run_id>/force-rehydrate
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.run_force_rehydrated
+- id: operator-runs-run-id-state
+  names:
+  - operator-run-state
+  paths:
+  - /api/operator/runs/<uuid:run_id>/state
+  - /api/v1/operator/runs/<uuid:run_id>/state
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operator-runtime-intents-intent-id-acknowledge
+  names:
+  - operator-runtime-intent-acknowledge
+  paths:
+  - /api/operator/runtime-intents/<uuid:intent_id>/acknowledge
+  - /api/v1/operator/runtime-intents/<uuid:intent_id>/acknowledge
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.runtime_intent_acknowledged
+- id: operator-runtime-intents-intent-id-replay
+  names:
+  - operator-runtime-intent-replay
+  paths:
+  - /api/operator/runtime-intents/<uuid:intent_id>/replay
+  - /api/v1/operator/runtime-intents/<uuid:intent_id>/replay
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.runtime_intent_replayed
+- id: operator-runtime-intents-backlog
+  names:
+  - operator-runtime-intent-backlog
+  paths:
+  - /api/operator/runtime-intents/backlog
+  - /api/v1/operator/runtime-intents/backlog
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operator-tasks-task-id-state
+  names:
+  - operator-task-state
+  paths:
+  - /api/operator/tasks/<uuid:task_id>/state
+  - /api/v1/operator/tasks/<uuid:task_id>/state
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operator-ws-subscribers
+  names:
+  - operator-ws-subscribers
+  paths:
+  - /api/operator/ws/subscribers
+  - /api/v1/operator/ws/subscribers
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: orgs
+  names:
+  - org-list-create
+  - org-list-create-top-level
+  paths:
+  - /api/orgs
+  - /api/v1/orgs
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: orgs-current
+  names:
+  - org-current
+  - org-current-top-level
+  paths:
+  - /api/orgs/current
+  - /api/v1/orgs/current
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: orgs-me
+  names:
+  - org-me
+  - org-me-top-level
+  paths:
+  - /api/orgs/me
+  - /api/v1/orgs/me
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: orgs-members
+  names:
+  - org-members
+  paths:
+  - /api/orgs/members
+  - /api/v1/orgs/members
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: org.member_added
+- id: orgs-members-user-id
+  names:
+  - org-member-detail
+  paths:
+  - /api/orgs/members/<uuid:user_id>
+  - /api/v1/orgs/members/<uuid:user_id>
+  methods:
+  - DELETE
+  - PATCH
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: org.member_changed
+- id: policies-guardrails
+  names:
+  - tenant-policy
+  paths:
+  - /api/policies/guardrails
+  - /api/v1/policies/guardrails
+  methods:
+  - GET
+  - PUT
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: prompts
+  names:
+  - prompt-list-create
+  paths:
+  - /api/prompts
+  - /api/v1/prompts
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: prompts-prompt-id
+  names:
+  - prompt-detail
+  paths:
+  - /api/prompts/<uuid:prompt_id>
+  - /api/v1/prompts/<uuid:prompt_id>
+  methods:
+  - DELETE
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: prompts-prompt-id-clone
+  names:
+  - prompt-clone
+  paths:
+  - /api/prompts/<uuid:prompt_id>/clone
+  - /api/v1/prompts/<uuid:prompt_id>/clone
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: prompts-prompt-id-publish
+  names:
+  - prompt-publish
+  paths:
+  - /api/prompts/<uuid:prompt_id>/publish
+  - /api/v1/prompts/<uuid:prompt_id>/publish
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: prompt.published
+- id: reports-strategy-report
+  names:
+  - strategy-report-generate
+  paths:
+  - /api/reports/strategy-report
+  - /api/v1/reports/strategy-report
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: retention
+  names:
+  - retention-policy
+  paths:
+  - /api/retention
+  - /api/v1/retention
+  methods:
+  - GET
+  - PUT
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: retention-cleanup
+  names:
+  - retention-cleanup
+  paths:
+  - /api/retention/cleanup
+  - /api/v1/retention/cleanup
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: retention_cleanup
+- id: retention-export
+  names:
+  - retention-export
+  paths:
+  - /api/retention/export
+  - /api/v1/retention/export
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: retention_export
+- id: runs
+  names:
+  - run-list
+  - run-list-create-top-level
+  paths:
+  - /api/runs
+  - /api/v1/runs
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: runs-run-id
+  names:
+  - run-detail
+  paths:
+  - /api/runs/<uuid:run_id>
+  - /api/v1/runs/<uuid:run_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: runs-run-id-cancel
+  names:
+  - run-cancel
+  paths:
+  - /api/runs/<uuid:run_id>/cancel
+  - /api/v1/runs/<uuid:run_id>/cancel
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: run.canceled
+- id: runs-run-id-events
+  names:
+  - run-events
+  paths:
+  - /api/runs/<uuid:run_id>/events
+  - /api/v1/runs/<uuid:run_id>/events
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: runs-run-id-replay
+  names:
+  - run-replay
+  paths:
+  - /api/runs/<uuid:run_id>/replay
+  - /api/v1/runs/<uuid:run_id>/replay
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: run.replayed
+- id: runs-run-id-resume
+  names:
+  - run-resume
+  paths:
+  - /api/runs/<uuid:run_id>/resume
+  - /api/v1/runs/<uuid:run_id>/resume
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: run.resume_requested
+- id: runs-run-id-stream
+  names:
+  - run-stream
+  paths:
+  - /api/runs/<uuid:run_id>/stream
+  - /api/v1/runs/<uuid:run_id>/stream
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: runs-engine-events
+  names:
+  - run-engine-events
+  paths:
+  - /api/runs/engine-events
+  - /api/v1/runs/engine-events
+  methods:
+  - POST
+  auth_surface: engine_signed
+  required_role: none
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: skip
+    revoked_token: skip
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: engine_callback
+  request_size_limit: api_default
+- id: runs-invoke
+  names:
+  - run-invoke
+  paths:
+  - /api/runs/invoke
+  - /api/v1/runs/invoke
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: run_input
+- id: runs-start
+  names:
+  - run-start
+  paths:
+  - /api/runs/start
+  - /api/v1/runs/start
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: run_input
+- id: runtime-tools-web-fetch
+  names:
+  - runtime-web-fetch
+  paths:
+  - /api/runtime-tools/web-fetch
+  - /api/v1/runtime-tools/web-fetch
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: runtime-tools-web-search
+  names:
+  - runtime-web-search
+  paths:
+  - /api/runtime-tools/web-search
+  - /api/v1/runtime-tools/web-search
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: scim-token
+  names:
+  - scim-token
+  paths:
+  - /api/scim/token
+  - /api/v1/scim/token
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: scim-token-rotate
+  names:
+  - scim-token-rotate
+  paths:
+  - /api/scim/token/rotate
+  - /api/v1/scim/token/rotate
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: scim-v2-Users
+  names:
+  - scim-users
+  paths:
+  - /api/scim/v2/Users
+  - /api/v1/scim/v2/Users
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: scim-v2-Users-user-id
+  names:
+  - scim-user-detail
+  paths:
+  - /api/scim/v2/Users/<uuid:user_id>
+  - /api/v1/scim/v2/Users/<uuid:user_id>
+  methods:
+  - DELETE
+  - GET
+  - PATCH
+  - PUT
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: system-state-overview
+  names:
+  - system-state-overview
+  paths:
+  - /api/system-state/overview
+  - /api/v1/system-state/overview
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: tasks
+  names:
+  - task-list
+  paths:
+  - /api/tasks
+  - /api/v1/tasks
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: tasks-task-id
+  names:
+  - task-detail
+  paths:
+  - /api/tasks/<uuid:task_id>
+  - /api/v1/tasks/<uuid:task_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: templates
+  names:
+  - template-list
+  paths:
+  - /api/templates
+  - /api/v1/templates
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: templates-template-id-clone
+  names:
+  - template-clone
+  paths:
+  - /api/templates/<uuid:template_id>/clone
+  - /api/v1/templates/<uuid:template_id>/clone
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: templates-template-id-ratings
+  names:
+  - template-rating
+  paths:
+  - /api/templates/<uuid:template_id>/ratings
+  - /api/v1/templates/<uuid:template_id>/ratings
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: templates-template-id-shares
+  names:
+  - template-share
+  paths:
+  - /api/templates/<uuid:template_id>/shares
+  - /api/v1/templates/<uuid:template_id>/shares
+  methods:
+  - DELETE
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: template.shared
+- id: templates-template-id-shares-organization-id
+  names:
+  - template-unshare
+  paths:
+  - /api/templates/<uuid:template_id>/shares/<uuid:organization_id>
+  - /api/v1/templates/<uuid:template_id>/shares/<uuid:organization_id>
+  methods:
+  - DELETE
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: template.unshared
+- id: templates-template-id-versions
+  names:
+  - template-versions
+  paths:
+  - /api/templates/<uuid:template_id>/versions
+  - /api/v1/templates/<uuid:template_id>/versions
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows
+  names:
+  - graph-list-create
+  paths:
+  - /api/v1/workflows
+  - /api/workflows
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-graph-id
+  names:
+  - graph-detail
+  paths:
+  - /api/v1/workflows/<uuid:graph_id>
+  - /api/workflows/<uuid:graph_id>
+  methods:
+  - DELETE
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-graph-id-memory-config
+  names:
+  - graph-memory-config
+  paths:
+  - /api/v1/workflows/<uuid:graph_id>/memory-config
+  - /api/workflows/<uuid:graph_id>/memory-config
+  methods:
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-graph-id-versions
+  names:
+  - graph-version-list-create
+  paths:
+  - /api/v1/workflows/<uuid:graph_id>/versions
+  - /api/workflows/<uuid:graph_id>/versions
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-graph-id-versions-version-id
+  names:
+  - graph-version-detail
+  paths:
+  - /api/v1/workflows/<uuid:graph_id>/versions/<uuid:version_id>
+  - /api/workflows/<uuid:graph_id>/versions/<uuid:version_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-graph-id-versions-latest
+  names:
+  - graph-version-latest
+  paths:
+  - /api/v1/workflows/<uuid:graph_id>/versions/latest
+  - /api/workflows/<uuid:graph_id>/versions/latest
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-external-workflows
+  names:
+  - graph-external-workflow-create
+  paths:
+  - /api/v1/workflows/external-workflows
+  - /api/workflows/external-workflows
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-validate
+  names:
+  - graph-validate
+  paths:
+  - /api/v1/workflows/validate
+  - /api/workflows/validate
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: workflows-versions
+  names:
+  - graph-version-create
+  paths:
+  - /api/v1/workflows/versions
+  - /api/workflows/versions
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: ws-ticket
+  names:
+  - ws-ticket
+  paths:
+  - /api/v1/ws-ticket
+  - /api/ws-ticket
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: ws-runs-run-id
+  names:
+  - run-websocket
+  paths:
+  - /ws/runs/<uuid:run_id>/
+  methods:
+  - WEBSOCKET
+  auth_surface: websocket_ticket
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403
+    insufficient_role: skip
+    correct_role: connects
+    malformed_payload: disconnect
+    rate_limited: connection_limit
+    oversized_request: skip
+  rate_limit_scope: websocket_ticket
+  request_size_limit: not_applicable

@@ -1148,6 +1148,57 @@ class ProcessedRuntimeIntent(models.Model):
         return f"ProcessedRuntimeIntent {self.intent_type} {self.intent_id}"
 
 
+class RuntimeIntentOutcome(models.Model):
+    """Backend-owned processing outcome for a runtime write intent."""
+
+    OUTCOME_CHOICES = [
+        ("processed", "Processed"),
+        ("duplicate", "Duplicate"),
+        ("ignored", "Ignored"),
+        ("invalid", "Invalid"),
+        ("dead_lettered", "Dead Lettered"),
+    ]
+
+    intent_id = models.UUIDField(primary_key=True)
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="runtime_intent_outcomes",
+        null=True,
+        blank=True,
+    )
+    intent_type = models.CharField(max_length=64, blank=True, default="")
+    attempt_id = models.CharField(max_length=64, blank=True, default="")
+    outcome = models.CharField(max_length=32, choices=OUTCOME_CHOICES)
+    reason = models.TextField(blank=True, default="")
+    error_class = models.CharField(max_length=128, blank=True, default="")
+    trace_id = models.CharField(max_length=32, blank=True, default="")
+    stream_message_id = models.CharField(max_length=64, blank=True, default="")
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_runtime_intent_outcomes",
+    )
+    acknowledgement_reason = models.TextField(blank=True, default="")
+    processed_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "runtime_intent_outcomes"
+        ordering = ["processed_at"]
+        indexes = [
+            models.Index(fields=["run", "processed_at"], name="rt_outcomes_run_time_idx"),
+            models.Index(fields=["outcome", "processed_at"], name="rt_outcomes_status_time_idx"),
+            models.Index(fields=["intent_type", "processed_at"], name="rt_outcomes_type_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"RuntimeIntentOutcome {self.outcome} {self.intent_id}"
+
+
 class ToolExecution(models.Model):
     """Backend-owned execution identity for one logical external tool operation."""
 
@@ -1535,6 +1586,49 @@ class AuditLog(models.Model):
         return f"AuditLog {self.action} {self.resource_type} {self.resource_id}"
 
 
+class ServiceMetricSample(models.Model):
+    """Backend-owned operational metric sample used for SLO windows."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    metric_name = models.CharField(max_length=128)
+    source = models.CharField(max_length=64)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_metric_samples",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_metric_samples",
+    )
+    value = models.FloatField(default=0.0)
+    unit = models.CharField(max_length=32, blank=True, default="")
+    dimensions = models.JSONField(default=dict, blank=True)
+    observed_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "service_metric_samples"
+        ordering = ["-observed_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["metric_name", "observed_at"], name="svc_metric_name_time_idx"),
+            models.Index(fields=["source", "observed_at"], name="svc_metric_source_time_idx"),
+            models.Index(
+                fields=["organization", "metric_name", "observed_at"],
+                name="svc_metric_org_name_time_idx",
+            ),
+            models.Index(fields=["run", "metric_name"], name="svc_metric_run_name_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.metric_name}={self.value} {self.unit}".strip()
+
+
 class TenantPolicy(models.Model):
     """Per-tenant guardrail policy for egress and LLM usage."""
 
@@ -1877,6 +1971,13 @@ class ApprovalTask(models.Model):
         on_delete=models.CASCADE,
         related_name="approval_tasks",
     )
+    task_lifecycle = models.ForeignKey(
+        "TaskLifecycleRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_tasks",
+    )
     node_id = models.CharField(max_length=64)
     assignee = models.ForeignKey(
         User,
@@ -1979,10 +2080,383 @@ class AgentRegistryEntry(models.Model):
         return f"{self.display_name} ({self.organization.name})"
 
 
+class TaskLifecycleRecord(models.Model):
+    """Backend-owned canonical lifecycle state for one logical task."""
+
+    STATUS_CHOICES = [
+        ("created", "Created"),
+        ("queued", "Queued"),
+        ("claimed", "Claimed"),
+        ("running", "Running"),
+        ("paused", "Paused"),
+        ("waiting_for_decision", "Waiting For Decision"),
+        ("retry_scheduled", "Retry Scheduled"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("dead_lettered", "Dead Lettered"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("normal", "Normal"),
+        ("high", "High"),
+        ("urgent", "Urgent"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="task_lifecycle_records",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="task_lifecycle_records",
+    )
+    source_node_id = models.CharField(max_length=255)
+    node_type = models.CharField(max_length=64, blank=True, default="")
+    external_key = models.CharField(max_length=255)
+    title = models.CharField(max_length=255)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="created")
+    priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES, default="normal")
+    summary = models.TextField(blank=True, default="")
+    current_attempt = models.PositiveIntegerField(default=1)
+    current_node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lifecycle_tasks",
+    )
+    current_decision = models.ForeignKey(
+        "DecisionRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lifecycle_tasks",
+    )
+    retry_metadata = models.JSONField(default=dict, blank=True)
+    recovery_options = models.JSONField(default=list, blank=True)
+    unresolved_error = models.TextField(blank=True, default="")
+    stale_event_count = models.PositiveIntegerField(default=0)
+    late_event_count = models.PositiveIntegerField(default=0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    last_transition_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "task_lifecycle_records"
+        ordering = ["-updated_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "external_key"],
+                name="task_lifecycle_org_external_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="task_life_org_status_idx"),
+            models.Index(fields=["run", "status"], name="task_life_run_status_idx"),
+            models.Index(fields=["run", "source_node_id"], name="task_life_run_node_idx"),
+            models.Index(fields=["last_transition_at"], name="task_life_transition_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class TaskAttemptRecord(models.Model):
+    """Backend-owned attempt identity for a lifecycle task."""
+
+    STATUS_CHOICES = [
+        ("created", "Created"),
+        ("running", "Running"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("retry_scheduled", "Retry Scheduled"),
+        ("dead_lettered", "Dead Lettered"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lifecycle_task = models.ForeignKey(
+        TaskLifecycleRecord,
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="task_attempts",
+    )
+    node_run = models.ForeignKey(
+        NodeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_attempts",
+    )
+    attempt_number = models.PositiveIntegerField(default=1)
+    parent_attempt = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retry_attempts",
+    )
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    owner_component = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="created")
+    retry_reason = models.TextField(blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "task_attempt_records"
+        ordering = ["attempt_number", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["lifecycle_task", "attempt_number"],
+                name="task_attempt_lifecycle_number_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "attempt_number"], name="task_attempt_run_number_idx"),
+            models.Index(fields=["status", "updated_at"], name="task_attempt_status_idx"),
+            models.Index(fields=["idempotency_key"], name="task_attempt_idem_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.lifecycle_task_id} attempt {self.attempt_number}"
+
+
+class TaskLifecycleEvent(models.Model):
+    """Immutable task lifecycle transition event."""
+
+    OUTCOME_CHOICES = [
+        ("accepted", "Accepted"),
+        ("duplicate", "Duplicate"),
+        ("invalid", "Invalid"),
+        ("stale", "Stale"),
+        ("late", "Late"),
+        ("out_of_order", "Out Of Order"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="task_lifecycle_events",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="task_lifecycle_events",
+    )
+    lifecycle_task = models.ForeignKey(
+        TaskLifecycleRecord,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    idempotency_key = models.CharField(max_length=255)
+    source = models.CharField(max_length=64, blank=True, default="")
+    event_type = models.CharField(max_length=64)
+    from_status = models.CharField(max_length=32, blank=True, default="")
+    to_status = models.CharField(max_length=32, blank=True, default="")
+    attempt_number = models.PositiveIntegerField(default=1)
+    outcome = models.CharField(max_length=32, choices=OUTCOME_CHOICES)
+    reason = models.TextField(blank=True, default="")
+    payload = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "task_lifecycle_events"
+        ordering = ["occurred_at", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "idempotency_key"],
+                name="task_lifecycle_event_org_idem_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "occurred_at"], name="task_life_evt_run_time_idx"),
+            models.Index(
+                fields=["lifecycle_task", "occurred_at"], name="task_life_evt_task_time_idx"
+            ),
+            models.Index(fields=["outcome", "occurred_at"], name="task_life_evt_outcome_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} {self.outcome}"
+
+
+class TaskDeadLetterRecord(models.Model):
+    """Operator-visible terminal diagnostics for a lost or poison task."""
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("acknowledged", "Acknowledged"),
+        ("recovered", "Recovered"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lifecycle_task = models.ForeignKey(
+        TaskLifecycleRecord,
+        on_delete=models.CASCADE,
+        related_name="dead_letters",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="task_dead_letters",
+    )
+    runtime_intent_outcome = models.ForeignKey(
+        RuntimeIntentOutcome,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_dead_letters",
+    )
+    intent_id = models.UUIDField(null=True, blank=True)
+    stream_message_id = models.CharField(max_length=64, blank=True, default="")
+    reason = models.TextField()
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    recovery_options = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="active")
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_task_dead_letters",
+    )
+    acknowledgement_reason = models.TextField(blank=True, default="")
+    recovered_at = models.DateTimeField(null=True, blank=True)
+    recovered_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recovered_task_dead_letters",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "task_dead_letter_records"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["run", "status"], name="task_dl_run_status_idx"),
+            models.Index(fields=["status", "created_at"], name="task_dl_status_time_idx"),
+            models.Index(fields=["intent_id"], name="task_dl_intent_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.lifecycle_task_id} dead-lettered"
+
+
+class RetryOperation(models.Model):
+    """Backend-owned visible retry budget for a retryable operation."""
+
+    RETRY_CLASS_CHOICES = [
+        ("transport", "Transport"),
+        ("backend_rejection", "Backend Rejection"),
+        ("llm_backpressure", "LLM Backpressure"),
+        ("human_pending", "Human Pending"),
+        ("poison_message", "Poison Message"),
+        ("duplicate_intent", "Duplicate Intent"),
+    ]
+    STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("running", "Running"),
+        ("succeeded", "Succeeded"),
+        ("failed", "Failed"),
+        ("exhausted", "Exhausted"),
+        ("dead_lettered", "Dead Lettered"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="retry_operations",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="retry_operations",
+    )
+    lifecycle_task = models.ForeignKey(
+        TaskLifecycleRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retry_operations",
+    )
+    attempt = models.ForeignKey(
+        TaskAttemptRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retry_operations",
+    )
+    operation_type = models.CharField(max_length=64)
+    idempotency_key = models.CharField(max_length=255)
+    attempt_number = models.PositiveIntegerField(default=1)
+    max_attempts = models.PositiveIntegerField(default=1)
+    retry_delay_ms = models.PositiveIntegerField(default=0)
+    retry_reason = models.TextField(blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    owning_component = models.CharField(max_length=64)
+    next_scheduled_at = models.DateTimeField(null=True, blank=True)
+    terminal_fallback = models.CharField(max_length=64, blank=True, default="")
+    retry_class = models.CharField(max_length=32, choices=RETRY_CLASS_CHOICES)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="scheduled")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "retry_operations"
+        ordering = ["-updated_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "idempotency_key"],
+                name="retry_operations_org_idem_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "status"], name="retry_ops_run_status_idx"),
+            models.Index(fields=["retry_class", "status"], name="retry_ops_class_status_idx"),
+            models.Index(fields=["next_scheduled_at"], name="retry_ops_next_sched_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.operation_type} attempt {self.attempt_number}/{self.max_attempts}"
+
+
 class TaskRecord(models.Model):
     """Projected unit of work attached to an execution and agent."""
 
     STATUS_CHOICES = [
+        ("created", "Created"),
+        ("queued", "Queued"),
+        ("claimed", "Claimed"),
+        ("paused", "Paused"),
+        ("waiting_for_decision", "Waiting For Decision"),
+        ("retry_scheduled", "Retry Scheduled"),
+        ("completed", "Completed"),
+        ("dead_lettered", "Dead Lettered"),
+        ("cancelled", "Cancelled"),
         ("pending", "Pending"),
         ("running", "Running"),
         ("waiting", "Waiting"),
@@ -2009,6 +2483,13 @@ class TaskRecord(models.Model):
         on_delete=models.CASCADE,
         related_name="task_records",
     )
+    lifecycle_task = models.ForeignKey(
+        TaskLifecycleRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_records",
+    )
     agent = models.ForeignKey(
         "AgentRegistryEntry",
         on_delete=models.SET_NULL,
@@ -2019,7 +2500,7 @@ class TaskRecord(models.Model):
     source_node_id = models.CharField(max_length=255, blank=True, default="")
     external_key = models.CharField(max_length=255)
     title = models.CharField(max_length=255)
-    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="created")
     priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES, default="normal")
     summary = models.TextField(blank=True, default="")
     current_step = models.ForeignKey(
@@ -2092,6 +2573,13 @@ class DecisionRecord(models.Model):
     )
     task = models.ForeignKey(
         "TaskRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decision_records",
+    )
+    task_lifecycle = models.ForeignKey(
+        TaskLifecycleRecord,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

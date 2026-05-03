@@ -19,6 +19,7 @@ class RequestMetricsMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         started_at = time.perf_counter()
+        method = request.method or ""
         timeout_threshold_ms = int(getattr(settings, "BACKEND_WATCHDOG_REQUEST_TIMEOUT_MS", 5000))
         try:
             response = self.get_response(request)
@@ -29,6 +30,8 @@ class RequestMetricsMiddleware:
                 duration_ms=duration_ms,
                 timeout_like=duration_ms >= timeout_threshold_ms,
                 timeout_threshold_ms=timeout_threshold_ms,
+                path=request.path_info,
+                method=method,
             )
             raise
 
@@ -38,5 +41,7 @@ class RequestMetricsMiddleware:
             duration_ms=duration_ms,
             timeout_like=duration_ms >= timeout_threshold_ms,
             timeout_threshold_ms=timeout_threshold_ms,
+            path=request.path_info,
+            method=method,
         )
         return response

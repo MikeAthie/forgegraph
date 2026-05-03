@@ -13,6 +13,13 @@ real ForgeGraph control plane.
 - `llm-degradation-unavailable`
 - `failure-injection-engine-stop`
 - `failure-injection-redis-stop`
+- `synthetic-no-llm-500`
+- `controlled-llm-latency`
+- `real-provider-capacity`
+
+Capacity tiers and Phase 4 acceptance rules are defined in
+[scalability-program.md](scalability-program.md). The `production-scale` tier
+is not a claim until the 500+ evidence package passes.
 
 ## Example
 
@@ -28,6 +35,23 @@ python scripts/stress_runner.py \
   --concurrency 5 10 20 50 \
   --runs 10 \
   --allow-service-disruption
+```
+
+Tier-based examples can omit `--concurrency`:
+
+For Phase 4 scenarios, set `--runs` to at least the requested concurrency. The
+harness rejects lower run counts to avoid false capacity evidence.
+
+```bash
+python scripts/stress_runner.py \
+  --base-url http://localhost:8000 \
+  --email admin@example.com \
+  --password admin-password \
+  --metrics-email admin@example.com \
+  --metrics-password admin-password \
+  --graph-version-id 00000000-0000-0000-0000-000000000000 \
+  --scenario synthetic-no-llm-500 \
+  --runs 500
 ```
 
 Artifacts are written to `logs/stress/<timestamp>/`.

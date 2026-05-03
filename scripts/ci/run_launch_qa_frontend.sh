@@ -12,7 +12,11 @@ require_command npx
 
 log_section "Launch QA frontend"
 npx jest --runInBand \
-  __tests__/components/graph-editor/GraphEditor.test.tsx \
-  __tests__/components/graph-editor/wizard/AgentWizard.test.tsx \
-  __tests__/components/graph-editor/NodeConfigDialog.test.tsx
-
+  __tests__/unit/pages/operations.test.tsx \
+  __tests__/unit/pages/departments.test.tsx \
+  __tests__/unit/pages/memory.test.tsx \
+  __tests__/unit/pages/admin-operations.test.tsx \
+  __tests__/unit/pages/admin-audit-logs.test.tsx \
+  __tests__/unit/pages/admin-billing.test.tsx \
+  __tests__/unit/components/OsShell.test.tsx \
+  __tests__/unit/components/ProtectedRoute.test.tsx

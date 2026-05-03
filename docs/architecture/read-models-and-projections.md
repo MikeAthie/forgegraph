@@ -18,7 +18,7 @@ Rules:
 - prefer cached summaries over frontend-side aggregation
 - expose canonical reads over REST and push live deltas over WebSockets
 - keep event ingestion idempotent
-- design projections for 500+ agents, high fan-out, and summary-first UI delivery
+- design projections for 500+ agents, high fan-out, and summary-first UI delivery, while treating 500+ as a measured production-scale gate rather than a current claim
 
 Snapshot-backed resume state also belongs in backend-owned projections and persistence, not in long-lived engine process state.
 

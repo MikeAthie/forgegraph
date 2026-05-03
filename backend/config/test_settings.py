@@ -20,6 +20,11 @@ from .settings import *  # noqa: F401,F403
 # backend-intent-only unless explicitly overridden.
 ENGINE_EVENT_STATE_MUTATION_ENABLED = True
 
+# Backend tests must not inherit the live-stack queue mode from service-backed
+# orchestration. Tests that exercise queued dispatch opt in with
+# @override_settings(RUN_QUEUE_ENABLED=True).
+RUN_QUEUE_ENABLED = False
+
 _REST_FRAMEWORK = cast(dict[str, Any], globals().get("REST_FRAMEWORK", {}))
 _DEFAULT_THROTTLE_RATES = cast(
     dict[str, str],
@@ -30,6 +35,8 @@ REST_FRAMEWORK = {
     **_REST_FRAMEWORK,
     "DEFAULT_THROTTLE_RATES": {
         **_DEFAULT_THROTTLE_RATES,
+        "anon": "10000/min",
+        "user": "10000/min",
         "auth_register": "10000/min",
         "auth_login": "10000/min",
         "auth_refresh": "10000/min",

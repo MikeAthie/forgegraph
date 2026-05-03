@@ -568,7 +568,7 @@ test.describe("Frontend Control Surface", () => {
       organizationId: fixture.organizationId,
     });
 
-    await expect(page.getByRole("heading", { name: /structured execution trace/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible();
     await expect(page.getByText(/failure point/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /write_ticket failed tool/i })).toBeVisible();
     await expect(page.getByText(/execution requires intervention here/i)).toBeVisible();

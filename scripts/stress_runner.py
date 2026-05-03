@@ -31,6 +31,47 @@ from typing import Any
 
 TERMINAL_RUN_STATUSES = {"succeeded", "failed", "canceled"}
 DEFAULT_CONCURRENCY_LEVELS = [5, 10, 20, 50]
+CAPACITY_TIERS: dict[str, dict[str, Any]] = {
+    "alpha": {
+        "target": "5-10 concurrent agents",
+        "max_concurrency": 10,
+        "meaning": "internal/customer design partners only",
+    },
+    "private-beta": {
+        "target": "25-50 concurrent agents",
+        "max_concurrency": 50,
+        "meaning": "limited external users",
+    },
+    "production-v1": {
+        "target": "100 concurrent agents",
+        "max_concurrency": 100,
+        "meaning": "reliable multi-org operation",
+    },
+    "production-scale": {
+        "target": "500+ concurrent agents",
+        "max_concurrency": 500,
+        "meaning": "proven high-scale company OS; roadmap until measured",
+    },
+}
+PHASE4_SCENARIOS = {
+    "synthetic-no-llm-500",
+    "controlled-llm-latency",
+    "real-provider-capacity",
+}
+SCENARIO_CHOICES = [
+    "endpoint-saturation",
+    "engine-concurrency",
+    "redis-saturation",
+    "llm-degradation-delay",
+    "llm-degradation-timeout",
+    "llm-degradation-unavailable",
+    "failure-injection-engine-stop",
+    "failure-injection-redis-stop",
+    "synthetic-no-llm-500",
+    "controlled-llm-latency",
+    "real-provider-capacity",
+    "all",
+]
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "logs" / "stress"
 
@@ -78,6 +119,38 @@ def deep_get(payload: dict[str, Any] | None, *path: str, default: Any = None) ->
             return default
         current = current[part]
     return current
+
+
+def metric_int(payload: dict[str, Any] | None, *path: str) -> int | None:
+    value = deep_get(payload, *path)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def metric_float(payload: dict[str, Any] | None, *path: str) -> float | None:
+    value = deep_get(payload, *path)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def metric_delta(
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    *path: str,
+) -> int | None:
+    before_value = metric_int(before, *path)
+    after_value = metric_int(after, *path)
+    if before_value is None or after_value is None:
+        return None
+    return max(after_value - before_value, 0)
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -130,6 +203,16 @@ class ScenarioMetrics:
     retry_count: int
     duplicate_node_execution_count: int
     error_types: dict[str, int]
+    max_queue_backlog: int | None
+    max_runtime_backlog: int | None
+    max_runtime_lag: int | None
+    backend_api_latency_p95_ms: float | None
+    websocket_send_latency_p95_ms: float | None
+    backend_api_latency_within_target: bool | None
+    websocket_send_latency_within_target: bool | None
+    websocket_messages_dropped_delta: int | None
+    runtime_dead_letter_delta: int | None
+    queue_bounded: bool | None
 
 
 @dataclass
@@ -557,11 +640,42 @@ class StressHarness:
             self.docker.start(failure_plan.service)
             notes.append(f"restarted {failure_plan.service} after controlled stop")
 
-    def compute_metrics(self, records: list[RunRecord]) -> ScenarioMetrics:
+    def compute_metrics(
+        self,
+        records: list[RunRecord],
+        *,
+        metrics_before: dict[str, Any],
+        metrics_after: dict[str, Any],
+    ) -> ScenarioMetrics:
         latencies = [float(record.latency_ms) for record in records if record.latency_ms >= 0]
         success_count = sum(1 for record in records if record.status == "success")
         failed_count = sum(1 for record in records if record.status != "success")
         error_types = Counter(record.error_type for record in records if record.error_type)
+        queue_backlogs = [
+            int(record.queue_backlog_size)
+            for record in records
+            if record.queue_backlog_size is not None
+        ]
+        runtime_backlogs = [
+            int(record.redis_backlog)
+            for record in records
+            if record.redis_backlog is not None
+        ]
+        runtime_lags = [
+            int(record.redis_lag)
+            for record in records
+            if record.redis_lag is not None
+        ]
+        queue_max_depth_target = metric_int(metrics_after, "slo", "queue_max_depth_target")
+        max_queue_backlog = max(queue_backlogs, default=None)
+        api_p95 = metric_float(metrics_after, "api", "latency_ms_p95")
+        api_p95_target = metric_float(metrics_after, "slo", "api_p95_latency_ms_target")
+        ws_send_p95 = metric_float(metrics_after, "websocket", "send_latency_ms_p95")
+        ws_send_p95_target = metric_float(
+            metrics_after,
+            "slo",
+            "websocket_send_p95_latency_ms_target",
+        )
         return ScenarioMetrics(
             total_runs=len(records),
             successful_runs=success_count,
@@ -575,6 +689,36 @@ class StressHarness:
                 1 for record in records if record.duplicate_node_execution
             ),
             error_types=dict(error_types),
+            max_queue_backlog=max_queue_backlog,
+            max_runtime_backlog=max(runtime_backlogs, default=None),
+            max_runtime_lag=max(runtime_lags, default=None),
+            backend_api_latency_p95_ms=api_p95,
+            websocket_send_latency_p95_ms=ws_send_p95,
+            backend_api_latency_within_target=(
+                None if api_p95 is None or api_p95_target is None else api_p95 <= api_p95_target
+            ),
+            websocket_send_latency_within_target=(
+                None
+                if ws_send_p95 is None or ws_send_p95_target is None
+                else ws_send_p95 <= ws_send_p95_target
+            ),
+            websocket_messages_dropped_delta=metric_delta(
+                metrics_before,
+                metrics_after,
+                "websocket",
+                "messages_dropped_total",
+            ),
+            runtime_dead_letter_delta=metric_delta(
+                metrics_before,
+                metrics_after,
+                "runtime_transport",
+                "dead_lettered_total",
+            ),
+            queue_bounded=(
+                None
+                if max_queue_backlog is None or queue_max_depth_target is None
+                else max_queue_backlog <= queue_max_depth_target
+            ),
         )
 
     def analyze_scenario(
@@ -653,6 +797,18 @@ class StressHarness:
         started_at = iso_now()
         self._started_run_ids = []
         notes: list[str] = []
+        if scenario == "synthetic-no-llm-500":
+            notes.append(
+                "Use only with an output-only deterministic graph; this separates engine/backend throughput from LLM capacity."
+            )
+        elif scenario == "controlled-llm-latency":
+            notes.append(
+                "Uses fake/chaos LLM latency and queue controls to measure backpressure separately from scheduler throughput."
+            )
+        elif scenario == "real-provider-capacity":
+            notes.append(
+                "Cost-bearing provider scenario; use realistic model, cost accounting, memory writes, and WebSocket observers."
+            )
         metrics_before = self.fetch_metrics_summary()
 
         injector: threading.Thread | None = None
@@ -688,7 +844,11 @@ class StressHarness:
             notes.extend(f"failure injector error: {message}" for message in injector_error)
 
         metrics_after = self.fetch_metrics_summary()
-        metrics = self.compute_metrics(records)
+        metrics = self.compute_metrics(
+            records,
+            metrics_before=metrics_before,
+            metrics_after=metrics_after,
+        )
         analysis = self.analyze_scenario(
             scenario=scenario,
             concurrency_levels=concurrency_levels,
@@ -723,18 +883,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--graph-id", help="Resolve the latest graph version from this graph id")
     parser.add_argument(
         "--scenario",
-        choices=[
-            "endpoint-saturation",
-            "engine-concurrency",
-            "redis-saturation",
-            "llm-degradation-delay",
-            "llm-degradation-timeout",
-            "llm-degradation-unavailable",
-            "failure-injection-engine-stop",
-            "failure-injection-redis-stop",
-            "all",
-        ],
+        choices=SCENARIO_CHOICES,
         default="all",
+    )
+    parser.add_argument(
+        "--capacity-tier",
+        choices=sorted(CAPACITY_TIERS),
+        help="Use the tier target as default concurrency when --concurrency is omitted.",
     )
     parser.add_argument("--concurrency", nargs="*", type=int, default=None)
     parser.add_argument("--runs", type=int, default=10, help="Runs per concurrency level")
@@ -751,7 +906,18 @@ def parse_args() -> argparse.Namespace:
         help="Literal JSON object passed as input_json to each run",
     )
     parser.add_argument("--allow-service-disruption", action="store_true")
+    parser.add_argument(
+        "--allow-real-provider",
+        action="store_true",
+        help="Required for real-provider-capacity so cost-bearing provider calls are explicit.",
+    )
     parser.add_argument("--llm-chaos-delay-ms", type=int, default=5000)
+    parser.add_argument("--llm-mock-delay-ms", type=int, default=1500)
+    parser.add_argument("--llm-mock-max-in-flight", type=int, default=4)
+    parser.add_argument("--llm-mock-error-mode", default="off")
+    parser.add_argument("--llm-max-concurrency", type=int, default=4)
+    parser.add_argument("--llm-max-queue-size", type=int, default=32)
+    parser.add_argument("--llm-queue-timeout-ms", type=int, default=5000)
     parser.add_argument("--failure-trigger-delay-seconds", type=float, default=5.0)
     parser.add_argument("--failure-restart-after-seconds", type=float, default=10.0)
     parser.add_argument("--docker-compose-file", default=str(ROOT_DIR / "docker-compose.yml"))
@@ -767,58 +933,91 @@ def resolve_graph_version_id(harness: StressHarness, args: argparse.Namespace) -
     raise SystemExit("either --graph-version-id or --graph-id is required")
 
 
+def resolve_concurrency_levels(args: argparse.Namespace, *, scenario: str) -> list[int]:
+    if args.concurrency:
+        return list(args.concurrency)
+    if scenario == "synthetic-no-llm-500":
+        return [CAPACITY_TIERS["production-scale"]["max_concurrency"]]
+    if args.capacity_tier:
+        return [int(CAPACITY_TIERS[args.capacity_tier]["max_concurrency"])]
+    return DEFAULT_CONCURRENCY_LEVELS
+
+
+def llm_backpressure_env(args: argparse.Namespace, *, mode: str, delay_ms: int) -> dict[str, str]:
+    return {
+        "FORGEGRAPH_LLM_CHAOS_MODE": mode,
+        "FORGEGRAPH_LLM_CHAOS_DELAY_MS": str(delay_ms),
+        "FORGEGRAPH_LLM_CHAOS_ERROR_MESSAGE": f"simulated llm {mode}",
+        "ENGINE_LLM_MAX_CONCURRENCY": str(args.llm_max_concurrency),
+        "ENGINE_LLM_MAX_QUEUE_SIZE": str(args.llm_max_queue_size),
+        "ENGINE_LLM_QUEUE_TIMEOUT_MS": str(args.llm_queue_timeout_ms),
+        "PLAYWRIGHT_LLM_MOCK_DELAY_MS": str(args.llm_mock_delay_ms),
+        "PLAYWRIGHT_LLM_MOCK_MAX_IN_FLIGHT": str(args.llm_mock_max_in_flight),
+        "PLAYWRIGHT_LLM_MOCK_ERROR_MODE": str(args.llm_mock_error_mode),
+    }
+
+
+def require_phase4_runs_cover_concurrency(
+    args: argparse.Namespace,
+    *,
+    scenario: str,
+    concurrency_levels: list[int],
+) -> None:
+    required_runs = max(concurrency_levels)
+    if args.runs >= required_runs:
+        return
+    raise SystemExit(
+        f"{scenario} requires --runs >= {required_runs} so the measured run count "
+        "can actually exercise the requested concurrency."
+    )
+
+
 def build_scenario_plan(args: argparse.Namespace) -> list[tuple[str, list[int], int, FailurePlan | None, dict[str, str] | None]]:
-    concurrency_levels = args.concurrency or DEFAULT_CONCURRENCY_LEVELS
     scenarios: list[tuple[str, list[int], int, FailurePlan | None, dict[str, str] | None]] = []
     if args.scenario in {"endpoint-saturation", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="endpoint-saturation")
         scenarios.append(("endpoint-saturation", concurrency_levels, args.runs, None, None))
     if args.scenario in {"engine-concurrency", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="engine-concurrency")
         scenarios.append(("engine-concurrency", concurrency_levels, args.runs, None, None))
     if args.scenario in {"redis-saturation", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="redis-saturation")
         scenarios.append(("redis-saturation", concurrency_levels, args.runs, None, None))
     if args.scenario in {"llm-degradation-delay", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="llm-degradation-delay")
         scenarios.append(
             (
                 "llm-degradation-delay",
                 concurrency_levels,
                 args.runs,
                 None,
-                {
-                    "FORGEGRAPH_LLM_CHAOS_MODE": "delay",
-                    "FORGEGRAPH_LLM_CHAOS_DELAY_MS": str(args.llm_chaos_delay_ms),
-                    "FORGEGRAPH_LLM_CHAOS_ERROR_MESSAGE": "simulated llm delay",
-                },
+                llm_backpressure_env(args, mode="delay", delay_ms=args.llm_chaos_delay_ms),
             )
         )
     if args.scenario in {"llm-degradation-timeout", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="llm-degradation-timeout")
         scenarios.append(
             (
                 "llm-degradation-timeout",
                 concurrency_levels,
                 args.runs,
                 None,
-                {
-                    "FORGEGRAPH_LLM_CHAOS_MODE": "timeout",
-                    "FORGEGRAPH_LLM_CHAOS_DELAY_MS": str(args.llm_chaos_delay_ms),
-                    "FORGEGRAPH_LLM_CHAOS_ERROR_MESSAGE": "simulated llm timeout",
-                },
+                llm_backpressure_env(args, mode="timeout", delay_ms=args.llm_chaos_delay_ms),
             )
         )
     if args.scenario in {"llm-degradation-unavailable", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="llm-degradation-unavailable")
         scenarios.append(
             (
                 "llm-degradation-unavailable",
                 concurrency_levels,
                 args.runs,
                 None,
-                {
-                    "FORGEGRAPH_LLM_CHAOS_MODE": "unavailable",
-                    "FORGEGRAPH_LLM_CHAOS_DELAY_MS": "0",
-                    "FORGEGRAPH_LLM_CHAOS_ERROR_MESSAGE": "simulated llm unavailable",
-                },
+                llm_backpressure_env(args, mode="unavailable", delay_ms=0),
             )
         )
     if args.scenario in {"failure-injection-engine-stop", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="failure-injection-engine-stop")
         scenarios.append(
             (
                 "failure-injection-engine-stop",
@@ -834,6 +1033,7 @@ def build_scenario_plan(args: argparse.Namespace) -> list[tuple[str, list[int], 
             )
         )
     if args.scenario in {"failure-injection-redis-stop", "all"}:
+        concurrency_levels = resolve_concurrency_levels(args, scenario="failure-injection-redis-stop")
         scenarios.append(
             (
                 "failure-injection-redis-stop",
@@ -848,6 +1048,54 @@ def build_scenario_plan(args: argparse.Namespace) -> list[tuple[str, list[int], 
                 None,
             )
         )
+    if args.scenario == "synthetic-no-llm-500":
+        concurrency_levels = resolve_concurrency_levels(args, scenario="synthetic-no-llm-500")
+        require_phase4_runs_cover_concurrency(
+            args,
+            scenario="synthetic-no-llm-500",
+            concurrency_levels=concurrency_levels,
+        )
+        scenarios.append(
+            (
+                "synthetic-no-llm-500",
+                concurrency_levels,
+                args.runs,
+                None,
+                None,
+            )
+        )
+    if args.scenario == "controlled-llm-latency":
+        concurrency_levels = resolve_concurrency_levels(args, scenario="controlled-llm-latency")
+        require_phase4_runs_cover_concurrency(
+            args,
+            scenario="controlled-llm-latency",
+            concurrency_levels=concurrency_levels,
+        )
+        scenarios.append(
+            (
+                "controlled-llm-latency",
+                concurrency_levels,
+                args.runs,
+                None,
+                llm_backpressure_env(args, mode="delay", delay_ms=args.llm_mock_delay_ms),
+            )
+        )
+    if args.scenario == "real-provider-capacity":
+        concurrency_levels = resolve_concurrency_levels(args, scenario="real-provider-capacity")
+        require_phase4_runs_cover_concurrency(
+            args,
+            scenario="real-provider-capacity",
+            concurrency_levels=concurrency_levels,
+        )
+        scenarios.append(
+            (
+                "real-provider-capacity",
+                concurrency_levels,
+                args.runs,
+                None,
+                None,
+            )
+        )
     return scenarios
 
 
@@ -856,6 +1104,10 @@ def require_service_disruption_allowed(args: argparse.Namespace, scenarios: list
     if needs_disruption and not args.allow_service_disruption:
         raise SystemExit(
             "--allow-service-disruption is required for LLM degradation or failure-injection scenarios"
+        )
+    if any(scenario == "real-provider-capacity" for scenario, *_ in scenarios) and not args.allow_real_provider:
+        raise SystemExit(
+            "--allow-real-provider is required for real-provider-capacity because it may incur provider cost"
         )
 
 
@@ -870,6 +1122,9 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    scenarios = build_scenario_plan(args)
+    require_service_disruption_allowed(args, scenarios)
 
     client = HttpJsonClient(args.base_url)
     client.login(args.email, args.password)
@@ -897,14 +1152,18 @@ def main() -> int:
     )
     harness.graph_version_id = resolve_graph_version_id(harness, args)
 
-    scenarios = build_scenario_plan(args)
-    require_service_disruption_allowed(args, scenarios)
-
     manifest: dict[str, Any] = {
         "started_at": iso_now(),
         "base_url": args.base_url,
         "graph_version_id": harness.graph_version_id,
         "output_dir": str(output_dir),
+        "capacity_tier": args.capacity_tier,
+        "capacity_tiers": CAPACITY_TIERS,
+        "phase4_notice": (
+            "Synthetic and CI load smokes are regression evidence only. "
+            "Production-scale 500+ must not be marketed until the production-scale "
+            "tier passes with real acceptance metrics."
+        ),
         "results": [],
     }
 
