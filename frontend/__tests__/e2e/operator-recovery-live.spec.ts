@@ -41,8 +41,7 @@ test.describe("Operator recovery live flow", () => {
 
     const forceFailResponse = page.waitForResponse(
       (response) =>
-        response.url().includes(`/api/operator/runs/${runId}/force-fail`) &&
-        response.request().method() === "POST",
+        response.url().includes(`/api/operator/runs/${runId}/force-fail`) && response.request().method() === "POST",
     );
     await page.getByRole("button", { name: /force fail/i }).click();
     expect((await forceFailResponse).ok()).toBeTruthy();
@@ -51,8 +50,14 @@ test.describe("Operator recovery live flow", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(operatorState.ok()).toBeTruthy();
-    const body = (await operatorState.json()) as { data?: { run?: { status?: string }; tasks?: Array<{ status: string }> } };
+    const body = (await operatorState.json()) as {
+      data?: { run?: { status?: string }; tasks?: Array<{ status: string }> };
+    };
     expect(body.data?.run?.status).toBe("failed");
-    expect((body.data?.tasks ?? []).every((task) => ["failed", "completed", "dead_lettered", "cancelled"].includes(task.status))).toBeTruthy();
+    expect(
+      (body.data?.tasks ?? []).every((task) =>
+        ["failed", "completed", "dead_lettered", "cancelled"].includes(task.status),
+      ),
+    ).toBeTruthy();
   });
 });

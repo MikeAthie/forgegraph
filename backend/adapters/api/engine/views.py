@@ -130,7 +130,7 @@ def _verify_engine_request(request: Request) -> Response | None:
         timestamp_ms=timestamp_header,
         signature=signature_header,
         body=request.body or b"",
-        method=request.method,
+        method=request.method or "",
         path=request.path,
     )
     if ok:
@@ -390,9 +390,7 @@ class EngineRuntimeIntentOutcomeView(APIView):
             return auth_error
 
         outcome = (
-            RuntimeIntentOutcome.objects.filter(intent_id=intent_id)
-            .select_related("run")
-            .first()
+            RuntimeIntentOutcome.objects.filter(intent_id=intent_id).select_related("run").first()
         )
         if outcome is None:
             return error_response(

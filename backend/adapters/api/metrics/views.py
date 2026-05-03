@@ -144,9 +144,7 @@ class MetricsSummaryView(APIView):
                 "messages_sent_total": websocket_metrics.messages_sent_total,
                 "messages_dropped_total": websocket_metrics.messages_dropped_total,
                 "messages_filtered_total": websocket_metrics.messages_filtered_total,
-                "slow_client_disconnects_total": (
-                    websocket_metrics.slow_client_disconnects_total
-                ),
+                "slow_client_disconnects_total": (websocket_metrics.slow_client_disconnects_total),
                 "message_rate_per_minute": websocket_metrics.message_rate_per_minute,
                 "send_latency_ms_p50": websocket_metrics.send_latency_ms_p50,
                 "send_latency_ms_p95": websocket_metrics.send_latency_ms_p95,

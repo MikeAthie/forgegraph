@@ -166,9 +166,7 @@ export function toTaskVMFromRecord(record: TaskRecord): TaskVM {
     currentDecisionId: record.current_decision_id,
     lifecycleTaskId: record.lifecycle_task_id ?? null,
     requiresApproval:
-      Boolean(record.current_decision_id) ||
-      record.status === "waiting_for_decision" ||
-      record.status === "paused",
+      Boolean(record.current_decision_id) || record.status === "waiting_for_decision" || record.status === "paused",
     retryMetadata: record.retry_metadata ?? null,
     latestRetry: record.latest_retry ?? null,
     deadLetter: record.dead_letter ?? null,

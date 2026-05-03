@@ -4,7 +4,7 @@ import json
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -29,7 +29,10 @@ EXCLUDED_ROUTE_PARTS = ("/health/", "/ready/", "/schema", "/docs", "/redoc")
 
 
 def _load_matrix() -> dict[str, Any]:
-    return yaml.safe_load(MATRIX_PATH.read_text(encoding="utf-8"))
+    matrix = yaml.safe_load(MATRIX_PATH.read_text(encoding="utf-8"))
+    if not isinstance(matrix, dict):
+        raise AssertionError("Security matrix must be a mapping.")
+    return cast(dict[str, Any], matrix)
 
 
 def _iter_api_routes() -> set[tuple[str, str]]:
@@ -83,7 +86,9 @@ def _routes_by_surface(surface: str) -> list[tuple[str, str]]:
     for route in matrix["routes"]:
         if route["auth_surface"] != surface:
             continue
-        method = next((candidate for candidate in route["methods"] if candidate != "WEBSOCKET"), None)
+        method = next(
+            (candidate for candidate in route["methods"] if candidate != "WEBSOCKET"), None
+        )
         if method is None:
             continue
         result.append((route["paths"][0].rstrip("/"), method))
@@ -130,18 +135,19 @@ def _generic_request(
     **headers: str,
 ):
     concrete_path = _concrete_path(path)
-    response = client.generic(
+    generic = cast(Any, client.generic)
+    response = generic(
         method,
         concrete_path,
-        data=body if method in {"POST", "PUT", "PATCH"} else None,
+        data=body if method in {"POST", "PUT", "PATCH"} else "",
         content_type="application/json",
         **headers,
     )
     if response.status_code in {301, 308} and not concrete_path.endswith("/"):
-        response = client.generic(
+        response = generic(
             method,
             concrete_path + "/",
-            data=body if method in {"POST", "PUT", "PATCH"} else None,
+            data=body if method in {"POST", "PUT", "PATCH"} else "",
             content_type="application/json",
             **headers,
         )
@@ -208,7 +214,7 @@ def test_engine_signed_matrix_routes_reject_missing_and_invalid_signatures(api_c
 @override_settings(ENGINE_CALLBACK_SECRET="test-secret", ENGINE_CALLBACK_MAX_SKEW_SECONDS=60)
 def test_engine_signed_routes_reject_stale_timestamps(api_client: APIClient):
     stale_timestamp = int((time.time() - 120) * 1000)
-    response = api_client.get(
+    response = cast(Any, api_client).get(
         f"/api/engine/runtime-intents/{uuid4()}",
         **_signed_headers(secret="test-secret", timestamp_ms=stale_timestamp),
     )
@@ -223,14 +229,14 @@ def test_engine_signed_routes_reject_exact_replay_but_allow_fresh_retry(api_clie
     timestamp_ms = int(time.time() * 1000)
     headers = _signed_headers(secret="test-secret", timestamp_ms=timestamp_ms)
 
-    first = api_client.get(path, **headers)
+    first = cast(Any, api_client).get(path, **headers)
     assert first.status_code != status.HTTP_401_UNAUTHORIZED
 
-    replay = api_client.get(path, **headers)
+    replay = cast(Any, api_client).get(path, **headers)
     assert replay.status_code == status.HTTP_401_UNAUTHORIZED
     assert replay.data["reason"] == "replayed_signature"
 
-    fresh = api_client.get(
+    fresh = cast(Any, api_client).get(
         path,
         **_signed_headers(secret="test-secret", timestamp_ms=timestamp_ms + 1),
     )
@@ -266,8 +272,9 @@ def test_api_request_size_middleware_rejects_oversized_api_payload(api_client: A
 
 
 def test_global_api_throttle_defaults_are_configured():
-    throttle_classes = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"]
-    throttle_rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
+    rest_framework = cast(dict[str, Any], settings.REST_FRAMEWORK)
+    throttle_classes = cast(list[str], rest_framework["DEFAULT_THROTTLE_CLASSES"])
+    throttle_rates = cast(dict[str, str], rest_framework["DEFAULT_THROTTLE_RATES"])
 
     assert "rest_framework.throttling.AnonRateThrottle" in throttle_classes
     assert "rest_framework.throttling.UserRateThrottle" in throttle_classes
@@ -277,10 +284,12 @@ def test_global_api_throttle_defaults_are_configured():
 
 def test_rate_limited_matrix_case_is_exercised_by_auth_scope(api_client: APIClient):
     cache.clear()
+    rest_framework = cast(dict[str, Any], settings.REST_FRAMEWORK)
+    throttle_rates = cast(dict[str, str], rest_framework["DEFAULT_THROTTLE_RATES"])
     throttled_settings = {
-        **settings.REST_FRAMEWORK,
+        **rest_framework,
         "DEFAULT_THROTTLE_RATES": {
-            **settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+            **throttle_rates,
             "auth_login": "1/min",
         },
     }
@@ -335,7 +344,9 @@ def test_sensitive_matrix_rows_declare_audit_actions():
     assert not missing
 
 
-def test_org_membership_sensitive_action_writes_audit_log(authenticated_client: APIClient, user: User):
+def test_org_membership_sensitive_action_writes_audit_log(
+    authenticated_client: APIClient, user: User
+):
     target = User.objects.create_user(email="new-member@example.com", password="testpassword123")
 
     response = authenticated_client.post(

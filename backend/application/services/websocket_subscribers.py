@@ -56,9 +56,7 @@ def _counts_for(
             if str(item.get("organization_id") or "") == str(organization_id)
         ),
         "user": sum(
-            1
-            for item in subscribers.values()
-            if str(item.get("user_id") or "") == str(user_id)
+            1 for item in subscribers.values() if str(item.get("user_id") or "") == str(user_id)
         ),
     }
 
@@ -98,9 +96,7 @@ def _normalize_event_types(event_types: list[str] | tuple[str, ...] | None) -> l
     if not event_types:
         return []
     normalized = {
-        str(event_type).strip()
-        for event_type in event_types
-        if str(event_type or "").strip()
+        str(event_type).strip() for event_type in event_types if str(event_type or "").strip()
     }
     return sorted(normalized)
 
@@ -215,20 +211,18 @@ def get_websocket_subscriber_snapshot() -> dict[str, Any]:
             if key
         ],
         "by_run": [
-            {"run_id": key, "connections": value}
-            for key, value in sorted(by_run.items())
-            if key
+            {"run_id": key, "connections": value} for key, value in sorted(by_run.items()) if key
         ],
         "by_user": [
-            {"user_id": key, "connections": value}
-            for key, value in sorted(by_user.items())
-            if key
+            {"user_id": key, "connections": value} for key, value in sorted(by_user.items()) if key
         ],
         "limits": limits,
         "fanout": {
             "messages_sent": sum(int(item.get("messages_sent") or 0) for item in subscribers),
             "messages_dropped": sum(int(item.get("messages_dropped") or 0) for item in subscribers),
-            "messages_filtered": sum(int(item.get("messages_filtered") or 0) for item in subscribers),
+            "messages_filtered": sum(
+                int(item.get("messages_filtered") or 0) for item in subscribers
+            ),
             "slow_disconnects": sum(1 for item in subscribers if bool(item.get("slow_disconnect"))),
         },
         "connections": subscribers,

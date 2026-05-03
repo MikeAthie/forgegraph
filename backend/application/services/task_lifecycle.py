@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.utils import timezone
 
-from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.redaction import redact_payload
 from infrastructure.orm.models import (
     DecisionRecord,
-    GraphVersion,
     NodeRun,
     Organization,
     RetryOperation,
@@ -22,7 +19,6 @@ from infrastructure.orm.models import (
     TaskDeadLetterRecord,
     TaskLifecycleEvent,
     TaskLifecycleRecord,
-    User,
 )
 
 TASK_STATUSES = {
@@ -42,13 +38,64 @@ TERMINAL_TASK_STATUSES = {"completed", "failed", "dead_lettered", "cancelled"}
 TERMINAL_RUN_STATUSES = {"succeeded", "failed", "canceled"}
 
 ALLOWED_TASK_TRANSITIONS: dict[str, set[str]] = {
-    "created": {"created", "queued", "claimed", "running", "paused", "waiting_for_decision", "failed", "dead_lettered", "cancelled"},
-    "queued": {"queued", "claimed", "running", "retry_scheduled", "failed", "dead_lettered", "cancelled"},
+    "created": {
+        "created",
+        "queued",
+        "claimed",
+        "running",
+        "paused",
+        "waiting_for_decision",
+        "failed",
+        "dead_lettered",
+        "cancelled",
+    },
+    "queued": {
+        "queued",
+        "claimed",
+        "running",
+        "retry_scheduled",
+        "failed",
+        "dead_lettered",
+        "cancelled",
+    },
     "claimed": {"claimed", "running", "retry_scheduled", "failed", "dead_lettered", "cancelled"},
-    "running": {"running", "paused", "waiting_for_decision", "retry_scheduled", "completed", "failed", "dead_lettered", "cancelled"},
-    "paused": {"paused", "running", "waiting_for_decision", "retry_scheduled", "failed", "dead_lettered", "cancelled"},
-    "waiting_for_decision": {"waiting_for_decision", "running", "retry_scheduled", "completed", "failed", "dead_lettered", "cancelled"},
-    "retry_scheduled": {"retry_scheduled", "queued", "claimed", "running", "failed", "dead_lettered", "cancelled"},
+    "running": {
+        "running",
+        "paused",
+        "waiting_for_decision",
+        "retry_scheduled",
+        "completed",
+        "failed",
+        "dead_lettered",
+        "cancelled",
+    },
+    "paused": {
+        "paused",
+        "running",
+        "waiting_for_decision",
+        "retry_scheduled",
+        "failed",
+        "dead_lettered",
+        "cancelled",
+    },
+    "waiting_for_decision": {
+        "waiting_for_decision",
+        "running",
+        "retry_scheduled",
+        "completed",
+        "failed",
+        "dead_lettered",
+        "cancelled",
+    },
+    "retry_scheduled": {
+        "retry_scheduled",
+        "queued",
+        "claimed",
+        "running",
+        "failed",
+        "dead_lettered",
+        "cancelled",
+    },
     "completed": {"completed"},
     "failed": {"failed", "retry_scheduled", "dead_lettered"},
     "dead_lettered": {"dead_lettered"},
@@ -90,11 +137,11 @@ class TaskTransitionResult:
 
 def organization_for_run(run: Run) -> Organization:
     if run.organization_id:
-        return run.organization
+        return cast(Organization, run.organization)
     if run.graph_version.graph.organization_id:
-        return run.graph_version.graph.organization
+        return cast(Organization, run.graph_version.graph.organization)
     if run.owner.default_organization_id:
-        return run.owner.default_organization
+        return cast(Organization, run.owner.default_organization)
     raise ValueError("Run does not have an organization for task lifecycle state.")
 
 
@@ -105,11 +152,14 @@ def lifecycle_external_key(run: Run, node_id: str) -> str:
 def task_title_for_node(run: Run, node_id: str, node_type: str = "") -> str:
     graph_json = run.dispatch_graph_json if isinstance(run.dispatch_graph_json, dict) else None
     if not graph_json and run.graph_version_id:
-        graph_json = run.graph_version.graph_json if isinstance(run.graph_version.graph_json, dict) else None
+        graph_json = (
+            run.graph_version.graph_json if isinstance(run.graph_version.graph_json, dict) else None
+        )
     for node in _extract_graph_nodes(graph_json or {}):
         if str(node.get("id") or "") != node_id:
             continue
-        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        raw_data = node.get("data")
+        data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
         label = str(node.get("name") or data.get("label") or data.get("name") or "").strip()
         if label:
             return f"{label} task"
@@ -160,9 +210,15 @@ def ensure_lifecycle_task(
     return task
 
 
-def initialize_lifecycle_tasks_for_run(run: Run, *, source: str = "run_start") -> list[TaskLifecycleRecord]:
+def initialize_lifecycle_tasks_for_run(
+    run: Run, *, source: str = "run_start"
+) -> list[TaskLifecycleRecord]:
     tasks: list[TaskLifecycleRecord] = []
-    graph_json = run.dispatch_graph_json if isinstance(run.dispatch_graph_json, dict) else run.graph_version.graph_json
+    graph_json = (
+        run.dispatch_graph_json
+        if isinstance(run.dispatch_graph_json, dict)
+        else run.graph_version.graph_json
+    )
     for node in _extract_graph_nodes(graph_json if isinstance(graph_json, dict) else {}):
         node_id = str(node.get("id") or "").strip()
         if not node_id or not _is_executable_node(node):
@@ -210,11 +266,15 @@ def transition_task_lifecycle(
     safe_payload = redact_payload(payload or {})
 
     with transaction.atomic():
-        run = Run.objects.select_for_update(of=("self",)).select_related(
-            "owner",
-            "organization",
-            "graph_version__graph__organization",
-        ).get(id=run.id)
+        run = (
+            Run.objects.select_for_update(of=("self",))
+            .select_related(
+                "owner",
+                "organization",
+                "graph_version__graph__organization",
+            )
+            .get(id=run.id)
+        )
         task = ensure_lifecycle_task(
             run=run,
             node_id=node_id,
@@ -357,11 +417,15 @@ def record_retry_operation(
         next_scheduled_at = timezone.now() + timedelta(milliseconds=retry_delay_ms)
 
     with transaction.atomic():
-        run = Run.objects.select_for_update(of=("self",)).select_related(
-            "owner",
-            "organization",
-            "graph_version__graph__organization",
-        ).get(id=run.id)
+        run = (
+            Run.objects.select_for_update(of=("self",))
+            .select_related(
+                "owner",
+                "organization",
+                "graph_version__graph__organization",
+            )
+            .get(id=run.id)
+        )
         task: TaskLifecycleRecord | None = None
         attempt: TaskAttemptRecord | None = None
         if node_id:
@@ -498,11 +562,7 @@ def _transition_outcome(
     normalized_attempt = max(int(attempt_number or 1), 1)
     if normalized_attempt < task.current_attempt:
         return "stale"
-    if (
-        run.status in {"failed", "canceled"}
-        and to_status == "completed"
-        and not allow_late
-    ):
+    if run.status in {"failed", "canceled"} and to_status == "completed" and not allow_late:
         return "late"
     if to_status not in ALLOWED_TASK_TRANSITIONS.get(task.status, set()):
         return "out_of_order"
@@ -547,7 +607,9 @@ def _ensure_attempt(
             "retry_reason": reason if status == "retry_scheduled" else "",
             "last_error": reason if status in {"failed", "dead_lettered"} else "",
             "started_at": event_time if status == "running" else None,
-            "ended_at": event_time if status in {"completed", "failed", "dead_lettered", "cancelled"} else None,
+            "ended_at": event_time
+            if status in {"completed", "failed", "dead_lettered", "cancelled"}
+            else None,
         },
     )
     update_fields: list[str] = []
@@ -622,9 +684,9 @@ def _apply_task_transition(
         task.retry_metadata = payload
         update_fields.append("retry_metadata")
     if to_status == "dead_lettered":
-        task.recovery_options = payload.get("recovery_options") or task.recovery_options or [
-            "inspect_run"
-        ]
+        task.recovery_options = (
+            payload.get("recovery_options") or task.recovery_options or ["inspect_run"]
+        )
         task.unresolved_error = reason or str(payload.get("last_error") or "")
         update_fields.extend(["recovery_options", "unresolved_error"])
     elif to_status in {"failed"} and reason:
@@ -633,7 +695,9 @@ def _apply_task_transition(
     if task.priority != _priority_for_task_status(to_status):
         task.priority = _priority_for_task_status(to_status)
         update_fields.append("priority")
-    summary = _summary_for_status(run=task.run, node_id=task.source_node_id, status=to_status, reason=reason)
+    summary = _summary_for_status(
+        run=task.run, node_id=task.source_node_id, status=to_status, reason=reason
+    )
     if task.summary != summary:
         task.summary = summary
         update_fields.append("summary")
@@ -649,7 +713,8 @@ def _extract_graph_nodes(graph_json: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _node_type(node: dict[str, Any]) -> str:
-    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    raw_data = node.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
     return str(node.get("type") or data.get("type") or data.get("node_type") or "").strip()
 
 

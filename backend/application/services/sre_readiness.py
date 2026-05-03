@@ -191,9 +191,7 @@ def build_sre_read_model(
             "active_total": sum(1 for alert in alerts if alert["state"] == "active"),
             "items": alerts,
         },
-        "catalog_validation": {
-            key: sorted(value) for key, value in validation.items()
-        },
+        "catalog_validation": {key: sorted(value) for key, value in validation.items()},
         "generated_at": now.isoformat(),
     }
 
@@ -360,10 +358,20 @@ def _build_dashboard_panels(
 
     objective_by_id = {item["id"]: item for item in objectives}
     return [
-        _panel("runtime_intent_backlog", "Runtime intent backlog", runtime_transport_metrics.backlog, "count"),
+        _panel(
+            "runtime_intent_backlog",
+            "Runtime intent backlog",
+            runtime_transport_metrics.backlog,
+            "count",
+        ),
         _panel("runtime_intent_lag", "Runtime intent lag", runtime_transport_metrics.lag, "count"),
         _panel("dead_letter_count", "Dead-letter count", _dead_letter_count(), "count"),
-        _panel("run_status_distribution", "Run status distribution", status_distribution, "distribution"),
+        _panel(
+            "run_status_distribution",
+            "Run status distribution",
+            status_distribution,
+            "distribution",
+        ),
         _panel("stuck_runs", "Stuck runs", stalled_runs, "count"),
         _panel("paused_runs", "Paused runs", paused_runs, "count"),
         _panel(
@@ -374,7 +382,12 @@ def _build_dashboard_panels(
             missing_data=objective_by_id["approval_to_resume_p95"]["missing_data"],
         ),
         _panel("resume_failure_rate", "Resume failure rate", resume_failure_rate, "ratio"),
-        _panel("websocket_connected_clients", "WebSocket connected clients", websocket_metrics.active_connections, "count"),
+        _panel(
+            "websocket_connected_clients",
+            "WebSocket connected clients",
+            websocket_metrics.active_connections,
+            "count",
+        ),
         _panel(
             "websocket_fanout_latency",
             "WebSocket fanout latency",
@@ -382,18 +395,61 @@ def _build_dashboard_panels(
             "ms",
             missing_data=objective_by_id["websocket_delivery_p95"]["missing_data"],
         ),
-        _panel("backend_api_latency", "Backend API latency", api_metrics.latency_ms_p95, "ms", missing_data=api_metrics.latency_ms_p95 is None),
+        _panel(
+            "backend_api_latency",
+            "Backend API latency",
+            api_metrics.latency_ms_p95,
+            "ms",
+            missing_data=api_metrics.latency_ms_p95 is None,
+        ),
         _panel("engine_queue_depth", "Engine queue depth", queue_total, "count"),
-        _panel("llm_queue_depth", "LLM queue depth", llm_queue_depth, "count", missing_data=llm_queue_missing),
-        _panel("llm_timeout_rate", "LLM timeout rate", llm_timeout_count / window_minutes, "per_minute"),
+        _panel(
+            "llm_queue_depth",
+            "LLM queue depth",
+            llm_queue_depth,
+            "count",
+            missing_data=llm_queue_missing,
+        ),
+        _panel(
+            "llm_timeout_rate", "LLM timeout rate", llm_timeout_count / window_minutes, "per_minute"
+        ),
         _panel("cost_per_org", "Cost per org", cost_by_org, "usd"),
-        _panel("memory_write_rate", "Memory write rate", memory_write_count / window_minutes, "per_minute"),
-        _panel("audit_event_rate", "Audit event rate", audit_event_count / window_minutes, "per_minute"),
+        _panel(
+            "memory_write_rate",
+            "Memory write rate",
+            memory_write_count / window_minutes,
+            "per_minute",
+        ),
+        _panel(
+            "audit_event_rate", "Audit event rate", audit_event_count / window_minutes, "per_minute"
+        ),
         _panel("active_runs", "Active runs", active_runs, "count"),
-        _panel("api_availability", "API availability", objective_by_id["api_availability"]["actual"], "ratio", missing_data=objective_by_id["api_availability"]["missing_data"]),
-        _panel("api_timeouts", "API timeout-like requests", api_metrics.timeout_like_rate_per_minute, "per_minute"),
-        _panel("callback_auth_failures", "Callback signature failures", api_metrics.callback_auth_failures_total, "count"),
-        _panel("run_success_rate", "Run success rate", run_metrics.run_success_rate, "ratio", missing_data=run_metrics.run_success_rate is None),
+        _panel(
+            "api_availability",
+            "API availability",
+            objective_by_id["api_availability"]["actual"],
+            "ratio",
+            missing_data=objective_by_id["api_availability"]["missing_data"],
+        ),
+        _panel(
+            "api_timeouts",
+            "API timeout-like requests",
+            api_metrics.timeout_like_rate_per_minute,
+            "per_minute",
+        ),
+        _panel(
+            "callback_auth_failures",
+            "Callback signature failures",
+            api_metrics.callback_auth_failures_total,
+            "count",
+        ),
+        _panel(
+            "run_success_rate",
+            "Run success rate",
+            run_metrics.run_success_rate,
+            "ratio",
+            missing_data=run_metrics.run_success_rate is None,
+        ),
     ]
 
 
@@ -423,7 +479,10 @@ def _evaluate_alerts(
             "intent_backlog_growing",
             active=runtime_transport_metrics.backlog
             > int(getattr(settings, "SLO_RUNTIME_INTENT_BACKLOG_WARNING", 50)),
-            evidence={"backlog": runtime_transport_metrics.backlog, "lag": runtime_transport_metrics.lag},
+            evidence={
+                "backlog": runtime_transport_metrics.backlog,
+                "lag": runtime_transport_metrics.lag,
+            },
         ),
         _alert(
             "no_progress_despite_backlog",
@@ -474,13 +533,18 @@ def _evaluate_alerts(
         ),
         _alert(
             "org_rate_limit_breach",
-            active=rate_limit_breaches > int(getattr(settings, "SLO_RATE_LIMIT_BREACH_THRESHOLD", 0)),
+            active=rate_limit_breaches
+            > int(getattr(settings, "SLO_RATE_LIMIT_BREACH_THRESHOLD", 0)),
             evidence={"rate_limit_breaches": rate_limit_breaches},
         ),
         _alert(
             "llm_queue_saturation",
             active=(
-                (llm_queue_depth is not None and llm_queue_depth >= float(getattr(settings, "SLO_LLM_QUEUE_DEPTH_THRESHOLD", 25)))
+                (
+                    llm_queue_depth is not None
+                    and llm_queue_depth
+                    >= float(getattr(settings, "SLO_LLM_QUEUE_DEPTH_THRESHOLD", 25))
+                )
                 or llm_timeouts > int(getattr(settings, "SLO_LLM_TIMEOUT_THRESHOLD", 0))
                 or RetryOperation.objects.filter(
                     retry_class="llm_backpressure",
@@ -497,7 +561,8 @@ def _evaluate_alerts(
         ),
         _alert(
             "cost_anomaly",
-            active=max_org_cost >= float(getattr(settings, "SLO_COST_ANOMALY_USD_PER_WINDOW", 100.0)),
+            active=max_org_cost
+            >= float(getattr(settings, "SLO_COST_ANOMALY_USD_PER_WINDOW", 100.0)),
             evidence={"max_org_cost_usd": max_org_cost},
         ),
     ]
@@ -537,7 +602,9 @@ def _sample_p95(metric_name: str, since: Any) -> tuple[float | None, int]:
 
 
 def _sample_count(metric_name: str, since: Any) -> int:
-    return ServiceMetricSample.objects.filter(metric_name=metric_name, observed_at__gte=since).count()
+    return ServiceMetricSample.objects.filter(
+        metric_name=metric_name, observed_at__gte=since
+    ).count()
 
 
 def _latest_sample_value(metric_name: str, since: Any) -> tuple[float | None, bool]:
@@ -562,10 +629,13 @@ def _approval_to_resume_p95(since: Any) -> tuple[float | None, int]:
         execution__isnull=False,
     ).only("execution_id", "resolved_at")
     for decision in decisions:
+        if decision.execution_id is None or decision.resolved_at is None:
+            continue
+        resolved_at = decision.resolved_at
         event = (
             RunEvent.objects.filter(
                 run_id=decision.execution_id,
-                created_at__gte=decision.resolved_at,
+                created_at__gte=resolved_at,
                 event_type__in=["ack_run_resumed", "run_resumed"],
             )
             .order_by("created_at")
@@ -573,7 +643,7 @@ def _approval_to_resume_p95(since: Any) -> tuple[float | None, int]:
             .first()
         )
         if event is not None:
-            values.append(max(0.0, (event.created_at - decision.resolved_at).total_seconds() * 1000.0))
+            values.append(max(0.0, (event.created_at - resolved_at).total_seconds() * 1000.0))
     return _percentile(values, 0.95), len(values)
 
 
@@ -589,7 +659,10 @@ def _task_projection_lag_p95(since: Any) -> tuple[float | None, int]:
         .only("updated_at", "lifecycle_task__last_transition_at")
     )
     for record in records:
-        transition_at = record.lifecycle_task.last_transition_at
+        lifecycle_task = record.lifecycle_task
+        if lifecycle_task is None:
+            continue
+        transition_at = lifecycle_task.last_transition_at
         if transition_at is not None:
             values.append(max(0.0, (record.updated_at - transition_at).total_seconds() * 1000.0))
     return _percentile(values, 0.95), len(values)
@@ -608,8 +681,7 @@ def _dead_letter_visibility_seconds(since: Any) -> tuple[float, int]:
                 max(
                     0.0,
                     (
-                        dead_letter.created_at
-                        - dead_letter.runtime_intent_outcome.processed_at
+                        dead_letter.created_at - dead_letter.runtime_intent_outcome.processed_at
                     ).total_seconds(),
                 )
             )

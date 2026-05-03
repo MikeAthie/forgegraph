@@ -132,8 +132,13 @@ const formatSreValue = (value: unknown, unit: string) => {
   }
   if (Array.isArray(value)) {
     if (unit === "usd") {
-      const total = value.reduce((sum, item) => sum + Number((item as { total_cost_usd?: number }).total_cost_usd ?? 0), 0);
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(total);
+      const total = value.reduce(
+        (sum, item) => sum + Number((item as { total_cost_usd?: number }).total_cost_usd ?? 0),
+        0,
+      );
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(
+        total,
+      );
     }
     return `${value.length} rows`;
   }
@@ -161,7 +166,9 @@ const formatSreValue = (value: unknown, unit: string) => {
       return `${Math.round(value * 10) / 10}/min`;
     }
     if (unit === "usd") {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(
+        value,
+      );
     }
     return new Intl.NumberFormat("en-US").format(value);
   }
@@ -418,7 +425,8 @@ export default function AdminOperationsPage() {
     if (data.metricsSummary.sre?.alerts.active_total) {
       notices.push(`${data.metricsSummary.sre.alerts.active_total} SRE alert(s) are active in the current SLO window.`);
     }
-    const missingSloData = data.metricsSummary.sre?.objectives.filter((objective) => objective.missing_data).length ?? 0;
+    const missingSloData =
+      data.metricsSummary.sre?.objectives.filter((objective) => objective.missing_data).length ?? 0;
     if (missingSloData > 0) {
       notices.push(`${missingSloData} SLO signal(s) have no data yet; do not treat them as passing.`);
     }
@@ -581,7 +589,9 @@ export default function AdminOperationsPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-medium text-foreground">SLO objectives</p>
-                            <p className="text-sm text-muted-foreground">Production readiness targets and current state.</p>
+                            <p className="text-sm text-muted-foreground">
+                              Production readiness targets and current state.
+                            </p>
                           </div>
                           <Badge variant="outline">{sreSummary.objectives.length} objectives</Badge>
                         </div>

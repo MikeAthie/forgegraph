@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from django.db import models, transaction
@@ -19,7 +19,7 @@ from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.audit_log import record_audit_log
 from application.services.rbac import has_min_role
 from application.services.redaction import redact_payload
-from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
+from application.services.run_liveness import touch_run_liveness
 from application.services.runtime_write_intents import (
     RUNTIME_INTENT_CONSUMER_GROUP,
     RUNTIME_INTENT_DEAD_LETTER_STREAM,
@@ -163,9 +163,7 @@ def _run_state_payload(run: Run) -> dict[str, Any]:
     ).select_related("task", "task_lifecycle", "agent", "source_approval_task")
     checkpoint = RunCheckpoint.objects.filter(run=run).first()
     last_backend_mutation = (
-        TaskLifecycleEvent.objects.filter(run=run)
-        .order_by("-occurred_at", "-created_at")
-        .first()
+        TaskLifecycleEvent.objects.filter(run=run).order_by("-occurred_at", "-created_at").first()
     )
     last_engine_callback = (
         RunEvent.objects.filter(run=run)
@@ -203,9 +201,7 @@ def _run_state_payload(run: Run) -> dict[str, Any]:
             "recovery_state": run.recovery_state,
             "recovery_reason": run.recovery_reason,
             "resume_attempt_id": str(run.resume_attempt_id) if run.resume_attempt_id else None,
-            "last_progress_at": run.last_progress_at.isoformat()
-            if run.last_progress_at
-            else None,
+            "last_progress_at": run.last_progress_at.isoformat() if run.last_progress_at else None,
             "last_heartbeat_at": run.last_heartbeat_at.isoformat()
             if run.last_heartbeat_at
             else None,
@@ -345,8 +341,8 @@ class OperatorRuntimeIntentBacklogView(APIView):
             return denied
         try:
             redis_client = build_runtime_intent_redis_client()
-            groups = redis_client.xinfo_groups(RUNTIME_INTENT_STREAM)
-            group_payload = next(
+            groups = cast(list[dict[str, Any]], redis_client.xinfo_groups(RUNTIME_INTENT_STREAM))
+            group_payload: dict[str, str | int] = next(
                 (
                     {
                         "name": str(group.get("name") or ""),
@@ -358,16 +354,22 @@ class OperatorRuntimeIntentBacklogView(APIView):
                 ),
                 {"name": RUNTIME_INTENT_CONSUMER_GROUP, "pending": 0, "lag": 0},
             )
-            stream_length = int(redis_client.xlen(RUNTIME_INTENT_STREAM))
-            dead_letter_count = int(redis_client.xlen(RUNTIME_INTENT_DEAD_LETTER_STREAM))
-            recent_dead_letters = [
-                _dead_letter_stream_payload(message_id, fields)
-                for message_id, fields in redis_client.xrevrange(
+            pending = int(group_payload["pending"])
+            lag = int(group_payload["lag"])
+            stream_length = int(cast(Any, redis_client.xlen(RUNTIME_INTENT_STREAM)))
+            dead_letter_count = int(cast(Any, redis_client.xlen(RUNTIME_INTENT_DEAD_LETTER_STREAM)))
+            dead_letter_messages = cast(
+                list[tuple[Any, dict[str, Any]]],
+                redis_client.xrevrange(
                     RUNTIME_INTENT_DEAD_LETTER_STREAM,
                     max="+",
                     min="-",
                     count=25,
-                )
+                ),
+            )
+            recent_dead_letters = [
+                _dead_letter_stream_payload(message_id, fields)
+                for message_id, fields in dead_letter_messages
             ]
         except Exception as exc:
             return error_response(
@@ -380,9 +382,9 @@ class OperatorRuntimeIntentBacklogView(APIView):
                 "stream": RUNTIME_INTENT_STREAM,
                 "dead_letter_stream": RUNTIME_INTENT_DEAD_LETTER_STREAM,
                 "stream_length": stream_length,
-                "pending": group_payload["pending"],
-                "lag": group_payload["lag"],
-                "backlog": group_payload["pending"] + group_payload["lag"],
+                "pending": pending,
+                "lag": lag,
+                "backlog": pending + lag,
                 "dead_letter_count": dead_letter_count,
                 "recent_dead_letters": recent_dead_letters,
             }
@@ -438,8 +440,13 @@ class OperatorRuntimeIntentReplayView(APIView):
             return denied
         user = request.user
         assert isinstance(user, User)
-        outcome = RuntimeIntentOutcome.objects.filter(intent_id=intent_id).select_related("run").first()
-        if outcome is None or (outcome.run_id and outcome.run.organization_id != _tenant_id(user)):
+        outcome = (
+            RuntimeIntentOutcome.objects.filter(intent_id=intent_id).select_related("run").first()
+        )
+        if outcome is None:
+            return error_response("NOT_FOUND", "Runtime intent outcome not found.", status=404)
+        outcome_run = outcome.run
+        if outcome_run is not None and outcome_run.organization_id != _tenant_id(user):
             return error_response("NOT_FOUND", "Runtime intent outcome not found.", status=404)
         if outcome.outcome != "dead_lettered":
             return error_response(
@@ -459,7 +466,11 @@ class OperatorRuntimeIntentReplayView(APIView):
             intent = decode_runtime_intent_message(
                 {"intent": str(replay_fields.get("intent") or "")}
             )
-            if outcome.run and outcome.run.active_attempt_id and intent.attempt_id != outcome.run.active_attempt_id:
+            if (
+                outcome_run is not None
+                and outcome_run.active_attempt_id
+                and intent.attempt_id != outcome_run.active_attempt_id
+            ):
                 return error_response(
                     "STALE_ATTEMPT",
                     "Cannot replay an intent for a stale attempt.",
@@ -477,9 +488,14 @@ class OperatorRuntimeIntentReplayView(APIView):
             action="operator.intent_replayed",
             resource_type="runtime_intent",
             resource_id=str(intent_id),
-            metadata={"reason": _operator_reason(request, "operator replay"), "message_id": str(replay_message_id)},
+            metadata={
+                "reason": _operator_reason(request, "operator replay"),
+                "message_id": str(replay_message_id),
+            },
         )
-        return success_response({"intent_id": str(intent_id), "replay_message_id": str(replay_message_id)})
+        return success_response(
+            {"intent_id": str(intent_id), "replay_message_id": str(replay_message_id)}
+        )
 
 
 class OperatorRuntimeIntentAcknowledgeView(APIView):
@@ -494,14 +510,26 @@ class OperatorRuntimeIntentAcknowledgeView(APIView):
         reason = _operator_reason(request, "operator acknowledged poison intent")
         if not reason:
             return error_response("VALIDATION_ERROR", "A reason is required.", status=400)
-        outcome = RuntimeIntentOutcome.objects.filter(intent_id=intent_id).select_related("run").first()
-        if outcome is None or (outcome.run_id and outcome.run.organization_id != _tenant_id(user)):
+        outcome = (
+            RuntimeIntentOutcome.objects.filter(intent_id=intent_id).select_related("run").first()
+        )
+        if outcome is None:
+            return error_response("NOT_FOUND", "Runtime intent outcome not found.", status=404)
+        outcome_run = outcome.run
+        if outcome_run is not None and outcome_run.organization_id != _tenant_id(user):
             return error_response("NOT_FOUND", "Runtime intent outcome not found.", status=404)
         now = timezone.now()
         outcome.acknowledged_at = now
         outcome.acknowledged_by = user
         outcome.acknowledgement_reason = reason
-        outcome.save(update_fields=["acknowledged_at", "acknowledged_by", "acknowledgement_reason", "updated_at"])
+        outcome.save(
+            update_fields=[
+                "acknowledged_at",
+                "acknowledged_by",
+                "acknowledgement_reason",
+                "updated_at",
+            ]
+        )
         TaskDeadLetterRecord.objects.filter(intent_id=intent_id, status="active").update(
             status="acknowledged",
             acknowledged_at=now,
@@ -659,7 +687,9 @@ class OperatorOrgLoadView(APIView):
                     "pending": Run.objects.filter(organization_id=org_id, status="pending").count(),
                     "running": Run.objects.filter(organization_id=org_id, status="running").count(),
                     "paused": Run.objects.filter(organization_id=org_id, status="paused").count(),
-                    "resume_requested": Run.objects.filter(organization_id=org_id, status="resume_requested").count(),
+                    "resume_requested": Run.objects.filter(
+                        organization_id=org_id, status="resume_requested"
+                    ).count(),
                     "failed": Run.objects.filter(organization_id=org_id, status="failed").count(),
                 },
                 "tasks": list(
@@ -735,7 +765,9 @@ def _force_terminal_run(request: Request, run_id: UUID, *, status_value: str) ->
                 source="operator_api",
                 reason=reason,
             )
-            RetryOperation.objects.filter(run=locked_run, status__in=["scheduled", "running"]).update(
+            RetryOperation.objects.filter(
+                run=locked_run, status__in=["scheduled", "running"]
+            ).update(
                 status="cancelled" if status_value == "canceled" else "failed",
                 last_error=reason,
             )
@@ -772,12 +804,16 @@ def _dead_letter_stream_payload(message_id: Any, fields: dict[str, Any]) -> dict
 
 
 def _find_dead_letter_stream_fields(redis_client: Any, intent_id: UUID) -> dict[str, Any] | None:
-    for _, fields in redis_client.xrevrange(
-        RUNTIME_INTENT_DEAD_LETTER_STREAM,
-        max="+",
-        min="-",
-        count=500,
-    ):
+    messages = cast(
+        list[tuple[Any, dict[str, Any]]],
+        redis_client.xrevrange(
+            RUNTIME_INTENT_DEAD_LETTER_STREAM,
+            max="+",
+            min="-",
+            count=500,
+        ),
+    )
+    for _, fields in messages:
         if str(fields.get("intent_id") or "") == str(intent_id):
             return fields
         raw_intent = str(fields.get("intent") or "")

@@ -134,6 +134,12 @@ from application.services.run_snapshots import (
     safe_set_snapshot,
     set_snapshot,
 )
+from application.services.schema_validation import (
+    SchemaError,
+    extract_schema_metadata,
+    validate_json_schema,
+)
+from application.services.structured_logging import log_event
 from application.services.task_lifecycle import (
     initialize_lifecycle_tasks_for_run,
     mark_run_tasks_terminal,
@@ -141,12 +147,6 @@ from application.services.task_lifecycle import (
     transition_from_node_run,
     transition_task_lifecycle,
 )
-from application.services.schema_validation import (
-    SchemaError,
-    extract_schema_metadata,
-    validate_json_schema,
-)
-from application.services.structured_logging import log_event
 from application.services.telemetry import start_backend_span
 from application.services.tenancy import get_tenant_id_for_user as resolve_tenant_id_for_user
 from application.services.tool_executions import (
@@ -167,8 +167,8 @@ from infrastructure.orm.models import (
     RunCheckpoint,
     RunEvent,
     RunEventProjection,
-    TenantSubscription,
     TaskLifecycleRecord,
+    TenantSubscription,
     User,
 )
 from infrastructure.security import s2s
@@ -3362,7 +3362,9 @@ class RunResumeView(APIView):
                 approval_task.save(
                     update_fields=["status", "result", "resolved_at", "task_lifecycle"]
                 )
-                organization = run.organization if run.organization_id else user.default_organization
+                organization = (
+                    run.organization if run.organization_id else user.default_organization
+                )
                 if organization is not None:
                     decision_record, _ = DecisionRecord.objects.update_or_create(
                         organization=organization,
@@ -3581,7 +3583,7 @@ class EngineRunEventsView(APIView):
             timestamp_ms=timestamp_header,
             signature=signature_header,
             body=request.body or b"",
-            method=request.method,
+            method=request.method or "",
             path=request.path,
         )
         if not ok:
@@ -4264,9 +4266,17 @@ class EngineRunEventsView(APIView):
                     try:
                         if event_type == "node_retrying":
                             retry_attempt = int(event.get("retry_attempt") or attempt)
-                            max_attempts = int(event.get("max_attempts") or event.get("max_retries") or retry_attempt)
-                            retry_delay_ms = int(event.get("retry_delay_ms") or event.get("retry_after_ms") or 0)
-                            retry_reason = str(event.get("reason") or event.get("error") or "node retry scheduled")
+                            max_attempts = int(
+                                event.get("max_attempts")
+                                or event.get("max_retries")
+                                or retry_attempt
+                            )
+                            retry_delay_ms = int(
+                                event.get("retry_delay_ms") or event.get("retry_after_ms") or 0
+                            )
+                            retry_reason = str(
+                                event.get("reason") or event.get("error") or "node retry scheduled"
+                            )
                             transition_task_lifecycle(
                                 run=run,
                                 node_id=node_id,

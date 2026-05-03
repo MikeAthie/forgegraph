@@ -49,7 +49,7 @@ def _ws(user: User, url: str) -> WebsocketCommunicator:
 
 
 async def _connect(communicator: WebsocketCommunicator) -> tuple[bool, int | str | None]:
-    return await communicator.connect(timeout=5)
+    return cast(tuple[bool, int | str | None], await communicator.connect(timeout=5))
 
 
 @database_sync_to_async

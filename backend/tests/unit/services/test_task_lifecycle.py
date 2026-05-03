@@ -4,10 +4,10 @@ from uuid import uuid4
 
 import pytest
 
-from application.services.tenancy import ensure_default_organization
 from application.services.task_lifecycle import (
     transition_task_lifecycle,
 )
+from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Graph,
     GraphVersion,

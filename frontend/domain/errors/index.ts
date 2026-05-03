@@ -79,12 +79,7 @@ function extractRawMessage(error: unknown): string {
         ? (data.error as { message?: unknown; detail?: unknown; code?: unknown })
         : null;
     const message =
-      nestedError?.message ??
-      nestedError?.detail ??
-      nestedError?.code ??
-      data?.detail ??
-      data?.message ??
-      data?.error;
+      nestedError?.message ?? nestedError?.detail ?? nestedError?.code ?? data?.detail ?? data?.message ?? data?.error;
     if (typeof message === "string" && message.trim()) {
       return `${response.status ?? ""} ${message}`.trim();
     }

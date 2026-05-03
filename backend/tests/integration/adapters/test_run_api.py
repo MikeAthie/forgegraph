@@ -2571,7 +2571,9 @@ class TestEngineRunEvents:
         assert RunEvent.objects.filter(run=run, event_type="run_resumed").exists()
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
-    def test_engine_run_resumed_rejects_missing_resume_attempt(self, signed_engine_event_post, user):
+    def test_engine_run_resumed_rejects_missing_resume_attempt(
+        self, signed_engine_event_post, user
+    ):
         graph = Graph.objects.create(owner=user, name="Missing Resume Attempt Graph")
         version = GraphVersion.objects.create(
             graph=graph,

@@ -4,8 +4,8 @@ from uuid import uuid4
 
 import pytest
 
-from application.services.tenancy import ensure_default_organization
 from application.services.task_lifecycle import record_retry_operation, transition_task_lifecycle
+from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Graph,
     GraphVersion,
@@ -75,7 +75,10 @@ def test_retry_attempt_requires_parent_attempt() -> None:
     task = TaskLifecycleRecord.objects.get(run=run, source_node_id="task_1")
     assert result.outcome == "invalid"
     assert task.status == "running"
-    assert TaskLifecycleEvent.objects.get(idempotency_key="task:test:retry-without-parent").outcome == "invalid"
+    assert (
+        TaskLifecycleEvent.objects.get(idempotency_key="task:test:retry-without-parent").outcome
+        == "invalid"
+    )
 
 
 def test_retry_exhaustion_creates_dead_letter_with_diagnostics() -> None:

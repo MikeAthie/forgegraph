@@ -28,8 +28,8 @@ from infrastructure.orm.models import (
     NodeRun,
     Organization,
     Run,
-    TaskRecord,
     TaskLifecycleRecord,
+    TaskRecord,
     TenantPolicy,
     User,
 )
@@ -422,7 +422,8 @@ def sync_decision_records_for_organization(
             defaults={
                 "execution": run,
                 "task": task,
-                "task_lifecycle": approval.task_lifecycle or (task.lifecycle_task if task else None),
+                "task_lifecycle": approval.task_lifecycle
+                or (task.lifecycle_task if task else None),
                 "agent": agent,
                 "decision_type": "human_approval",
                 "status": approval.status,
@@ -689,6 +690,7 @@ def agent_summary(agent: AgentRegistryEntry) -> dict[str, Any]:
 
 
 def task_summary(task: TaskRecord) -> dict[str, Any]:
+    lifecycle_task = task.lifecycle_task if task.lifecycle_task_id else None
     return {
         "id": str(task.id),
         "organization_id": str(task.organization_id),
@@ -702,12 +704,14 @@ def task_summary(task: TaskRecord) -> dict[str, Any]:
         "source_node_id": task.source_node_id,
         "current_step_id": str(task.current_step_id) if task.current_step_id else None,
         "current_decision_id": str(task.current_decision_id) if task.current_decision_id else None,
-        "attempt_count": task.lifecycle_task.current_attempt if task.lifecycle_task_id else None,
-        "retry_metadata": task.lifecycle_task.retry_metadata if task.lifecycle_task_id else {},
-        "dead_letter": _task_dead_letter_summary(task.lifecycle_task) if task.lifecycle_task_id else None,
-        "stale_event_count": task.lifecycle_task.stale_event_count if task.lifecycle_task_id else 0,
-        "late_event_count": task.lifecycle_task.late_event_count if task.lifecycle_task_id else 0,
-        "recovery_options": task.lifecycle_task.recovery_options if task.lifecycle_task_id else [],
+        "attempt_count": lifecycle_task.current_attempt if lifecycle_task is not None else None,
+        "retry_metadata": lifecycle_task.retry_metadata if lifecycle_task is not None else {},
+        "dead_letter": _task_dead_letter_summary(lifecycle_task)
+        if lifecycle_task is not None
+        else None,
+        "stale_event_count": lifecycle_task.stale_event_count if lifecycle_task is not None else 0,
+        "late_event_count": lifecycle_task.late_event_count if lifecycle_task is not None else 0,
+        "recovery_options": lifecycle_task.recovery_options if lifecycle_task is not None else [],
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "ended_at": task.ended_at.isoformat() if task.ended_at else None,
         "created_at": task.created_at.isoformat(),

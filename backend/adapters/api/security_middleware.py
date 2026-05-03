@@ -17,10 +17,8 @@ class ApiRequestSizeLimitMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> object:
-        if (
-            request.path_info.startswith("/api/")
-            and request.method.upper() in self._BODY_METHODS
-        ):
+        method = request.method or ""
+        if request.path_info.startswith("/api/") and method.upper() in self._BODY_METHODS:
             content_length = _content_length(request)
             limit = _limit_for_path(request.path_info)
             if content_length is not None and content_length > limit:
@@ -28,7 +26,7 @@ class ApiRequestSizeLimitMiddleware:
                     status_code=413,
                     duration_ms=0,
                     path=request.path_info,
-                    method=request.method,
+                    method=method,
                 )
                 record_service_metric_sample(
                     metric_name="api_request_oversized",
@@ -37,7 +35,7 @@ class ApiRequestSizeLimitMiddleware:
                     unit="bytes",
                     dimensions={
                         "path": request.path_info,
-                        "method": request.method.upper(),
+                        "method": method.upper(),
                         "limit": limit,
                     },
                 )
@@ -57,7 +55,7 @@ class ApiRequestSizeLimitMiddleware:
 
 def _content_length(request: HttpRequest) -> int | None:
     raw = request.META.get("CONTENT_LENGTH")
-    if raw in (None, ""):
+    if not isinstance(raw, str) or raw == "":
         return None
     try:
         return int(raw)
@@ -78,5 +76,13 @@ def _limit_for_path(path: str) -> int:
         "/api/v1/executions/invoke",
     )
     if normalized in run_input_paths:
-        return int(getattr(settings, "RUN_INPUT_MAX_BYTES", 256 * 1024))
-    return int(getattr(settings, "API_REQUEST_MAX_BYTES", 1024 * 1024))
+        return _settings_int("RUN_INPUT_MAX_BYTES", 256 * 1024)
+    return _settings_int("API_REQUEST_MAX_BYTES", 1024 * 1024)
+
+
+def _settings_int(name: str, default: int) -> int:
+    value = getattr(settings, name, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default

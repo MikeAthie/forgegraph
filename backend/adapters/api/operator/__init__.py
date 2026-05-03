@@ -1,2 +1,1 @@
 """Operator recovery API module."""
-

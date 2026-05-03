@@ -66,27 +66,30 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [actionLoading, setActionLoading] = useState<"stop" | "retry" | null>(null);
 
-  const loadOperation = useCallback(async (options?: { showSpinner?: boolean }) => {
-    if (!operationId) {
-      return;
-    }
+  const loadOperation = useCallback(
+    async (options?: { showSpinner?: boolean }) => {
+      if (!operationId) {
+        return;
+      }
 
-    if (options?.showSpinner) {
-      setLoading(true);
-    }
-    setError(null);
-    try {
-      const data = await operationRepository.get(operationId);
-      setOperation(data);
-      setSelectedTaskId((current) =>
-        current && data.tasks.some((task) => task.id === current) ? current : (data.tasks[0]?.id ?? null),
-      );
-    } catch (loadError: unknown) {
-      setError(translateProductError(loadError, "operation"));
-    } finally {
-      setLoading(false);
-    }
-  }, [operationId]);
+      if (options?.showSpinner) {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const data = await operationRepository.get(operationId);
+        setOperation(data);
+        setSelectedTaskId((current) =>
+          current && data.tasks.some((task) => task.id === current) ? current : (data.tasks[0]?.id ?? null),
+        );
+      } catch (loadError: unknown) {
+        setError(translateProductError(loadError, "operation"));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [operationId],
+  );
 
   useEffect(() => {
     void loadOperation({ showSpinner: true });
@@ -159,25 +162,25 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
       ? "Failure needs review"
       : retryTask
         ? "Retry is scheduled"
-      : isWaitingForApproval
-        ? "Approval is waiting"
-        : operation?.status === "running"
-          ? "Operation is active"
-          : operation?.status === "completed"
-            ? "Deliverable is ready"
-            : "Operation state";
+        : isWaitingForApproval
+          ? "Approval is waiting"
+          : operation?.status === "running"
+            ? "Operation is active"
+            : operation?.status === "completed"
+              ? "Deliverable is ready"
+              : "Operation state";
   const actionDescription =
     failedTask || operation?.failure
       ? (operation?.failure?.summary ?? "A department could not finish its assigned work.")
       : retryTask
         ? `${retryTask.departmentName} has a bounded retry scheduled by the backend.`
-      : isWaitingForApproval
-        ? "A department needs a human decision before work can continue."
-        : operation?.status === "running"
-          ? `${operation.currentDepartmentName} is working now.`
-          : operation?.status === "completed"
-            ? "The operation finished cleanly. Review the deliverable or start another operation when needed."
-            : "Review status, task activity, and deliverable readiness.";
+        : isWaitingForApproval
+          ? "A department needs a human decision before work can continue."
+          : operation?.status === "running"
+            ? `${operation.currentDepartmentName} is working now.`
+            : operation?.status === "completed"
+              ? "The operation finished cleanly. Review the deliverable or start another operation when needed."
+              : "Review status, task activity, and deliverable readiness.";
 
   const handleStopOperation = useCallback(async () => {
     if (!operation || actionLoading) {

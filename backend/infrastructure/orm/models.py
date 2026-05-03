@@ -2287,7 +2287,9 @@ class TaskLifecycleEvent(models.Model):
         ]
         indexes = [
             models.Index(fields=["run", "occurred_at"], name="task_life_evt_run_time_idx"),
-            models.Index(fields=["lifecycle_task", "occurred_at"], name="task_life_evt_task_time_idx"),
+            models.Index(
+                fields=["lifecycle_task", "occurred_at"], name="task_life_evt_task_time_idx"
+            ),
             models.Index(fields=["outcome", "occurred_at"], name="task_life_evt_outcome_idx"),
         ]
 

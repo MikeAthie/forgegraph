@@ -449,7 +449,9 @@ def apply_pause_run_intent(
             occurred_at=intent.timestamp,
         )
         if lifecycle_result.outcome not in {"accepted", "duplicate"}:
-            return "invalid" if lifecycle_result.outcome in {"invalid", "out_of_order"} else "ignored"
+            return (
+                "invalid" if lifecycle_result.outcome in {"invalid", "out_of_order"} else "ignored"
+            )
 
         approval_payload = {
             "prompt_message": decision_payload["prompt_message"],
@@ -607,7 +609,11 @@ def apply_ack_run_resumed_intent(
                 occurred_at=intent.timestamp,
             )
             if lifecycle_result.outcome not in {"accepted", "duplicate"}:
-                return "invalid" if lifecycle_result.outcome in {"invalid", "out_of_order"} else "ignored"
+                return (
+                    "invalid"
+                    if lifecycle_result.outcome in {"invalid", "out_of_order"}
+                    else "ignored"
+                )
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
 
     if run is not None:
@@ -1020,13 +1026,18 @@ def apply_task_lifecycle_transition_intent(
             node_id=node_id,
             node_type=node_type,
             to_status=status_value,
-            attempt_number=_coerce_non_negative_int(intent.payload.get("attempt_number"), default=1),
-            parent_attempt_number=_optional_positive_int(intent.payload.get("parent_attempt_number")),
+            attempt_number=_coerce_non_negative_int(
+                intent.payload.get("attempt_number"), default=1
+            ),
+            parent_attempt_number=_optional_positive_int(
+                intent.payload.get("parent_attempt_number")
+            ),
             source=str(intent.payload.get("source") or "engine").strip() or "engine",
             idempotency_key=idempotency_key,
             reason=str(intent.payload.get("reason") or "").strip(),
             event_type="runtime_intent.task_lifecycle_transition",
-            owner_component=str(intent.payload.get("owning_component") or "engine").strip() or "engine",
+            owner_component=str(intent.payload.get("owning_component") or "engine").strip()
+            or "engine",
             payload=_payload_dict(intent.payload.get("metadata")),
             occurred_at=intent.timestamp,
             allow_late=bool(intent.payload.get("allow_late")),
@@ -1281,7 +1292,9 @@ def _record_runtime_intent_outcome(
     now = timezone.now()
     observed_timestamp = intent.timestamp
     if timezone.is_naive(observed_timestamp):
-        observed_timestamp = timezone.make_aware(observed_timestamp, timezone.get_current_timezone())
+        observed_timestamp = timezone.make_aware(
+            observed_timestamp, timezone.get_current_timezone()
+        )
     processing_ms = max(0.0, (now - observed_timestamp).total_seconds() * 1000.0)
     RuntimeIntentOutcome.objects.update_or_create(
         intent_id=intent.intent_id,

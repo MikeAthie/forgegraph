@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  createTestUser,
-  loginLive,
-} from "./live-helpers";
+import { createTestUser, loginLive } from "./live-helpers";
 
 test.describe("Production launch live OS surfaces", () => {
   test("loads operator surfaces from the live backend stack", async ({ page, request }, testInfo) => {

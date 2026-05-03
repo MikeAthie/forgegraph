@@ -272,9 +272,7 @@ export default function TasksPage() {
                         {selectedTask.deadLetter.last_error ? ` Last error: ${selectedTask.deadLetter.last_error}` : ""}
                       </p>
                       {selectedTask.deadLetter.recovery_options?.length ? (
-                        <p className="mt-2 text-xs">
-                          Recovery: {selectedTask.deadLetter.recovery_options.join(", ")}
-                        </p>
+                        <p className="mt-2 text-xs">Recovery: {selectedTask.deadLetter.recovery_options.join(", ")}</p>
                       ) : null}
                     </div>
                   ) : null}

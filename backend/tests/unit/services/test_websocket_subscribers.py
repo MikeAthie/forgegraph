@@ -10,7 +10,6 @@ from application.services.websocket_subscribers import (
     update_run_websocket_subscriber_activity,
 )
 
-
 LOC_MEM_CACHE = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

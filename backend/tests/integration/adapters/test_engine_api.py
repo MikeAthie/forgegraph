@@ -51,9 +51,7 @@ class TestEngineRunApi:
         "outcome",
         ["processed", "duplicate", "ignored", "invalid", "dead_lettered"],
     )
-    def test_runtime_intent_outcome_lookup_reports_backend_owned_outcome(
-        self, api_client, outcome
-    ):
+    def test_runtime_intent_outcome_lookup_reports_backend_owned_outcome(self, api_client, outcome):
         user = User.objects.create_user(
             email=f"engine-outcome-{outcome}@example.com",
             password="password123",
@@ -94,9 +92,7 @@ class TestEngineRunApi:
         assert response.data["data"]["trace_id"] == "trace-outcome"
         assert response.data["data"]["stream_message_id"] == "1700000000000-0"
 
-    def test_runtime_intent_outcome_lookup_reports_pending_when_not_committed(
-        self, api_client
-    ):
+    def test_runtime_intent_outcome_lookup_reports_pending_when_not_committed(self, api_client):
         response = api_client.get(
             f"/api/engine/runtime-intents/{uuid4()}",
             **_signed_headers("test-secret"),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from django.db import connection, connections, transaction
@@ -139,7 +139,9 @@ def test_duplicate_event_aggregation_does_not_mutate_state_twice() -> None:
     assert first == "processed"
     assert second == "duplicate"
     assert TaskLifecycleRecord.objects.get(run=run, source_node_id="task_1").status == "running"
-    assert run.task_lifecycle_events.filter(idempotency_key="architecture:task-running").count() == 1
+    assert (
+        run.task_lifecycle_events.filter(idempotency_key="architecture:task-running").count() == 1
+    )
 
 
 def test_stale_runtime_attempt_is_ignored_without_task_state_mutation() -> None:
@@ -179,7 +181,9 @@ def test_stale_runtime_attempt_is_ignored_without_task_state_mutation() -> None:
     assert TaskLifecycleRecord.objects.get(run=run, source_node_id="task_1").status == "running"
     outcome = RuntimeIntentOutcome.objects.get(intent_id=intent.intent_id)
     assert outcome.outcome == "ignored"
-    assert not run.task_lifecycle_events.filter(idempotency_key="architecture:stale-complete").exists()
+    assert not run.task_lifecycle_events.filter(
+        idempotency_key="architecture:stale-complete"
+    ).exists()
 
 
 def test_decision_resolution_requires_immutable_audit_record_before_dispatch(
@@ -284,7 +288,9 @@ def test_checkpoint_is_not_visible_before_transaction_commit(user) -> None:
         separate = connections["default"].copy()
         try:
             with separate.cursor() as cursor:
-                cursor.execute("select count(*) from run_checkpoints where run_id = %s", [checkpoint_pk])
+                cursor.execute(
+                    "select count(*) from run_checkpoints where run_id = %s", [checkpoint_pk]
+                )
                 assert cursor.fetchone()[0] == 0
         finally:
             separate.close()
@@ -292,7 +298,9 @@ def test_checkpoint_is_not_visible_before_transaction_commit(user) -> None:
     separate = connections["default"].copy()
     try:
         with separate.cursor() as cursor:
-            cursor.execute("select count(*) from run_checkpoints where run_id = %s", [checkpoint_pk])
+            cursor.execute(
+                "select count(*) from run_checkpoints where run_id = %s", [checkpoint_pk]
+            )
             assert cursor.fetchone()[0] == 1
     finally:
         separate.close()

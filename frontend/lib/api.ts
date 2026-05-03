@@ -2307,7 +2307,9 @@ export const operatorApi = {
     const response = await api.get<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.runState(runId));
     return response.data.data;
   },
-  getTaskState: async (taskId: string): Promise<{ task: OperatorTaskLifecycle; attempts: unknown[]; events: unknown[] }> => {
+  getTaskState: async (
+    taskId: string,
+  ): Promise<{ task: OperatorTaskLifecycle; attempts: unknown[]; events: unknown[] }> => {
     const response = await api.get<
       ApiSuccessResponse<{ task: OperatorTaskLifecycle; attempts: unknown[]; events: unknown[] }>
     >(API_PATHS.operator.taskState(taskId));
@@ -2330,7 +2332,10 @@ export const operatorApi = {
     );
     return response.data.data;
   },
-  acknowledgeIntent: async (intentId: string, reason: string): Promise<{ intent_id: string; acknowledged_at: string }> => {
+  acknowledgeIntent: async (
+    intentId: string,
+    reason: string,
+  ): Promise<{ intent_id: string; acknowledged_at: string }> => {
     const response = await api.post<ApiSuccessResponse<{ intent_id: string; acknowledged_at: string }>>(
       API_PATHS.operator.acknowledgeIntent(intentId),
       { reason },
@@ -2350,10 +2355,9 @@ export const operatorApi = {
     return response.data.data;
   },
   forceRehydrateRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
-    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(
-      API_PATHS.operator.forceRehydrateRun(runId),
-      { reason },
-    );
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.forceRehydrateRun(runId), {
+      reason,
+    });
     return response.data.data;
   },
   getWebSocketSubscribers: async (): Promise<OperatorWebSocketSubscribers> => {

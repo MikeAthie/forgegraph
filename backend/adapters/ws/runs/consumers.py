@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs
 from uuid import UUID, uuid4
 
@@ -22,6 +22,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
 
 from application.services.metrics import (
+    record_service_metric_sample,
     record_ws_connected,
     record_ws_connection_failure,
     record_ws_disconnected,
@@ -29,7 +30,6 @@ from application.services.metrics import (
     record_ws_message_filtered,
     record_ws_message_sent,
     record_ws_slow_client_disconnect,
-    record_service_metric_sample,
 )
 from application.services.run_event_streaming import (
     event_levels_for_subscription,
@@ -227,7 +227,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         start = time.perf_counter()
         try:
             await asyncio.wait_for(self.send_json(message), timeout=timeout_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             record_ws_message_dropped("send_timeout")
             record_ws_slow_client_disconnect("send_timeout")
             await sync_to_async(
@@ -332,7 +332,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         if public_message is None:
             record_ws_message_dropped("invalid_public_message")
             return
-        event_types = getattr(self, "event_types", set())
+        event_types = cast(set[str], getattr(self, "event_types", set()))
         public_type = str(public_message.get("type") or "")
         if event_types and public_type not in event_types:
             record_ws_message_filtered()

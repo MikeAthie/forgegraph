@@ -8,11 +8,7 @@ import {
   seedFrontendControlPlaneFixture,
 } from "./helpers";
 
-async function waitForRunWebSocketSubscription(
-  request: APIRequestContext,
-  accessToken: string,
-  runId: string,
-) {
+async function waitForRunWebSocketSubscription(request: APIRequestContext, accessToken: string, runId: string) {
   const apiBase = (process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:8002").replace(/\/$/, "");
   await expect
     .poll(

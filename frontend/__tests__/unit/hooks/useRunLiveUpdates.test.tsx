@@ -82,9 +82,7 @@ describe("useRunLiveUpdates", () => {
     });
 
     expect(onInvalidate).toHaveBeenCalledTimes(1);
-    expect(FakeWebSocket.instances[0].send).toHaveBeenCalledWith(
-      JSON.stringify({ type: "pong", event_id: "evt-1" }),
-    );
+    expect(FakeWebSocket.instances[0].send).toHaveBeenCalledWith(JSON.stringify({ type: "pong", event_id: "evt-1" }));
   });
 
   it("ignores transport-only messages instead of inventing final backend state locally", async () => {

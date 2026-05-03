@@ -1,12 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  createGraphName,
-  createHumanGateRunViaApi,
-  createTestUser,
-  loginLive,
-  waitForRunStatus,
-} from "./live-helpers";
+import { createGraphName, createHumanGateRunViaApi, createTestUser, loginLive, waitForRunStatus } from "./live-helpers";
 
 test.describe("Human gate live flow", () => {
   test.describe.configure({ mode: "serial" });
