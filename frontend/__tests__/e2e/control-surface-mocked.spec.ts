@@ -48,7 +48,7 @@ test.describe("Frontend Control Surface Live Backend", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("heading", { name: /decide with context, not with logs/i })).toBeVisible();
-    await expect(page.getByText(fixture.approval.promptMessage, { exact: true })).toBeVisible();
+    await expect(page.getByText(fixture.approval.promptMessage, { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: new RegExp(fixture.approval.graphName, "i") })).toBeVisible();
   });
 
@@ -57,7 +57,7 @@ test.describe("Frontend Control Surface Live Backend", () => {
     await ensureUserRegistered(request, user);
     const fixture = seedFrontendControlPlaneFixture(user);
     await proxyBackendApi(page, request, user, [
-      new RegExp(`/api/executions/${fixture.runIds.failed}(?:\\?.*)?$`),
+      new RegExp(`/api/runs/${fixture.runIds.failed}(?:\\?.*)?$`),
       /\/api\/decisions\/count(?:\?.*)?$/,
     ]);
 
@@ -65,8 +65,8 @@ test.describe("Frontend Control Surface Live Backend", () => {
     await page.goto(`/executions/${fixture.runIds.failed}`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: /operation trace/i })).toBeVisible();
-    await expect(page.getByText(/escalation api rejected the payload/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible();
+    await expect(page.getByText(/operation could not continue|could not finish/i).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: /department activity/i })).toBeVisible();
   });
 });

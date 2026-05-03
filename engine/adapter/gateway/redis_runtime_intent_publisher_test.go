@@ -125,3 +125,47 @@ func TestRedisRuntimeIntentPublisherFailsFastOnFatalAuthError(t *testing.T) {
 		t.Fatalf("expected one publish attempt, got %d", client.callCount)
 	}
 }
+
+func TestRedisRuntimeIntentPublisherFailsAfterRetryBudget(t *testing.T) {
+	results := make([]stubXAddResult, 100)
+	for i := range results {
+		results[i] = stubXAddResult{err: errors.New("i/o timeout")}
+	}
+	client := &stubRuntimeIntentStreamClient{
+		results: results,
+	}
+	publisher, err := NewRedisRuntimeIntentPublisherWithConfig(
+		client,
+		"forgegraph:test:runtime:intents",
+		RuntimeIntentPublisherConfig{
+			InitialBackoff: 2 * time.Millisecond,
+			MaxBackoff:     2 * time.Millisecond,
+			MaxElapsedTime: 50 * time.Millisecond,
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewRedisRuntimeIntentPublisherWithConfig() error = %v", err)
+	}
+
+	intent := &port.RuntimeIntentEnvelope{
+		IntentID:   "intent-retry-exhausted",
+		IntentType: "pause_run",
+		RunID:      "run-1",
+		AttemptID:  "attempt-1",
+		Payload:    map[string]any{"node_id": "gate"},
+	}
+	err = publisher.Publish(context.Background(), intent)
+	if err == nil {
+		t.Fatal("expected retry exhaustion error")
+	}
+	var publishErr *RuntimeIntentPublishError
+	if !errors.As(err, &publishErr) {
+		t.Fatalf("expected RuntimeIntentPublishError, got %T", err)
+	}
+	if !publishErr.Retryable {
+		t.Fatalf("expected transient retry exhaustion to remain classified retryable")
+	}
+	if client.callCount < 2 {
+		t.Fatalf("expected multiple publish attempts before exhaustion, got %d", client.callCount)
+	}
+}

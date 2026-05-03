@@ -19,6 +19,7 @@ import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { operationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { OperationVM, TaskVM } from "@/domain/translation";
+import { useRunLiveUpdates } from "@/hooks/useRunLiveUpdates";
 import {
   EmptyBlock,
   InspectorPanel,
@@ -65,12 +66,14 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [actionLoading, setActionLoading] = useState<"stop" | "retry" | null>(null);
 
-  const loadOperation = useCallback(async () => {
+  const loadOperation = useCallback(async (options?: { showSpinner?: boolean }) => {
     if (!operationId) {
       return;
     }
 
-    setLoading(true);
+    if (options?.showSpinner) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await operationRepository.get(operationId);
@@ -86,8 +89,10 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   }, [operationId]);
 
   useEffect(() => {
-    void loadOperation();
+    void loadOperation({ showSpinner: true });
   }, [loadOperation]);
+
+  useRunLiveUpdates(operationId, () => loadOperation({ showSpinner: false }));
 
   const selectedTask = useMemo(
     () => operation?.tasks.find((task) => task.id === selectedTaskId) ?? operation?.tasks[0] ?? null,
@@ -107,12 +112,18 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
       .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0))
       .slice(0, 2);
     const bottleneckIds = new Set(bottleneckTasks.map((task) => task.id));
-    const decisionTasks = operation.tasks.filter((task) => task.requiresApproval || task.status === "paused");
-    const failedTasks = operation.tasks.filter((task) => task.status === "failed");
+    const decisionTasks = operation.tasks.filter(
+      (task) => task.requiresApproval || task.status === "paused" || task.status === "waiting_for_decision",
+    );
+    const failedTasks = operation.tasks.filter((task) =>
+      ["failed", "dead_lettered", "cancelled"].includes(task.status),
+    );
+    const retryTasks = operation.tasks.filter((task) => task.status === "retry_scheduled");
     const highlightIds = new Set([
       ...bottleneckIds,
       ...decisionTasks.map((task) => task.id),
       ...failedTasks.map((task) => task.id),
+      ...retryTasks.map((task) => task.id),
     ]);
     const routineTasks = operation.tasks.filter((task) => !highlightIds.has(task.id));
     const visibleRoutineIds = new Set(routineTasks.slice(0, 3).map((task) => task.id));
@@ -125,6 +136,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
     return {
       failedTasks,
       decisionTasks,
+      retryTasks,
       bottleneckTasks,
       bottleneckIds,
       hiddenRoutineCount: Math.max(routineTasks.length - visibleRoutineIds.size, 0),
@@ -135,6 +147,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const totalCost = estimateOperationCost(operation);
   const failedTask = activityState?.failedTasks[0] ?? null;
   const decisionTask = activityState?.decisionTasks[0] ?? null;
+  const retryTask = activityState?.retryTasks[0] ?? null;
   const bottleneckTask = activityState?.bottleneckTasks[0] ?? null;
   const canStopOperation = operation ? ["queued", "running"].includes(operation.status) : false;
   const isWaitingForApproval = operation?.status === "paused" || Boolean(decisionTask);
@@ -144,6 +157,8 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const actionTitle =
     failedTask || operation?.failure
       ? "Failure needs review"
+      : retryTask
+        ? "Retry is scheduled"
       : isWaitingForApproval
         ? "Approval is waiting"
         : operation?.status === "running"
@@ -154,6 +169,8 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const actionDescription =
     failedTask || operation?.failure
       ? (operation?.failure?.summary ?? "A department could not finish its assigned work.")
+      : retryTask
+        ? `${retryTask.departmentName} has a bounded retry scheduled by the backend.`
       : isWaitingForApproval
         ? "A department needs a human decision before work can continue."
         : operation?.status === "running"
@@ -382,7 +399,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
 
               <div className="grid gap-6 2xl:grid-cols-[0.92fr_1.08fr]">
                 <Panel title="Attention points" description="The department activity that matters most right now.">
-                  {failedTask || decisionTask || bottleneckTask ? (
+                  {failedTask || decisionTask || retryTask || bottleneckTask ? (
                     <div className="space-y-3">
                       {failedTask ? (
                         <div className="rounded-[1.2rem] border border-rose-800/12 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
@@ -403,6 +420,15 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                           <p className="text-sm font-semibold">Decision boundary</p>
                           <p className="mt-2 text-sm leading-7">
                             {decisionTask.departmentName} is waiting on a human decision or approval boundary.
+                          </p>
+                        </div>
+                      ) : null}
+                      {retryTask ? (
+                        <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 px-4 py-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
+                          <p className="text-sm font-semibold">Retry scheduled</p>
+                          <p className="mt-2 text-sm leading-7">
+                            {retryTask.latestRetry?.retry_reason ||
+                              `${retryTask.departmentName} has a bounded backend retry recorded.`}
                           </p>
                         </div>
                       ) : null}
@@ -512,6 +538,8 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                                   <StatusBadge status="pending" label="department activity" />
                                   {isDecision ? <StatusBadge status="paused" label="decision" /> : null}
                                   {isBottleneck ? <StatusBadge status="pending" label="bottleneck" /> : null}
+                                  {task.deadLetter ? <StatusBadge status="dead_lettered" label="dead letter" /> : null}
+                                  {task.latestRetry ? <StatusBadge status="retry_scheduled" label="retry" /> : null}
                                 </div>
                                 <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
                                   {getTaskNarrative(task)}
@@ -542,7 +570,18 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                                 {tone === "rose" ? (
                                   <div className="rounded-2xl border border-rose-800/15 bg-rose-50 px-3 py-2 text-rose-900 dark:border-rose-200/20 dark:bg-rose-500/10 dark:text-rose-100">
                                     <p className="text-[11px] uppercase tracking-[0.16em]">Failure</p>
-                                    <p className="mt-1 text-xs">This activity requires intervention here.</p>
+                                    <p className="mt-1 text-xs">
+                                      {task.deadLetter?.reason || "This activity requires intervention here."}
+                                    </p>
+                                  </div>
+                                ) : null}
+                                {task.latestRetry ? (
+                                  <div className="rounded-2xl border border-amber-800/15 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-200/20 dark:bg-amber-500/10 dark:text-amber-100">
+                                    <p className="text-[11px] uppercase tracking-[0.16em]">Retry</p>
+                                    <p className="mt-1 text-xs">
+                                      Attempt {task.latestRetry.attempt_number ?? "?"} of{" "}
+                                      {task.latestRetry.max_attempts ?? "?"}
+                                    </p>
                                   </div>
                                 ) : null}
                               </div>

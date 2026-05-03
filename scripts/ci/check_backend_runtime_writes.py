@@ -22,11 +22,15 @@ IGNORED_PARTS = {
 ALLOWED_RUNTIME_WRITERS = {
     Path("backend/adapters/api/runs/views.py"),
     Path("backend/adapters/api/engine/views.py"),
+    Path("backend/adapters/api/operator/views.py"),
     Path("backend/adapters/api/integrations/telegram_views.py"),
     Path("backend/adapters/api/integrations/whatsapp_views.py"),
     Path("backend/adapters/api/integrations/webhook_views.py"),
+    Path("backend/application/services/audit_log.py"),
+    Path("backend/application/services/os_projections.py"),
     Path("backend/application/services/runtime_write_intents.py"),
     Path("backend/application/services/run_liveness.py"),
+    Path("backend/application/services/task_lifecycle.py"),
     Path("backend/infrastructure/orm/management/commands/process_run_queue.py"),
 }
 
@@ -98,6 +102,54 @@ WRITE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "ApprovalTask state mutation",
         re.compile(r"""\b(?:approval_task|task)\.status\s*(?<![=!<>])=(?![=])"""),
+    ),
+    (
+        "TaskLifecycleRecord ORM write",
+        re.compile(
+            r"""TaskLifecycleRecord\.objects\.(?:create|get_or_create|update_or_create|bulk_create|bulk_update)""",
+        ),
+    ),
+    (
+        "TaskLifecycleRecord ORM update",
+        re.compile(r"""TaskLifecycleRecord\.objects\.filter\([^)]*\)\.update\("""),
+    ),
+    (
+        "TaskLifecycleRecord state mutation",
+        re.compile(r"""\b(?:lifecycle_task|task)\.status\s*(?<![=!<>])=(?![=])"""),
+    ),
+    (
+        "TaskLifecycleRecord save",
+        re.compile(r"""\b(?:lifecycle_task|task)\.save\("""),
+    ),
+    (
+        "TaskLifecycleEvent ORM write",
+        re.compile(
+            r"""TaskLifecycleEvent\.objects\.(?:create|get_or_create|update_or_create|bulk_create|bulk_update)""",
+        ),
+    ),
+    (
+        "TaskDeadLetterRecord ORM write",
+        re.compile(
+            r"""TaskDeadLetterRecord\.objects\.(?:create|get_or_create|update_or_create|bulk_create|bulk_update)""",
+        ),
+    ),
+    (
+        "TaskDeadLetterRecord ORM update",
+        re.compile(r"""TaskDeadLetterRecord\.objects\.filter\([^)]*\)\.update\("""),
+    ),
+    (
+        "RetryOperation ORM write",
+        re.compile(
+            r"""RetryOperation\.objects\.(?:create|get_or_create|update_or_create|bulk_create|bulk_update)""",
+        ),
+    ),
+    (
+        "RetryOperation ORM update",
+        re.compile(r"""RetryOperation\.objects\.filter\([^)]*\)\.update\("""),
+    ),
+    (
+        "RuntimeIntentOutcome acknowledgement mutation",
+        re.compile(r"""\b(?:outcome|runtime_intent_outcome)\.acknowledged_at\s*(?<![=!<>])=(?![=])"""),
     ),
 )
 

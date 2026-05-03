@@ -1,4 +1,4 @@
-import { executionsApi, runsApi, tasksApi, type LLMMode } from "@/lib/api";
+import { executionsApi, runsApi, tasksApi, type LLMMode, type ResumeRunResponse } from "@/lib/api";
 import { buildCompanyProfile, buildOperationInput, type CompanyProfile } from "@/lib/company-workspace";
 import {
   toOperationListVM,
@@ -20,6 +20,14 @@ export const operationRepository = {
   get: async (operationId: string): Promise<OperationVM> => {
     const operation = await runsApi.get(operationId);
     return toOperationVM(operation);
+  },
+
+  getBackendState: async (operationId: string): Promise<{ status: string; recoveryState?: string | null }> => {
+    const operation = await runsApi.get(operationId);
+    return {
+      status: String(operation.status),
+      recoveryState: operation.recovery_state ?? null,
+    };
   },
 
   getLegacyExecution: async (operationId: string): Promise<OperationVM> => {
@@ -73,7 +81,7 @@ export const operationRepository = {
     departmentId: string,
     approved: boolean,
     feedback?: string,
-  ): Promise<{ resumed: boolean }> =>
+  ): Promise<ResumeRunResponse> =>
     runsApi.resume(operationId, {
       node_id: departmentId,
       input_json: {

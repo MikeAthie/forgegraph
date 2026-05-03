@@ -4,13 +4,17 @@
 
 Release order is:
 
-1. full CI passes
-2. dependency audit passes
-3. images are built from the exact CI commit SHA, scanned, and published
-4. migration contract runs
-5. services are deployed
-6. smoke checks pass
-7. release metadata is recorded
+1. local production evidence gate is runnable or has a documented environment-only exception
+2. full CI passes
+3. dependency audit passes
+4. images are built from the exact CI commit SHA, scanned, and published
+5. migration contract runs
+6. services are deployed
+7. smoke checks pass
+8. release metadata is recorded
+
+Use [production-evidence-gate.md](production-evidence-gate.md) for the local
+gate, failure classification, capacity evidence, and operator walkthrough.
 
 ## Integrity Rule
 

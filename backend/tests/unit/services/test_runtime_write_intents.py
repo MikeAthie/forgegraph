@@ -18,6 +18,7 @@ from application.services.runtime_write_intents import (
     apply_set_run_status_intent,
     apply_store_checkpoint_intent,
     apply_upsert_node_run_intent,
+    process_runtime_intent_message,
 )
 from infrastructure.orm.models import (
     ApprovalTask,
@@ -30,6 +31,7 @@ from infrastructure.orm.models import (
     RunCheckpoint,
     RunEvent,
     RunEventProjection,
+    RuntimeIntentOutcome,
     User,
 )
 
@@ -117,6 +119,22 @@ def _pause_intent(*, run: Run, intent_id: UUID | None = None) -> RuntimeIntentEn
             },
         },
     )
+
+
+def _intent_fields(intent: RuntimeIntentEnvelope) -> dict[str, str]:
+    return {
+        "intent": json.dumps(
+            {
+                "intent_id": str(intent.intent_id),
+                "intent_type": intent.intent_type,
+                "run_id": str(intent.run_id),
+                "attempt_id": intent.attempt_id,
+                "trace_id": intent.trace_id,
+                "timestamp": intent.timestamp.isoformat(),
+                "payload": intent.payload,
+            }
+        )
+    }
 
 
 @patch("application.services.runtime_write_intents.broadcast_decision_required")
@@ -287,6 +305,37 @@ def test_apply_pause_run_intent_is_idempotent_for_duplicate_intent_id(
     broadcast_decision_required.assert_called_once()
 
 
+@patch("application.services.runtime_write_intents.broadcast_decision_required")
+@patch("application.services.runtime_write_intents.broadcast_run_updated")
+def test_process_runtime_intent_records_backend_owned_outcome(
+    broadcast_run_updated,
+    broadcast_decision_required,
+):
+    run = _make_run()
+    intent = _pause_intent(run=run)
+
+    result = process_runtime_intent_message(
+        stream_message_id="1700000000099-0",
+        fields=_intent_fields(intent),
+    )
+
+    assert result == "processed"
+    outcome = RuntimeIntentOutcome.objects.get(intent_id=intent.intent_id)
+    assert outcome.outcome == "processed"
+    assert outcome.run == run
+
+    duplicate = process_runtime_intent_message(
+        stream_message_id="1700000000100-0",
+        fields=_intent_fields(intent),
+    )
+
+    assert duplicate == "duplicate"
+    outcome.refresh_from_db()
+    assert outcome.outcome == "duplicate"
+    broadcast_run_updated.assert_called_once()
+    broadcast_decision_required.assert_called_once()
+
+
 @patch("application.services.runtime_write_intents.broadcast_decision_resolved")
 @patch("application.services.runtime_write_intents.broadcast_run_updated")
 def test_apply_ack_run_resumed_intent_clears_pause_state_and_resume_tracking(
@@ -314,6 +363,7 @@ def test_apply_ack_run_resumed_intent_clears_pause_state_and_resume_tracking(
         trace_id="trace-resume",
         payload={
             "node_id": "human_gate_1",
+            "resume_attempt_id": str(resume_attempt_id),
             "resolution": {"approved": True, "feedback": "ship it"},
         },
     )

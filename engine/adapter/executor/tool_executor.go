@@ -521,6 +521,23 @@ func (e *ToolExecutor) executeHTTPTool(
 			)
 			if attempt < retryAttempts {
 				delayMs := computeProviderRetryDelayMs(retryBackoffMs, attempt, 0)
+				if recordErr := port.RecordRetry(ctx, port.RetryRecord{
+					OperationType:    "tool_http_request",
+					AttemptNumber:    attempt + 1,
+					MaxAttempts:      retryAttempts,
+					RetryDelayMs:     delayMs,
+					RetryReason:      "tool http request failed",
+					LastError:        lastErr,
+					RetryClass:       "transport",
+					TerminalFallback: "return_retryable_error",
+					Metadata: map[string]any{
+						"tool":              def.Name,
+						"tool_execution_id": call.ToolExecutionID,
+						"idempotency_key":   call.IdempotencyKey,
+					},
+				}); recordErr != nil {
+					return nil, recordErr
+				}
 				if backoffErr := sleepWithContext(ctx, delayMs); backoffErr != nil {
 					return nil, backoffErr
 				}
@@ -587,6 +604,25 @@ func (e *ToolExecutor) executeHTTPTool(
 			)
 			if attempt < retryAttempts {
 				delayMs := computeProviderRetryDelayMs(retryBackoffMs, attempt, retryAfterMs)
+				if recordErr := port.RecordRetry(ctx, port.RetryRecord{
+					OperationType:    "tool_upstream_http",
+					AttemptNumber:    attempt + 1,
+					MaxAttempts:      retryAttempts,
+					RetryDelayMs:     delayMs,
+					RetryReason:      "tool upstream returned retryable status",
+					LastError:        lastErr,
+					RetryClass:       "transport",
+					TerminalFallback: "return_retryable_error",
+					Metadata: map[string]any{
+						"tool":              def.Name,
+						"tool_execution_id": call.ToolExecutionID,
+						"idempotency_key":   call.IdempotencyKey,
+						"status_code":       resp.StatusCode,
+						"retry_after_ms":    retryAfterMs,
+					},
+				}); recordErr != nil {
+					return nil, recordErr
+				}
 				if backoffErr := sleepWithContext(ctx, delayMs); backoffErr != nil {
 					return nil, backoffErr
 				}

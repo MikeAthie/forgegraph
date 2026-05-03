@@ -3,6 +3,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: forgegraph-postgres
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
@@ -56,6 +57,16 @@ services:
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-false}
       AUTH_REFRESH_COOKIE_SECURE: ${AUTH_REFRESH_COOKIE_SECURE:-false}
+      AUTH_REGISTER_THROTTLE_RATE: ${AUTH_REGISTER_THROTTLE_RATE:-20/hour}
+      AUTH_LOGIN_THROTTLE_RATE: ${AUTH_LOGIN_THROTTLE_RATE:-10/min}
+      AUTH_REFRESH_THROTTLE_RATE: ${AUTH_REFRESH_THROTTLE_RATE:-60/min}
+      AUTH_WS_TICKET_THROTTLE_RATE: ${AUTH_WS_TICKET_THROTTLE_RATE:-120/min}
+      API_ANON_THROTTLE_RATE: ${API_ANON_THROTTLE_RATE:-120/min}
+      API_USER_THROTTLE_RATE: ${API_USER_THROTTLE_RATE:-1200/min}
+      RUN_START_RATE_LIMIT_PER_MIN: ${RUN_START_RATE_LIMIT_PER_MIN:-60}
+      RUN_INVOKE_RATE_LIMIT_PER_MIN: ${RUN_INVOKE_RATE_LIMIT_PER_MIN:-120}
+      RUN_RATE_LIMIT_WINDOW_SECONDS: ${RUN_RATE_LIMIT_WINDOW_SECONDS:-60}
+      RUN_MAX_ACTIVE_PER_TENANT: ${RUN_MAX_ACTIVE_PER_TENANT:-25}
       FORGEGRAPH_ALLOW_INSECURE_TRANSPORT: ${FORGEGRAPH_ALLOW_INSECURE_TRANSPORT:-true}
       FF_OS_SHELL: ${FF_OS_SHELL:-true}
       FF_AGENT_REGISTRY: ${FF_AGENT_REGISTRY:-true}
@@ -97,6 +108,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
     healthcheck:
@@ -178,6 +190,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
     healthcheck:
@@ -254,6 +267,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
     healthcheck:
@@ -346,6 +360,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./docs:/docs:ro
     healthcheck:
       test:
         [

@@ -55,7 +55,12 @@ def test_compute_metrics_and_analysis_detect_breaking_point():
         ),
     ]
 
-    metrics = module.StressHarness.compute_metrics(harness, records)
+    metrics = module.StressHarness.compute_metrics(
+        harness,
+        records,
+        metrics_before={},
+        metrics_after={},
+    )
     analysis = module.StressHarness.analyze_scenario(
         harness,
         scenario="endpoint-saturation",

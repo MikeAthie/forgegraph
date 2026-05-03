@@ -29,6 +29,8 @@ class RequestMetricsMiddleware:
                 duration_ms=duration_ms,
                 timeout_like=duration_ms >= timeout_threshold_ms,
                 timeout_threshold_ms=timeout_threshold_ms,
+                path=request.path_info,
+                method=request.method,
             )
             raise
 
@@ -38,5 +40,7 @@ class RequestMetricsMiddleware:
             duration_ms=duration_ms,
             timeout_like=duration_ms >= timeout_threshold_ms,
             timeout_threshold_ms=timeout_threshold_ms,
+            path=request.path_info,
+            method=request.method,
         )
         return response

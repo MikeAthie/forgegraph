@@ -64,14 +64,20 @@ export const statusTone = (status: string) => {
     case "resolved":
       return "emerald";
     case "idle":
+    case "created":
+    case "claimed":
     case "queued":
     case "pending":
     case "waiting":
       return "slate";
     case "paused":
+    case "waiting_for_decision":
+    case "retry_scheduled":
       return "amber";
     case "error":
     case "failed":
+    case "dead_lettered":
+    case "cancelled":
     case "rejected":
     case "attention":
       return "rose";

@@ -21,6 +21,7 @@ from infrastructure.orm.models import (
     OrganizationMembership,
     Run,
     RunQueueEntry,
+    ServiceMetricSample,
 )
 
 
@@ -61,6 +62,20 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     record_callback_auth_failure("invalid_signature")
     record_api_request(status_code=200, duration_ms=120)
     record_api_request(status_code=503, duration_ms=240)
+    ServiceMetricSample.objects.create(
+        metric_name="runtime_intent_processing_ms",
+        source="test",
+        value=250,
+        unit="ms",
+        observed_at=timezone.now(),
+    )
+    ServiceMetricSample.objects.create(
+        metric_name="websocket_delivery_ms",
+        source="test",
+        value=50,
+        unit="ms",
+        observed_at=timezone.now(),
+    )
     record_transport_event("intent_received")
     record_transport_event("intent_applied")
     record_transport_event("intent_ack")
@@ -94,6 +109,9 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
     assert "oldest_pending_age_seconds" in payload["queue"]
     assert "by_tenant" in payload["queue"]
     assert "websocket" in payload
+    assert "messages_filtered_total" in payload["websocket"]
+    assert "slow_client_disconnects_total" in payload["websocket"]
+    assert "send_latency_ms_p95" in payload["websocket"]
     assert payload["api"]["requests_total"] >= 2
     assert payload["api"]["server_errors_total"] >= 1
     assert "timeout_like_requests_total" in payload["api"]
@@ -115,6 +133,14 @@ def test_metrics_summary_returns_run_and_queue_stats(authenticated_client, user)
         assert payload["runtime_transport"]["stream_backlog"] >= 5
         assert payload["runtime_transport"]["dead_letter_count"] >= 1
     assert "guardrails" in payload
+    assert "api_p95_latency_ms_target" in payload["slo"]
+    assert "websocket_send_p95_latency_ms_target" in payload["slo"]
+    assert "runtime_intent_processing_p95_ms_target" in payload["slo"]
+    assert "sre" in payload
+    assert "objectives" in payload["sre"]
+    assert "dashboard_panels" in payload["sre"]
+    assert "alerts" in payload["sre"]
+    assert not payload["sre"]["catalog_validation"]["missing_slos"]
     assert "generated_at" in payload
 
 
@@ -130,3 +156,27 @@ def test_metrics_summary_requires_admin_role(api_client, user):
     response = api_client.get("/api/metrics/summary")
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert response.data["error"]["code"] == "FORBIDDEN"
+
+
+def test_metrics_slo_endpoint_returns_sre_read_model(authenticated_client):
+    ServiceMetricSample.objects.create(
+        metric_name="api_request_duration_ms",
+        source="test",
+        value=100,
+        unit="ms",
+        dimensions={"status_code": 200, "path": "/api/runs", "method": "GET"},
+        observed_at=timezone.now(),
+    )
+
+    response = authenticated_client.get("/api/metrics/slo")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.data["data"]
+    objective_ids = {item["id"] for item in payload["objectives"]}
+    panel_ids = {item["id"] for item in payload["dashboard_panels"]}
+    alert_ids = {item["id"] for item in payload["alerts"]["items"]}
+
+    assert "api_availability" in objective_ids
+    assert "runtime_intent_backlog" in panel_ids
+    assert "backend_health_degradation" in alert_ids
+    assert payload["catalog_path"] == "docs/ops/production-slos.yaml"

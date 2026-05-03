@@ -20,7 +20,7 @@ from adapters.ws.runs.broadcast import (
     broadcast_run_updated,
 )
 from application.services.company_archive import ArchiveService
-from application.services.metrics import record_stale_attempt_ignored
+from application.services.metrics import record_service_metric_sample, record_stale_attempt_ignored
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
@@ -30,6 +30,13 @@ from application.services.run_snapshots import (
     delete_snapshot,
     safe_delete_snapshot,
     set_snapshot,
+)
+from application.services.task_lifecycle import (
+    dead_letter_task,
+    mark_run_tasks_terminal,
+    record_retry_operation,
+    transition_from_node_run,
+    transition_task_lifecycle,
 )
 from application.services.tool_executions import transition_tool_execution
 from infrastructure.orm.models import (
@@ -41,6 +48,8 @@ from infrastructure.orm.models import (
     RunCheckpoint,
     RunEvent,
     RunEventProjection,
+    RuntimeIntentOutcome,
+    TaskLifecycleRecord,
     ToolExecution,
 )
 
@@ -72,6 +81,8 @@ SUPPORTED_RUNTIME_INTENTS = {
     "node_completed",
     "store_checkpoint",
     "set_run_status",
+    "task_lifecycle_transition",
+    "record_retry_operation",
     "tool_execution_started",
     "tool_execution_succeeded",
     "tool_execution_failed",
@@ -237,6 +248,35 @@ def process_runtime_intent_message(
     fields: dict[str, str],
 ) -> IntentProcessResult:
     intent = decode_runtime_intent_message(fields)
+    try:
+        result = _apply_runtime_intent_message(
+            intent=intent,
+            stream_message_id=stream_message_id,
+        )
+    except RuntimeIntentError as exc:
+        _record_runtime_intent_outcome(
+            intent=intent,
+            outcome="invalid",
+            stream_message_id=stream_message_id,
+            reason=str(exc),
+            error_class=exc.__class__.__name__,
+        )
+        raise
+
+    _record_runtime_intent_outcome(
+        intent=intent,
+        outcome=result,
+        stream_message_id=stream_message_id,
+        reason=_runtime_intent_result_reason(result),
+    )
+    return result
+
+
+def _apply_runtime_intent_message(
+    *,
+    intent: RuntimeIntentEnvelope,
+    stream_message_id: str,
+) -> IntentProcessResult:
     if intent.intent_type == "pause_run":
         return apply_pause_run_intent(intent=intent, stream_message_id=stream_message_id)
     if intent.intent_type == "ack_run_resumed":
@@ -247,6 +287,16 @@ def process_runtime_intent_message(
         return apply_store_checkpoint_intent(intent=intent, stream_message_id=stream_message_id)
     if intent.intent_type == "set_run_status":
         return apply_set_run_status_intent(intent=intent, stream_message_id=stream_message_id)
+    if intent.intent_type == "task_lifecycle_transition":
+        return apply_task_lifecycle_transition_intent(
+            intent=intent,
+            stream_message_id=stream_message_id,
+        )
+    if intent.intent_type == "record_retry_operation":
+        return apply_record_retry_operation_intent(
+            intent=intent,
+            stream_message_id=stream_message_id,
+        )
     if intent.intent_type.startswith("tool_execution_"):
         return apply_tool_execution_status_intent(
             intent=intent,
@@ -255,6 +305,45 @@ def process_runtime_intent_message(
     if intent.intent_type == "upsert_node_run":
         return apply_upsert_node_run_intent(intent=intent, stream_message_id=stream_message_id)
     raise RuntimeIntentError(f"unsupported runtime intent type: {intent.intent_type}")
+
+
+def record_runtime_intent_dead_letter(
+    *,
+    intent_id: str | None,
+    run_id: str | None,
+    intent_type: str | None,
+    attempt_id: str | None,
+    stream_message_id: str,
+    reason: str,
+    error_class: str,
+) -> bool:
+    try:
+        parsed_intent_id = UUID(str(intent_id or "").strip())
+    except ValueError:
+        return False
+
+    run: Run | None = None
+    try:
+        parsed_run_id = UUID(str(run_id or "").strip())
+    except ValueError:
+        parsed_run_id = None
+    if parsed_run_id is not None:
+        run = Run.objects.filter(id=parsed_run_id).only("id").first()
+
+    RuntimeIntentOutcome.objects.update_or_create(
+        intent_id=parsed_intent_id,
+        defaults={
+            "run": run,
+            "intent_type": str(intent_type or "").strip(),
+            "attempt_id": str(attempt_id or "").strip(),
+            "outcome": "dead_lettered",
+            "reason": reason,
+            "error_class": error_class,
+            "trace_id": "",
+            "stream_message_id": stream_message_id,
+        },
+    )
+    return True
 
 
 def apply_pause_run_intent(
@@ -340,7 +429,7 @@ def apply_pause_run_intent(
         )
 
         normalized_node_output = {"pause_payload": redact_payload(_payload_dict(pause_payload))}
-        _upsert_node_run(
+        node_run = _upsert_node_run(
             run=run,
             node_id=node_id,
             node_type=node_type,
@@ -351,6 +440,16 @@ def apply_pause_run_intent(
             trace_id=intent.trace_id,
             span_id="",
         )
+        lifecycle_result = transition_from_node_run(
+            run=run,
+            node_run=node_run,
+            source="runtime_intent",
+            idempotency_key=f"task:{intent.intent_id}:pause",
+            reason="HITL pause intent committed",
+            occurred_at=intent.timestamp,
+        )
+        if lifecycle_result.outcome not in {"accepted", "duplicate"}:
+            return "invalid" if lifecycle_result.outcome in {"invalid", "out_of_order"} else "ignored"
 
         approval_payload = {
             "prompt_message": decision_payload["prompt_message"],
@@ -360,11 +459,21 @@ def apply_pause_run_intent(
             run=run,
             node_id=node_id,
             status="pending",
-            defaults={"assignee": run.owner, "payload": approval_payload},
+            defaults={
+                "assignee": run.owner,
+                "payload": approval_payload,
+                "task_lifecycle": lifecycle_result.lifecycle_task,
+            },
         )
+        approval_update_fields: list[str] = []
         if not created and approval_task.payload != approval_payload:
             approval_task.payload = approval_payload
-            approval_task.save(update_fields=["payload"])
+            approval_update_fields.append("payload")
+        if approval_task.task_lifecycle_id != lifecycle_result.lifecycle_task.id:
+            approval_task.task_lifecycle = lifecycle_result.lifecycle_task
+            approval_update_fields.append("task_lifecycle")
+        if approval_update_fields:
+            approval_task.save(update_fields=sorted(set(approval_update_fields)))
 
         _upsert_run_projection(
             run=run,
@@ -437,6 +546,9 @@ def apply_ack_run_resumed_intent(
         expected_attempt_id = str(run.resume_attempt_id) if run.resume_attempt_id else ""
         if expected_attempt_id and intent.attempt_id != expected_attempt_id:
             return "invalid"
+        payload_resume_attempt_id = str(intent.payload.get("resume_attempt_id") or "").strip()
+        if expected_attempt_id and payload_resume_attempt_id != expected_attempt_id:
+            return "invalid"
 
         resolved_node_id = node_id or str(run.paused_node_id or "")
         resolved_payload = {
@@ -479,6 +591,23 @@ def apply_ack_run_resumed_intent(
                 "category": "state",
             },
         )
+        if resolved_node_id:
+            lifecycle_result = transition_task_lifecycle(
+                run=run,
+                node_id=resolved_node_id,
+                node_type="human_gate",
+                to_status="running",
+                attempt_number=1,
+                source="runtime_intent",
+                idempotency_key=f"task:{intent.intent_id}:resume_ack",
+                reason="backend accepted resume acknowledgement",
+                event_type="runtime_intent.ack_run_resumed",
+                owner_component="engine",
+                payload={"resume_attempt_id": expected_attempt_id},
+                occurred_at=intent.timestamp,
+            )
+            if lifecycle_result.outcome not in {"accepted", "duplicate"}:
+                return "invalid" if lifecycle_result.outcome in {"invalid", "out_of_order"} else "ignored"
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
 
     if run is not None:
@@ -659,6 +788,20 @@ def apply_set_run_status_intent(
         )
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
         if run.status in {"succeeded", "failed", "canceled"}:
+            if run.status == "failed":
+                mark_run_tasks_terminal(
+                    run=run,
+                    status_value="failed",
+                    source="runtime_intent",
+                    reason=str(run.error_message or "run failed"),
+                )
+            elif run.status == "canceled":
+                mark_run_tasks_terminal(
+                    run=run,
+                    status_value="cancelled",
+                    source="runtime_intent",
+                    reason=str(run.error_message or "run cancelled"),
+                )
             run_id = run.id
 
             def delete_completed_run_snapshot() -> None:
@@ -825,12 +968,133 @@ def apply_upsert_node_run_intent(
             output_json=node_run.output_json,
             error_json=node_run.error_json,
         )
+        lifecycle_result = transition_from_node_run(
+            run=run,
+            node_run=node_run,
+            source="runtime_intent",
+            idempotency_key=f"task:{intent.intent_id}",
+            reason=str(intent.payload.get("reason") or "").strip(),
+            occurred_at=intent.timestamp,
+            allow_late=bool(intent.payload.get("allow_late")),
+        )
+        if lifecycle_result.outcome not in {"accepted", "duplicate"}:
+            if lifecycle_result.outcome == "invalid":
+                return "invalid"
+            if lifecycle_result.outcome in {"stale", "late"}:
+                return "ignored"
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
         if node_run.status == "succeeded":
             _schedule_deliverable_archive(run_id=run.id, node_run_id=node_run.id)
 
     if run is not None and node_run is not None:
         broadcast_node_run_updated(run=run, node_run=node_run)
+    return "processed"
+
+
+def apply_task_lifecycle_transition_intent(
+    *,
+    intent: RuntimeIntentEnvelope,
+    stream_message_id: str,
+) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
+    node_id = str(intent.payload.get("node_id") or "").strip()
+    node_type = str(intent.payload.get("node_type") or "").strip()
+    status_value = str(intent.payload.get("status") or "").strip()
+    idempotency_key = str(intent.payload.get("idempotency_key") or "").strip()
+    if not node_id:
+        raise RuntimeIntentError("task_lifecycle_transition payload.node_id is required")
+    if not status_value:
+        raise RuntimeIntentError("task_lifecycle_transition payload.status is required")
+    if not idempotency_key:
+        raise RuntimeIntentError("task_lifecycle_transition payload.idempotency_key is required")
+
+    with transaction.atomic():
+        if _intent_already_processed(intent.intent_id):
+            return "duplicate"
+        run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
+        result = transition_task_lifecycle(
+            run=run,
+            node_id=node_id,
+            node_type=node_type,
+            to_status=status_value,
+            attempt_number=_coerce_non_negative_int(intent.payload.get("attempt_number"), default=1),
+            parent_attempt_number=_optional_positive_int(intent.payload.get("parent_attempt_number")),
+            source=str(intent.payload.get("source") or "engine").strip() or "engine",
+            idempotency_key=idempotency_key,
+            reason=str(intent.payload.get("reason") or "").strip(),
+            event_type="runtime_intent.task_lifecycle_transition",
+            owner_component=str(intent.payload.get("owning_component") or "engine").strip() or "engine",
+            payload=_payload_dict(intent.payload.get("metadata")),
+            occurred_at=intent.timestamp,
+            allow_late=bool(intent.payload.get("allow_late")),
+        )
+        if result.outcome not in {"accepted", "duplicate"}:
+            return "ignored" if result.outcome in {"stale", "late"} else "invalid"
+        _touch_run(run, event_time=intent.timestamp)
+        _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
+    return "processed"
+
+
+def apply_record_retry_operation_intent(
+    *,
+    intent: RuntimeIntentEnvelope,
+    stream_message_id: str,
+) -> IntentProcessResult:
+    _require_intent_attempt_id(intent)
+    operation_type = str(intent.payload.get("operation_type") or "").strip()
+    idempotency_key = str(intent.payload.get("idempotency_key") or "").strip()
+    if not operation_type:
+        raise RuntimeIntentError("record_retry_operation payload.operation_type is required")
+    if not idempotency_key:
+        raise RuntimeIntentError("record_retry_operation payload.idempotency_key is required")
+
+    with transaction.atomic():
+        if _intent_already_processed(intent.intent_id):
+            return "duplicate"
+        run = _load_run_for_update(intent.run_id)
+        stale_result = _ignore_stale_attempt(intent=intent, run=run)
+        if stale_result is not None:
+            return stale_result
+        try:
+            record_retry_operation(
+                run=run,
+                operation_type=operation_type,
+                idempotency_key=idempotency_key,
+                attempt_number=_coerce_non_negative_int(
+                    intent.payload.get("attempt_number"),
+                    default=1,
+                ),
+                max_attempts=max(
+                    _coerce_non_negative_int(intent.payload.get("max_attempts"), default=1),
+                    1,
+                ),
+                retry_delay_ms=_coerce_non_negative_int(
+                    intent.payload.get("retry_delay_ms"),
+                    default=0,
+                ),
+                retry_reason=str(intent.payload.get("retry_reason") or "").strip(),
+                last_error=str(redact_payload(intent.payload.get("last_error") or "")),
+                owning_component=str(intent.payload.get("owning_component") or "engine").strip()
+                or "engine",
+                retry_class=str(intent.payload.get("retry_class") or "transport").strip(),
+                terminal_fallback=str(intent.payload.get("terminal_fallback") or "").strip(),
+                node_id=str(intent.payload.get("node_id") or "").strip(),
+                node_type=str(intent.payload.get("node_type") or "").strip(),
+                next_scheduled_at=_parse_optional_datetime(intent.payload.get("next_scheduled_at"))
+                if intent.payload.get("next_scheduled_at") not in (None, "")
+                else None,
+                parent_attempt_number=_optional_positive_int(
+                    intent.payload.get("parent_attempt_number")
+                ),
+                payload=_payload_dict(intent.payload.get("metadata")),
+            )
+        except ValueError as exc:
+            raise RuntimeIntentError(str(exc)) from exc
+        _touch_run(run, event_time=intent.timestamp)
+        _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
     return "processed"
 
 
@@ -927,6 +1191,26 @@ def mark_run_transport_failure(
                     "category": "state",
                 },
             )
+            parsed_intent_id = None
+            if intent_id:
+                try:
+                    parsed_intent_id = UUID(intent_id)
+                except ValueError:
+                    parsed_intent_id = None
+            for task in TaskLifecycleRecord.objects.filter(run=run).exclude(
+                status__in={"completed", "failed", "dead_lettered", "cancelled"}
+            ):
+                dead_letter_task(
+                    task=task,
+                    reason=reason,
+                    last_error=transport_error_message,
+                    attempt_count=task.current_attempt,
+                    recovery_options=["inspect_run", "replay_intent", "force_fail_run"],
+                    idempotency_key=f"task:{task.id}:transport_dead_letter:{stream_message_id}",
+                    source="runtime_intent_transport",
+                    intent_id=parsed_intent_id,
+                    stream_message_id=stream_message_id,
+                )
     except RuntimeIntentError:
         return False
 
@@ -970,6 +1254,61 @@ def _record_processed_intent(
         attempt_id=intent.attempt_id,
         trace_id=intent.trace_id,
         stream_message_id=stream_message_id,
+    )
+
+
+def _runtime_intent_result_reason(result: IntentProcessResult) -> str:
+    if result == "processed":
+        return ""
+    if result == "duplicate":
+        return "intent was already applied"
+    if result == "ignored":
+        return "intent was ignored by backend state-machine rules"
+    if result == "invalid":
+        return "intent was rejected by backend state-machine rules"
+    return str(result)
+
+
+def _record_runtime_intent_outcome(
+    *,
+    intent: RuntimeIntentEnvelope,
+    outcome: str,
+    stream_message_id: str,
+    reason: str = "",
+    error_class: str = "",
+) -> None:
+    run = Run.objects.filter(id=intent.run_id).only("id").first()
+    now = timezone.now()
+    observed_timestamp = intent.timestamp
+    if timezone.is_naive(observed_timestamp):
+        observed_timestamp = timezone.make_aware(observed_timestamp, timezone.get_current_timezone())
+    processing_ms = max(0.0, (now - observed_timestamp).total_seconds() * 1000.0)
+    RuntimeIntentOutcome.objects.update_or_create(
+        intent_id=intent.intent_id,
+        defaults={
+            "run": run,
+            "intent_type": intent.intent_type,
+            "attempt_id": intent.attempt_id,
+            "outcome": outcome,
+            "reason": reason,
+            "error_class": error_class,
+            "trace_id": intent.trace_id,
+            "stream_message_id": stream_message_id,
+        },
+    )
+    record_service_metric_sample(
+        metric_name="runtime_intent_processing_ms",
+        source="runtime_intent_worker",
+        value=processing_ms,
+        unit="ms",
+        organization_id=run.organization_id if run else None,
+        run_id=run.id if run else None,
+        dimensions={
+            "intent_type": intent.intent_type,
+            "outcome": outcome,
+            "stream_message_id": stream_message_id,
+        },
+        observed_at=now,
     )
 
 
@@ -1305,6 +1644,16 @@ def _coerce_non_negative_int(raw_value: object, *, default: int) -> int:
     except (TypeError, ValueError):
         value = default
     return value if value >= 0 else default
+
+
+def _optional_positive_int(raw_value: object) -> int | None:
+    if raw_value in (None, ""):
+        return None
+    try:
+        value = int(cast(Any, raw_value))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def _parse_optional_datetime(raw_value: object) -> datetime | None:

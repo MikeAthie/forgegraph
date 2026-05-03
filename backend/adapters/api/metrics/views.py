@@ -25,6 +25,7 @@ from application.services.rbac import has_min_role
 from application.services.runtime_transport_observability import (
     get_runtime_transport_observability_snapshot,
 )
+from application.services.sre_readiness import build_sre_read_model
 from infrastructure.orm.models import Run, RunQueueEntry, User
 
 
@@ -91,6 +92,16 @@ class MetricsSummaryView(APIView):
             failure_rate = float(run_metrics.run_failed_total) / float(
                 run_metrics.run_completed_total
             )
+        sre = build_sre_read_model(
+            run_metrics=run_metrics,
+            api_metrics=api_metrics,
+            websocket_metrics=websocket_metrics,
+            runtime_transport_metrics=runtime_transport_metrics,
+            queue_total=queue_total,
+            queue_processing=queue_processing,
+            stalled_runs=stalled_runs,
+            active_runs=active_runs,
+        )
 
         payload: dict[str, Any] = {
             "runs": {
@@ -132,7 +143,13 @@ class MetricsSummaryView(APIView):
                 "connection_failures_total": websocket_metrics.connection_failures_total,
                 "messages_sent_total": websocket_metrics.messages_sent_total,
                 "messages_dropped_total": websocket_metrics.messages_dropped_total,
+                "messages_filtered_total": websocket_metrics.messages_filtered_total,
+                "slow_client_disconnects_total": (
+                    websocket_metrics.slow_client_disconnects_total
+                ),
                 "message_rate_per_minute": websocket_metrics.message_rate_per_minute,
+                "send_latency_ms_p50": websocket_metrics.send_latency_ms_p50,
+                "send_latency_ms_p95": websocket_metrics.send_latency_ms_p95,
             },
             "api": {
                 "requests_total": api_metrics.requests_total,
@@ -172,9 +189,40 @@ class MetricsSummaryView(APIView):
                 "generated_at": runtime_transport_metrics.generated_at,
             },
             "slo": {
+                "api_availability_beta_target": getattr(
+                    settings, "SLO_API_AVAILABILITY_BETA", 0.995
+                ),
+                "api_availability_production_target": getattr(
+                    settings, "SLO_API_AVAILABILITY_PRODUCTION", 0.999
+                ),
+                "runtime_intent_processing_p95_ms_target": getattr(
+                    settings,
+                    "SLO_RUNTIME_INTENT_PROCESSING_P95_MS",
+                    1000,
+                ),
+                "approval_to_resume_p95_ms_target": getattr(
+                    settings, "SLO_APPROVAL_TO_RESUME_P95_MS", 5000
+                ),
+                "task_projection_lag_p95_ms_target": getattr(
+                    settings, "SLO_TASK_PROJECTION_LAG_P95_MS", 2000
+                ),
+                "dead_letter_visibility_seconds_target": getattr(
+                    settings, "SLO_DEAD_LETTER_VISIBILITY_SECONDS", 30
+                ),
+                "silent_task_loss_max": getattr(settings, "SLO_SILENT_TASK_LOSS_MAX", 0),
                 "run_success_rate_target": getattr(settings, "SLO_RUN_SUCCESS_RATE", 0.99),
                 "run_p95_latency_ms_target": getattr(settings, "SLO_RUN_P95_LATENCY_MS", 60000),
                 "queue_max_depth_target": getattr(settings, "SLO_QUEUE_MAX_DEPTH", 500),
+                "api_p95_latency_ms_target": getattr(
+                    settings,
+                    "SLO_API_P95_LATENCY_MS",
+                    5000,
+                ),
+                "websocket_send_p95_latency_ms_target": getattr(
+                    settings,
+                    "SLO_WEBSOCKET_SEND_P95_LATENCY_MS",
+                    2000,
+                ),
             },
             "guardrails": {
                 "run_max_active_per_tenant": getattr(settings, "RUN_MAX_ACTIVE_PER_TENANT", 0),
@@ -195,8 +243,74 @@ class MetricsSummaryView(APIView):
                     > float(getattr(settings, "SLO_RUN_P95_LATENCY_MS", 60000))
                 ),
                 "queue_depth": queue_total > int(getattr(settings, "SLO_QUEUE_MAX_DEPTH", 500)),
+                "api_p95_latency": (
+                    api_metrics.latency_ms_p95 is not None
+                    and api_metrics.latency_ms_p95
+                    > float(getattr(settings, "SLO_API_P95_LATENCY_MS", 5000))
+                ),
+                "websocket_send_p95_latency": (
+                    websocket_metrics.send_latency_ms_p95 is not None
+                    and websocket_metrics.send_latency_ms_p95
+                    > float(getattr(settings, "SLO_WEBSOCKET_SEND_P95_LATENCY_MS", 2000))
+                ),
             },
+            "sre": sre,
             "generated_at": run_metrics.generated_at,
         }
 
         return success_response(payload)
+
+
+class MetricsSloView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        user = request.user
+        if not isinstance(user, User) or not has_min_role(user, "admin"):
+            return error_response(
+                code="FORBIDDEN",
+                message="You don't have permission to access SLO metrics.",
+                status=403,
+            )
+
+        run_metrics = get_run_metrics_snapshot()
+        websocket_metrics = get_websocket_metrics_snapshot()
+        api_metrics = get_api_metrics_snapshot()
+        runtime_transport_metrics = get_runtime_transport_observability_snapshot()
+        queue_pending = RunQueueEntry.objects.filter(status="pending").count()
+        queue_processing = RunQueueEntry.objects.filter(status="processing").count()
+        queue_total = queue_pending + queue_processing
+        stalled_before = timezone.now() - timedelta(
+            seconds=max(
+                int(
+                    getattr(
+                        settings,
+                        "RUN_ENGINE_STALLED_TIMEOUT_SECONDS",
+                        getattr(settings, "RUN_LIVENESS_TIMEOUT_SECONDS", 60),
+                    )
+                ),
+                1,
+            )
+        )
+        stalled_runs = (
+            Run.objects.filter(status__in=["running", "resume_requested"])
+            .filter(
+                Q(last_progress_at__lt=stalled_before)
+                | Q(last_progress_at__isnull=True, started_at__lt=stalled_before)
+                | Q(status="resume_requested", resume_requested_at__lt=stalled_before)
+            )
+            .count()
+        )
+        active_runs = Run.objects.filter(status__in=["pending", "running", "paused"]).count()
+        return success_response(
+            build_sre_read_model(
+                run_metrics=run_metrics,
+                api_metrics=api_metrics,
+                websocket_metrics=websocket_metrics,
+                runtime_transport_metrics=runtime_transport_metrics,
+                queue_total=queue_total,
+                queue_processing=queue_processing,
+                stalled_runs=stalled_runs,
+                active_runs=active_runs,
+            )
+        )

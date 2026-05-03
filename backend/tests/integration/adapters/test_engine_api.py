@@ -8,7 +8,15 @@ from django.test import override_settings
 from django.utils import timezone
 
 from application.services.run_snapshots import RunSnapshot, set_snapshot
-from infrastructure.orm.models import Graph, GraphVersion, NodeRun, Run, RunCheckpoint, User
+from infrastructure.orm.models import (
+    Graph,
+    GraphVersion,
+    NodeRun,
+    Run,
+    RunCheckpoint,
+    RuntimeIntentOutcome,
+    User,
+)
 from infrastructure.security import s2s
 
 pytestmark = pytest.mark.django_db
@@ -39,6 +47,64 @@ def _engine_callback_secret(settings):
 
 
 class TestEngineRunApi:
+    @pytest.mark.parametrize(
+        "outcome",
+        ["processed", "duplicate", "ignored", "invalid", "dead_lettered"],
+    )
+    def test_runtime_intent_outcome_lookup_reports_backend_owned_outcome(
+        self, api_client, outcome
+    ):
+        user = User.objects.create_user(
+            email=f"engine-outcome-{outcome}@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name=f"Engine Outcome {outcome}")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+        intent_id = uuid4()
+        RuntimeIntentOutcome.objects.create(
+            intent_id=intent_id,
+            run=run,
+            intent_type="pause_run",
+            attempt_id="attempt-1",
+            outcome=outcome,
+            reason=f"{outcome} reason",
+            error_class="TestOutcome",
+            trace_id="trace-outcome",
+            stream_message_id="1700000000000-0",
+        )
+
+        response = api_client.get(
+            f"/api/engine/runtime-intents/{intent_id}",
+            **_signed_headers("test-secret"),
+        )
+
+        assert response.status_code == 200
+        assert response.data["data"]["intent_id"] == str(intent_id)
+        assert response.data["data"]["run_id"] == str(run.id)
+        assert response.data["data"]["intent_type"] == "pause_run"
+        assert response.data["data"]["attempt_id"] == "attempt-1"
+        assert response.data["data"]["outcome"] == outcome
+        assert response.data["data"]["reason"] == f"{outcome} reason"
+        assert response.data["data"]["error_class"] == "TestOutcome"
+        assert response.data["data"]["trace_id"] == "trace-outcome"
+        assert response.data["data"]["stream_message_id"] == "1700000000000-0"
+
+    def test_runtime_intent_outcome_lookup_reports_pending_when_not_committed(
+        self, api_client
+    ):
+        response = api_client.get(
+            f"/api/engine/runtime-intents/{uuid4()}",
+            **_signed_headers("test-secret"),
+        )
+
+        assert response.status_code == 404
+        assert response.data["error"]["code"] == "RUNTIME_INTENT_PENDING"
+
     def test_run_detail_round_trip(self, api_client):
         user = User.objects.create_user(email="engine-api@example.com", password="password123")
         graph = Graph.objects.create(owner=user, name="Engine API Graph")

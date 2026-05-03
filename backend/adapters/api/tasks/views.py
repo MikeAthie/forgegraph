@@ -21,7 +21,7 @@ class TaskListView(APIView):
     def get(self, request: Request) -> Response:
         bundle = refresh_phase1_projections(cast(User, request.user))
         tasks = TaskRecord.objects.filter(organization=bundle.organization).select_related(
-            "agent", "execution", "current_step", "current_decision"
+            "agent", "execution", "current_step", "current_decision", "lifecycle_task"
         )
         status_filter = request.query_params.get("status")
         if status_filter:
@@ -36,7 +36,7 @@ class TaskDetailView(APIView):
         bundle = refresh_phase1_projections(cast(User, request.user))
         try:
             task = TaskRecord.objects.select_related(
-                "agent", "execution", "current_step", "current_decision"
+                "agent", "execution", "current_step", "current_decision", "lifecycle_task"
             ).get(id=task_id, organization=bundle.organization)
         except TaskRecord.DoesNotExist:
             return error_response("NOT_FOUND", "Task not found", status=404)

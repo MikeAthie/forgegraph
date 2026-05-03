@@ -51,6 +51,13 @@ export type GraphVersionResponse = {
 export type RunDetailResponse = {
   status: string;
   error_message?: string | null;
+  recovery_state?: string | null;
+  timeline?: Array<{
+    event_type: string;
+    status?: string | null;
+    message?: string | null;
+    details?: Record<string, unknown> | null;
+  }> | null;
 };
 
 export type MemoryObservationSeed = {
@@ -102,6 +109,12 @@ export type CompanySeedResult = {
   versionId: string;
 };
 
+export type HumanGateRunSeedResult = {
+  companyId: string;
+  versionId: string;
+  runId: string;
+};
+
 const TEST_PASSWORD = "ForgeGraphTest!12345";
 const API_BASE_URL = (
   process.env.PLAYWRIGHT_API_URL ??
@@ -147,7 +160,7 @@ export async function ensureUserRegistered(request: APIRequestContext, user: Tes
   if (response.status() === 400) return;
 
   const body = await response.text();
-  throw new Error(`Failed to register test user (status ${response.status()}): ${body}`);
+  throw new Error(`Failed to register test user via ${API_BASE_URL} (status ${response.status()}): ${body}`);
 }
 
 export async function login(page: Page, user: TestUser): Promise<void> {
@@ -206,6 +219,44 @@ export async function login(page: Page, user: TestUser): Promise<void> {
   await page.goto("/companies");
   await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 20_000 });
   await page.waitForLoadState("networkidle");
+}
+
+export async function loginLive(
+  page: Page,
+  request: APIRequestContext,
+  user: TestUser,
+  targetPath = "/companies",
+): Promise<string> {
+  await page.context().clearCookies();
+  await ensureUserRegistered(request, user);
+
+  await page.goto("/login");
+  await page.getByRole("textbox", { name: /email address/i }).fill(user.email);
+  await page.getByRole("textbox", { name: /password/i }).fill(user.password);
+  const loginResponsePromise = page.waitForResponse(
+    (response) => response.url().includes("/api/auth/login") && response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  const loginResponse = await loginResponsePromise;
+  if (!loginResponse.ok()) {
+    throw new Error(
+      `Live login failed (status ${loginResponse.status()}) via ${loginResponse.url()}: ${await loginResponse.text()}`,
+    );
+  }
+  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+
+  const token = await page.evaluate(() => window.sessionStorage.getItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__"));
+  if (!token) {
+    throw new Error("Live login did not produce a browser access token.");
+  }
+
+  if (targetPath !== "/companies") {
+    await page.goto(targetPath);
+  }
+  await page.waitForLoadState("networkidle");
+  return token;
 }
 
 export async function openAuthenticatedPage(
@@ -350,16 +401,33 @@ export function createGraphName(prefix: string): string {
 }
 
 export async function getAccessToken(request: APIRequestContext, user: TestUser): Promise<string> {
-  const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
-    data: {
-      email: user.email,
-      password: user.password,
-    },
-  });
-  expect(response.ok()).toBeTruthy();
-  const body = (await response.json()) as { access?: string };
-  expect(body.access).toBeTruthy();
-  return body.access as string;
+  let lastBody = "";
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
+      data: {
+        email: user.email,
+        password: user.password,
+      },
+    });
+
+    if (response.ok()) {
+      const body = (await response.json()) as { access?: string };
+      expect(body.access).toBeTruthy();
+      return body.access as string;
+    }
+
+    lastBody = await response.text();
+    if (response.status() !== 429 || attempt === 4) {
+      throw new Error(`Failed to login test user (status ${response.status()}): ${lastBody}`);
+    }
+
+    const retryAfterSeconds = Number(response.headers()["retry-after"] ?? "2");
+    const delayMs = Math.max(500, Math.min(5000, retryAfterSeconds * 1000 || 2000));
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  throw new Error(`Failed to login test user after retries: ${lastBody}`);
 }
 
 export async function createCompanyViaApi(
@@ -398,6 +466,99 @@ export async function createCompanyViaApi(
   return {
     companyId,
     versionId: versionBody.data.id,
+  };
+}
+
+export async function createHumanGateRunViaApi(
+  request: APIRequestContext,
+  accessToken: string,
+  options: {
+    graphName: string;
+    promptMessage: string;
+    instructions?: string;
+  },
+): Promise<HumanGateRunSeedResult> {
+  const graphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      name: options.graphName,
+      description: "Live HITL approval/resume production gate harness.",
+    },
+  });
+  expect(graphResponse.ok()).toBeTruthy();
+  const graphBody = (await graphResponse.json()) as { data: { id: string } };
+  const companyId = graphBody.data.id;
+
+  const graphJson = {
+    nodes: [
+      {
+        id: "finance_approval",
+        type: "human_gate",
+        name: "Finance approval",
+        config: {
+          prompt_message: options.promptMessage,
+          approval_message: options.promptMessage,
+          instructions: options.instructions ?? "",
+          required_fields: [],
+        },
+      },
+      {
+        id: "final_output",
+        type: "output",
+        name: "Final Output",
+        config: {
+          output_mapping: {
+            decision: "node.finance_approval.output",
+            request: "input.request",
+          },
+        },
+      },
+    ],
+    edges: [
+      { id: "start-finance-approval", from: "START", to: "finance_approval" },
+      { id: "finance-approval-final-output", from: "finance_approval", to: "final_output" },
+      { id: "final-output-end", from: "final_output", to: "END" },
+    ],
+    metadata: {
+      name: options.graphName,
+      description: "Live HITL approval/resume production gate harness.",
+      engine_contract_version: "2",
+    },
+    editor_state: {
+      viewport: { x: 0, y: 0, zoom: 1 },
+      nodePositions: {
+        finance_approval: { x: 160, y: 120 },
+        final_output: { x: 520, y: 120 },
+      },
+    },
+  };
+
+  const versionResponse = await request.post(`${API_BASE_URL}/api/graphs/${companyId}/versions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      graph_json: graphJson,
+    },
+  });
+  expect(versionResponse.ok()).toBeTruthy();
+  const versionBody = (await versionResponse.json()) as { data: { id: string } };
+  const versionId = versionBody.data.id;
+
+  const startResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      graph_version_id: versionId,
+      input_json: {
+        request: "Review and approve a controlled outbound refund test.",
+      },
+    },
+  });
+  expect(startResponse.ok()).toBeTruthy();
+  const startBody = (await startResponse.json()) as { data: { id: string } };
+
+  return {
+    companyId,
+    versionId,
+    runId: startBody.data.id,
   };
 }
 

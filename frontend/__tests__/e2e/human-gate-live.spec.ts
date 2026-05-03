@@ -1,19 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  addHumanGateNode,
-  addOutputNode,
-  createGraph,
   createGraphName,
+  createHumanGateRunViaApi,
   createTestUser,
-  ensureUserRegistered,
-  getAccessToken,
-  login,
-  openBackendAuthenticatedPage,
-  saveGraph,
-  startRunFromEditor,
+  loginLive,
   waitForRunStatus,
-} from "./helpers";
+} from "./live-helpers";
 
 test.describe("Human gate live flow", () => {
   test.describe.configure({ mode: "serial" });
@@ -25,44 +18,54 @@ test.describe("Human gate live flow", () => {
     test.setTimeout(120_000);
 
     const user = createTestUser(testInfo, "human-gate-live");
-    await ensureUserRegistered(request, user);
-    const accessToken = await getAccessToken(request, user);
-    await login(page, user);
+    const accessToken = await loginLive(page, request, user);
 
     const graphName = createGraphName("Human Gate Live");
-    await createGraph(page, graphName);
-    await addHumanGateNode(page, {
-      label: "Finance approval",
-      promptMessage: "Approve the outbound refund before execution resumes.",
+    const promptMessage = "Approve the outbound refund before execution resumes.";
+    const { runId } = await createHumanGateRunViaApi(request, accessToken, {
+      graphName,
+      promptMessage,
       instructions: "Approve only when the refund amount is within policy.",
     });
-    await addOutputNode(page, "Final Output");
-    await saveGraph(page);
 
-    const runId = await startRunFromEditor(page);
+    await page.goto(`/runs/${runId}`);
     await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
-    await expect(page.getByText(/live updates/i).first()).toBeVisible({ timeout: 30_000 });
-
-    await waitForRunStatus(request, accessToken, runId, "paused");
-    await expect(page.getByText(/approve the outbound refund before execution resumes/i).first()).toBeVisible({
+    await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByRole("link", { name: /open inbox/i })).toBeVisible();
+
+    await waitForRunStatus(request, accessToken, runId, "paused");
+    await expect(page.getByRole("heading", { name: /approval is waiting/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("link", { name: /open approvals/i })).toBeVisible();
 
     const reviewPage = await page.context().newPage();
-    await openBackendAuthenticatedPage(reviewPage, request, user, "/inbox");
+    await loginLive(reviewPage, request, user, "/inbox");
+    await reviewPage.getByRole("button", { name: /^all$/i }).click();
     const approvalRow = reviewPage.getByRole("button", { name: new RegExp(graphName, "i") }).first();
     await expect(approvalRow).toBeVisible({ timeout: 30_000 });
     await approvalRow.click();
+    await expect(reviewPage.getByText(promptMessage).first()).toBeVisible({ timeout: 30_000 });
     await reviewPage
       .getByPlaceholder(/add guidance, constraints, or corrections that should travel with this decision/i)
       .fill("Approved by the live Playwright reliability test.");
-    await reviewPage.getByRole("button", { name: /approve with notes/i }).click();
+    const approveButton = reviewPage.getByRole("button", { name: /approve with notes/i });
+    await expect(approveButton).toBeEnabled();
+    const resumeResponsePromise = reviewPage.waitForResponse(
+      (response) => response.url().includes(`/api/runs/${runId}/resume`) && response.request().method() === "POST",
+    );
+    await approveButton.click();
+    const resumeResponse = await resumeResponsePromise;
+    expect(resumeResponse.ok()).toBeTruthy();
     await reviewPage.close();
 
-    await waitForRunStatus(request, accessToken, runId, "succeeded");
+    const completedRun = await waitForRunStatus(request, accessToken, runId, "succeeded");
+    const eventTypes = new Set((completedRun.timeline ?? []).map((event) => event.event_type));
+    expect(eventTypes.has("decision_required")).toBeTruthy();
+    expect(eventTypes.has("decision_resolved")).toBeTruthy();
+    expect(eventTypes.has("run.resume_requested")).toBeTruthy();
+    expect(eventTypes.has("run_resumed")).toBeTruthy();
     await page.bringToFront();
     await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
-    await expect(page.getByText(/^succeeded$/i).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^completed$/i).first()).toBeVisible({ timeout: 30_000 });
   });
 });

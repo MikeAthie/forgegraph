@@ -22,7 +22,9 @@ from adapters.api.prompts.serializers import (
     PromptUpdateSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.audit_log import record_audit_log
 from application.services.rbac import has_min_role
+from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import PromptTemplate, User
 
 
@@ -347,6 +349,17 @@ class PromptPublishView(APIView):
         prompt.visibility = "public"
         prompt.license = serializer.validated_data.get("license", "MIT")
         prompt.save()
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_user(user),
+            action="prompt.published",
+            resource_type="prompt_template",
+            resource_id=str(prompt.id),
+            metadata={
+                "visibility": prompt.visibility,
+                "license": prompt.license,
+            },
+        )
 
         prompt_data = PromptDetailSerializer(
             {

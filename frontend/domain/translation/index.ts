@@ -61,11 +61,29 @@ export function toTaskStatusVM(status: string): TaskStatusVM {
   if (normalized === "succeeded" || normalized === "success" || normalized === "completed") {
     return "completed";
   }
-  if (normalized === "failed" || normalized === "error" || normalized === "canceled") {
+  if (normalized === "dead_lettered") {
+    return "dead_lettered";
+  }
+  if (normalized === "retry_scheduled") {
+    return "retry_scheduled";
+  }
+  if (normalized === "waiting_for_decision") {
+    return "waiting_for_decision";
+  }
+  if (normalized === "cancelled" || normalized === "canceled") {
+    return "cancelled";
+  }
+  if (normalized === "failed" || normalized === "error") {
     return "failed";
   }
   if (normalized === "paused" || normalized === "waiting") {
     return "paused";
+  }
+  if (normalized === "claimed") {
+    return "claimed";
+  }
+  if (normalized === "created") {
+    return "created";
   }
   if (normalized === "running") {
     return "running";
@@ -119,6 +137,7 @@ export function toTaskVMFromDepartmentActivity(activity: NodeRunItem, setupJson:
     endedAt: activity.ended_at,
     durationMs: activity.duration_ms,
     attempt: activity.attempt,
+    attemptCount: activity.attempt,
     requiresApproval: activity.status === "waiting" || activity.node_type === "human_gate",
     toolName: latestTrace?.tool ? String(latestTrace.tool) : null,
     resultPreview: resultPreview ? truncate(resultPreview) : null,
@@ -142,8 +161,20 @@ export function toTaskVMFromRecord(record: TaskRecord): TaskVM {
     createdAt: record.created_at,
     updatedAt: record.updated_at,
     durationMs: null,
+    attemptCount: record.attempt_count ?? null,
     currentStepId: record.current_step_id,
-    requiresApproval: Boolean(record.current_decision_id),
+    currentDecisionId: record.current_decision_id,
+    lifecycleTaskId: record.lifecycle_task_id ?? null,
+    requiresApproval:
+      Boolean(record.current_decision_id) ||
+      record.status === "waiting_for_decision" ||
+      record.status === "paused",
+    retryMetadata: record.retry_metadata ?? null,
+    latestRetry: record.latest_retry ?? null,
+    deadLetter: record.dead_letter ?? null,
+    staleEventCount: record.stale_event_count ?? 0,
+    lateEventCount: record.late_event_count ?? 0,
+    recoveryOptions: record.recovery_options ?? [],
   };
 }
 

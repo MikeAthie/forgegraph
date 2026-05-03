@@ -1,4 +1,4 @@
-import { approvalsApi } from "@/lib/api";
+import { approvalsApi, type ResumeRunResponse } from "@/lib/api";
 import { toApprovalVM, type ApprovalVM } from "@/domain/translation";
 import { operationRepository } from "./operationRepository";
 
@@ -13,7 +13,7 @@ export const approvalRepository = {
     return toApprovalVM(approval);
   },
 
-  decide: async (approval: ApprovalVM, approved: boolean, feedback?: string): Promise<{ resumed: boolean }> =>
+  decide: async (approval: ApprovalVM, approved: boolean, feedback?: string): Promise<ResumeRunResponse> =>
     operationRepository.resumeAfterApproval(approval.operationId, approval.departmentId, approved, feedback),
 };
 

@@ -28,6 +28,7 @@ from application.services.runtime_write_intents import (
     ensure_runtime_intent_group,
     mark_run_transport_failure,
     process_runtime_intent_message,
+    record_runtime_intent_dead_letter,
 )
 from application.services.structured_logging import log_event
 
@@ -629,6 +630,15 @@ class Command(BaseCommand):
             dead_letter_stream=RUNTIME_INTENT_DEAD_LETTER_STREAM,
             intent_id=metadata.get("intent_id") or "",
             intent_type=metadata.get("intent_type") or "",
+        )
+        record_runtime_intent_dead_letter(
+            intent_id=metadata.get("intent_id"),
+            run_id=metadata.get("run_id"),
+            intent_type=metadata.get("intent_type"),
+            attempt_id=metadata.get("attempt_id"),
+            stream_message_id=message_id,
+            reason=reason,
+            error_class=error_class,
         )
         trimmed_count = self._enforce_stream_hard_cap(
             redis_client=redis_client,

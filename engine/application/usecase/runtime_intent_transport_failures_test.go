@@ -18,6 +18,7 @@ import (
 
 func TestPauseIntentPublishFailsClosedWhenRedisIsUnavailable(t *testing.T) {
 	engine := NewTestEngine(t, 2)
+	engine.Scheduler.config.CheckpointMode = CheckpointModeNone
 
 	publisher, client := newUnavailableRedisRuntimeIntentPublisher(t)
 	defer func() {

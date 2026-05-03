@@ -4,6 +4,7 @@ from adapters.api.engine.views import (
     EngineCredentialDetailView,
     EngineMemoryEntryView,
     EngineNodeCacheDetailView,
+    EngineRuntimeIntentOutcomeView,
     EngineRunCheckpointView,
     EngineRunDetailView,
     EngineRunNodeRunDetailView,
@@ -19,6 +20,11 @@ urlpatterns = [
         name="engine-credential-detail",
     ),
     path("runs/<uuid:run_id>", EngineRunDetailView.as_view(), name="engine-run-detail"),
+    path(
+        "runtime-intents/<uuid:intent_id>",
+        EngineRuntimeIntentOutcomeView.as_view(),
+        name="engine-runtime-intent-outcome",
+    ),
     path(
         "runs/<uuid:run_id>/pause-state",
         EngineRunPauseStateView.as_view(),

@@ -345,6 +345,18 @@ class RetentionExportView(APIView):
         if isinstance(pagination, Response):
             return pagination
         limit, offset = pagination
+        record_audit_log(
+            actor=user,
+            tenant_id=str(tenant_uuid),
+            action="retention_export",
+            resource_type="tenant_retention_export",
+            resource_id=str(tenant_uuid),
+            metadata={
+                "export_type": export_type,
+                "limit": limit,
+                "offset": offset,
+            },
+        )
 
         if export_type == "runs":
             run_qs = (

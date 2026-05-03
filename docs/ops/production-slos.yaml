@@ -1,0 +1,134 @@
+version: 1
+owner: sre
+release_tier_default: beta
+window_seconds: 3600
+
+slo_targets:
+  - id: api_availability
+    title: API availability
+    target_beta: 0.995
+    target_production: 0.999
+    unit: ratio
+    comparison: gte
+    runbook: docs/ops/runbooks/backend_health_degradation.md
+  - id: runtime_intent_processing_p95
+    title: Runtime intent processing p95
+    target_ms: 1000
+    unit: ms
+    comparison: lte
+    runbook: docs/ops/runbooks/intent_backlog_growing.md
+  - id: websocket_delivery_p95
+    title: WebSocket delivery p95
+    target_ms: 2000
+    unit: ms
+    comparison: lte
+    runbook: docs/ops/runbooks/websocket_fanout_degradation.md
+  - id: approval_to_resume_p95
+    title: Approval-to-resume p95
+    target_ms: 5000
+    unit: ms
+    comparison: lte
+    excludes: human_wait_time
+    runbook: docs/ops/runbooks/approval_resume_failures.md
+  - id: task_projection_lag_p95
+    title: Task state projection lag p95
+    target_ms: 2000
+    unit: ms
+    comparison: lte
+    runbook: docs/ops/runbooks/no_progress_despite_backlog.md
+  - id: dead_letter_visibility
+    title: Dead-letter visibility
+    target_seconds: 30
+    unit: seconds
+    comparison: lte
+    runbook: docs/ops/runbooks/dead_letter_spike.md
+  - id: backend_health_recovery
+    title: Backend health recovery
+    target: no_manual_restart_under_expected_load
+    unit: healthy
+    comparison: gte
+    runbook: docs/ops/runbooks/backend_health_degradation.md
+  - id: silent_task_loss
+    title: Silent task loss
+    target_count: 0
+    unit: count
+    comparison: lte
+    runbook: docs/ops/runbooks/no_progress_despite_backlog.md
+
+dashboard_panels:
+  - id: runtime_intent_backlog
+    title: Runtime intent backlog
+  - id: runtime_intent_lag
+    title: Runtime intent lag
+  - id: dead_letter_count
+    title: Dead-letter count
+  - id: run_status_distribution
+    title: Run status distribution
+  - id: stuck_runs
+    title: Stuck runs
+  - id: paused_runs
+    title: Paused runs
+  - id: approval_latency
+    title: Approval latency
+  - id: resume_failure_rate
+    title: Resume failure rate
+  - id: websocket_connected_clients
+    title: WebSocket connected clients
+  - id: websocket_fanout_latency
+    title: WebSocket fanout latency
+  - id: backend_api_latency
+    title: Backend API latency
+  - id: engine_queue_depth
+    title: Engine queue depth
+  - id: llm_queue_depth
+    title: LLM queue depth
+  - id: llm_timeout_rate
+    title: LLM timeout rate
+  - id: cost_per_org
+    title: Cost per org
+  - id: memory_write_rate
+    title: Memory write rate
+  - id: audit_event_rate
+    title: Audit event rate
+
+alert_rules:
+  - id: intent_backlog_growing
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/intent_backlog_growing.md
+  - id: no_progress_despite_backlog
+    severity: critical
+    window_seconds: 300
+    runbook: docs/ops/runbooks/no_progress_despite_backlog.md
+  - id: dead_letter_spike
+    severity: critical
+    window_seconds: 300
+    runbook: docs/ops/runbooks/dead_letter_spike.md
+  - id: approval_resume_failures
+    severity: critical
+    window_seconds: 300
+    runbook: docs/ops/runbooks/approval_resume_failures.md
+  - id: backend_health_degradation
+    severity: critical
+    window_seconds: 60
+    runbook: docs/ops/runbooks/backend_health_degradation.md
+  - id: engine_callback_signature_failures
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/engine_callback_signature_failures.md
+  - id: websocket_fanout_degradation
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/websocket_fanout_degradation.md
+  - id: org_rate_limit_breach
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/org_rate_limit_breach.md
+  - id: llm_queue_saturation
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/llm_queue_saturation.md
+  - id: cost_anomaly
+    severity: warning
+    window_seconds: 900
+    runbook: docs/ops/runbooks/cost_anomaly.md

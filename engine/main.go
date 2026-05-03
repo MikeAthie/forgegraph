@@ -89,6 +89,8 @@ type Config struct {
 	RuntimeIntentPublishMaxBackoffMs     int
 	RuntimeIntentPublishMaxElapsedTimeMs int
 	RuntimeIntentStreamMaxLen            int64
+	RuntimeIntentOutcomeWaitTimeoutMs    int
+	RuntimeIntentOutcomePollIntervalMs   int
 }
 
 const (
@@ -150,6 +152,8 @@ func LoadConfig() *Config {
 		RuntimeIntentPublishMaxBackoffMs:     getEnvInt("ENGINE_RUNTIME_INTENT_RETRY_MAX_BACKOFF_MS", 2000),
 		RuntimeIntentPublishMaxElapsedTimeMs: getEnvInt("ENGINE_RUNTIME_INTENT_RETRY_MAX_ELAPSED_MS", 20000),
 		RuntimeIntentStreamMaxLen:            int64(getEnvInt("ENGINE_RUNTIME_INTENT_STREAM_MAXLEN", 0)),
+		RuntimeIntentOutcomeWaitTimeoutMs:    getEnvInt("ENGINE_RUNTIME_INTENT_OUTCOME_TIMEOUT_MS", 10000),
+		RuntimeIntentOutcomePollIntervalMs:   getEnvInt("ENGINE_RUNTIME_INTENT_OUTCOME_POLL_MS", 100),
 	}
 	return cfg
 }
@@ -605,6 +609,7 @@ func (s *EngineServer) ResumeRun(ctx context.Context, req *ResumeRunRequest) (*R
 		req.RunId,
 		req.NodeId,
 		req.InputJson,
+		req.ResumeAttemptId,
 		req.Traceparent,
 		req.Tracestate,
 	)
@@ -712,6 +717,23 @@ func main() {
 	if err != nil {
 		log.Error("runtime_intent_publisher_init_failed", "error", err.Error())
 		os.Exit(1)
+	}
+	if repoDriver == runStateModeControlPlaneHTTP {
+		ackPublisher, ackErr := gateway.NewBackendAcknowledgedRuntimeIntentPublisher(
+			runtimeIntentPublisher,
+			cfg.ControlPlaneURL,
+			cfg.CallbackSecret,
+			nil,
+			gateway.RuntimeIntentOutcomeWaitConfig{
+				Timeout:      time.Duration(cfg.RuntimeIntentOutcomeWaitTimeoutMs) * time.Millisecond,
+				PollInterval: time.Duration(cfg.RuntimeIntentOutcomePollIntervalMs) * time.Millisecond,
+			},
+		)
+		if ackErr != nil {
+			log.Error("runtime_intent_outcome_publisher_init_failed", "error", ackErr.Error())
+			os.Exit(1)
+		}
+		runtimeIntentPublisher = ackPublisher
 	}
 	log.Info(
 		"runtime_intent_publisher_initialized",

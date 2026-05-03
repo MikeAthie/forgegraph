@@ -184,6 +184,73 @@ describe("AdminOperationsPage", () => {
         run_p95_latency: false,
         queue_depth: false,
       },
+      sre: {
+        catalog_version: 1,
+        catalog_path: "docs/ops/production-slos.yaml",
+        release_tier: "beta",
+        window_seconds: 3600,
+        objectives: [
+          {
+            id: "api_availability",
+            title: "API availability",
+            target: 0.995,
+            actual: 0.998,
+            unit: "ratio",
+            comparison: "gte",
+            status: "passing",
+            source: "durable_metric_samples",
+            observed_count: 20,
+            missing_data: false,
+          },
+          {
+            id: "runtime_intent_processing_p95",
+            title: "Runtime intent processing p95",
+            target: 1000,
+            actual: null,
+            unit: "ms",
+            comparison: "lte",
+            status: "no_data",
+            source: "durable_metric_samples",
+            observed_count: 0,
+            missing_data: true,
+          },
+        ],
+        dashboard_panels: [
+          {
+            id: "runtime_intent_backlog",
+            title: "Runtime intent backlog",
+            value: 3,
+            unit: "count",
+            missing_data: false,
+          },
+          {
+            id: "llm_queue_depth",
+            title: "LLM queue depth",
+            value: null,
+            unit: "count",
+            missing_data: true,
+          },
+        ],
+        alerts: {
+          active_total: 1,
+          items: [
+            {
+              id: "intent_backlog_growing",
+              title: "Intent Backlog Growing",
+              state: "active",
+              severity: "warning",
+              evidence: { backlog: 3 },
+              runbook: "docs/ops/runbooks/intent_backlog_growing.md",
+            },
+          ],
+        },
+        catalog_validation: {
+          missing_slos: [],
+          missing_dashboard_panels: [],
+          missing_alerts: [],
+        },
+        generated_at: "2026-03-13T10:00:00Z",
+      },
       generated_at: "2026-03-13T10:00:00Z",
     });
     const previewSpy = jest.spyOn(api.retentionApi, "previewCleanup").mockResolvedValue({
@@ -202,6 +269,34 @@ describe("AdminOperationsPage", () => {
       total_deleted: 12,
       errors: [],
     });
+    jest.spyOn(api.operatorApi, "getRuntimeIntentBacklog").mockResolvedValue({
+      stream: "runtime:intents",
+      dead_letter_stream: "runtime:intents:dead",
+      stream_length: 3,
+      pending: 1,
+      lag: 2,
+      backlog: 3,
+      dead_letter_count: 1,
+      recent_dead_letters: [],
+    });
+    jest.spyOn(api.operatorApi, "getDeadLetters").mockResolvedValue({
+      task_dead_letters: [],
+      runtime_intent_outcomes: [],
+    });
+    jest.spyOn(api.operatorApi, "getOrgLoad").mockResolvedValue({
+      organization_id: "org-1",
+      runs: { running: 1, paused: 1, failed: 0 },
+      tasks: [{ status: "running", count: 1 }],
+      retry_operations: [{ status: "scheduled", count: 2 }],
+      dead_letters: 1,
+    });
+    jest.spyOn(api.operatorApi, "getWebSocketSubscribers").mockResolvedValue({
+      total: 2,
+      by_org: { "org-1": 2 },
+      by_run: {},
+      by_user: {},
+      subscribers: [],
+    });
 
     render(<AdminOperationsPage />);
 
@@ -210,6 +305,10 @@ describe("AdminOperationsPage", () => {
     });
 
     expect(screen.getAllByText(/default deny/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/production slos and sre alerts/i)).toBeInTheDocument();
+    expect(screen.getByText(/api availability/i)).toBeInTheDocument();
+    expect(screen.getByText(/intent backlog growing/i)).toBeInTheDocument();
+    expect(screen.getByText(/recovery controls/i)).toBeInTheDocument();
     expect(screen.getByText(/support-safe exports/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /operator help/i })).toHaveAttribute("href", "/admin/help");
 

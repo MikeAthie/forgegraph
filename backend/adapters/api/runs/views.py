@@ -134,6 +134,13 @@ from application.services.run_snapshots import (
     safe_set_snapshot,
     set_snapshot,
 )
+from application.services.task_lifecycle import (
+    initialize_lifecycle_tasks_for_run,
+    mark_run_tasks_terminal,
+    record_retry_operation,
+    transition_from_node_run,
+    transition_task_lifecycle,
+)
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
@@ -149,6 +156,7 @@ from application.services.tool_executions import (
 from application.services.trace_context import ensure_trace_context
 from infrastructure.orm.models import (
     ApprovalTask,
+    DecisionRecord,
     GraphVersion,
     LLMBudget,
     LLMQuota,
@@ -160,6 +168,7 @@ from infrastructure.orm.models import (
     RunEvent,
     RunEventProjection,
     TenantSubscription,
+    TaskLifecycleRecord,
     User,
 )
 from infrastructure.security import s2s
@@ -992,11 +1001,14 @@ def _validate_run_event_transition(*, current_status: str, event_type: str) -> N
         # Backend-initiated starts can move the run to running before the engine
         # sends its confirmation event, so treat run_started as idempotent there.
         "run_started": {"pending", "running"},
-        "run_paused": {"running"},
-        "run_resumed": {"resume_requested"},
-        "run_completed": {"running", "resume_requested"},
-        "run_failed": {"running", "resume_requested"},
-        "run_canceled": {"pending", "running", "paused", "resume_requested"},
+        # Critical runtime intents may commit the authoritative state before the
+        # later engine event arrives. Accept the matching terminal/current state
+        # as an idempotent observability event instead of turning it into a 409.
+        "run_paused": {"running", "paused"},
+        "run_resumed": {"resume_requested", "running"},
+        "run_completed": {"running", "resume_requested", "succeeded"},
+        "run_failed": {"running", "resume_requested", "failed"},
+        "run_canceled": {"pending", "running", "paused", "resume_requested", "canceled"},
     }
     allowed = allowed_previous_statuses.get(event_type)
     if allowed is None or normalized in allowed:
@@ -1348,6 +1360,14 @@ def _project_pause_state(
             node_update_fields.append("span_id")
         if node_update_fields:
             node_run.save(update_fields=sorted(set(node_update_fields)))
+        lifecycle_result = transition_from_node_run(
+            run=run,
+            node_run=node_run,
+            source="engine_callback",
+            idempotency_key=f"task:{run.id}:{node_id}:pause:{attempt}:{event_time.isoformat() if event_time else 'unknown'}",
+            reason="human decision gate paused execution",
+            occurred_at=event_time,
+        )
 
         approval_payload = {
             "prompt_message": str(pause_payload.get("prompt_message") or ""),
@@ -1360,11 +1380,18 @@ def _project_pause_state(
             defaults={
                 "assignee": run.owner,
                 "payload": approval_payload,
+                "task_lifecycle": lifecycle_result.lifecycle_task,
             },
         )
+        update_fields: list[str] = []
         if not created and approval_task.payload != approval_payload:
             approval_task.payload = approval_payload
-            approval_task.save(update_fields=["payload"])
+            update_fields.append("payload")
+        if approval_task.task_lifecycle_id != lifecycle_result.lifecycle_task.id:
+            approval_task.task_lifecycle = lifecycle_result.lifecycle_task
+            update_fields.append("task_lifecycle")
+        if update_fields:
+            approval_task.save(update_fields=sorted(set(update_fields)))
 
 
 def _project_run_event_state(
@@ -1955,6 +1982,7 @@ class RunStartView(APIView):
             error_message="",
             trace_id=trace_metadata["trace_id"],
         )
+        initialize_lifecycle_tasks_for_run(run, source="run_start")
         try:
             outbound_graph = prepare_tool_executions_for_dispatch(
                 run=run,
@@ -1966,6 +1994,12 @@ class RunStartView(APIView):
             run.ended_at = timezone.now()
             run.error_message = str(exc)
             run.save(update_fields=["status", "ended_at", "error_message"])
+            mark_run_tasks_terminal(
+                run=run,
+                status_value="failed",
+                source="run_start",
+                reason=str(exc),
+            )
             return _tool_execution_dispatch_error_response(exc)
         broadcast_run_updated(run)
         record_audit_log(
@@ -1986,6 +2020,17 @@ class RunStartView(APIView):
 
         if getattr(settings, "RUN_QUEUE_ENABLED", False):
             queue_entry = enqueue_run(run, tenant_id=tenant_id)
+            for lifecycle_task in TaskLifecycleRecord.objects.filter(run=run):
+                transition_task_lifecycle(
+                    run=run,
+                    node_id=lifecycle_task.source_node_id,
+                    node_type=lifecycle_task.node_type,
+                    to_status="queued",
+                    attempt_number=lifecycle_task.current_attempt,
+                    source="run_queue",
+                    idempotency_key=f"task:{run.id}:{lifecycle_task.source_node_id}:queued:{queue_entry.id}",
+                    reason="run queued for backend-owned dispatch",
+                )
             run_data = {
                 "id": run.id,
                 "owner_id": run.owner_id,
@@ -2080,6 +2125,12 @@ class RunStartView(APIView):
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
             run.save(update_fields=["status", "ended_at", "error_message"])
+            mark_run_tasks_terminal(
+                run=run,
+                status_value="failed",
+                source="run_start",
+                reason=run.error_message,
+            )
             record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
@@ -2101,6 +2152,12 @@ class RunStartView(APIView):
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
             run.save(update_fields=["status", "ended_at", "error_message"])
+            mark_run_tasks_terminal(
+                run=run,
+                status_value="failed",
+                source="run_start",
+                reason=run.error_message,
+            )
             record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
@@ -2980,6 +3037,23 @@ class RunCancelView(APIView):
             run.error_message = "Canceled by user."
 
         run.save(update_fields=["status", "started_at", "ended_at", "error_message"])
+        record_audit_log(
+            actor=user,
+            tenant_id=get_tenant_id_for_run(run),
+            action="run.canceled",
+            resource_type="run",
+            resource_id=str(run.id),
+            metadata={
+                "status": run.status,
+                "reason": run.error_message,
+            },
+        )
+        mark_run_tasks_terminal(
+            run=run,
+            status_value="cancelled",
+            source="run_cancel",
+            reason=run.error_message or "Canceled by user.",
+        )
         record_run_completed("canceled", run.duration_ms)
         broadcast_run_updated(run)
 
@@ -3085,12 +3159,23 @@ class RunResumeView(APIView):
             if resolved_task is not None:
                 if resolved_task.result == input_json:
                     return success_response(
-                        {"resumed": True, "run_id": str(run.id), "duplicate": True}
+                        {
+                            "resumed": True,
+                            "run_id": str(run.id),
+                            "duplicate": True,
+                            "decision_status": resolved_task.status,
+                        }
                     )
                 return error_response(
-                    code="DECISION_ALREADY_RESOLVED",
-                    message="Approval task for this node has already been resolved.",
+                    code="DECISION_CONFLICT",
+                    message="Approval task for this node has already been resolved differently.",
                     status=status.HTTP_409_CONFLICT,
+                    details=[
+                        {
+                            "field": "input_json",
+                            "issue": "Conflicting decision does not match the recorded result.",
+                        }
+                    ],
                 )
         if run.status == "resume_requested":
             return error_response(
@@ -3207,6 +3292,173 @@ class RunResumeView(APIView):
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
 
+        decision_status = "accepted" if bool(input_json.get("approved", True)) else "rejected"
+        decision_resolved_payload: dict[str, Any] | None = None
+        with transaction.atomic():
+            run = Run.objects.select_for_update().get(id=run.id)
+            update_fields = touch_run_liveness(
+                run,
+                event_time=resume_requested_at,
+                recovery_state=recovery_state_for_status("resume_requested"),
+            )
+            if update_fields:
+                run.save(update_fields=sorted(set(update_fields)))
+
+            RunEvent.objects.create(
+                run=run,
+                event_type="run.resume_requested",
+                payload={
+                    "status": "resume_requested",
+                    "node_id": node_id,
+                    "resume_requested_at": resume_requested_at.isoformat(),
+                    "resume_attempt_id": str(resume_attempt_id),
+                    "decision_status": decision_status,
+                    "category": "state",
+                },
+                trace_id=run.trace_id or trace_context["trace_id"],
+            )
+            record_audit_log(
+                actor=user,
+                tenant_id=get_tenant_id_for_run(run),
+                action="run.resume_requested",
+                resource_type="run",
+                resource_id=str(run.id),
+                metadata={
+                    "node_id": node_id,
+                    "resume_attempt_id": str(resume_attempt_id),
+                    "decision_status": decision_status,
+                },
+            )
+            _project_run_event_state(
+                run=run,
+                projection_status="resume_requested",
+                trace_id=run.trace_id or trace_context["trace_id"],
+                event_type="run.resume_requested",
+                event_id=None,
+                event_time=resume_requested_at,
+                pause_state_json=run.pause_state_json,
+                paused_node_id=run.paused_node_id,
+            )
+
+            approval_task = pending_approval_task
+            if approval_task:
+                approved = bool(input_json.get("approved", True))
+                lifecycle_task = approval_task.task_lifecycle
+                if lifecycle_task is None:
+                    lifecycle_task = transition_task_lifecycle(
+                        run=run,
+                        node_id=node_id,
+                        node_type="human_gate",
+                        to_status="waiting_for_decision",
+                        attempt_number=1,
+                        source="hitl_resume",
+                        idempotency_key=f"task:{run.id}:{node_id}:decision_link:{approval_task.id}",
+                        reason="approval task linked to lifecycle task",
+                    ).lifecycle_task
+                approval_task.status = "approved" if approved else "rejected"
+                approval_task.result = input_json
+                approval_task.resolved_at = resume_requested_at
+                approval_task.task_lifecycle = lifecycle_task
+                approval_task.save(
+                    update_fields=["status", "result", "resolved_at", "task_lifecycle"]
+                )
+                organization = run.organization if run.organization_id else user.default_organization
+                if organization is not None:
+                    decision_record, _ = DecisionRecord.objects.update_or_create(
+                        organization=organization,
+                        external_key=f"approval:{approval_task.id}",
+                        defaults={
+                            "execution": run,
+                            "task": None,
+                            "task_lifecycle": lifecycle_task,
+                            "agent": None,
+                            "decision_type": "human_approval",
+                            "status": approval_task.status,
+                            "source_approval_task": approval_task,
+                            "context_json": approval_task.payload
+                            if isinstance(approval_task.payload, dict)
+                            else {},
+                            "resolution_json": input_json,
+                            "requested_at": approval_task.created_at,
+                            "resolved_at": resume_requested_at,
+                        },
+                    )
+                    lifecycle_task.current_decision = decision_record
+                    lifecycle_task.save(update_fields=["current_decision", "updated_at"])
+                PreferenceEventService().record_hitl_feedback(
+                    approval_task=approval_task,
+                    actor=user,
+                    final_value=input_json,
+                )
+                record_audit_log(
+                    actor=user,
+                    tenant_id=get_tenant_id_for_user(user),
+                    action="approval.resolved",
+                    resource_type="approval",
+                    resource_id=str(approval_task.id),
+                    metadata={
+                        "run_id": str(run.id),
+                        "node_id": node_id,
+                        "status": approval_task.status,
+                        "resume_attempt_id": str(resume_attempt_id),
+                    },
+                )
+                decision_resolved_payload = {
+                    "node_id": node_id,
+                    "status": approval_task.status,
+                    "resolution": redact_payload(input_json),
+                    "resume_attempt_id": str(resume_attempt_id),
+                }
+
+        broadcast_run_updated(run)
+        if decision_resolved_payload is not None:
+            broadcast_decision_resolved(run=run, payload=decision_resolved_payload)
+
+        def _mark_resume_dispatch_failed(*, reason: str, error_message: str) -> Run:
+            failure_time = timezone.now()
+            with transaction.atomic():
+                failed_run = Run.objects.select_for_update().get(id=run.id)
+                if (
+                    failed_run.status == "resume_requested"
+                    and failed_run.resume_attempt_id == resume_attempt_id
+                ):
+                    failed_run.recovery_state = "resume_dispatch_failed"
+                    failed_run.recovery_reason = reason[:64]
+                    update_fields = ["recovery_state", "recovery_reason"]
+                    update_fields.extend(
+                        touch_run_liveness(
+                            failed_run,
+                            event_time=failure_time,
+                            recovery_state="resume_dispatch_failed",
+                        )
+                    )
+                    failed_run.save(update_fields=sorted(set(update_fields)))
+                    RunEvent.objects.create(
+                        run=failed_run,
+                        event_type="run.resume_dispatch_failed",
+                        payload={
+                            "status": "resume_requested",
+                            "recovery_state": "resume_dispatch_failed",
+                            "recovery_reason": reason,
+                            "error_message": redact_payload(error_message),
+                            "resume_attempt_id": str(resume_attempt_id),
+                            "node_id": node_id,
+                            "category": "state",
+                        },
+                        trace_id=failed_run.trace_id or trace_context["trace_id"],
+                    )
+                    _project_run_event_state(
+                        run=failed_run,
+                        projection_status="resume_requested",
+                        trace_id=failed_run.trace_id or trace_context["trace_id"],
+                        event_type="run.resume_dispatch_failed",
+                        event_id=None,
+                        event_time=failure_time,
+                        pause_state_json=failed_run.pause_state_json,
+                        paused_node_id=failed_run.paused_node_id,
+                    )
+                return failed_run
+
         try:
             with start_backend_span(
                 "runs.resume",
@@ -3240,7 +3492,11 @@ class RunResumeView(APIView):
                 message="Dispatched run resume to engine",
             )
         except EngineConnectionError as e:
-            _revert_resume_request()
+            run = _mark_resume_dispatch_failed(
+                reason="engine_unavailable",
+                error_message=str(e),
+            )
+            broadcast_run_updated(run)
             log_event(
                 logger,
                 logging.ERROR,
@@ -3256,7 +3512,11 @@ class RunResumeView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except EngineExecutionError as e:
-            _revert_resume_request()
+            run = _mark_resume_dispatch_failed(
+                reason="engine_rejected_resume",
+                error_message=str(e),
+            )
+            broadcast_run_updated(run)
             log_event(
                 logger,
                 logging.ERROR,
@@ -3283,54 +3543,6 @@ class RunResumeView(APIView):
             if update_fields:
                 run.save(update_fields=sorted(set(update_fields)))
 
-            RunEvent.objects.create(
-                run=run,
-                event_type="run.resume_requested",
-                payload={
-                    "status": "resume_requested",
-                    "node_id": node_id,
-                    "resume_requested_at": resume_requested_at.isoformat(),
-                    "resume_attempt_id": str(resume_attempt_id),
-                    "engine_instance_id": selected_engine_id,
-                },
-                trace_id=run.trace_id or trace_context["trace_id"],
-            )
-            _project_run_event_state(
-                run=run,
-                projection_status="resume_requested",
-                trace_id=run.trace_id or trace_context["trace_id"],
-                event_type="run.resume_requested",
-                event_id=None,
-                event_time=resume_requested_at,
-                pause_state_json=run.pause_state_json,
-                paused_node_id=run.paused_node_id,
-            )
-
-            approval_task = pending_approval_task
-            if approval_task:
-                approved = input_json.get("approved", True)
-                approval_task.status = "approved" if approved else "rejected"
-                approval_task.result = input_json
-                approval_task.resolved_at = resume_requested_at
-                approval_task.save(update_fields=["status", "result", "resolved_at"])
-                PreferenceEventService().record_hitl_feedback(
-                    approval_task=approval_task,
-                    actor=user,
-                    final_value=input_json,
-                )
-                record_audit_log(
-                    actor=user,
-                    tenant_id=get_tenant_id_for_user(user),
-                    action="approval.resolved",
-                    resource_type="approval",
-                    resource_id=str(approval_task.id),
-                    metadata={
-                        "run_id": str(run.id),
-                        "node_id": node_id,
-                        "status": approval_task.status,
-                    },
-                )
-
         broadcast_run_updated(run)
 
         log_event(
@@ -3343,7 +3555,14 @@ class RunResumeView(APIView):
             resume_attempt_id=str(resume_attempt_id),
             message="Run resume request completed",
         )
-        return success_response({"resumed": True, "run_id": str(run.id)})
+        return success_response(
+            {
+                "resumed": True,
+                "run_id": str(run.id),
+                "resume_attempt_id": str(resume_attempt_id),
+                "decision_status": decision_status,
+            }
+        )
 
 
 class EngineRunEventsView(APIView):
@@ -3358,10 +3577,12 @@ class EngineRunEventsView(APIView):
     def post(self, request: Request) -> Response:
         timestamp_header = request.headers.get("X-Forgegraph-Timestamp", "")
         signature_header = request.headers.get("X-Forgegraph-Signature", "")
-        ok, reason = s2s.verify_request(
+        ok, reason = s2s.verify_request_once(
             timestamp_ms=timestamp_header,
             signature=signature_header,
             body=request.body or b"",
+            method=request.method,
+            path=request.path,
         )
         if not ok:
             record_callback_auth_failure(reason)
@@ -3502,7 +3723,7 @@ class EngineRunEventsView(APIView):
             payload: dict[str, Any],
             *,
             derived: bool = False,
-        ) -> None:
+        ) -> bool:
             normalized_payload = dict(payload)
             normalized_payload["category"] = normalize_event_category(
                 event_type_name,
@@ -3518,6 +3739,7 @@ class EngineRunEventsView(APIView):
                     trace_id=trace_context["trace_id"],
                     span_id=trace_context["span_id"],
                 )
+                return True
             except IntegrityError:
                 log_event(
                     logger,
@@ -3528,6 +3750,7 @@ class EngineRunEventsView(APIView):
                     event_id=event_id,
                     message="Duplicate run event ignored",
                 )
+                return False
 
         if event_type == "run.schema_validation":
             payload = redact_payload(event.get("output") or {})
@@ -3704,19 +3927,25 @@ class EngineRunEventsView(APIView):
                 if event_type == "run_resumed":
                     event_output = event.get("output")
                     resume_output = event_output if isinstance(event_output, dict) else {}
-                    resume_attempt_id = str(resume_output.get("resume_attempt_id") or "").strip()
-                    if run.resume_attempt_id:
-                        expected_resume_attempt_id = str(run.resume_attempt_id)
-                        if not resume_attempt_id or resume_attempt_id != expected_resume_attempt_id:
-                            return problem_response(
-                                type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
-                                title="Stale resume acknowledgement",
-                                status=status.HTTP_409_CONFLICT,
-                                detail=(
-                                    "run_resumed acknowledgement does not match the active "
-                                    "resume_attempt_id."
-                                ),
-                            )
+                    resume_attempt_id = str(
+                        resume_output.get("resume_attempt_id") or event.get("attempt_id") or ""
+                    ).strip()
+                    expected_resume_attempt_id = str(
+                        run.resume_attempt_id or run.authoritative_attempt_id or ""
+                    ).strip()
+                    if not resume_attempt_id or (
+                        expected_resume_attempt_id
+                        and resume_attempt_id != expected_resume_attempt_id
+                    ):
+                        return problem_response(
+                            type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
+                            title="Stale resume acknowledgement",
+                            status=status.HTTP_409_CONFLICT,
+                            detail=(
+                                "run_resumed acknowledgement does not match the active "
+                                "resume_attempt_id."
+                            ),
+                        )
                     run_payload["status"] = "running"
                     run.status = "running"
                     update_fields.append("status")
@@ -3811,7 +4040,15 @@ class EngineRunEventsView(APIView):
                 if state_mutation_enabled and event_type == "run_completed":
                     _schedule_deliverable_archive(run.id)
 
-                _save_event("run.updated", _serialize_event_payload(redact_payload(run_payload)))
+                lifecycle_event_saved = _save_event(
+                    "run.updated", _serialize_event_payload(redact_payload(run_payload))
+                )
+                if lifecycle_event_saved:
+                    _save_event(
+                        event_type,
+                        _serialize_event_payload(redact_payload(run_payload)),
+                        derived=True,
+                    )
                 for summary_payload in final_run_stream_summaries:
                     broadcast_node_stream_summary(run=run, payload=summary_payload)
                 if state_mutation_enabled and event_type == "run_paused" and node_id:
@@ -4024,6 +4261,68 @@ class EngineRunEventsView(APIView):
                     node_update_fields.extend(["trace_id", "span_id"])
 
                     node_run.save(update_fields=sorted(set(node_update_fields)))
+                    try:
+                        if event_type == "node_retrying":
+                            retry_attempt = int(event.get("retry_attempt") or attempt)
+                            max_attempts = int(event.get("max_attempts") or event.get("max_retries") or retry_attempt)
+                            retry_delay_ms = int(event.get("retry_delay_ms") or event.get("retry_after_ms") or 0)
+                            retry_reason = str(event.get("reason") or event.get("error") or "node retry scheduled")
+                            transition_task_lifecycle(
+                                run=run,
+                                node_id=node_id,
+                                node_type=node_type,
+                                to_status="retry_scheduled",
+                                attempt_number=attempt,
+                                parent_attempt_number=attempt - 1 if attempt > 1 else None,
+                                source="engine_callback",
+                                idempotency_key=f"task:{event_id or run.id}:{node_id}:retry",
+                                reason=retry_reason,
+                                node_run=node_run,
+                                owner_component="engine",
+                                payload={
+                                    "retry_attempt": retry_attempt,
+                                    "max_attempts": max_attempts,
+                                    "retry_delay_ms": retry_delay_ms,
+                                },
+                                occurred_at=event_time,
+                            )
+                            record_retry_operation(
+                                run=run,
+                                operation_type="node_execution",
+                                idempotency_key=f"retry:{event_id or run.id}:{node_id}:{attempt}",
+                                attempt_number=retry_attempt,
+                                max_attempts=max(max_attempts, retry_attempt),
+                                retry_delay_ms=retry_delay_ms,
+                                retry_reason=retry_reason,
+                                last_error=str(event.get("error") or retry_reason),
+                                owning_component="engine",
+                                retry_class=str(event.get("retry_class") or "llm_backpressure"),
+                                terminal_fallback="dead_letter",
+                                node_id=node_id,
+                                node_type=node_type,
+                                parent_attempt_number=attempt - 1 if attempt > 1 else None,
+                                payload=redact_payload(event),
+                            )
+                        else:
+                            transition_from_node_run(
+                                run=run,
+                                node_run=node_run,
+                                source="engine_callback",
+                                idempotency_key=f"task:{event_id or run.id}:{node_id}:{node_payload['status']}:{attempt}",
+                                reason=str(node_payload.get("error_json") or ""),
+                                occurred_at=event_time,
+                            )
+                    except Exception as exc:
+                        log_event(
+                            logger,
+                            logging.WARNING,
+                            "task_lifecycle_projection_failed",
+                            run_id=str(run.id),
+                            node_id=node_id,
+                            attempt=attempt,
+                            event_type=event_type,
+                            error_message=str(exc),
+                        )
                     run_update_fields = touch_run_liveness(
                         run,
                         event_time=event_time,

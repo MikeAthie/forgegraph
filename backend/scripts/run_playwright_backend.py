@@ -115,6 +115,18 @@ def main() -> int:
         env=env,
         text=True,
     )
+    run_queue_process = subprocess.Popen(
+        [
+            sys.executable,
+            "manage.py",
+            "process_run_queue",
+            "--worker-id",
+            "playwright-run-queue",
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+    )
     runserver_process = subprocess.Popen(
         [
             sys.executable,
@@ -133,6 +145,7 @@ def main() -> int:
 
     def handle_shutdown(signum: int, _frame: object) -> None:
         terminate_process(runserver_process)
+        terminate_process(run_queue_process)
         terminate_process(runtime_intent_process)
         terminate_process(grpc_process)
         raise SystemExit(128 + signum)
@@ -145,6 +158,7 @@ def main() -> int:
         return runserver_exit
     finally:
         terminate_process(runserver_process)
+        terminate_process(run_queue_process)
         terminate_process(runtime_intent_process)
         terminate_process(grpc_process)
 

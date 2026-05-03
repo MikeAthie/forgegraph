@@ -148,6 +148,9 @@ message ResumeRunRequest {
   // W3C trace context propagated from the control plane.
   string traceparent = 4;
   string tracestate = 5;
+
+  // Backend-owned resume attempt identifier accepted for this continuation.
+  string resume_attempt_id = 6;
 }
 
 // ResumeRunResponse confirms resumption

@@ -213,12 +213,14 @@ export async function mockOperationApis(
       status: detail ? 200 : 404,
       contentType: "application/json",
       body: JSON.stringify(
-        detail ?? {
-          error: {
-            code: "NOT_FOUND",
-            message: "Operation not found.",
-          },
-        },
+        detail
+          ? apiSuccess(detail)
+          : {
+              error: {
+                code: "NOT_FOUND",
+                message: "Operation not found.",
+              },
+            },
       ),
     });
   });

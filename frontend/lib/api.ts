@@ -187,6 +187,19 @@ const API_PATHS = {
     list: "/api/tasks/",
     detail: (taskId: string) => `/api/tasks/${taskId}`,
   },
+  operator: {
+    runState: (runId: string) => `/api/operator/runs/${runId}/state`,
+    taskState: (taskId: string) => `/api/operator/tasks/${taskId}/state`,
+    runtimeIntentBacklog: "/api/operator/runtime-intents/backlog",
+    deadLetters: "/api/operator/dead-letters",
+    replayIntent: (intentId: string) => `/api/operator/runtime-intents/${intentId}/replay`,
+    acknowledgeIntent: (intentId: string) => `/api/operator/runtime-intents/${intentId}/acknowledge`,
+    forceFailRun: (runId: string) => `/api/operator/runs/${runId}/force-fail`,
+    forceCancelRun: (runId: string) => `/api/operator/runs/${runId}/force-cancel`,
+    forceRehydrateRun: (runId: string) => `/api/operator/runs/${runId}/force-rehydrate`,
+    wsSubscribers: "/api/operator/ws/subscribers",
+    orgLoad: "/api/operator/org-load",
+  },
   accounting: {
     overview: "/api/accounting/",
     ledger: "/api/accounting/ledger",
@@ -252,6 +265,7 @@ const API_PATHS = {
   },
   metrics: {
     summary: "/api/metrics/summary",
+    slo: "/api/metrics/slo",
   },
   scim: {
     token: "/api/scim/token",
@@ -638,6 +652,8 @@ export type MetricsSummary = {
     pending: number;
     processing: number;
     total_depth: number;
+    backlog?: number;
+    stalled_runs?: number;
     oldest_pending_age_seconds: number | null;
     by_tenant: Array<{
       tenant_id: string;
@@ -646,10 +662,49 @@ export type MetricsSummary = {
       total: number;
     }>;
   };
+  websocket?: {
+    active_connections: number;
+    connection_failures_total: number;
+    messages_sent_total: number;
+    messages_dropped_total: number;
+    messages_filtered_total: number;
+    slow_client_disconnects_total: number;
+    message_rate_per_minute: number;
+    send_latency_ms_p50: number | null;
+    send_latency_ms_p95: number | null;
+  };
+  api?: {
+    requests_total: number;
+    server_errors_total: number;
+    timeout_like_requests_total: number;
+    timeout_like_rate_per_minute: number;
+    timeout_threshold_ms: number;
+    latency_ms_p50: number | null;
+    latency_ms_p95: number | null;
+    callback_auth_failures_total: number;
+    callback_auth_failures_by_reason: Record<string, number>;
+  };
+  runtime_transport?: {
+    backlog: number;
+    lag: number;
+    pending: number;
+    dead_letter_count: number;
+    source: string;
+    error: string;
+  };
   slo: {
+    api_availability_beta_target?: number;
+    api_availability_production_target?: number;
+    runtime_intent_processing_p95_ms_target?: number;
+    approval_to_resume_p95_ms_target?: number;
+    task_projection_lag_p95_ms_target?: number;
+    dead_letter_visibility_seconds_target?: number;
+    silent_task_loss_max?: number;
     run_success_rate_target: number;
     run_p95_latency_ms_target: number;
     queue_max_depth_target: number;
+    api_p95_latency_ms_target?: number;
+    websocket_send_p95_latency_ms_target?: number;
   };
   guardrails: {
     run_max_active_per_tenant: number;
@@ -660,6 +715,59 @@ export type MetricsSummary = {
     run_success_rate: boolean;
     run_p95_latency: boolean;
     queue_depth: boolean;
+    api_p95_latency?: boolean;
+    websocket_send_p95_latency?: boolean;
+  };
+  sre?: SreReadinessSummary;
+  generated_at: string;
+};
+
+export type SreObjective = {
+  id: string;
+  title: string;
+  target: number;
+  actual: number | null;
+  unit: string;
+  comparison: "gte" | "lte";
+  status: "passing" | "breaching" | "no_data";
+  source: string;
+  observed_count: number;
+  missing_data: boolean;
+  description?: string;
+};
+
+export type SreDashboardPanel = {
+  id: string;
+  title: string;
+  value: unknown;
+  unit: string;
+  missing_data: boolean;
+};
+
+export type SreAlert = {
+  id: string;
+  title: string;
+  state: "ok" | "active" | "no_data";
+  severity: "warning" | "critical" | string;
+  evidence: Record<string, unknown>;
+  runbook: string;
+};
+
+export type SreReadinessSummary = {
+  catalog_version: number;
+  catalog_path: string;
+  release_tier: string;
+  window_seconds: number;
+  objectives: SreObjective[];
+  dashboard_panels: SreDashboardPanel[];
+  alerts: {
+    active_total: number;
+    items: SreAlert[];
+  };
+  catalog_validation: {
+    missing_slos: string[];
+    missing_dashboard_panels: string[];
+    missing_alerts: string[];
   };
   generated_at: string;
 };
@@ -1615,6 +1723,9 @@ export interface RunDetail {
   input_json: Record<string, unknown>;
   output_json: Record<string, unknown> | null;
   error_message: string;
+  recovery_state?: string | null;
+  recovery_reason?: string | null;
+  resume_attempt_id?: string | null;
   duration_ms: number | null;
   trace_id?: string;
   node_runs: NodeRunItem[];
@@ -1645,6 +1756,14 @@ export interface RunDetail {
     node_id?: string;
     node_name?: string;
   } | null;
+}
+
+export interface ResumeRunResponse {
+  resumed: boolean;
+  run_id?: string;
+  duplicate?: boolean;
+  resume_attempt_id?: string;
+  decision_status?: string;
 }
 
 export interface ApprovalTask {
@@ -1686,18 +1805,68 @@ export interface AgentRegistryEntry {
   updated_at: string;
 }
 
+export type TaskLifecycleStatus =
+  | "created"
+  | "queued"
+  | "claimed"
+  | "running"
+  | "paused"
+  | "waiting_for_decision"
+  | "retry_scheduled"
+  | "completed"
+  | "failed"
+  | "dead_lettered"
+  | "cancelled"
+  | string;
+
+export interface TaskDeadLetterSummary {
+  id?: string;
+  reason?: string;
+  attempt_count?: number;
+  last_error?: string;
+  recovery_options?: string[];
+  status?: string;
+  intent_id?: string | null;
+  created_at?: string | null;
+  acknowledged_at?: string | null;
+}
+
+export interface TaskRetrySummary {
+  id?: string;
+  operation_type?: string;
+  idempotency_key?: string;
+  attempt_number?: number;
+  max_attempts?: number;
+  retry_delay_ms?: number;
+  retry_reason?: string;
+  last_error?: string;
+  owning_component?: string;
+  next_scheduled_at?: string | null;
+  terminal_fallback?: string;
+  retry_class?: string;
+  status?: string;
+}
+
 export interface TaskRecord {
   id: string;
   organization_id: string;
   execution_id: string;
   agent_id: string | null;
   title: string;
-  status: "pending" | "running" | "waiting" | "succeeded" | "failed" | "canceled" | string;
+  status: TaskLifecycleStatus;
   priority: "low" | "normal" | "high" | "urgent" | string;
   summary: string;
   source_node_id: string;
   current_step_id: string | null;
   current_decision_id: string | null;
+  lifecycle_task_id?: string | null;
+  attempt_count?: number | null;
+  retry_metadata?: Record<string, unknown> | null;
+  latest_retry?: TaskRetrySummary | null;
+  dead_letter?: TaskDeadLetterSummary | null;
+  stale_event_count?: number | null;
+  late_event_count?: number | null;
+  recovery_options?: string[] | null;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
@@ -1709,6 +1878,7 @@ export interface DecisionRecord {
   organization_id: string;
   execution_id: string | null;
   task_id: string | null;
+  task_lifecycle_id?: string | null;
   agent_id: string | null;
   decision_type: "human_approval" | "policy_guardrail" | "marketplace_review" | "operator_intervention" | string;
   status: "pending" | "approved" | "rejected" | "resolved" | string;
@@ -1719,6 +1889,131 @@ export interface DecisionRecord {
   resolved_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface OperatorTaskLifecycle {
+  id: string;
+  run_id: string;
+  organization_id: string;
+  source_node_id: string;
+  node_type: string;
+  title: string;
+  status: TaskLifecycleStatus;
+  priority: string;
+  summary: string;
+  current_attempt: number;
+  current_node_run_id?: string | null;
+  current_decision_id?: string | null;
+  retry_metadata?: Record<string, unknown> | null;
+  recovery_options?: string[];
+  unresolved_error?: string;
+  stale_event_count: number;
+  late_event_count: number;
+  started_at?: string | null;
+  ended_at?: string | null;
+  last_transition_at?: string | null;
+  latest_retry?: TaskRetrySummary | null;
+  dead_letter?: TaskDeadLetterSummary | null;
+}
+
+export interface OperatorRunState {
+  run: {
+    id: string;
+    status: RunStatus;
+    current_attempt?: string | null;
+    recovery_state?: string | null;
+    recovery_reason?: string | null;
+    resume_attempt_id?: string | null;
+    last_progress_at?: string | null;
+    last_heartbeat_at?: string | null;
+    engine_instance_id?: string | null;
+    error_message?: string;
+  };
+  active_tasks: OperatorTaskLifecycle[];
+  tasks: OperatorTaskLifecycle[];
+  pending_decisions: Array<{
+    id: string;
+    status: string;
+    decision_type: string;
+    task_id?: string | null;
+    task_lifecycle_id?: string | null;
+    requested_at?: string | null;
+  }>;
+  last_checkpoint?: { node_id: string; step_index: number; updated_at: string } | null;
+  last_backend_state_mutation?: {
+    id: string;
+    event_type: string;
+    outcome: string;
+    to_status: string;
+    occurred_at: string;
+  } | null;
+  last_engine_callback?: {
+    id: string;
+    event_type: string;
+    created_at: string;
+    payload?: Record<string, unknown> | string | null;
+  } | null;
+  unresolved_errors: string[];
+  dead_letter_count: number;
+  cost_to_date: number;
+  memory_writes: number;
+  audit_timeline: Array<{
+    id: string;
+    action: string;
+    resource_type: string;
+    created_at: string;
+    metadata?: Record<string, unknown> | null;
+  }>;
+}
+
+export interface OperatorRuntimeIntentBacklog {
+  stream: string;
+  dead_letter_stream: string;
+  stream_length: number;
+  pending: number;
+  lag: number;
+  backlog: number;
+  dead_letter_count: number;
+  recent_dead_letters: Array<{
+    message_id: string;
+    intent_id: string;
+    intent_type: string;
+    run_id: string;
+    attempt_id: string;
+    reason: string;
+    error_class: string;
+    dead_lettered_at: string;
+  }>;
+}
+
+export interface OperatorDeadLetters {
+  task_dead_letters: TaskDeadLetterSummary[];
+  runtime_intent_outcomes: Array<{
+    intent_id: string;
+    run_id?: string | null;
+    intent_type: string;
+    attempt_id: string;
+    reason: string;
+    error_class: string;
+    acknowledged_at?: string | null;
+    processed_at: string;
+  }>;
+}
+
+export interface OperatorOrgLoad {
+  organization_id: string;
+  runs: Record<string, number>;
+  tasks: Array<{ status: string; count: number }>;
+  retry_operations: Array<{ status: string; count: number }>;
+  dead_letters: number;
+}
+
+export interface OperatorWebSocketSubscribers {
+  total: number;
+  by_org: Record<string, number>;
+  by_run: Record<string, number>;
+  by_user: Record<string, number>;
+  subscribers?: Array<Record<string, unknown>>;
 }
 
 export interface CostLedgerEntry {
@@ -1856,8 +2151,8 @@ export const runsApi = {
     return response.data.data;
   },
 
-  resume: async (runId: string, input: ResumeRunInput): Promise<{ resumed: boolean }> => {
-    const response = await api.post<ApiSuccessResponse<{ resumed: boolean }>>(API_PATHS.runs.resume(runId), input);
+  resume: async (runId: string, input: ResumeRunInput): Promise<ResumeRunResponse> => {
+    const response = await api.post<ApiSuccessResponse<ResumeRunResponse>>(API_PATHS.runs.resume(runId), input);
     return response.data.data;
   },
 
@@ -2003,6 +2298,70 @@ export const tasksApi = {
   },
   get: async (taskId: string): Promise<TaskRecord> => {
     const response = await api.get<ApiSuccessResponse<TaskRecord>>(API_PATHS.tasks.detail(taskId));
+    return response.data.data;
+  },
+};
+
+export const operatorApi = {
+  getRunState: async (runId: string): Promise<OperatorRunState> => {
+    const response = await api.get<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.runState(runId));
+    return response.data.data;
+  },
+  getTaskState: async (taskId: string): Promise<{ task: OperatorTaskLifecycle; attempts: unknown[]; events: unknown[] }> => {
+    const response = await api.get<
+      ApiSuccessResponse<{ task: OperatorTaskLifecycle; attempts: unknown[]; events: unknown[] }>
+    >(API_PATHS.operator.taskState(taskId));
+    return response.data.data;
+  },
+  getRuntimeIntentBacklog: async (): Promise<OperatorRuntimeIntentBacklog> => {
+    const response = await api.get<ApiSuccessResponse<OperatorRuntimeIntentBacklog>>(
+      API_PATHS.operator.runtimeIntentBacklog,
+    );
+    return response.data.data;
+  },
+  getDeadLetters: async (): Promise<OperatorDeadLetters> => {
+    const response = await api.get<ApiSuccessResponse<OperatorDeadLetters>>(API_PATHS.operator.deadLetters);
+    return response.data.data;
+  },
+  replayIntent: async (intentId: string, reason: string): Promise<{ intent_id: string; replay_message_id: string }> => {
+    const response = await api.post<ApiSuccessResponse<{ intent_id: string; replay_message_id: string }>>(
+      API_PATHS.operator.replayIntent(intentId),
+      { reason },
+    );
+    return response.data.data;
+  },
+  acknowledgeIntent: async (intentId: string, reason: string): Promise<{ intent_id: string; acknowledged_at: string }> => {
+    const response = await api.post<ApiSuccessResponse<{ intent_id: string; acknowledged_at: string }>>(
+      API_PATHS.operator.acknowledgeIntent(intentId),
+      { reason },
+    );
+    return response.data.data;
+  },
+  forceFailRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.forceFailRun(runId), {
+      reason,
+    });
+    return response.data.data;
+  },
+  forceCancelRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.forceCancelRun(runId), {
+      reason,
+    });
+    return response.data.data;
+  },
+  forceRehydrateRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(
+      API_PATHS.operator.forceRehydrateRun(runId),
+      { reason },
+    );
+    return response.data.data;
+  },
+  getWebSocketSubscribers: async (): Promise<OperatorWebSocketSubscribers> => {
+    const response = await api.get<ApiSuccessResponse<OperatorWebSocketSubscribers>>(API_PATHS.operator.wsSubscribers);
+    return response.data.data;
+  },
+  getOrgLoad: async (): Promise<OperatorOrgLoad> => {
+    const response = await api.get<ApiSuccessResponse<OperatorOrgLoad>>(API_PATHS.operator.orgLoad);
     return response.data.data;
   },
 };
@@ -2159,6 +2518,10 @@ export const healthApi = {
 export const metricsApi = {
   getSummary: async (): Promise<MetricsSummary> => {
     const response = await api.get<ApiSuccessResponse<MetricsSummary>>(API_PATHS.metrics.summary);
+    return response.data.data;
+  },
+  getSlo: async (): Promise<SreReadinessSummary> => {
+    const response = await api.get<ApiSuccessResponse<SreReadinessSummary>>(API_PATHS.metrics.slo);
     return response.data.data;
   },
 };

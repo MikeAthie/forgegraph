@@ -104,6 +104,365 @@ jobs:
         run: bash scripts/ci/run_frontend_checks.sh
 
 
+  backend_unit:
+    name: backend-unit
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Backend unit
+        run: bash scripts/ci/run_backend_unit.sh
+
+
+  backend_integration:
+    name: backend-integration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Backend integration
+        run: bash scripts/ci/run_backend_integration.sh
+
+
+  migration:
+    name: migration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Migration contract
+        run: bash scripts/ci/run_backend_migration.sh
+
+
+  security_regression:
+    name: security-regression
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Security regression
+        run: bash scripts/ci/run_security_regression.sh
+
+
+  sre_readiness:
+    name: sre-readiness
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: SRE readiness
+        run: bash scripts/ci/run_sre_readiness.sh
+
+
+  engine_deterministic:
+    name: engine-deterministic
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - name: Engine deterministic
+        run: bash scripts/ci/run_engine_deterministic.sh
+
+
+  engine_integration:
+    name: engine-integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - name: Engine integration
+        run: bash scripts/ci/run_engine_integration.sh
+
+
+  engine_race:
+    name: engine-race
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - name: Engine race
+        run: bash scripts/ci/run_engine_race.sh
+
+
+  frontend_unit:
+    name: frontend-unit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend unit
+        run: bash scripts/ci/run_frontend_unit.sh
+
+
+  frontend_playwright_mocked:
+    name: frontend-playwright-mocked
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Frontend mocked Playwright
+        run: bash scripts/ci/run_frontend_playwright_mocked.sh
+
+
   launch_qa_backend:
     name: launch-qa-backend
     needs: backend
@@ -195,9 +554,584 @@ jobs:
         run: bash scripts/ci/run_launch_qa_frontend.sh
 
 
+  launch_qa_live:
+    name: launch-qa-live
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      PLAYWRIGHT_DEV_PORT: "3001"
+      PLAYWRIGHT_BACKEND_PORT: "8002"
+      PLAYWRIGHT_ENGINE_PORT: "50071"
+      PLAYWRIGHT_ENGINE_METRICS_PORT: "9091"
+      USE_IN_MEMORY_CHANNEL_LAYER: "false"
+      USE_IN_MEMORY_CACHE: "false"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Guard live specs against mocks
+        run: bash scripts/ci/check_live_playwright_no_mocks.sh
+
+      - name: Launch QA - Live backend engine websocket
+        working-directory: frontend
+        run: >
+          npx playwright test
+          __tests__/e2e/human-gate-live.spec.ts
+          __tests__/e2e/production-launch-live.spec.ts
+          __tests__/e2e/operator-recovery-live.spec.ts
+          __tests__/e2e/tenant-isolation-live.spec.ts
+          --project=chromium
+
+
+  frontend_playwright_live:
+    name: frontend-playwright-live
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      USE_IN_MEMORY_CHANNEL_LAYER: "false"
+      USE_IN_MEMORY_CACHE: "false"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Guard live specs against mocks
+        run: bash scripts/ci/check_live_playwright_no_mocks.sh
+      - name: Frontend live Playwright OS surfaces
+        working-directory: frontend
+        run: >
+          npx playwright test
+          __tests__/e2e/production-launch-live.spec.ts
+          __tests__/e2e/operator-recovery-live.spec.ts
+          --project=chromium
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-playwright-live-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+
+
+  full_hitl_lifecycle:
+    name: full-hitl-lifecycle
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      USE_IN_MEMORY_CHANNEL_LAYER: "false"
+      USE_IN_MEMORY_CACHE: "false"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Guard live specs against mocks
+        run: bash scripts/ci/check_live_playwright_no_mocks.sh
+      - name: Full HITL lifecycle
+        working-directory: frontend
+        run: npx playwright test __tests__/e2e/human-gate-live.spec.ts --project=chromium
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-hitl-lifecycle-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+
+
+  failure_retry_dead_letter:
+    name: failure-retry-dead-letter
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      USE_IN_MEMORY_CHANNEL_LAYER: "false"
+      USE_IN_MEMORY_CACHE: "false"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+      PLAYWRIGHT_LLM_MOCK_ERROR_MODE: "off"
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Guard live specs against mocks
+        run: bash scripts/ci/check_live_playwright_no_mocks.sh
+      - name: Failure retry dead-letter live
+        working-directory: frontend
+        run: npx playwright test __tests__/e2e/failure-retry-dead-letter-live.spec.ts --project=chromium
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-retry-dead-letter-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+
+
+  tenant_isolation:
+    name: tenant-isolation
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      USE_IN_MEMORY_CHANNEL_LAYER: "false"
+      USE_IN_MEMORY_CACHE: "false"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Guard live specs against mocks
+        run: bash scripts/ci/check_live_playwright_no_mocks.sh
+      - name: Tenant isolation live
+        working-directory: frontend
+        run: npx playwright test __tests__/e2e/tenant-isolation-live.spec.ts --project=chromium
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tenant-isolation-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+
+
+  load_smoke:
+    name: load-smoke
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PLAYWRIGHT_RUNTIME_TARGET: local
+      PLAYWRIGHT_WORKERS: "1"
+      USE_IN_MEMORY_CHANNEL_LAYER: "false"
+      USE_IN_MEMORY_CACHE: "false"
+      USE_SQLITE: "false"
+      DB_HOST: localhost
+      DB_PORT: "5433"
+      DB_NAME: forgegraph
+      DB_USER: forgegraph
+      DB_PASSWORD: forgegraph_secret
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_ADDR: 127.0.0.1:6379
+      PLAYWRIGHT_LOAD_SMOKE_RUNS: "100"
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (dev)
+        working-directory: backend
+        run: python -m uv sync --dev
+      - name: Put backend venv first
+        run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Load smoke
+        run: bash scripts/ci/run_load_smoke.sh
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-smoke-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+
+
+  docker_full_stack_smoke:
+    name: docker-full-stack-smoke
+    needs: [backend, engine, frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: forgegraph
+          POSTGRES_USER: forgegraph
+          POSTGRES_PASSWORD: forgegraph_secret
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U forgegraph -d forgegraph"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Docker full-stack smoke
+        run: bash scripts/ci/run_docker_full_stack_smoke.sh
+
+
   launch_qa_report:
     name: launch-qa-report
-    needs: [launch_qa_backend, launch_qa_engine, launch_qa_frontend]
+    needs: [launch_qa_backend, launch_qa_engine, launch_qa_frontend, launch_qa_live]
     if: always()
     runs-on: ubuntu-latest
 
@@ -212,8 +1146,9 @@ jobs:
           | Backend Functional + Security | ${{ needs.launch_qa_backend.result }} |
           | Engine Reliability | ${{ needs.launch_qa_engine.result }} |
           | Frontend UX | ${{ needs.launch_qa_frontend.result }} |
+          | Live Full Stack | ${{ needs.launch_qa_live.result }} |
 
-          Overall gate: ${{ (needs.launch_qa_backend.result == 'success' && needs.launch_qa_engine.result == 'success' && needs.launch_qa_frontend.result == 'success') && 'PASS' || 'FAIL' }}
+          Overall gate: ${{ (needs.launch_qa_backend.result == 'success' && needs.launch_qa_engine.result == 'success' && needs.launch_qa_frontend.result == 'success' && needs.launch_qa_live.result == 'success') && 'PASS' || 'FAIL' }}
           EOF
 
       - name: Upload launch QA report
@@ -229,9 +1164,26 @@ jobs:
       - backend
       - engine
       - frontend
+      - backend_unit
+      - backend_integration
+      - migration
+      - security_regression
+      - sre_readiness
+      - engine_deterministic
+      - engine_integration
+      - engine_race
+      - frontend_unit
+      - frontend_playwright_mocked
       - launch_qa_backend
       - launch_qa_engine
       - launch_qa_frontend
+      - launch_qa_live
+      - frontend_playwright_live
+      - full_hitl_lifecycle
+      - failure_retry_dead_letter
+      - tenant_isolation
+      - load_smoke
+      - docker_full_stack_smoke
     if: always()
     runs-on: ubuntu-latest
 
@@ -241,16 +1193,50 @@ jobs:
           echo "backend=${{ needs.backend.result }}"
           echo "engine=${{ needs.engine.result }}"
           echo "frontend=${{ needs.frontend.result }}"
+          echo "backend_unit=${{ needs.backend_unit.result }}"
+          echo "backend_integration=${{ needs.backend_integration.result }}"
+          echo "migration=${{ needs.migration.result }}"
+          echo "security_regression=${{ needs.security_regression.result }}"
+          echo "sre_readiness=${{ needs.sre_readiness.result }}"
+          echo "engine_deterministic=${{ needs.engine_deterministic.result }}"
+          echo "engine_integration=${{ needs.engine_integration.result }}"
+          echo "engine_race=${{ needs.engine_race.result }}"
+          echo "frontend_unit=${{ needs.frontend_unit.result }}"
+          echo "frontend_playwright_mocked=${{ needs.frontend_playwright_mocked.result }}"
           echo "launch_qa_backend=${{ needs.launch_qa_backend.result }}"
           echo "launch_qa_engine=${{ needs.launch_qa_engine.result }}"
           echo "launch_qa_frontend=${{ needs.launch_qa_frontend.result }}"
+          echo "launch_qa_live=${{ needs.launch_qa_live.result }}"
+          echo "frontend_playwright_live=${{ needs.frontend_playwright_live.result }}"
+          echo "full_hitl_lifecycle=${{ needs.full_hitl_lifecycle.result }}"
+          echo "failure_retry_dead_letter=${{ needs.failure_retry_dead_letter.result }}"
+          echo "tenant_isolation=${{ needs.tenant_isolation.result }}"
+          echo "load_smoke=${{ needs.load_smoke.result }}"
+          echo "docker_full_stack_smoke=${{ needs.docker_full_stack_smoke.result }}"
 
           if [ "${{ needs.backend.result }}" != "success" ] || \
              [ "${{ needs.engine.result }}" != "success" ] || \
              [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.backend_unit.result }}" != "success" ] || \
+             [ "${{ needs.backend_integration.result }}" != "success" ] || \
+             [ "${{ needs.migration.result }}" != "success" ] || \
+             [ "${{ needs.security_regression.result }}" != "success" ] || \
+             [ "${{ needs.sre_readiness.result }}" != "success" ] || \
+             [ "${{ needs.engine_deterministic.result }}" != "success" ] || \
+             [ "${{ needs.engine_integration.result }}" != "success" ] || \
+             [ "${{ needs.engine_race.result }}" != "success" ] || \
+             [ "${{ needs.frontend_unit.result }}" != "success" ] || \
+             [ "${{ needs.frontend_playwright_mocked.result }}" != "success" ] || \
              [ "${{ needs.launch_qa_backend.result }}" != "success" ] || \
              [ "${{ needs.launch_qa_engine.result }}" != "success" ] || \
-             [ "${{ needs.launch_qa_frontend.result }}" != "success" ]; then
+             [ "${{ needs.launch_qa_frontend.result }}" != "success" ] || \
+             [ "${{ needs.launch_qa_live.result }}" != "success" ] || \
+             [ "${{ needs.frontend_playwright_live.result }}" != "success" ] || \
+             [ "${{ needs.full_hitl_lifecycle.result }}" != "success" ] || \
+             [ "${{ needs.failure_retry_dead_letter.result }}" != "success" ] || \
+             [ "${{ needs.tenant_isolation.result }}" != "success" ] || \
+             [ "${{ needs.load_smoke.result }}" != "success" ] || \
+             [ "${{ needs.docker_full_stack_smoke.result }}" != "success" ]; then
             echo "One or more required CI checks failed."
             exit 1
           fi

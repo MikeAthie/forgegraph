@@ -48,6 +48,7 @@ urlpatterns = [
     path("runtime-tools/", include("adapters.api.runtime_tools.urls")),
     path("onboarding/", include("adapters.api.onboarding.urls")),
     path("metrics/", include("adapters.api.metrics.urls")),
+    path("operator/", include("adapters.api.operator.urls")),
     path("runs", RunListView.as_view(), name="run-list-create-top-level"),
     path("runs/", include("adapters.api.runs.urls")),
     path("approvals/", include("adapters.api.approvals.urls")),

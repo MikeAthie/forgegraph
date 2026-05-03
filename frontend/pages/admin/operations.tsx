@@ -10,12 +10,18 @@ import {
   getApiErrorMessage,
   healthApi,
   metricsApi,
+  operatorApi,
   policiesApi,
   retentionApi,
   type MemoryAnalyticsPerformance,
   type MemoryAnalyticsUsage,
   type MemoryHealthResponse,
   type MetricsSummary,
+  type OperatorDeadLetters,
+  type OperatorOrgLoad,
+  type OperatorRunState,
+  type OperatorRuntimeIntentBacklog,
+  type OperatorWebSocketSubscribers,
   type RetentionCleanupPreview,
   type RetentionExportType,
   type TenantGuardrailPolicy,
@@ -41,6 +47,13 @@ type OperationsData = {
   memoryPerformance: MemoryAnalyticsPerformance;
   memoryHealth: MemoryHealthResponse;
   metricsSummary: MetricsSummary;
+};
+
+type RecoveryData = {
+  backlog: OperatorRuntimeIntentBacklog;
+  deadLetters: OperatorDeadLetters;
+  orgLoad: OperatorOrgLoad;
+  wsSubscribers: OperatorWebSocketSubscribers;
 };
 
 type ExportAction = {
@@ -113,6 +126,48 @@ const formatDays = (value: number | null) => {
   return `${value} days`;
 };
 
+const formatSreValue = (value: unknown, unit: string) => {
+  if (value === null || value === undefined) {
+    return "No data";
+  }
+  if (Array.isArray(value)) {
+    if (unit === "usd") {
+      const total = value.reduce((sum, item) => sum + Number((item as { total_cost_usd?: number }).total_cost_usd ?? 0), 0);
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(total);
+    }
+    return `${value.length} rows`;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      return "None";
+    }
+    return entries
+      .slice(0, 3)
+      .map(([key, item]) => `${key}: ${String(item)}`)
+      .join(" · ");
+  }
+  if (typeof value === "number") {
+    if (unit === "ratio") {
+      return `${Math.round(value * 1000) / 10}%`;
+    }
+    if (unit === "ms") {
+      return `${Math.round(value)} ms`;
+    }
+    if (unit === "seconds") {
+      return `${Math.round(value)}s`;
+    }
+    if (unit === "per_minute") {
+      return `${Math.round(value * 10) / 10}/min`;
+    }
+    if (unit === "usd") {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
+    }
+    return new Intl.NumberFormat("en-US").format(value);
+  }
+  return String(value);
+};
+
 const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -132,6 +187,13 @@ export default function AdminOperationsPage() {
   const [cleanupPreview, setCleanupPreview] = useState<RetentionCleanupPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [recoveryData, setRecoveryData] = useState<RecoveryData | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [operatorError, setOperatorError] = useState<string | null>(null);
+  const [runLookupId, setRunLookupId] = useState("");
+  const [inspectedRun, setInspectedRun] = useState<OperatorRunState | null>(null);
+  const [operatorReason, setOperatorReason] = useState("");
+  const [operatorAction, setOperatorAction] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -160,13 +222,32 @@ export default function AdminOperationsPage() {
     }
   }, []);
 
+  const loadRecoveryData = useCallback(async () => {
+    setRecoveryLoading(true);
+    setOperatorError(null);
+    try {
+      const [backlog, deadLetters, orgLoad, wsSubscribers] = await Promise.all([
+        operatorApi.getRuntimeIntentBacklog(),
+        operatorApi.getDeadLetters(),
+        operatorApi.getOrgLoad(),
+        operatorApi.getWebSocketSubscribers(),
+      ]);
+      setRecoveryData({ backlog, deadLetters, orgLoad, wsSubscribers });
+    } catch (err: unknown) {
+      setOperatorError(getApiErrorMessage(err, "Failed to load recovery diagnostics."));
+    } finally {
+      setRecoveryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!canManage) {
       setLoading(false);
       return;
     }
     void loadData();
-  }, [canManage, loadData]);
+    void loadRecoveryData();
+  }, [canManage, loadData, loadRecoveryData]);
 
   const handlePreviewCleanup = useCallback(async () => {
     setPreviewLoading(true);
@@ -194,6 +275,85 @@ export default function AdminOperationsPage() {
       setExportingKey(null);
     }
   }, []);
+
+  const handleInspectRun = useCallback(async () => {
+    const runId = runLookupId.trim();
+    if (!runId) {
+      setOperatorError("Enter a run ID to inspect.");
+      return;
+    }
+    setOperatorAction("inspect-run");
+    setOperatorError(null);
+    try {
+      setInspectedRun(await operatorApi.getRunState(runId));
+    } catch (err: unknown) {
+      setOperatorError(getApiErrorMessage(err, "Failed to inspect run state."));
+    } finally {
+      setOperatorAction(null);
+    }
+  }, [runLookupId]);
+
+  const requireOperatorReason = useCallback(() => {
+    const reason = operatorReason.trim();
+    if (!reason) {
+      setOperatorError("Operator recovery actions require a reason.");
+      return null;
+    }
+    return reason;
+  }, [operatorReason]);
+
+  const handleRunRecoveryAction = useCallback(
+    async (action: "force-fail" | "force-cancel" | "force-rehydrate") => {
+      if (!inspectedRun) {
+        return;
+      }
+      const reason = requireOperatorReason();
+      if (!reason) {
+        return;
+      }
+      setOperatorAction(action);
+      setOperatorError(null);
+      try {
+        const updated =
+          action === "force-fail"
+            ? await operatorApi.forceFailRun(inspectedRun.run.id, reason)
+            : action === "force-cancel"
+              ? await operatorApi.forceCancelRun(inspectedRun.run.id, reason)
+              : await operatorApi.forceRehydrateRun(inspectedRun.run.id, reason);
+        setInspectedRun(updated);
+        await loadRecoveryData();
+      } catch (err: unknown) {
+        setOperatorError(getApiErrorMessage(err, "Operator recovery action failed."));
+      } finally {
+        setOperatorAction(null);
+      }
+    },
+    [inspectedRun, loadRecoveryData, requireOperatorReason],
+  );
+
+  const handleIntentAction = useCallback(
+    async (intentId: string, action: "replay" | "acknowledge") => {
+      const reason = requireOperatorReason();
+      if (!reason) {
+        return;
+      }
+      setOperatorAction(`${action}:${intentId}`);
+      setOperatorError(null);
+      try {
+        if (action === "replay") {
+          await operatorApi.replayIntent(intentId, reason);
+        } else {
+          await operatorApi.acknowledgeIntent(intentId, reason);
+        }
+        await loadRecoveryData();
+      } catch (err: unknown) {
+        setOperatorError(getApiErrorMessage(err, "Runtime intent recovery action failed."));
+      } finally {
+        setOperatorAction(null);
+      }
+    },
+    [loadRecoveryData, requireOperatorReason],
+  );
 
   const healthItems = useMemo(() => {
     if (!data) {
@@ -255,8 +415,19 @@ export default function AdminOperationsPage() {
     if (data.metricsSummary.violations.queue_depth) {
       notices.push("Queue depth is above the target. Operators should expect slower operation starts.");
     }
+    if (data.metricsSummary.sre?.alerts.active_total) {
+      notices.push(`${data.metricsSummary.sre.alerts.active_total} SRE alert(s) are active in the current SLO window.`);
+    }
+    const missingSloData = data.metricsSummary.sre?.objectives.filter((objective) => objective.missing_data).length ?? 0;
+    if (missingSloData > 0) {
+      notices.push(`${missingSloData} SLO signal(s) have no data yet; do not treat them as passing.`);
+    }
     return notices;
   }, [data]);
+
+  const sreSummary = data?.metricsSummary.sre ?? null;
+  const breachingSloCount = sreSummary?.objectives.filter((objective) => objective.status === "breaching").length ?? 0;
+  const missingSloCount = sreSummary?.objectives.filter((objective) => objective.missing_data).length ?? 0;
 
   if (!canManage) {
     return (
@@ -364,6 +535,338 @@ export default function AdminOperationsPage() {
                   </AlertDescription>
                 </Alert>
               )}
+
+              {operatorError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{operatorError}</AlertDescription>
+                </Alert>
+              )}
+
+              {sreSummary && (
+                <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle>Production SLOs and SRE alerts</CardTitle>
+                    <CardDescription>
+                      Backend-owned SLO evidence, dashboard signals, and alert state from the current evaluation window.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Release tier</p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">{sreSummary.release_tier}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {Math.round(sreSummary.window_seconds / 60)} minute window
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Breaching SLOs</p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">{breachingSloCount}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Targets come from production-slos.yaml.</p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Active alerts</p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">{sreSummary.alerts.active_total}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Repo-native alert evaluation.</p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Missing signals</p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">{missingSloCount}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Missing data is never treated as healthy.</p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+                      <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-foreground">SLO objectives</p>
+                            <p className="text-sm text-muted-foreground">Production readiness targets and current state.</p>
+                          </div>
+                          <Badge variant="outline">{sreSummary.objectives.length} objectives</Badge>
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          {sreSummary.objectives.map((objective) => (
+                            <div key={objective.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium">{objective.title}</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {formatSreValue(objective.actual, objective.unit)} / target{" "}
+                                    {formatSreValue(objective.target, objective.unit)}
+                                  </p>
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    objective.status === "passing"
+                                      ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                      : objective.status === "breaching"
+                                        ? "border-destructive/30 text-destructive"
+                                        : "border-amber-500/30 text-amber-800 dark:text-amber-200"
+                                  }
+                                >
+                                  {objective.status.replace(/_/g, " ")}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                Source: {objective.source} · samples {objective.observed_count}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                        <p className="font-medium text-foreground">Active alert state</p>
+                        <div className="mt-4 space-y-3">
+                          {sreSummary.alerts.items
+                            .filter((alert) => alert.state !== "ok")
+                            .map((alert) => (
+                              <div key={alert.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium">{alert.title}</p>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      alert.state === "active"
+                                        ? "border-destructive/30 text-destructive"
+                                        : "border-amber-500/30 text-amber-800 dark:text-amber-200"
+                                    }
+                                  >
+                                    {alert.state.replace(/_/g, " ")}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 text-xs text-muted-foreground">{alert.runbook}</p>
+                              </div>
+                            ))}
+                          {sreSummary.alerts.items.every((alert) => alert.state === "ok") ? (
+                            <p className="rounded-lg border border-border/50 bg-card/70 p-4 text-sm text-muted-foreground">
+                              No SRE alerts are active in the current window.
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <p className="font-medium text-foreground">Dashboard signals</p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+                        {sreSummary.dashboard_panels.map((panel) => (
+                          <div key={panel.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{panel.title}</p>
+                            <p className="mt-2 text-sm font-semibold text-foreground">
+                              {formatSreValue(panel.value, panel.unit)}
+                            </p>
+                            {panel.missing_data ? (
+                              <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">No data configured</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle role="heading" aria-level={2}>
+                    Recovery controls
+                  </CardTitle>
+                  <CardDescription>
+                    Backend-owned state, retry backlog, dead letters, and live connection counts for stuck-company
+                    inspection.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Intent backlog</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">
+                        {recoveryData?.backlog.backlog ?? 0}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Pending {recoveryData?.backlog.pending ?? 0} · lag {recoveryData?.backlog.lag ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dead letters</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">
+                        {recoveryData?.orgLoad.dead_letters ?? recoveryData?.backlog.dead_letter_count ?? 0}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">Visible through backend recovery state.</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">WebSocket clients</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">
+                        {recoveryData?.wsSubscribers.total ?? 0}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {Object.keys(recoveryData?.wsSubscribers.by_run ?? {}).length} runs subscribed
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Retry operations</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">
+                        {(recoveryData?.orgLoad.retry_operations ?? []).reduce((sum, item) => sum + item.count, 0)}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">Bounded and inspectable.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <input
+                          value={runLookupId}
+                          onChange={(event) => setRunLookupId(event.target.value)}
+                          placeholder="Run ID"
+                          className="min-h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={() => void handleInspectRun()}
+                          disabled={operatorAction === "inspect-run"}
+                        >
+                          {operatorAction === "inspect-run" ? <Spinner size="xs" className="mr-2" /> : null}
+                          Inspect run
+                        </Button>
+                      </div>
+                      <textarea
+                        value={operatorReason}
+                        onChange={(event) => setOperatorReason(event.target.value)}
+                        placeholder="Operator reason required for replay, acknowledgement, force fail, force cancel, and rehydrate."
+                        className="mt-3 min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+
+                      {inspectedRun ? (
+                        <div className="mt-4 space-y-3">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-lg border border-border/50 bg-card/70 p-3">
+                              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Status</p>
+                              <p className="mt-2 font-semibold">{inspectedRun.run.status}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Attempt {inspectedRun.run.current_attempt ?? "unknown"}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-border/50 bg-card/70 p-3">
+                              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Blocked work</p>
+                              <p className="mt-2 font-semibold">
+                                {inspectedRun.active_tasks.length} active · {inspectedRun.dead_letter_count} dead
+                              </p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {inspectedRun.pending_decisions.length} pending decisions
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <Button
+                              variant="outline"
+                              onClick={() => void handleRunRecoveryAction("force-fail")}
+                              disabled={operatorAction === "force-fail"}
+                            >
+                              Force fail
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => void handleRunRecoveryAction("force-cancel")}
+                              disabled={operatorAction === "force-cancel"}
+                            >
+                              Force cancel
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => void handleRunRecoveryAction("force-rehydrate")}
+                              disabled={operatorAction === "force-rehydrate"}
+                            >
+                              Rehydrate
+                            </Button>
+                          </div>
+                          <div className="max-h-56 overflow-auto rounded-lg border border-border/50">
+                            {inspectedRun.tasks.map((task) => (
+                              <div
+                                key={task.id}
+                                className="flex items-start justify-between gap-3 border-b border-border/40 px-3 py-2 last:border-b-0"
+                              >
+                                <div>
+                                  <p className="text-sm font-medium">{task.title}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {task.status} · attempt {task.current_attempt}
+                                    {task.unresolved_error ? ` · ${task.unresolved_error}` : ""}
+                                  </p>
+                                </div>
+                                <Badge variant="outline">{task.priority}</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-foreground">Dead-letter recovery</p>
+                          <p className="text-sm text-muted-foreground">
+                            Replay only decodeable supported intents; acknowledgement never mutates execution state.
+                          </p>
+                        </div>
+                        <Button variant="outline" onClick={() => void loadRecoveryData()} disabled={recoveryLoading}>
+                          {recoveryLoading ? <Spinner size="xs" className="mr-2" /> : null}
+                          Refresh
+                        </Button>
+                      </div>
+                      <div className="max-h-80 space-y-3 overflow-auto pr-1">
+                        {(recoveryData?.deadLetters.runtime_intent_outcomes ?? []).slice(0, 8).map((outcome) => (
+                          <div key={outcome.intent_id} className="rounded-lg border border-border/50 bg-card/70 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{outcome.intent_type}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {outcome.reason || outcome.error_class || "No reason recorded"}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {outcome.acknowledged_at
+                                    ? `Acknowledged ${formatDateTime(outcome.acknowledged_at)}`
+                                    : "Unacknowledged"}
+                                </p>
+                              </div>
+                              <Badge variant="outline">{outcome.attempt_id || "no attempt"}</Badge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleIntentAction(outcome.intent_id, "replay")}
+                                disabled={operatorAction === `replay:${outcome.intent_id}`}
+                              >
+                                Replay
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleIntentAction(outcome.intent_id, "acknowledge")}
+                                disabled={
+                                  Boolean(outcome.acknowledged_at) ||
+                                  operatorAction === `acknowledge:${outcome.intent_id}`
+                                }
+                              >
+                                Acknowledge
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {(recoveryData?.deadLetters.runtime_intent_outcomes ?? []).length === 0 ? (
+                          <p className="rounded-lg border border-border/50 bg-card/70 p-4 text-sm text-muted-foreground">
+                            No runtime intent dead letters are visible for this organization.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
