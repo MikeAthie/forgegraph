@@ -18,11 +18,3 @@ type SummarizeOptions struct {
 	PreserveFacts   bool
 	Model           string
 }
-
-// SummaryStore persists summaries and facts for later retrieval.
-type SummaryStore interface {
-	StoreSummary(ctx context.Context, tenantID, runID string, summary *entity.Summary, ttlSeconds int) error
-	StoreFacts(ctx context.Context, tenantID, runID string, facts []entity.Fact, ttlSeconds int) error
-	GetSummary(ctx context.Context, tenantID, runID string) (*entity.Summary, bool, error)
-	GetFact(ctx context.Context, tenantID, runID, factKey string) (*entity.Fact, bool, error)
-}

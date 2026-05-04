@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from adapters.api.responses import success_response
 from application.services.os_projections import (
     organization_state_summary,
-    refresh_phase1_projections,
+    projection_organization_for_user,
 )
 from infrastructure.orm.models import User
 
@@ -21,5 +21,5 @@ class SystemStateOverviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        bundle = refresh_phase1_projections(cast(User, request.user))
-        return success_response(organization_state_summary(bundle.organization))
+        organization = projection_organization_for_user(cast(User, request.user))
+        return success_response(organization_state_summary(organization))

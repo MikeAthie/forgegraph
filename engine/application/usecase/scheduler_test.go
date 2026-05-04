@@ -1983,9 +1983,11 @@ func TestScheduler_DisabledNodeWithMultipleDownstream(t *testing.T) {
 
 func TestScheduler_MaybeTriggerSummarization(t *testing.T) {
 	s := &Scheduler{}
+	emitter := newRecordingEmitter()
+	s.emitter = emitter
 
 	summarizer := &summarizerStub{}
-	worker := NewSummarizationWorker(summarizer, nil, 1, 5)
+	worker := NewSummarizationWorker(summarizer, 1, 5)
 	worker.Start(context.Background())
 	defer worker.Stop()
 	s.SetSummarizationWorker(worker)
@@ -2033,6 +2035,17 @@ func TestScheduler_MaybeTriggerSummarization(t *testing.T) {
 			t.Fatalf("expected summary and trimmed buffer, got summary=%v count=%d", rc.currentSummary, rc.messageBuffer.Count())
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+
+	events := emitter.getEvents()
+	if len(events) != 1 {
+		t.Fatalf("expected one backend memory intent event, got %d", len(events))
+	}
+	if events[0].Type != port.EventTypeSummaryCreated {
+		t.Fatalf("event type = %s, want %s", events[0].Type, port.EventTypeSummaryCreated)
+	}
+	if events[0].Output["backend_owner"] != "memory_service" {
+		t.Fatalf("backend_owner = %#v, want memory_service", events[0].Output["backend_owner"])
 	}
 }
 

@@ -28,6 +28,12 @@ const (
 	EventTypeNodeSkipped     EventType = "node_skipped"
 	EventTypeNodeRetrying    EventType = "node_retrying"
 	EventTypeNodeStreamChunk EventType = "node_stream_chunk"
+
+	// Backend-owned memory intent events. These request or describe memory work; they are
+	// not authoritative state until the backend accepts and stores them.
+	EventTypeMemoryWriteRequested EventType = "memory_write_requested"
+	EventTypeMemoryFactExtracted  EventType = "memory_fact_extracted"
+	EventTypeSummaryCreated       EventType = "summary_created"
 )
 
 const (
@@ -67,6 +73,10 @@ func (t EventType) IsNodeEvent() bool {
 type ExecutionEvent struct {
 	// EventID is a unique identifier for this event (for idempotency)
 	EventID string `json:"event_id"`
+	// IdempotencyKey is the canonical backend dedupe key for this event.
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	// Sequence is monotonically assigned per run by the emitting engine instance.
+	Sequence int64 `json:"sequence,omitempty"`
 	// Version is the schema version for this event payload
 	Version int `json:"version"`
 	// Type is the event type

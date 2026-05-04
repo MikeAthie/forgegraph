@@ -192,6 +192,9 @@ const API_PATHS = {
     taskState: (taskId: string) => `/api/operator/tasks/${taskId}/state`,
     runtimeIntentBacklog: "/api/operator/runtime-intents/backlog",
     deadLetters: "/api/operator/dead-letters",
+    replayEventDeadLetter: (deadLetterId: string) => `/api/operator/event-dead-letters/${deadLetterId}/replay`,
+    acknowledgeEventDeadLetter: (deadLetterId: string) =>
+      `/api/operator/event-dead-letters/${deadLetterId}/acknowledge`,
     replayIntent: (intentId: string) => `/api/operator/runtime-intents/${intentId}/replay`,
     acknowledgeIntent: (intentId: string) => `/api/operator/runtime-intents/${intentId}/acknowledge`,
     forceFailRun: (runId: string) => `/api/operator/runs/${runId}/force-fail`,
@@ -286,6 +289,19 @@ const api: AxiosInstance = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+export type IdempotencyOptions = {
+  idempotencyKey?: string;
+};
+
+const idempotencyConfig = (options?: IdempotencyOptions) =>
+  options?.idempotencyKey
+    ? {
+        headers: {
+          "Idempotency-Key": options.idempotencyKey,
+        },
+      }
+    : undefined;
 
 // Refresh token is stored in a HttpOnly cookie; keep access token in-memory.
 let accessToken: string | null = null;
@@ -1988,6 +2004,7 @@ export interface OperatorRuntimeIntentBacklog {
 
 export interface OperatorDeadLetters {
   task_dead_letters: TaskDeadLetterSummary[];
+  event_dead_letters: OperatorEventDeadLetter[];
   runtime_intent_outcomes: Array<{
     intent_id: string;
     run_id?: string | null;
@@ -2000,12 +2017,35 @@ export interface OperatorDeadLetters {
   }>;
 }
 
+export interface OperatorEventDeadLetter {
+  id: string;
+  organization_id?: string | null;
+  run_id?: string | null;
+  event_id: string;
+  idempotency_key: string;
+  event_type: string;
+  source: string;
+  reason: string;
+  error_class: string;
+  retry_count: number;
+  status: "active" | "acknowledged" | "replay_requested" | "resolved" | string;
+  payload?: Record<string, unknown> | null;
+  last_replay_action: string;
+  replay_requested_at?: string | null;
+  replay_requested_by?: string | null;
+  acknowledged_at?: string | null;
+  acknowledgement_reason: string;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
 export interface OperatorOrgLoad {
   organization_id: string;
   runs: Record<string, number>;
   tasks: Array<{ status: string; count: number }>;
   retry_operations: Array<{ status: string; count: number }>;
   dead_letters: number;
+  event_dead_letters?: number;
 }
 
 export interface OperatorWebSocketSubscribers {
@@ -2045,9 +2085,31 @@ export interface CostAggregate {
   entry_count: number;
 }
 
+export type MetricProvenance = {
+  source: string;
+  computed_at: string | null;
+  freshness_ms: number | null;
+  status: "available" | "not_instrumented" | "stale" | "error" | string;
+  value?: number | null;
+};
+
+export type ProjectionMetadata = {
+  computed_at: string;
+  projection_lag_ms: number | null;
+  last_event_id: string;
+  watermark: string | null;
+};
+
 export interface AccountingOverview {
   organization_id: string;
   total_cost_usd: number;
+  generated_at?: string;
+  projection?: ProjectionMetadata;
+  metric_provenance?: {
+    total_cost_usd?: MetricProvenance;
+    revenue?: MetricProvenance;
+    profit?: MetricProvenance;
+  };
   cost_by_type: Array<{
     cost_type: string;
     total_cost_usd: number;
@@ -2100,6 +2162,7 @@ export interface OrganizationStateSummary {
   };
   accounting: AccountingOverview;
   generated_at: string;
+  projection?: ProjectionMetadata;
 }
 
 export interface ResumeRunInput {
@@ -2136,28 +2199,48 @@ export const runsApi = {
     return response.data.data;
   },
 
-  start: async (input: StartRunInput): Promise<RunDetail> => {
-    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.start, input);
+  start: async (input: StartRunInput, options?: IdempotencyOptions): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(
+      API_PATHS.runs.start,
+      input,
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
 
-  invoke: async (input: InvokeRunInput): Promise<RunDetail> => {
-    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.invoke, input);
+  invoke: async (input: InvokeRunInput, options?: IdempotencyOptions): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(
+      API_PATHS.runs.invoke,
+      input,
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
 
-  cancel: async (runId: string): Promise<RunDetail> => {
-    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.cancel(runId), {});
+  cancel: async (runId: string, options?: IdempotencyOptions): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(
+      API_PATHS.runs.cancel(runId),
+      {},
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
 
-  resume: async (runId: string, input: ResumeRunInput): Promise<ResumeRunResponse> => {
-    const response = await api.post<ApiSuccessResponse<ResumeRunResponse>>(API_PATHS.runs.resume(runId), input);
+  resume: async (runId: string, input: ResumeRunInput, options?: IdempotencyOptions): Promise<ResumeRunResponse> => {
+    const response = await api.post<ApiSuccessResponse<ResumeRunResponse>>(
+      API_PATHS.runs.resume(runId),
+      input,
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
 
-  replay: async (runId: string, input?: ReplayRunInput): Promise<RunDetail> => {
-    const response = await api.post<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.replay(runId), input ?? {});
+  replay: async (runId: string, input?: ReplayRunInput, options?: IdempotencyOptions): Promise<RunDetail> => {
+    const response = await api.post<ApiSuccessResponse<RunDetail>>(
+      API_PATHS.runs.replay(runId),
+      input ?? {},
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
 };
@@ -2325,39 +2408,82 @@ export const operatorApi = {
     const response = await api.get<ApiSuccessResponse<OperatorDeadLetters>>(API_PATHS.operator.deadLetters);
     return response.data.data;
   },
-  replayIntent: async (intentId: string, reason: string): Promise<{ intent_id: string; replay_message_id: string }> => {
+  replayIntent: async (
+    intentId: string,
+    reason: string,
+    options?: IdempotencyOptions,
+  ): Promise<{ intent_id: string; replay_message_id: string }> => {
     const response = await api.post<ApiSuccessResponse<{ intent_id: string; replay_message_id: string }>>(
       API_PATHS.operator.replayIntent(intentId),
       { reason },
+      idempotencyConfig(options),
     );
     return response.data.data;
   },
   acknowledgeIntent: async (
     intentId: string,
     reason: string,
+    options?: IdempotencyOptions,
   ): Promise<{ intent_id: string; acknowledged_at: string }> => {
     const response = await api.post<ApiSuccessResponse<{ intent_id: string; acknowledged_at: string }>>(
       API_PATHS.operator.acknowledgeIntent(intentId),
       { reason },
+      idempotencyConfig(options),
     );
     return response.data.data;
   },
-  forceFailRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
-    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.forceFailRun(runId), {
-      reason,
-    });
+  replayEventDeadLetter: async (
+    deadLetterId: string,
+    reason: string,
+    options?: IdempotencyOptions,
+  ): Promise<OperatorEventDeadLetter> => {
+    const response = await api.post<ApiSuccessResponse<OperatorEventDeadLetter>>(
+      API_PATHS.operator.replayEventDeadLetter(deadLetterId),
+      { reason },
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
-  forceCancelRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
-    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.forceCancelRun(runId), {
-      reason,
-    });
+  acknowledgeEventDeadLetter: async (
+    deadLetterId: string,
+    reason: string,
+    options?: IdempotencyOptions,
+  ): Promise<OperatorEventDeadLetter> => {
+    const response = await api.post<ApiSuccessResponse<OperatorEventDeadLetter>>(
+      API_PATHS.operator.acknowledgeEventDeadLetter(deadLetterId),
+      { reason },
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
-  forceRehydrateRun: async (runId: string, reason: string): Promise<OperatorRunState> => {
-    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(API_PATHS.operator.forceRehydrateRun(runId), {
-      reason,
-    });
+  forceFailRun: async (runId: string, reason: string, options?: IdempotencyOptions): Promise<OperatorRunState> => {
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(
+      API_PATHS.operator.forceFailRun(runId),
+      {
+        reason,
+      },
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+  forceCancelRun: async (runId: string, reason: string, options?: IdempotencyOptions): Promise<OperatorRunState> => {
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(
+      API_PATHS.operator.forceCancelRun(runId),
+      {
+        reason,
+      },
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+  forceRehydrateRun: async (runId: string, reason: string, options?: IdempotencyOptions): Promise<OperatorRunState> => {
+    const response = await api.post<ApiSuccessResponse<OperatorRunState>>(
+      API_PATHS.operator.forceRehydrateRun(runId),
+      {
+        reason,
+      },
+      idempotencyConfig(options),
+    );
     return response.data.data;
   },
   getWebSocketSubscribers: async (): Promise<OperatorWebSocketSubscribers> => {

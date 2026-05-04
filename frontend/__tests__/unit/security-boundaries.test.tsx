@@ -83,4 +83,32 @@ describe("security boundary enforcement", () => {
     expect(source).toContain("approval.departmentId");
     expect(source).not.toMatch(/\borg(anization)?_?id\b/i);
   });
+
+  it("propagates idempotency keys for retryable run and operator commands", () => {
+    const apiSource = readFrontendSource("lib/api.ts");
+    const operationRepositorySource = readFrontendSource("domain/repositories/operationRepository.ts");
+
+    expect(apiSource).toContain('"Idempotency-Key": options.idempotencyKey');
+    for (const method of [
+      "start:",
+      "invoke:",
+      "cancel:",
+      "resume:",
+      "replay:",
+      "replayIntent:",
+      "acknowledgeIntent:",
+      "replayEventDeadLetter:",
+      "acknowledgeEventDeadLetter:",
+      "forceFailRun:",
+      "forceCancelRun:",
+      "forceRehydrateRun:",
+    ]) {
+      expect(apiSource).toContain(method);
+    }
+
+    expect(operationRepositorySource).toContain("operation.cancel:${operationId}");
+    expect(operationRepositorySource).toContain("operation.resume:${operationId}:${departmentId}");
+    expect(operationRepositorySource).toContain('newClientActionId("operation.launch")');
+    expect(operationRepositorySource).toContain("newClientActionId(`operation.replay:${operationId}`)");
+  });
 });

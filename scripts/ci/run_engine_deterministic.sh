@@ -12,6 +12,7 @@ require_command go
 
 log_section "Engine architecture ownership guard"
 bash "${SCRIPT_DIR}/check_engine_ownership.sh"
+bash "${SCRIPT_DIR}/check_engine_event_envelope.sh"
 
 log_section "Engine deterministic and architecture tests"
 go test . -count=1

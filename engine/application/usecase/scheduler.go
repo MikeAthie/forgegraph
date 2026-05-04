@@ -1564,14 +1564,15 @@ func (s *Scheduler) maybeTriggerSummarization(rc *runContext, node *entity.Node)
 	}
 
 	rc.markSummaryInFlight()
-
+	summaryTTLSeconds := rc.memoryConfig.Tier2.SummaryTTL
+	factsTTLSeconds := rc.memoryConfig.Tier2.FactsTTL
 	req := SummarizationRequest{
 		RunID:             rc.runID,
 		TenantID:          rc.tenantID,
 		Messages:          messages,
 		Options:           port.SummarizeOptions{Model: cfg.Model, PreserveFacts: true},
-		SummaryTTLSeconds: rc.memoryConfig.Tier2.SummaryTTL,
-		FactsTTLSeconds:   rc.memoryConfig.Tier2.FactsTTL,
+		SummaryTTLSeconds: summaryTTLSeconds,
+		FactsTTLSeconds:   factsTTLSeconds,
 		Callback: func(summary *entity.Summary, err error) {
 			if err != nil {
 				rc.clearSummaryInFlight()
@@ -1579,8 +1580,21 @@ func (s *Scheduler) maybeTriggerSummarization(rc *runContext, node *entity.Node)
 				log.Printf("Summarization failed for run %s: %v", rc.runID, err)
 				return
 			}
+			if summary == nil {
+				rc.clearSummaryInFlight()
+				metrics.RecordSummarizationTrigger("error")
+				log.Printf("Summarization returned no summary for run %s", rc.runID)
+				return
+			}
 
 			rc.applySummary(summary, cfg)
+			s.emitSummaryMemoryIntents(
+				rc,
+				summary,
+				cfg,
+				summaryTTLSeconds,
+				factsTTLSeconds,
+			)
 			s.trimMemoryBuffer(rc, cfg.KeepRecentCount)
 			metrics.RecordSummarizationTrigger("success")
 		},
@@ -1593,6 +1607,64 @@ func (s *Scheduler) maybeTriggerSummarization(rc *runContext, node *entity.Node)
 		return
 	}
 	metrics.RecordSummarizationTrigger("submitted")
+}
+
+func (s *Scheduler) emitSummaryMemoryIntents(
+	rc *runContext,
+	summary *entity.Summary,
+	cfg entity.SummarizationConfig,
+	summaryTTLSeconds int,
+	factsTTLSeconds int,
+) {
+	if s == nil || s.emitter == nil || rc == nil || summary == nil {
+		return
+	}
+
+	createdAt := summary.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	summaryPayload := map[string]any{
+		"summary_id":    summary.ID,
+		"content":       summary.Content,
+		"source_count":  summary.SourceCount,
+		"created_at":    createdAt.UTC().Format(time.RFC3339Nano),
+		"model":         cfg.Model,
+		"facts_count":   len(summary.FactsExtracted),
+		"ttl_seconds":   summaryTTLSeconds,
+		"backend_owner": "memory_service",
+	}
+	s.emitter.EmitAsync(
+		port.NewEvent(port.EventTypeSummaryCreated, rc.runID).
+			WithTenantID(rc.tenantID).
+			WithAttemptID(rc.attemptID).
+			WithOutput(summaryPayload),
+	)
+
+	if len(summary.FactsExtracted) == 0 {
+		return
+	}
+
+	facts := make([]map[string]any, 0, len(summary.FactsExtracted))
+	for _, fact := range summary.FactsExtracted {
+		facts = append(facts, map[string]any{
+			"key":            fact.Key,
+			"value":          fact.Value,
+			"confidence":     fact.Confidence,
+			"source_node_id": fact.SourceNodeID,
+		})
+	}
+	s.emitter.EmitAsync(
+		port.NewEvent(port.EventTypeMemoryFactExtracted, rc.runID).
+			WithTenantID(rc.tenantID).
+			WithAttemptID(rc.attemptID).
+			WithOutput(map[string]any{
+				"summary_id":    summary.ID,
+				"facts":         facts,
+				"ttl_seconds":   factsTTLSeconds,
+				"backend_owner": "memory_service",
+			}),
+	)
 }
 
 func (s *Scheduler) trimMemoryBuffer(rc *runContext, keepRecent int) {

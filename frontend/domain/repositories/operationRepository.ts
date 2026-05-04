@@ -9,6 +9,14 @@ import {
   type TaskVM,
 } from "@/domain/translation";
 
+const newClientActionId = (prefix: string): string => {
+  const randomId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}:${randomId}`;
+};
+
 export const operationRepository = {
   list: async (): Promise<OperationVM[]> => {
     const operations = await runsApi.list();
@@ -49,18 +57,25 @@ export const operationRepository = {
       autonomyMode: input.autonomyMode,
       aiAccessMode: input.aiAccessMode,
     });
-    const operation = await runsApi.start({
-      graph_version_id: input.setupVersionId,
-      llm_mode: input.aiAccessMode,
-      provider: profile.intelligenceProvider,
-      credential_id: profile.byokCredentialId ?? undefined,
-      input_json: buildOperationInput(profile, input.operationBrief, input.operatingBrief),
-    });
+    const operation = await runsApi.start(
+      {
+        graph_version_id: input.setupVersionId,
+        llm_mode: input.aiAccessMode,
+        provider: profile.intelligenceProvider,
+        credential_id: profile.byokCredentialId ?? undefined,
+        input_json: buildOperationInput(profile, input.operationBrief, input.operatingBrief),
+      },
+      {
+        idempotencyKey: newClientActionId("operation.launch"),
+      },
+    );
     return toOperationVM(operation);
   },
 
   stop: async (operationId: string): Promise<OperationVM> => {
-    const operation = await runsApi.cancel(operationId);
+    const operation = await runsApi.cancel(operationId, {
+      idempotencyKey: `operation.cancel:${operationId}`,
+    });
     return toOperationVM(operation);
   },
 
@@ -68,11 +83,17 @@ export const operationRepository = {
     operationId: string,
     input?: { aiAccessMode?: LLMMode; provider?: string; credentialId?: string | null },
   ): Promise<OperationVM> => {
-    const operation = await runsApi.replay(operationId, {
-      llm_mode: input?.aiAccessMode,
-      provider: input?.provider,
-      credential_id: input?.credentialId ?? undefined,
-    });
+    const operation = await runsApi.replay(
+      operationId,
+      {
+        llm_mode: input?.aiAccessMode,
+        provider: input?.provider,
+        credential_id: input?.credentialId ?? undefined,
+      },
+      {
+        idempotencyKey: newClientActionId(`operation.replay:${operationId}`),
+      },
+    );
     return toOperationVM(operation);
   },
 
@@ -82,13 +103,19 @@ export const operationRepository = {
     approved: boolean,
     feedback?: string,
   ): Promise<ResumeRunResponse> =>
-    runsApi.resume(operationId, {
-      node_id: departmentId,
-      input_json: {
-        approved,
-        feedback: feedback || undefined,
+    runsApi.resume(
+      operationId,
+      {
+        node_id: departmentId,
+        input_json: {
+          approved,
+          feedback: feedback || undefined,
+        },
       },
-    }),
+      {
+        idempotencyKey: `operation.resume:${operationId}:${departmentId}:${approved ? "approved" : "rejected"}`,
+      },
+    ),
 };
 
 export type OperationRepository = typeof operationRepository;

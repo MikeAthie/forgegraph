@@ -19,6 +19,7 @@ if [ -n "${unformatted}" ]; then
 fi
 
 bash "${SCRIPT_DIR}/check_engine_ownership.sh"
+bash "${SCRIPT_DIR}/check_engine_event_envelope.sh"
 
 log_section "Engine vet"
 go vet ./...

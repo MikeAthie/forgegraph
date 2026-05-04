@@ -2340,6 +2340,42 @@ class TestEngineRunEvents:
     """Tests for POST /api/runs/engine-events (S2S)."""
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_callback_invalid_schema_returns_reject_invalid_decision(
+        self, signed_engine_event_post, user
+    ):
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-invalid-schema",
+                "type": "run_started",
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["decision"] == "reject_invalid"
+        assert response.data["safe_to_discard"] is True
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
+    def test_engine_callback_missing_run_requires_retry(self, signed_engine_event_post, user):
+        missing_run_id = uuid4()
+
+        response = signed_engine_event_post(
+            {
+                "event_id": "evt-missing-run",
+                "type": "run_started",
+                "run_id": str(missing_run_id),
+                "tenant_id": str(user.default_organization_id),
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["decision"] == "retry_required"
+        assert response.data["safe_to_discard"] is False
+        assert response.data["conflict_code"] == "404_UNKNOWN_ENTITY"
+
+    @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_run_paused_event_projects_waiting_state_and_approval_task(
         self, signed_engine_event_post, user
     ):
@@ -2402,6 +2438,8 @@ class TestEngineRunEvents:
         duplicate_response = signed_engine_event_post(payload)
         assert duplicate_response.status_code == status.HTTP_200_OK
         assert duplicate_response.data["data"]["duplicate"] is True
+        assert duplicate_response.data["data"]["decision"] == "duplicate"
+        assert duplicate_response.data["data"]["safe_to_discard"] is True
         assert (
             ApprovalTask.objects.filter(run=run, node_id="human_gate_1", status="pending").count()
             == 1
@@ -2603,6 +2641,8 @@ class TestEngineRunEvents:
 
         assert response.status_code == status.HTTP_409_CONFLICT
         assert "resume_attempt_id" in response.data["detail"]
+        assert response.data["decision"] == "stale_superseded"
+        assert response.data["safe_to_discard"] is True
         run.refresh_from_db()
         assert run.status == "resume_requested"
         assert run.resume_attempt_id is not None
@@ -2637,6 +2677,9 @@ class TestEngineRunEvents:
 
         assert response.status_code == status.HTTP_409_CONFLICT
         assert "invalid run event transition" in response.data["detail"].lower()
+        assert response.data["decision"] == "retry_required"
+        assert response.data["safe_to_discard"] is False
+        assert response.data["conflict_code"] == "409_ORDERING_CONFLICT"
         run.refresh_from_db()
         assert run.status == "paused"
 
@@ -2972,6 +3015,9 @@ class TestEngineRunEvents:
 
         assert response.status_code == status.HTTP_409_CONFLICT
         assert "engine instance" in response.data["detail"].lower()
+        assert response.data["decision"] == "retry_required"
+        assert response.data["safe_to_discard"] is False
+        assert response.data["conflict_code"] == "409_ORDERING_CONFLICT"
         assert RunEvent.objects.filter(run=run, external_id="evt-engine-assignment-2").count() == 0
 
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
@@ -3064,6 +3110,8 @@ class TestEngineRunEvents:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.data["decision"] == "reject_invalid"
+        assert response.data["safe_to_discard"] is False
         assert RunEvent.objects.filter(run=run).count() == 0
 
         run.refresh_from_db()

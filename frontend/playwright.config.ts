@@ -36,8 +36,10 @@ function loadRootEnvFile() {
 
 loadRootEnvFile();
 
-const runtimeTarget = (process.env.PLAYWRIGHT_RUNTIME_TARGET ?? "docker").toLowerCase();
+const runtimeTarget = (process.env.PLAYWRIGHT_RUNTIME_TARGET ?? "local").toLowerCase();
 const useDockerRuntime = runtimeTarget !== "local";
+const reuseExistingServer =
+  (process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? "false").toLowerCase() === "true";
 const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_DEV_PORT) : 3001;
 const dockerFrontendUrl = process.env.PLAYWRIGHT_DOCKER_FRONTEND_URL ?? "http://127.0.0.1:3000";
 // Use 127.0.0.1 to keep frontend/backend on the same "site" for SameSite=Lax cookies.
@@ -62,7 +64,9 @@ const memoryGrpcPort = process.env.MEMORY_GRPC_PORT
   ? Number(process.env.MEMORY_GRPC_PORT)
   : process.env.PLAYWRIGHT_MEMORY_GRPC_PORT
     ? Number(process.env.PLAYWRIGHT_MEMORY_GRPC_PORT)
-    : 50052;
+    : useDockerRuntime
+      ? 50052
+      : 50072;
 const llmMockPort = process.env.PLAYWRIGHT_LLM_MOCK_PORT ? Number(process.env.PLAYWRIGHT_LLM_MOCK_PORT) : 8011;
 const llmMockUrl = `http://127.0.0.1:${llmMockPort}`;
 const dockerLocalLlmUrl = process.env.PLAYWRIGHT_DOCKER_LOCAL_LLM_URL ?? "http://127.0.0.1:12434/v1";
@@ -97,6 +101,11 @@ const engineDatabaseUrl =
 
 // Give E2E helpers a stable default API URL (avoids IPv6 localhost issues on some hosts).
 process.env.PLAYWRIGHT_API_URL = process.env.PLAYWRIGHT_API_URL ?? backendUrl;
+if (!useDockerRuntime) {
+  process.env.NEXT_PUBLIC_API_URL = backendUrl;
+} else {
+  process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? backendUrl;
+}
 process.env.PLAYWRIGHT_RUNTIME_TARGET = runtimeTarget;
 process.env.PLAYWRIGHT_RUNTIME_TENANT_ID = runtimeFixtureTenantId;
 process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL = runtimeFixtureEmail;
@@ -131,7 +140,7 @@ process.env.USE_IN_MEMORY_CHANNEL_LAYER = process.env.USE_IN_MEMORY_CHANNEL_LAYE
 const workerCount =
   Number.isFinite(workerOverride) && workerOverride && workerOverride > 0
     ? workerOverride
-    : process.env.CI || useSqlite
+    : process.env.CI || useSqlite || runtimeTarget === "local"
       ? 1
       : undefined;
 
@@ -191,7 +200,7 @@ export default defineConfig({
           {
             command: `node scripts/playwright-openai-mock.mjs`,
             url: `${llmMockUrl}/health`,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             cwd: __dirname,
             env: {
               ...process.env,
@@ -205,7 +214,7 @@ export default defineConfig({
           {
             command: "python scripts/run_playwright_backend.py",
             url: `${backendUrl}/health`,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             cwd: path.join(__dirname, "..", "backend"),
             env: {
               ...process.env,
@@ -260,7 +269,7 @@ export default defineConfig({
           {
             command: "go run .",
             url: `${engineMetricsUrl}/metrics`,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             cwd: path.join(__dirname, "..", "engine"),
             env: {
               ...process.env,
@@ -294,7 +303,7 @@ export default defineConfig({
           {
             command: `npm run dev -- -p ${devPort}`,
             url: devUrl,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             env: {
               ...process.env,
               NEXT_PUBLIC_API_URL: backendUrl,

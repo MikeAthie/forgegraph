@@ -6,6 +6,13 @@ type RunLiveMessage = {
   type?: string;
   event_type?: string;
   event_id?: string;
+  state_version?: number;
+  payload?: {
+    resync_required?: boolean;
+    full_resync_required?: boolean;
+    replay_supported?: boolean;
+    latest_state_version?: number;
+  };
   event?: {
     type?: string;
     event_type?: string;
@@ -19,6 +26,7 @@ type RunLiveMessage = {
 const RUN_INVALIDATION_MESSAGES = new Set([
   "connection_established",
   "resync_required",
+  "full_resync_required",
   "run_started",
   "run_updated",
   "run_paused",
@@ -58,6 +66,13 @@ function messageType(message: RunLiveMessage) {
   );
 }
 
+function numericStateVersion(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return Math.trunc(value);
+}
+
 export function useRunLiveUpdates(
   runId: string | null | undefined,
   onBackendStateInvalidated: () => void | Promise<void>,
@@ -78,6 +93,7 @@ export function useRunLiveUpdates(
     let socket: WebSocket | null = null;
     let reconnectTimer: number | null = null;
     const lastEventIdRef = { current: "" };
+    const lastStateVersionRef = { current: 0 };
 
     const connect = async () => {
       try {
@@ -94,6 +110,9 @@ export function useRunLiveUpdates(
         if (lastEventIdRef.current) {
           params.set("last_event_id", lastEventIdRef.current);
         }
+        if (lastStateVersionRef.current > 0) {
+          params.set("last_seen_state_version", String(lastStateVersionRef.current));
+        }
 
         socket = new WebSocket(`${websocketBaseUrl()}/ws/runs/${encodeURIComponent(runId)}/?${params.toString()}`);
         socket.onmessage = (event) => {
@@ -103,8 +122,28 @@ export function useRunLiveUpdates(
             if (parsed.event_id) {
               lastEventIdRef.current = parsed.event_id;
             }
+            const messageStateVersion =
+              numericStateVersion(parsed.state_version) ?? numericStateVersion(parsed.payload?.latest_state_version);
+            if (messageStateVersion !== null) {
+              lastStateVersionRef.current = Math.max(lastStateVersionRef.current, messageStateVersion);
+            }
             if (parsedType === "heartbeat") {
-              socket?.send(JSON.stringify({ type: "pong", event_id: lastEventIdRef.current }));
+              socket?.send(
+                JSON.stringify({
+                  type: "pong",
+                  event_id: lastEventIdRef.current,
+                  last_seen_state_version: lastStateVersionRef.current,
+                }),
+              );
+              return;
+            }
+            if (parsedType === "connection_established") {
+              if (parsed.payload?.resync_required || parsed.payload?.full_resync_required) {
+                void callbackRef.current();
+              }
+              return;
+            }
+            if (parsedType === "replay_complete") {
               return;
             }
             if (RUN_INVALIDATION_MESSAGES.has(parsedType)) {

@@ -24,6 +24,10 @@ from application.services.metrics import record_service_metric_sample, record_st
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
+from application.services.run_state_machine import (
+    RUN_STATUS_TRANSITIONS,
+    apply_run_status_transition,
+)
 from application.services.run_locking import acquire_run_transaction_lock
 from application.services.run_snapshots import (
     RunSnapshot,
@@ -88,16 +92,6 @@ SUPPORTED_RUNTIME_INTENTS = {
     "tool_execution_failed",
     "tool_execution_ambiguous",
     "upsert_node_run",
-}
-
-RUN_STATUS_TRANSITIONS: dict[str, set[str]] = {
-    "pending": {"pending", "running", "failed", "canceled"},
-    "running": {"running", "paused", "resume_requested", "succeeded", "failed", "canceled"},
-    "paused": {"paused", "resume_requested", "failed", "canceled"},
-    "resume_requested": {"resume_requested", "running", "failed", "canceled"},
-    "succeeded": {"succeeded"},
-    "failed": {"failed"},
-    "canceled": {"canceled"},
 }
 
 IntentProcessResult = Literal["processed", "duplicate", "invalid", "ignored"]
@@ -1351,9 +1345,9 @@ def _update_run_fields(
 ) -> None:
     update_fields: list[str] = []
 
-    if status is not _UNSET and run.status != status:
-        run.status = str(status)
-        update_fields.append("status")
+    if status is not _UNSET:
+        transition = apply_run_status_transition(run, str(status))
+        update_fields.extend(transition.update_fields)
     if trace_id is not _UNSET:
         next_trace_id = str(trace_id or "")
         if run.trace_id != next_trace_id:

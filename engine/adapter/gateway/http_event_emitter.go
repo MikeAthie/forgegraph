@@ -21,13 +21,15 @@ import (
 
 	"github.com/forgegraph/engine/adapter/metrics"
 	"github.com/forgegraph/engine/application/port"
+	"github.com/google/uuid"
 )
 
 var ErrEventCallbackNotConfigured = errors.New("event callback URL is required")
 
 type eventDeliveryError struct {
-	err       error
-	retryable bool
+	err        error
+	retryable  bool
+	deadLetter bool
 }
 
 func (e *eventDeliveryError) Error() string {
@@ -46,6 +48,11 @@ func isRetryableEventDeliveryError(err error) bool {
 	return true
 }
 
+func isDeadLetterEventDeliveryError(err error) bool {
+	var deliveryErr *eventDeliveryError
+	return errors.As(err, &deliveryErr) && deliveryErr.deadLetter
+}
+
 func isRetryableEventHTTPStatus(statusCode int) bool {
 	switch {
 	case statusCode == http.StatusRequestTimeout:
@@ -61,6 +68,30 @@ func isRetryableEventHTTPStatus(statusCode int) bool {
 	}
 }
 
+func fallbackRetryableEventHTTPStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusBadRequest:
+		return false
+	case http.StatusNotFound, http.StatusConflict:
+		return true
+	default:
+		return isRetryableEventHTTPStatus(statusCode)
+	}
+}
+
+type callbackDecisionEnvelope struct {
+	Decision       string `json:"decision"`
+	Reason         string `json:"reason"`
+	BackendEventID string `json:"backend_event_id"`
+	SafeToDiscard  bool   `json:"safe_to_discard"`
+	RetryAfterMS   int    `json:"retry_after_ms,omitempty"`
+	ConflictCode   string `json:"conflict_code,omitempty"`
+}
+
+func normalizeCallbackDecision(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
+}
+
 // HTTPEventEmitter sends execution events to the control plane via HTTP POST.
 type HTTPEventEmitter struct {
 	client           *http.Client
@@ -68,6 +99,8 @@ type HTTPEventEmitter struct {
 	secret           string
 	eventVerbosity   string
 	engineInstanceID string
+	sequenceMu       sync.Mutex
+	sequences        map[string]int64
 
 	// Async event handling
 	eventChan chan *port.ExecutionEvent
@@ -82,11 +115,12 @@ type HTTPEventEmitter struct {
 	spoolFlushInterval time.Duration
 
 	// Disk spool for undelivered events
-	spoolPath    string
-	spoolMu      sync.Mutex
-	flushMu      sync.Mutex
-	spoolFlushCh chan struct{}
-	stopCh       chan struct{}
+	spoolPath      string
+	deadLetterPath string
+	spoolMu        sync.Mutex
+	flushMu        sync.Mutex
+	spoolFlushCh   chan struct{}
+	stopCh         chan struct{}
 }
 
 // HTTPEventEmitterConfig holds configuration for the event emitter
@@ -111,6 +145,9 @@ type HTTPEventEmitterConfig struct {
 
 	// SpoolPath enables disk persistence for undelivered events (JSONL)
 	SpoolPath string
+
+	// DeadLetterPath stores callback events rejected as invalid by the backend.
+	DeadLetterPath string
 
 	// SpoolFlushInterval controls how often the emitter retries spooled events.
 	SpoolFlushInterval time.Duration
@@ -167,6 +204,10 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 	if spoolPath == "" {
 		spoolPath = defaultSpoolPath(config.CallbackURL)
 	}
+	deadLetterPath := config.DeadLetterPath
+	if deadLetterPath == "" {
+		deadLetterPath = spoolPath + ".dead.jsonl"
+	}
 
 	emitter := &HTTPEventEmitter{
 		client:             client,
@@ -174,11 +215,13 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 		secret:             config.SignatureSecret,
 		eventVerbosity:     normalizeEventVerbosity(config.EventVerbosity),
 		engineInstanceID:   config.EngineInstanceID,
+		sequences:          make(map[string]int64),
 		eventChan:          make(chan *port.ExecutionEvent, bufferSize),
 		maxRetries:         maxRetries,
 		retryDelay:         retryDelay,
 		spoolFlushInterval: spoolFlushInterval,
 		spoolPath:          spoolPath,
+		deadLetterPath:     deadLetterPath,
 		spoolFlushCh:       make(chan struct{}, 1),
 		stopCh:             make(chan struct{}),
 	}
@@ -223,6 +266,12 @@ func (e *HTTPEventEmitter) prepareEvent(event *port.ExecutionEvent) *port.Execut
 		return nil
 	}
 	prepared := *event
+	if strings.TrimSpace(prepared.EventID) == "" {
+		prepared.EventID = uuid.NewString()
+	}
+	if prepared.Sequence <= 0 {
+		prepared.Sequence = e.nextSequence(prepared.RunID)
+	}
 	if prepared.Category == "" {
 		prepared.Category = port.EventCategory(port.InferEventCategory(prepared.Type))
 	}
@@ -231,7 +280,24 @@ func (e *HTTPEventEmitter) prepareEvent(event *port.ExecutionEvent) *port.Execut
 	}
 	prepared.Input = cloneEventMap(event.Input)
 	prepared.Output = cloneEventMap(event.Output)
+	if strings.TrimSpace(prepared.IdempotencyKey) == "" {
+		prepared.IdempotencyKey = buildEventIdempotencyKey(&prepared)
+	}
 	return &prepared
+}
+
+func (e *HTTPEventEmitter) nextSequence(runID string) int64 {
+	e.sequenceMu.Lock()
+	defer e.sequenceMu.Unlock()
+	if e.sequences == nil {
+		e.sequences = make(map[string]int64)
+	}
+	key := strings.TrimSpace(runID)
+	if key == "" {
+		key = "__unknown_run__"
+	}
+	e.sequences[key]++
+	return e.sequences[key]
 }
 
 func cloneEventMap(input map[string]any) map[string]any {
@@ -405,6 +471,11 @@ func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.Execut
 
 		if !retryable {
 			metrics.RecordEventDeliveryFailure(event.Type.String())
+			if spoolOnFailure && isDeadLetterEventDeliveryError(err) {
+				if deadLetterErr := e.appendToDeadLetter(event, err.Error()); deadLetterErr != nil {
+					return fmt.Errorf("event rejected and could not be dead-lettered: %w", deadLetterErr)
+				}
+			}
 			return err
 		}
 
@@ -434,7 +505,7 @@ func (e *HTTPEventEmitter) sendWithRetry(ctx context.Context, event *port.Execut
 
 // send makes the actual HTTP POST request
 func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent) error {
-	body, err := json.Marshal(toCloudEventEnvelope(event))
+	body, err := json.Marshal(toCanonicalEventEnvelope(event))
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
@@ -464,28 +535,129 @@ func (e *HTTPEventEmitter) send(ctx context.Context, event *port.ExecutionEvent)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		if readErr != nil {
-			return &eventDeliveryError{
-				err:       fmt.Errorf("server returned status %d (failed to read response body: %w)", resp.StatusCode, readErr),
-				retryable: isRetryableEventHTTPStatus(resp.StatusCode),
-			}
-		}
-		bodyText := strings.TrimSpace(string(responseBody))
-		if bodyText == "" {
-			return &eventDeliveryError{
-				err:       fmt.Errorf("server returned status %d", resp.StatusCode),
-				retryable: isRetryableEventHTTPStatus(resp.StatusCode),
-			}
-		}
+	responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if readErr != nil {
 		return &eventDeliveryError{
-			err:       fmt.Errorf("server returned status %d: %s", resp.StatusCode, bodyText),
-			retryable: isRetryableEventHTTPStatus(resp.StatusCode),
+			err:       fmt.Errorf("server returned status %d (failed to read response body: %w)", resp.StatusCode, readErr),
+			retryable: fallbackRetryableEventHTTPStatus(resp.StatusCode),
 		}
 	}
 
-	return nil
+	decision, hasDecision := parseCallbackDecision(responseBody)
+	if !hasDecision {
+		bodyText := strings.TrimSpace(string(responseBody))
+		if bodyText == "" {
+			bodyText = "missing callback decision envelope"
+		}
+		retryable := true
+		deadLetter := false
+		if resp.StatusCode >= 400 {
+			retryable = fallbackRetryableEventHTTPStatus(resp.StatusCode)
+			deadLetter = resp.StatusCode == http.StatusBadRequest
+		}
+		return &eventDeliveryError{
+			err:        fmt.Errorf("server returned status %d without structured callback decision: %s", resp.StatusCode, bodyText),
+			retryable:  retryable,
+			deadLetter: deadLetter,
+		}
+	}
+
+	return e.handleCallbackDecision(resp.StatusCode, decision, event, responseBody)
+}
+
+func parseCallbackDecision(responseBody []byte) (callbackDecisionEnvelope, bool) {
+	var direct callbackDecisionEnvelope
+	if err := json.Unmarshal(responseBody, &direct); err == nil && strings.TrimSpace(direct.Decision) != "" {
+		return direct, true
+	}
+
+	var wrapped struct {
+		Data callbackDecisionEnvelope `json:"data"`
+	}
+	if err := json.Unmarshal(responseBody, &wrapped); err == nil && strings.TrimSpace(wrapped.Data.Decision) != "" {
+		return wrapped.Data, true
+	}
+
+	return callbackDecisionEnvelope{}, false
+}
+
+func (e *HTTPEventEmitter) handleCallbackDecision(
+	statusCode int,
+	decision callbackDecisionEnvelope,
+	event *port.ExecutionEvent,
+	responseBody []byte,
+) error {
+	normalizedDecision := normalizeCallbackDecision(decision.Decision)
+	reason := strings.TrimSpace(decision.Reason)
+	if reason == "" {
+		reason = normalizedDecision
+	}
+
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return &eventDeliveryError{
+			err:       fmt.Errorf("server returned authorization status %d: %s", statusCode, reason),
+			retryable: false,
+		}
+	}
+
+	if decision.ConflictCode != "" || statusCode == http.StatusConflict {
+		conflictCode := strings.TrimSpace(decision.ConflictCode)
+		if conflictCode == "" {
+			conflictCode = "409_CONFLICT"
+		}
+		metrics.RecordEventConflict(conflictCode, event.Type.String())
+	}
+
+	switch normalizedDecision {
+	case "accepted":
+		if !decision.SafeToDiscard {
+			return &eventDeliveryError{
+				err:       fmt.Errorf("backend accepted event without safe_to_discard=true: %s", strings.TrimSpace(string(responseBody))),
+				retryable: true,
+			}
+		}
+		return nil
+	case "duplicate":
+		if !decision.SafeToDiscard {
+			return &eventDeliveryError{
+				err:       fmt.Errorf("backend duplicate response missing safe_to_discard=true: %s", strings.TrimSpace(string(responseBody))),
+				retryable: true,
+			}
+		}
+		metrics.RecordEventDiscarded("duplicate", event.Type.String())
+		return nil
+	case "stale_superseded":
+		if !decision.SafeToDiscard {
+			return &eventDeliveryError{
+				err:       fmt.Errorf("backend stale response missing safe_to_discard=true: %s", strings.TrimSpace(string(responseBody))),
+				retryable: true,
+			}
+		}
+		metrics.RecordEventDiscarded("stale_superseded", event.Type.String())
+		return nil
+	case "retry_required":
+		return &eventDeliveryError{
+			err:       fmt.Errorf("backend requires retry for status %d: %s", statusCode, reason),
+			retryable: true,
+		}
+	case "reject_invalid":
+		if !decision.SafeToDiscard {
+			return &eventDeliveryError{
+				err:       fmt.Errorf("backend reject_invalid response missing safe_to_discard=true: %s", strings.TrimSpace(string(responseBody))),
+				retryable: true,
+			}
+		}
+		return &eventDeliveryError{
+			err:        fmt.Errorf("backend rejected event as invalid for status %d: %s", statusCode, reason),
+			retryable:  false,
+			deadLetter: true,
+		}
+	default:
+		return &eventDeliveryError{
+			err:       fmt.Errorf("backend returned unknown callback decision %q for status %d", decision.Decision, statusCode),
+			retryable: true,
+		}
+	}
 }
 
 func signPayload(secret string, timestamp string, body []byte) string {
@@ -495,45 +667,146 @@ func signPayload(secret string, timestamp string, body []byte) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func toCloudEventEnvelope(event *port.ExecutionEvent) map[string]any {
+func toCanonicalEventEnvelope(event *port.ExecutionEvent) map[string]any {
 	if event == nil {
 		return map[string]any{}
 	}
-	eventType := map[string]string{
-		"run_started":           "forgegraph.run.started",
-		"run_completed":         "forgegraph.run.completed",
-		"run_failed":            "forgegraph.run.failed",
-		"run_paused":            "forgegraph.run.paused",
-		"run_resumed":           "forgegraph.run.resumed",
-		"run_canceled":          "forgegraph.run.canceled",
-		"run.schema_validation": "forgegraph.run.schema_validation",
-		"node_started":          "forgegraph.node.started",
-		"node_completed":        "forgegraph.node.completed",
-		"node_failed":           "forgegraph.node.failed",
-		"node_skipped":          "forgegraph.node.skipped",
-		"node_retrying":         "forgegraph.node.retrying",
-		"node_stream_chunk":     "forgegraph.node.stream_chunk",
+	canonicalType := map[string]string{
+		"run_started":            "run.started",
+		"run_completed":          "run.completed",
+		"run_failed":             "run.failed",
+		"run_paused":             "run.paused",
+		"run_resumed":            "run.resumed",
+		"run_canceled":           "run.canceled",
+		"run.schema_validation":  "run.schema_validation",
+		"node_started":           "node.started",
+		"node_completed":         "node.completed",
+		"node_failed":            "node.failed",
+		"node_skipped":           "node.skipped",
+		"node_retrying":          "node.retrying",
+		"node_stream_chunk":      "node.stream_chunk",
+		"memory_write_requested": "memory.write_requested",
+		"memory_fact_extracted":  "memory.fact_extracted",
+		"summary_created":        "summary.created",
 	}[event.Type.String()]
-	if eventType == "" {
-		eventType = event.Type.String()
+	if canonicalType == "" {
+		canonicalType = event.Type.String()
 	}
+	tenantID := strings.TrimSpace(event.TenantID)
+	payload := canonicalEventPayload(event)
 	envelope := map[string]any{
-		"specversion":     "1.0",
-		"id":              event.EventID,
-		"source":          "forgegraph-engine",
-		"type":            eventType,
-		"subject":         event.RunID,
-		"time":            time.UnixMilli(event.Timestamp).UTC().Format(time.RFC3339Nano),
-		"datacontenttype": "application/json",
-		"data":            event,
+		"event_id":        event.EventID,
+		"idempotency_key": event.IdempotencyKey,
+		"tenant_id":       tenantID,
+		"org_id":          tenantID,
+		"run_id":          event.RunID,
+		"agent_id":        nil,
+		"task_id":         nullableString(event.NodeID),
+		"source":          "engine",
+		"type":            canonicalType,
+		"sequence":        event.Sequence,
+		"causation_id":    nil,
+		"correlation_id":  event.RunID,
+		"occurred_at":     time.UnixMilli(event.Timestamp).UTC().Format(time.RFC3339Nano),
+		"schema_version":  2,
+		"payload":         payload,
 	}
-	if event.Traceparent != "" {
-		envelope["traceparent"] = event.Traceparent
-	}
-	if event.Tracestate != "" {
-		envelope["tracestate"] = event.Tracestate
-	}
+	envelope["checksum"] = checksumCanonicalEnvelope(envelope)
 	return envelope
+}
+
+func canonicalEventPayload(event *port.ExecutionEvent) map[string]any {
+	payload := map[string]any{
+		"version":            event.Version,
+		"category":           string(event.Category),
+		"timestamp":          event.Timestamp,
+		"engine_instance_id": event.EngineInstanceID,
+	}
+	if strings.TrimSpace(event.NodeID) != "" {
+		payload["node_id"] = event.NodeID
+	}
+	if strings.TrimSpace(event.NodeType) != "" {
+		payload["node_type"] = event.NodeType
+	}
+	if strings.TrimSpace(event.NodeName) != "" {
+		payload["node_name"] = event.NodeName
+	}
+	if event.Attempt > 0 {
+		payload["attempt"] = event.Attempt
+	}
+	if strings.TrimSpace(event.AttemptID) != "" {
+		payload["attempt_id"] = event.AttemptID
+	}
+	if len(event.Input) > 0 {
+		payload["input"] = event.Input
+	}
+	if len(event.Output) > 0 {
+		payload["output"] = event.Output
+	}
+	if strings.TrimSpace(event.Error) != "" {
+		payload["error"] = event.Error
+	}
+	if event.DurationMs > 0 {
+		payload["duration_ms"] = event.DurationMs
+	}
+	if strings.TrimSpace(event.Traceparent) != "" {
+		payload["traceparent"] = event.Traceparent
+	}
+	if strings.TrimSpace(event.Tracestate) != "" {
+		payload["tracestate"] = event.Tracestate
+	}
+	if strings.TrimSpace(event.TraceID) != "" {
+		payload["trace_id"] = event.TraceID
+	}
+	if strings.TrimSpace(event.SpanID) != "" {
+		payload["span_id"] = event.SpanID
+	}
+	return payload
+}
+
+func buildEventIdempotencyKey(event *port.ExecutionEvent) string {
+	tenantID := strings.TrimSpace(event.TenantID)
+	if tenantID == "" {
+		tenantID = "unknown-tenant"
+	}
+	runID := strings.TrimSpace(event.RunID)
+	if runID == "" {
+		runID = "unknown-run"
+	}
+	hashInput, _ := marshalCanonicalJSON(canonicalEventPayload(event))
+	sum := sha256.Sum256(hashInput)
+	return fmt.Sprintf("%s/%s/engine/%d/%s", tenantID, runID, event.Sequence, hex.EncodeToString(sum[:8]))
+}
+
+func checksumCanonicalEnvelope(envelope map[string]any) string {
+	copyWithoutChecksum := make(map[string]any, len(envelope))
+	for key, value := range envelope {
+		if key == "checksum" {
+			continue
+		}
+		copyWithoutChecksum[key] = value
+	}
+	body, _ := marshalCanonicalJSON(copyWithoutChecksum)
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
+func marshalCanonicalJSON(value any) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSpace(buffer.Bytes()), nil
+}
+
+func nullableString(value string) any {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) error {
@@ -572,6 +845,49 @@ func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) error {
 	}
 
 	metrics.RecordEventSpooled(event.Type.String())
+	return nil
+}
+
+func (e *HTTPEventEmitter) appendToDeadLetter(event *port.ExecutionEvent, reason string) error {
+	if e.deadLetterPath == "" {
+		return errors.New("event dead-letter path is not configured")
+	}
+
+	e.spoolMu.Lock()
+	defer e.spoolMu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(e.deadLetterPath), 0o755); err != nil {
+		log.Printf("Warning: failed to create event dead-letter directory: %v", err)
+		return err
+	}
+
+	file, err := os.OpenFile(e.deadLetterPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		log.Printf("Warning: failed to open event dead-letter file: %v", err)
+		return err
+	}
+	defer file.Close()
+
+	payload, err := json.Marshal(map[string]any{
+		"dead_lettered_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"reason":           reason,
+		"event":            event,
+	})
+	if err != nil {
+		log.Printf("Warning: failed to marshal event for dead-letter: %v", err)
+		return err
+	}
+
+	if _, err := file.Write(append(payload, '\n')); err != nil {
+		log.Printf("Warning: failed to write event to dead-letter file: %v", err)
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		log.Printf("Warning: failed to fsync event dead-letter file: %v", err)
+		return err
+	}
+
+	metrics.RecordEventDiscarded("dead_letter", event.Type.String())
 	return nil
 }
 
@@ -662,13 +978,34 @@ func (e *HTTPEventEmitter) flushSpool(ctx context.Context) (int, error) {
 				remaining = append(remaining, line)
 				continue
 			}
+			if isDeadLetterEventDeliveryError(err) {
+				if deadLetterErr := e.appendToDeadLetter(&event, err.Error()); deadLetterErr != nil {
+					log.Printf(
+						"Warning: failed to dead-letter spooled event: run_id=%s event_id=%s err=%v",
+						event.RunID,
+						event.EventID,
+						deadLetterErr,
+					)
+					remaining = append(remaining, line)
+					continue
+				}
+				log.Printf(
+					"Warning: dead-lettered invalid spooled event: run_id=%s event_id=%s err=%v",
+					event.RunID,
+					event.EventID,
+					err,
+				)
+				continue
+			}
 			log.Printf(
 				"Warning: dropping non-retryable spooled event: run_id=%s event_id=%s err=%v",
 				event.RunID,
 				event.EventID,
 				err,
 			)
+			continue
 		}
+		metrics.RecordEventReplayed(event.Type.String())
 	}
 
 	if err := scanner.Err(); err != nil {

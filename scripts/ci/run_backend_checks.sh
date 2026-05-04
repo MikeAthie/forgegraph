@@ -9,6 +9,7 @@ ROOT="$(forgegraph_repo_root)"
 cd "${ROOT}"
 
 bash "${SCRIPT_DIR}/check_backend_runtime_writes.sh"
+python "${SCRIPT_DIR}/check_run_state_machine.py"
 
 cd "${ROOT}/backend"
 

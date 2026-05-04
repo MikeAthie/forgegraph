@@ -3,6 +3,8 @@
 > Internal terminology notice: These terms are INTERNAL and not user-facing. Product surfaces must translate them through the canonical ontology and frontend domain ViewModels.
 
 > Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
+>
+> Callback and canonical event envelope requirements: [event-contracts.md](event-contracts.md).
 
 `Run` and `RunEvent` remain canonical runtime facts.
 
@@ -15,5 +17,7 @@ Requirements:
 - events never mutate durable state directly; backend handlers validate and apply writes
 
 Primary runtime contract: [runtime-invariants.md](runtime-invariants.md)
+
+Callback contract: [event-contracts.md](event-contracts.md)
 
 Implementation plan: [post-stateless-engine-reliability-hardening-v2.md](post-stateless-engine-reliability-hardening-v2.md)

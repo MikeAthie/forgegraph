@@ -1,5 +1,11 @@
-import { systemStateApi } from "@/lib/api";
-import { toOperationStatusVM, toTaskVMFromRecord, type OperationStatusVM, type TaskVM } from "@/domain/translation";
+import { systemStateApi, type MetricProvenance } from "@/lib/api";
+import {
+  toOperationStatusVM,
+  toTaskVMFromRecord,
+  type MetricProvenanceVM,
+  type OperationStatusVM,
+  type TaskVM,
+} from "@/domain/translation";
 
 export type OverviewDepartmentVM = {
   id: string;
@@ -58,13 +64,33 @@ export type OrganizationOverviewVM = {
     activeKnowledgeCount: number;
     recentTopics: string[];
   };
+  metricProvenance: {
+    totalCostUsd: MetricProvenanceVM;
+    revenue: MetricProvenanceVM;
+    profit: MetricProvenanceVM;
+  };
   costByType: OverviewCostRowVM[];
   generatedAt: string;
 };
 
+function metricProvenance(metric: MetricProvenance | undefined, fallback: MetricProvenanceVM): MetricProvenanceVM {
+  if (!metric) {
+    return fallback;
+  }
+
+  return {
+    source: metric.source,
+    computedAt: metric.computed_at,
+    freshnessMs: metric.freshness_ms,
+    status: metric.status,
+    value: metric.value ?? null,
+  };
+}
+
 export const overviewRepository = {
   get: async (): Promise<OrganizationOverviewVM> => {
     const overview = await systemStateApi.getOverview();
+    const accountingProvenance = overview.accounting.metric_provenance ?? {};
 
     return {
       organization: overview.organization,
@@ -111,6 +137,29 @@ export const overviewRepository = {
       memory: {
         activeKnowledgeCount: overview.memory.active_observation_count,
         recentTopics: overview.memory.recent_topics,
+      },
+      metricProvenance: {
+        totalCostUsd: metricProvenance(accountingProvenance.total_cost_usd, {
+          source: "backend.cost_ledger_entries",
+          computedAt: overview.accounting.generated_at ?? overview.generated_at,
+          freshnessMs: null,
+          status: "available",
+          value: overview.summary.total_cost_usd,
+        }),
+        revenue: metricProvenance(accountingProvenance.revenue, {
+          source: "backend.accounting",
+          computedAt: overview.accounting.generated_at ?? overview.generated_at,
+          freshnessMs: null,
+          status: "not_instrumented",
+          value: null,
+        }),
+        profit: metricProvenance(accountingProvenance.profit, {
+          source: "backend.accounting",
+          computedAt: overview.accounting.generated_at ?? overview.generated_at,
+          freshnessMs: null,
+          status: "not_instrumented",
+          value: null,
+        }),
       },
       costByType: overview.accounting.cost_by_type.map((row) => ({
         type: row.cost_type,

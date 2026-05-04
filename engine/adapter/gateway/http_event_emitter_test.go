@@ -16,6 +16,28 @@ import (
 	"github.com/forgegraph/engine/application/port"
 )
 
+func writeCallbackDecision(
+	t *testing.T,
+	w http.ResponseWriter,
+	statusCode int,
+	decision string,
+	safeToDiscard bool,
+) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"decision":         decision,
+		"reason":           decision,
+		"backend_event_id": "backend-event",
+		"safe_to_discard":  safeToDiscard,
+		"conflict_code":    "",
+		"retry_after_ms":   0,
+	}); err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+}
+
 func TestNewHTTPEventEmitterRequiresCallbackURL(t *testing.T) {
 	_, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{})
 	if !errors.Is(err, ErrEventCallbackNotConfigured) {
@@ -148,7 +170,7 @@ func TestEmitSpoolsOnDeliveryFailure(t *testing.T) {
 	}
 }
 
-func TestEmitDoesNotRetryOrSpoolOnNonRetryableConflict(t *testing.T) {
+func TestEmitRetriesAndSpoolsRawConflict(t *testing.T) {
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
@@ -159,26 +181,17 @@ func TestEmitDoesNotRetryOrSpoolOnNonRetryableConflict(t *testing.T) {
 	defer server.Close()
 
 	spoolPath := filepath.Join(t.TempDir(), "events.jsonl")
-	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
-		CallbackURL:        server.URL,
-		Client:             server.Client(),
-		MaxRetries:         3,
-		RetryDelay:         10 * time.Millisecond,
-		SpoolPath:          spoolPath,
-		SpoolFlushInterval: time.Hour,
-	})
-	if err != nil {
-		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	emitter := &HTTPEventEmitter{
+		callbackURL:    server.URL,
+		client:         server.Client(),
+		maxRetries:     3,
+		retryDelay:     10 * time.Millisecond,
+		spoolPath:      spoolPath,
+		deadLetterPath: filepath.Join(t.TempDir(), "events.dead.jsonl"),
+		spoolFlushCh:   make(chan struct{}, 1),
 	}
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := emitter.Close(closeCtx); err != nil {
-			t.Fatalf("Close() error = %v", err)
-		}
-	}()
 
-	err = emitter.Emit(context.Background(), port.NewEvent(port.EventTypeRunCompleted, "run-1"))
+	err := emitter.Emit(context.Background(), port.NewEvent(port.EventTypeRunCompleted, "run-1"))
 	if err == nil {
 		t.Fatal("expected Emit() error")
 	}
@@ -186,15 +199,15 @@ func TestEmitDoesNotRetryOrSpoolOnNonRetryableConflict(t *testing.T) {
 		t.Fatalf("Emit() error = %v, want status 409 detail", err)
 	}
 
-	if got := requestCount.Load(); got != 1 {
-		t.Fatalf("requestCount = %d, want 1", got)
+	if got := requestCount.Load(); got != 3 {
+		t.Fatalf("requestCount = %d, want 3", got)
 	}
-	if _, statErr := os.Stat(spoolPath); !os.IsNotExist(statErr) {
-		t.Fatalf("expected no spool file, got stat error %v", statErr)
+	if _, statErr := os.Stat(spoolPath); statErr != nil {
+		t.Fatalf("expected spool file, got stat error %v", statErr)
 	}
 }
 
-func TestFlushSpoolDropsNonRetryableNotFoundEvents(t *testing.T) {
+func TestFlushSpoolRequeuesRawNotFoundEvents(t *testing.T) {
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
@@ -237,16 +250,17 @@ func TestFlushSpoolDropsNonRetryableNotFoundEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("flushSpool() error = %v", err)
 	}
-	if remaining != 0 {
-		t.Fatalf("remaining = %d, want 0", remaining)
+	if remaining != 1 {
+		t.Fatalf("remaining = %d, want 1", remaining)
 	}
-	if got := requestCount.Load(); got != 1 {
-		t.Fatalf("requestCount = %d, want 1", got)
+	if got := requestCount.Load(); got != 3 {
+		t.Fatalf("requestCount = %d, want 3", got)
 	}
-	for _, candidatePath := range []string{spoolPath, spoolPath + ".processing"} {
-		if _, statErr := os.Stat(candidatePath); !os.IsNotExist(statErr) {
-			t.Fatalf("expected %s to be removed, stat error = %v", candidatePath, statErr)
-		}
+	if _, statErr := os.Stat(spoolPath); statErr != nil {
+		t.Fatalf("expected spool file to remain, stat error = %v", statErr)
+	}
+	if _, statErr := os.Stat(spoolPath + ".processing"); !os.IsNotExist(statErr) {
+		t.Fatalf("expected processing file to be removed, stat error = %v", statErr)
 	}
 }
 
@@ -254,7 +268,7 @@ func TestEmitMinimalVerbosityDropsObservabilityEvents(t *testing.T) {
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
-		w.WriteHeader(http.StatusOK)
+		writeCallbackDecision(t, w, http.StatusOK, "accepted", true)
 	}))
 	defer server.Close()
 
@@ -289,13 +303,21 @@ func TestEmitStampsEngineInstanceAndCategory(t *testing.T) {
 		defer r.Body.Close()
 
 		var envelope struct {
-			Data port.ExecutionEvent `json:"data"`
+			Payload struct {
+				AttemptID        string `json:"attempt_id"`
+				Category         string `json:"category"`
+				EngineInstanceID string `json:"engine_instance_id"`
+			} `json:"payload"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Decode() error = %v", err)
 		}
-		received <- &envelope.Data
-		w.WriteHeader(http.StatusOK)
+		received <- &port.ExecutionEvent{
+			AttemptID:        envelope.Payload.AttemptID,
+			Category:         port.EventCategory(envelope.Payload.Category),
+			EngineInstanceID: envelope.Payload.EngineInstanceID,
+		}
+		writeCallbackDecision(t, w, http.StatusOK, "accepted", true)
 	}))
 	defer server.Close()
 
@@ -341,13 +363,15 @@ func TestEmitIncludesAttemptID(t *testing.T) {
 		defer r.Body.Close()
 
 		var envelope struct {
-			Data port.ExecutionEvent `json:"data"`
+			Payload struct {
+				AttemptID string `json:"attempt_id"`
+			} `json:"payload"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Decode() error = %v", err)
 		}
-		received <- &envelope.Data
-		w.WriteHeader(http.StatusOK)
+		received <- &port.ExecutionEvent{AttemptID: envelope.Payload.AttemptID}
+		writeCallbackDecision(t, w, http.StatusOK, "accepted", true)
 	}))
 	defer server.Close()
 
@@ -385,21 +409,91 @@ func TestEmitIncludesAttemptID(t *testing.T) {
 	}
 }
 
+func TestEmitUsesCanonicalEventEnvelopeV2(t *testing.T) {
+	received := make(chan map[string]any, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var envelope map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		received <- envelope
+		writeCallbackDecision(t, w, http.StatusOK, "accepted", true)
+	}))
+	defer server.Close()
+
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL: server.URL,
+		Client:      server.Client(),
+		MaxRetries:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	event := port.NewEvent(port.EventTypeNodeCompleted, "run-canonical").
+		WithTenantID("tenant-1").
+		WithNode("node-1", "prompt", "Prompt").
+		WithAttempt(1).
+		WithOutput(map[string]any{"ok": true})
+	if err := emitter.Emit(context.Background(), event); err != nil {
+		t.Fatalf("Emit() error = %v", err)
+	}
+
+	select {
+	case envelope := <-received:
+		for _, forbidden := range []string{"specversion", "data", "datacontenttype", "subject"} {
+			if _, ok := envelope[forbidden]; ok {
+				t.Fatalf("canonical envelope unexpectedly contains %s: %#v", forbidden, envelope)
+			}
+		}
+		if got := envelope["schema_version"]; got != float64(2) {
+			t.Fatalf("schema_version = %#v, want 2", got)
+		}
+		if got := envelope["source"]; got != "engine" {
+			t.Fatalf("source = %#v, want engine", got)
+		}
+		if got := envelope["type"]; got != "node.completed" {
+			t.Fatalf("type = %#v, want node.completed", got)
+		}
+		if got := envelope["tenant_id"]; got != "tenant-1" {
+			t.Fatalf("tenant_id = %#v, want tenant-1", got)
+		}
+		if envelope["idempotency_key"] == "" || envelope["checksum"] == "" {
+			t.Fatalf("missing canonical idempotency/checksum: %#v", envelope)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok || payload["node_id"] != "node-1" {
+			t.Fatalf("payload = %#v, want node_id", envelope["payload"])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for emitted event")
+	}
+}
+
 func TestEmitAsyncFreezesMutableEventPayload(t *testing.T) {
 	received := make(chan map[string]any, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
 		var envelope struct {
-			Data struct {
+			Payload struct {
 				Output map[string]any `json:"output"`
-			} `json:"data"`
+			} `json:"payload"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Decode() error = %v", err)
 		}
-		received <- envelope.Data.Output
-		w.WriteHeader(http.StatusOK)
+		received <- envelope.Payload.Output
+		writeCallbackDecision(t, w, http.StatusOK, "accepted", true)
 	}))
 	defer server.Close()
 
@@ -461,6 +555,210 @@ func TestEmitAsyncFreezesMutableEventPayload(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for emitted event")
+	}
+}
+
+func TestEmitCallbackDecisionStatusPairs(t *testing.T) {
+	tests := []struct {
+		name           string
+		statusCode     int
+		decision       string
+		safeToDiscard  bool
+		wantErr        bool
+		wantRequests   int32
+		wantSpool      bool
+		wantDeadLetter bool
+	}{
+		{
+			name:          "accepted",
+			statusCode:    http.StatusOK,
+			decision:      "accepted",
+			safeToDiscard: true,
+			wantRequests:  1,
+		},
+		{
+			name:          "duplicate applied",
+			statusCode:    http.StatusOK,
+			decision:      "duplicate",
+			safeToDiscard: true,
+			wantRequests:  1,
+		},
+		{
+			name:          "stale superseded conflict",
+			statusCode:    http.StatusConflict,
+			decision:      "stale_superseded",
+			safeToDiscard: true,
+			wantRequests:  1,
+		},
+		{
+			name:          "ordering conflict retry",
+			statusCode:    http.StatusConflict,
+			decision:      "retry_required",
+			safeToDiscard: false,
+			wantErr:       true,
+			wantRequests:  2,
+			wantSpool:     true,
+		},
+		{
+			name:           "invalid schema dead letter",
+			statusCode:     http.StatusBadRequest,
+			decision:       "reject_invalid",
+			safeToDiscard:  true,
+			wantErr:        true,
+			wantRequests:   1,
+			wantDeadLetter: true,
+		},
+		{
+			name:          "unsafe accepted response retries",
+			statusCode:    http.StatusOK,
+			decision:      "accepted",
+			safeToDiscard: false,
+			wantErr:       true,
+			wantRequests:  2,
+			wantSpool:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var requestCount atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount.Add(1)
+				writeCallbackDecision(t, w, tc.statusCode, tc.decision, tc.safeToDiscard)
+			}))
+			defer server.Close()
+
+			tempDir := t.TempDir()
+			spoolPath := filepath.Join(tempDir, "events.jsonl")
+			deadLetterPath := filepath.Join(tempDir, "events.dead.jsonl")
+			emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+				CallbackURL:        server.URL,
+				Client:             server.Client(),
+				MaxRetries:         2,
+				RetryDelay:         10 * time.Millisecond,
+				SpoolPath:          spoolPath,
+				DeadLetterPath:     deadLetterPath,
+				SpoolFlushInterval: time.Hour,
+			})
+			if err != nil {
+				t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+			}
+			defer func() {
+				closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				if err := emitter.Close(closeCtx); err != nil {
+					t.Fatalf("Close() error = %v", err)
+				}
+			}()
+
+			err = emitter.Emit(context.Background(), port.NewEvent(port.EventTypeRunCompleted, "run-1"))
+			if tc.wantErr && err == nil {
+				t.Fatal("expected Emit() error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("Emit() error = %v", err)
+			}
+			if got := requestCount.Load(); got != tc.wantRequests {
+				t.Fatalf("requestCount = %d, want %d", got, tc.wantRequests)
+			}
+			if _, statErr := os.Stat(spoolPath); tc.wantSpool != (statErr == nil) {
+				t.Fatalf("spool exists = %v, want %v (stat error %v)", statErr == nil, tc.wantSpool, statErr)
+			}
+			if _, statErr := os.Stat(deadLetterPath); tc.wantDeadLetter != (statErr == nil) {
+				t.Fatalf(
+					"dead-letter exists = %v, want %v (stat error %v)",
+					statErr == nil,
+					tc.wantDeadLetter,
+					statErr,
+				)
+			}
+		})
+	}
+}
+
+func TestEmitAuthFailureDoesNotRetrySpoolOrDeadLetter(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		writeCallbackDecision(t, w, http.StatusUnauthorized, "reject_invalid", false)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	spoolPath := filepath.Join(tempDir, "events.jsonl")
+	deadLetterPath := filepath.Join(tempDir, "events.dead.jsonl")
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL:        server.URL,
+		Client:             server.Client(),
+		MaxRetries:         3,
+		RetryDelay:         10 * time.Millisecond,
+		SpoolPath:          spoolPath,
+		DeadLetterPath:     deadLetterPath,
+		SpoolFlushInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	err = emitter.Emit(context.Background(), port.NewEvent(port.EventTypeRunFailed, "run-auth"))
+	if err == nil {
+		t.Fatal("expected Emit() error")
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("requestCount = %d, want 1", got)
+	}
+	if _, statErr := os.Stat(spoolPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no spool file, stat error = %v", statErr)
+	}
+	if _, statErr := os.Stat(deadLetterPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dead-letter file, stat error = %v", statErr)
+	}
+}
+
+func TestEmitSpoolsWhenSuccessResponseMissingDecision(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	spoolPath := filepath.Join(t.TempDir(), "events.jsonl")
+	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
+		CallbackURL:        server.URL,
+		Client:             server.Client(),
+		MaxRetries:         2,
+		RetryDelay:         10 * time.Millisecond,
+		SpoolPath:          spoolPath,
+		SpoolFlushInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := emitter.Close(closeCtx); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	err = emitter.Emit(context.Background(), port.NewEvent(port.EventTypeRunStarted, "run-missing-decision"))
+	if err == nil {
+		t.Fatal("expected Emit() error")
+	}
+	if got := requestCount.Load(); got != 2 {
+		t.Fatalf("requestCount = %d, want 2", got)
+	}
+	if _, statErr := os.Stat(spoolPath); statErr != nil {
+		t.Fatalf("expected spool file, stat error = %v", statErr)
 	}
 }
 

@@ -27,6 +27,9 @@ OBSERVABILITY_EVENT_TYPES = {
     "node_stream.chunk",
     "node_stream.summary",
     "run.schema_validation",
+    "memory_write_requested",
+    "memory_fact_extracted",
+    "summary_created",
 }
 
 

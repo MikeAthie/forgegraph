@@ -13,7 +13,7 @@ from adapters.api.responses import success_response
 from application.services.os_projections import (
     accounting_overview,
     cost_ledger_summary,
-    refresh_phase1_projections,
+    projection_organization_for_user,
 )
 from infrastructure.orm.models import CostLedgerEntry, User
 
@@ -22,16 +22,16 @@ class AccountingOverviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        bundle = refresh_phase1_projections(cast(User, request.user))
-        return success_response(accounting_overview(bundle.organization))
+        organization = projection_organization_for_user(cast(User, request.user))
+        return success_response(accounting_overview(organization))
 
 
 class AccountingLedgerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        bundle = refresh_phase1_projections(cast(User, request.user))
-        entries = CostLedgerEntry.objects.filter(organization=bundle.organization).select_related(
+        organization = projection_organization_for_user(cast(User, request.user))
+        entries = CostLedgerEntry.objects.filter(organization=organization).select_related(
             "agent", "task", "execution", "workflow_revision"
         )
         return success_response(

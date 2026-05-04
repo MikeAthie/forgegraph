@@ -21,6 +21,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from adapters.ws.runs.broadcast import broadcast_node_run_updated, broadcast_run_updated
+from application.services.run_state_machine import apply_run_status_transition
 from infrastructure.orm.models import GraphVersion, NodeRun, Run, User
 
 
@@ -175,10 +176,14 @@ class Command(BaseCommand):
                     )
                     broadcast_node_run_updated(run=run, node_run=skipped)
 
-                run.status = "failed"
+                transition = apply_run_status_transition(run, "failed")
                 run.ended_at = last_finished_at
                 run.error_message = fail_message
-                run.save(update_fields=["status", "ended_at", "error_message"])
+                run.save(
+                    update_fields=sorted(
+                        set(transition.update_fields + ["ended_at", "error_message"])
+                    )
+                )
                 broadcast_run_updated(run)
                 return
 
@@ -190,10 +195,10 @@ class Command(BaseCommand):
 
             time.sleep(delay_s)
 
-        run.status = "succeeded"
+        transition = apply_run_status_transition(run, "succeeded")
         run.ended_at = last_finished_at
         run.output_json = {"seeded": True}
-        run.save(update_fields=["status", "ended_at", "output_json"])
+        run.save(update_fields=sorted(set(transition.update_fields + ["ended_at", "output_json"])))
         broadcast_run_updated(run)
 
     def _toposort(self, nodes: list[dict], edges: list[dict]) -> list[dict]:

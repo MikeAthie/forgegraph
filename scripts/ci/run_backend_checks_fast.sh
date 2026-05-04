@@ -20,6 +20,7 @@ if [[ "${BACKEND_CHANGED}" != "1" ]]; then
 fi
 
 bash "${SCRIPT_DIR}/check_backend_runtime_writes.sh"
+python "${SCRIPT_DIR}/check_run_state_machine.py"
 
 cd "${ROOT}/backend"
 

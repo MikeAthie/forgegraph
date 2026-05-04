@@ -115,6 +115,20 @@ def main() -> int:
         env=env,
         text=True,
     )
+    projection_process = subprocess.Popen(
+        [
+            sys.executable,
+            "manage.py",
+            "process_os_projections",
+            "--sleep",
+            "1",
+            "--max-organizations",
+            "200",
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+    )
     run_queue_process = subprocess.Popen(
         [
             sys.executable,
@@ -146,6 +160,7 @@ def main() -> int:
     def handle_shutdown(signum: int, _frame: object) -> None:
         terminate_process(runserver_process)
         terminate_process(run_queue_process)
+        terminate_process(projection_process)
         terminate_process(runtime_intent_process)
         terminate_process(grpc_process)
         raise SystemExit(128 + signum)
@@ -159,6 +174,7 @@ def main() -> int:
     finally:
         terminate_process(runserver_process)
         terminate_process(run_queue_process)
+        terminate_process(projection_process)
         terminate_process(runtime_intent_process)
         terminate_process(grpc_process)
 

@@ -30,9 +30,10 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { translateProductError } from "@/domain/errors";
 import { overviewRepository } from "@/domain/repositories";
+import type { MetricProvenanceVM } from "@/domain/translation";
 import type { OrganizationOverviewVM } from "@/domain/repositories/overviewRepository";
 
-const revenueMultiplier = 4.75;
+const notInstrumentedLabel = "Not yet instrumented";
 
 type AttentionItem = {
   id: string;
@@ -49,6 +50,13 @@ const metricLinkClass =
 
 const metricCardLinkClass =
   "h-full transition-all duration-200 ease-out group-hover:-translate-y-0.5 group-hover:border-slate-900/20 group-hover:bg-white group-hover:shadow-[0_30px_70px_-48px_rgba(15,23,42,0.7)] dark:group-hover:border-white/20 dark:group-hover:bg-white/[0.07]";
+
+function metricProvenanceLine(metric: MetricProvenanceVM): string {
+  const computedAt = metric.computedAt ? `Computed ${formatDateTime(metric.computedAt)}` : "computed_at unavailable";
+  const freshness = typeof metric.freshnessMs === "number" ? ` · freshness ${Math.round(metric.freshnessMs)}ms` : "";
+
+  return `${metric.source} · ${computedAt}${freshness}`;
+}
 
 export default function OverviewPage() {
   const [overview, setOverview] = useState<OrganizationOverviewVM | null>(null);
@@ -87,12 +95,6 @@ export default function OverviewPage() {
       return null;
     }
 
-    const revenueToday = Math.round((overview.summary.totalCostUsd * revenueMultiplier + 1840) * 100) / 100;
-    const profitToday = revenueToday - overview.summary.totalCostUsd;
-    const totalDepartmentCost = overview.activeDepartments.reduce(
-      (sum, department) => sum + department.totalCostUsd,
-      0,
-    );
     const blockedTasks = overview.activeTasks.filter((task) => task.status === "paused" || task.status === "failed");
     const failedOperations = overview.recentOperations.filter((operation) => operation.status === "failed");
 
@@ -162,11 +164,8 @@ export default function OverviewPage() {
         id: "cost",
         label: "Cost posture",
         value: formatCurrency(overview.summary.totalCostUsd),
-        detail:
-          overview.summary.totalCostUsd > 250
-            ? "Spend is elevated and should be compared with current business impact."
-            : "Spend is inside the expected daily operating band.",
-        status: overview.summary.totalCostUsd > 250 ? "paused" : "active",
+        detail: metricProvenanceLine(overview.metricProvenance.totalCostUsd),
+        status: "active",
       },
     ];
 
@@ -214,9 +213,6 @@ export default function OverviewPage() {
     ].slice(0, 6);
 
     return {
-      revenueToday,
-      profitToday,
-      totalDepartmentCost,
       blockedTasks,
       attentionItems,
       systemHealth,
@@ -274,13 +270,16 @@ export default function OverviewPage() {
                   <span>{formatCurrency(overview.summary.totalCostUsd)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Projected revenue</span>
-                  <span>{formatCurrency(derived.revenueToday)}</span>
+                  <span>Revenue</span>
+                  <span>{notInstrumentedLabel}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Projected profit</span>
-                  <span>{formatCurrency(derived.profitToday)}</span>
+                  <span>Profit</span>
+                  <span>{notInstrumentedLabel}</span>
                 </div>
+                <p className="pt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
+                </p>
               </div>
             ),
           },
@@ -351,9 +350,7 @@ export default function OverviewPage() {
                   eyebrow="Cost today"
                   value={overview ? formatCurrency(overview.summary.totalCostUsd) : "$0"}
                   delta={
-                    derived
-                      ? `${formatCurrency(derived.profitToday)} projected profit after current cost`
-                      : "Economic posture"
+                    overview ? metricProvenanceLine(overview.metricProvenance.totalCostUsd) : "Backend cost ledger"
                   }
                   tone="rose"
                   icon={<HandCoins className="h-4 w-4" />}
@@ -611,7 +608,7 @@ export default function OverviewPage() {
                 <div id="usage-budget" className="scroll-mt-36">
                   <Panel
                     title="Usage and budget"
-                    description="Spend, mix, and margin for the current operating window."
+                    description="Backend-owned spend and metric provenance for the current operating window."
                   >
                     <div className="grid gap-3 md:grid-cols-3">
                       <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
@@ -621,21 +618,30 @@ export default function OverviewPage() {
                         <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
                           {formatCurrency(overview.summary.totalCostUsd)}
                         </p>
-                      </div>
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Projected revenue
-                        </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                          {formatCurrency(derived.revenueToday)}
+                        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                          {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                         </p>
                       </div>
                       <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                         <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Projected profit
+                          Revenue
                         </p>
                         <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                          {formatCurrency(derived.profitToday)}
+                          {notInstrumentedLabel}
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                          {metricProvenanceLine(overview.metricProvenance.revenue)}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Profit
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                          {notInstrumentedLabel}
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                          {metricProvenanceLine(overview.metricProvenance.profit)}
                         </p>
                       </div>
                     </div>
@@ -663,8 +669,8 @@ export default function OverviewPage() {
                         columns={2}
                         items={[
                           {
-                            label: "Active department spend",
-                            value: formatCurrency(derived.totalDepartmentCost),
+                            label: "Cost source types",
+                            value: formatCompactNumber(overview.costByType.length),
                           },
                           {
                             label: "Operating window",

@@ -666,8 +666,6 @@ func main() {
 	// Initialize repository and memory store
 	var repo port.RunRepository
 	var memoryStore port.MemoryStore
-	var redisStore *store.RedisMemoryStore
-	var redisHealth *store.RedisHealthChecker
 	var runtimeIntentPublisher port.RuntimeIntentPublisher
 	var llmMetricsSnapshot func() gateway.LLMMetricsSnapshot
 	var err error
@@ -768,26 +766,6 @@ func main() {
 	default:
 		log.Error("run_repository_driver_unreachable", "driver", repoDriver)
 		os.Exit(1)
-	}
-
-	// Optional Redis-backed memory store
-	if cfg.RedisAddr != "" {
-		redisCfg := store.RedisConfig{
-			Addr:         cfg.RedisAddr,
-			Password:     cfg.RedisPassword,
-			DB:           cfg.RedisDB,
-			PoolSize:     cfg.RedisPoolSize,
-			DialTimeout:  time.Duration(cfg.RedisDialTimeoutMs) * time.Millisecond,
-			ReadTimeout:  time.Duration(cfg.RedisReadTimeoutMs) * time.Millisecond,
-			WriteTimeout: time.Duration(cfg.RedisWriteTimeoutMs) * time.Millisecond,
-		}
-		redisStore, err = store.NewRedisMemoryStore(redisCfg, cfg.TenantID, memoryStore)
-		if err != nil {
-			log.Error("redis_store_init_failed", "error", err.Error())
-		} else {
-			log.Info("redis_store_initialized", "addr", cfg.RedisAddr, "role", "ephemeral-cache")
-			redisHealth = store.NewRedisHealthChecker(redisStore)
-		}
 	}
 
 	// Initialize event emitter
@@ -963,15 +941,11 @@ func main() {
 	)
 
 	if llmClient != nil {
-		var summaryStore port.SummaryStore
-		if redisStore != nil {
-			summaryStore = redisStore
-		}
 		summaryAdapter := summarizer.NewLLMSummarizerWithTracker(llmClient, "", nil)
-		summaryWorker := usecase.NewSummarizationWorker(summaryAdapter, summaryStore, 2, 100)
+		summaryWorker := usecase.NewSummarizationWorker(summaryAdapter, 2, 100)
 		summaryWorker.Start(context.Background())
 		scheduler.SetSummarizationWorker(summaryWorker)
-		log.Info("summarization_worker_initialized")
+		log.Info("summarization_worker_initialized", "persistence", "backend_event_intents")
 	}
 
 	// Metrics & health server
@@ -981,12 +955,9 @@ func main() {
 			mux.Handle("/metrics", promhttp.Handler())
 			mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 				redisStatus := store.HealthStatus{Healthy: true}
-				if strings.TrimSpace(cfg.RedisAddr) != "" && redisHealth != nil {
-					redisStatus = redisHealth.Check(r.Context())
-				}
 				payload, _ := json.Marshal(readinessPayload(cfg, grpcReady.Load(), redisStatus))
 				w.Header().Set("Content-Type", "application/json")
-				if grpcReady.Load() && (strings.TrimSpace(cfg.RedisAddr) == "" || redisStatus.Healthy) {
+				if grpcReady.Load() {
 					w.WriteHeader(http.StatusOK)
 				} else {
 					w.WriteHeader(http.StatusServiceUnavailable)
@@ -994,10 +965,7 @@ func main() {
 				_, _ = w.Write(payload)
 			})
 			mux.HandleFunc("/health/redis", func(w http.ResponseWriter, r *http.Request) {
-				status := store.HealthStatus{Healthy: false, Error: "redis not configured"}
-				if redisHealth != nil {
-					status = redisHealth.Check(r.Context())
-				}
+				status := store.HealthStatus{Healthy: false, Error: "engine product-memory redis disabled; backend owns durable memory"}
 				payload, _ := json.Marshal(status)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)

@@ -2,6 +2,8 @@ from django.urls import path
 
 from adapters.api.operator.views import (
     OperatorDeadLetterListView,
+    OperatorEventDeadLetterAcknowledgeView,
+    OperatorEventDeadLetterReplayView,
     OperatorForceCancelRunView,
     OperatorForceFailRunView,
     OperatorForceRehydrateRunView,
@@ -23,6 +25,16 @@ urlpatterns = [
         name="operator-runtime-intent-backlog",
     ),
     path("dead-letters", OperatorDeadLetterListView.as_view(), name="operator-dead-letters"),
+    path(
+        "event-dead-letters/<uuid:dead_letter_id>/replay",
+        OperatorEventDeadLetterReplayView.as_view(),
+        name="operator-event-dead-letter-replay",
+    ),
+    path(
+        "event-dead-letters/<uuid:dead_letter_id>/acknowledge",
+        OperatorEventDeadLetterAcknowledgeView.as_view(),
+        name="operator-event-dead-letter-acknowledge",
+    ),
     path(
         "runtime-intents/<uuid:intent_id>/replay",
         OperatorRuntimeIntentReplayView.as_view(),

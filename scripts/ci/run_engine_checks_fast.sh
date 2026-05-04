@@ -43,6 +43,7 @@ else
 fi
 
 bash "${SCRIPT_DIR}/check_engine_ownership.sh"
+bash "${SCRIPT_DIR}/check_engine_event_envelope.sh"
 
 engine_impacted_packages() {
   local changed_packages=()

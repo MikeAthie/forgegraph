@@ -41,6 +41,7 @@ def test_websocket_subscriber_limits_are_visible_and_enforced() -> None:
         event_level="default",
         event_types=["run_completed", "decision_required"],
         last_seen_event_id="evt-1",
+        last_seen_state_version=4,
     )
 
     accepted, details = can_accept_run_websocket_subscriber(
@@ -87,6 +88,7 @@ def test_websocket_subscriber_snapshot_tracks_fanout_and_slow_clients() -> None:
     update_run_websocket_subscriber_activity(
         connection_id="conn-a",
         event_id="evt-2",
+        state_version=7,
         event_type="run_completed",
         sent=True,
     )
@@ -116,6 +118,7 @@ def test_websocket_subscriber_snapshot_tracks_fanout_and_slow_clients() -> None:
     assert snapshot["by_org"][0]["messages_filtered"] == 1
     assert snapshot["by_org"][0]["slow_disconnects"] == 1
     assert snapshot["connections"][0]["last_seen_event_id"] == "evt-2"
+    assert snapshot["connections"][0]["last_seen_state_version"] == 7
 
     unregister_run_websocket_subscriber(connection_id="conn-a")
     assert get_websocket_subscriber_snapshot()["active_connections"] == 0

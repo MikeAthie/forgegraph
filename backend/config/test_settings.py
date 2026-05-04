@@ -19,6 +19,7 @@ from .settings import *  # noqa: F401,F403
 # the suite is migrated to the runtime-intent path. Production defaults remain
 # backend-intent-only unless explicitly overridden.
 ENGINE_EVENT_STATE_MUTATION_ENABLED = True
+ENGINE_LEGACY_EVENT_CALLBACKS_ENABLED = True
 
 # Backend tests must not inherit the live-stack queue mode from service-backed
 # orchestration. Tests that exercise queued dispatch opt in with

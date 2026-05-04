@@ -28,6 +28,7 @@ from infrastructure.orm.models import (
     NodeRun,
     Organization,
     Run,
+    RunEvent,
     TaskLifecycleRecord,
     TaskRecord,
     TenantPolicy,
@@ -62,6 +63,16 @@ def _organization_for_user(user: User) -> Organization:
     if not user.default_organization_id:
         raise ValueError("User does not have a default organization.")
     return user.default_organization  # type: ignore[return-value]
+
+
+def projection_organization_for_user(user: User) -> Organization:
+    """Return the organization whose materialized read models should be read.
+
+    This performs no projection repair or synchronization. GET request paths use
+    this helper to keep reads side-effect free.
+    """
+
+    return _organization_for_user(user)
 
 
 def _graph_scope_filter(organization: Organization) -> models.Q:
@@ -640,8 +651,7 @@ def _refresh_cost_aggregates(
     CostAggregate.objects.filter(organization=organization).exclude(id__in=active_ids).delete()
 
 
-def refresh_phase1_projections(user: User) -> ProjectionBundle:
-    organization = _organization_for_user(user)
+def refresh_phase1_projections_for_organization(organization: Organization) -> ProjectionBundle:
     with transaction.atomic():
         agents = sync_agent_registry_for_organization(organization)
         tasks = sync_task_records_for_organization(organization, agents)
@@ -654,6 +664,53 @@ def refresh_phase1_projections(user: User) -> ProjectionBundle:
         decisions=decisions,
         ledger=ledger,
     )
+
+
+def refresh_phase1_projections(user: User) -> ProjectionBundle:
+    organization = _organization_for_user(user)
+    return refresh_phase1_projections_for_organization(organization)
+
+
+def projection_metadata(organization: Organization) -> dict[str, Any]:
+    computed_at = timezone.now()
+    source_timestamps = [
+        AgentRegistryEntry.objects.filter(organization=organization).aggregate(
+            value=models.Max("updated_at")
+        )["value"],
+        TaskRecord.objects.filter(organization=organization).aggregate(
+            value=models.Max("updated_at")
+        )["value"],
+        DecisionRecord.objects.filter(organization=organization).aggregate(
+            value=models.Max("updated_at")
+        )["value"],
+        CostLedgerEntry.objects.filter(organization=organization).aggregate(
+            value=models.Max("created_at")
+        )["value"],
+        CostAggregate.objects.filter(organization=organization).aggregate(
+            value=models.Max("updated_at")
+        )["value"],
+    ]
+    watermark_at = max((value for value in source_timestamps if value is not None), default=None)
+    lag_ms = None
+    if watermark_at is not None:
+        lag_ms = max(0, int((computed_at - watermark_at).total_seconds() * 1000))
+
+    latest_event = (
+        RunEvent.objects.filter(_run_scope_filter(organization, prefix="run__"))
+        .order_by("-created_at")
+        .values("external_id", "id", "created_at")
+        .first()
+    )
+    last_event_id = ""
+    if latest_event:
+        last_event_id = str(latest_event.get("external_id") or latest_event.get("id") or "")
+
+    return {
+        "computed_at": computed_at.isoformat(),
+        "projection_lag_ms": lag_ms,
+        "last_event_id": last_event_id,
+        "watermark": watermark_at.isoformat() if watermark_at else None,
+    }
 
 
 def agent_summary(agent: AgentRegistryEntry) -> dict[str, Any]:
@@ -764,6 +821,7 @@ def cost_ledger_summary(entry: CostLedgerEntry) -> dict[str, Any]:
 
 
 def accounting_overview(organization: Organization) -> dict[str, Any]:
+    computed_at = timezone.now().isoformat()
     ledger_qs = CostLedgerEntry.objects.filter(organization=organization)
     total_cost = (
         ledger_qs.aggregate(total=models.Sum("total_cost_usd")).get("total") or DECIMAL_ZERO
@@ -786,6 +844,31 @@ def accounting_overview(organization: Organization) -> dict[str, Any]:
     return {
         "organization_id": str(organization.id),
         "total_cost_usd": float(total_cost),
+        "generated_at": computed_at,
+        "projection": projection_metadata(organization),
+        "metric_provenance": {
+            "total_cost_usd": {
+                "source": "backend.cost_ledger_entries",
+                "computed_at": computed_at,
+                "freshness_ms": 0,
+                "status": "available",
+                "value": float(total_cost),
+            },
+            "revenue": {
+                "source": "backend.accounting",
+                "computed_at": computed_at,
+                "freshness_ms": 0,
+                "status": "not_instrumented",
+                "value": None,
+            },
+            "profit": {
+                "source": "backend.accounting",
+                "computed_at": computed_at,
+                "freshness_ms": 0,
+                "status": "not_instrumented",
+                "value": None,
+            },
+        },
         "cost_by_type": [
             {
                 "cost_type": row["cost_type"],
@@ -904,4 +987,5 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
         },
         "accounting": accounting_overview(organization),
         "generated_at": timezone.now().isoformat(),
+        "projection": projection_metadata(organization),
     }

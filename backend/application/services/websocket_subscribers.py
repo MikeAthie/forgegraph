@@ -110,6 +110,7 @@ def register_run_websocket_subscriber(
     event_level: str,
     event_types: list[str] | tuple[str, ...] | None = None,
     last_seen_event_id: str = "",
+    last_seen_state_version: int = 0,
 ) -> None:
     now = timezone.now().isoformat()
     subscribers = _subscriber_map()
@@ -121,6 +122,7 @@ def register_run_websocket_subscriber(
         "event_level": event_level,
         "event_types": _normalize_event_types(event_types),
         "last_seen_event_id": str(last_seen_event_id or ""),
+        "last_seen_state_version": max(int(last_seen_state_version or 0), 0),
         "connected_at": now,
         "last_seen_at": now,
         "heartbeat_count": 0,
@@ -142,6 +144,7 @@ def update_run_websocket_subscriber_activity(
     *,
     connection_id: str,
     event_id: str | None = None,
+    state_version: int | None = None,
     event_type: str | None = None,
     sent: bool = False,
     dropped: bool = False,
@@ -157,6 +160,11 @@ def update_run_websocket_subscriber_activity(
     subscriber["last_seen_at"] = timezone.now().isoformat()
     if event_id:
         subscriber["last_seen_event_id"] = str(event_id)
+    if state_version is not None and state_version > 0:
+        subscriber["last_seen_state_version"] = max(
+            int(subscriber.get("last_seen_state_version") or 0),
+            int(state_version),
+        )
     if event_type:
         subscriber["last_event_type"] = str(event_type)
     if sent:

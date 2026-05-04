@@ -250,6 +250,14 @@ export type DepartmentCostVM = {
   totalCostUsd: number;
 };
 
+export type MetricProvenanceVM = {
+  source: string;
+  computedAt: string | null;
+  freshnessMs: number | null;
+  status: "available" | "not_instrumented" | "stale" | "error" | string;
+  value: number | null;
+};
+
 export type AccountingLedgerEntryVM = {
   id: string;
   sourceLabel: string;
@@ -265,6 +273,12 @@ export type AccountingLedgerEntryVM = {
 export type AccountingOverviewVM = {
   organizationId: string;
   totalCostUsd: number;
+  generatedAt: string | null;
+  metricProvenance: {
+    totalCostUsd: MetricProvenanceVM;
+    revenue: MetricProvenanceVM;
+    profit: MetricProvenanceVM;
+  };
   costByType: CostBreakdownVM[];
   topDepartments: DepartmentCostVM[];
 };

@@ -77,12 +77,47 @@ describe("useRunLiveUpdates", () => {
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
 
     act(() => {
-      FakeWebSocket.instances[0].receive({ type: "connection_established", event_id: "evt-1" });
+      FakeWebSocket.instances[0].receive({
+        type: "connection_established",
+        event_id: "evt-1",
+        payload: { replay_supported: true, resync_required: false, latest_state_version: 7 },
+      });
       FakeWebSocket.instances[0].receive({ type: "heartbeat" });
+      FakeWebSocket.instances[0].receive({ type: "full_resync_required" });
     });
 
     expect(onInvalidate).toHaveBeenCalledTimes(1);
-    expect(FakeWebSocket.instances[0].send).toHaveBeenCalledWith(JSON.stringify({ type: "pong", event_id: "evt-1" }));
+    expect(FakeWebSocket.instances[0].send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "pong", event_id: "evt-1", last_seen_state_version: 7 }),
+    );
+  });
+
+  it("reconnects with the last backend state version", async () => {
+    const onInvalidate = jest.fn();
+
+    render(<Probe runId="run-999" onInvalidate={onInvalidate} />);
+
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        FakeWebSocket.instances[0].receive({ type: "run_updated", event_id: "evt-9", state_version: 9 });
+        FakeWebSocket.instances[0].onclose?.();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+      });
+
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      const reconnectUrl = new URL(FakeWebSocket.instances[1].url);
+      expect(reconnectUrl.searchParams.get("last_event_id")).toBe("evt-9");
+      expect(reconnectUrl.searchParams.get("last_seen_state_version")).toBe("9");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("ignores transport-only messages instead of inventing final backend state locally", async () => {
