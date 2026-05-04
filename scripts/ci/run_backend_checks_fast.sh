@@ -20,7 +20,17 @@ if [[ "${BACKEND_CHANGED}" != "1" ]]; then
 fi
 
 bash "${SCRIPT_DIR}/check_backend_runtime_writes.sh"
-python "${SCRIPT_DIR}/check_run_state_machine.py"
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON_CMD=(python3)
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_CMD=(python)
+elif command -v py >/dev/null 2>&1; then
+  PYTHON_CMD=(py -3)
+else
+  echo "Python interpreter not found for backend fast checks." >&2
+  exit 1
+fi
+"${PYTHON_CMD[@]}" "${SCRIPT_DIR}/check_run_state_machine.py"
 
 cd "${ROOT}/backend"
 

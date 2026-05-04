@@ -24,16 +24,16 @@ from application.services.metrics import record_service_metric_sample, record_st
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
 from application.services.run_liveness import recovery_state_for_status, touch_run_liveness
-from application.services.run_state_machine import (
-    RUN_STATUS_TRANSITIONS,
-    apply_run_status_transition,
-)
 from application.services.run_locking import acquire_run_transaction_lock
 from application.services.run_snapshots import (
     RunSnapshot,
     delete_snapshot,
     safe_delete_snapshot,
     set_snapshot,
+)
+from application.services.run_state_machine import (
+    RUN_STATUS_TRANSITIONS,
+    apply_run_status_transition,
 )
 from application.services.task_lifecycle import (
     dead_letter_task,

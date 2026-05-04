@@ -379,6 +379,8 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         if message_type == "resync":
             requested_state_version = content.get("last_seen_state_version")
             try:
+                if requested_state_version is None:
+                    raise TypeError("last_seen_state_version missing")
                 last_seen_state_version = max(int(requested_state_version), 0)
             except (TypeError, ValueError):
                 last_seen_state_version = int(getattr(self, "last_seen_state_version", 0) or 0)

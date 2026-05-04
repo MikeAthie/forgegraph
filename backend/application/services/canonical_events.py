@@ -127,8 +127,11 @@ def _validate_required(envelope: dict[str, Any]) -> None:
         )
     if int(envelope.get("schema_version") or 0) != CANONICAL_EVENT_SCHEMA_VERSION:
         raise CanonicalEventValidationError("schema_version must be 2.")
+    sequence_value = envelope.get("sequence")
+    if sequence_value is None:
+        raise CanonicalEventValidationError("sequence must be an integer.")
     try:
-        sequence = int(envelope.get("sequence"))
+        sequence = int(sequence_value)
     except (TypeError, ValueError) as exc:
         raise CanonicalEventValidationError("sequence must be an integer.") from exc
     if sequence < 1:

@@ -14,8 +14,8 @@ from application.services.engine_selection import get_default_engine_instance_id
 from application.services.event_categories import EVENT_CATEGORY_STATE
 from application.services.metrics import record_liveness_reconciliation, record_run_completed
 from application.services.run_queue import enqueue_run
-from application.services.run_state_machine import apply_run_status_transition
 from application.services.run_snapshots import get_snapshot, safe_delete_snapshot
+from application.services.run_state_machine import apply_run_status_transition
 from application.services.structured_logging import log_event
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import Run, RunEvent

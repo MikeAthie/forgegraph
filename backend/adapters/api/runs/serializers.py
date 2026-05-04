@@ -293,7 +293,7 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
     org_id = serializers.UUIDField(required=False)
     agent_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     task_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    source = serializers.CharField(required=False, allow_blank=True)
+    source = serializers.CharField(required=False, allow_blank=True)  # type: ignore[assignment]
     sequence = serializers.IntegerField(required=False, min_value=1)
     causation_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     correlation_id = serializers.CharField(required=False, allow_blank=True)

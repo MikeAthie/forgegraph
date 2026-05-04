@@ -38,8 +38,7 @@ loadRootEnvFile();
 
 const runtimeTarget = (process.env.PLAYWRIGHT_RUNTIME_TARGET ?? "local").toLowerCase();
 const useDockerRuntime = runtimeTarget !== "local";
-const reuseExistingServer =
-  (process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? "false").toLowerCase() === "true";
+const reuseExistingServer = (process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? "false").toLowerCase() === "true";
 const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_DEV_PORT) : 3001;
 const dockerFrontendUrl = process.env.PLAYWRIGHT_DOCKER_FRONTEND_URL ?? "http://127.0.0.1:3000";
 // Use 127.0.0.1 to keep frontend/backend on the same "site" for SameSite=Lax cookies.

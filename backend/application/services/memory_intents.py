@@ -21,8 +21,14 @@ class MemoryIntentResult:
 class NoopObservationIndexDispatcher:
     """Avoid making engine callback success depend on async indexing infrastructure."""
 
-    def enqueue_upsert(self, *, observation_id: UUID | str) -> None:
+    def enqueue_upsert(
+        self,
+        *,
+        observation_id: UUID | str,
+        embedding_model: str | None = None,
+    ) -> None:
         _ = observation_id
+        _ = embedding_model
 
     def enqueue_delete(self, *, observation_id: UUID | str) -> None:
         _ = observation_id
