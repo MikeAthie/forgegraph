@@ -65,7 +65,7 @@ const TEST_PASSWORD = "ForgeGraphTest!12345";
 const API_BASE_URL = (
   process.env.PLAYWRIGHT_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
-  "http://127.0.0.1:8000"
+  "http://127.0.0.1:8002"
 ).replace(/\/$/, "");
 
 export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {

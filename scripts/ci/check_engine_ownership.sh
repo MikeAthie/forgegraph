@@ -68,3 +68,26 @@ search_file 'control-plane-http' engine/main.go >/dev/null || {
   echo "Missing explicit control-plane-http enforcement in engine startup." >&2
   exit 1
 }
+
+durable_memory_pattern='RedisMemoryStore|NewRedisMemoryStore|StoreSummary\(|StoreFacts\(|keyPatternMemory'
+
+if command -v rg >/dev/null 2>&1; then
+  mapfile -t durable_memory_matches < <(
+    rg -l "${durable_memory_pattern}" engine --glob '*.go' --glob '!architecture_enforcement_test.go' | sort
+  )
+else
+  mapfile -t durable_memory_matches < <(
+    grep -R -l -E --include='*.go' --exclude='architecture_enforcement_test.go' "${durable_memory_pattern}" engine | sort
+  )
+fi
+
+if [ "${#durable_memory_matches[@]}" -gt 0 ]; then
+  printf '%s\n' "${durable_memory_matches[@]}" >&2
+  echo "Engine durable product-memory persistence detected. Engine summaries/facts must move through backend-owned memory intents only." >&2
+  exit 1
+fi
+
+if [ -f scripts/ci/engine_durable_memory_temporary_violations.tsv ]; then
+  echo "Temporary engine durable memory exception manifest must not be reintroduced." >&2
+  exit 1
+fi

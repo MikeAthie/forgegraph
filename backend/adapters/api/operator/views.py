@@ -17,9 +17,23 @@ from adapters.api.responses import error_response, success_response
 from adapters.api.runs.views import get_engine_client_for_run, run_queryset_for_user
 from adapters.ws.runs.broadcast import broadcast_run_updated
 from application.services.audit_log import record_audit_log
+from application.services.event_dead_letters import (
+    acknowledge_event_dead_letter,
+    request_event_dead_letter_replay,
+)
+from application.services.processed_commands import (
+    IdempotencyConflict,
+    build_idempotency_context,
+    record_processed_command,
+    replay_processed_command,
+)
 from application.services.rbac import has_min_role
 from application.services.redaction import redact_payload
 from application.services.run_liveness import touch_run_liveness
+from application.services.run_state_machine import (
+    RunTransitionConflict,
+    apply_run_status_transition,
+)
 from application.services.runtime_write_intents import (
     RUNTIME_INTENT_CONSUMER_GROUP,
     RUNTIME_INTENT_DEAD_LETTER_STREAM,
@@ -32,6 +46,7 @@ from infrastructure.orm.models import (
     AuditLog,
     CostLedgerEntry,
     DecisionRecord,
+    EventDeadLetterRecord,
     LLMUsage,
     MemoryObservation,
     RetryOperation,
@@ -62,6 +77,20 @@ def _tenant_id(user: User) -> UUID:
     if user.default_organization_id is None:
         raise ValueError("Operator has no default organization.")
     return user.default_organization_id
+
+
+def _idempotency_conflict_response(exc: IdempotencyConflict) -> Response:
+    return error_response(
+        "IDEMPOTENCY_CONFLICT",
+        str(exc),
+        status=409,
+        details=[
+            {
+                "action": exc.action,
+                "idempotency_key": exc.idempotency_key,
+            }
+        ],
+    )
 
 
 def _run_for_operator(user: User, run_id: UUID) -> Run | None:
@@ -147,6 +176,38 @@ def _dead_letter_payload(dead_letter: TaskDeadLetterRecord) -> dict[str, Any]:
         else None,
         "acknowledgement_reason": dead_letter.acknowledgement_reason,
         "created_at": dead_letter.created_at.isoformat(),
+    }
+
+
+def _event_dead_letter_payload(dead_letter: EventDeadLetterRecord) -> dict[str, Any]:
+    return {
+        "id": str(dead_letter.id),
+        "organization_id": str(dead_letter.organization_id)
+        if dead_letter.organization_id
+        else None,
+        "run_id": str(dead_letter.run_id) if dead_letter.run_id else None,
+        "event_id": dead_letter.event_id,
+        "idempotency_key": dead_letter.idempotency_key,
+        "event_type": dead_letter.event_type,
+        "source": dead_letter.source,
+        "reason": dead_letter.reason,
+        "error_class": dead_letter.error_class,
+        "retry_count": dead_letter.retry_count,
+        "status": dead_letter.status,
+        "payload": redact_payload(dead_letter.payload),
+        "last_replay_action": dead_letter.last_replay_action,
+        "replay_requested_at": dead_letter.replay_requested_at.isoformat()
+        if dead_letter.replay_requested_at
+        else None,
+        "replay_requested_by": str(dead_letter.replay_requested_by_id)
+        if dead_letter.replay_requested_by_id
+        else None,
+        "acknowledged_at": dead_letter.acknowledged_at.isoformat()
+        if dead_letter.acknowledged_at
+        else None,
+        "acknowledgement_reason": dead_letter.acknowledgement_reason,
+        "first_seen_at": dead_letter.first_seen_at.isoformat(),
+        "last_seen_at": dead_letter.last_seen_at.isoformat(),
     }
 
 
@@ -412,6 +473,14 @@ class OperatorDeadLetterListView(APIView):
         return success_response(
             {
                 "task_dead_letters": [_dead_letter_payload(item) for item in dead_letters],
+                "event_dead_letters": [
+                    _event_dead_letter_payload(item)
+                    for item in EventDeadLetterRecord.objects.filter(
+                        organization_id=_tenant_id(user)
+                    )
+                    .select_related("organization", "run", "acknowledged_by", "replay_requested_by")
+                    .order_by("-last_seen_at")[:100]
+                ],
                 "runtime_intent_outcomes": [
                     {
                         "intent_id": str(outcome.intent_id),
@@ -428,6 +497,122 @@ class OperatorDeadLetterListView(APIView):
                     for outcome in outcomes
                 ],
             }
+        )
+
+
+class OperatorEventDeadLetterReplayView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, dead_letter_id: UUID) -> Response:
+        denied = _ensure_operator(request.user)
+        if denied is not None:
+            return denied
+        user = request.user
+        assert isinstance(user, User)
+        reason = _operator_reason(request, "operator requested event replay")
+        if not reason:
+            return error_response("VALIDATION_ERROR", "A reason is required.", status=400)
+        record = EventDeadLetterRecord.objects.filter(
+            id=dead_letter_id,
+            organization_id=_tenant_id(user),
+        ).first()
+        if record is None:
+            return error_response("NOT_FOUND", "Event dead letter not found.", status=404)
+        command_context = build_idempotency_context(
+            request=request,
+            organization=record.organization,
+            action=f"operator.event_dead_letter.replay:{dead_letter_id}",
+            request_payload=request.data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
+        updated = request_event_dead_letter_replay(
+            dead_letter_id=dead_letter_id,
+            actor=user,
+            reason=reason,
+        )
+        if updated is None:
+            return error_response("NOT_FOUND", "Event dead letter not found.", status=404)
+        record_audit_log(
+            actor=user,
+            tenant_id=str(_tenant_id(user)),
+            action="operator.event_dead_letter_replay_requested",
+            resource_type="event_dead_letter",
+            resource_id=str(dead_letter_id),
+            metadata={
+                "reason": reason,
+                "event_id": updated.event_id,
+                "event_type": updated.event_type,
+            },
+        )
+        response = success_response(_event_dead_letter_payload(updated))
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="event_dead_letter",
+            resource_id=str(dead_letter_id),
+        )
+
+
+class OperatorEventDeadLetterAcknowledgeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, dead_letter_id: UUID) -> Response:
+        denied = _ensure_operator(request.user)
+        if denied is not None:
+            return denied
+        user = request.user
+        assert isinstance(user, User)
+        reason = _operator_reason(request, "operator acknowledged event dead letter")
+        if not reason:
+            return error_response("VALIDATION_ERROR", "A reason is required.", status=400)
+        record = EventDeadLetterRecord.objects.filter(
+            id=dead_letter_id,
+            organization_id=_tenant_id(user),
+        ).first()
+        if record is None:
+            return error_response("NOT_FOUND", "Event dead letter not found.", status=404)
+        command_context = build_idempotency_context(
+            request=request,
+            organization=record.organization,
+            action=f"operator.event_dead_letter.ack:{dead_letter_id}",
+            request_payload=request.data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
+        updated = acknowledge_event_dead_letter(
+            dead_letter_id=dead_letter_id,
+            actor=user,
+            reason=reason,
+        )
+        if updated is None:
+            return error_response("NOT_FOUND", "Event dead letter not found.", status=404)
+        record_audit_log(
+            actor=user,
+            tenant_id=str(_tenant_id(user)),
+            action="operator.event_dead_letter_acknowledged",
+            resource_type="event_dead_letter",
+            resource_id=str(dead_letter_id),
+            metadata={
+                "reason": reason,
+                "event_id": updated.event_id,
+                "event_type": updated.event_type,
+            },
+        )
+        response = success_response(_event_dead_letter_payload(updated))
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="event_dead_letter",
+            resource_id=str(dead_letter_id),
         )
 
 
@@ -448,6 +633,20 @@ class OperatorRuntimeIntentReplayView(APIView):
         outcome_run = outcome.run
         if outcome_run is not None and outcome_run.organization_id != _tenant_id(user):
             return error_response("NOT_FOUND", "Runtime intent outcome not found.", status=404)
+        command_context = build_idempotency_context(
+            request=request,
+            organization=(
+                outcome_run.organization if outcome_run is not None else user.default_organization
+            ),
+            action=f"operator.runtime_intent.replay:{intent_id}",
+            request_payload=request.data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
         if outcome.outcome != "dead_lettered":
             return error_response(
                 "INTENT_REPLAY_CONFLICT",
@@ -493,8 +692,14 @@ class OperatorRuntimeIntentReplayView(APIView):
                 "message_id": str(replay_message_id),
             },
         )
-        return success_response(
+        response = success_response(
             {"intent_id": str(intent_id), "replay_message_id": str(replay_message_id)}
+        )
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="runtime_intent",
+            resource_id=str(intent_id),
         )
 
 
@@ -518,6 +723,20 @@ class OperatorRuntimeIntentAcknowledgeView(APIView):
         outcome_run = outcome.run
         if outcome_run is not None and outcome_run.organization_id != _tenant_id(user):
             return error_response("NOT_FOUND", "Runtime intent outcome not found.", status=404)
+        command_context = build_idempotency_context(
+            request=request,
+            organization=(
+                outcome_run.organization if outcome_run is not None else user.default_organization
+            ),
+            action=f"operator.runtime_intent.ack:{intent_id}",
+            request_payload=request.data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
         now = timezone.now()
         outcome.acknowledged_at = now
         outcome.acknowledged_by = user
@@ -544,7 +763,15 @@ class OperatorRuntimeIntentAcknowledgeView(APIView):
             resource_id=str(intent_id),
             metadata={"reason": reason},
         )
-        return success_response({"intent_id": str(intent_id), "acknowledged_at": now.isoformat()})
+        response = success_response(
+            {"intent_id": str(intent_id), "acknowledged_at": now.isoformat()}
+        )
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="runtime_intent",
+            resource_id=str(intent_id),
+        )
 
 
 class OperatorForceFailRunView(APIView):
@@ -583,17 +810,37 @@ class OperatorForceRehydrateRunView(APIView):
                 "Cannot force rehydrate without a backend-owned checkpoint.",
                 status=409,
             )
+        command_context = build_idempotency_context(
+            request=request,
+            organization=run.organization or user.default_organization,
+            action=f"operator.run.force_rehydrate:{run.id}",
+            request_payload=request.data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
         resume_attempt_id = uuid4()
         now = timezone.now()
         with transaction.atomic():
             locked_run = Run.objects.select_for_update().get(id=run.id)
-            locked_run.status = "resume_requested"
+            try:
+                transition = apply_run_status_transition(locked_run, "resume_requested")
+            except RunTransitionConflict as exc:
+                return error_response(
+                    "RUN_STATE_TRANSITION_CONFLICT",
+                    exc.reason,
+                    status=409,
+                    details=[exc.as_payload()],
+                )
             locked_run.resume_attempt_id = resume_attempt_id
             locked_run.resume_requested_at = now
             locked_run.recovery_state = "operator_rehydrate_requested"
             locked_run.recovery_reason = "operator_rehydrate"
             update_fields = [
-                "status",
+                *transition.update_fields,
                 "resume_attempt_id",
                 "resume_requested_at",
                 "recovery_state",
@@ -644,7 +891,13 @@ class OperatorForceRehydrateRunView(APIView):
             return error_response("REHYDRATE_DISPATCH_FAILED", str(exc), status=503)
         run.refresh_from_db()
         broadcast_run_updated(run)
-        return success_response(_run_state_payload(run))
+        response = success_response(_run_state_payload(run))
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="run",
+            resource_id=str(run.id),
+        )
 
 
 class OperatorWebSocketSubscribersView(APIView):
@@ -708,6 +961,10 @@ class OperatorOrgLoadView(APIView):
                     lifecycle_task__organization_id=org_id,
                     status="active",
                 ).count(),
+                "event_dead_letters": EventDeadLetterRecord.objects.filter(
+                    organization_id=org_id,
+                    status__in={"active", "replay_requested"},
+                ).count(),
                 "websocket": org_ws
                 or {
                     "organization_id": str(org_id),
@@ -735,17 +992,37 @@ def _force_terminal_run(request: Request, run_id: UUID, *, status_value: str) ->
     run = _run_for_operator(user, run_id)
     if run is None:
         return error_response("NOT_FOUND", "Run not found.", status=404)
+    command_context = build_idempotency_context(
+        request=request,
+        organization=run.organization or user.default_organization,
+        action=f"operator.run.force_{status_value}:{run.id}",
+        request_payload=request.data,
+    )
+    try:
+        replayed_response = replay_processed_command(command_context)
+    except IdempotencyConflict as exc:
+        return _idempotency_conflict_response(exc)
+    if replayed_response is not None:
+        return replayed_response
     now = timezone.now()
     with transaction.atomic():
         locked_run = Run.objects.select_for_update().get(id=run.id)
         if locked_run.status not in {"succeeded", "failed", "canceled"}:
-            locked_run.status = status_value
+            try:
+                transition = apply_run_status_transition(locked_run, status_value)
+            except RunTransitionConflict as exc:
+                return error_response(
+                    "RUN_STATE_TRANSITION_CONFLICT",
+                    exc.reason,
+                    status=409,
+                    details=[exc.as_payload()],
+                )
             locked_run.ended_at = now
             locked_run.error_message = reason
             locked_run.recovery_state = "operator_forced_terminal"
             locked_run.recovery_reason = f"operator_force_{status_value}"
             update_fields = [
-                "status",
+                *transition.update_fields,
                 "ended_at",
                 "error_message",
                 "recovery_state",
@@ -787,7 +1064,13 @@ def _force_terminal_run(request: Request, run_id: UUID, *, status_value: str) ->
         )
     run.refresh_from_db()
     broadcast_run_updated(run)
-    return success_response(_run_state_payload(run))
+    response = success_response(_run_state_payload(run))
+    return record_processed_command(
+        context=command_context,
+        response=response,
+        resource_type="run",
+        resource_id=str(run.id),
+    )
 
 
 def _dead_letter_stream_payload(message_id: Any, fields: dict[str, Any]) -> dict[str, Any]:

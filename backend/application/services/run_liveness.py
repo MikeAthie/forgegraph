@@ -15,6 +15,7 @@ from application.services.event_categories import EVENT_CATEGORY_STATE
 from application.services.metrics import record_liveness_reconciliation, record_run_completed
 from application.services.run_queue import enqueue_run
 from application.services.run_snapshots import get_snapshot, safe_delete_snapshot
+from application.services.run_state_machine import apply_run_status_transition
 from application.services.structured_logging import log_event
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import Run, RunEvent
@@ -194,7 +195,7 @@ def _fail_stale_run(
     }
 
     with transaction.atomic():
-        run.status = "failed"
+        transition = apply_run_status_transition(run, "failed")
         run.ended_at = now
         run.error_message = message
         run.recovery_state = "stalled_failed"
@@ -203,7 +204,7 @@ def _fail_stale_run(
         run.resume_attempt_id = None
         run.save(
             update_fields=[
-                "status",
+                *transition.update_fields,
                 "ended_at",
                 "error_message",
                 "recovery_state",
@@ -263,7 +264,7 @@ def _queue_stale_run_recovery(
     should_clear_checkpoint = recovery_policy == RECOVERY_POLICY_RETRY
 
     with transaction.atomic():
-        run.status = "pending"
+        transition = apply_run_status_transition(run, "pending", allow_backend_requeue=True)
         run.ended_at = None
         run.output_json = None
         run.error_message = ""
@@ -278,7 +279,7 @@ def _queue_stale_run_recovery(
         run.last_heartbeat_at = now
         run.save(
             update_fields=[
-                "status",
+                *transition.update_fields,
                 "ended_at",
                 "output_json",
                 "error_message",

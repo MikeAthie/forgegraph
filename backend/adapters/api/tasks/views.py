@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
-from application.services.os_projections import refresh_phase1_projections, task_summary
+from application.services.os_projections import projection_organization_for_user, task_summary
 from infrastructure.orm.models import TaskRecord, User
 
 
@@ -19,8 +19,8 @@ class TaskListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        bundle = refresh_phase1_projections(cast(User, request.user))
-        tasks = TaskRecord.objects.filter(organization=bundle.organization).select_related(
+        organization = projection_organization_for_user(cast(User, request.user))
+        tasks = TaskRecord.objects.filter(organization=organization).select_related(
             "agent", "execution", "current_step", "current_decision", "lifecycle_task"
         )
         status_filter = request.query_params.get("status")
@@ -33,11 +33,11 @@ class TaskDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, task_id: UUID) -> Response:
-        bundle = refresh_phase1_projections(cast(User, request.user))
+        organization = projection_organization_for_user(cast(User, request.user))
         try:
             task = TaskRecord.objects.select_related(
                 "agent", "execution", "current_step", "current_decision", "lifecycle_task"
-            ).get(id=task_id, organization=bundle.organization)
+            ).get(id=task_id, organization=organization)
         except TaskRecord.DoesNotExist:
             return error_response("NOT_FOUND", "Task not found", status=404)
         return success_response(task_summary(task))

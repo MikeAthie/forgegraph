@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,8 +12,7 @@ import (
 
 func TestSummarizationWorker_SubmitAndProcess(t *testing.T) {
 	mockSummarizer := &testSummarizer{}
-	mockStore := &testSummaryStore{}
-	worker := NewSummarizationWorker(mockSummarizer, mockStore, 1, 2)
+	worker := NewSummarizationWorker(mockSummarizer, 1, 2)
 	worker.Start(context.Background())
 	defer worker.Stop()
 
@@ -41,17 +39,10 @@ func TestSummarizationWorker_SubmitAndProcess(t *testing.T) {
 	}
 
 	<-done
-
-	if mockStore.storeCalls != 1 {
-		t.Fatalf("expected store summary call, got %d", mockStore.storeCalls)
-	}
-	if mockStore.factCalls != 1 {
-		t.Fatalf("expected store facts call, got %d", mockStore.factCalls)
-	}
 }
 
 func TestSummarizationWorker_QueueFull(t *testing.T) {
-	worker := NewSummarizationWorker(&testSummarizer{}, nil, 1, 1)
+	worker := NewSummarizationWorker(&testSummarizer{}, 1, 1)
 
 	if err := worker.Submit(SummarizationRequest{RunID: "run-1"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,32 +66,4 @@ func (t *testSummarizer) Summarize(ctx context.Context, messages []entity.Messag
 
 func (t *testSummarizer) ExtractFacts(ctx context.Context, messages []entity.Message) ([]entity.Fact, error) {
 	return nil, nil
-}
-
-type testSummaryStore struct {
-	mu         sync.Mutex
-	storeCalls int
-	factCalls  int
-}
-
-func (t *testSummaryStore) StoreSummary(ctx context.Context, tenantID, runID string, summary *entity.Summary, ttlSeconds int) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.storeCalls++
-	return nil
-}
-
-func (t *testSummaryStore) StoreFacts(ctx context.Context, tenantID, runID string, facts []entity.Fact, ttlSeconds int) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.factCalls++
-	return nil
-}
-
-func (t *testSummaryStore) GetSummary(ctx context.Context, tenantID, runID string) (*entity.Summary, bool, error) {
-	return nil, false, nil
-}
-
-func (t *testSummaryStore) GetFact(ctx context.Context, tenantID, runID, factKey string) (*entity.Fact, bool, error) {
-	return nil, false, nil
 }

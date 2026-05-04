@@ -90,11 +90,23 @@ hard to start is itself a production risk.
 
 Use the capacity tiers in `docs/ops/scalability-program.md`.
 
-- Private beta proof: clean 25 and 50 concurrent no-LLM runs.
-- Production v1 proof: clean 100 concurrent no-LLM run through backend, engine, Redis, Postgres, and WebSocket.
-- Production scale proof: 500 synthetic no-LLM, controlled fake-LLM, and real-provider capacity reports.
+- Private beta proof: Phase 3 Gate A and Gate B reports.
+- Production v1 proof: Phase 3 Gate C report through backend, engine, Redis, Postgres, projections, and WebSocket.
+- Production scale proof: three consecutive passing Phase 3 Gate E reports with failure injection, reconnect storm, duplicate-event storm, HITL, memory, accounting, and multi-tenant coverage.
 
 The CI load smoke is regression evidence only. It is not a marketing claim.
+
+## Required Runbooks
+
+Broad production requires on-call runbooks for the failure queues and recovery
+paths operators depend on:
+
+- Spool growth: [event_spool_growth.md](runbooks/event_spool_growth.md)
+- Dead letters: [dead_letter_spike.md](runbooks/dead_letter_spike.md)
+- Projection lag: [projection_lag.md](runbooks/projection_lag.md)
+- WebSocket replay/fanout failures: [websocket_replay_failure.md](runbooks/websocket_replay_failure.md) and [websocket_fanout_degradation.md](runbooks/websocket_fanout_degradation.md)
+- Redis degradation: [redis_degradation.md](runbooks/redis_degradation.md)
+- LLM throttling: [llm_queue_saturation.md](runbooks/llm_queue_saturation.md)
 
 ## Operator Walkthrough
 

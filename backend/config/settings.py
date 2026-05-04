@@ -10,6 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
@@ -236,6 +237,7 @@ CORS_ALLOWED_ORIGINS = _get_csv_env(
     if IS_DEV_LIKE
     else "",
 )
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = _get_csv_env(
     "CSRF_TRUSTED_ORIGINS",
@@ -433,6 +435,7 @@ RUN_WS_MAX_CONNECTIONS_PER_ORG = int(os.environ.get("RUN_WS_MAX_CONNECTIONS_PER_
 RUN_WS_MAX_CONNECTIONS_PER_USER = int(os.environ.get("RUN_WS_MAX_CONNECTIONS_PER_USER", "20"))
 RUN_WS_HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("RUN_WS_HEARTBEAT_INTERVAL_SECONDS", "12"))
 RUN_WS_SEND_TIMEOUT_SECONDS = float(os.environ.get("RUN_WS_SEND_TIMEOUT_SECONDS", "2.0"))
+RUN_WS_REPLAY_LIMIT = int(os.environ.get("RUN_WS_REPLAY_LIMIT", "200"))
 
 # Backend watchdog thresholds. The Docker healthcheck consumes /health and restarts
 # the process when this watchdog reports an unhealthy state.
@@ -477,6 +480,10 @@ RUN_LIVENESS_RECONCILE_INTERVAL_SECONDS = int(
 )
 ENGINE_EVENT_STATE_MUTATION_ENABLED = _get_bool_env(
     "ENGINE_EVENT_STATE_MUTATION_ENABLED",
+    False,
+)
+ENGINE_LEGACY_EVENT_CALLBACKS_ENABLED = _get_bool_env(
+    "ENGINE_LEGACY_EVENT_CALLBACKS_ENABLED",
     False,
 )
 RUN_EVENT_STREAM_DEFAULT_LEVEL = os.environ.get("RUN_EVENT_STREAM_DEFAULT_LEVEL", "default")

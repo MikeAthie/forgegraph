@@ -30,6 +30,7 @@ ALLOWED_RUNTIME_WRITERS = {
     Path("backend/application/services/os_projections.py"),
     Path("backend/application/services/runtime_write_intents.py"),
     Path("backend/application/services/run_liveness.py"),
+    Path("backend/application/services/run_state_machine.py"),
     Path("backend/application/services/task_lifecycle.py"),
     Path("backend/infrastructure/orm/management/commands/process_run_queue.py"),
 }

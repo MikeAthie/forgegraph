@@ -362,6 +362,30 @@ export default function AdminOperationsPage() {
     [loadRecoveryData, requireOperatorReason],
   );
 
+  const handleEventDeadLetterAction = useCallback(
+    async (deadLetterId: string, action: "replay" | "acknowledge") => {
+      const reason = requireOperatorReason();
+      if (!reason) {
+        return;
+      }
+      setOperatorAction(`event-${action}:${deadLetterId}`);
+      setOperatorError(null);
+      try {
+        if (action === "replay") {
+          await operatorApi.replayEventDeadLetter(deadLetterId, reason);
+        } else {
+          await operatorApi.acknowledgeEventDeadLetter(deadLetterId, reason);
+        }
+        await loadRecoveryData();
+      } catch (err: unknown) {
+        setOperatorError(getApiErrorMessage(err, "Event dead-letter recovery action failed."));
+      } finally {
+        setOperatorAction(null);
+      }
+    },
+    [loadRecoveryData, requireOperatorReason],
+  );
+
   const healthItems = useMemo(() => {
     if (!data) {
       return [];
@@ -436,6 +460,15 @@ export default function AdminOperationsPage() {
   const sreSummary = data?.metricsSummary.sre ?? null;
   const breachingSloCount = sreSummary?.objectives.filter((objective) => objective.status === "breaching").length ?? 0;
   const missingSloCount = sreSummary?.objectives.filter((objective) => objective.missing_data).length ?? 0;
+  const eventDeadLetters = recoveryData?.deadLetters.event_dead_letters ?? [];
+  const runtimeIntentDeadLetters = recoveryData?.deadLetters.runtime_intent_outcomes ?? [];
+  const activeEventDeadLetterCount = eventDeadLetters.filter(
+    (item) => item.status === "active" || item.status === "replay_requested",
+  ).length;
+  const taskDeadLetterCount = recoveryData?.orgLoad.dead_letters ?? 0;
+  const runtimeIntentDeadLetterCount = recoveryData?.backlog.dead_letter_count ?? 0;
+  const eventDeadLetterCount = recoveryData?.orgLoad.event_dead_letters ?? activeEventDeadLetterCount;
+  const totalDeadLetterCount = taskDeadLetterCount + runtimeIntentDeadLetterCount + eventDeadLetterCount;
 
   if (!canManage) {
     return (
@@ -702,10 +735,10 @@ export default function AdminOperationsPage() {
                     </div>
                     <div className="rounded-xl border border-border/50 bg-background/70 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dead letters</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">
-                        {recoveryData?.orgLoad.dead_letters ?? recoveryData?.backlog.dead_letter_count ?? 0}
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{totalDeadLetterCount}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {eventDeadLetterCount} event · {runtimeIntentDeadLetterCount} runtime intent
                       </p>
-                      <p className="mt-2 text-sm text-muted-foreground">Visible through backend recovery state.</p>
                     </div>
                     <div className="rounded-xl border border-border/50 bg-background/70 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">WebSocket clients</p>
@@ -819,7 +852,7 @@ export default function AdminOperationsPage() {
                         <div>
                           <p className="font-medium text-foreground">Dead-letter recovery</p>
                           <p className="text-sm text-muted-foreground">
-                            Replay only decodeable supported intents; acknowledgement never mutates execution state.
+                            Event ingestion failures, runtime intent poison messages, and audited operator recovery.
                           </p>
                         </div>
                         <Button variant="outline" onClick={() => void loadRecoveryData()} disabled={recoveryLoading}>
@@ -828,7 +861,52 @@ export default function AdminOperationsPage() {
                         </Button>
                       </div>
                       <div className="max-h-80 space-y-3 overflow-auto pr-1">
-                        {(recoveryData?.deadLetters.runtime_intent_outcomes ?? []).slice(0, 8).map((outcome) => (
+                        {eventDeadLetters.slice(0, 8).map((deadLetter) => (
+                          <div key={deadLetter.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">
+                                  {deadLetter.event_type || "unknown event"}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {deadLetter.reason || deadLetter.error_class || "No reason recorded"}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Seen {deadLetter.retry_count} time(s) · last {formatDateTime(deadLetter.last_seen_at)}
+                                </p>
+                              </div>
+                              <Badge variant="outline">{deadLetter.status.replace(/_/g, " ")}</Badge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleEventDeadLetterAction(deadLetter.id, "replay")}
+                                disabled={operatorAction === `event-replay:${deadLetter.id}`}
+                              >
+                                Request replay
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleEventDeadLetterAction(deadLetter.id, "acknowledge")}
+                                disabled={
+                                  Boolean(deadLetter.acknowledged_at) ||
+                                  operatorAction === `event-acknowledge:${deadLetter.id}`
+                                }
+                              >
+                                Acknowledge
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {eventDeadLetters.length === 0 ? (
+                          <p className="rounded-lg border border-border/50 bg-card/70 p-4 text-sm text-muted-foreground">
+                            No event ingestion dead letters are visible for this organization.
+                          </p>
+                        ) : null}
+
+                        {runtimeIntentDeadLetters.slice(0, 8).map((outcome) => (
                           <div key={outcome.intent_id} className="rounded-lg border border-border/50 bg-card/70 p-3">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -867,7 +945,7 @@ export default function AdminOperationsPage() {
                             </div>
                           </div>
                         ))}
-                        {(recoveryData?.deadLetters.runtime_intent_outcomes ?? []).length === 0 ? (
+                        {runtimeIntentDeadLetters.length === 0 ? (
                           <p className="rounded-lg border border-border/50 bg-card/70 p-4 text-sm text-muted-foreground">
                             No runtime intent dead letters are visible for this organization.
                           </p>

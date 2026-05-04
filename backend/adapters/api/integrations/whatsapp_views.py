@@ -37,6 +37,7 @@ from application.services.run_preparation import (
     validate_prompt_credentials,
 )
 from application.services.run_queue import enqueue_run
+from application.services.run_state_machine import apply_run_status_transition
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
@@ -483,10 +484,12 @@ class WhatsAppWebhookView(APIView):
             )
             prepared_graph = run_views._attach_operation_context_pack(run, prepared_graph)
         except ToolExecutionDispatchBlocked as exc:
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = str(exc)
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             return error_response(
                 code="TOOL_EXECUTION_DISPATCH_BLOCKED",
                 message=str(exc),
@@ -558,8 +561,8 @@ class WhatsAppWebhookView(APIView):
                         traceparent=trace_metadata["traceparent"],
                         tracestate=trace_metadata["tracestate"],
                     )
-                    run.status = "running"
-                    update_fields = ["status"]
+                    transition = apply_run_status_transition(run, "running")
+                    update_fields = transition.update_fields
                     update_fields.extend(
                         run_views.touch_run_liveness(
                             run,
@@ -572,10 +575,12 @@ class WhatsAppWebhookView(APIView):
                     broadcast_run_updated(run)
         except EngineConnectionError as exc:
             logger.error("Engine connection failed for WhatsApp run %s: %s", run.id, exc)
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {exc}"
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
@@ -585,10 +590,12 @@ class WhatsAppWebhookView(APIView):
             )
         except EngineExecutionError as exc:
             logger.error("Engine rejected WhatsApp run %s: %s", run.id, exc)
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {exc}"
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(

@@ -197,15 +197,13 @@
           "Scheduler",
           "Tool registry",
           "LLM gateways",
-          "Memory store"
+          "Backend-owned memory intents"
         ]
       },
       {
-        "name": "Persistence, Memory, and Tooling Adapters",
-        "description": "Runtime adapters provide execution dependencies such as repositories, Redis and PostgreSQL memory stores, credential resolution, gateway integrations, and tool manifest loading.",
+        "name": "Persistence, Runtime Transport, and Tooling Adapters",
+        "description": "Runtime adapters provide execution dependencies such as backend-owned runtime intent transport, credential resolution, gateway integrations, and tool manifest loading. Product memory is backend-owned and not persisted by engine adapters.",
         "files": [
-          "adapter/store/redis_memory_store.go",
-          "adapter/store/postgres_memory_store.go",
           "adapter/repository/postgres_run_repository.go",
           "adapter/repository/memory_run_repository.go",
           "adapter/gateway/credential_resolver.go",

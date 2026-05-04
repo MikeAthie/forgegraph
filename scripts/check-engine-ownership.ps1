@@ -40,7 +40,9 @@ function Assert-HasMatch {
 $engineMain = Join-Path $repoRoot "engine\main.go"
 $engineTests = Join-Path $repoRoot "engine\main_test.go"
 $engineFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -File | Select-Object -ExpandProperty FullName
-$engineGoFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -Filter *.go -File | Select-Object -ExpandProperty FullName
+$engineGoFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -Filter *.go -File |
+  Where-Object { $_.Name -ne "architecture_enforcement_test.go" } |
+  Select-Object -ExpandProperty FullName
 $runtimeInvariants = Join-Path $repoRoot "docs\architecture\runtime-invariants.md"
 
 Write-Host ""
@@ -62,3 +64,19 @@ Assert-NoMatch 'normalizeRunStateMode("postgres") = %s, want dual-write' @($engi
 
 Assert-HasMatch "ENGINE_ALLOW_IN_MEMORY_MODE" @($engineMain) "Missing ENGINE_ALLOW_IN_MEMORY_MODE safeguard in engine startup."
 Assert-HasMatch "control-plane-http" @($engineMain) "Missing explicit control-plane-http enforcement in engine startup."
+
+$durableMemoryPattern = "RedisMemoryStore|NewRedisMemoryStore|StoreSummary\(|StoreFacts\(|keyPatternMemory"
+
+$durableMemoryMatches = Select-String -Path $engineGoFiles -Pattern $durableMemoryPattern |
+  Where-Object { $_.Path -notlike "*architecture_enforcement_test.go" } |
+  Select-Object -ExpandProperty Path -Unique
+
+if ($durableMemoryMatches) {
+  $durableMemoryMatches | ForEach-Object { Write-Error "Engine durable product-memory persistence detected: $_" }
+  throw "Engine product memory/summaries/facts must move through backend-owned memory intents only."
+}
+
+$manifest = Join-Path $repoRoot "scripts\ci\engine_durable_memory_temporary_violations.tsv"
+if (Test-Path $manifest) {
+  throw "Temporary engine durable memory exception manifest must not be reintroduced."
+}

@@ -1,62 +1,53 @@
 # Scalability Program
 
-Phase 4 separates capacity evidence from product claims. ForgeGraph can be
-designed for high concurrency, but launch claims must match measured results.
+Phase 3 proves capacity. It does not create a product claim by itself.
 
-## Capacity Tiers
+The invariant from `docs/architecture/runtime-invariants.md` still wins:
+backend owns durable truth, engine executes, frontend observes and controls.
+Load tests are invalid if they rely on frontend-derived state, engine-owned
+durable memory, silent event drops, or request-time projection repair.
 
-| Tier | Target | Meaning | Claim Status |
-| --- | --- | --- | --- |
-| Alpha | 5-10 concurrent agents | internal/customer design partners only | allowed after P0/P1 gates |
-| Private beta | 25-50 concurrent agents | limited external users | allowed after clean 25/50 evidence |
-| Production v1 | 100 concurrent agents | reliable multi-org operation | allowed after clean 100 evidence |
-| Production scale | 500+ concurrent agents | proven high-scale company OS | roadmap until measured |
+## 500-Agent Benchmark Definition
 
-Do not market the 500+ tier until the production-scale evidence package passes.
+The production-scale target is:
 
-## Separate Measurements
+- 500 active agents across at least 25 tenants.
+- 20 active runs per tenant.
+- p95 backend API latency below 300 ms.
+- p95 event ingestion latency below 500 ms.
+- p95 projection lag below 2 seconds.
+- p95 WebSocket delivery below 1 second.
+- zero silent drops.
+- dead-letter rate below 0.1%.
+- no tenant isolation violations.
+- memory, HITL, accounting, retry, reconnect, and duplicate-event paths included.
 
-Capacity reports must measure these paths separately:
+## Capacity Gates
 
-- Engine scheduling capacity without LLM calls.
-- Backend runtime-intent processing capacity.
-- WebSocket fanout capacity.
-- LLM provider throughput.
-- Queue saturation behavior.
-- Cost-accounting overhead.
-- Memory-write overhead.
+| Gate | Requirement | Required evidence |
+| --- | --- | --- |
+| A | 25 concurrent agents, 1 hour | zero silent drops |
+| B | 50 concurrent agents, 2 hours | projection lag p95 below 2 seconds |
+| C | 100 concurrent agents, 4 hours | retry/dead-letter within SLO |
+| D | 250 concurrent agents, 4 hours | WebSocket reconnect storm included |
+| E | 500 concurrent agents, 8 hours | multi-tenant, HITL, memory, accounting, retries, LLM throttling, failures |
 
-## Required Load Scenarios
+Gate E must pass three consecutive times before any public 500-agent claim is
+allowed. The CI claim guard in `scripts/ci/check_capacity_claims.py` blocks
+unqualified public 500-agent copy unless three passing Gate E reports exist
+under `logs/stress/**/phase3-gate-E.json`.
 
-The harness in [scripts/stress_runner.py](../../scripts/stress_runner.py) exposes
-Phase 4 scenario names:
+## Stress Harness
 
-- `synthetic-no-llm-500`: 500 concurrent output-only runs through the real
-  backend, runtime intent worker, engine, Redis/Postgres, and WebSocket path.
-- `controlled-llm-latency`: fake/chaos LLM latency with queue size, timeout,
-  and max-in-flight controls.
-- `real-provider-capacity`: realistic provider/model run with cost tracking,
-  memory writes, and WebSocket observers enabled.
+Use `scripts/stress_runner.py` for Phase 3 evidence. It writes:
 
-For Phase 4 scenarios, `--runs` must be at least the highest requested
-concurrency level. Otherwise the harness refuses to run because the result would
-not exercise the claimed concurrency.
+- `manifest.json`
+- `<scenario>/summary.json`
+- `<scenario>/runs.jsonl`
+- `phase3-gate-<A-E>.json`
+- `phase3-gate-<A-E>.md`
 
-Example synthetic gate:
-
-```bash
-python scripts/stress_runner.py \
-  --base-url http://localhost:8000 \
-  --email admin@example.com \
-  --password admin-password \
-  --metrics-email admin@example.com \
-  --metrics-password admin-password \
-  --graph-version-id 00000000-0000-0000-0000-000000000000 \
-  --scenario synthetic-no-llm-500 \
-  --runs 500
-```
-
-Example controlled LLM backpressure gate:
+Gate example:
 
 ```bash
 python scripts/stress_runner.py \
@@ -66,17 +57,12 @@ python scripts/stress_runner.py \
   --metrics-email admin@example.com \
   --metrics-password admin-password \
   --graph-version-id 00000000-0000-0000-0000-000000000000 \
-  --scenario controlled-llm-latency \
-  --capacity-tier private-beta \
-  --llm-mock-delay-ms 1500 \
-  --llm-mock-max-in-flight 4 \
-  --llm-max-queue-size 32 \
-  --llm-queue-timeout-ms 5000 \
-  --runs 50 \
-  --allow-service-disruption
+  --scenario endpoint-saturation \
+  --capacity-gate A \
+  --runs 25
 ```
 
-Example real provider gate:
+Gate E example:
 
 ```bash
 python scripts/stress_runner.py \
@@ -85,41 +71,73 @@ python scripts/stress_runner.py \
   --password admin-password \
   --metrics-email admin@example.com \
   --metrics-password admin-password \
+  --tenant-credentials-file .phase3-tenants.json \
   --graph-version-id 00000000-0000-0000-0000-000000000000 \
-  --scenario real-provider-capacity \
-  --capacity-tier alpha \
-  --runs 10 \
-  --allow-real-provider
+  --scenario all \
+  --capacity-gate E \
+  --runs 500 \
+  --allow-service-disruption \
+  --engine-callback-secret "$ENGINE_CALLBACK_SECRET"
 ```
 
-## Production v1 Acceptance
+The tenant credentials file accepts either a list or `{ "tenants": [...] }`.
+Each entry must include `email` and `password`, and may include
+`graph_version_id` when each tenant uses a tenant-local graph fixture.
 
-Before broad production, the evidence package must show:
+## Required Scenario Coverage
 
-- 100 concurrent agents.
-- No backend stalls.
-- No silent task loss.
-- Bounded queue depth.
-- p95 backend API latency within target.
-- p95 WebSocket send/delivery latency within target.
-- No manual restart after the load test.
-- Dead-letter rate understood and visible.
+The harness supports these capacity and failure scenarios:
 
-The CI `load-smoke` job remains a 100-run no-LLM regression gate. It is not a
-production capacity claim by itself.
+- `endpoint-saturation`
+- `engine-concurrency`
+- `redis-saturation`
+- `llm-degradation-delay`
+- `llm-degradation-timeout`
+- `llm-degradation-unavailable`
+- `failure-injection-engine-stop`
+- `failure-injection-redis-stop`
+- `websocket-reconnect-storm`
+- `duplicate-event-storm`
+- `synthetic-no-llm-500`
+- `controlled-llm-latency`
+- `real-provider-capacity`
 
-## WebSocket Hardening
+Feature flags add per-run stress metadata and post-run checks:
 
-Run WebSockets must remain backend-state-first:
+- `--simulate-decisions`
+- `--simulate-memory-writes`
+- `--simulate-accounting`
+- `--simulate-retries`
+- `--simulate-ws-reconnects`
+- `--simulate-duplicate-events`
 
-- Per-org and per-user connection limits are enforced before connection accept.
-- Event-level and event-type filters reduce fanout pressure.
-- Heartbeats and client `pong` messages update subscriber activity.
-- Slow clients are disconnected after bounded send timeout.
-- Subscriber snapshots expose per-org connections, fanout counts, filtered
-  events, dropped messages, and slow disconnects.
-- Reconnects use `last_event_id` as a hint and receive a `resync_required`
-  signal; clients refetch backend state rather than trusting replayed transport
-  events as authoritative state.
+Gate D automatically requires WebSocket reconnect evidence. Gate E
+automatically requires multi-tenant, HITL, memory, accounting, retry,
+LLM throttling, failure injection, WebSocket reconnect, and duplicate-event
+evidence. Gate C also requires retry evidence.
 
-A slow browser tab must not degrade other users or organizations.
+## Bottleneck Removal Order
+
+Do not run scale gates against request-time projection repair or engine-owned
+product memory. The required order is:
+
+1. Projection workers off request paths.
+2. Runtime streams partitioned and bounded by tenant/run where needed.
+3. Worker concurrency limits and queue backpressure visible in metrics.
+4. DB indexes validated on event ingestion and projection paths.
+5. Per-tenant fairness enforced.
+6. LLM provider quotas, retry budgets, circuit breakers, and degraded mode set.
+7. Phase 3 gates A through E run in order.
+
+## Claim Policy
+
+Allowed before Gate E:
+
+> ForgeGraph is in controlled beta with measured capacity gates in progress.
+
+Not allowed before three passing Gate E reports:
+
+> Run your entire company with 500+ concurrent agents.
+
+Evidence beats intent. Product copy must follow the latest checked-in gate
+reports, not architecture goals.

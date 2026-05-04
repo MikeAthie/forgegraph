@@ -293,12 +293,15 @@ async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
 
     connected_message = await communicator.receive_json_from()
     assert connected_message["payload"]["resync_required"] is True
+    assert connected_message["payload"]["full_resync_required"] is True
+    assert connected_message["payload"]["replay_supported"] is True
     assert connected_message["payload"]["last_seen_event_id"] == "evt-old"
 
     await communicator.send_json_to({"type": "resync"})
     resync = await communicator.receive_json_from()
-    assert resync["type"] == "resync_required"
-    assert resync["payload"]["replay_supported"] is False
+    assert resync["type"] == "full_resync_required"
+    assert resync["payload"]["replay_supported"] is True
+    assert resync["payload"]["full_resync_required"] is True
     await communicator.disconnect()
 
 

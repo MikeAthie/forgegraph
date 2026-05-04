@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Wallet } from "lucide-react";
+import { Building2, CircleDollarSign, CircleOff, ReceiptText, Wallet } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
@@ -17,10 +17,20 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Spinner } from "@/components/ui";
 import { translateProductError } from "@/domain/errors";
 import { accountingRepository } from "@/domain/repositories";
-import type { AccountingLedgerEntryVM, AccountingOverviewVM } from "@/domain/translation/viewModels";
+import type {
+  AccountingLedgerEntryVM,
+  AccountingOverviewVM,
+  MetricProvenanceVM,
+} from "@/domain/translation/viewModels";
 
-const weeklyMultiplier = 5.4;
-const monthlyMultiplier = 22.6;
+const notInstrumentedLabel = "Not yet instrumented";
+
+function metricProvenanceLine(metric: MetricProvenanceVM): string {
+  const computedAt = metric.computedAt ? `Computed ${formatDateTime(metric.computedAt)}` : "computed_at unavailable";
+  const freshness = typeof metric.freshnessMs === "number" ? ` · freshness ${Math.round(metric.freshnessMs)}ms` : "";
+
+  return `${metric.source} · ${computedAt}${freshness}`;
+}
 
 export default function AccountingPage() {
   const [overview, setOverview] = useState<AccountingOverviewVM | null>(null);
@@ -59,76 +69,64 @@ export default function AccountingPage() {
     };
   }, []);
 
-  const financials = useMemo(() => {
+  const accountingState = useMemo(() => {
     if (!overview) {
       return null;
     }
 
-    const today = overview.totalCostUsd;
-    const week = Math.round(today * weeklyMultiplier * 100) / 100;
-    const month = Math.round(today * monthlyMultiplier * 100) / 100;
-    const revenueToday = Math.round((today * 4.8 + 1900) * 100) / 100;
-    const revenueMonth = Math.round(revenueToday * 22 * 100) / 100;
-
     return {
-      today,
-      week,
-      month,
-      revenueToday,
-      revenueMonth,
-      profitToday: revenueToday - today,
-      profitMonth: revenueMonth - month,
+      trackedCost: overview.totalCostUsd,
       maxTypeCost: Math.max(...overview.costByType.map((entry) => entry.totalCostUsd), 1),
       maxDepartmentCost: Math.max(...overview.topDepartments.map((department) => department.totalCostUsd), 1),
     };
   }, [overview]);
 
-  const inspector = financials ? (
-    <InspectorPanel
-      title="Accounting posture"
-      subtitle="Costs stay append-only and canonical. This screen is a read model that makes economic activity legible for operators."
-      sections={[
-        {
-          title: "Today",
-          content: (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span>Spend</span>
-                <span>{formatCurrency(financials.today)}</span>
+  const inspector =
+    overview && accountingState ? (
+      <InspectorPanel
+        title="Accounting posture"
+        subtitle="Costs stay append-only and canonical. Revenue and profit remain unavailable until backend accounting instruments them."
+        sections={[
+          {
+            title: "Backend metrics",
+            content: (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span>Spend</span>
+                  <span>{formatCurrency(accountingState.trackedCost)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Revenue</span>
+                  <span>{notInstrumentedLabel}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Profit</span>
+                  <span>{notInstrumentedLabel}</span>
+                </div>
+                <p className="pt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
+                </p>
               </div>
-              <div className="flex items-center justify-between">
-                <span>Revenue</span>
-                <span>{formatCurrency(financials.revenueToday)}</span>
+            ),
+          },
+          {
+            title: "Instrumentation",
+            content: (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span>Revenue source</span>
+                  <span>{overview.metricProvenance.revenue.source}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Revenue status</span>
+                  <StatusBadge status="pending" label={notInstrumentedLabel} />
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span>Profit</span>
-                <span>{formatCurrency(financials.profitToday)}</span>
-              </div>
-            </div>
-          ),
-        },
-        {
-          title: "Month",
-          content: (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span>Spend</span>
-                <span>{formatCurrency(financials.month)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Revenue</span>
-                <span>{formatCurrency(financials.revenueMonth)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Profit</span>
-                <span>{formatCurrency(financials.profitMonth)}</span>
-              </div>
-            </div>
-          ),
-        },
-      ]}
-    />
-  ) : null;
+            ),
+          },
+        ]}
+      />
+    ) : null;
 
   return (
     <ProtectedRoute>
@@ -137,7 +135,7 @@ export default function AccountingPage() {
           <SectionHeader
             eyebrow="Accounting"
             title="Economic state of the AI organization"
-            description="This surface treats spend, revenue, and profit like operational facts. The interface stays closer to financial software than an analytics marketing dashboard."
+            description="This surface shows backend-owned cost records. Revenue and profit stay unavailable until backend instrumentation exists."
           />
 
           {error ? (
@@ -146,7 +144,7 @@ export default function AccountingPage() {
             </Alert>
           ) : null}
 
-          {loading || !overview || !financials ? (
+          {loading || !overview || !accountingState ? (
             <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
               <Spinner size="lg" />
             </div>
@@ -155,40 +153,36 @@ export default function AccountingPage() {
               <div className="grid gap-4 xl:grid-cols-5">
                 <MetricCard
                   eyebrow="Cost today"
-                  value={formatCurrency(financials.today)}
-                  delta="Tracked LLM and memory spend"
+                  value={formatCurrency(accountingState.trackedCost)}
+                  delta={metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                   tone="rose"
                   icon={<Wallet className="h-4 w-4" />}
                 />
                 <MetricCard
-                  eyebrow="Cost week"
-                  value={formatCurrency(financials.week)}
-                  delta="Projected from current daily trajectory"
-                  icon={<ArrowUpRight className="h-4 w-4" />}
+                  eyebrow="Cost sources"
+                  value={overview.costByType.length.toLocaleString()}
+                  delta="Backend ledger cost types"
+                  icon={<ReceiptText className="h-4 w-4" />}
                 />
                 <MetricCard
-                  eyebrow="Cost month"
-                  value={formatCurrency(financials.month)}
-                  delta="Projected month-to-date operating spend"
-                  icon={<ArrowUpRight className="h-4 w-4" />}
+                  eyebrow="Departments"
+                  value={overview.topDepartments.length.toLocaleString()}
+                  delta="Backend departments with spend"
+                  icon={<Building2 className="h-4 w-4" />}
                 />
                 <MetricCard
                   eyebrow="Revenue"
-                  value={formatCurrency(financials.revenueToday)}
-                  delta="Mock value for company-OS scenarios"
-                  tone="emerald"
-                  icon={<ArrowUpRight className="h-4 w-4" />}
+                  value={notInstrumentedLabel}
+                  delta={metricProvenanceLine(overview.metricProvenance.revenue)}
+                  tone="slate"
+                  icon={<CircleDollarSign className="h-4 w-4" />}
                 />
                 <MetricCard
                   eyebrow="Profit / loss"
-                  value={formatCurrency(financials.profitToday)}
-                  delta={
-                    financials.profitToday >= 0
-                      ? "Positive contribution margin today"
-                      : "Spend exceeds modeled revenue today"
-                  }
-                  tone={financials.profitToday >= 0 ? "emerald" : "amber"}
-                  icon={<ArrowDownRight className="h-4 w-4" />}
+                  value={notInstrumentedLabel}
+                  delta={metricProvenanceLine(overview.metricProvenance.profit)}
+                  tone="slate"
+                  icon={<CircleOff className="h-4 w-4" />}
                 />
               </div>
 
@@ -215,7 +209,7 @@ export default function AccountingPage() {
                           <div className="mt-3">
                             <TrendBar
                               value={entry.totalCostUsd}
-                              total={financials.maxTypeCost}
+                              total={accountingState.maxTypeCost}
                               tone={entry.label === "llm" ? "rose" : "cyan"}
                             />
                           </div>
@@ -252,7 +246,7 @@ export default function AccountingPage() {
                           <div className="mt-3">
                             <TrendBar
                               value={department.totalCostUsd}
-                              total={financials.maxDepartmentCost}
+                              total={accountingState.maxDepartmentCost}
                               tone="rose"
                             />
                           </div>

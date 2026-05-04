@@ -40,6 +40,11 @@ from application.services.run_ws_protocol import (
     build_ws_public_message,
     normalize_ws_public_message,
 )
+from application.services.state_feed import (
+    StateFeedReplay,
+    latest_state_feed_version,
+    replay_state_feed_events,
+)
 from application.services.structured_logging import log_event
 from application.services.websocket_subscribers import (
     can_accept_run_websocket_subscriber,
@@ -58,6 +63,21 @@ def _query_values(query_params: dict[str, list[str]], *names: str) -> list[str]:
         for raw_value in query_params.get(name, []):
             values.extend(part.strip() for part in raw_value.split(",") if part.strip())
     return values
+
+
+def _query_int(query_params: dict[str, list[str]], name: str, default: int = 0) -> int:
+    raw_value = next(iter(query_params.get(name, [])), "")
+    try:
+        return max(int(raw_value), 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _message_state_version(message: dict[str, Any]) -> int:
+    try:
+        return max(int(message.get("state_version") or 0), 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 async def _user_can_access_run(*, run_id: str, user_id: UUID, organization_id: str) -> bool:
@@ -123,6 +143,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         last_seen_event_id = str(
             next(iter(query_params.get("last_event_id", [])), "") or ""
         ).strip()
+        last_seen_state_version = _query_int(query_params, "last_seen_state_version")
         accepted, limit_details = await sync_to_async(
             can_accept_run_websocket_subscriber,
             thread_sensitive=False,
@@ -153,6 +174,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         self.permissions = permissions
         self.event_types = set(event_types)
         self.last_seen_event_id = last_seen_event_id
+        self.last_seen_state_version = last_seen_state_version
         self.connection_id = str(uuid4())
         self._ws_connected = False
         self.group_names = [
@@ -173,6 +195,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             event_level=requested_level,
             event_types=event_types,
             last_seen_event_id=last_seen_event_id,
+            last_seen_state_version=last_seen_state_version,
         )
         record_ws_connected()
         log_event(
@@ -186,10 +209,16 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             event_level=requested_level,
             event_types=event_types,
         )
+        replay = await self._load_replay(
+            last_seen_state_version=last_seen_state_version,
+            last_seen_event_id=last_seen_event_id,
+            event_level=requested_level,
+        )
         await self._send_public_message(
             build_ws_public_message(
                 "connection_established",
                 run_id=self.run_id,
+                tenant_id=self.organization_id,
                 payload={
                     "event_level": requested_level,
                     "organization_id": self.organization_id,
@@ -197,12 +226,61 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
                     "permissions": self.permissions,
                     "event_types": event_types,
                     "last_seen_event_id": last_seen_event_id,
-                    "resync_required": True,
-                    "replay_supported": False,
+                    "last_seen_state_version": last_seen_state_version,
+                    "latest_state_version": replay.latest_state_version,
+                    "resync_required": replay.full_resync_required,
+                    "full_resync_required": replay.full_resync_required,
+                    "replay_supported": True,
+                    "replayed_count": len(replay.events),
+                    "replay_reason": replay.reason,
                 },
             )
         )
+        for replay_message in replay.events:
+            await self._send_public_message(replay_message)
         self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def _load_replay(
+        self,
+        *,
+        last_seen_state_version: int,
+        last_seen_event_id: str = "",
+        event_level: str = "default",
+    ) -> StateFeedReplay:
+        if last_seen_event_id and last_seen_state_version <= 0:
+            latest_version = await sync_to_async(latest_state_feed_version, thread_sensitive=True)(
+                run_id=self.run_id,
+                organization_id=self.organization_id,
+            )
+            await self._record_replay_failure("state_version_required")
+            return StateFeedReplay(
+                events=[],
+                latest_state_version=latest_version,
+                full_resync_required=True,
+                reason="state_version_required",
+            )
+
+        replay = await sync_to_async(replay_state_feed_events, thread_sensitive=True)(
+            run_id=self.run_id,
+            organization_id=self.organization_id,
+            after_state_version=last_seen_state_version,
+            event_types=cast(set[str], getattr(self, "event_types", set())),
+            event_level=event_level,
+        )
+        if replay.full_resync_required:
+            await self._record_replay_failure(replay.reason)
+        return replay
+
+    async def _record_replay_failure(self, reason: str) -> None:
+        await sync_to_async(record_service_metric_sample, thread_sensitive=False)(
+            metric_name="websocket_replay_failure",
+            source="run_websocket_consumer",
+            value=1,
+            unit="count",
+            organization_id=str(getattr(self, "organization_id", "") or "") or None,
+            run_id=str(getattr(self, "run_id", "") or "") or None,
+            dimensions={"reason": str(reason or "unknown")},
+        )
 
     async def _heartbeat_loop(self) -> None:
         interval = int(getattr(settings, "RUN_WS_HEARTBEAT_INTERVAL_SECONDS", 12))
@@ -210,7 +288,12 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             while True:
                 await asyncio.sleep(interval)
                 await self._send_public_message(
-                    build_ws_public_message("heartbeat", run_id=self.run_id)
+                    build_ws_public_message(
+                        "heartbeat",
+                        run_id=self.run_id,
+                        tenant_id=self.organization_id,
+                        state_version=int(getattr(self, "last_seen_state_version", 0) or 0),
+                    )
                 )
                 await sync_to_async(
                     update_run_websocket_subscriber_activity,
@@ -254,6 +337,9 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             await self.close(code=1013)
             return
         duration_ms = int((time.perf_counter() - start) * 1000)
+        state_version = _message_state_version(message)
+        if state_version > int(getattr(self, "last_seen_state_version", 0) or 0):
+            self.last_seen_state_version = state_version
         record_ws_message_sent(duration_ms=duration_ms)
         await sync_to_async(record_service_metric_sample, thread_sensitive=False)(
             metric_name="websocket_delivery_ms",
@@ -265,6 +351,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             dimensions={
                 "event_type": str(message.get("type") or ""),
                 "event_id": str(message.get("event_id") or ""),
+                "state_version": state_version,
             },
         )
         await sync_to_async(
@@ -274,6 +361,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             connection_id=str(getattr(self, "connection_id", "") or ""),
             event_type=str(message.get("type") or ""),
             event_id=str(message.get("event_id") or ""),
+            state_version=state_version,
             sent=True,
         )
 
@@ -289,13 +377,38 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             )
             return
         if message_type == "resync":
+            requested_state_version = content.get("last_seen_state_version")
+            try:
+                if requested_state_version is None:
+                    raise TypeError("last_seen_state_version missing")
+                last_seen_state_version = max(int(requested_state_version), 0)
+            except (TypeError, ValueError):
+                last_seen_state_version = int(getattr(self, "last_seen_state_version", 0) or 0)
+            last_seen_event_id = str(
+                content.get("last_event_id") or getattr(self, "last_seen_event_id", "") or ""
+            )
+            replay = await self._load_replay(
+                last_seen_state_version=last_seen_state_version,
+                last_seen_event_id=last_seen_event_id,
+                event_level=normalize_requested_event_level(
+                    str(content.get("event_level") or "default")
+                ),
+            )
+            if not replay.full_resync_required:
+                for replay_message in replay.events:
+                    await self._send_public_message(replay_message)
             await self._send_public_message(
                 build_ws_public_message(
-                    "resync_required",
+                    "full_resync_required" if replay.full_resync_required else "replay_complete",
                     run_id=str(getattr(self, "run_id", "") or ""),
+                    tenant_id=str(getattr(self, "organization_id", "") or ""),
                     payload={
                         "reason": "client_requested",
-                        "replay_supported": False,
+                        "replay_supported": True,
+                        "full_resync_required": replay.full_resync_required,
+                        "latest_state_version": replay.latest_state_version,
+                        "replayed_count": len(replay.events),
+                        "replay_reason": replay.reason,
                     },
                 )
             )

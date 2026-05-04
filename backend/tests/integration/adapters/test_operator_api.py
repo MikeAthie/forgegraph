@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from rest_framework import status
 
+from application.services.event_dead_letters import record_event_dead_letter
 from application.services.task_lifecycle import (
     dead_letter_task,
     transition_task_lifecycle,
@@ -118,3 +119,46 @@ def test_operator_run_state_is_org_scoped(authenticated_client, user) -> None:
     response = authenticated_client.get(f"/api/operator/runs/{run.id}/state")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_operator_event_dead_letters_are_visible_and_audited(authenticated_client, user) -> None:
+    run = _make_run(user)
+    dead_letter = record_event_dead_letter(
+        source="engine_callback",
+        run=run,
+        organization=run.organization,
+        event_id="evt-poison",
+        event_type="run_completed",
+        reason="run state ordering conflict",
+        error_class="run_state_ordering_conflict",
+        payload={"event_id": "evt-poison", "secret": "hidden"},
+    )
+
+    list_response = authenticated_client.get("/api/operator/dead-letters")
+
+    assert list_response.status_code == status.HTTP_200_OK
+    payload = list_response.data["data"]
+    assert payload["event_dead_letters"][0]["id"] == str(dead_letter.id)
+    assert payload["event_dead_letters"][0]["payload"]["secret"] == "***REDACTED***"
+
+    replay_response = authenticated_client.post(
+        f"/api/operator/event-dead-letters/{dead_letter.id}/replay",
+        {"reason": "backend projection fixed"},
+        format="json",
+    )
+
+    assert replay_response.status_code == status.HTTP_200_OK
+    assert replay_response.data["data"]["status"] == "replay_requested"
+    assert AuditLog.objects.filter(
+        resource_id=str(dead_letter.id),
+        action="operator.event_dead_letter_replay_requested",
+    ).exists()
+
+    acknowledge_response = authenticated_client.post(
+        f"/api/operator/event-dead-letters/{dead_letter.id}/acknowledge",
+        {"reason": "manual replay completed"},
+        format="json",
+    )
+
+    assert acknowledge_response.status_code == status.HTTP_200_OK
+    assert acknowledge_response.data["data"]["status"] == "acknowledged"

@@ -1121,6 +1121,57 @@ class RunEvent(models.Model):
         return f"RunEvent {self.run_id} - {self.event_type}"
 
 
+class StateFeedEvent(models.Model):
+    """Versioned backend state-feed event retained for WebSocket replay."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="state_feed_events",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="state_feed_events",
+    )
+    event_id = models.CharField(max_length=128)
+    state_version = models.PositiveBigIntegerField()
+    type = models.CharField(max_length=96)
+    level = models.CharField(max_length=16, blank=True, default="")
+    requires_refetch = models.BooleanField(default=False)
+    message = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "state_feed_events"
+        ordering = ["state_version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "state_version"],
+                name="state_feed_run_version_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["run", "event_id"],
+                name="state_feed_run_event_id_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "run", "state_version"],
+                name="state_feed_org_run_ver_idx",
+            ),
+            models.Index(fields=["run", "created_at"], name="state_feed_run_created_idx"),
+            models.Index(
+                fields=["organization", "created_at"],
+                name="state_feed_org_created_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"StateFeedEvent {self.run_id} v{self.state_version} {self.type}"
+
+
 class ProcessedRuntimeIntent(models.Model):
     """ProcessedRuntimeIntent records backend-applied runtime write intents."""
 
@@ -1146,6 +1197,46 @@ class ProcessedRuntimeIntent(models.Model):
 
     def __str__(self) -> str:
         return f"ProcessedRuntimeIntent {self.intent_type} {self.intent_id}"
+
+
+class ProcessedCommand(models.Model):
+    """ProcessedCommand records idempotent HTTP mutation responses."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="processed_commands",
+    )
+    idempotency_key = models.CharField(max_length=255)
+    action = models.CharField(max_length=96)
+    request_hash = models.CharField(max_length=64)
+    response_status = models.PositiveSmallIntegerField()
+    response_body = models.JSONField(default=dict)
+    resource_type = models.CharField(max_length=64, blank=True, default="")
+    resource_id = models.CharField(max_length=128, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "processed_commands"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "action", "idempotency_key"],
+                name="processed_cmd_org_action_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="processed_cmd_org_time_idx"),
+            models.Index(
+                fields=["organization", "resource_type", "resource_id"],
+                name="processed_cmd_resource_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProcessedCommand {self.action} {self.idempotency_key}"
 
 
 class RuntimeIntentOutcome(models.Model):
@@ -1197,6 +1288,78 @@ class RuntimeIntentOutcome(models.Model):
 
     def __str__(self) -> str:
         return f"RuntimeIntentOutcome {self.outcome} {self.intent_id}"
+
+
+class EventDeadLetterRecord(models.Model):
+    """Operator-visible diagnostics for backend event ingestion failures."""
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("acknowledged", "Acknowledged"),
+        ("replay_requested", "Replay Requested"),
+        ("resolved", "Resolved"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="event_dead_letters",
+        null=True,
+        blank=True,
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="event_dead_letters",
+        null=True,
+        blank=True,
+    )
+    event_id = models.CharField(max_length=128, blank=True, default="")
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    event_type = models.CharField(max_length=96, blank=True, default="")
+    source = models.CharField(max_length=64, default="engine_callback")
+    reason = models.TextField()
+    error_class = models.CharField(max_length=128, blank=True, default="")
+    payload = models.JSONField(default=dict, blank=True)
+    retry_count = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="active")
+    last_replay_action = models.TextField(blank=True, default="")
+    replay_requested_at = models.DateTimeField(null=True, blank=True)
+    replay_requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replay_requested_event_dead_letters",
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_event_dead_letters",
+    )
+    acknowledgement_reason = models.TextField(blank=True, default="")
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "event_dead_letter_records"
+        ordering = ["-last_seen_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "last_seen_at"],
+                name="event_dl_org_status_time_idx",
+            ),
+            models.Index(fields=["run", "status"], name="event_dl_run_status_idx"),
+            models.Index(fields=["event_id"], name="event_dl_event_id_idx"),
+            models.Index(fields=["source", "last_seen_at"], name="event_dl_source_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.source} {self.event_type or 'event'} dead-lettered"
 
 
 class ToolExecution(models.Model):
@@ -1502,6 +1665,7 @@ class LLMUsage(models.Model):
     node_id = models.CharField(max_length=255)
     provider = models.CharField(max_length=32)
     model = models.CharField(max_length=64)
+    external_key = models.CharField(max_length=255, null=True, blank=True)
     prompt_tokens = models.PositiveIntegerField(default=0)
     completion_tokens = models.PositiveIntegerField(default=0)
     total_tokens = models.PositiveIntegerField(default=0)
@@ -1514,6 +1678,14 @@ class LLMUsage(models.Model):
         indexes = [
             models.Index(fields=["tenant_id", "created_at"], name="llm_usage_tenant_time_idx"),
             models.Index(fields=["run", "node_id"], name="llm_usage_run_node_idx"),
+            models.Index(fields=["tenant_id", "external_key"], name="llm_usage_tenant_ext_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant_id", "external_key"],
+                condition=models.Q(external_key__isnull=False),
+                name="llm_usage_tenant_external_uniq",
+            )
         ]
 
     def __str__(self) -> str:

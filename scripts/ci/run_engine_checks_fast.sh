@@ -32,17 +32,25 @@ if [[ ${#changed_go_files[@]} -eq 0 ]]; then
 else
   changed_go_rel=()
   for file in "${changed_go_files[@]}"; do
-    changed_go_rel+=("${file#engine/}")
+    rel="${file#engine/}"
+    if [[ -f "${rel}" ]]; then
+      changed_go_rel+=("${rel}")
+    fi
   done
-  unformatted="$(gofmt -l "${changed_go_rel[@]}")"
-  if [[ -n "${unformatted}" ]]; then
-    echo "gofmt required on:" >&2
-    echo "${unformatted}" >&2
-    exit 1
+  if [[ ${#changed_go_rel[@]} -eq 0 ]]; then
+    echo "No changed existing Go files detected; skipping gofmt."
+  else
+    unformatted="$(gofmt -l "${changed_go_rel[@]}")"
+    if [[ -n "${unformatted}" ]]; then
+      echo "gofmt required on:" >&2
+      echo "${unformatted}" >&2
+      exit 1
+    fi
   fi
 fi
 
 bash "${SCRIPT_DIR}/check_engine_ownership.sh"
+bash "${SCRIPT_DIR}/check_engine_event_envelope.sh"
 
 engine_impacted_packages() {
   local changed_packages=()

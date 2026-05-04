@@ -45,6 +45,7 @@ from application.services.run_queue import (
     record_run_queue_worker_heartbeat,
     release_stale_entries,
 )
+from application.services.run_state_machine import apply_run_status_transition
 from application.services.task_lifecycle import (
     mark_run_tasks_terminal,
     record_retry_operation,
@@ -242,8 +243,8 @@ class Command(BaseCommand):
             return
 
         with transaction.atomic():
-            run.status = "running"
-            update_fields = ["status"]
+            transition = apply_run_status_transition(run, "running")
+            update_fields = transition.update_fields
             update_fields.extend(
                 touch_run_liveness(
                     run,
@@ -302,10 +303,14 @@ class Command(BaseCommand):
         now = timezone.now()
         if not run.started_at:
             run.started_at = now
-        run.status = "failed"
+        transition = apply_run_status_transition(run, "failed")
         run.ended_at = now
         run.error_message = message
-        run.save(update_fields=["status", "started_at", "ended_at", "error_message"])
+        run.save(
+            update_fields=sorted(
+                set(transition.update_fields + ["started_at", "ended_at", "error_message"])
+            )
+        )
         mark_run_tasks_terminal(
             run=run,
             status_value="failed",

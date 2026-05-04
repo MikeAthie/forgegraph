@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from datetime import UTC, datetime
 
 
 def _request(
@@ -107,6 +108,12 @@ def _post_signed_callback(
         return 0, str(exc.reason)
 
 
+def _canonical_event_checksum(envelope: dict[str, object]) -> str:
+    unsigned = {key: value for key, value in envelope.items() if key != "checksum"}
+    body = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
 def _signed_callback_test(
     opener: urllib.request.OpenerDirector,
     *,
@@ -114,27 +121,41 @@ def _signed_callback_test(
     callback_secret: str,
     run_id: str,
     tenant_id: str,
+    engine_instance_id: str = "",
 ) -> None:
     callback_url = backend_url.rstrip("/") + "/api/runs/engine-events"
+    event_id = f"smoke-{uuid.uuid4()}"
     payload = {
-        "event_id": f"smoke-{uuid.uuid4()}",
-        "type": "node_stream_chunk",
-        "category": "observability",
-        "run_id": run_id,
+        "event_id": event_id,
+        "idempotency_key": f"{tenant_id}/{run_id}/release-smoke/1/{event_id}",
         "tenant_id": tenant_id,
-        "node_id": "release-smoke-observability",
-        "node_type": "output",
-        "attempt": 1,
-        "output": {"chunk": "release smoke callback", "chunk_index": 0},
-        "timestamp": int(time.time() * 1000),
+        "org_id": tenant_id,
+        "run_id": run_id,
+        "agent_id": None,
+        "task_id": "release-smoke-observability",
+        "source": "engine",
+        "type": "node.stream_chunk",
+        "sequence": 1,
+        "causation_id": None,
+        "correlation_id": run_id,
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "schema_version": 2,
+        "payload": {
+            "category": "observability",
+            "node_id": "release-smoke-observability",
+            "node_type": "output",
+            "attempt": 1,
+            "output": {"chunk": "release smoke callback", "chunk_index": 0},
+        },
     }
-    duplicate_payload = dict(payload)
-    duplicate_payload["timestamp"] = int(time.time() * 1000) + 1
+    if engine_instance_id:
+        payload["payload"]["engine_instance_id"] = engine_instance_id  # type: ignore[index]
+    payload["checksum"] = _canonical_event_checksum(payload)
     status_code, body = _post_signed_callback(
         opener,
         callback_url=callback_url,
         callback_secret=callback_secret,
-        payload=duplicate_payload,
+        payload=payload,
     )
     if status_code != 200:
         raise SystemExit(
@@ -142,6 +163,7 @@ def _signed_callback_test(
             f"status={status_code}, body={body}"
         )
 
+    time.sleep(0.01)
     status_code, body = _post_signed_callback(
         opener,
         callback_url=callback_url,
@@ -603,6 +625,7 @@ def main() -> None:
     parser.add_argument("--frontend-url")
     parser.add_argument("--engine-url")
     parser.add_argument("--callback-secret", default="")
+    parser.add_argument("--engine-instance-id", default="")
     parser.add_argument("--skip-frontend", action="store_true")
     parser.add_argument("--skip-engine", action="store_true")
     parser.add_argument("--skip-callback", action="store_true")
@@ -651,6 +674,7 @@ def main() -> None:
             callback_secret=args.callback_secret,
             run_id=run_id,
             tenant_id=tenant_id,
+            engine_instance_id=args.engine_instance_id,
         )
 
     if not args.skip_engine:

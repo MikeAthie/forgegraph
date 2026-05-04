@@ -112,6 +112,35 @@ func TestHttpRepositoryCriticalWritesPublishRuntimeIntents(t *testing.T) {
 	}
 }
 
+func TestEngineRuntimeDoesNotWireDurableProductMemory(t *testing.T) {
+	runtimePaths := []string{
+		filepath.Join(engineRoot(t), "main.go"),
+		filepath.Join(engineRoot(t), "application", "port", "summarizer.go"),
+		filepath.Join(engineRoot(t), "application", "usecase", "scheduler.go"),
+		filepath.Join(engineRoot(t), "application", "usecase", "summarization_worker.go"),
+	}
+	forbiddenRuntimeWrites := []string{
+		"NewRedisMemoryStore",
+		"RedisMemoryStore",
+		"SummaryStore",
+		"StoreSummary(",
+		"StoreFacts(",
+	}
+
+	for _, runtimePath := range runtimePaths {
+		sourceBytes, err := os.ReadFile(runtimePath)
+		if err != nil {
+			t.Fatalf("read runtime source %s: %v", runtimePath, err)
+		}
+		source := string(sourceBytes)
+		for _, forbidden := range forbiddenRuntimeWrites {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("engine runtime source %s still wires durable product memory via %s", relativeEnginePath(t, runtimePath), forbidden)
+			}
+		}
+	}
+}
+
 func forEachGoSource(t *testing.T, visit func(path string, source string)) {
 	t.Helper()
 	root := engineRoot(t)

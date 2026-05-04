@@ -5,6 +5,7 @@ Clean Architecture: Interface Adapters layer.
 """
 
 import asyncio
+import hashlib
 import json as pyjson
 import logging
 from collections import defaultdict
@@ -64,7 +65,10 @@ from application.services.auth_state import (
     is_access_jti_revoked,
     validate_access_token,
 )
-from application.services.cloudevents import unwrap_engine_event
+from application.services.canonical_events import (
+    CanonicalEventValidationError,
+    parse_engine_event_payload,
+)
 from application.services.company_archive import ArchiveService, ContextPackService
 from application.services.company_learning import PreferenceEventService
 from application.services.engine_selection import (
@@ -81,6 +85,7 @@ from application.services.event_categories import (
     assert_runtime_state_mutation_allowed,
     normalize_event_category,
 )
+from application.services.event_dead_letters import record_event_dead_letter
 from application.services.llm_access import (
     LLM_MODE_MANAGED,
     LLMAccessConfig,
@@ -93,11 +98,18 @@ from application.services.llm_access import (
 )
 from application.services.llm_pricing import calculate_cost
 from application.services.managed_llm_limits import check_managed_llm_limits
+from application.services.memory_intents import BackendMemoryIntentService
 from application.services.metrics import (
     record_callback_auth_failure,
     record_run_completed,
     record_run_started,
     record_stale_attempt_ignored,
+)
+from application.services.processed_commands import (
+    IdempotencyConflict,
+    build_idempotency_context,
+    record_processed_command,
+    replay_processed_command,
 )
 from application.services.rate_limit import check_rate_limit, rate_limit_response_payload
 from application.services.rbac import has_min_role
@@ -134,6 +146,11 @@ from application.services.run_snapshots import (
     safe_set_snapshot,
     set_snapshot,
 )
+from application.services.run_state_machine import (
+    RunTransitionConflict,
+    apply_run_status_transition,
+    assert_run_transition_allowed,
+)
 from application.services.schema_validation import (
     SchemaError,
     extract_schema_metadata,
@@ -163,6 +180,7 @@ from infrastructure.orm.models import (
     LLMUsage,
     NodeRun,
     NodeRunEventProjection,
+    Organization,
     Run,
     RunCheckpoint,
     RunEvent,
@@ -191,6 +209,129 @@ def _engine_event_attempt_id(event_type: str, event: dict[str, Any]) -> str:
         if isinstance(output, dict):
             return str(output.get("resume_attempt_id") or "").strip()
     return ""
+
+
+def _engine_callback_payload(
+    *,
+    decision: str,
+    reason: str,
+    backend_event_id: str = "",
+    safe_to_discard: bool = False,
+    retry_after_ms: int | None = None,
+    conflict_code: str = "",
+    **extra: Any,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "decision": decision,
+        "reason": reason,
+        "backend_event_id": backend_event_id,
+        "safe_to_discard": safe_to_discard,
+    }
+    if retry_after_ms is not None:
+        payload["retry_after_ms"] = retry_after_ms
+    if conflict_code:
+        payload["conflict_code"] = conflict_code
+    payload.update(extra)
+    return payload
+
+
+def _engine_callback_success(
+    data: dict[str, Any] | None = None,
+    *,
+    decision: str = "accepted",
+    reason: str = "accepted",
+    backend_event_id: str = "",
+    safe_to_discard: bool = True,
+    conflict_code: str = "",
+) -> Response:
+    payload = _engine_callback_payload(
+        decision=decision,
+        reason=reason,
+        backend_event_id=backend_event_id,
+        safe_to_discard=safe_to_discard,
+        conflict_code=conflict_code,
+    )
+    if data:
+        payload.update(data)
+    return success_response(payload)
+
+
+def _engine_callback_problem(
+    *,
+    type_uri: str,
+    title: str,
+    status_code: int,
+    detail: str,
+    decision: str,
+    reason: str,
+    backend_event_id: str = "",
+    safe_to_discard: bool = False,
+    conflict_code: str = "",
+    extensions: dict[str, Any] | None = None,
+) -> Response:
+    payload = _engine_callback_payload(
+        decision=decision,
+        reason=reason,
+        backend_event_id=backend_event_id,
+        safe_to_discard=safe_to_discard,
+        conflict_code=conflict_code,
+        type=type_uri,
+        title=title,
+        status=status_code,
+        detail=detail,
+    )
+    if extensions:
+        payload.update(extensions)
+    return Response(payload, status=status_code)
+
+
+def _record_engine_callback_dead_letter(
+    *,
+    event: dict[str, Any] | None,
+    run: Run | None = None,
+    reason: str,
+    error_class: str = "",
+    event_type: str = "",
+    event_id: str = "",
+    idempotency_key: str = "",
+) -> None:
+    payload = event if isinstance(event, dict) else {}
+    try:
+        organization = run.organization if run is not None and run.organization_id else None
+        if organization is None:
+            organization = _organization_from_event_payload(payload)
+        record_event_dead_letter(
+            source="engine_callback",
+            reason=reason,
+            payload=payload,
+            organization=organization,
+            run=run,
+            event_id=event_id or str(payload.get("event_id") or ""),
+            idempotency_key=idempotency_key or str(payload.get("idempotency_key") or ""),
+            event_type=event_type or str(payload.get("type") or payload.get("event_type") or ""),
+            error_class=error_class,
+        )
+    except Exception:
+        logger.exception(
+            "engine_callback_dead_letter_record_failed",
+            extra={
+                "run_id": str(run.id) if run is not None else "",
+                "event_id": event_id or str(payload.get("event_id") or ""),
+                "event_type": event_type or str(payload.get("type") or ""),
+                "reason": reason,
+            },
+        )
+
+
+def _organization_from_event_payload(event: dict[str, Any]) -> Organization | None:
+    raw_org_id = str(event.get("tenant_id") or event.get("organization_id") or "").strip()
+    if not raw_org_id:
+        return None
+    try:
+        org_id = UUID(raw_org_id)
+    except ValueError:
+        return None
+    return Organization.objects.filter(id=org_id).first()
 
 
 def _ignore_stale_engine_attempt(
@@ -225,18 +366,28 @@ def _ignore_stale_engine_attempt(
         category=normalized_category,
     )
     if event_type == "run_resumed":
-        return problem_response(
+        return _engine_callback_problem(
             type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
             title="Stale resume acknowledgement",
-            status=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_409_CONFLICT,
             detail="run_resumed acknowledgement does not match the active resume_attempt_id.",
+            decision="stale_superseded",
+            reason="resume_attempt_id does not match the active backend resume attempt",
+            backend_event_id=event_id,
+            safe_to_discard=True,
+            conflict_code="409_STALE_SUPERSEDED",
         )
-    return success_response(
+    return _engine_callback_success(
         {
             "received": True,
             "stale": True,
             "authoritative_state_updated": False,
-        }
+        },
+        decision="stale_superseded",
+        reason="event attempt does not match the active backend attempt",
+        backend_event_id=event_id,
+        safe_to_discard=True,
+        conflict_code="409_STALE_SUPERSEDED",
     )
 
 
@@ -297,6 +448,20 @@ def get_tenant_id_for_run(run: Run) -> str:
 
 def _request_trace_headers(request: Request) -> tuple[str | None, str | None]:
     return request.headers.get("traceparent"), request.headers.get("tracestate")
+
+
+def _idempotency_conflict_response(exc: IdempotencyConflict) -> Response:
+    return error_response(
+        code="IDEMPOTENCY_CONFLICT",
+        message=str(exc),
+        status=status.HTTP_409_CONFLICT,
+        details=[
+            {
+                "action": exc.action,
+                "idempotency_key": exc.idempotency_key,
+            }
+        ],
+    )
 
 
 def _trace_metadata_from_graph(graph_json: dict[str, Any]) -> dict[str, str]:
@@ -997,23 +1162,13 @@ def _build_run_status_history(*, run: Run) -> list[str]:
 
 def _validate_run_event_transition(*, current_status: str, event_type: str) -> None:
     normalized = str(current_status or "").strip().lower()
-    allowed_previous_statuses: dict[str, set[str]] = {
-        # Backend-initiated starts can move the run to running before the engine
-        # sends its confirmation event, so treat run_started as idempotent there.
-        "run_started": {"pending", "running"},
-        # Critical runtime intents may commit the authoritative state before the
-        # later engine event arrives. Accept the matching terminal/current state
-        # as an idempotent observability event instead of turning it into a 409.
-        "run_paused": {"running", "paused"},
-        "run_resumed": {"resume_requested", "running"},
-        "run_completed": {"running", "resume_requested", "succeeded"},
-        "run_failed": {"running", "resume_requested", "failed"},
-        "run_canceled": {"pending", "running", "paused", "resume_requested", "canceled"},
-    }
-    allowed = allowed_previous_statuses.get(event_type)
-    if allowed is None or normalized in allowed:
+    requested_status = _run_status_from_event(event_type, {})
+    if requested_status is None:
         return
-    raise ValueError(f"invalid run event transition: {normalized or 'unknown'} -> {event_type}")
+    try:
+        assert_run_transition_allowed(normalized, requested_status)
+    except RunTransitionConflict as exc:
+        raise ValueError(f"invalid run event transition: {exc}") from exc
 
 
 def _build_run_timeline(*, run: Run) -> list[dict[str, Any]]:
@@ -1853,6 +2008,18 @@ class RunStartView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         tenant_id = get_tenant_id_for_user(user)
+        command_context = build_idempotency_context(
+            request=request,
+            organization=user.default_organization,
+            action="runs.start",
+            request_payload=serializer.validated_data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
         rate_limit_response = _apply_rate_limit(
             scope="run_start",
             tenant_id=tenant_id,
@@ -1893,7 +2060,6 @@ class RunStartView(APIView):
                 message=f"GraphVersion with id '{graph_version_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
-
         try:
             llm_access = resolve_llm_access_for_dispatch(llm_access, user)
         except LLMAccessValidationError as exc:
@@ -1990,10 +2156,12 @@ class RunStartView(APIView):
             )
             outbound_graph = _attach_operation_context_pack(run, outbound_graph)
         except ToolExecutionDispatchBlocked as exc:
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = str(exc)
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             mark_run_tasks_terminal(
                 run=run,
                 status_value="failed",
@@ -2055,10 +2223,16 @@ class RunStartView(APIView):
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-            return success_response(
+            response = success_response(
                 serialized_data,
                 status=status.HTTP_201_CREATED,
                 meta=_queue_response_meta(run=run, tenant_id=tenant_id),
+            )
+            return record_processed_command(
+                context=command_context,
+                response=response,
+                resource_type="run",
+                resource_id=str(run.id),
             )
 
         # Send run to the engine
@@ -2098,8 +2272,8 @@ class RunStartView(APIView):
                         tracestate=trace_metadata["tracestate"],
                     )
                     # Update status to running once engine accepts
-                    run.status = "running"
-                    update_fields = ["status"]
+                    transition = apply_run_status_transition(run, "running")
+                    update_fields = transition.update_fields
                     update_fields.extend(
                         touch_run_liveness(
                             run,
@@ -2121,10 +2295,12 @@ class RunStartView(APIView):
                 trace_id=run.trace_id or trace_metadata["trace_id"],
                 error_message=str(e),
             )
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             mark_run_tasks_terminal(
                 run=run,
                 status_value="failed",
@@ -2148,10 +2324,12 @@ class RunStartView(APIView):
                 trace_id=run.trace_id or trace_metadata["trace_id"],
                 error_message=str(e),
             )
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             mark_run_tasks_terminal(
                 run=run,
                 status_value="failed",
@@ -2188,7 +2366,13 @@ class RunStartView(APIView):
         }
 
         serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-        return success_response(serialized_data, status=status.HTTP_201_CREATED)
+        response = success_response(serialized_data, status=status.HTTP_201_CREATED)
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="run",
+            resource_id=str(run.id),
+        )
 
 
 class RunInvokeView(APIView):
@@ -2218,6 +2402,18 @@ class RunInvokeView(APIView):
             )
         tenant_id = get_tenant_id_for_user(user)
         tenant_uuid = UUID(tenant_id)
+        command_context = build_idempotency_context(
+            request=request,
+            organization=user.default_organization,
+            action="runs.invoke",
+            request_payload=serializer.validated_data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
         rate_limit_response = _apply_rate_limit(
             scope="run_invoke",
             tenant_id=tenant_id,
@@ -2449,10 +2645,16 @@ class RunInvokeView(APIView):
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-            return success_response(
+            response = success_response(
                 serialized_data,
                 status=status.HTTP_201_CREATED,
                 meta=_queue_response_meta(run=run, tenant_id=tenant_id),
+            )
+            return record_processed_command(
+                context=command_context,
+                response=response,
+                resource_type="run",
+                resource_id=str(run.id),
             )
 
         callback_url = resolve_engine_callback_url(run_id=str(run.id))
@@ -2490,8 +2692,8 @@ class RunInvokeView(APIView):
                         traceparent=trace_metadata["traceparent"],
                         tracestate=trace_metadata["tracestate"],
                     )
-                    run.status = "running"
-                    update_fields = ["status"]
+                    transition = apply_run_status_transition(run, "running")
+                    update_fields = transition.update_fields
                     update_fields.extend(
                         touch_run_liveness(
                             run,
@@ -2513,10 +2715,12 @@ class RunInvokeView(APIView):
                 trace_id=run.trace_id or trace_metadata["trace_id"],
                 error_message=str(e),
             )
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = f"Engine connection failed: {e}"
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
@@ -2534,10 +2738,12 @@ class RunInvokeView(APIView):
                 trace_id=run.trace_id or trace_metadata["trace_id"],
                 error_message=str(e),
             )
-            run.status = "failed"
+            transition = apply_run_status_transition(run, "failed")
             run.ended_at = timezone.now()
             run.error_message = f"Engine rejected run: {e}"
-            run.save(update_fields=["status", "ended_at", "error_message"])
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             record_run_completed("failed", run.duration_ms)
             broadcast_run_updated(run)
             return error_response(
@@ -2568,7 +2774,13 @@ class RunInvokeView(APIView):
         }
 
         serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-        return success_response(serialized_data, status=status.HTTP_201_CREATED)
+        response = success_response(serialized_data, status=status.HTTP_201_CREATED)
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="run",
+            resource_id=str(run.id),
+        )
 
 
 class RunReplayView(APIView):
@@ -2610,6 +2822,18 @@ class RunReplayView(APIView):
                 message=f"Run with id '{run_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
+        command_context = build_idempotency_context(
+            request=request,
+            organization=run.organization or user.default_organization,
+            action=f"runs.replay:{run.id}",
+            request_payload=serializer.validated_data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
 
         if run.status in {"pending", "running", "paused", "resume_requested"}:
             return error_response(
@@ -2830,13 +3054,19 @@ class RunReplayView(APIView):
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-            return success_response(
+            response = success_response(
                 serialized_data,
                 status=status.HTTP_201_CREATED,
                 meta=_queue_response_meta(
                     run=replay_run,
                     tenant_id=get_tenant_id_for_user(user),
                 ),
+            )
+            return record_processed_command(
+                context=command_context,
+                response=response,
+                resource_type="run",
+                resource_id=str(replay_run.id),
             )
 
         callback_url = resolve_engine_callback_url(run_id=str(replay_run.id))
@@ -2874,8 +3104,8 @@ class RunReplayView(APIView):
                         traceparent=trace_metadata["traceparent"],
                         tracestate=trace_metadata["tracestate"],
                     )
-                    replay_run.status = "running"
-                    update_fields = ["status"]
+                    transition = apply_run_status_transition(replay_run, "running")
+                    update_fields = transition.update_fields
                     update_fields.extend(
                         touch_run_liveness(
                             replay_run,
@@ -2897,10 +3127,12 @@ class RunReplayView(APIView):
                 trace_id=replay_run.trace_id or trace_metadata["trace_id"],
                 error_message=str(e),
             )
-            replay_run.status = "failed"
+            transition = apply_run_status_transition(replay_run, "failed")
             replay_run.ended_at = timezone.now()
             replay_run.error_message = f"Engine connection failed: {e}"
-            replay_run.save(update_fields=["status", "ended_at", "error_message"])
+            replay_run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             record_run_completed("failed", replay_run.duration_ms)
             broadcast_run_updated(replay_run)
             return error_response(
@@ -2918,10 +3150,12 @@ class RunReplayView(APIView):
                 trace_id=replay_run.trace_id or trace_metadata["trace_id"],
                 error_message=str(e),
             )
-            replay_run.status = "failed"
+            transition = apply_run_status_transition(replay_run, "failed")
             replay_run.ended_at = timezone.now()
             replay_run.error_message = f"Engine rejected run: {e}"
-            replay_run.save(update_fields=["status", "ended_at", "error_message"])
+            replay_run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
             record_run_completed("failed", replay_run.duration_ms)
             broadcast_run_updated(replay_run)
             return error_response(
@@ -2952,7 +3186,13 @@ class RunReplayView(APIView):
         }
 
         serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-        return success_response(serialized_data, status=status.HTTP_201_CREATED)
+        response = success_response(serialized_data, status=status.HTTP_201_CREATED)
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="run",
+            resource_id=str(replay_run.id),
+        )
 
 
 class RunCancelView(APIView):
@@ -2992,6 +3232,18 @@ class RunCancelView(APIView):
                 message=f"Run with id '{run_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
+        command_context = build_idempotency_context(
+            request=request,
+            organization=run.organization or user.default_organization,
+            action=f"runs.cancel:{run.id}",
+            request_payload=request.data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
 
         if run.status in {"succeeded", "failed", "canceled"}:
             return error_response(
@@ -3031,12 +3283,16 @@ class RunCancelView(APIView):
         if not run.started_at:
             run.started_at = timezone.now()
 
-        run.status = "canceled"
+        transition = apply_run_status_transition(run, "canceled")
         run.ended_at = timezone.now()
         if not run.error_message:
             run.error_message = "Canceled by user."
 
-        run.save(update_fields=["status", "started_at", "ended_at", "error_message"])
+        run.save(
+            update_fields=sorted(
+                set(transition.update_fields + ["started_at", "ended_at", "error_message"])
+            )
+        )
         record_audit_log(
             actor=user,
             tenant_id=get_tenant_id_for_run(run),
@@ -3085,7 +3341,13 @@ class RunCancelView(APIView):
         }
 
         serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
-        return success_response(serialized_data)
+        response = success_response(serialized_data)
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="run",
+            resource_id=str(run.id),
+        )
 
 
 class RunResumeView(APIView):
@@ -3123,6 +3385,18 @@ class RunResumeView(APIView):
                 message=f"Run with id '{run_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
+        command_context = build_idempotency_context(
+            request=request,
+            organization=run.organization or user.default_organization,
+            action=f"runs.resume:{run.id}",
+            request_payload=serializer.validated_data,
+        )
+        try:
+            replayed_response = replay_processed_command(command_context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
 
         if run.status not in {"paused", "resume_requested"}:
             return error_response(
@@ -3158,13 +3432,19 @@ class RunResumeView(APIView):
             )
             if resolved_task is not None:
                 if resolved_task.result == input_json:
-                    return success_response(
+                    response = success_response(
                         {
                             "resumed": True,
                             "run_id": str(run.id),
                             "duplicate": True,
                             "decision_status": resolved_task.status,
                         }
+                    )
+                    return record_processed_command(
+                        context=command_context,
+                        response=response,
+                        resource_type="run",
+                        resource_id=str(run.id),
                     )
                 return error_response(
                     code="DECISION_CONFLICT",
@@ -3235,10 +3515,13 @@ class RunResumeView(APIView):
             )
 
         with transaction.atomic():
-            run.status = "resume_requested"
+            transition = apply_run_status_transition(run, "resume_requested")
             run.resume_requested_at = resume_requested_at
             run.resume_attempt_id = resume_attempt_id
-            update_fields = ["status", "resume_requested_at", "resume_attempt_id"]
+            update_fields = transition.update_fields + [
+                "resume_requested_at",
+                "resume_attempt_id",
+            ]
             update_fields.extend(
                 touch_run_liveness(
                     run,
@@ -3255,10 +3538,13 @@ class RunResumeView(APIView):
                     refreshed_run.status == "resume_requested"
                     and refreshed_run.resume_attempt_id == resume_attempt_id
                 ):
-                    refreshed_run.status = "paused"
+                    transition = apply_run_status_transition(refreshed_run, "paused")
                     refreshed_run.resume_requested_at = None
                     refreshed_run.resume_attempt_id = None
-                    revert_fields = ["status", "resume_requested_at", "resume_attempt_id"]
+                    revert_fields = transition.update_fields + [
+                        "resume_requested_at",
+                        "resume_attempt_id",
+                    ]
                     revert_fields.extend(
                         touch_run_liveness(
                             refreshed_run,
@@ -3557,13 +3843,19 @@ class RunResumeView(APIView):
             resume_attempt_id=str(resume_attempt_id),
             message="Run resume request completed",
         )
-        return success_response(
+        response = success_response(
             {
                 "resumed": True,
                 "run_id": str(run.id),
                 "resume_attempt_id": str(resume_attempt_id),
                 "decision_status": decision_status,
             }
+        )
+        return record_processed_command(
+            context=command_context,
+            response=response,
+            resource_type="run",
+            resource_id=str(run.id),
         )
 
 
@@ -3588,21 +3880,64 @@ class EngineRunEventsView(APIView):
         )
         if not ok:
             record_callback_auth_failure(reason)
-            return problem_response(
+            _record_engine_callback_dead_letter(
+                event={"path": request.path, "body_size": len(request.body or b"")},
+                reason="engine callback authentication failed",
+                error_class="engine_callback_auth_failed",
+            )
+            return _engine_callback_problem(
                 type_uri="https://forgegraph.dev/problems/engine-callback-unauthorized",
                 title="Unauthorized",
-                status=status.HTTP_401_UNAUTHORIZED,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Engine callback verification failed: {reason}",
+                decision="reject_invalid",
+                reason="engine callback authentication failed",
+                safe_to_discard=False,
             )
 
-        incoming_payload = unwrap_engine_event(request.data)
+        try:
+            parsed_event = parse_engine_event_payload(
+                request.data,
+                allow_legacy=bool(
+                    getattr(settings, "ENGINE_LEGACY_EVENT_CALLBACKS_ENABLED", False)
+                ),
+            )
+        except CanonicalEventValidationError as exc:
+            payload = request.data if isinstance(request.data, dict) else {}
+            _record_engine_callback_dead_letter(
+                event=payload,
+                reason="invalid canonical engine event envelope",
+                error_class="canonical_event_validation",
+                event_id=str(payload.get("event_id") or ""),
+                idempotency_key=str(payload.get("idempotency_key") or ""),
+                event_type=str(payload.get("type") or ""),
+            )
+            return _engine_callback_problem(
+                type_uri="https://forgegraph.dev/problems/canonical-engine-event-validation",
+                title="Invalid canonical engine event envelope",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+                decision="reject_invalid",
+                reason="invalid canonical engine event envelope",
+                backend_event_id=str(payload.get("event_id") or ""),
+                safe_to_discard=True,
+            )
+        incoming_payload = parsed_event.event
         serializer = EngineExecutionEventSerializer(data=incoming_payload)
         if not serializer.is_valid():
-            return problem_response(
+            _record_engine_callback_dead_letter(
+                event=incoming_payload if isinstance(incoming_payload, dict) else {},
+                reason="invalid engine callback schema",
+                error_class="engine_callback_validation",
+            )
+            return _engine_callback_problem(
                 type_uri="https://forgegraph.dev/problems/engine-callback-validation",
                 title="Invalid engine callback payload",
-                status=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="The request contains invalid fields.",
+                decision="reject_invalid",
+                reason="invalid engine callback schema",
+                safe_to_discard=True,
                 extensions={
                     "errors": [
                         {"field": field, "issue": ", ".join(errors)}
@@ -3616,11 +3951,20 @@ class EngineRunEventsView(APIView):
         try:
             run = Run.objects.get(id=run_id)
         except Run.DoesNotExist:
-            return problem_response(
+            _record_engine_callback_dead_letter(
+                event=event,
+                reason="backend cannot prove the run is tombstoned",
+                error_class="run_not_found",
+            )
+            return _engine_callback_problem(
                 type_uri="https://forgegraph.dev/problems/run-not-found",
                 title="Run not found",
-                status=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Run with id '{run_id}' not found.",
+                decision="retry_required",
+                reason="backend cannot prove the run is tombstoned",
+                safe_to_discard=False,
+                conflict_code="404_UNKNOWN_ENTITY",
             )
         trace_context = ensure_trace_context(
             traceparent=str(
@@ -3642,16 +3986,33 @@ class EngineRunEventsView(APIView):
         tenant_id = str(event.get("tenant_id"))
         expected_tenant_id = get_tenant_id_for_run(run)
         if tenant_id != expected_tenant_id:
-            return problem_response(
+            _record_engine_callback_dead_letter(
+                event=event,
+                run=run,
+                reason="tenant mismatch for run event",
+                error_class="tenant_mismatch",
+                event_id=str(event.get("event_id") or ""),
+            )
+            return _engine_callback_problem(
                 type_uri="https://forgegraph.dev/problems/tenant-mismatch",
                 title="Tenant mismatch",
-                status=status.HTTP_403_FORBIDDEN,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="Tenant mismatch for run event.",
+                decision="reject_invalid",
+                reason="tenant mismatch for run event",
+                backend_event_id=str(event.get("event_id") or ""),
+                safe_to_discard=False,
             )
 
         event_id = event.get("event_id")
         if event_id and RunEvent.objects.filter(run=run, external_id=event_id).exists():
-            return success_response({"received": True, "duplicate": True})
+            return _engine_callback_success(
+                {"received": True, "duplicate": True},
+                decision="duplicate",
+                reason="event already applied",
+                backend_event_id=str(event_id),
+                safe_to_discard=True,
+            )
 
         event_type = event.get("type", "")
         timestamp_ms = event.get("timestamp")
@@ -3694,11 +4055,24 @@ class EngineRunEventsView(APIView):
                 error_detail=str(exc),
                 category=normalized_category,
             )
-            return problem_response(
+            _record_engine_callback_dead_letter(
+                event=event,
+                run=run,
+                reason="engine callback ownership conflict",
+                error_class="engine_instance_mismatch",
+                event_id=str(event_id or ""),
+                event_type=str(event_type or ""),
+            )
+            return _engine_callback_problem(
                 type_uri="https://forgegraph.dev/problems/engine-instance-mismatch",
                 title="Engine instance mismatch",
-                status=status.HTTP_409_CONFLICT,
+                status_code=status.HTTP_409_CONFLICT,
                 detail=str(exc),
+                decision="retry_required",
+                reason="engine callback ownership conflict",
+                backend_event_id=str(event_id or ""),
+                safe_to_discard=False,
+                conflict_code="409_ORDERING_CONFLICT",
             )
 
         raw_callback_engine_instance_id = str(event.get("engine_instance_id") or "").strip()
@@ -3711,11 +4085,24 @@ class EngineRunEventsView(APIView):
                         payload=event,
                     )
                 except EventSafetyViolation as exc:
-                    return problem_response(
+                    _record_engine_callback_dead_letter(
+                        event=event,
+                        run=run,
+                        reason="event safety violation",
+                        error_class="event_safety_violation",
+                        event_id=str(event_id or ""),
+                        event_type=str(event_type or ""),
+                    )
+                    return _engine_callback_problem(
                         type_uri="https://forgegraph.dev/problems/event-safety-violation",
                         title="Event safety violation",
-                        status=status.HTTP_409_CONFLICT,
+                        status_code=status.HTTP_409_CONFLICT,
                         detail=str(exc),
+                        decision="reject_invalid",
+                        reason="event safety violation",
+                        backend_event_id=str(event_id or ""),
+                        safe_to_discard=True,
+                        conflict_code="409_EVENT_SAFETY_VIOLATION",
                     )
                 run.engine_instance_id = callback_engine_instance_id
                 run.save(update_fields=["engine_instance_id"])
@@ -3758,7 +4145,11 @@ class EngineRunEventsView(APIView):
             payload = redact_payload(event.get("output") or {})
             _save_event("run.schema_validation", payload)
             message = broadcast_run_schema_validation(run=run, payload=payload)
-            return success_response(message)
+            return _engine_callback_success(
+                message,
+                reason="schema validation event accepted",
+                backend_event_id=str(event_id or ""),
+            )
 
         if event_type == "node_stream_chunk":
             output = event.get("output")
@@ -3800,7 +4191,80 @@ class EngineRunEventsView(APIView):
             if summary_payload:
                 broadcast_node_stream_summary(run=run, payload=summary_payload)
             message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
-            return success_response(message)
+            return _engine_callback_success(
+                message,
+                reason="stream chunk event accepted",
+                backend_event_id=str(event_id or ""),
+            )
+
+        if event_type in {
+            "memory_write_requested",
+            "memory_fact_extracted",
+            "summary_created",
+        }:
+            payload = event.get("output")
+            memory_payload = payload if isinstance(payload, dict) else {}
+            try:
+                memory_result = BackendMemoryIntentService().apply_engine_memory_intent(
+                    run=run,
+                    event_type=str(event_type),
+                    payload=memory_payload,
+                    event_id=str(event_id or ""),
+                )
+            except ValueError as exc:
+                _record_engine_callback_dead_letter(
+                    event=event,
+                    run=run,
+                    reason="invalid backend memory intent",
+                    error_class="memory_intent_validation",
+                    event_id=str(event_id or ""),
+                    event_type=str(event_type or ""),
+                )
+                return _engine_callback_problem(
+                    type_uri="https://forgegraph.dev/problems/memory-intent-validation",
+                    title="Invalid memory intent",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                    decision="reject_invalid",
+                    reason="invalid backend memory intent",
+                    backend_event_id=str(event_id or ""),
+                    safe_to_discard=True,
+                )
+            if not _save_event(
+                event_type, _serialize_event_payload(redact_payload(memory_payload))
+            ):
+                return _engine_callback_success(
+                    {"received": True, "duplicate": True},
+                    decision="duplicate",
+                    reason="event already applied",
+                    backend_event_id=str(event_id or ""),
+                    safe_to_discard=True,
+                )
+            record_audit_log(
+                actor=None,
+                tenant_id=get_tenant_id_for_run(run),
+                action=f"memory.{event_type}",
+                resource_type="run",
+                resource_id=str(run.id),
+                metadata={
+                    "event_id": event_id,
+                    "event_type": event_type,
+                    "source": "engine_callback",
+                    "backend_owner": "memory_service",
+                    "observation_count": memory_result.observation_count,
+                },
+            )
+            return _engine_callback_success(
+                {
+                    "received": True,
+                    "event_type": event_type,
+                    "authoritative_state_updated": True,
+                    "memory_owner": "backend",
+                    "memory_observation_count": memory_result.observation_count,
+                },
+                reason="backend memory intent event accepted",
+                backend_event_id=str(event_id or ""),
+            )
 
         if event_type in {
             "run_started",
@@ -3817,20 +4281,46 @@ class EngineRunEventsView(APIView):
                     payload=event,
                 )
             except EventSafetyViolation as exc:
-                return problem_response(
+                _record_engine_callback_dead_letter(
+                    event=event,
+                    run=run,
+                    reason="event safety violation",
+                    error_class="event_safety_violation",
+                    event_id=str(event_id or ""),
+                    event_type=str(event_type or ""),
+                )
+                return _engine_callback_problem(
                     type_uri="https://forgegraph.dev/problems/event-safety-violation",
                     title="Event safety violation",
-                    status=status.HTTP_409_CONFLICT,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail=str(exc),
+                    decision="reject_invalid",
+                    reason="event safety violation",
+                    backend_event_id=str(event_id or ""),
+                    safe_to_discard=True,
+                    conflict_code="409_EVENT_SAFETY_VIOLATION",
                 )
             try:
                 _validate_run_event_transition(current_status=run.status, event_type=event_type)
             except ValueError as exc:
-                return problem_response(
+                _record_engine_callback_dead_letter(
+                    event=event,
+                    run=run,
+                    reason="run state ordering conflict",
+                    error_class="run_state_ordering_conflict",
+                    event_id=str(event_id or ""),
+                    event_type=str(event_type or ""),
+                )
+                return _engine_callback_problem(
                     type_uri="https://forgegraph.dev/problems/invalid-run-transition",
                     title="Invalid run transition",
-                    status=status.HTTP_409_CONFLICT,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail=str(exc),
+                    decision="retry_required",
+                    reason="run state ordering conflict",
+                    backend_event_id=str(event_id or ""),
+                    safe_to_discard=False,
+                    conflict_code="409_ORDERING_CONFLICT",
                 )
             with transaction.atomic():
                 run = _lock_run_for_update(run.id)
@@ -3847,8 +4337,7 @@ class EngineRunEventsView(APIView):
 
                 if event_type == "run_started":
                     run_payload["status"] = "running"
-                    run.status = "running"
-                    update_fields.append("status")
+                    update_fields.extend(apply_run_status_transition(run, "running").update_fields)
                     if event_time:
                         run_payload["started_at"] = event_time
                         run.started_at = event_time
@@ -3859,8 +4348,9 @@ class EngineRunEventsView(APIView):
 
                 if event_type == "run_completed":
                     run_payload["status"] = "succeeded"
-                    run.status = "succeeded"
-                    update_fields.append("status")
+                    update_fields.extend(
+                        apply_run_status_transition(run, "succeeded").update_fields
+                    )
                     if event_time:
                         run_payload["ended_at"] = event_time
                         run.ended_at = event_time
@@ -3877,8 +4367,7 @@ class EngineRunEventsView(APIView):
 
                 if event_type == "run_failed":
                     run_payload["status"] = "failed"
-                    run.status = "failed"
-                    update_fields.append("status")
+                    update_fields.extend(apply_run_status_transition(run, "failed").update_fields)
                     if event_time:
                         run_payload["ended_at"] = event_time
                         run.ended_at = event_time
@@ -3894,8 +4383,7 @@ class EngineRunEventsView(APIView):
 
                 if event_type == "run_canceled":
                     run_payload["status"] = "canceled"
-                    run.status = "canceled"
-                    update_fields.append("status")
+                    update_fields.extend(apply_run_status_transition(run, "canceled").update_fields)
                     if event_time:
                         run_payload["ended_at"] = event_time
                         run.ended_at = event_time
@@ -3906,8 +4394,7 @@ class EngineRunEventsView(APIView):
 
                 if event_type == "run_paused":
                     run_payload["status"] = "paused"
-                    run.status = "paused"
-                    update_fields.append("status")
+                    update_fields.extend(apply_run_status_transition(run, "paused").update_fields)
                     node_id = str(event.get("node_id") or "")
                     if node_id:
                         run_payload["paused_node_id"] = node_id
@@ -3939,18 +4426,22 @@ class EngineRunEventsView(APIView):
                         expected_resume_attempt_id
                         and resume_attempt_id != expected_resume_attempt_id
                     ):
-                        return problem_response(
+                        return _engine_callback_problem(
                             type_uri="https://forgegraph.dev/problems/stale-resume-acknowledgement",
                             title="Stale resume acknowledgement",
-                            status=status.HTTP_409_CONFLICT,
+                            status_code=status.HTTP_409_CONFLICT,
                             detail=(
                                 "run_resumed acknowledgement does not match the active "
                                 "resume_attempt_id."
                             ),
+                            decision="stale_superseded",
+                            reason="resume_attempt_id does not match the active backend resume attempt",
+                            backend_event_id=str(event_id or ""),
+                            safe_to_discard=True,
+                            conflict_code="409_STALE_SUPERSEDED",
                         )
                     run_payload["status"] = "running"
-                    run.status = "running"
-                    update_fields.append("status")
+                    update_fields.extend(apply_run_status_transition(run, "running").update_fields)
                     run_payload["paused_node_id"] = None
                     run.paused_node_id = None
                     update_fields.append("paused_node_id")
@@ -4088,16 +4579,22 @@ class EngineRunEventsView(APIView):
                     broadcast_node_stream_summary(run=run, payload=summary_payload)
 
                 if not state_mutation_enabled:
-                    return success_response(
+                    return _engine_callback_success(
                         {
                             "received": True,
                             "event_type": event_type,
                             "authoritative_state_updated": False,
-                        }
+                        },
+                        reason="event accepted without authoritative state mutation",
+                        backend_event_id=str(event_id or ""),
                     )
 
                 message = broadcast_run_updated(run)
-                return success_response(message)
+                return _engine_callback_success(
+                    message,
+                    reason="run state event accepted",
+                    backend_event_id=str(event_id or ""),
+                )
 
         if event_type in {
             "node_started",
@@ -4113,11 +4610,24 @@ class EngineRunEventsView(APIView):
                     payload=event,
                 )
             except EventSafetyViolation as exc:
-                return problem_response(
+                _record_engine_callback_dead_letter(
+                    event=event,
+                    run=run,
+                    reason="event safety violation",
+                    error_class="event_safety_violation",
+                    event_id=str(event_id or ""),
+                    event_type=str(event_type or ""),
+                )
+                return _engine_callback_problem(
                     type_uri="https://forgegraph.dev/problems/event-safety-violation",
                     title="Event safety violation",
-                    status=status.HTTP_409_CONFLICT,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail=str(exc),
+                    decision="reject_invalid",
+                    reason="event safety violation",
+                    backend_event_id=str(event_id or ""),
+                    safe_to_discard=True,
+                    conflict_code="409_EVENT_SAFETY_VIOLATION",
                 )
             node_id = event.get("node_id") or ""
             node_type = event.get("node_type") or ""
@@ -4420,16 +4930,25 @@ class EngineRunEventsView(APIView):
                     if prompt_tokens or completion_tokens or total_tokens:
                         tenant_id = get_tenant_id_for_run(run)
                         cost = calculate_cost(provider, model, prompt_tokens, completion_tokens)
-                        LLMUsage.objects.create(
+                        usage_key_material = (
+                            f"{event_id or run.id}:{run.id}:{node_id}:{attempt}:{provider}:{model}"
+                        )
+                        usage_external_key = (
+                            f"llm:{hashlib.sha256(usage_key_material.encode('utf-8')).hexdigest()}"
+                        )
+                        LLMUsage.objects.update_or_create(
                             tenant_id=tenant_id,
-                            run=run,
-                            node_id=node_id,
-                            provider=provider,
-                            model=model,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            total_tokens=total_tokens,
-                            cost_usd=cost,
+                            external_key=usage_external_key,
+                            defaults={
+                                "run": run,
+                                "node_id": node_id,
+                                "provider": provider,
+                                "model": model,
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": total_tokens,
+                                "cost_usd": cost,
+                            },
                         )
                         cost_update_payload = {
                             "node_id": node_id,
@@ -4456,22 +4975,40 @@ class EngineRunEventsView(APIView):
                 broadcast_cost_update(run=run, payload=cost_update_payload)
 
             if not state_mutation_enabled:
-                return success_response(
+                return _engine_callback_success(
                     {
                         "received": True,
                         "event_type": event_type,
                         "authoritative_state_updated": False,
-                    }
+                    },
+                    reason="event accepted without authoritative state mutation",
+                    backend_event_id=str(event_id or ""),
                 )
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)
-            return success_response(message)
+            return _engine_callback_success(
+                message,
+                reason="node state event accepted",
+                backend_event_id=str(event_id or ""),
+            )
 
-        return problem_response(
+        _record_engine_callback_dead_letter(
+            event=event,
+            run=run,
+            reason="unknown engine event type",
+            error_class="unknown_engine_event",
+            event_id=str(event_id or ""),
+            event_type=str(event_type or ""),
+        )
+        return _engine_callback_problem(
             type_uri="https://forgegraph.dev/problems/unknown-engine-event",
             title="Unknown engine event",
-            status=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unknown event type.",
+            decision="reject_invalid",
+            reason="unknown engine event type",
+            backend_event_id=str(event_id or ""),
+            safe_to_discard=True,
         )
 
 
@@ -4527,6 +5064,34 @@ class RunEventsView(APIView):
                     detail=str(exc),
                 )
             payload = serializer.validated_data["run"]
+            output_schema = None
+            schema_mode = "warn"
+            schema_errors: list[dict[str, Any]] | None = None
+            try:
+                _, output_schema, _, schema_mode = extract_schema_metadata(
+                    run.graph_version.graph_json
+                )
+            except Exception:
+                output_schema = None
+
+            if output_schema and payload.get("status") == "succeeded" and "output_json" in payload:
+                try:
+                    schema_errors = validate_json_schema(payload.get("output_json"), output_schema)
+                except SchemaError as exc:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "run_output_schema_invalid",
+                        run_id=str(run.id),
+                        trace_id=run.trace_id,
+                        error_message=str(exc),
+                    )
+
+            if schema_errors and schema_mode == "strict":
+                payload["status"] = "failed"
+                payload["error_message"] = (
+                    f"Output schema validation failed: {schema_errors[0]['message']}"
+                )
             update_fields: list[str] = []
 
             for field in ["status", "started_at", "ended_at", "output_json", "error_message"]:
@@ -4582,29 +5147,6 @@ class RunEventsView(APIView):
                         },
                     )
 
-            output_schema = None
-            schema_mode = "warn"
-            try:
-                _, output_schema, _, schema_mode = extract_schema_metadata(
-                    run.graph_version.graph_json
-                )
-            except Exception:
-                output_schema = None
-
-            schema_errors: list[dict[str, Any]] | None = None
-            if output_schema and payload.get("status") == "succeeded" and "output_json" in payload:
-                try:
-                    schema_errors = validate_json_schema(payload.get("output_json"), output_schema)
-                except SchemaError as exc:
-                    log_event(
-                        logger,
-                        logging.WARNING,
-                        "run_output_schema_invalid",
-                        run_id=str(run.id),
-                        trace_id=run.trace_id,
-                        error_message=str(exc),
-                    )
-
             if schema_errors:
                 try:
                     RunEvent.objects.create(
@@ -4627,20 +5169,6 @@ class RunEventsView(APIView):
                         trace_id=run.trace_id,
                         error_message=str(exc),
                     )
-
-                if schema_mode == "strict":
-                    run.status = "failed"
-                    run.error_message = (
-                        f"Output schema validation failed: {schema_errors[0]['message']}"
-                    )
-                    run.save(
-                        update_fields=[
-                            "status",
-                            "error_message",
-                        ]
-                    )
-                    payload["status"] = run.status
-                    payload["error_message"] = run.error_message
 
             try:
                 RunEvent.objects.create(

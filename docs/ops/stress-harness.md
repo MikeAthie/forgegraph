@@ -16,10 +16,12 @@ real ForgeGraph control plane.
 - `synthetic-no-llm-500`
 - `controlled-llm-latency`
 - `real-provider-capacity`
+- `websocket-reconnect-storm`
+- `duplicate-event-storm`
 
-Capacity tiers and Phase 4 acceptance rules are defined in
+Capacity tiers and Phase 3 acceptance gates are defined in
 [scalability-program.md](scalability-program.md). The `production-scale` tier
-is not a claim until the 500+ evidence package passes.
+is not a claim until the Phase 3 Gate E evidence package passes three times.
 
 ## Example
 
@@ -37,9 +39,10 @@ python scripts/stress_runner.py \
   --allow-service-disruption
 ```
 
-Tier-based examples can omit `--concurrency`:
+Tier-based examples can omit `--concurrency`. Phase 3 gate examples can use
+`--capacity-gate A`, `--capacity-gate B`, through `--capacity-gate E`.
 
-For Phase 4 scenarios, set `--runs` to at least the requested concurrency. The
+For production-scale scenarios, set `--runs` to at least the requested concurrency. The
 harness rejects lower run counts to avoid false capacity evidence.
 
 ```bash

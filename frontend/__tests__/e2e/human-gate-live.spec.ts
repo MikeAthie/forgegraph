@@ -44,15 +44,42 @@ test.describe("Human gate live flow", () => {
       .fill("Approved by the live Playwright reliability test.");
     const approveButton = reviewPage.getByRole("button", { name: /approve with notes/i });
     await expect(approveButton).toBeEnabled();
-    const resumeResponsePromise = reviewPage.waitForResponse(
-      (response) => response.url().includes(`/api/runs/${runId}/resume`) && response.request().method() === "POST",
+    const postUrls: string[] = [];
+    const failedRequests: string[] = [];
+    reviewPage.on("request", (request) => {
+      if (request.method() === "POST") {
+        postUrls.push(request.url());
+      }
+    });
+    reviewPage.on("requestfailed", (request) => {
+      failedRequests.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "unknown failure"}`);
+    });
+    const resumeRequestPromise = reviewPage.waitForRequest(
+      (request) =>
+        /\/api\/(?:runs|executions)\/[^/]+\/resume$/.test(new URL(request.url()).pathname) &&
+        request.method() === "POST",
+      { timeout: 30_000 },
     );
     await approveButton.click();
-    const resumeResponse = await resumeResponsePromise;
-    expect(resumeResponse.ok()).toBeTruthy();
-    await reviewPage.close();
+    const resumeRequest = await resumeRequestPromise.catch((error: unknown) => {
+      throw new Error(
+        `Approval click did not reach a backend resume endpoint for run ${runId}. POSTs: ${
+          postUrls.length ? postUrls.join(", ") : "none"
+        }. ${String(error)}`,
+      );
+    });
+    expect(resumeRequest.url()).toContain(`/api/runs/${runId}/resume`);
+    const resumeResponse = await resumeRequest.response();
+    const resumeResponseBody = resumeResponse ? await resumeResponse.text() : "";
+    expect(
+      resumeResponse?.ok(),
+      `Resume POST failed for run ${runId}: url=${resumeRequest.url()} status=${
+        resumeResponse?.status() ?? "missing"
+      } body=${resumeResponseBody} failedRequests=${failedRequests.join(" | ") || "none"}`,
+    ).toBeTruthy();
 
     const completedRun = await waitForRunStatus(request, accessToken, runId, "succeeded");
+    await reviewPage.close();
     const eventTypes = new Set((completedRun.timeline ?? []).map((event) => event.event_type));
     expect(eventTypes.has("decision_required")).toBeTruthy();
     expect(eventTypes.has("decision_resolved")).toBeTruthy();

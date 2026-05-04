@@ -35,6 +35,9 @@ ENGINE_EVENT_TYPE_CHOICES = [
     "node_retrying",
     "node_stream_chunk",
     "run.schema_validation",
+    "memory_write_requested",
+    "memory_fact_extracted",
+    "summary_created",
 ]
 NODE_SCOPED_ENGINE_EVENT_TYPES = {
     "node_started",
@@ -286,6 +289,18 @@ class EngineExecutionEventSerializer(serializers.Serializer[Any]):
     """Serializer for execution events emitted by the engine."""
 
     event_id = serializers.CharField(required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True)
+    org_id = serializers.UUIDField(required=False)
+    agent_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    task_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    source = serializers.CharField(required=False, allow_blank=True)  # type: ignore[assignment]
+    sequence = serializers.IntegerField(required=False, min_value=1)
+    causation_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    correlation_id = serializers.CharField(required=False, allow_blank=True)
+    occurred_at = serializers.CharField(required=False, allow_blank=True)
+    schema_version = serializers.IntegerField(required=False)
+    checksum = serializers.CharField(required=False, allow_blank=True)
+    canonical_type = serializers.CharField(required=False, allow_blank=True)
     version = serializers.IntegerField(required=False)
     type = serializers.ChoiceField(choices=ENGINE_EVENT_TYPE_CHOICES)
     category = serializers.CharField(required=False, allow_blank=True)

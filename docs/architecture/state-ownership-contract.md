@@ -4,6 +4,8 @@
 
 > Runtime precedence: [runtime-invariants.md](runtime-invariants.md) is canonical.
 > This document elaborates state ownership details but does not override the runtime invariants.
+>
+> Boundary ADR: [state-ownership.md](state-ownership.md).
 
 ForgeGraph has one enforceable ownership rule for durable runtime state:
 
@@ -63,6 +65,7 @@ Only ephemeral execution state that can be lost without corrupting the system.
 
 References:
 
+- [state-ownership.md](state-ownership.md)
 - [control-plane.md](control-plane.md)
 - [execution-plane.md](execution-plane.md)
 - [run-event-contract.md](run-event-contract.md)

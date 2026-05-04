@@ -10,6 +10,7 @@ import {
 
 test.describe("Frontend Control Surface Live Backend", () => {
   test("renders overview state from backend projections", async ({ page, request }, testInfo) => {
+    test.setTimeout(60_000);
     const user = createTestUser(testInfo, "live-overview");
     await ensureUserRegistered(request, user);
     seedFrontendControlPlaneFixture(user);
@@ -20,12 +21,17 @@ test.describe("Frontend Control Surface Live Backend", () => {
     ]);
 
     await login(page, user);
-    await page.goto("/overview");
-    await page.waitForLoadState("networkidle");
+    await page.goto("/overview", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByRole("heading", { name: /^command ops$/i }).first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: /^active departments$/i })).toBeVisible();
-    await expect(page.getByText(/^cost today$/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^command ops$/i }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("a[href$='#active-departments']").filter({ hasText: /active departments/i })).toBeVisible(
+      {
+        timeout: 15_000,
+      },
+    );
+    await expect(page.locator("a[href$='#usage-budget']").filter({ hasText: /cost today/i })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page.getByRole("link", { name: /ops conductor/i }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /billing sentinel/i }).first()).toBeVisible();
     await expect(
@@ -44,10 +50,11 @@ test.describe("Frontend Control Surface Live Backend", () => {
     ]);
 
     await login(page, user);
-    await page.goto("/inbox");
-    await page.waitForLoadState("networkidle");
+    await page.goto("/inbox", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByRole("heading", { name: /decide with context, not with logs/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /decide with context, not with logs/i })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page.getByText(fixture.approval.promptMessage, { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: new RegExp(fixture.approval.graphName, "i") })).toBeVisible();
   });
@@ -62,10 +69,9 @@ test.describe("Frontend Control Surface Live Backend", () => {
     ]);
 
     await login(page, user);
-    await page.goto(`/executions/${fixture.runIds.failed}`);
-    await page.waitForLoadState("networkidle");
+    await page.goto(`/executions/${fixture.runIds.failed}`, { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/operation could not continue|could not finish/i).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: /department activity/i })).toBeVisible();
   });

@@ -21,23 +21,37 @@ from application.services.run_event_streaming import (
     run_event_group_name,
 )
 from application.services.run_ws_protocol import build_ws_public_message
+from application.services.state_feed import record_state_feed_event
 from infrastructure.orm.models import NodeRun, Run
 
 
-def _send_to_run_group(*, run_id: str, message: dict[str, Any]) -> None:
+def _send_to_run_group(
+    *,
+    run: Run,
+    message: dict[str, Any],
+    requires_refetch: bool = False,
+) -> None:
+    versioned_message = record_state_feed_event(
+        run=run,
+        message=message,
+        requires_refetch=requires_refetch,
+    )
     channel_layer = get_channel_layer()
     if channel_layer is None:
         return
 
     event_level = str(
-        message.get("level")
-        or classify_transport_event_level(str(message.get("type") or ""), _message_payload(message))
+        versioned_message.get("level")
+        or classify_transport_event_level(
+            str(versioned_message.get("type") or ""),
+            _message_payload(versioned_message),
+        )
     )
     async_to_sync(channel_layer.group_send)(
-        run_event_group_name(run_id=run_id, level=event_level),
+        run_event_group_name(run_id=str(run.id), level=event_level),
         {
             "type": "broadcast.message",
-            "message": message,
+            "message": versioned_message,
         },
     )
 
@@ -61,7 +75,7 @@ def broadcast_run_updated(run: Run) -> dict[str, Any]:
             "run": RunDeltaBroadcastSerializer(run).data,
         }
     )
-    _send_to_run_group(run_id=str(run.id), message=message)
+    _send_to_run_group(run=run, message=message)
     return message
 
 
@@ -78,7 +92,7 @@ def broadcast_node_run_updated(*, run: Run, node_run: NodeRun) -> dict[str, Any]
         },
         payload=payload,
     )
-    _send_to_run_group(run_id=str(run.id), message=message)
+    _send_to_run_group(run=run, message=message)
     return message
 
 
@@ -94,7 +108,7 @@ def broadcast_run_schema_validation(*, run: Run, payload: dict[str, Any]) -> dic
         },
         payload=payload,
     )
-    _send_to_run_group(run_id=str(run.id), message=message)
+    _send_to_run_group(run=run, message=message, requires_refetch=True)
     return message
 
 
@@ -110,7 +124,7 @@ def broadcast_node_stream_chunk(*, run: Run, payload: dict[str, Any]) -> dict[st
         },
         payload=payload,
     )
-    _send_to_run_group(run_id=str(run.id), message=message)
+    _send_to_run_group(run=run, message=message)
     return message
 
 
@@ -127,7 +141,7 @@ def broadcast_node_stream_summary(*, run: Run, payload: dict[str, Any]) -> dict[
         payload=payload,
         level=EVENT_LEVEL_DEFAULT,
     )
-    _send_to_run_group(run_id=str(run.id), message=message)
+    _send_to_run_group(run=run, message=message)
     return message
 
 
@@ -148,7 +162,7 @@ def broadcast_transport_event(
         payload=payload,
         level=level,
     )
-    _send_to_run_group(run_id=str(run.id), message=message)
+    _send_to_run_group(run=run, message=message)
     return message
 
 

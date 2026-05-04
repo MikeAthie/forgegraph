@@ -2500,6 +2500,54 @@ routes:
     oversized_request: skip
   rate_limit_scope: default
   request_size_limit: api_default
+- id: operator-event-dead-letters-dead-letter-id-acknowledge
+  names:
+  - operator-event-dead-letter-acknowledge
+  paths:
+  - /api/operator/event-dead-letters/<uuid:dead_letter_id>/acknowledge
+  - /api/v1/operator/event-dead-letters/<uuid:dead_letter_id>/acknowledge
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.event_dead_letter_acknowledged
+- id: operator-event-dead-letters-dead-letter-id-replay
+  names:
+  - operator-event-dead-letter-replay
+  paths:
+  - /api/operator/event-dead-letters/<uuid:dead_letter_id>/replay
+  - /api/v1/operator/event-dead-letters/<uuid:dead_letter_id>/replay
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: operator.event_dead_letter_replay_requested
 - id: operator-org-load
   names:
   - operator-org-load

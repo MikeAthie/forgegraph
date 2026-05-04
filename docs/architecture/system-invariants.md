@@ -81,9 +81,9 @@ These rules describe broader product and platform guidance around the runtime co
 ## Scale Target
 
 - Design for 500+ agents and high concurrency even if early deployments are smaller.
-- Do not claim 500+ current capacity until the production-scale tier in
-  [../ops/scalability-program.md](../ops/scalability-program.md) has clean,
-  reproducible evidence.
+- Do not claim 500+ current capacity until Phase 3 Gate E in
+  [../ops/scalability-program.md](../ops/scalability-program.md) has three clean,
+  reproducible evidence runs.
 - Every proposal should be checked against fan-out pressure, WebSocket scaling, event volume, snapshot storage growth, and aggregation cost.
 
 ## Auth And Tenancy
