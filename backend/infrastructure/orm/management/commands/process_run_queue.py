@@ -45,7 +45,10 @@ from application.services.run_queue import (
     record_run_queue_worker_heartbeat,
     release_stale_entries,
 )
-from application.services.run_state_machine import apply_run_status_transition
+from application.services.run_state_machine import (
+    TERMINAL_RUN_STATUSES,
+    apply_run_status_transition,
+)
 from application.services.task_lifecycle import (
     mark_run_tasks_terminal,
     record_retry_operation,
@@ -140,6 +143,16 @@ class Command(BaseCommand):
 
     def _process_entry(self, entry: RunQueueEntry, queue_settings: Any) -> None:
         run = entry.run
+        if run.status in TERMINAL_RUN_STATUSES:
+            logger.info(
+                "Skipping stale run queue entry %s for terminal run %s (%s).",
+                entry.id,
+                run.id,
+                run.status,
+            )
+            mark_completed(entry)
+            return
+
         user = run.owner
         tenant_id = get_tenant_id_for_user(user)
         session_id = str(run.thread_id) if run.thread_id else None
@@ -274,6 +287,10 @@ class Command(BaseCommand):
         self, entry: RunQueueEntry, run: Any, message: str, retryable: bool = False
     ) -> None:
         if retryable:
+            if run.status in TERMINAL_RUN_STATUSES:
+                mark_completed(entry)
+                return
+
             run.error_message = message
             run.save(update_fields=["error_message"])
             mark_failed(entry, error_message=message, retryable=True)
@@ -301,6 +318,10 @@ class Command(BaseCommand):
             return
 
         now = timezone.now()
+        if run.status in TERMINAL_RUN_STATUSES:
+            mark_completed(entry)
+            return
+
         if not run.started_at:
             run.started_at = now
         transition = apply_run_status_transition(run, "failed")

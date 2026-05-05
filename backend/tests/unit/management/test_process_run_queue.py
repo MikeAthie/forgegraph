@@ -132,3 +132,48 @@ def test_process_run_queue_uses_persisted_dispatch_graph_without_repreparing(mon
     assert run_metadata["context_pack_id"] == graph_json["metadata"]["context_pack_id"]
     assert run_metadata["context_pack_mode"] == "fresh_at_dispatch"
     assert "backend_attempt_id" not in run_metadata
+
+
+@pytest.mark.django_db
+def test_process_run_queue_completes_stale_entry_for_terminal_run(monkeypatch, user):
+    graph = Graph.objects.create(owner=user, name="Terminal Queued Graph")
+    version = GraphVersion.objects.create(
+        graph=graph,
+        version=1,
+        graph_json={
+            "nodes": [{"id": "source", "type": "transform", "name": "Source"}],
+            "edges": [],
+        },
+    )
+    run = Run.objects.create(
+        owner=user,
+        graph_version=version,
+        status="succeeded",
+        input_json={"hello": "queue"},
+        dispatch_graph_json={
+            "nodes": [{"id": "agent_1", "type": "agent", "name": "Agent"}],
+            "edges": [],
+        },
+    )
+    entry = enqueue_run(run, tenant_id=str(user.default_organization_id))
+
+    def _unexpected_engine_client(*args, **kwargs):
+        raise AssertionError("terminal runs must not be dispatched to the engine")
+
+    monkeypatch.setattr(process_run_queue, "get_engine_client", _unexpected_engine_client)
+
+    Command()._process_entry(
+        entry,
+        RunQueueSettings(
+            max_per_tenant=1,
+            lock_timeout_seconds=300,
+            retry_delay_seconds=30,
+        ),
+    )
+
+    run.refresh_from_db()
+    entry.refresh_from_db()
+
+    assert run.status == "succeeded"
+    assert entry.status == "completed"
+    assert entry.locked_by == ""

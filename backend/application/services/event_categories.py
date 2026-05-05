@@ -30,6 +30,9 @@ OBSERVABILITY_EVENT_TYPES = {
     "memory_write_requested",
     "memory_fact_extracted",
     "summary_created",
+    "memory.write_requested",
+    "memory.fact_extracted",
+    "summary.created",
 }
 
 

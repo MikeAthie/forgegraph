@@ -118,6 +118,7 @@ def _concrete_path(path: str) -> str:
         "<uuid:user_id>": str(uuid4()),
         "<uuid:version_id>": str(uuid4()),
         "<str:cache_key>": "cache-key",
+        "<str:dead_letter_key>": f"event:{uuid4()}",
         "<str:node_id>": "node-1",
         "<str:provider>": "openai",
         "<slug:package_slug>": "demo-package",
@@ -177,14 +178,27 @@ def test_route_security_matrix_covers_every_production_api_route_and_run_websock
     assert not extra, f"Matrix contains stale route entries: {extra}"
 
     matrix = _load_matrix()
-    websocket_entries = [
+    run_websocket_entries = [
         route
         for route in matrix["routes"]
         if "/ws/runs/<uuid:run_id>/" in route["paths"]
         and "WEBSOCKET" in route["methods"]
         and route["auth_surface"] == "websocket_ticket"
     ]
-    assert websocket_entries, "Matrix must explicitly cover /ws/runs/<run_id>/ websocket tickets."
+    assert run_websocket_entries, (
+        "Matrix must explicitly cover /ws/runs/<run_id>/ websocket tickets."
+    )
+
+    organization_websocket_entries = [
+        route
+        for route in matrix["routes"]
+        if "/ws/organizations/<uuid:organization_id>/state/" in route["paths"]
+        and "WEBSOCKET" in route["methods"]
+        and route["auth_surface"] == "websocket_ticket"
+    ]
+    assert organization_websocket_entries, (
+        "Matrix must explicitly cover /ws/organizations/<organization_id>/state websocket tickets."
+    )
 
 
 def test_jwt_matrix_routes_reject_unauthenticated_requests(api_client: APIClient):
@@ -335,6 +349,8 @@ def test_sensitive_matrix_rows_declare_audit_actions():
         "runs-run-id-cancel",
         "runs-run-id-resume",
         "runs-run-id-replay",
+        "ops-dead-letters-dead-letter-key-replay",
+        "ops-dead-letters-dead-letter-key-resolve",
     }
     entries = {route["id"]: route for route in matrix["routes"]}
     missing = [

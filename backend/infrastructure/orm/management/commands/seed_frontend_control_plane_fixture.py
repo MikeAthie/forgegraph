@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from application.services.os_projections import refresh_phase1_projections
+from application.services.os_projection_rebuild import rebuild_os_projections_for_organization
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     AgentRegistryEntry,
@@ -540,7 +540,20 @@ class Command(BaseCommand):
                 },
             )
 
-            refresh_phase1_projections(user)
+        rebuild_os_projections_for_organization(organization)
+
+        ops_agent = AgentRegistryEntry.objects.filter(
+            organization=organization,
+            source_workflow=paused_graph,
+            source_node_id="ops_agent",
+        ).first()
+        finance_agent = AgentRegistryEntry.objects.filter(
+            organization=organization,
+            source_workflow=running_graph,
+            source_node_id="finance_agent",
+        ).first()
+        ops_agent_id = ops_agent.id if ops_agent is not None else ops_agent_id
+        finance_agent_id = finance_agent.id if finance_agent is not None else finance_agent_id
 
         payload = {
             "organizationId": str(organization.id),

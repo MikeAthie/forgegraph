@@ -249,14 +249,33 @@ func makeGraphJSONWithMetadata(nodes []entity.Node, edges []entity.Edge, metadat
 
 func waitForSchedulerInactive(t *testing.T, scheduler *Scheduler, runID string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	waitForRuntimeCondition(t, 2*time.Second, func() bool {
 		if !scheduler.IsRunActive(runID) {
-			return
+			return true
 		}
-		time.Sleep(10 * time.Millisecond)
+		return false
+	}, fmt.Sprintf("run %s remained active", runID))
+}
+
+func waitForRuntimeCondition(t *testing.T, timeout time.Duration, condition func() bool, failureMessage string) {
+	t.Helper()
+	if condition() {
+		return
 	}
-	t.Fatalf("run %s remained active", runID)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timer.C:
+			t.Fatal(failureMessage)
+		case <-ticker.C:
+			if condition() {
+				return
+			}
+		}
+	}
 }
 
 func TestSchedulerStartRunFailsClosedWhenRunStartWriteFails(t *testing.T) {
@@ -644,10 +663,9 @@ func TestSchedulerPauseIntentActiveModePublishesWithoutLegacyPauseWrites(t *test
 	engine.AwaitBlockedAttempt(runID, "gate", 1)
 	engine.Release(runID, "gate")
 
-	deadline := time.Now().Add(2 * time.Second)
-	for publisher.CountByIntentType("pause_run") == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForRuntimeCondition(t, 2*time.Second, func() bool {
+		return publisher.CountByIntentType("pause_run") > 0
+	}, "expected pause_run intent to be published")
 	if publisher.CountByIntentType("pause_run") != 1 {
 		t.Fatalf("expected one pause_run intent to be published, got %d", publisher.CountByIntentType("pause_run"))
 	}
@@ -719,10 +737,9 @@ func TestSchedulerPublishesToolExecutionLifecycleIntents(t *testing.T) {
 	engine.AwaitBlockedAttempt(runID, "output", 1)
 	engine.Release(runID, "output")
 
-	deadline := time.Now().Add(2 * time.Second)
-	for publisher.CountByIntentType("tool_execution_succeeded") == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForRuntimeCondition(t, 2*time.Second, func() bool {
+		return publisher.CountByIntentType("tool_execution_succeeded") > 0
+	}, "expected tool_execution_succeeded intent to be published")
 	if publisher.CountByIntentType("tool_execution_started") != 1 {
 		t.Fatalf("expected one tool_execution_started intent, got %d", publisher.CountByIntentType("tool_execution_started"))
 	}
@@ -777,10 +794,9 @@ func TestSchedulerBlocksAutomaticRetryForUnsafeToolExecution(t *testing.T) {
 	engine.AwaitBlockedAttempt(runID, "tool_1", 1)
 	engine.Release(runID, "tool_1")
 
-	deadline := time.Now().Add(2 * time.Second)
-	for engine.Repo.getRunStatus(runID) != string(value.RunStatusFailed) && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForRuntimeCondition(t, 2*time.Second, func() bool {
+		return engine.Repo.getRunStatus(runID) == string(value.RunStatusFailed)
+	}, "expected unsafe tool run to fail")
 	if attempts != 1 {
 		t.Fatalf("unsafe tool attempts = %d, want 1", attempts)
 	}
@@ -826,10 +842,9 @@ func TestSchedulerRecordsRetryOperationBeforeRetryDelay(t *testing.T) {
 	engine.AwaitBlockedAttempt(runID, "retry", 1)
 	engine.Release(runID, "retry")
 
-	deadline := time.Now().Add(2 * time.Second)
-	for publisher.CountByIntentType("record_retry_operation") == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForRuntimeCondition(t, 2*time.Second, func() bool {
+		return publisher.CountByIntentType("record_retry_operation") > 0
+	}, "expected record_retry_operation intent to be published")
 	intent := publisher.LastByIntentType("record_retry_operation")
 	if intent == nil {
 		t.Fatal("expected record_retry_operation intent")

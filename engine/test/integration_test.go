@@ -1,5 +1,5 @@
-//go:build legacy_engine_tests
-// +build legacy_engine_tests
+//go:build legacy_engine_tests && legacy_timing
+// +build legacy_engine_tests,legacy_timing
 
 package test
 

@@ -24,11 +24,9 @@ test.describe("Frontend Control Surface Live Backend", () => {
     await page.goto("/overview", { waitUntil: "domcontentloaded" });
 
     await expect(page.getByRole("heading", { name: /^command ops$/i }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator("a[href$='#active-departments']").filter({ hasText: /active departments/i })).toBeVisible(
-      {
-        timeout: 15_000,
-      },
-    );
+    await expect(page.locator("a[href$='#active-departments']").filter({ hasText: /active agents/i })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page.locator("a[href$='#usage-budget']").filter({ hasText: /cost today/i })).toBeVisible({
       timeout: 15_000,
     });

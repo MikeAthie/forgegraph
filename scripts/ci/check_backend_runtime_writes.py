@@ -28,6 +28,7 @@ ALLOWED_RUNTIME_WRITERS = {
     Path("backend/adapters/api/integrations/webhook_views.py"),
     Path("backend/application/services/audit_log.py"),
     Path("backend/application/services/os_projections.py"),
+    Path("backend/application/services/operator_actions.py"),
     Path("backend/application/services/runtime_write_intents.py"),
     Path("backend/application/services/run_liveness.py"),
     Path("backend/application/services/run_state_machine.py"),

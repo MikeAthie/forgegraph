@@ -30,6 +30,11 @@ LOC_MEM_CACHE = {
         "LOCATION": "ws-tests",
     }
 }
+LOC_MEM_CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
 
 
 def _ws(user: User, url: str) -> WebsocketCommunicator:
@@ -131,7 +136,7 @@ async def test_run_ws_rejects_unauthenticated_user(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -169,7 +174,7 @@ async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
         },
     )
 
-    message = await communicator.receive_json_from()
+    message = await communicator.receive_json_from(timeout=5)
     assert message["type"] == "run_started"
     assert message["run_id"] == str(run_id)
     assert message["payload"]["run"]["status"] == "running"
@@ -178,7 +183,7 @@ async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_default_subscription_drops_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -216,7 +221,7 @@ async def test_run_ws_default_subscription_drops_verbose_messages(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_filters_by_requested_event_type(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -275,14 +280,14 @@ async def test_run_ws_filters_by_requested_event_type(user):
         },
     )
 
-    message = await communicator.receive_json_from()
+    message = await communicator.receive_json_from(timeout=5)
     assert message["type"] == "run_completed"
     assert message["event_id"] == "evt-filter-completed"
     await communicator.disconnect()
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -291,14 +296,14 @@ async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
     connected, _ = await _connect(communicator)
     assert connected is True
 
-    connected_message = await communicator.receive_json_from()
+    connected_message = await communicator.receive_json_from(timeout=5)
     assert connected_message["payload"]["resync_required"] is True
     assert connected_message["payload"]["full_resync_required"] is True
     assert connected_message["payload"]["replay_supported"] is True
     assert connected_message["payload"]["last_seen_event_id"] == "evt-old"
 
     await communicator.send_json_to({"type": "resync"})
-    resync = await communicator.receive_json_from()
+    resync = await communicator.receive_json_from(timeout=5)
     assert resync["type"] == "full_resync_required"
     assert resync["payload"]["replay_supported"] is True
     assert resync["payload"]["full_resync_required"] is True
@@ -306,7 +311,7 @@ async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_verbose_subscription_receives_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -345,14 +350,14 @@ async def test_run_ws_verbose_subscription_receives_verbose_messages(user):
         },
     )
 
-    message = await communicator.receive_json_from()
+    message = await communicator.receive_json_from(timeout=5)
     assert message["type"] == "node_stream_chunk"
     assert message["payload"]["text_preview"] == "hello"
     await communicator.disconnect()
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_allows_same_org_member(user):
     run_id = await _create_run_for_user(user=user)
     member = await _create_same_org_member(user)
@@ -367,6 +372,7 @@ async def test_run_ws_allows_same_org_member(user):
 @pytest.mark.asyncio
 @override_settings(
     CACHES=LOC_MEM_CACHE,
+    CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS,
     RUN_WS_MAX_CONNECTIONS_PER_USER=1,
     RUN_WS_MAX_CONNECTIONS_PER_ORG=10,
 )
@@ -389,7 +395,7 @@ async def test_run_ws_enforces_user_connection_limit(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_rejects_cross_org_user(user):
     _, run_id = await _create_other_user_and_run()
 
@@ -401,7 +407,7 @@ async def test_run_ws_rejects_cross_org_user(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_ticket_is_single_use(user):
     run_id = await _create_run_for_user(user=user)
 
@@ -419,7 +425,7 @@ async def test_run_ws_ticket_is_single_use(user):
 
 
 @pytest.mark.asyncio
-@override_settings(CACHES=LOC_MEM_CACHE)
+@override_settings(CACHES=LOC_MEM_CACHE, CHANNEL_LAYERS=LOC_MEM_CHANNEL_LAYERS)
 async def test_run_ws_rejects_ticket_when_access_token_revoked(user):
     run_id = await _create_run_for_user(user=user)
 

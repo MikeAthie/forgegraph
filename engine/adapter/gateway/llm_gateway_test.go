@@ -281,13 +281,35 @@ func TestLLMGatewayCircuitOpensAndCloses(t *testing.T) {
 		t.Fatalf("expected circuit-open LLMError, got %T %v", err, err)
 	}
 
-	time.Sleep(20 * time.Millisecond)
 	primary.err = nil
-	response, err := gw.Generate(context.Background(), LLMRequest{Prompt: "after cooldown"})
-	if err != nil {
-		t.Fatalf("Generate() after cooldown error = %v", err)
-	}
+	var response LLMResponse
+	waitForLLMGatewayCondition(t, 200*time.Millisecond, func() bool {
+		var generateErr error
+		response, generateErr = gw.Generate(context.Background(), LLMRequest{Prompt: "after cooldown"})
+		return generateErr == nil
+	}, "Generate() did not recover after circuit cooldown")
 	if response.Status != LLMStatusSuccess {
 		t.Fatalf("response status = %s, want success", response.Status)
+	}
+}
+
+func waitForLLMGatewayCondition(t *testing.T, timeout time.Duration, condition func() bool, failureMessage string) {
+	t.Helper()
+	if condition() {
+		return
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timer.C:
+			t.Fatal(failureMessage)
+		case <-ticker.C:
+			if condition() {
+				return
+			}
+		}
 	}
 }

@@ -20,6 +20,7 @@ from adapters.ws.runs.broadcast import (
     broadcast_run_updated,
 )
 from application.services.company_archive import ArchiveService
+from application.services.idempotency import record_idempotency_observation
 from application.services.metrics import record_service_metric_sample, record_stale_attempt_ignored
 from application.services.redaction import redact_payload
 from application.services.redis_connections import build_redis_client
@@ -1317,6 +1318,21 @@ def _record_runtime_intent_outcome(
         },
         observed_at=now,
     )
+    if outcome in {"processed", "duplicate", "invalid"}:
+        record_idempotency_observation(
+            boundary="runtime_intent",
+            status=(
+                "applied"
+                if outcome == "processed"
+                else "already_applied"
+                if outcome == "duplicate"
+                else "rejected"
+            ),
+            idempotency_key=str(intent.intent_id),
+            resource_type="runtime_intent",
+            organization_id=run.organization_id if run else None,
+            run_id=run.id if run else None,
+        )
 
 
 def _touch_run(run: Run, *, event_time: datetime) -> None:

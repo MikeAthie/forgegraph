@@ -102,13 +102,18 @@ describe("security boundary enforcement", () => {
       "forceFailRun:",
       "forceCancelRun:",
       "forceRehydrateRun:",
+      "replayDeadLetter:",
+      "resolveDeadLetter:",
     ]) {
       expect(apiSource).toContain(method);
     }
 
-    expect(operationRepositorySource).toContain("operation.cancel:${operationId}");
-    expect(operationRepositorySource).toContain("operation.resume:${operationId}:${departmentId}");
-    expect(operationRepositorySource).toContain('newClientActionId("operation.launch")');
-    expect(operationRepositorySource).toContain("newClientActionId(`operation.replay:${operationId}`)");
+    const opsSource = readFrontendSource("pages/ops/index.tsx");
+    expect(operationRepositorySource).toContain('stableClientCommandId("operation.cancel", operationId)');
+    expect(operationRepositorySource).toContain('"operation.resume"');
+    expect(operationRepositorySource).toContain('newClientCommandId("operation.launch")');
+    expect(operationRepositorySource).toContain("newClientCommandId(`operation.replay:${operationId}`)");
+    expect(opsSource).toContain("newClientCommandId(`ops.dead_letter.replay:${item.id}`)");
+    expect(opsSource).toContain("newClientCommandId(`ops.dead_letter.resolve:${item.id}`)");
   });
 });

@@ -1,0 +1,5 @@
+/docs/architecture/state-ownership.md @backend-lead @engine-lead @frontend-lead @product-lead
+/docs/architecture/event-contracts.md @backend-lead @engine-lead
+/docs/architecture/frontend-state-contract.md @backend-lead @frontend-lead
+/docs/architecture/launch-claims.md @product-lead @backend-lead @platform-sre-lead
+/docs/launch/claims-policy.md @product-lead @backend-lead @platform-sre-lead

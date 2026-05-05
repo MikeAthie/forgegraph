@@ -1172,6 +1172,212 @@ class StateFeedEvent(models.Model):
         return f"StateFeedEvent {self.run_id} v{self.state_version} {self.type}"
 
 
+class OrganizationStateFeedSequence(models.Model):
+    """Per-organization allocator for Command Ops state-feed versions."""
+
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="state_feed_sequence",
+    )
+    next_sequence = models.BigIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "organization_state_feed_sequences"
+
+    def __str__(self) -> str:
+        return f"{self.organization_id} next={self.next_sequence}"
+
+
+class OrganizationStateFeedEvent(models.Model):
+    """Versioned organization notification retained for Command Ops replay."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="organization_state_feed_events",
+    )
+    event_id = models.CharField(max_length=128)
+    state_version = models.PositiveBigIntegerField()
+    type = models.CharField(max_length=96)
+    resource_type = models.CharField(max_length=64, blank=True, default="")
+    resource_id = models.CharField(max_length=128, blank=True, default="")
+    requires_refetch = models.BooleanField(default=True)
+    message = models.JSONField(default=dict)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "organization_state_feed_events"
+        ordering = ["organization_id", "state_version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "state_version"],
+                name="org_state_feed_org_version_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "event_id"],
+                name="org_state_feed_org_event_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "state_version"],
+                name="org_state_feed_org_ver_idx",
+            ),
+            models.Index(
+                fields=["organization", "type", "state_version"],
+                name="org_state_feed_type_ver_idx",
+            ),
+            models.Index(
+                fields=["organization", "resource_type", "resource_id"],
+                name="org_state_feed_resource_idx",
+            ),
+            models.Index(
+                fields=["organization", "created_at"],
+                name="org_state_feed_created_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"OrganizationStateFeedEvent {self.organization_id} v{self.state_version} {self.type}"
+        )
+
+
+class OrganizationDomainEventSequence(models.Model):
+    """Per-organization allocator for backend-authored domain event sequences."""
+
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="domain_event_sequence",
+    )
+    next_sequence = models.BigIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "organization_domain_event_sequences"
+
+    def __str__(self) -> str:
+        return f"{self.organization_id} next={self.next_sequence}"
+
+
+class DomainEvent(models.Model):
+    """Backend-owned durable projection event derived from committed backend writes."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="domain_events",
+    )
+    aggregate_type = models.CharField(max_length=64)
+    aggregate_id = models.UUIDField(db_index=True)
+    event_type = models.CharField(max_length=128)
+    event_version = models.IntegerField(default=1)
+    sequence = models.BigIntegerField()
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    payload = models.JSONField(default=dict)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "domain_events"
+        ordering = ["organization_id", "sequence"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "sequence"],
+                name="domain_events_org_sequence_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "sequence"], name="domain_events_org_seq_idx"),
+            models.Index(fields=["tenant_id", "event_type"], name="domain_events_tenant_type_idx"),
+            models.Index(
+                fields=["aggregate_type", "aggregate_id", "sequence"],
+                name="domain_events_agg_seq_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} {self.organization_id}#{self.sequence}"
+
+
+class ProjectionCursor(models.Model):
+    """Per-organization cursor for one materialized projection."""
+
+    STATUS_CHOICES = [
+        ("fresh", "Fresh"),
+        ("stale", "Stale"),
+        ("rebuilding", "Rebuilding"),
+        ("degraded", "Degraded"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    projection_name = models.CharField(max_length=128)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="projection_cursors",
+    )
+    last_sequence = models.BigIntegerField(default=0)
+    last_event_id = models.UUIDField(null=True, blank=True)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="fresh")
+    last_error = models.TextField(blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "projection_cursors"
+        ordering = ["projection_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["projection_name", "organization"],
+                name="projection_cursor_name_org_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "projection_name"],
+                name="projection_cursor_org_name_idx",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.projection_name} {self.organization_id}#{self.last_sequence}"
+
+
+class ProcessedProjectionEvent(models.Model):
+    """Idempotency marker for projection handlers."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    projection_name = models.CharField(max_length=128)
+    event = models.ForeignKey(
+        DomainEvent,
+        on_delete=models.CASCADE,
+        related_name="processed_projection_events",
+    )
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "processed_projection_events"
+        ordering = ["-processed_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["projection_name", "event"],
+                name="uniq_projection_event_once",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.projection_name} {self.event_id}"
+
+
 class ProcessedRuntimeIntent(models.Model):
     """ProcessedRuntimeIntent records backend-applied runtime write intents."""
 
@@ -1237,6 +1443,211 @@ class ProcessedCommand(models.Model):
 
     def __str__(self) -> str:
         return f"ProcessedCommand {self.action} {self.idempotency_key}"
+
+
+class ProcessedCallbackEvent(models.Model):
+    """ProcessedCallbackEvent records backend-applied engine callback events."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="processed_callback_events",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="processed_callback_events",
+    )
+    event_id = models.CharField(max_length=128)
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    event_type = models.CharField(max_length=96)
+    request_hash = models.CharField(max_length=64)
+    response_status = models.PositiveSmallIntegerField(default=200)
+    response_body = models.JSONField(default=dict, blank=True)
+    resource_type = models.CharField(max_length=64, blank=True, default="")
+    resource_id = models.CharField(max_length=128, blank=True, default="")
+    status = models.CharField(max_length=32, default="applied")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "processed_callback_events"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "event_id"],
+                name="processed_callback_run_event_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="processed_callback_org_idem_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "created_at"],
+                name="processed_cb_org_time_idx",
+            ),
+            models.Index(fields=["event_type", "created_at"], name="processed_cb_type_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProcessedCallbackEvent {self.event_type} {self.event_id}"
+
+
+class ProcessedDecisionSubmission(models.Model):
+    """ProcessedDecisionSubmission records backend-applied human decisions."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="processed_decision_submissions",
+    )
+    run = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="processed_decision_submissions",
+    )
+    approval_task = models.ForeignKey(
+        "ApprovalTask",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processed_submissions",
+    )
+    submit_id = models.CharField(max_length=255)
+    request_hash = models.CharField(max_length=64)
+    resume_attempt_id = models.UUIDField(null=True, blank=True)
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    response_status = models.PositiveSmallIntegerField(default=200)
+    response_body = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=32, default="applied")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "processed_decision_submissions"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "submit_id"],
+                name="processed_decision_org_submit_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "created_at"], name="processed_dec_run_time_idx"),
+            models.Index(
+                fields=["approval_task", "created_at"],
+                name="processed_dec_task_time_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProcessedDecisionSubmission {self.submit_id}"
+
+
+class ProcessedAccountingEvent(models.Model):
+    """ProcessedAccountingEvent records backend-applied usage/cost events."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="processed_accounting_events",
+    )
+    event_key = models.CharField(max_length=255)
+    event_type = models.CharField(max_length=64)
+    request_hash = models.CharField(max_length=64, blank=True, default="")
+    llm_usage = models.ForeignKey(
+        "LLMUsage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processed_accounting_events",
+    )
+    memory_usage = models.ForeignKey(
+        "MemoryUsage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processed_accounting_events",
+    )
+    cost_ledger_entry = models.ForeignKey(
+        "CostLedgerEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processed_accounting_events",
+    )
+    status = models.CharField(max_length=32, default="applied")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "processed_accounting_events"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "event_key"],
+                name="processed_accounting_org_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "created_at"],
+                name="processed_acct_org_time_idx",
+            ),
+            models.Index(fields=["event_type", "created_at"], name="processed_acct_type_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProcessedAccountingEvent {self.event_type} {self.event_key}"
+
+
+class ProcessedMemoryEvent(models.Model):
+    """ProcessedMemoryEvent records backend-applied memory writes."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="processed_memory_events",
+    )
+    event_id = models.CharField(max_length=128)
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    event_type = models.CharField(max_length=96)
+    request_hash = models.CharField(max_length=64)
+    observation_ids_json = models.JSONField(default=list, blank=True)
+    response_status = models.PositiveSmallIntegerField(default=200)
+    response_body = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=32, default="applied")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "processed_memory_events"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "event_id"],
+                name="processed_memory_org_event_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="processed_memory_org_idem_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="processed_mem_org_time_idx"),
+            models.Index(fields=["event_type", "created_at"], name="processed_mem_type_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProcessedMemoryEvent {self.event_type} {self.event_id}"
 
 
 class RuntimeIntentOutcome(models.Model):
@@ -1570,6 +1981,12 @@ class MemoryObservation(models.Model):
     scope = models.CharField(max_length=16, choices=SCOPE_CHOICES, default="graph")
     topic_key = models.CharField(max_length=128, blank=True, default="")
     tool_name = models.CharField(max_length=128, blank=True, default="")
+    source_event_id = models.CharField(max_length=128, blank=True, default="", db_index=True)
+    source_event_type = models.CharField(max_length=128, blank=True, default="")
+    fact_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    provenance_json = models.JSONField(default=dict, blank=True)
+    cost_metadata_json = models.JSONField(default=dict, blank=True)
+    retention_policy_json = models.JSONField(default=dict, blank=True)
     revision_count = models.PositiveIntegerField(default=1)
     duplicate_count = models.PositiveIntegerField(default=0)
     last_seen_at = models.DateTimeField(default=timezone.now)
@@ -1597,6 +2014,8 @@ class MemoryObservation(models.Model):
             models.Index(
                 fields=["tenant_id", "type", "last_seen_at"], name="mem_obs_type_seen_idx"
             ),
+            models.Index(fields=["tenant_id", "source_event_id"], name="mem_obs_source_event_idx"),
+            models.Index(fields=["tenant_id", "fact_hash"], name="mem_obs_fact_hash_idx"),
         ]
         constraints = [
             _make_check_constraint(
@@ -1756,6 +2175,53 @@ class AuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"AuditLog {self.action} {self.resource_type} {self.resource_id}"
+
+
+class OperatorActionLog(models.Model):
+    """Append-only operator recovery action log."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operator_action_logs",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="operator_action_logs",
+    )
+    action = models.CharField(max_length=96)
+    target_type = models.CharField(max_length=64)
+    target_id = models.CharField(max_length=128)
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=32, default="applied")
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "operator_action_logs"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "created_at"],
+                name="operator_action_org_time_idx",
+            ),
+            models.Index(
+                fields=["organization", "action", "created_at"],
+                name="operator_action_org_action_idx",
+            ),
+            models.Index(
+                fields=["target_type", "target_id"],
+                name="operator_action_target_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"OperatorActionLog {self.action} {self.target_type} {self.target_id}"
 
 
 class ServiceMetricSample(models.Model):
@@ -3843,3 +4309,113 @@ def ensure_default_organization(
         is_default=True,
     )
     User.objects.filter(pk=instance.pk).update(default_organization=organization)
+
+
+@receiver(post_save, sender=Run)
+def record_run_domain_event_signal(
+    sender: type[Run], instance: Run, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw"):
+        return
+    from application.services.domain_events import record_run_domain_event
+
+    record_run_domain_event(instance, created=created)
+
+
+@receiver(post_save, sender=RunEvent)
+def record_run_event_domain_event_signal(
+    sender: type[RunEvent], instance: RunEvent, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw") or not created:
+        return
+    from application.services.domain_events import record_run_event_domain_event
+
+    record_run_event_domain_event(instance)
+
+
+@receiver(post_save, sender=NodeRun)
+def record_node_run_domain_event_signal(
+    sender: type[NodeRun], instance: NodeRun, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw"):
+        return
+    from application.services.domain_events import record_node_run_domain_event
+
+    record_node_run_domain_event(instance, created=created)
+
+
+@receiver(post_save, sender=TaskLifecycleEvent)
+def record_task_lifecycle_domain_event_signal(
+    sender: type[TaskLifecycleEvent], instance: TaskLifecycleEvent, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw") or not created:
+        return
+    from application.services.domain_events import record_task_lifecycle_domain_event
+
+    record_task_lifecycle_domain_event(instance)
+
+
+@receiver(post_save, sender=ApprovalTask)
+def record_approval_domain_event_signal(
+    sender: type[ApprovalTask], instance: ApprovalTask, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw"):
+        return
+    from application.services.domain_events import record_approval_domain_event
+
+    record_approval_domain_event(instance, created=created)
+
+
+@receiver(post_save, sender=LLMUsage)
+def record_llm_usage_domain_event_signal(
+    sender: type[LLMUsage], instance: LLMUsage, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw") or not created:
+        return
+    from application.services.domain_events import record_llm_usage_domain_event
+
+    record_llm_usage_domain_event(instance)
+
+
+@receiver(post_save, sender=MemoryUsage)
+def record_memory_usage_domain_event_signal(
+    sender: type[MemoryUsage], instance: MemoryUsage, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw"):
+        return
+    from application.services.domain_events import record_memory_usage_domain_event
+
+    record_memory_usage_domain_event(instance)
+
+
+@receiver(post_save, sender=MemoryObservation)
+def record_memory_observation_domain_event_signal(
+    sender: type[MemoryObservation], instance: MemoryObservation, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw"):
+        return
+    from application.services.domain_events import record_memory_observation_domain_event
+
+    record_memory_observation_domain_event(instance, created=created)
+
+
+@receiver(post_save, sender=GraphVersion)
+def record_graph_version_domain_event_signal(
+    sender: type[GraphVersion], instance: GraphVersion, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw") or not created:
+        return
+    from application.services.domain_events import record_graph_version_domain_event
+
+    record_graph_version_domain_event(instance)
+
+
+@receiver(post_save, sender=AuditLog)
+def record_audit_review_domain_event_signal(
+    sender: type[AuditLog], instance: AuditLog, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw") or not created:
+        return
+    from application.services.domain_events import record_audit_review_domain_event
+
+    record_audit_review_domain_event(instance)

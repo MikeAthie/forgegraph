@@ -18,6 +18,8 @@ if [ -n "${unformatted}" ]; then
   exit 1
 fi
 
+bash "${ROOT}/scripts/check_engine_statelessness.sh"
+run_python "${SCRIPT_DIR}/check_engine_no_release_sleeps.py"
 bash "${SCRIPT_DIR}/check_engine_ownership.sh"
 bash "${SCRIPT_DIR}/check_engine_event_envelope.sh"
 

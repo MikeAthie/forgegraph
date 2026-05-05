@@ -16,9 +16,9 @@ else
   exit 1
 fi
 
-${PYTHON_BIN} "${SCRIPT_DIR}/check_capacity_claims.py"
-${PYTHON_BIN} "${SCRIPT_DIR}/check_remediation_roadmap.py"
+bash "${SCRIPT_DIR}/run_governance_checks.sh"
 ${PYTHON_BIN} "${SCRIPT_DIR}/check_run_state_machine.py"
+bash "${SCRIPT_DIR}/run_loadgen_smoke.sh"
 
 bash "${SCRIPT_DIR}/run_backend_unit.sh"
 bash "${SCRIPT_DIR}/run_backend_integration.sh"

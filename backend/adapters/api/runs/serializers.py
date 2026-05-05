@@ -38,6 +38,9 @@ ENGINE_EVENT_TYPE_CHOICES = [
     "memory_write_requested",
     "memory_fact_extracted",
     "summary_created",
+    "memory.write_requested",
+    "memory.fact_extracted",
+    "summary.created",
 ]
 NODE_SCOPED_ENGINE_EVENT_TYPES = {
     "node_started",
@@ -101,6 +104,7 @@ class RunResumeSerializer(serializers.Serializer[Any]):
 
     node_id = serializers.CharField()
     input_json = serializers.JSONField(required=False, default=dict)
+    submit_id = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
 
 class RunReplaySerializer(LLMAccessRequestMixin, serializers.Serializer[Any]):

@@ -1,4 +1,10 @@
-import { accountingApi, type AccountingOverview, type CostLedgerEntry, type MetricProvenance } from "@/lib/api";
+import {
+  accountingApi,
+  type AccountingMetric,
+  type AccountingOverview,
+  type CostLedgerEntry,
+  type MetricProvenance,
+} from "@/lib/api";
 
 import type { AccountingLedgerEntryVM, AccountingOverviewVM, MetricProvenanceVM } from "../translation/viewModels";
 
@@ -29,36 +35,75 @@ function metricProvenance(metric: MetricProvenance | undefined, fallback: Metric
   };
 }
 
+function metricFromAccountingMetric(
+  metric: AccountingMetric | undefined,
+  fallback: MetricProvenanceVM,
+): MetricProvenanceVM {
+  if (!metric) {
+    return fallback;
+  }
+
+  if (metric.status === "available") {
+    return {
+      source: metric.source,
+      computedAt: metric.computed_at,
+      freshnessMs: null,
+      status: metric.status,
+      value: metric.value,
+      currency: metric.currency,
+    };
+  }
+
+  return {
+    source: metric.source,
+    computedAt: metric.computed_at,
+    freshnessMs: null,
+    status: metric.status,
+    value: null,
+    reason: metric.reason,
+  };
+}
+
 function toAccountingOverviewVM(overview: AccountingOverview): AccountingOverviewVM {
   const generatedAt = overview.generated_at ?? null;
   const provenance = overview.metric_provenance ?? {};
+  const metrics = overview.metrics ?? {};
+  const totalCostUsd = metricFromAccountingMetric(metrics.cost, {
+    source: "backend_ledger",
+    computedAt: generatedAt,
+    freshnessMs: null,
+    status: "available",
+    value: overview.total_cost_usd,
+    currency: "USD",
+  });
 
   return {
     organizationId: overview.organization_id,
-    totalCostUsd: overview.total_cost_usd,
+    totalCostUsd:
+      totalCostUsd.status === "available" && typeof totalCostUsd.value === "number" ? totalCostUsd.value : 0,
     generatedAt,
     metricProvenance: {
-      totalCostUsd: metricProvenance(provenance.total_cost_usd, {
-        source: "backend.cost_ledger_entries",
-        computedAt: generatedAt,
-        freshnessMs: null,
-        status: "available",
-        value: overview.total_cost_usd,
-      }),
-      revenue: metricProvenance(provenance.revenue, {
-        source: "backend.accounting",
-        computedAt: generatedAt,
-        freshnessMs: null,
-        status: "not_instrumented",
-        value: null,
-      }),
-      profit: metricProvenance(provenance.profit, {
-        source: "backend.accounting",
-        computedAt: generatedAt,
-        freshnessMs: null,
-        status: "not_instrumented",
-        value: null,
-      }),
+      totalCostUsd: metricFromAccountingMetric(metrics.cost, metricProvenance(provenance.total_cost_usd, totalCostUsd)),
+      revenue: metricFromAccountingMetric(
+        metrics.revenue,
+        metricProvenance(provenance.revenue, {
+          source: "backend_accounting",
+          computedAt: generatedAt,
+          freshnessMs: null,
+          status: "not_instrumented",
+          value: null,
+        }),
+      ),
+      profit: metricFromAccountingMetric(
+        metrics.profit,
+        metricProvenance(provenance.profit, {
+          source: "backend_accounting",
+          computedAt: generatedAt,
+          freshnessMs: null,
+          status: "not_instrumented",
+          value: null,
+        }),
+      ),
     },
     costByType: overview.cost_by_type.map((entry) => ({
       id: entry.cost_type,

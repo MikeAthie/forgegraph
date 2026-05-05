@@ -1,0 +1,11 @@
+# pattern<TAB>path<TAB>reason
+# Exceptions require architecture approval because runtime-invariants.md remains controlling.
+RedisMemoryStore	engine/architecture_enforcement_test.go	Guard asserts the forbidden symbol remains blocked.
+summarization_worker	engine/architecture_enforcement_test.go	Guard references the legacy worker filename as a blocked runtime surface.
+summarization_worker	engine/testsprite_tests/standard_prd.json	Static product test metadata only; not runtime code.
+RedisMemoryStore	engine/statelessness_guard_test.go	Guard mirrors the CI statelessness pattern list.
+SaveSummary	engine/statelessness_guard_test.go	Guard mirrors the CI statelessness pattern list.
+SaveFact	engine/statelessness_guard_test.go	Guard mirrors the CI statelessness pattern list.
+PersistMemory	engine/statelessness_guard_test.go	Guard mirrors the CI statelessness pattern list.
+MemoryUsage	engine/statelessness_guard_test.go	Guard mirrors the CI statelessness pattern list.
+summarization_worker	engine/statelessness_guard_test.go	Guard mirrors the CI statelessness pattern list.

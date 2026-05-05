@@ -86,6 +86,15 @@ from application.services.event_categories import (
     normalize_event_category,
 )
 from application.services.event_dead_letters import record_event_dead_letter
+from application.services.idempotency import (
+    IdempotencyStatus,
+    annotate_response,
+    annotated_response_from_body,
+    hash_request_payload,
+    normalize_idempotency_key,
+    record_idempotency_observation,
+    response_body,
+)
 from application.services.llm_access import (
     LLM_MODE_MANAGED,
     LLMAccessConfig,
@@ -181,6 +190,9 @@ from infrastructure.orm.models import (
     NodeRun,
     NodeRunEventProjection,
     Organization,
+    ProcessedAccountingEvent,
+    ProcessedCallbackEvent,
+    ProcessedDecisionSubmission,
     Run,
     RunCheckpoint,
     RunEvent,
@@ -462,6 +474,88 @@ def _idempotency_conflict_response(exc: IdempotencyConflict) -> Response:
             }
         ],
     )
+
+
+def _deterministic_submit_id(*, run_id: UUID, node_id: str, input_json: Any) -> str:
+    digest = hash_request_payload(
+        {
+            "run_id": str(run_id),
+            "node_id": node_id,
+            "input_json": input_json if isinstance(input_json, dict) else {},
+        }
+    )
+    return f"decision:{run_id}:{node_id}:{digest}"
+
+
+def _resume_submit_id(*, request: Request, run_id: UUID, node_id: str, input_json: Any) -> str:
+    explicit = normalize_idempotency_key(
+        request.data.get("submit_id") if isinstance(request.data, dict) else "",
+    )
+    if explicit:
+        return explicit
+    header = normalize_idempotency_key(request.headers.get("Idempotency-Key"))
+    if header:
+        return header
+    return _deterministic_submit_id(run_id=run_id, node_id=node_id, input_json=input_json)
+
+
+def _processed_decision_replay_response(
+    submission: ProcessedDecisionSubmission,
+    *,
+    submit_id: str,
+) -> Response | None:
+    if not submission.response_body:
+        return None
+    record_idempotency_observation(
+        boundary="human_decision",
+        status="already_applied",
+        idempotency_key=submit_id,
+        resource_type="run",
+        organization_id=submission.organization_id,
+        run_id=submission.run_id,
+    )
+    return annotated_response_from_body(
+        submission.response_body,
+        response_status=submission.response_status,
+        status="already_applied",
+        idempotency_key=submit_id,
+        resource_type="run",
+        resource_id=str(submission.run_id),
+    )
+
+
+def _memory_intent_payload_from_event(event: dict[str, Any]) -> dict[str, Any]:
+    payload = event.get("output")
+    if not isinstance(payload, dict):
+        payload = event.get("payload")
+    if not isinstance(payload, dict):
+        payload = {
+            key: event[key]
+            for key in (
+                "fact",
+                "facts",
+                "content",
+                "value",
+                "key",
+                "title",
+                "source_span",
+                "confidence",
+                "summary_id",
+                "ttl_seconds",
+                "cost_usd",
+                "total_tokens",
+                "prompt_tokens",
+                "completion_tokens",
+                "model",
+                "provider",
+            )
+            if key in event
+        }
+    payload = dict(payload)
+    for key in ("tenant_id", "organization_id", "org_id", "run_id", "agent_id", "idempotency_key"):
+        if key in event and key not in payload:
+            payload[key] = str(event[key]) if event[key] is not None else None
+    return payload
 
 
 def _trace_metadata_from_graph(graph_json: dict[str, Any]) -> dict[str, str]:
@@ -3385,9 +3479,10 @@ class RunResumeView(APIView):
                 message=f"Run with id '{run_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
+        organization = run.organization or user.default_organization
         command_context = build_idempotency_context(
             request=request,
-            organization=run.organization or user.default_organization,
+            organization=organization,
             action=f"runs.resume:{run.id}",
             request_payload=serializer.validated_data,
         )
@@ -3397,6 +3492,50 @@ class RunResumeView(APIView):
             return _idempotency_conflict_response(exc)
         if replayed_response is not None:
             return replayed_response
+
+        node_id = serializer.validated_data["node_id"]
+        input_json = serializer.validated_data.get("input_json", {})
+        submit_id = _resume_submit_id(
+            request=request,
+            run_id=run.id,
+            node_id=node_id,
+            input_json=input_json,
+        )
+        decision_request_hash = hash_request_payload(
+            {
+                "run_id": str(run.id),
+                "node_id": node_id,
+                "input_json": input_json,
+            }
+        )
+        decision_submission: ProcessedDecisionSubmission | None = None
+        if organization is not None:
+            decision_submission = ProcessedDecisionSubmission.objects.filter(
+                organization=organization,
+                submit_id=submit_id,
+            ).first()
+            if decision_submission is not None:
+                if decision_submission.request_hash != decision_request_hash:
+                    record_idempotency_observation(
+                        boundary="human_decision",
+                        status="rejected",
+                        idempotency_key=submit_id,
+                        resource_type="run",
+                        organization_id=organization.id,
+                        run_id=run.id,
+                    )
+                    return error_response(
+                        code="IDEMPOTENCY_CONFLICT",
+                        message="Decision submit id was already used with a different payload.",
+                        status=status.HTTP_409_CONFLICT,
+                        details=[{"submit_id": submit_id}],
+                    )
+                replayed_decision = _processed_decision_replay_response(
+                    decision_submission,
+                    submit_id=submit_id,
+                )
+                if replayed_decision is not None:
+                    return replayed_decision
 
         if run.status not in {"paused", "resume_requested"}:
             return error_response(
@@ -3408,9 +3547,9 @@ class RunResumeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        node_id = serializer.validated_data["node_id"]
-        input_json = serializer.validated_data.get("input_json", {})
         resume_attempt_id = uuid4()
+        if decision_submission is not None and decision_submission.resume_attempt_id:
+            resume_attempt_id = decision_submission.resume_attempt_id
         log_event(
             logger,
             logging.INFO,
@@ -3440,6 +3579,25 @@ class RunResumeView(APIView):
                             "decision_status": resolved_task.status,
                         }
                     )
+                    annotate_response(
+                        response,
+                        status="already_applied",
+                        idempotency_key=submit_id,
+                        resource_type="run",
+                        resource_id=str(run.id),
+                    )
+                    if decision_submission is not None and not decision_submission.response_body:
+                        decision_submission.response_status = response.status_code
+                        decision_submission.response_body = response_body(response)
+                        decision_submission.status = "applied"
+                        decision_submission.save(
+                            update_fields=[
+                                "response_status",
+                                "response_body",
+                                "status",
+                                "updated_at",
+                            ]
+                        )
                     return record_processed_command(
                         context=command_context,
                         response=response,
@@ -3697,6 +3855,26 @@ class RunResumeView(APIView):
                     "resolution": redact_payload(input_json),
                     "resume_attempt_id": str(resume_attempt_id),
                 }
+            if organization is not None:
+                ProcessedDecisionSubmission.objects.update_or_create(
+                    organization=organization,
+                    submit_id=submit_id,
+                    defaults={
+                        "run": run,
+                        "approval_task": approval_task,
+                        "request_hash": decision_request_hash,
+                        "resume_attempt_id": resume_attempt_id,
+                        "status": "applied",
+                    },
+                )
+                record_idempotency_observation(
+                    boundary="human_decision",
+                    status="applied",
+                    idempotency_key=submit_id,
+                    resource_type="run",
+                    organization_id=organization.id,
+                    run_id=run.id,
+                )
 
         broadcast_run_updated(run)
         if decision_resolved_payload is not None:
@@ -3851,6 +4029,23 @@ class RunResumeView(APIView):
                 "decision_status": decision_status,
             }
         )
+        annotate_response(
+            response,
+            status="applied",
+            idempotency_key=submit_id,
+            resource_type="run",
+            resource_id=str(run.id),
+        )
+        if organization is not None:
+            ProcessedDecisionSubmission.objects.filter(
+                organization=organization,
+                submit_id=submit_id,
+            ).update(
+                dispatched_at=timezone.now(),
+                response_status=response.status_code,
+                response_body=response_body(response),
+                status="applied",
+            )
         return record_processed_command(
             context=command_context,
             response=response,
@@ -4005,15 +4200,87 @@ class EngineRunEventsView(APIView):
             )
 
         event_id = event.get("event_id")
+        callback_organization_id = run.organization_id or run.owner.default_organization_id
+        callback_idempotency_key = normalize_idempotency_key(
+            event.get("idempotency_key") or event_id,
+        )
+        callback_request_hash = hash_request_payload(event)
         if event_id and RunEvent.objects.filter(run=run, external_id=event_id).exists():
-            return _engine_callback_success(
+            processed_callback = ProcessedCallbackEvent.objects.filter(
+                run=run,
+                event_id=str(event_id),
+            ).first()
+            if (
+                processed_callback is not None
+                and processed_callback.request_hash == callback_request_hash
+                and processed_callback.response_body
+            ):
+                record_idempotency_observation(
+                    boundary="engine_callback",
+                    status="already_applied",
+                    idempotency_key=str(event_id),
+                    resource_type=processed_callback.resource_type or "run",
+                    organization_id=processed_callback.organization_id,
+                    run_id=run.id,
+                )
+                duplicate_response = annotated_response_from_body(
+                    processed_callback.response_body,
+                    response_status=processed_callback.response_status,
+                    status="already_applied",
+                    idempotency_key=str(event_id),
+                    resource_type=processed_callback.resource_type or "run",
+                    resource_id=processed_callback.resource_id or str(run.id),
+                )
+                body = duplicate_response.data
+                if isinstance(body, dict):
+                    data = body.get("data")
+                    if isinstance(data, dict):
+                        data["duplicate"] = True
+                        data["decision"] = "duplicate"
+                        data["reason"] = "event already applied"
+                        data["safe_to_discard"] = True
+                return duplicate_response
+            response = _engine_callback_success(
                 {"received": True, "duplicate": True},
                 decision="duplicate",
                 reason="event already applied",
                 backend_event_id=str(event_id),
                 safe_to_discard=True,
             )
-
+            annotate_response(
+                response,
+                status="already_applied",
+                idempotency_key=str(event_id),
+                resource_type="run",
+                resource_id=str(run.id),
+            )
+            return response
+        if event_id:
+            processed_callback = ProcessedCallbackEvent.objects.filter(
+                run=run,
+                event_id=str(event_id),
+            ).first()
+            if processed_callback is not None:
+                if processed_callback.request_hash != callback_request_hash:
+                    record_idempotency_observation(
+                        boundary="engine_callback",
+                        status="rejected",
+                        idempotency_key=str(event_id),
+                        resource_type="run",
+                        organization_id=callback_organization_id,
+                        run_id=run.id,
+                    )
+                    return _engine_callback_problem(
+                        type_uri="https://forgegraph.dev/problems/engine-callback-idempotency-conflict",
+                        title="Engine callback idempotency conflict",
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Engine callback event_id was already used with a different payload.",
+                        decision="reject_invalid",
+                        reason="event idempotency key conflict",
+                        backend_event_id=str(event_id),
+                        safe_to_discard=False,
+                        conflict_code="409_IDEMPOTENCY_CONFLICT",
+                    )
         event_type = event.get("type", "")
         timestamp_ms = event.get("timestamp")
         event_time = _datetime_from_timestamp_ms(timestamp_ms)
@@ -4128,6 +4395,28 @@ class EngineRunEventsView(APIView):
                     trace_id=trace_context["trace_id"],
                     span_id=trace_context["span_id"],
                 )
+                if not derived and event_id and callback_organization_id:
+                    ProcessedCallbackEvent.objects.update_or_create(
+                        run=run,
+                        event_id=str(event_id),
+                        defaults={
+                            "organization_id": callback_organization_id,
+                            "idempotency_key": callback_idempotency_key,
+                            "event_type": event_type_name,
+                            "request_hash": callback_request_hash,
+                            "resource_type": "run",
+                            "resource_id": str(run.id),
+                            "status": "applied",
+                        },
+                    )
+                    record_idempotency_observation(
+                        boundary="engine_callback",
+                        status="applied",
+                        idempotency_key=str(event_id),
+                        resource_type="run",
+                        organization_id=callback_organization_id,
+                        run_id=run.id,
+                    )
                 return True
             except IntegrityError:
                 log_event(
@@ -4141,11 +4430,57 @@ class EngineRunEventsView(APIView):
                 )
                 return False
 
+        def _callback_success(
+            data: dict[str, Any] | None = None,
+            *,
+            decision: str = "accepted",
+            reason: str = "accepted",
+            backend_event_id: str = "",
+            safe_to_discard: bool = True,
+            conflict_code: str = "",
+            idempotency_status: IdempotencyStatus = "applied",
+        ) -> Response:
+            response = _engine_callback_success(
+                data,
+                decision=decision,
+                reason=reason,
+                backend_event_id=backend_event_id,
+                safe_to_discard=safe_to_discard,
+                conflict_code=conflict_code,
+            )
+            if not event_id:
+                return response
+
+            annotate_response(
+                response,
+                status=idempotency_status,
+                idempotency_key=str(event_id),
+                resource_type="run",
+                resource_id=str(run.id),
+            )
+            if callback_organization_id:
+                ProcessedCallbackEvent.objects.update_or_create(
+                    run=run,
+                    event_id=str(event_id),
+                    defaults={
+                        "organization_id": callback_organization_id,
+                        "idempotency_key": callback_idempotency_key,
+                        "event_type": str(event_type or ""),
+                        "request_hash": callback_request_hash,
+                        "response_status": response.status_code,
+                        "response_body": response_body(response),
+                        "resource_type": "run",
+                        "resource_id": str(run.id),
+                        "status": "applied",
+                    },
+                )
+            return response
+
         if event_type == "run.schema_validation":
             payload = redact_payload(event.get("output") or {})
             _save_event("run.schema_validation", payload)
             message = broadcast_run_schema_validation(run=run, payload=payload)
-            return _engine_callback_success(
+            return _callback_success(
                 message,
                 reason="schema validation event accepted",
                 backend_event_id=str(event_id or ""),
@@ -4191,7 +4526,7 @@ class EngineRunEventsView(APIView):
             if summary_payload:
                 broadcast_node_stream_summary(run=run, payload=summary_payload)
             message = broadcast_node_stream_chunk(run=run, payload=stream_payload)
-            return _engine_callback_success(
+            return _callback_success(
                 message,
                 reason="stream chunk event accepted",
                 backend_event_id=str(event_id or ""),
@@ -4201,9 +4536,11 @@ class EngineRunEventsView(APIView):
             "memory_write_requested",
             "memory_fact_extracted",
             "summary_created",
+            "memory.write_requested",
+            "memory.fact_extracted",
+            "summary.created",
         }:
-            payload = event.get("output")
-            memory_payload = payload if isinstance(payload, dict) else {}
+            memory_payload = _memory_intent_payload_from_event(event)
             try:
                 memory_result = BackendMemoryIntentService().apply_engine_memory_intent(
                     run=run,
@@ -4233,12 +4570,13 @@ class EngineRunEventsView(APIView):
             if not _save_event(
                 event_type, _serialize_event_payload(redact_payload(memory_payload))
             ):
-                return _engine_callback_success(
+                return _callback_success(
                     {"received": True, "duplicate": True},
                     decision="duplicate",
                     reason="event already applied",
                     backend_event_id=str(event_id or ""),
                     safe_to_discard=True,
+                    idempotency_status="already_applied",
                 )
             record_audit_log(
                 actor=None,
@@ -4254,7 +4592,7 @@ class EngineRunEventsView(APIView):
                     "observation_count": memory_result.observation_count,
                 },
             )
-            return _engine_callback_success(
+            return _callback_success(
                 {
                     "received": True,
                     "event_type": event_type,
@@ -4579,7 +4917,7 @@ class EngineRunEventsView(APIView):
                     broadcast_node_stream_summary(run=run, payload=summary_payload)
 
                 if not state_mutation_enabled:
-                    return _engine_callback_success(
+                    return _callback_success(
                         {
                             "received": True,
                             "event_type": event_type,
@@ -4590,7 +4928,7 @@ class EngineRunEventsView(APIView):
                     )
 
                 message = broadcast_run_updated(run)
-                return _engine_callback_success(
+                return _callback_success(
                     message,
                     reason="run state event accepted",
                     backend_event_id=str(event_id or ""),
@@ -4936,7 +5274,21 @@ class EngineRunEventsView(APIView):
                         usage_external_key = (
                             f"llm:{hashlib.sha256(usage_key_material.encode('utf-8')).hexdigest()}"
                         )
-                        LLMUsage.objects.update_or_create(
+                        accounting_request_hash = hash_request_payload(
+                            {
+                                "event_id": event_id,
+                                "run_id": str(run.id),
+                                "node_id": node_id,
+                                "attempt": attempt,
+                                "provider": provider,
+                                "model": model,
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": total_tokens,
+                                "cost_usd": str(cost),
+                            }
+                        )
+                        llm_usage, _ = LLMUsage.objects.update_or_create(
                             tenant_id=tenant_id,
                             external_key=usage_external_key,
                             defaults={
@@ -4949,6 +5301,24 @@ class EngineRunEventsView(APIView):
                                 "total_tokens": total_tokens,
                                 "cost_usd": cost,
                             },
+                        )
+                        ProcessedAccountingEvent.objects.update_or_create(
+                            organization_id=tenant_id,
+                            event_key=usage_external_key,
+                            defaults={
+                                "event_type": "llm_usage",
+                                "request_hash": accounting_request_hash,
+                                "llm_usage": llm_usage,
+                                "status": "applied",
+                            },
+                        )
+                        record_idempotency_observation(
+                            boundary="accounting_write",
+                            status="applied",
+                            idempotency_key=usage_external_key,
+                            resource_type="llm_usage",
+                            organization_id=tenant_id,
+                            run_id=run.id,
                         )
                         cost_update_payload = {
                             "node_id": node_id,
@@ -4975,7 +5345,7 @@ class EngineRunEventsView(APIView):
                 broadcast_cost_update(run=run, payload=cost_update_payload)
 
             if not state_mutation_enabled:
-                return _engine_callback_success(
+                return _callback_success(
                     {
                         "received": True,
                         "event_type": event_type,
@@ -4986,7 +5356,7 @@ class EngineRunEventsView(APIView):
                 )
 
             message = broadcast_node_run_updated(run=run, node_run=node_run)
-            return _engine_callback_success(
+            return _callback_success(
                 message,
                 reason="node state event accepted",
                 backend_event_id=str(event_id or ""),

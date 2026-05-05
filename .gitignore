@@ -9,6 +9,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+/logs/loadgen/
+/logs/loadgen-smoke/
+/logs/loadgen-smoke-live/
 
 # Node / Next.js
 node_modules/

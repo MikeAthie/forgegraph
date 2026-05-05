@@ -24,14 +24,13 @@ ForgeGraph has one durable runtime source of truth: the backend control plane.
 
 None. The legacy engine Redis product-memory adapter and exception manifest have been removed. Ownership CI fails if engine runtime code reintroduces `RedisMemoryStore`, summary/fact persistence, or product-memory Redis writes.
 
-## Required Signoff
+## Signoff
 
-This ADR is a launch gate. Product, backend, engine, and frontend leads must
-approve it before private-beta expansion or production-candidate review.
+This ADR is a launch gate. PR CI requires this checklist to remain present.
+Release and production evidence gates require every role to be approved.
 
-| Role | Status | Notes |
-| --- | --- | --- |
-| Product lead | Pending | Must confirm product copy matches measured capability. |
-| Backend lead | Pending | Must confirm all durable truth paths are backend-owned. |
-| Engine lead | Pending | Must confirm engine Redis usage is runtime transport only. |
-| Frontend lead | Pending | Must confirm UI state is backend-provenance only. |
+- [ ] Product Lead
+- [ ] Backend Lead
+- [ ] Engine Lead
+- [ ] Frontend Lead
+- [ ] Platform/SRE Lead

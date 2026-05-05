@@ -39,11 +39,28 @@ Until that migration is complete, legacy engine callback payloads remain compati
 
 Engine summary/fact output must be emitted as memory intent events, not direct durable memory writes:
 
-- `memory_write_requested`
-- `memory_fact_extracted`
-- `summary_created`
+- Canonical: `memory.write_requested`, `memory.fact_extracted`, `summary.created`
+- Legacy compatibility input: `memory_write_requested`, `memory_fact_extracted`, `summary_created`
 
-The backend validates these events, stores backend-owned memory observations, records audit metadata, and returns the callback decision envelope. The event itself is still transport; the persisted backend memory record is the durable fact.
+Canonical memory fact events use backend-owned provenance fields:
+
+```json
+{
+  "type": "memory.fact_extracted",
+  "idempotency_key": "tenant/run/engine/sequence/hash",
+  "tenant_id": "uuid",
+  "organization_id": "uuid",
+  "run_id": "uuid",
+  "agent_id": "uuid",
+  "payload": {
+    "fact": "Customer prefers concise approvals.",
+    "source_span": "turn-12",
+    "confidence": 0.91
+  }
+}
+```
+
+The backend validates tenant, run, optional agent, payload shape, retention, cost metadata, and duplicate fact hash. It stores backend-owned memory observations with source event, provenance, audit, tenant, run, agent, and cost metadata, then returns the callback decision envelope. The event itself is still transport; the persisted backend memory record is the durable fact.
 
 ## Replayable State Feed
 
@@ -63,3 +80,15 @@ Clients reconnect with `last_seen_state_version`. The backend replays retained e
 Phase 2 event ingestion failures must create backend-owned operator records when the backend receives an event but does not apply it. This includes invalid schemas, unknown runs, tenant mismatches, ordering conflicts, safety violations, invalid memory intents, and unknown event types.
 
 Each event dead letter records source, tenant/run when known, event id, idempotency key, event type, redacted payload, reason, retry count, first seen, and last seen timestamps. Operator replay requests and acknowledgements are RBAC-protected and audited. Event dead letters are diagnostics and reconciliation records; they do not make the event authoritative state.
+
+## Signoff
+
+This event contract is a release gate. PR CI requires this checklist to remain
+present. Release and production evidence gates require every role to be
+approved.
+
+- [ ] Product Lead
+- [ ] Backend Lead
+- [ ] Engine Lead
+- [ ] Frontend Lead
+- [ ] Platform/SRE Lead

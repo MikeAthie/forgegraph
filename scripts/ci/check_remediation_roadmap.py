@@ -11,6 +11,8 @@ REQUIRED_FILES = [
     "docs/architecture/state-ownership.md",
     "docs/architecture/event-contracts.md",
     "docs/architecture/frontend-state-contract.md",
+    "docs/architecture/launch-claims.md",
+    "docs/launch/claims-policy.md",
     "docs/ops/remediation-roadmap-coverage.md",
     "docs/ops/event-spool-growth-runbook.md",
     "docs/ops/runbooks/event_spool_growth.md",
@@ -22,7 +24,10 @@ REQUIRED_FILES = [
     "docs/ops/runbooks/llm_queue_saturation.md",
     "scripts/ci/check_engine_ownership.sh",
     "scripts/check-engine-ownership.ps1",
+    "scripts/ci/check_architecture_signoff.py",
+    "scripts/ci/check_launch_claims.py",
     "scripts/ci/check_capacity_claims.py",
+    "scripts/ci/check_frontend_accounting_metrics.py",
     "scripts/ci/check_engine_event_envelope.sh",
     "scripts/ci/check_run_state_machine.py",
     "frontend/__tests__/unit/pages/financial-provenance.test.ts",
@@ -33,6 +38,9 @@ REQUIRED_FILES = [
     "backend/tests/unit/services/test_processed_commands.py",
     "backend/tests/unit/services/test_run_state_machine.py",
     "backend/tests/unit/scripts/test_stress_runner.py",
+    "docs/perf/500-agent-benchmark.md",
+    "tools/loadgen/go.mod",
+    "scripts/ci/run_loadgen_smoke.sh",
 ]
 
 REQUIRED_TEXT = {
@@ -43,7 +51,8 @@ REQUIRED_TEXT = {
         "three successful Gate E reports",
     ],
     "docs/ops/scalability-program.md": [
-        "Gate E must pass three consecutive times",
+        "Gate E must pass three consecutive checked-in reports",
+        "tools/loadgen",
         "duplicate-event",
     ],
     "scripts/stress_runner.py": [
@@ -53,9 +62,14 @@ REQUIRED_TEXT = {
         "aggregate_phase3_gate_result",
     ],
     "scripts/ci/run_required_checks.sh": [
-        "check_capacity_claims.py",
-        "check_remediation_roadmap.py",
+        "run_governance_checks.sh",
         "check_run_state_machine.py",
+    ],
+    "scripts/ci/run_governance_checks.sh": [
+        "check_architecture_signoff.py",
+        "check_launch_claims.py",
+        "check_frontend_accounting_metrics.py",
+        "check_remediation_roadmap.py",
     ],
     "scripts/ci/check_engine_ownership.sh": [
         "Temporary engine durable memory exception manifest must not be reintroduced",

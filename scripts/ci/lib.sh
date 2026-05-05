@@ -47,6 +47,23 @@ run_uv() {
   exit 1
 }
 
+run_python() {
+  if command -v python >/dev/null 2>&1; then
+    python "$@"
+    return
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$@"
+    return
+  fi
+  if command -v py >/dev/null 2>&1; then
+    py -3 "$@"
+    return
+  fi
+  echo "Missing required command: python" >&2
+  exit 1
+}
+
 require_tcp_service() {
   local host="$1"
   local port="$2"

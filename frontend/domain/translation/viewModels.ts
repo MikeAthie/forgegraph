@@ -256,6 +256,8 @@ export type MetricProvenanceVM = {
   freshnessMs: number | null;
   status: "available" | "not_instrumented" | "stale" | "error" | string;
   value: number | null;
+  currency?: string | null;
+  reason?: string | null;
 };
 
 export type AccountingLedgerEntryVM = {

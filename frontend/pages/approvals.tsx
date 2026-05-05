@@ -119,8 +119,11 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     setEditNotes("");
-    setDecisionState(approvalStatusToDecisionState(selectedApproval?.status));
   }, [selectedApproval?.id]);
+
+  useEffect(() => {
+    setDecisionState(approvalStatusToDecisionState(selectedApproval?.status));
+  }, [selectedApproval?.id, selectedApproval?.status]);
 
   useRunLiveUpdates(selectedApproval?.operationId, async () => {
     if (!selectedApproval) {

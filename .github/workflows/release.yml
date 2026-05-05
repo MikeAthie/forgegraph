@@ -28,7 +28,7 @@ jobs:
           echo "sha_tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
 
   security-audit:
-    needs: prepare
+    needs: [prepare, architecture-signoff]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -71,6 +71,21 @@ jobs:
         run: |
           npm ci
           npm audit --omit=dev
+
+  architecture-signoff:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Require architecture signoff
+        run: python scripts/ci/check_architecture_signoff.py --require-approved
 
   build-and-scan:
     needs: [prepare, security-audit]

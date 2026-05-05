@@ -9,10 +9,12 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
+from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
+from application.dto.accounting import AvailableAccountingMetric, NotInstrumentedAccountingMetric
 from infrastructure.orm.models import (
     AgentRegistryEntry,
     ApprovalTask,
@@ -20,6 +22,8 @@ from infrastructure.orm.models import (
     CostAggregate,
     CostLedgerEntry,
     DecisionRecord,
+    DomainEvent,
+    EventDeadLetterRecord,
     Graph,
     GraphVersion,
     LLMUsage,
@@ -27,8 +31,11 @@ from infrastructure.orm.models import (
     MemoryUsage,
     NodeRun,
     Organization,
+    OrganizationStateFeedEvent,
+    ProjectionCursor,
     Run,
-    RunEvent,
+    RuntimeIntentOutcome,
+    TaskDeadLetterRecord,
     TaskLifecycleRecord,
     TaskRecord,
     TenantPolicy,
@@ -47,7 +54,9 @@ TASK_ACTIVE_STATUSES = {
     "waiting_for_decision",
     "retry_scheduled",
 }
+TASK_BLOCKED_STATUSES = {"paused", "waiting", "waiting_for_decision", "failed", "dead_lettered"}
 DECIMAL_ZERO = Decimal("0")
+LEGACY_SWEEP_DISABLED_MESSAGE = "Legacy OS projection sweep disabled"
 
 
 @dataclass(slots=True)
@@ -73,6 +82,11 @@ def projection_organization_for_user(user: User) -> Organization:
     """
 
     return _organization_for_user(user)
+
+
+def _ensure_legacy_sweep_enabled() -> None:
+    if not bool(getattr(settings, "ENABLE_LEGACY_OS_PROJECTION_SWEEP", False)):
+        raise RuntimeError(LEGACY_SWEEP_DISABLED_MESSAGE)
 
 
 def _graph_scope_filter(organization: Organization) -> models.Q:
@@ -180,6 +194,7 @@ def _agent_defaults(node: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any
 
 
 def sync_agent_registry_for_organization(organization: Organization) -> list[AgentRegistryEntry]:
+    _ensure_legacy_sweep_enabled()
     active_ids: list[UUID] = []
     graphs = (
         _workflow_queryset(organization)
@@ -309,6 +324,7 @@ def sync_task_records_for_organization(
     organization: Organization,
     agents: list[AgentRegistryEntry] | None = None,
 ) -> list[TaskRecord]:
+    _ensure_legacy_sweep_enabled()
     agents = agents or list(AgentRegistryEntry.objects.filter(organization=organization))
     agents_by_key = {
         (str(agent.source_workflow_id), agent.source_node_id): agent for agent in agents
@@ -318,7 +334,7 @@ def sync_task_records_for_organization(
             _run_scope_filter(organization, prefix="run__"),
         )
         .select_related("run__graph_version__graph")
-        .order_by("-started_at", "-id")[:500]
+        .order_by("-started_at", "-id")
     )
     active_ids: list[UUID] = []
 
@@ -327,7 +343,7 @@ def sync_task_records_for_organization(
             organization=organization,
         )
         .select_related("run__graph_version__graph", "current_node_run")
-        .order_by("-updated_at", "-created_at")[:500]
+        .order_by("-updated_at", "-created_at")
     )
     for lifecycle_task in lifecycle_tasks:
         run = lifecycle_task.run
@@ -406,6 +422,7 @@ def sync_decision_records_for_organization(
     agents: list[AgentRegistryEntry] | None = None,
     tasks: list[TaskRecord] | None = None,
 ) -> list[DecisionRecord]:
+    _ensure_legacy_sweep_enabled()
     agents = agents or list(AgentRegistryEntry.objects.filter(organization=organization))
     tasks = tasks or list(TaskRecord.objects.filter(organization=organization))
     tasks_by_key = {(str(task.execution_id), task.source_node_id): task for task in tasks}
@@ -526,6 +543,7 @@ def sync_accounting_for_organization(
     agents: list[AgentRegistryEntry] | None = None,
     tasks: list[TaskRecord] | None = None,
 ) -> list[CostLedgerEntry]:
+    _ensure_legacy_sweep_enabled()
     agents = agents or list(AgentRegistryEntry.objects.filter(organization=organization))
     tasks = tasks or list(TaskRecord.objects.filter(organization=organization))
     tasks_by_run_node = {(str(task.execution_id), task.source_node_id): task for task in tasks}
@@ -652,6 +670,7 @@ def _refresh_cost_aggregates(
 
 
 def refresh_phase1_projections_for_organization(organization: Organization) -> ProjectionBundle:
+    _ensure_legacy_sweep_enabled()
     with transaction.atomic():
         agents = sync_agent_registry_for_organization(organization)
         tasks = sync_task_records_for_organization(organization, agents)
@@ -667,49 +686,62 @@ def refresh_phase1_projections_for_organization(organization: Organization) -> P
 
 
 def refresh_phase1_projections(user: User) -> ProjectionBundle:
+    _ensure_legacy_sweep_enabled()
     organization = _organization_for_user(user)
     return refresh_phase1_projections_for_organization(organization)
 
 
 def projection_metadata(organization: Organization) -> dict[str, Any]:
     computed_at = timezone.now()
-    source_timestamps = [
-        AgentRegistryEntry.objects.filter(organization=organization).aggregate(
-            value=models.Max("updated_at")
-        )["value"],
-        TaskRecord.objects.filter(organization=organization).aggregate(
-            value=models.Max("updated_at")
-        )["value"],
-        DecisionRecord.objects.filter(organization=organization).aggregate(
-            value=models.Max("updated_at")
-        )["value"],
-        CostLedgerEntry.objects.filter(organization=organization).aggregate(
-            value=models.Max("created_at")
-        )["value"],
-        CostAggregate.objects.filter(organization=organization).aggregate(
-            value=models.Max("updated_at")
-        )["value"],
-    ]
-    watermark_at = max((value for value in source_timestamps if value is not None), default=None)
-    lag_ms = None
-    if watermark_at is not None:
-        lag_ms = max(0, int((computed_at - watermark_at).total_seconds() * 1000))
-
-    latest_event = (
-        RunEvent.objects.filter(_run_scope_filter(organization, prefix="run__"))
-        .order_by("-created_at")
-        .values("external_id", "id", "created_at")
+    state_feed_version = (
+        OrganizationStateFeedEvent.objects.filter(organization=organization)
+        .order_by("-state_version")
+        .values_list("state_version", flat=True)
         .first()
+        or 0
     )
-    last_event_id = ""
-    if latest_event:
-        last_event_id = str(latest_event.get("external_id") or latest_event.get("id") or "")
+    latest_event = (
+        DomainEvent.objects.filter(organization=organization).order_by("-sequence").first()
+    )
+    cursors = list(ProjectionCursor.objects.filter(organization=organization))
+    cursor = min(cursors, key=lambda value: int(value.last_sequence), default=None)
+    last_sequence = int(cursor.last_sequence) if cursor is not None else 0
+    last_event_id = str(cursor.last_event_id or "") if cursor is not None else ""
+    pending_event = None
+    if latest_event is not None and last_sequence < int(latest_event.sequence):
+        pending_event = (
+            DomainEvent.objects.filter(organization=organization, sequence__gt=last_sequence)
+            .order_by("sequence")
+            .first()
+        )
+    lag_seconds = 0.0
+    if pending_event is not None:
+        lag_seconds = max(0.0, (computed_at - pending_event.occurred_at).total_seconds())
+    active_dead_letter = EventDeadLetterRecord.objects.filter(
+        organization=organization,
+        source="os_projection_worker",
+        status__in={"active", "replay_requested"},
+    ).exists()
+    cursor_statuses = {cursor.status for cursor in cursors}
+    if "rebuilding" in cursor_statuses:
+        status = "rebuilding"
+    elif active_dead_letter or "degraded" in cursor_statuses:
+        status = "degraded"
+    elif pending_event is not None:
+        status = "stale"
+    else:
+        status = "fresh"
+    lag_ms = int(lag_seconds * 1000)
 
     return {
         "computed_at": computed_at.isoformat(),
-        "projection_lag_ms": lag_ms,
+        "last_sequence": last_sequence,
         "last_event_id": last_event_id,
-        "watermark": watermark_at.isoformat() if watermark_at else None,
+        "state_feed_version": int(state_feed_version),
+        "lag_seconds": lag_seconds,
+        "status": status,
+        "projection_lag_ms": lag_ms,
+        "watermark": cursor.updated_at.isoformat() if cursor is not None else None,
     }
 
 
@@ -841,29 +873,50 @@ def accounting_overview(organization: Organization) -> dict[str, Any]:
             "-period_start"
         )[:14]
     )
+    cost_metric = AvailableAccountingMetric(
+        value=float(total_cost),
+        currency="USD",
+        computed_at=computed_at,
+        source="backend_ledger",
+    ).to_json()
+    revenue_metric = NotInstrumentedAccountingMetric(
+        reason="Backend revenue ledger is not instrumented yet.",
+        computed_at=computed_at,
+        source="backend_accounting",
+    ).to_json()
+    profit_metric = NotInstrumentedAccountingMetric(
+        reason="Backend profit ledger is not instrumented yet.",
+        computed_at=computed_at,
+        source="backend_accounting",
+    ).to_json()
     return {
         "organization_id": str(organization.id),
         "total_cost_usd": float(total_cost),
         "generated_at": computed_at,
         "projection": projection_metadata(organization),
+        "metrics": {
+            "cost": cost_metric,
+            "revenue": revenue_metric,
+            "profit": profit_metric,
+        },
         "metric_provenance": {
             "total_cost_usd": {
-                "source": "backend.cost_ledger_entries",
-                "computed_at": computed_at,
+                "source": cost_metric["source"],
+                "computed_at": cost_metric["computed_at"],
                 "freshness_ms": 0,
-                "status": "available",
-                "value": float(total_cost),
+                "status": cost_metric["status"],
+                "value": cost_metric["value"],
             },
             "revenue": {
-                "source": "backend.accounting",
-                "computed_at": computed_at,
+                "source": revenue_metric["source"],
+                "computed_at": revenue_metric["computed_at"],
                 "freshness_ms": 0,
                 "status": "not_instrumented",
                 "value": None,
             },
             "profit": {
-                "source": "backend.accounting",
-                "computed_at": computed_at,
+                "source": profit_metric["source"],
+                "computed_at": profit_metric["computed_at"],
                 "freshness_ms": 0,
                 "status": "not_instrumented",
                 "value": None,
@@ -904,8 +957,54 @@ def accounting_overview(organization: Organization) -> dict[str, Any]:
     }
 
 
+def _coerce_datetime(value: datetime | str | None) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone=UTC)
+    return parsed
+
+
+def _latest_datetime(*values: datetime | str | None) -> datetime | None:
+    parsed_values = [parsed for value in values if (parsed := _coerce_datetime(value)) is not None]
+    return max(parsed_values) if parsed_values else None
+
+
+def _section_metadata(
+    *,
+    source: str,
+    computed_at: datetime | str | None,
+    last_updated_at: datetime | str | None = None,
+    status: str = "fresh",
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    measured_at = now or timezone.now()
+    computed_dt = _coerce_datetime(computed_at) or measured_at
+    updated_dt = _coerce_datetime(last_updated_at) or computed_dt
+    normalized_status = str(status or "fresh")
+    freshness_ms = max(0, int((measured_at - updated_dt).total_seconds() * 1000))
+    return {
+        "source": source,
+        "computed_at": computed_dt.isoformat(),
+        "last_updated_at": updated_dt.isoformat(),
+        "freshness_ms": freshness_ms,
+        "status": normalized_status,
+        "stale": normalized_status in {"stale", "rebuilding"},
+        "degraded": normalized_status == "degraded",
+    }
+
+
 def organization_state_summary(organization: Organization) -> dict[str, Any]:
     now = timezone.now()
+    projection = projection_metadata(organization)
     active_agents = AgentRegistryEntry.objects.filter(
         organization=organization,
         status__in={"active", "attention"},
@@ -914,6 +1013,10 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
         organization=organization,
         status__in=TASK_ACTIVE_STATUSES,
     ).select_related("agent", "execution")[:8]
+    blocked_task_qs = TaskRecord.objects.filter(
+        organization=organization,
+        status__in=TASK_BLOCKED_STATUSES,
+    )
     pending_decisions = DecisionRecord.objects.filter(
         organization=organization,
         status="pending",
@@ -933,6 +1036,118 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
         .get("total")
         or DECIMAL_ZERO
     )
+    accounting = accounting_overview(organization)
+    task_dead_letter_count = TaskDeadLetterRecord.objects.filter(
+        lifecycle_task__organization=organization,
+        status="active",
+    ).count()
+    event_dead_letter_count = EventDeadLetterRecord.objects.filter(
+        organization=organization,
+        status__in={"active", "replay_requested"},
+    ).count()
+    runtime_intent_dead_letter_qs = RuntimeIntentOutcome.objects.filter(
+        run__organization=organization,
+        outcome="dead_lettered",
+        acknowledged_at__isnull=True,
+    )
+    runtime_intent_dead_letter_count = runtime_intent_dead_letter_qs.count()
+    dead_letter_count = (
+        task_dead_letter_count + event_dead_letter_count + runtime_intent_dead_letter_count
+    )
+    operations_status = (
+        "degraded"
+        if dead_letter_count > 0 or projection["status"] in {"stale", "rebuilding", "degraded"}
+        else "fresh"
+    )
+    runtime_intent_lag_seconds = 0.0
+    oldest_runtime_intent_dead_letter = runtime_intent_dead_letter_qs.order_by(
+        "processed_at"
+    ).first()
+    if oldest_runtime_intent_dead_letter is not None:
+        runtime_intent_lag_seconds = max(
+            0.0,
+            (now - oldest_runtime_intent_dead_letter.processed_at).total_seconds(),
+        )
+
+    active_agent_count = active_agents.count()
+    active_task_count = TaskRecord.objects.filter(
+        organization=organization, status__in=TASK_ACTIVE_STATUSES
+    ).count()
+    pending_decision_count = DecisionRecord.objects.filter(
+        organization=organization, status="pending"
+    ).count()
+    execution_count_24h = Run.objects.filter(
+        _run_scope_filter(organization),
+        started_at__gte=now - timedelta(hours=24),
+    ).count()
+    memory_write_count_24h = MemoryObservation.objects.filter(
+        tenant_id=organization.id,
+        deleted_at__isnull=True,
+        created_at__gte=now - timedelta(hours=24),
+    ).count()
+    cost_metric = accounting.get("metrics", {}).get("cost", {})
+    cost_metric_status = (
+        "fresh"
+        if cost_metric.get("status") == "available" and operations_status == "fresh"
+        else operations_status
+    )
+    cost_computed_at = cost_metric.get("computed_at") or accounting.get("generated_at") or now
+    running_updated_at = _latest_datetime(
+        active_agents.aggregate(latest=models.Max("updated_at")).get("latest"),
+        TaskRecord.objects.filter(organization=organization, status__in=TASK_ACTIVE_STATUSES)
+        .aggregate(latest=models.Max("updated_at"))
+        .get("latest"),
+    )
+    blocked_updated_at = blocked_task_qs.aggregate(latest=models.Max("updated_at")).get("latest")
+    decisions_updated_at = (
+        DecisionRecord.objects.filter(organization=organization, status="pending")
+        .aggregate(latest=models.Max("updated_at"))
+        .get("latest")
+    )
+    costs_updated_at = (
+        CostLedgerEntry.objects.filter(organization=organization)
+        .aggregate(latest=models.Max("occurred_at"))
+        .get("latest")
+    )
+    memory_updated_at = (
+        MemoryObservation.objects.filter(tenant_id=organization.id, deleted_at__isnull=True)
+        .aggregate(latest=models.Max("updated_at"))
+        .get("latest")
+    )
+    task_dead_letter_updated_at = (
+        TaskDeadLetterRecord.objects.filter(
+            lifecycle_task__organization=organization,
+            status="active",
+        )
+        .aggregate(latest=models.Max("updated_at"))
+        .get("latest")
+    )
+    event_dead_letter_updated_at = (
+        EventDeadLetterRecord.objects.filter(
+            organization=organization,
+            status__in={"active", "replay_requested"},
+        )
+        .aggregate(latest=models.Max("last_seen_at"))
+        .get("latest")
+    )
+    runtime_intent_dead_letter_updated_at = runtime_intent_dead_letter_qs.aggregate(
+        latest=models.Max("updated_at")
+    ).get("latest")
+    failures_updated_at = _latest_datetime(
+        task_dead_letter_updated_at,
+        event_dead_letter_updated_at,
+        runtime_intent_dead_letter_updated_at,
+    )
+    projection_section = {
+        **projection,
+        **_section_metadata(
+            source="backend_projection",
+            computed_at=projection.get("computed_at"),
+            last_updated_at=projection.get("watermark") or projection.get("computed_at"),
+            status=str(projection.get("status") or "fresh"),
+            now=now,
+        ),
+    }
 
     return {
         "organization": {
@@ -940,19 +1155,79 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
             "name": organization.name,
         },
         "summary": {
-            "active_agent_count": active_agents.count(),
-            "active_task_count": TaskRecord.objects.filter(
-                organization=organization, status__in=TASK_ACTIVE_STATUSES
-            ).count(),
-            "pending_decision_count": DecisionRecord.objects.filter(
-                organization=organization, status="pending"
-            ).count(),
-            "execution_count_24h": Run.objects.filter(
-                _run_scope_filter(organization),
-                started_at__gte=now - timedelta(hours=24),
-            ).count(),
+            "active_agent_count": active_agent_count,
+            "active_task_count": active_task_count,
+            "pending_decision_count": pending_decision_count,
+            "execution_count_24h": execution_count_24h,
             "memory_observation_count": memory_count,
             "total_cost_usd": float(total_cost),
+        },
+        "running": {
+            **_section_metadata(
+                source="backend_projection",
+                computed_at=projection.get("computed_at"),
+                last_updated_at=running_updated_at,
+                status=str(projection.get("status") or "fresh"),
+                now=now,
+            ),
+            "active_agent_count": active_agent_count,
+            "running_task_count": active_task_count,
+            "operation_count_24h": execution_count_24h,
+            "items": [task_summary(task) for task in active_tasks],
+        },
+        "blocked": {
+            **_section_metadata(
+                source="backend_projection",
+                computed_at=projection.get("computed_at"),
+                last_updated_at=blocked_updated_at,
+                status=str(projection.get("status") or "fresh"),
+                now=now,
+            ),
+            "blocked_task_count": blocked_task_qs.count(),
+            "items": [
+                task_summary(task)
+                for task in blocked_task_qs.select_related("agent", "execution").order_by(
+                    "-updated_at"
+                )[:8]
+            ],
+        },
+        "decisions": {
+            **_section_metadata(
+                source="backend_projection",
+                computed_at=projection.get("computed_at"),
+                last_updated_at=decisions_updated_at,
+                status=str(projection.get("status") or "fresh"),
+                now=now,
+            ),
+            "pending_decision_count": pending_decision_count,
+            "items": [decision_summary(decision) for decision in pending_decisions],
+        },
+        "costs": {
+            **_section_metadata(
+                source=str(cost_metric.get("source") or "backend_ledger"),
+                computed_at=cost_computed_at,
+                last_updated_at=costs_updated_at,
+                status=cost_metric_status,
+                now=now,
+            ),
+            "total_cost_usd": float(total_cost),
+            "currency": cost_metric.get("currency") or "USD",
+            "metric": cost_metric,
+            "cost_by_type": accounting["cost_by_type"],
+        },
+        "failures": {
+            **_section_metadata(
+                source="backend_ops",
+                computed_at=now,
+                last_updated_at=failures_updated_at,
+                status=operations_status,
+                now=now,
+            ),
+            "dead_letter_count": dead_letter_count,
+            "task_dead_letter_count": task_dead_letter_count,
+            "event_dead_letter_count": event_dead_letter_count,
+            "runtime_intent_dead_letter_count": runtime_intent_dead_letter_count,
+            "runtime_intent_lag_seconds": runtime_intent_lag_seconds,
         },
         "active_agents": [agent_summary(agent) for agent in active_agents[:6]],
         "active_tasks": [task_summary(task) for task in active_tasks],
@@ -971,7 +1246,15 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
             for run in recent_executions
         ],
         "memory": {
+            **_section_metadata(
+                source="backend_memory",
+                computed_at=projection.get("computed_at"),
+                last_updated_at=memory_updated_at,
+                status=str(projection.get("status") or "fresh"),
+                now=now,
+            ),
             "active_observation_count": memory_count,
+            "memory_write_count_24h": memory_write_count_24h,
             "recent_topics": list(
                 MemoryObservation.objects.filter(tenant_id=organization.id, deleted_at__isnull=True)
                 .exclude(topic_key="")
@@ -985,7 +1268,18 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
             "allowed_models": policy.allowed_models if policy else [],
             "http_default_deny": policy.http_default_deny if policy else False,
         },
-        "accounting": accounting_overview(organization),
-        "generated_at": timezone.now().isoformat(),
-        "projection": projection_metadata(organization),
+        "accounting": accounting,
+        "operations": {
+            "status": operations_status,
+            "dead_letter_count": dead_letter_count,
+            "task_dead_letter_count": task_dead_letter_count,
+            "event_dead_letter_count": event_dead_letter_count,
+            "runtime_intent_dead_letter_count": runtime_intent_dead_letter_count,
+            "projection_status": projection["status"],
+            "projection_lag_seconds": projection["lag_seconds"],
+            "runtime_intent_lag_seconds": runtime_intent_lag_seconds,
+            "generated_at": now.isoformat(),
+        },
+        "generated_at": now.isoformat(),
+        "projection": projection_section,
     }

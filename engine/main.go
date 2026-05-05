@@ -945,7 +945,7 @@ func main() {
 		summaryWorker := usecase.NewSummarizationWorker(summaryAdapter, 2, 100)
 		summaryWorker.Start(context.Background())
 		scheduler.SetSummarizationWorker(summaryWorker)
-		log.Info("summarization_worker_initialized", "persistence", "backend_event_intents")
+		log.Info("backend_memory_summary_intents_initialized", "persistence", "backend_event_intents")
 	}
 
 	// Metrics & health server

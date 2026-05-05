@@ -1,3 +1,6 @@
+//go:build legacy_timing
+// +build legacy_timing
+
 package e2e
 
 import (

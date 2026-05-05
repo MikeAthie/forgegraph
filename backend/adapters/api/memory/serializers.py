@@ -26,6 +26,12 @@ class MemoryObservationDetailSerializer(serializers.Serializer[Any]):
     scope = serializers.CharField()
     topic_key = serializers.CharField()
     tool_name = serializers.CharField()
+    source_event_id = serializers.CharField()
+    source_event_type = serializers.CharField()
+    fact_hash = serializers.CharField()
+    provenance = serializers.DictField()
+    cost_metadata = serializers.DictField()
+    retention_policy = serializers.DictField()
     revision_count = serializers.IntegerField()
     duplicate_count = serializers.IntegerField()
     last_seen_at = serializers.DateTimeField()
@@ -36,6 +42,7 @@ class MemoryObservationDetailSerializer(serializers.Serializer[Any]):
 
 
 class MemoryObservationCreateSerializer(serializers.Serializer[Any]):
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, max_length=255)
     type = serializers.CharField(max_length=64)
     title = serializers.CharField(required=False, allow_blank=True, max_length=255)
     content = serializers.CharField()

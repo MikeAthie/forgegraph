@@ -15,6 +15,20 @@ permissions:
   contents: read
 
 jobs:
+  governance:
+    name: governance
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Governance checks
+        run: bash scripts/ci/run_governance_checks.sh
+
   backend:
     name: backend
     runs-on: ubuntu-latest
@@ -80,6 +94,22 @@ jobs:
 
       - name: Engine checks
         run: bash scripts/ci/run_engine_checks.sh
+
+  loadgen:
+    name: loadgen
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+
+      - name: Loadgen checks
+        run: bash scripts/ci/run_loadgen_smoke.sh
 
 
   frontend:
@@ -1161,8 +1191,10 @@ jobs:
   required-checks:
     name: required-checks
     needs:
+      - governance
       - backend
       - engine
+      - loadgen
       - frontend
       - backend_unit
       - backend_integration
@@ -1190,8 +1222,10 @@ jobs:
     steps:
       - name: Enforce required CI gates
         run: |
+          echo "governance=${{ needs.governance.result }}"
           echo "backend=${{ needs.backend.result }}"
           echo "engine=${{ needs.engine.result }}"
+          echo "loadgen=${{ needs.loadgen.result }}"
           echo "frontend=${{ needs.frontend.result }}"
           echo "backend_unit=${{ needs.backend_unit.result }}"
           echo "backend_integration=${{ needs.backend_integration.result }}"
@@ -1214,8 +1248,10 @@ jobs:
           echo "load_smoke=${{ needs.load_smoke.result }}"
           echo "docker_full_stack_smoke=${{ needs.docker_full_stack_smoke.result }}"
 
-          if [ "${{ needs.backend.result }}" != "success" ] || \
+          if [ "${{ needs.governance.result }}" != "success" ] || \
+             [ "${{ needs.backend.result }}" != "success" ] || \
              [ "${{ needs.engine.result }}" != "success" ] || \
+             [ "${{ needs.loadgen.result }}" != "success" ] || \
              [ "${{ needs.frontend.result }}" != "success" ] || \
              [ "${{ needs.backend_unit.result }}" != "success" ] || \
              [ "${{ needs.backend_integration.result }}" != "success" ] || \

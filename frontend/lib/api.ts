@@ -203,6 +203,15 @@ const API_PATHS = {
     wsSubscribers: "/api/operator/ws/subscribers",
     orgLoad: "/api/operator/org-load",
   },
+  ops: {
+    deadLetters: "/api/ops/dead-letters",
+    deadLetter: (deadLetterKey: string) => `/api/ops/dead-letters/${encodeURIComponent(deadLetterKey)}`,
+    replayDeadLetter: (deadLetterKey: string) => `/api/ops/dead-letters/${encodeURIComponent(deadLetterKey)}/replay`,
+    resolveDeadLetter: (deadLetterKey: string) => `/api/ops/dead-letters/${encodeURIComponent(deadLetterKey)}/resolve`,
+    projectionLag: "/api/ops/projection-lag",
+    eventSpool: "/api/ops/event-spool",
+    runtimeIntentLag: "/api/ops/runtime-intent-lag",
+  },
   accounting: {
     overview: "/api/accounting/",
     ledger: "/api/accounting/ledger",
@@ -1608,6 +1617,12 @@ export interface MemoryObservation {
   scope: string;
   topic_key: string;
   tool_name: string;
+  source_event_id: string;
+  source_event_type: string;
+  fact_hash: string;
+  provenance: Record<string, unknown>;
+  cost_metadata: Record<string, unknown>;
+  retention_policy: Record<string, unknown>;
   revision_count: number;
   duplicate_count: number;
   last_seen_at: string;
@@ -1778,8 +1793,15 @@ export interface ResumeRunResponse {
   resumed: boolean;
   run_id?: string;
   duplicate?: boolean;
+  already_applied?: boolean;
   resume_attempt_id?: string;
   decision_status?: string;
+  idempotency?: {
+    status: "applied" | "already_applied" | "rejected" | "retry_required";
+    idempotency_key: string;
+    resource_type: string;
+    resource_id: string;
+  };
 }
 
 export interface ApprovalTask {
@@ -2039,6 +2061,150 @@ export interface OperatorEventDeadLetter {
   last_seen_at: string;
 }
 
+export type OpsDeadLetterKind = "task" | "event" | "runtime_intent";
+
+export interface OpsDeadLetter {
+  id: string;
+  native_id: string;
+  kind: OpsDeadLetterKind;
+  organization_id?: string | null;
+  run_id?: string | null;
+  status: string;
+  title: string;
+  source: string;
+  event_type?: string | null;
+  event_id?: string | null;
+  intent_id?: string | null;
+  idempotency_key?: string | null;
+  reason: string;
+  last_error?: string | null;
+  retry_count: number;
+  attempt_count: number;
+  created_at: string;
+  last_seen_at: string;
+  acknowledged_at?: string | null;
+  recovery_options: string[];
+  actions: string[];
+}
+
+export interface OpsDeadLetterDetail extends OpsDeadLetter {
+  payload?: Record<string, unknown> | null;
+  operator_actions: Array<{
+    id: string;
+    action: string;
+    status: string;
+    reason: string;
+    actor_id?: string | null;
+    idempotency_key?: string;
+    metadata?: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+  audit_history: Array<{
+    id: string;
+    action: string;
+    actor_id?: string | null;
+    metadata?: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+}
+
+export interface OpsDeadLetterList {
+  organization_id: string;
+  items: OpsDeadLetter[];
+  counts: {
+    total: number;
+    active: number;
+    task: number;
+    event: number;
+    runtime_intent: number;
+  };
+}
+
+export interface OpsDeadLetterActionResponse {
+  status: "replayed" | "replay_requested" | "resolved" | string;
+  dead_letter: OpsDeadLetter;
+  intent_id?: string;
+  replay_message_id?: string;
+  projection_names?: string[];
+  processed?: number;
+}
+
+export interface OpsProjectionLag {
+  organization_id: string;
+  projection: ProjectionMetadata;
+  latest_domain_event?: OpsDomainEventMetadata | null;
+  cursors: Array<{
+    projection_name: string;
+    last_sequence: number;
+    last_event_id: string;
+    status: string;
+    last_error: string;
+    updated_at: string;
+  }>;
+  active_dead_letters: OpsDeadLetter[];
+}
+
+export interface OpsDomainEventMetadata {
+  id: string;
+  organization_id: string;
+  aggregate_type: string;
+  aggregate_id: string;
+  event_type: string;
+  event_version: number;
+  sequence: number;
+  idempotency_key: string;
+  payload_keys: string[];
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface OpsEventSpool {
+  organization_id: string;
+  domain_events: {
+    count: number;
+    latest_sequence: number;
+    recent: OpsDomainEventMetadata[];
+  };
+  state_feed_events: {
+    count: number;
+    latest_state_version: number;
+    recent: Array<{
+      id: string;
+      event_id: string;
+      organization_id: string;
+      state_version: number;
+      type: string;
+      resource: { type: string; id: string };
+      requires_refetch: boolean;
+      occurred_at: string;
+      created_at: string;
+    }>;
+  };
+  dead_letters: {
+    active_count: number;
+    recent: OpsDeadLetter[];
+  };
+  generated_at: string;
+}
+
+export interface OpsRuntimeIntentLag {
+  organization_id: string;
+  stream: string;
+  dead_letter_stream: string;
+  stream_length: number;
+  pending: number;
+  lag: number;
+  backlog: number;
+  consumer_idle_ms: number;
+  oldest_pending_idle_ms: number;
+  dead_letter_count: number;
+  source: string;
+  error: string;
+  recent_dead_letters: OperatorRuntimeIntentBacklog["recent_dead_letters"];
+  recent_runtime_outcomes: OpsDeadLetter[];
+  generated_at: string;
+}
+
 export interface OperatorOrgLoad {
   organization_id: string;
   runs: Record<string, number>;
@@ -2093,11 +2259,81 @@ export type MetricProvenance = {
   value?: number | null;
 };
 
+export type AccountingMetric =
+  | {
+      status: "available";
+      value: number;
+      currency: string;
+      computed_at: string;
+      source: string;
+    }
+  | {
+      status: "not_instrumented";
+      reason: string;
+      computed_at: string;
+      source: string;
+    };
+
 export type ProjectionMetadata = {
   computed_at: string;
+  last_sequence?: number;
+  state_feed_version?: number;
+  lag_seconds?: number | null;
+  status?: "fresh" | "stale" | "rebuilding" | "degraded" | string;
   projection_lag_ms: number | null;
   last_event_id: string;
   watermark: string | null;
+  source?: string;
+  last_updated_at?: string;
+  freshness_ms?: number;
+  stale?: boolean;
+  degraded?: boolean;
+};
+
+export type OverviewSectionMetadata = {
+  source: string;
+  computed_at: string;
+  last_updated_at: string;
+  freshness_ms: number;
+  status: "fresh" | "stale" | "rebuilding" | "degraded" | "available" | "not_instrumented" | string;
+  stale: boolean;
+  degraded: boolean;
+};
+
+export type RunningOverviewSection = OverviewSectionMetadata & {
+  active_agent_count: number;
+  running_task_count: number;
+  operation_count_24h: number;
+  items: TaskRecord[];
+};
+
+export type BlockedOverviewSection = OverviewSectionMetadata & {
+  blocked_task_count: number;
+  items: TaskRecord[];
+};
+
+export type DecisionsOverviewSection = OverviewSectionMetadata & {
+  pending_decision_count: number;
+  items: DecisionRecord[];
+};
+
+export type CostsOverviewSection = OverviewSectionMetadata & {
+  total_cost_usd: number;
+  currency: string;
+  metric?: AccountingMetric;
+  cost_by_type: Array<{
+    cost_type: string;
+    total_cost_usd: number;
+    entry_count: number;
+  }>;
+};
+
+export type FailuresOverviewSection = OverviewSectionMetadata & {
+  dead_letter_count: number;
+  task_dead_letter_count: number;
+  event_dead_letter_count: number;
+  runtime_intent_dead_letter_count: number;
+  runtime_intent_lag_seconds: number;
 };
 
 export interface AccountingOverview {
@@ -2105,6 +2341,11 @@ export interface AccountingOverview {
   total_cost_usd: number;
   generated_at?: string;
   projection?: ProjectionMetadata;
+  metrics?: {
+    cost?: AccountingMetric;
+    revenue?: AccountingMetric;
+    profit?: AccountingMetric;
+  };
   metric_provenance?: {
     total_cost_usd?: MetricProvenance;
     revenue?: MetricProvenance;
@@ -2150,8 +2391,14 @@ export interface OrganizationStateSummary {
     ended_at: string | null;
     duration_ms: number | null;
   }>;
-  memory: {
+  running?: RunningOverviewSection;
+  blocked?: BlockedOverviewSection;
+  decisions?: DecisionsOverviewSection;
+  costs?: CostsOverviewSection;
+  failures?: FailuresOverviewSection;
+  memory: Partial<OverviewSectionMetadata> & {
     active_observation_count: number;
+    memory_write_count_24h?: number;
     recent_topics: string[];
   };
   policy: {
@@ -2161,12 +2408,24 @@ export interface OrganizationStateSummary {
     http_default_deny: boolean;
   };
   accounting: AccountingOverview;
+  operations?: {
+    status: "fresh" | "degraded" | string;
+    dead_letter_count: number;
+    task_dead_letter_count: number;
+    event_dead_letter_count: number;
+    runtime_intent_dead_letter_count: number;
+    projection_status: string;
+    projection_lag_seconds: number;
+    runtime_intent_lag_seconds?: number;
+    generated_at: string;
+  };
   generated_at: string;
   projection?: ProjectionMetadata;
 }
 
 export interface ResumeRunInput {
   node_id: string;
+  submit_id?: string;
   input_json: {
     approved: boolean;
     fields?: Record<string, string>;
@@ -2492,6 +2751,53 @@ export const operatorApi = {
   },
   getOrgLoad: async (): Promise<OperatorOrgLoad> => {
     const response = await api.get<ApiSuccessResponse<OperatorOrgLoad>>(API_PATHS.operator.orgLoad);
+    return response.data.data;
+  },
+};
+
+export const opsApi = {
+  getDeadLetters: async (): Promise<OpsDeadLetterList> => {
+    const response = await api.get<ApiSuccessResponse<OpsDeadLetterList>>(API_PATHS.ops.deadLetters);
+    return response.data.data;
+  },
+  getDeadLetter: async (deadLetterKey: string): Promise<OpsDeadLetterDetail> => {
+    const response = await api.get<ApiSuccessResponse<OpsDeadLetterDetail>>(API_PATHS.ops.deadLetter(deadLetterKey));
+    return response.data.data;
+  },
+  replayDeadLetter: async (
+    deadLetterKey: string,
+    reason: string,
+    options: IdempotencyOptions,
+  ): Promise<OpsDeadLetterActionResponse> => {
+    const response = await api.post<ApiSuccessResponse<OpsDeadLetterActionResponse>>(
+      API_PATHS.ops.replayDeadLetter(deadLetterKey),
+      { reason },
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+  resolveDeadLetter: async (
+    deadLetterKey: string,
+    reason: string,
+    options?: IdempotencyOptions,
+  ): Promise<OpsDeadLetterActionResponse> => {
+    const response = await api.post<ApiSuccessResponse<OpsDeadLetterActionResponse>>(
+      API_PATHS.ops.resolveDeadLetter(deadLetterKey),
+      { reason },
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+  getProjectionLag: async (): Promise<OpsProjectionLag> => {
+    const response = await api.get<ApiSuccessResponse<OpsProjectionLag>>(API_PATHS.ops.projectionLag);
+    return response.data.data;
+  },
+  getEventSpool: async (): Promise<OpsEventSpool> => {
+    const response = await api.get<ApiSuccessResponse<OpsEventSpool>>(API_PATHS.ops.eventSpool);
+    return response.data.data;
+  },
+  getRuntimeIntentLag: async (): Promise<OpsRuntimeIntentLag> => {
+    const response = await api.get<ApiSuccessResponse<OpsRuntimeIntentLag>>(API_PATHS.ops.runtimeIntentLag);
     return response.data.data;
   },
 };

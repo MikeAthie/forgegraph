@@ -197,6 +197,8 @@ PY
 
 detect_python
 
+"${PYTHON_CMD[@]}" "${SCRIPT_DIR}/check_architecture_signoff.py" --require-approved
+
 start_llm_mock() {
   if http_ready "${PLAYWRIGHT_LLM_MOCK_URL}/health"; then
     log_section "Reusing deterministic LLM mock at ${PLAYWRIGHT_LLM_MOCK_URL}"

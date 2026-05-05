@@ -32,6 +32,14 @@ function metricProvenanceLine(metric: MetricProvenanceVM): string {
   return `${metric.source} · ${computedAt}${freshness}`;
 }
 
+function financialMetricLabel(metric: MetricProvenanceVM): string {
+  if (metric.status === "available" && typeof metric.value === "number") {
+    return formatCurrency(metric.value);
+  }
+
+  return notInstrumentedLabel;
+}
+
 export default function AccountingPage() {
   const [overview, setOverview] = useState<AccountingOverviewVM | null>(null);
   const [ledger, setLedger] = useState<AccountingLedgerEntryVM[]>([]);
@@ -93,7 +101,7 @@ export default function AccountingPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span>Spend</span>
-                  <span>{formatCurrency(accountingState.trackedCost)}</span>
+                  <span>{financialMetricLabel(overview.metricProvenance.totalCostUsd)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Revenue</span>
@@ -153,7 +161,7 @@ export default function AccountingPage() {
               <div className="grid gap-4 xl:grid-cols-5">
                 <MetricCard
                   eyebrow="Cost today"
-                  value={formatCurrency(accountingState.trackedCost)}
+                  value={financialMetricLabel(overview.metricProvenance.totalCostUsd)}
                   delta={metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                   tone="rose"
                   icon={<Wallet className="h-4 w-4" />}

@@ -33,6 +33,21 @@ const observationOne: api.MemoryObservation = {
   scope: "graph",
   topic_key: "jackie-style",
   tool_name: "slack",
+  source_event_id: "evt-memory-1",
+  source_event_type: "memory_fact_extracted",
+  fact_hash: "fact-hash-1",
+  provenance: {
+    source: "engine_memory_intent",
+    backend_owner: "memory_service",
+    source_span: "Slack thread",
+  },
+  cost_metadata: {
+    cost_usd: "0.010000",
+    currency: "USD",
+  },
+  retention_policy: {
+    ttl_seconds: 86400,
+  },
   revision_count: 2,
   duplicate_count: 1,
   last_seen_at: "2026-03-10T18:35:00Z",
@@ -166,6 +181,10 @@ describe("Memory Browser Page", () => {
     expect(screen.getByText(/weekly launch summary/i)).toBeInTheDocument();
     expect(screen.getByText(/captured content/i)).toBeInTheDocument();
     expect(screen.getAllByText(/linked scope/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/source event/i)).toBeInTheDocument();
+    expect(screen.getByText("evt-memory-1")).toBeInTheDocument();
+    expect(screen.getByText(/provenance/i)).toBeInTheDocument();
+    expect(screen.getByText(/engine_memory_intent/i)).toBeInTheDocument();
     expect(screen.getAllByText(/timeline/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/member memory access/i)).toBeInTheDocument();
     expect(screen.getByText(/retention changes are limited to owner and admin/i)).toBeInTheDocument();
