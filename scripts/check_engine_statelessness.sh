@@ -41,9 +41,19 @@ for pattern in "${BAD_PATTERNS[@]}"; do
     fi
   done < <(
     if command -v rg >/dev/null 2>&1; then
-      rg -n --hidden --glob '!**/.git/**' --glob '!engine/engine.exe' --glob '!engine/testsprite_tests/tmp/**' "${pattern}" engine || true
+      rg -n \
+        --hidden \
+        --glob '!**/.git/**' \
+        --glob '!engine/engine.exe' \
+        --glob '!engine/testsprite_tests/tmp/**' \
+        --glob '!testsprite_tests/tmp/**' \
+        --glob '!**/testsprite_tests/tmp/**' \
+        "${pattern}" engine || true
     else
-      grep -R -n -I --exclude-dir=.git --exclude=engine.exe "${pattern}" engine 2>/dev/null || true
+      find engine \
+        \( -path '*/.git/*' -o -path 'engine/testsprite_tests/tmp/*' -o -name engine.exe \) \
+        -prune -o -type f -print0 \
+        | xargs -0 grep -n -I "${pattern}" 2>/dev/null || true
     fi
   )
 done
