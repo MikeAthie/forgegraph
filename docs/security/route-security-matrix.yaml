@@ -4,6 +4,7 @@ scope:
   include:
   - /api/**
   - /api/v1/**
+  - /ws/organizations/<uuid:organization_id>/state/
   - /ws/runs/<uuid:run_id>/
   exclude:
   - health
@@ -2783,6 +2784,176 @@ routes:
     oversized_request: skip
   rate_limit_scope: default
   request_size_limit: api_default
+- id: ops-dead-letters
+  names:
+  - ops-dead-letter-list
+  paths:
+  - /api/ops/dead-letters
+  - /api/v1/ops/dead-letters
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.dead_letter.read
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: ops-dead-letters-dead-letter-key
+  names:
+  - ops-dead-letter-detail
+  paths:
+  - /api/ops/dead-letters/<str:dead_letter_key>
+  - /api/v1/ops/dead-letters/<str:dead_letter_key>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.dead_letter.read
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: ops-dead-letters-dead-letter-key-replay
+  names:
+  - ops-dead-letter-replay
+  paths:
+  - /api/ops/dead-letters/<str:dead_letter_key>/replay
+  - /api/v1/ops/dead-letters/<str:dead_letter_key>/replay
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.dead_letter.replay
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: ops.dead_letter.replay
+- id: ops-dead-letters-dead-letter-key-resolve
+  names:
+  - ops-dead-letter-resolve
+  paths:
+  - /api/ops/dead-letters/<str:dead_letter_key>/resolve
+  - /api/v1/ops/dead-letters/<str:dead_letter_key>/resolve
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.dead_letter.replay
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: ops.dead_letter.resolve
+- id: ops-projection-lag
+  names:
+  - ops-projection-lag
+  paths:
+  - /api/ops/projection-lag
+  - /api/v1/ops/projection-lag
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.projection.read
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: ops-event-spool
+  names:
+  - ops-event-spool
+  paths:
+  - /api/ops/event-spool
+  - /api/v1/ops/event-spool
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.projection.read
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: ops-runtime-intent-lag
+  names:
+  - ops-runtime-intent-lag
+  paths:
+  - /api/ops/runtime-intent-lag
+  - /api/v1/ops/runtime-intent-lag
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  required_permission: ops.projection.read
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: skip
+  rate_limit_scope: default
+  request_size_limit: api_default
 - id: orgs
   names:
   - org-list-create
@@ -3950,6 +4121,28 @@ routes:
   - run-websocket
   paths:
   - /ws/runs/<uuid:run_id>/
+  methods:
+  - WEBSOCKET
+  auth_surface: websocket_ticket
+  required_role: viewer
+  org_scope: tenant
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403
+    insufficient_role: skip
+    correct_role: connects
+    malformed_payload: disconnect
+    rate_limited: connection_limit
+    oversized_request: skip
+  rate_limit_scope: websocket_ticket
+  request_size_limit: not_applicable
+- id: ws-organizations-organization-id-state
+  names:
+  - organization-state-websocket
+  paths:
+  - /ws/organizations/<uuid:organization_id>/state/
   methods:
   - WEBSOCKET
   auth_surface: websocket_ticket

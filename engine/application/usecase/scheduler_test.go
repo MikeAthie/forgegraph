@@ -697,17 +697,7 @@ func TestScheduler_ParallelBranches(t *testing.T) {
 	repo := newMockRepository()
 	emitter := newRecordingEmitter()
 
-	// Track parallel execution
-	var executionTimes sync.Map
-	parallelExec := make(chan struct{}, 2)
-
 	transformExec := newMockExecutor("transform", func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
-		executionTimes.Store(node.ID, time.Now())
-		// For branches, add delay to detect parallelism
-		if node.ID == "branchA" || node.ID == "branchB" {
-			parallelExec <- struct{}{}
-			time.Sleep(50 * time.Millisecond)
-		}
 		return &port.NodeExecutionResult{Output: node.ID + "_done"}, nil
 	})
 
@@ -1829,26 +1819,43 @@ func TestScheduler_InputVariables(t *testing.T) {
 
 func waitForRunCompletion(t *testing.T, scheduler *Scheduler, repo *mockRepository, runID string, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	waitForSchedulerCondition(t, timeout, func() bool {
 		if !scheduler.IsRunActive(runID) {
-			return
+			return true
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("Run %s did not complete within %v", runID, timeout)
+		return false
+	}, fmt.Sprintf("Run %s did not complete within %v", runID, timeout))
 }
 
 func waitForRunInactive(t *testing.T, scheduler *Scheduler, runID string, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	waitForSchedulerCondition(t, timeout, func() bool {
 		if !scheduler.IsRunActive(runID) {
-			return
+			return true
 		}
-		time.Sleep(50 * time.Millisecond)
+		return false
+	}, fmt.Sprintf("Run %s did not become inactive within %v", runID, timeout))
+}
+
+func waitForSchedulerCondition(t *testing.T, timeout time.Duration, condition func() bool, failureMessage string) {
+	t.Helper()
+	if condition() {
+		return
 	}
-	t.Fatalf("Run %s did not become inactive within %v", runID, timeout)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timer.C:
+			t.Fatal(failureMessage)
+		case <-ticker.C:
+			if condition() {
+				return
+			}
+		}
+	}
 }
 
 // =============================================================================
@@ -2026,16 +2033,9 @@ func TestScheduler_MaybeTriggerSummarization(t *testing.T) {
 	node := &entity.Node{ID: "prompt-1", Type: string(value.NodeTypePrompt)}
 	s.maybeTriggerSummarization(rc, node)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if rc.currentSummary != nil && rc.messageBuffer.Count() == 2 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("expected summary and trimmed buffer, got summary=%v count=%d", rc.currentSummary, rc.messageBuffer.Count())
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForSchedulerCondition(t, 2*time.Second, func() bool {
+		return rc.currentSummary != nil && rc.messageBuffer.Count() == 2
+	}, fmt.Sprintf("expected summary and trimmed buffer, got summary=%v count=%d", rc.currentSummary, rc.messageBuffer.Count()))
 
 	events := emitter.getEvents()
 	if len(events) != 1 {

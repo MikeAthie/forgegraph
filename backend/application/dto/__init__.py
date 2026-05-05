@@ -2,6 +2,12 @@
 #
 # Used to transfer data across layer boundaries.
 
+from application.dto.accounting import (
+    AccountingMetric,
+    AccountingMetricPayload,
+    AvailableAccountingMetric,
+    NotInstrumentedAccountingMetric,
+)
 from application.dto.auth import (
     LoginInput,
     RegisterInput,
@@ -29,6 +35,11 @@ from application.dto.run import (
 )
 
 __all__ = [
+    # Accounting
+    "AccountingMetric",
+    "AccountingMetricPayload",
+    "AvailableAccountingMetric",
+    "NotInstrumentedAccountingMetric",
     # Auth
     "RegisterInput",
     "LoginInput",

@@ -1,5 +1,6 @@
 import { executionsApi, runsApi, tasksApi, type LLMMode, type ResumeRunResponse } from "@/lib/api";
 import { buildCompanyProfile, buildOperationInput, type CompanyProfile } from "@/lib/company-workspace";
+import { newClientCommandId, stableClientCommandId } from "@/lib/idempotency";
 import {
   toOperationListVM,
   toOperationVM,
@@ -8,14 +9,6 @@ import {
   type OperationVM,
   type TaskVM,
 } from "@/domain/translation";
-
-const newClientActionId = (prefix: string): string => {
-  const randomId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}:${randomId}`;
-};
 
 export const operationRepository = {
   list: async (): Promise<OperationVM[]> => {
@@ -66,7 +59,7 @@ export const operationRepository = {
         input_json: buildOperationInput(profile, input.operationBrief, input.operatingBrief),
       },
       {
-        idempotencyKey: newClientActionId("operation.launch"),
+        idempotencyKey: newClientCommandId("operation.launch"),
       },
     );
     return toOperationVM(operation);
@@ -74,7 +67,7 @@ export const operationRepository = {
 
   stop: async (operationId: string): Promise<OperationVM> => {
     const operation = await runsApi.cancel(operationId, {
-      idempotencyKey: `operation.cancel:${operationId}`,
+      idempotencyKey: stableClientCommandId("operation.cancel", operationId),
     });
     return toOperationVM(operation);
   },
@@ -91,7 +84,7 @@ export const operationRepository = {
         credential_id: input?.credentialId ?? undefined,
       },
       {
-        idempotencyKey: newClientActionId(`operation.replay:${operationId}`),
+        idempotencyKey: newClientCommandId(`operation.replay:${operationId}`),
       },
     );
     return toOperationVM(operation);
@@ -107,13 +100,24 @@ export const operationRepository = {
       operationId,
       {
         node_id: departmentId,
+        submit_id: stableClientCommandId(
+          "operation.resume",
+          operationId,
+          departmentId,
+          approved ? "approved" : "rejected",
+        ),
         input_json: {
           approved,
           feedback: feedback || undefined,
         },
       },
       {
-        idempotencyKey: `operation.resume:${operationId}:${departmentId}:${approved ? "approved" : "rejected"}`,
+        idempotencyKey: stableClientCommandId(
+          "operation.resume",
+          operationId,
+          departmentId,
+          approved ? "approved" : "rejected",
+        ),
       },
     ),
 };

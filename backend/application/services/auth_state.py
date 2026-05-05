@@ -54,7 +54,7 @@ def _access_jti(token: Token) -> str:
 def _ws_permissions_for_user(user: User) -> list[str]:
     membership = get_default_membership(user)
     role = membership.role if membership is not None else "viewer"
-    permissions = {"runs:view"}
+    permissions = {"organizations:state:view", "runs:view"}
     if role in {"member", "admin", "owner"}:
         permissions.add("runs:operate")
     if role in {"admin", "owner"}:

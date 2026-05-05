@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import Protocol, TypedDict, cast
 from uuid import UUID
 
 from asgiref.sync import async_to_sync
@@ -23,6 +23,15 @@ from infrastructure.orm.models import MemoryObservation
 
 MAX_OBSERVATION_CONTENT_LENGTH = 8_000
 MAX_SEARCH_QUERY_LENGTH = 512
+
+
+class MemoryObservationMetadata(TypedDict):
+    source_event_id: str
+    source_event_type: str
+    fact_hash: str
+    provenance_json: dict[str, object]
+    cost_metadata_json: dict[str, object]
+    retention_policy_json: dict[str, object]
 
 
 @dataclass(slots=True)
@@ -89,6 +98,12 @@ class MemoryObservationService:
         agent_id: UUID | str | None = None,
         topic_key: str | None = None,
         tool_name: str | None = None,
+        source_event_id: str | None = None,
+        source_event_type: str | None = None,
+        fact_hash: str | None = None,
+        provenance_json: dict[str, object] | None = None,
+        cost_metadata_json: dict[str, object] | None = None,
+        retention_policy_json: dict[str, object] | None = None,
         dedupe: bool = True,
         update_topic: bool = False,
     ) -> MemoryObservation:
@@ -107,6 +122,14 @@ class MemoryObservationService:
             agent_id=agent_id,
         )
         tenant_uuid = self._require_uuid(tenant_id, "tenant_id")
+        metadata = self._normalize_metadata(
+            source_event_id=source_event_id,
+            source_event_type=source_event_type,
+            fact_hash=fact_hash,
+            provenance_json=provenance_json,
+            cost_metadata_json=cost_metadata_json,
+            retention_policy_json=retention_policy_json,
+        )
         now = timezone.now()
 
         with transaction.atomic():
@@ -142,6 +165,7 @@ class MemoryObservationService:
                         topic_key=normalized["topic_key"],
                         tool_name=normalized["tool_name"],
                     )
+                    changed_fields.update(self._apply_metadata(topic_match, **metadata))
                     topic_match.revision_count += 1
                     topic_match.last_seen_at = now
                     topic_match.save(
@@ -171,6 +195,12 @@ class MemoryObservationService:
                     scope=normalized["scope"],
                     topic_key=normalized["topic_key"],
                     tool_name=normalized["tool_name"],
+                    source_event_id=metadata["source_event_id"],
+                    source_event_type=metadata["source_event_type"],
+                    fact_hash=metadata["fact_hash"],
+                    provenance_json=metadata["provenance_json"],
+                    cost_metadata_json=metadata["cost_metadata_json"],
+                    retention_policy_json=metadata["retention_policy_json"],
                     last_seen_at=now,
                 ),
             )
@@ -503,6 +533,34 @@ class MemoryObservationService:
                 changed_fields.add("tool_name")
         return changed_fields
 
+    def _apply_metadata(
+        self,
+        observation: MemoryObservation,
+        *,
+        source_event_id: str,
+        source_event_type: str,
+        fact_hash: str,
+        provenance_json: dict[str, object],
+        cost_metadata_json: dict[str, object],
+        retention_policy_json: dict[str, object],
+    ) -> set[str]:
+        changed_fields: set[str] = set()
+        updates: dict[str, object] = {
+            "source_event_id": source_event_id,
+            "source_event_type": source_event_type,
+            "fact_hash": fact_hash,
+            "provenance_json": provenance_json,
+            "cost_metadata_json": cost_metadata_json,
+            "retention_policy_json": retention_policy_json,
+        }
+        for field, value in updates.items():
+            if value in ("", {}) and getattr(observation, field) not in ("", {}):
+                continue
+            if getattr(observation, field) != value:
+                setattr(observation, field, value)
+                changed_fields.add(field)
+        return changed_fields
+
     def _normalize_payload(
         self,
         *,
@@ -524,6 +582,29 @@ class MemoryObservationService:
             "scope": self._normalize_scope(scope),
             "topic_key": self._normalize_topic_key(topic_key or normalized_title),
             "tool_name": self._normalize_tool_name(tool_name),
+        }
+
+    def _normalize_metadata(
+        self,
+        *,
+        source_event_id: str | None,
+        source_event_type: str | None,
+        fact_hash: str | None,
+        provenance_json: dict[str, object] | None,
+        cost_metadata_json: dict[str, object] | None,
+        retention_policy_json: dict[str, object] | None,
+    ) -> MemoryObservationMetadata:
+        return {
+            "source_event_id": redact_text(str(source_event_id or "").strip())[:128],
+            "source_event_type": redact_text(str(source_event_type or "").strip())[:128],
+            "fact_hash": redact_text(str(fact_hash or "").strip())[:64],
+            "provenance_json": provenance_json if isinstance(provenance_json, dict) else {},
+            "cost_metadata_json": cost_metadata_json
+            if isinstance(cost_metadata_json, dict)
+            else {},
+            "retention_policy_json": retention_policy_json
+            if isinstance(retention_policy_json, dict)
+            else {},
         }
 
     def _normalize_scope_ids(

@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   ArrowRight,
+  Activity,
   BellRing,
   BrainCircuit,
+  Database,
   HandCoins,
-  ShieldCheck,
   Siren,
+  TimerReset,
   Waypoints,
 } from "lucide-react";
 
@@ -24,14 +26,17 @@ import {
   formatCompactNumber,
   formatCurrency,
   formatDateTime,
+  formatDuration,
   overviewIcons,
 } from "@/components/os/operations-ui";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
+import { useAuth } from "@/contexts/AuthContext";
 import { translateProductError } from "@/domain/errors";
 import { overviewRepository } from "@/domain/repositories";
 import type { MetricProvenanceVM } from "@/domain/translation";
-import type { OrganizationOverviewVM } from "@/domain/repositories/overviewRepository";
+import type { OrganizationOverviewVM, OverviewSectionVM } from "@/domain/repositories/overviewRepository";
+import { useStateFeed, type StateFeedMessage } from "@/hooks/useStateFeed";
 
 const notInstrumentedLabel = "Not yet instrumented";
 
@@ -51,6 +56,26 @@ const metricLinkClass =
 const metricCardLinkClass =
   "h-full transition-all duration-200 ease-out group-hover:-translate-y-0.5 group-hover:border-slate-900/20 group-hover:bg-white group-hover:shadow-[0_30px_70px_-48px_rgba(15,23,42,0.7)] dark:group-hover:border-white/20 dark:group-hover:bg-white/[0.07]";
 
+const OVERVIEW_FEED_EVENT_TYPES = [
+  "overview.updated",
+  "task.created",
+  "task.updated",
+  "decision.created",
+  "decision.updated",
+  "agent.updated",
+  "memory.created",
+  "accounting.updated",
+  "dead_letter.created",
+  "projection.stale",
+  "projection.recovered",
+];
+
+const OVERVIEW_FEED_EVENT_TYPE_SET = new Set(OVERVIEW_FEED_EVENT_TYPES);
+
+function stateFeedMessageType(message: StateFeedMessage) {
+  return message.type || message.event_type || message.event?.type || message.event?.event_type || "";
+}
+
 function metricProvenanceLine(metric: MetricProvenanceVM): string {
   const computedAt = metric.computedAt ? `Computed ${formatDateTime(metric.computedAt)}` : "computed_at unavailable";
   const freshness = typeof metric.freshnessMs === "number" ? ` · freshness ${Math.round(metric.freshnessMs)}ms` : "";
@@ -58,37 +83,87 @@ function metricProvenanceLine(metric: MetricProvenanceVM): string {
   return `${metric.source} · ${computedAt}${freshness}`;
 }
 
+function financialMetricLabel(metric: MetricProvenanceVM): string {
+  if (metric.status === "available" && typeof metric.value === "number") {
+    return formatCurrency(metric.value);
+  }
+
+  return notInstrumentedLabel;
+}
+
+function projectionStatusLabel(projection: OrganizationOverviewVM["projection"]): string {
+  if (!projection) {
+    return "Projection unavailable";
+  }
+  const status = projection.status ?? "fresh";
+  const lag =
+    typeof projection.lag_seconds === "number" && projection.lag_seconds > 0
+      ? ` · ${Math.round(projection.lag_seconds)}s lag`
+      : "";
+  const sequence =
+    typeof projection.last_sequence === "number" ? ` · seq ${projection.last_sequence.toLocaleString()}` : "";
+  return `Projection ${status}${lag}${sequence}`;
+}
+
+type CardMetadata = Pick<
+  OverviewSectionVM,
+  "source" | "lastUpdatedAt" | "freshnessMs" | "status" | "stale" | "degraded"
+>;
+
+function overviewCardDetail(section: CardMetadata): string {
+  const freshness =
+    typeof section.freshnessMs === "number" ? ` · freshness ${formatDuration(section.freshnessMs)}` : "";
+  return `${section.source} · ${section.status} · Updated ${formatDateTime(section.lastUpdatedAt)}${freshness}`;
+}
+
+function overviewCardTone(
+  section: CardMetadata,
+  hasAttention = false,
+): "slate" | "emerald" | "amber" | "rose" | "cyan" {
+  if (section.degraded || hasAttention) {
+    return "rose";
+  }
+  if (section.stale || section.status === "stale" || section.status === "rebuilding") {
+    return "amber";
+  }
+  return section.status === "fresh" ? "emerald" : "slate";
+}
+
 export default function OverviewPage() {
-  const [overview, setOverview] = useState<OrganizationOverviewVM | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const data = await overviewRepository.get();
-        if (!cancelled) {
-          setOverview(data);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setError(translateProductError(err, "operation"));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+  const { user, isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
+  const organizationId = user?.default_organization_id ?? null;
+  const overviewQuery = useQuery({
+    queryKey: ["overview", organizationId ?? "current"],
+    queryFn: overviewRepository.get,
+    enabled: isAuthenticated,
+  });
+  const overview = overviewQuery.data ?? null;
+  const effectiveOrganizationId = overview?.organization.id ?? organizationId;
+  const invalidateOverview = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["overview"] });
+  }, [queryClient]);
+  const handleStateFeedEvent = useCallback(
+    (event: StateFeedMessage) => {
+      const type = stateFeedMessageType(event);
+      if (event.requires_refetch || OVERVIEW_FEED_EVENT_TYPE_SET.has(type)) {
+        invalidateOverview();
       }
-    };
+    },
+    [invalidateOverview],
+  );
+  const stateFeed = useStateFeed({
+    scope: "organization",
+    organizationId: effectiveOrganizationId,
+    enabled: isAuthenticated && Boolean(effectiveOrganizationId),
+    lastSeenStateVersion: overview?.projection?.state_feed_version ?? null,
+    eventTypes: OVERVIEW_FEED_EVENT_TYPES,
+    onEvent: handleStateFeedEvent,
+    onFullResync: invalidateOverview,
+  });
 
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const loading = overviewQuery.isLoading;
+  const error = overviewQuery.error ? translateProductError(overviewQuery.error, "operation") : null;
 
   const derived = useMemo(() => {
     if (!overview) {
@@ -97,8 +172,22 @@ export default function OverviewPage() {
 
     const blockedTasks = overview.activeTasks.filter((task) => task.status === "paused" || task.status === "failed");
     const failedOperations = overview.recentOperations.filter((operation) => operation.status === "failed");
+    const recoveryNeeded = overview.operations.deadLetterCount > 0 || overview.operations.status === "degraded";
 
     const attentionItems: AttentionItem[] = [
+      ...(recoveryNeeded
+        ? [
+            {
+              id: "operator-recovery",
+              title: "Operator recovery needs attention",
+              detail: `${overview.operations.deadLetterCount} backend failure record${overview.operations.deadLetterCount === 1 ? "" : "s"} require review. Projection state is ${overview.operations.projectionStatus}.`,
+              owner: "Recovery",
+              tone: "rose" as const,
+              href: "/ops",
+              action: "Open recovery",
+            },
+          ]
+        : []),
       ...failedOperations.slice(0, 2).map((operation) => ({
         id: `failed-${operation.id}`,
         title: `${operation.companyName} needs attention`,
@@ -132,11 +221,13 @@ export default function OverviewPage() {
       {
         id: "control-plane",
         label: "Control plane",
-        value: attentionItems.some((item) => item.tone === "rose") ? "Degraded" : "Responsive",
-        detail: attentionItems.some((item) => item.tone === "rose")
-          ? "There is at least one failed operation in the visible window."
-          : "No critical failures are currently projected.",
-        status: attentionItems.some((item) => item.tone === "rose") ? "failed" : "active",
+        value: recoveryNeeded || attentionItems.some((item) => item.tone === "rose") ? "Degraded" : "Responsive",
+        detail: recoveryNeeded
+          ? "Operator-visible recovery records or projection lag require attention."
+          : attentionItems.some((item) => item.tone === "rose")
+            ? "There is at least one failed operation in the visible window."
+            : "No critical failures are currently projected.",
+        status: recoveryNeeded || attentionItems.some((item) => item.tone === "rose") ? "failed" : "active",
       },
       {
         id: "departments",
@@ -163,7 +254,7 @@ export default function OverviewPage() {
       {
         id: "cost",
         label: "Cost posture",
-        value: formatCurrency(overview.summary.totalCostUsd),
+        value: financialMetricLabel(overview.metricProvenance.totalCostUsd),
         detail: metricProvenanceLine(overview.metricProvenance.totalCostUsd),
         status: "active",
       },
@@ -267,7 +358,7 @@ export default function OverviewPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span>Tracked cost</span>
-                  <span>{formatCurrency(overview.summary.totalCostUsd)}</span>
+                  <span>{financialMetricLabel(overview.metricProvenance.totalCostUsd)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Revenue</span>
@@ -287,6 +378,95 @@ export default function OverviewPage() {
       />
     ) : null;
 
+  const projectionCardMetadata: CardMetadata = {
+    source: overview?.projection?.source ?? "backend_projection",
+    lastUpdatedAt:
+      overview?.projection?.last_updated_at ?? overview?.projection?.watermark ?? overview?.generatedAt ?? null,
+    freshnessMs: overview?.projection?.freshness_ms ?? overview?.projection?.projection_lag_ms ?? null,
+    status: overview?.projection?.status ?? "fresh",
+    stale: Boolean(overview?.projection?.stale ?? overview?.projection?.status === "stale"),
+    degraded: Boolean(overview?.projection?.degraded ?? overview?.projection?.status === "degraded"),
+  };
+  const companyOsCards = overview
+    ? [
+        {
+          href: "#active-departments",
+          ariaLabel: "Jump to active agents",
+          eyebrow: "Active Agents",
+          value: formatCompactNumber(overview.running.activeAgentCount),
+          section: overview.running,
+          tone: overviewCardTone(overview.running),
+          icon: <BrainCircuit className="h-4 w-4" />,
+        },
+        {
+          href: "#blocked-tasks",
+          ariaLabel: "Jump to running tasks",
+          eyebrow: "Running Tasks",
+          value: formatCompactNumber(overview.running.runningTaskCount),
+          section: overview.running,
+          tone: overviewCardTone(overview.running),
+          icon: <Activity className="h-4 w-4" />,
+        },
+        {
+          href: "#pending-approvals",
+          ariaLabel: "Jump to blocked decisions",
+          eyebrow: "Blocked Decisions",
+          value: formatCompactNumber(overview.decisions.pendingDecisionCount),
+          section: overview.decisions,
+          tone: overviewCardTone(overview.decisions, overview.decisions.pendingDecisionCount > 0),
+          icon: <BellRing className="h-4 w-4" />,
+        },
+        {
+          href: "#usage-budget",
+          ariaLabel: "Jump to cost today",
+          eyebrow: "Cost Today",
+          value: financialMetricLabel(overview.metricProvenance.totalCostUsd),
+          section: overview.costs,
+          tone: overviewCardTone(overview.costs),
+          icon: <HandCoins className="h-4 w-4" />,
+        },
+        {
+          href: "#memory",
+          ariaLabel: "Jump to memory writes",
+          eyebrow: "Memory Writes",
+          value: formatCompactNumber(overview.memory.writeCount24h),
+          section: overview.memory.section,
+          tone: overviewCardTone(overview.memory.section),
+          icon: <Database className="h-4 w-4" />,
+        },
+        {
+          href: "/ops",
+          ariaLabel: "Open dead letter recovery",
+          eyebrow: "Dead Letters",
+          value: formatCompactNumber(overview.failures.deadLetterCount),
+          section: overview.failures,
+          tone: overviewCardTone(overview.failures, overview.failures.deadLetterCount > 0),
+          icon: <Siren className="h-4 w-4" />,
+        },
+        {
+          href: "#system-health",
+          ariaLabel: "Jump to projection lag",
+          eyebrow: "Projection Lag",
+          value:
+            typeof overview.projection?.lag_seconds === "number"
+              ? formatDuration(overview.projection.lag_seconds * 1000)
+              : "Pending",
+          section: projectionCardMetadata,
+          tone: overviewCardTone(projectionCardMetadata),
+          icon: <Waypoints className="h-4 w-4" />,
+        },
+        {
+          href: "/ops",
+          ariaLabel: "Open runtime intent lag",
+          eyebrow: "Runtime Intent Lag",
+          value: formatDuration(overview.failures.runtimeIntentLagSeconds * 1000),
+          section: overview.failures,
+          tone: overviewCardTone(overview.failures, overview.failures.runtimeIntentLagSeconds > 0),
+          icon: <TimerReset className="h-4 w-4" />,
+        },
+      ]
+    : [];
+
   return (
     <ProtectedRoute>
       <DashboardLayout inspector={inspector}>
@@ -296,66 +476,38 @@ export default function OverviewPage() {
             description="Summary first, inspection second, logs last. This page should tell an operator what is happening and where to act in under ten seconds."
             action={
               overview?.generatedAt ? (
-                <StatusBadge status="active" label={`Updated ${formatDateTime(overview.generatedAt)}`} />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <StatusBadge status="active" label={`Updated ${formatDateTime(overview.generatedAt)}`} />
+                  <StatusBadge
+                    status={overview.projection?.status ?? "stale"}
+                    label={projectionStatusLabel(overview.projection)}
+                  />
+                  {stateFeed.status === "unavailable" ? (
+                    <StatusBadge status="stale" label="Live feed unavailable" />
+                  ) : null}
+                  {overview.operations.deadLetterCount > 0 ? (
+                    <StatusBadge
+                      status="degraded"
+                      label={`${overview.operations.deadLetterCount} recovery item${overview.operations.deadLetterCount === 1 ? "" : "s"}`}
+                    />
+                  ) : null}
+                </div>
               ) : null
             }
           >
-            <div className="grid gap-4 xl:grid-cols-5">
-              <Link href="#system-health" className={metricLinkClass} aria-label="Jump to system health">
-                <MetricCard
-                  className={metricCardLinkClass}
-                  eyebrow="System health"
-                  value={derived?.attentionItems.length ? "Attention" : "Stable"}
-                  delta={
-                    derived?.attentionItems.length
-                      ? `${derived.attentionItems.length} item${derived.attentionItems.length === 1 ? "" : "s"} need action`
-                      : "No critical issues in the visible window"
-                  }
-                  tone={derived?.attentionItems.length ? "rose" : "emerald"}
-                  icon={<Siren className="h-4 w-4" />}
-                />
-              </Link>
-              <Link href="#active-departments" className={metricLinkClass} aria-label="Jump to active departments">
-                <MetricCard
-                  className={metricCardLinkClass}
-                  eyebrow="Active departments"
-                  value={overview ? formatCompactNumber(overview.summary.activeDepartmentCount) : "0"}
-                  delta="Departments currently attached to live work"
-                  icon={<BrainCircuit className="h-4 w-4" />}
-                />
-              </Link>
-              <Link href="#blocked-tasks" className={metricLinkClass} aria-label="Jump to blocked tasks">
-                <MetricCard
-                  className={metricCardLinkClass}
-                  eyebrow="Blocked tasks"
-                  value={derived ? formatCompactNumber(derived.blockedTasks.length) : "0"}
-                  delta="Waiting or failed work that needs intervention"
-                  tone={derived?.blockedTasks.length ? "amber" : "slate"}
-                  icon={<Waypoints className="h-4 w-4" />}
-                />
-              </Link>
-              <Link href="#pending-approvals" className={metricLinkClass} aria-label="Jump to pending approvals">
-                <MetricCard
-                  className={metricCardLinkClass}
-                  eyebrow="Pending approvals"
-                  value={overview ? formatCompactNumber(overview.summary.pendingApprovalCount) : "0"}
-                  delta="Approvals ready for human review"
-                  tone={overview?.summary.pendingApprovalCount ? "amber" : "slate"}
-                  icon={<BellRing className="h-4 w-4" />}
-                />
-              </Link>
-              <Link href="#usage-budget" className={metricLinkClass} aria-label="Jump to usage and budget">
-                <MetricCard
-                  className={metricCardLinkClass}
-                  eyebrow="Cost today"
-                  value={overview ? formatCurrency(overview.summary.totalCostUsd) : "$0"}
-                  delta={
-                    overview ? metricProvenanceLine(overview.metricProvenance.totalCostUsd) : "Backend cost ledger"
-                  }
-                  tone="rose"
-                  icon={<HandCoins className="h-4 w-4" />}
-                />
-              </Link>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {companyOsCards.map((card) => (
+                <Link key={card.eyebrow} href={card.href} className={metricLinkClass} aria-label={card.ariaLabel}>
+                  <MetricCard
+                    className={metricCardLinkClass}
+                    eyebrow={card.eyebrow}
+                    value={card.value}
+                    delta={overviewCardDetail(card.section)}
+                    tone={card.tone}
+                    icon={card.icon}
+                  />
+                </Link>
+              ))}
             </div>
           </Panel>
 
@@ -616,7 +768,7 @@ export default function OverviewPage() {
                           Tracked cost
                         </p>
                         <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                          {formatCurrency(overview.summary.totalCostUsd)}
+                          {financialMetricLabel(overview.metricProvenance.totalCostUsd)}
                         </p>
                         <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
                           {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BellRing,
   BookCopy,
@@ -40,6 +41,7 @@ import {
   Input,
 } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
+import { useStateFeed, type StateFeedMessage } from "@/hooks/useStateFeed";
 import { decisionsApi, getApiErrorMessage, organizationsApi, type OrganizationListItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +56,7 @@ type NavItem = {
   icon: typeof Gauge;
   section: "operate" | "build";
   badge?: number | null;
+  adminOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -64,10 +67,17 @@ const navItems: NavItem[] = [
   { href: "/approvals", label: "Approvals", icon: BellRing, section: "operate" },
   { href: "/memory", label: "Knowledge", icon: BookCopy, section: "operate" },
   { href: "/accounting", label: "Usage", icon: HandCoins, section: "operate" },
+  { href: "/ops", label: "Recovery", icon: ShieldCheck, section: "operate", adminOnly: true },
   { href: "/library", label: "Assets", icon: LibraryBig, section: "build" },
   { href: "/workflows", label: "Advanced operating models", icon: FolderTree, section: "build" },
   { href: "/settings", label: "Settings", icon: ShieldCheck, section: "build" },
 ];
+
+const DECISION_BADGE_FEED_EVENTS = ["decision.created", "decision.updated", "overview.updated"];
+
+function stateFeedMessageType(message: StateFeedMessage) {
+  return message.type || message.event_type || message.event?.type || message.event?.event_type || "";
+}
 
 const pageMeta = (pathname: string) => {
   if (pathname.startsWith("/companies/new")) {
@@ -110,6 +120,12 @@ const pageMeta = (pathname: string) => {
     return {
       title: "Usage And Budget",
       description: "Track AI usage, spend concentration, and company operating limits.",
+    };
+  }
+  if (pathname.startsWith("/ops")) {
+    return {
+      title: "Operator Recovery",
+      description: "Inspect dead letters, projection lag, event spool health, and backend recovery actions.",
     };
   }
   if (pathname.startsWith("/library") || pathname.startsWith("/prompts")) {
@@ -159,7 +175,6 @@ const isActivePath = (pathname: string, href: string) => {
 export default function OsShell({ children, mainClassName }: OsShellProps) {
   const router = useRouter();
   const { user, isAuthenticated, logout, checkAuth } = useAuth();
-  const [pendingDecisionCount, setPendingDecisionCount] = useState<number | null>(null);
   const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
   const [organizationsLoading, setOrganizationsLoading] = useState(false);
   const [organizationActionId, setOrganizationActionId] = useState<string | null>(null);
@@ -169,35 +184,31 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
   const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [createOrganizationError, setCreateOrganizationError] = useState<string | null>(null);
   const meta = useMemo(() => pageMeta(router.pathname), [router.pathname]);
-
-  useEffect(() => {
-    if (!isAuthenticated || process.env.NODE_ENV === "test") {
-      setPendingDecisionCount(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const data = await decisionsApi.count();
-        if (!cancelled) {
-          setPendingDecisionCount(data.count);
-        }
-      } catch {
-        if (!cancelled) {
-          setPendingDecisionCount(null);
-        }
+  const organizationId = user?.default_organization_id ?? null;
+  const queryClient = useQueryClient();
+  const invalidateDecisionCount = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["decisions", "count"] });
+  }, [queryClient]);
+  const decisionBadgeFeed = useStateFeed({
+    scope: "organization",
+    organizationId,
+    enabled: isAuthenticated && Boolean(organizationId) && process.env.NODE_ENV !== "test",
+    eventTypes: DECISION_BADGE_FEED_EVENTS,
+    onEvent: (event) => {
+      if (event.requires_refetch || DECISION_BADGE_FEED_EVENTS.includes(stateFeedMessageType(event))) {
+        invalidateDecisionCount();
       }
-    };
-
-    void load();
-    const intervalId = window.setInterval(() => void load(), 20_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [isAuthenticated]);
+    },
+    onFullResync: invalidateDecisionCount,
+  });
+  const pendingDecisionQuery = useQuery({
+    queryKey: ["decisions", "count", organizationId ?? "current"],
+    queryFn: decisionsApi.count,
+    enabled: isAuthenticated && Boolean(organizationId) && process.env.NODE_ENV !== "test",
+    refetchInterval: decisionBadgeFeed.status === "unavailable" ? 30_000 : false,
+  });
+  const pendingDecisionCount = pendingDecisionQuery.data?.count ?? null;
+  const canOperate = user?.organization_role === "owner" || user?.organization_role === "admin";
 
   useEffect(() => {
     if (!isAuthenticated || process.env.NODE_ENV === "test") {
@@ -315,10 +326,12 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
     [newOrganizationName, refreshOrganizationContext, resetCreateOrganization],
   );
 
-  const items = navItems.map((item) => ({
-    ...item,
-    badge: item.href === "/approvals" ? pendingDecisionCount : item.badge,
-  }));
+  const items = navItems
+    .filter((item) => !item.adminOnly || canOperate)
+    .map((item) => ({
+      ...item,
+      badge: item.href === "/approvals" ? pendingDecisionCount : item.badge,
+    }));
 
   return (
     <div className="min-h-screen text-foreground">

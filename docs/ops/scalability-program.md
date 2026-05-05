@@ -1,6 +1,6 @@
 # Scalability Program
 
-Phase 3 proves capacity. It does not create a product claim by itself.
+Phase 6 proves capacity. It does not create a product claim by itself.
 
 The invariant from `docs/architecture/runtime-invariants.md` still wins:
 backend owns durable truth, engine executes, frontend observes and controls.
@@ -9,7 +9,8 @@ durable memory, silent event drops, or request-time projection repair.
 
 ## 500-Agent Benchmark Definition
 
-The production-scale target is:
+The production-scale target is defined in
+`docs/perf/500-agent-benchmark.md`. The short version is:
 
 - 500 active agents across at least 25 tenants.
 - 20 active runs per tenant.
@@ -32,12 +33,50 @@ The production-scale target is:
 | D | 250 concurrent agents, 4 hours | WebSocket reconnect storm included |
 | E | 500 concurrent agents, 8 hours | multi-tenant, HITL, memory, accounting, retries, LLM throttling, failures |
 
-Gate E must pass three consecutive times before any public 500-agent claim is
-allowed. The CI claim guard in `scripts/ci/check_capacity_claims.py` blocks
-unqualified public 500-agent copy unless three passing Gate E reports exist
-under `logs/stress/**/phase3-gate-E.json`.
+Gate E must pass three consecutive checked-in reports before any public
+500-agent claim is allowed. The CI claim guard in
+`scripts/ci/check_capacity_claims.py` blocks unqualified public 500-agent copy
+unless the latest Gate E evidence under `docs/ops/capacity/gate-e-*.json`
+contains three consecutive passing reports and no newer failure.
 
-## Stress Harness
+## Primary Load Generator
+
+Use `tools/loadgen` for Phase 6 capacity evidence. It writes checked-in gate
+reports under `docs/ops/capacity/` and raw artifacts under `logs/loadgen/`.
+
+Gate E example:
+
+```bash
+go run ./tools/loadgen \
+  --base-url http://localhost:8000 \
+  --engine-callback-secret "$ENGINE_CALLBACK_SECRET" \
+  --gate E \
+  --tenants 25 \
+  --agents 500 \
+  --runs-per-tenant 20 \
+  --with-hitl \
+  --with-memory \
+  --with-accounting \
+  --ws-clients 500 \
+  --duplicate-event-storm \
+  --reconnect-storm \
+  --llm-throttling \
+  --engine-restart-hook "./ops/restart-engine.sh" \
+  --backend-worker-restart-hook "./ops/restart-backend-worker.sh" \
+  --redis-degrade-hook "./ops/redis-degrade.sh" \
+  --redis-recover-hook "./ops/redis-recover.sh" \
+  --llm-throttle-on-hook "./ops/llm-throttle-on.sh" \
+  --llm-throttle-off-hook "./ops/llm-throttle-off.sh" \
+  --duration 8h
+```
+
+`tools/loadgen` only drives backend APIs, signed engine callbacks, WebSockets,
+and operator read APIs. It never writes durable state directly.
+
+## Legacy Stress Harness
+
+`scripts/stress_runner.py` remains available for legacy and regression evidence.
+It is not the primary Phase 6 500-agent evidence path.
 
 Use `scripts/stress_runner.py` for Phase 3 evidence. It writes:
 

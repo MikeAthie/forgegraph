@@ -62,6 +62,7 @@ export const statusTone = (status: string) => {
     case "succeeded":
     case "success":
     case "resolved":
+    case "fresh":
       return "emerald";
     case "idle":
     case "created":
@@ -73,6 +74,8 @@ export const statusTone = (status: string) => {
     case "paused":
     case "waiting_for_decision":
     case "retry_scheduled":
+    case "stale":
+    case "rebuilding":
       return "amber";
     case "error":
     case "failed":
@@ -80,6 +83,7 @@ export const statusTone = (status: string) => {
     case "cancelled":
     case "rejected":
     case "attention":
+    case "degraded":
       return "rose";
     default:
       return "slate";

@@ -11,6 +11,20 @@ permissions:
   contents: read
 
 jobs:
+  governance:
+    name: governance
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Governance checks
+        run: bash scripts/ci/run_governance_checks.sh
+
   backend_fast:
     name: backend-fast
     runs-on: ubuntu-latest
@@ -88,6 +102,22 @@ jobs:
       - name: Engine fast checks
         run: bash scripts/ci/run_engine_checks_fast.sh
 
+  loadgen_fast:
+    name: loadgen-fast
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+          cache: true
+
+      - name: Loadgen checks
+        run: bash scripts/ci/run_loadgen_smoke.sh
+
   frontend_fast:
     name: frontend-fast
     runs-on: ubuntu-latest
@@ -123,8 +153,10 @@ jobs:
   required-checks:
     name: required-checks
     needs:
+      - governance
       - backend_fast
       - engine_fast
+      - loadgen_fast
       - frontend_fast
     if: always()
     runs-on: ubuntu-latest
@@ -132,12 +164,16 @@ jobs:
     steps:
       - name: Enforce required CI gates
         run: |
+          echo "governance=${{ needs.governance.result }}"
           echo "backend-fast=${{ needs.backend_fast.result }}"
           echo "engine-fast=${{ needs.engine_fast.result }}"
+          echo "loadgen-fast=${{ needs.loadgen_fast.result }}"
           echo "frontend-fast=${{ needs.frontend_fast.result }}"
 
-          if [ "${{ needs.backend_fast.result }}" != "success" ] || \
+          if [ "${{ needs.governance.result }}" != "success" ] || \
+             [ "${{ needs.backend_fast.result }}" != "success" ] || \
              [ "${{ needs.engine_fast.result }}" != "success" ] || \
+             [ "${{ needs.loadgen_fast.result }}" != "success" ] || \
              [ "${{ needs.frontend_fast.result }}" != "success" ]; then
             echo "One or more required CI checks failed."
             exit 1

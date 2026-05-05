@@ -10,6 +10,9 @@ cd "${ROOT}/engine"
 
 require_command go
 
+bash "${ROOT}/scripts/check_engine_statelessness.sh"
+run_python "${SCRIPT_DIR}/check_engine_no_release_sleeps.py"
+
 log_section "Launch QA engine"
 go test ./application/usecase -run "Scheduler|OnError|RetryAfter|NonRetryable" -count=1
 go test ./adapter/executor -run "HTTPExecutor|ToolExecutor|PromptExecutor" -count=1

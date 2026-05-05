@@ -2,6 +2,8 @@ import type { AppProps } from "next/app";
 import { IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";
 import { useRouter } from "next/router";
 import { ThemeProvider } from "next-themes";
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import "@xyflow/react/dist/style.css";
 import "../styles/globals.css";
@@ -36,16 +38,29 @@ function OrganizationScopedPage({ Component, pageProps }: Pick<AppProps, "Compon
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const seo = getRouteSeo(router.pathname, router.asPath);
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
 
   return (
     <>
       <SeoHead {...seo} />
       <div className={`${sans.variable} ${serif.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <AuthProvider>
-            <OrganizationScopedPage Component={Component} pageProps={pageProps} />
-            <Toaster richColors position="top-right" />
-          </AuthProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <OrganizationScopedPage Component={Component} pageProps={pageProps} />
+              <Toaster richColors position="top-right" />
+            </AuthProvider>
+          </QueryClientProvider>
         </ThemeProvider>
       </div>
     </>

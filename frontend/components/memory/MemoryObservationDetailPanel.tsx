@@ -13,6 +13,14 @@ const toLabelCase = (value: string) => {
     .join(" ");
 };
 
+const metadataItems = (metadata: Record<string, unknown>) =>
+  Object.entries(metadata)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => ({
+      label: toLabelCase(key),
+      value: typeof value === "object" ? JSON.stringify(value) : String(value),
+    }));
+
 interface MemoryObservationDetailPanelProps {
   error: string | null;
   loading: boolean;
@@ -95,6 +103,9 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
                     { label: "Session", value: observation.sessionId ?? "None" },
                     { label: "Department", value: observation.departmentId ?? "None" },
                     { label: "Chunk", value: observation.chunkId ?? "None" },
+                    { label: "Source event", value: observation.sourceEventId || "None" },
+                    { label: "Source type", value: observation.sourceEventType || "None" },
+                    { label: "Fact hash", value: observation.factHash || "None" },
                   ]}
                 />
               </div>
@@ -123,6 +134,15 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-slate-900/8 bg-white px-5 py-5 dark:border-white/8 dark:bg-white/4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Provenance</p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+              <KeyValueGrid columns={1} items={metadataItems(observation.provenance)} />
+              <KeyValueGrid columns={1} items={metadataItems(observation.costMetadata)} />
+              <KeyValueGrid columns={1} items={metadataItems(observation.retentionPolicy)} />
             </div>
           </div>
         </>

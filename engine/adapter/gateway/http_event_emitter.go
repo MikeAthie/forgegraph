@@ -740,7 +740,11 @@ func canonicalEventPayload(event *port.ExecutionEvent) map[string]any {
 	if len(event.Input) > 0 {
 		payload["input"] = event.Input
 	}
-	if len(event.Output) > 0 {
+	if isBackendMemoryIntentEvent(event.Type) && len(event.Output) > 0 {
+		for key, value := range event.Output {
+			payload[key] = value
+		}
+	} else if len(event.Output) > 0 {
 		payload["output"] = event.Output
 	}
 	if strings.TrimSpace(event.Error) != "" {
@@ -762,6 +766,15 @@ func canonicalEventPayload(event *port.ExecutionEvent) map[string]any {
 		payload["span_id"] = event.SpanID
 	}
 	return payload
+}
+
+func isBackendMemoryIntentEvent(eventType port.EventType) bool {
+	switch eventType {
+	case port.EventTypeMemoryWriteRequested, port.EventTypeMemoryFactExtracted, port.EventTypeSummaryCreated:
+		return true
+	default:
+		return false
+	}
 }
 
 func buildEventIdempotencyKey(event *port.ExecutionEvent) string {

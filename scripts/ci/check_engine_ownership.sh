@@ -73,11 +73,11 @@ durable_memory_pattern='RedisMemoryStore|NewRedisMemoryStore|StoreSummary\(|Stor
 
 if command -v rg >/dev/null 2>&1; then
   mapfile -t durable_memory_matches < <(
-    rg -l "${durable_memory_pattern}" engine --glob '*.go' --glob '!architecture_enforcement_test.go' | sort
+    rg -l "${durable_memory_pattern}" engine --glob '*.go' --glob '!architecture_enforcement_test.go' --glob '!statelessness_guard_test.go' | sort
   )
 else
   mapfile -t durable_memory_matches < <(
-    grep -R -l -E --include='*.go' --exclude='architecture_enforcement_test.go' "${durable_memory_pattern}" engine | sort
+    grep -R -l -E --include='*.go' --exclude='architecture_enforcement_test.go' --exclude='statelessness_guard_test.go' "${durable_memory_pattern}" engine | sort
   )
 fi
 

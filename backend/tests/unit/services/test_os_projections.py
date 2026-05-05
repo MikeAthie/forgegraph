@@ -4,9 +4,11 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from application.services.os_projections import (
+    accounting_overview,
     organization_state_summary,
     refresh_phase1_projections,
     sync_accounting_for_organization,
@@ -46,11 +48,21 @@ def _create_run(user, *, status: str = "running") -> Run:
 
 
 def _normalized_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(summary)
-    normalized.pop("generated_at", None)
+    volatile_keys = {"generated_at", "computed_at", "last_updated_at", "freshness_ms"}
+
+    def normalize(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: normalize(item) for key, item in value.items() if key not in volatile_keys}
+        if isinstance(value, list):
+            return [normalize(item) for item in value]
+        return value
+
+    normalized = normalize(summary)
+    assert isinstance(normalized, dict)
     return normalized
 
 
+@override_settings(ENABLE_LEGACY_OS_PROJECTION_SWEEP=True)
 def test_sync_decision_records_materializes_approval_state_idempotently(user) -> None:
     organization = user.default_organization
     assert organization is not None
@@ -87,6 +99,7 @@ def test_sync_decision_records_materializes_approval_state_idempotently(user) ->
     assert DecisionRecord.objects.filter(organization=organization).count() == 1
 
 
+@override_settings(ENABLE_LEGACY_OS_PROJECTION_SWEEP=True)
 def test_sync_accounting_projects_usage_into_ledger_and_aggregates_idempotently(user) -> None:
     organization = user.default_organization
     assert organization is not None
@@ -123,6 +136,47 @@ def test_sync_accounting_projects_usage_into_ledger_and_aggregates_idempotently(
     assert hourly_aggregate.entry_count == 1
 
 
+@override_settings(ENABLE_LEGACY_OS_PROJECTION_SWEEP=True)
+def test_accounting_overview_exposes_backend_owned_metric_statuses(user) -> None:
+    organization = user.default_organization
+    assert organization is not None
+    run = _create_run(user)
+    LLMUsage.objects.create(
+        tenant_id=organization.id,
+        run=run,
+        node_id="prompt_1",
+        provider="openai",
+        model="gpt-4.1-mini",
+        prompt_tokens=240,
+        completion_tokens=60,
+        total_tokens=300,
+        cost_usd=Decimal("1.500000"),
+    )
+    sync_accounting_for_organization(organization)
+
+    overview = accounting_overview(organization)
+    metrics = overview["metrics"]
+
+    assert metrics["cost"] == {
+        "status": "available",
+        "value": 1.5,
+        "currency": "USD",
+        "computed_at": metrics["cost"]["computed_at"],
+        "source": "backend_ledger",
+    }
+    assert metrics["cost"]["computed_at"]
+
+    for name in ("revenue", "profit"):
+        metric = metrics[name]
+        assert metric["status"] == "not_instrumented"
+        assert metric["source"] == "backend_accounting"
+        assert metric["computed_at"]
+        assert metric["reason"]
+        assert "value" not in metric
+        assert "currency" not in metric
+
+
+@override_settings(ENABLE_LEGACY_OS_PROJECTION_SWEEP=True)
 def test_refresh_phase1_projections_rebuilds_control_plane_state_from_materialized_events(
     user,
 ) -> None:

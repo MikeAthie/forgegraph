@@ -30,3 +30,15 @@ If a real metric is not available, the frontend displays `Not yet instrumented`.
 - Format backend-provided values.
 - Compute purely presentational metadata such as relative freshness text from backend timestamps.
 - Submit user commands and decisions through backend APIs with idempotency keys when available.
+
+## Signoff
+
+This frontend state contract is a release gate. PR CI requires this checklist to
+remain present. Release and production evidence gates require every role to be
+approved.
+
+- [ ] Product Lead
+- [ ] Backend Lead
+- [ ] Engine Lead
+- [ ] Frontend Lead
+- [ ] Platform/SRE Lead

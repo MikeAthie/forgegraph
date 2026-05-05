@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import UUID
 
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -19,13 +20,21 @@ from adapters.api.memory.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from application.services.audit_log import record_audit_log
+from application.services.idempotency import (
+    annotate_response,
+    annotated_response_from_body,
+    hash_request_payload,
+    normalize_idempotency_key,
+    record_idempotency_observation,
+    response_body,
+)
 from application.services.memory_observation_service import (
     MemoryObservationService,
     ObservationContext,
 )
 from application.services.rbac import has_min_role
 from application.services.tenancy import get_tenant_id_for_user
-from infrastructure.orm.models import MemoryObservation, User
+from infrastructure.orm.models import MemoryObservation, ProcessedMemoryEvent, User
 
 
 def _observation_payload(observation: MemoryObservation) -> dict[str, Any]:
@@ -46,6 +55,18 @@ def _observation_payload(observation: MemoryObservation) -> dict[str, Any]:
                 "scope": observation.scope,
                 "topic_key": observation.topic_key,
                 "tool_name": observation.tool_name,
+                "source_event_id": observation.source_event_id,
+                "source_event_type": observation.source_event_type,
+                "fact_hash": observation.fact_hash,
+                "provenance": observation.provenance_json
+                if isinstance(observation.provenance_json, dict)
+                else {},
+                "cost_metadata": observation.cost_metadata_json
+                if isinstance(observation.cost_metadata_json, dict)
+                else {},
+                "retention_policy": observation.retention_policy_json
+                if isinstance(observation.retention_policy_json, dict)
+                else {},
                 "revision_count": observation.revision_count,
                 "duplicate_count": observation.duplicate_count,
                 "last_seen_at": observation.last_seen_at,
@@ -120,12 +141,91 @@ class MemoryObservationListCreateView(APIView):
         if not serializer.is_valid():
             return _validation_error(serializer)
 
+        tenant_id = get_tenant_id_for_user(user)
+        validated_data = dict(serializer.validated_data)
+        body_idempotency_key = str(validated_data.pop("idempotency_key", "") or "").strip()
+        idempotency_key = normalize_idempotency_key(
+            body_idempotency_key or request.headers.get("Idempotency-Key"),
+            max_length=128,
+        )
+        request_hash = hash_request_payload(validated_data)
+        if idempotency_key:
+            processed = ProcessedMemoryEvent.objects.filter(
+                organization_id=tenant_id,
+                event_id=idempotency_key,
+            ).first()
+            if processed is not None:
+                if processed.request_hash != request_hash:
+                    record_idempotency_observation(
+                        boundary="memory_write",
+                        status="rejected",
+                        idempotency_key=idempotency_key,
+                        resource_type="memory_observation",
+                        organization_id=tenant_id,
+                    )
+                    return error_response(
+                        code="IDEMPOTENCY_CONFLICT",
+                        message="Idempotency key was already used with a different request body.",
+                        status=status.HTTP_409_CONFLICT,
+                        details=[{"idempotency_key": idempotency_key}],
+                    )
+                record_idempotency_observation(
+                    boundary="memory_write",
+                    status="already_applied",
+                    idempotency_key=idempotency_key,
+                    resource_type="memory_observation",
+                    organization_id=tenant_id,
+                )
+                return annotated_response_from_body(
+                    processed.response_body,
+                    response_status=processed.response_status,
+                    status="already_applied",
+                    idempotency_key=idempotency_key,
+                    resource_type="memory_observation",
+                    resource_id=str((processed.observation_ids_json or [""])[0] or ""),
+                )
+
         service = MemoryObservationService()
         try:
-            observation = service.create_observation(
-                tenant_id=get_tenant_id_for_user(user),
-                **serializer.validated_data,
-            )
+            with transaction.atomic():
+                observation = service.create_observation(
+                    tenant_id=tenant_id,
+                    **validated_data,
+                )
+                _record_memory_observation_audit(
+                    user=user,
+                    action="memory.observation_created",
+                    observation=observation,
+                )
+                response = success_response(
+                    _observation_payload(observation),
+                    status=status.HTTP_201_CREATED,
+                )
+                if idempotency_key:
+                    annotate_response(
+                        response,
+                        status="applied",
+                        idempotency_key=idempotency_key,
+                        resource_type="memory_observation",
+                        resource_id=str(observation.id),
+                    )
+                    ProcessedMemoryEvent.objects.create(
+                        organization_id=tenant_id,
+                        event_id=idempotency_key,
+                        idempotency_key=idempotency_key,
+                        event_type="memory.observation.create",
+                        request_hash=request_hash,
+                        observation_ids_json=[str(observation.id)],
+                        response_status=response.status_code,
+                        response_body=response_body(response),
+                    )
+                    record_idempotency_observation(
+                        boundary="memory_write",
+                        status="applied",
+                        idempotency_key=idempotency_key,
+                        resource_type="memory_observation",
+                        organization_id=tenant_id,
+                    )
         except ValueError as exc:
             return error_response(
                 code="VALIDATION_ERROR",
@@ -133,12 +233,7 @@ class MemoryObservationListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        _record_memory_observation_audit(
-            user=user,
-            action="memory.observation_created",
-            observation=observation,
-        )
-        return success_response(_observation_payload(observation), status=status.HTTP_201_CREATED)
+        return response
 
 
 class MemoryObservationDetailView(APIView):

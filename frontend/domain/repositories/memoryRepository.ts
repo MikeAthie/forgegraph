@@ -10,6 +10,12 @@ export type MemoryObservationVM = {
   type: string;
   topic: string;
   toolName: string;
+  sourceEventId: string;
+  sourceEventType: string;
+  factHash: string;
+  provenance: Record<string, unknown>;
+  costMetadata: Record<string, unknown>;
+  retentionPolicy: Record<string, unknown>;
   companyId: string | null;
   operationId: string | null;
   sessionId: string | null;
@@ -46,6 +52,12 @@ function toMemoryObservationVM(observation: MemoryObservation): MemoryObservatio
     type: observation.type,
     topic: observation.topic_key,
     toolName: observation.tool_name,
+    sourceEventId: observation.source_event_id,
+    sourceEventType: observation.source_event_type,
+    factHash: observation.fact_hash,
+    provenance: observation.provenance,
+    costMetadata: observation.cost_metadata,
+    retentionPolicy: observation.retention_policy,
     companyId: observation.graph_id,
     operationId: observation.run_id,
     sessionId: observation.session_id,

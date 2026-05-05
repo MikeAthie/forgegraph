@@ -47,6 +47,7 @@ import { formatJsonForDisplay } from "../../lib/json";
 import { canAddMarketplacePackageToEditor, getMarketplacePackageReason } from "../../lib/marketplace-runtime";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { ERROR_FALLBACKS } from "../../lib/error-messages";
+import { newClientCommandId, stableClientCommandId } from "../../lib/idempotency";
 import {
   GRAPH_EDITOR_SNAP_GRID,
   getConnectionFeedback,
@@ -1375,11 +1376,16 @@ export function GraphEditor({
 
     setStartingRun(true);
     try {
-      const run = await runsApi.start({
-        graph_version_id: currentVersionId,
-        llm_mode: "managed",
-        input_json: {},
-      });
+      const run = await runsApi.start(
+        {
+          graph_version_id: currentVersionId,
+          llm_mode: "managed",
+          input_json: {},
+        },
+        {
+          idempotencyKey: newClientCommandId("graph.run"),
+        },
+      );
       showSuccess("Run created");
       void router.push(`/runs/${run.id}`);
     } catch (err: unknown) {
@@ -1399,7 +1405,9 @@ export function GraphEditor({
 
     setOverlayCanceling(true);
     try {
-      const updated = await runsApi.cancel(overlayRun.id);
+      const updated = await runsApi.cancel(overlayRun.id, {
+        idempotencyKey: stableClientCommandId("graph.cancel", overlayRun.id),
+      });
       setOverlayRun(updated);
       showSuccess("Run canceled");
     } catch (err: unknown) {
@@ -1622,11 +1630,16 @@ export function GraphEditor({
         }
 
         setStartingRun(true);
-        const run = await runsApi.start({
-          graph_version_id: versionId,
-          llm_mode: "managed",
-          input_json: { mode: "wizard_test" },
-        });
+        const run = await runsApi.start(
+          {
+            graph_version_id: versionId,
+            llm_mode: "managed",
+            input_json: { mode: "wizard_test" },
+          },
+          {
+            idempotencyKey: newClientCommandId("graph.run"),
+          },
+        );
         showSuccess("Test run started");
         void router.push(`/runs/${run.id}`);
       } catch (err: unknown) {

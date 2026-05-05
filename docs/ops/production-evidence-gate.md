@@ -96,6 +96,13 @@ Use the capacity tiers in `docs/ops/scalability-program.md`.
 
 The CI load smoke is regression evidence only. It is not a marketing claim.
 
+## Claim Gate
+
+- [ ] Latest capacity evidence supports public concurrency claim
+- [ ] Gate E passed 3 times
+- [ ] Accounting metrics are backend-instrumented
+- [ ] Command Ops is live/versioned
+
 ## Required Runbooks
 
 Broad production requires on-call runbooks for the failure queues and recovery

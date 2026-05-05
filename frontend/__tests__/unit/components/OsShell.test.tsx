@@ -1,5 +1,9 @@
+import fs from "fs";
+import path from "path";
 import { render, screen } from "@testing-library/react";
 import { useRouter } from "next/router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
 import OsShell from "@/components/shell/OsShell";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +28,14 @@ jest.mock("@/components/ui/theme-toggle", () => ({
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
+const repoRoot = path.resolve(__dirname, "../../..");
+
+function renderShell(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>);
+}
 
 describe("OsShell", () => {
   beforeEach(() => {
@@ -56,7 +68,7 @@ describe("OsShell", () => {
   });
 
   it("provides a skip link and main landmark", () => {
-    render(
+    renderShell(
       <OsShell>
         <h2>Department thinking surface</h2>
       </OsShell>,
@@ -68,7 +80,7 @@ describe("OsShell", () => {
   });
 
   it("marks active navigation links for assistive technology", () => {
-    render(
+    renderShell(
       <OsShell>
         <h2>Department thinking surface</h2>
       </OsShell>,
@@ -79,7 +91,7 @@ describe("OsShell", () => {
   });
 
   it("uses product navigation labels in the primary shell", () => {
-    render(
+    renderShell(
       <OsShell>
         <h2>Department thinking surface</h2>
       </OsShell>,
@@ -89,5 +101,50 @@ describe("OsShell", () => {
     expect(screen.getAllByRole("link", { name: /approvals/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: /^agents$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^executions$/i })).not.toBeInTheDocument();
+  });
+
+  it("shows recovery navigation only to operators", () => {
+    const { unmount } = renderShell(
+      <OsShell>
+        <h2>Department thinking surface</h2>
+      </OsShell>,
+    );
+
+    expect(screen.getAllByRole("link", { name: /recovery/i }).length).toBeGreaterThan(0);
+    unmount();
+
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: "user-1",
+        email: "operator@example.com",
+        default_organization_id: "org-1",
+        organization_role: "member",
+      },
+      isAuthenticated: true,
+      loading: false,
+      error: null,
+      login: jest.fn(),
+      register: jest.fn(),
+      logout: jest.fn(),
+      checkAuth: jest.fn(),
+      clearError: jest.fn(),
+    });
+
+    renderShell(
+      <OsShell>
+        <h2>Department thinking surface</h2>
+      </OsShell>,
+    );
+
+    expect(screen.queryByRole("link", { name: /recovery/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the approvals badge event-driven with fallback polling only when the feed is unavailable", () => {
+    const source = fs.readFileSync(path.join(repoRoot, "components/shell/OsShell.tsx"), "utf8");
+
+    expect(source).toMatch(/useStateFeed/);
+    expect(source).toMatch(/invalidateQueries\(\{ queryKey: \["decisions", "count"\] \}\)/);
+    expect(source).toMatch(/refetchInterval:\s*decisionBadgeFeed\.status === "unavailable" \? 30_000 : false/);
+    expect(source).not.toMatch(/setInterval\([^)]*decisionsApi\.count/s);
   });
 });

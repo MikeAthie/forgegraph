@@ -479,6 +479,37 @@ func TestEmitUsesCanonicalEventEnvelopeV2(t *testing.T) {
 	}
 }
 
+func TestCanonicalMemoryIntentPayloadIsBackendOwnedShape(t *testing.T) {
+	event := port.NewEvent(port.EventTypeMemoryFactExtracted, "run-memory").
+		WithTenantID("tenant-1").
+		WithOutput(map[string]any{
+			"fact":        "Customer prefers concise approvals.",
+			"source_span": "turn-12",
+			"confidence":  0.91,
+		})
+
+	envelope := toCanonicalEventEnvelope(event)
+	if got := envelope["type"]; got != "memory.fact_extracted" {
+		t.Fatalf("type = %#v, want memory.fact_extracted", got)
+	}
+	payload, ok := envelope["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload = %#v, want object", envelope["payload"])
+	}
+	if _, ok := payload["output"]; ok {
+		t.Fatalf("memory intent payload must not nest product memory under output: %#v", payload)
+	}
+	if got := payload["fact"]; got != "Customer prefers concise approvals." {
+		t.Fatalf("fact = %#v", got)
+	}
+	if got := payload["source_span"]; got != "turn-12" {
+		t.Fatalf("source_span = %#v", got)
+	}
+	if got := payload["confidence"]; got != 0.91 {
+		t.Fatalf("confidence = %#v", got)
+	}
+}
+
 func TestEmitAsyncFreezesMutableEventPayload(t *testing.T) {
 	received := make(chan map[string]any, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -765,14 +796,23 @@ func TestEmitSpoolsWhenSuccessResponseMissingDecision(t *testing.T) {
 func assertEventually(t *testing.T, timeout time.Duration, condition func() bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	if condition() {
+		return
 	}
-	t.Fatal("condition was not satisfied before timeout")
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timer.C:
+			t.Fatal("condition was not satisfied before timeout")
+		case <-ticker.C:
+			if condition() {
+				return
+			}
+		}
+	}
 }
 
 func bytesSplitLines(data []byte) [][]byte {

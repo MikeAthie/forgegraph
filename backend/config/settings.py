@@ -436,6 +436,9 @@ RUN_WS_MAX_CONNECTIONS_PER_USER = int(os.environ.get("RUN_WS_MAX_CONNECTIONS_PER
 RUN_WS_HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("RUN_WS_HEARTBEAT_INTERVAL_SECONDS", "12"))
 RUN_WS_SEND_TIMEOUT_SECONDS = float(os.environ.get("RUN_WS_SEND_TIMEOUT_SECONDS", "2.0"))
 RUN_WS_REPLAY_LIMIT = int(os.environ.get("RUN_WS_REPLAY_LIMIT", "200"))
+ORG_WS_HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("ORG_WS_HEARTBEAT_INTERVAL_SECONDS", "12"))
+ORG_WS_SEND_TIMEOUT_SECONDS = float(os.environ.get("ORG_WS_SEND_TIMEOUT_SECONDS", "2.0"))
+ORG_WS_REPLAY_LIMIT = int(os.environ.get("ORG_WS_REPLAY_LIMIT", "500"))
 
 # Backend watchdog thresholds. The Docker healthcheck consumes /health and restarts
 # the process when this watchdog reports an unhealthy state.
@@ -508,6 +511,7 @@ FF_TASK_PROJECTIONS = _get_bool_env("FF_TASK_PROJECTIONS", True)
 FF_DECISION_CENTER = _get_bool_env("FF_DECISION_CENTER", True)
 FF_ACCOUNTING_AGGREGATES = _get_bool_env("FF_ACCOUNTING_AGGREGATES", True)
 FF_PUBLIC_API_ALIASES = _get_bool_env("FF_PUBLIC_API_ALIASES", True)
+ENABLE_LEGACY_OS_PROJECTION_SWEEP = _get_bool_env("ENABLE_LEGACY_OS_PROJECTION_SWEEP", False)
 CURATED_MEMORY_EMBEDDING_MODEL = os.environ.get(
     "CURATED_MEMORY_EMBEDDING_MODEL",
     "text-embedding-ada-002",

@@ -31,6 +31,7 @@ else
   exit 1
 fi
 "${PYTHON_CMD[@]}" "${SCRIPT_DIR}/check_run_state_machine.py"
+"${PYTHON_CMD[@]}" "${SCRIPT_DIR}/check_projection_guardrails.py"
 
 cd "${ROOT}/backend"
 
