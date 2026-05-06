@@ -96,7 +96,7 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
-      RUN_QUEUE_ENABLED: ${RUN_QUEUE_ENABLED:-false}
+      RUN_QUEUE_ENABLED: ${RUN_QUEUE_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -119,7 +119,6 @@ services:
       start_period: 30s
 
   backend-run-queue:
-    profiles: ["queue"]
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -288,8 +287,10 @@ services:
         "python",
         "manage.py",
         "process_os_projections",
+        "--batch-size",
+        "${OS_PROJECTION_BATCH_SIZE:-200}",
         "--sleep",
-        "${OS_PROJECTION_SLEEP_SECONDS:-5}",
+        "${OS_PROJECTION_SLEEP_SECONDS:-0.25}",
       ]
     environment:
       DB_HOST: postgres
@@ -372,6 +373,7 @@ services:
       ENGINE_LLM_MAX_QUEUE_SIZE: ${ENGINE_LLM_MAX_QUEUE_SIZE:-32}
       ENGINE_LLM_QUEUE_TIMEOUT_MS: ${ENGINE_LLM_QUEUE_TIMEOUT_MS:-5000}
       ENGINE_LLM_REQUEST_TIMEOUT_MS: ${ENGINE_LLM_REQUEST_TIMEOUT_MS:-45000}
+      ENGINE_EVENT_WORKERS: ${ENGINE_EVENT_WORKERS:-1}
       ENGINE_LLM_CIRCUIT_FAILURE_RATE_THRESHOLD: ${ENGINE_LLM_CIRCUIT_FAILURE_RATE_THRESHOLD:-0.75}
       ENGINE_LLM_CIRCUIT_MIN_REQUESTS: ${ENGINE_LLM_CIRCUIT_MIN_REQUESTS:-20}
       ENGINE_LLM_CIRCUIT_WINDOW_SIZE: ${ENGINE_LLM_CIRCUIT_WINDOW_SIZE:-20}

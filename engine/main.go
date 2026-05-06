@@ -75,6 +75,7 @@ type Config struct {
 	EventMaxRetries                      int
 	EventRetryDelayMs                    int
 	EventBufferSize                      int
+	EventWorkerCount                     int
 	EventSpoolPath                       string
 	EventVerbosity                       string
 	EngineInstanceID                     string
@@ -138,6 +139,7 @@ func LoadConfig() *Config {
 		EventMaxRetries:                      getEnvInt("ENGINE_EVENT_MAX_RETRIES", 3),
 		EventRetryDelayMs:                    getEnvInt("ENGINE_EVENT_RETRY_DELAY_MS", 100),
 		EventBufferSize:                      getEnvInt("ENGINE_EVENT_BUFFER_SIZE", 100),
+		EventWorkerCount:                     getEnvInt("ENGINE_EVENT_WORKERS", 1),
 		EventSpoolPath:                       getEnv("ENGINE_EVENT_SPOOL_PATH", ""),
 		EventVerbosity:                       normalizeEventVerbosity(getEnv("ENGINE_EVENT_VERBOSITY", "default")),
 		EngineInstanceID:                     strings.TrimSpace(getEnv("ENGINE_INSTANCE_ID", "")),
@@ -658,6 +660,7 @@ func main() {
 		"runtime_write_mode", cfg.RuntimeWriteMode,
 		"runtime_intent_stream", cfg.RuntimeIntentStream,
 		"engine_event_verbosity", cfg.EventVerbosity,
+		"engine_event_workers", cfg.EventWorkerCount,
 		"engine_instance_id", resolveEngineInstanceID(cfg),
 		"engine_allow_in_memory_mode", cfg.EngineAllowInMemoryMode,
 		"grpc_tls_enabled", strings.TrimSpace(cfg.GRPCTLSCertFile) != "" && strings.TrimSpace(cfg.GRPCTLSKeyFile) != "",
@@ -780,6 +783,7 @@ func main() {
 	emitterCfg.MaxRetries = cfg.EventMaxRetries
 	emitterCfg.RetryDelay = time.Duration(cfg.EventRetryDelayMs) * time.Millisecond
 	emitterCfg.BufferSize = cfg.EventBufferSize
+	emitterCfg.WorkerCount = cfg.EventWorkerCount
 	emitterCfg.SpoolPath = resolveEventSpoolPath(cfg, callbackURL)
 	emitterCfg.EventVerbosity = cfg.EventVerbosity
 	emitterCfg.EngineInstanceID = resolveEngineInstanceID(cfg)

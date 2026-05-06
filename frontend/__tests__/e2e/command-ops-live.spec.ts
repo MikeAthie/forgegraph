@@ -3,26 +3,47 @@ import path from "path";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import {
-  createTestUser,
-  ensureUserRegistered,
-  getAccessToken,
-  login,
-  seedFrontendControlPlaneFixture,
-} from "./helpers";
+import { createTestUser, ensureUserRegistered, getAccessToken, loginLive } from "./live-helpers";
 
 const backendDir = path.join(__dirname, "..", "..", "..", "backend");
 const managementEnv = {
   ...process.env,
   DJANGO_SETTINGS_MODULE: process.env.DJANGO_SETTINGS_MODULE ?? "config.test_settings",
 };
+const apiBase = (process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:8002").replace(/\/$/, "");
+
+async function getDefaultOrganizationId(request: APIRequestContext, accessToken: string): Promise<string> {
+  const orgResponse = await request.get(`${apiBase}/api/orgs/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (orgResponse.ok()) {
+    const body = (await orgResponse.json()) as {
+      data?: { organization?: { id?: string } };
+    };
+    const organizationId = body.data?.organization?.id;
+    if (organizationId) {
+      return organizationId;
+    }
+  }
+
+  const meResponse = await request.get(`${apiBase}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (meResponse.ok()) {
+    const body = (await meResponse.json()) as { default_organization_id?: string };
+    if (body.default_organization_id) {
+      return body.default_organization_id;
+    }
+  }
+
+  throw new Error("Live Command Ops test could not resolve a default organization id.");
+}
 
 async function waitForOrganizationWebSocketSubscription(
   request: APIRequestContext,
   accessToken: string,
   organizationId: string,
 ) {
-  const apiBase = (process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:8002").replace(/\/$/, "");
   await expect
     .poll(
       async () => {
@@ -84,10 +105,10 @@ test.describe("Command Ops live organization state feed", () => {
     test.setTimeout(60_000);
     const user = createTestUser(testInfo, "command-ops-live");
     await ensureUserRegistered(request, user);
-    const fixture = seedFrontendControlPlaneFixture(user);
     const accessToken = await getAccessToken(request, user);
+    const organizationId = await getDefaultOrganizationId(request, accessToken);
 
-    await login(page, user);
+    await loginLive(page, request, user, "/companies");
     const overviewResponse = page.waitForResponse(
       (response) =>
         response.request().method() === "GET" &&
@@ -98,12 +119,12 @@ test.describe("Command Ops live organization state feed", () => {
     await page.goto("/overview");
     await overviewResponse;
     await orgSocket;
-    await waitForOrganizationWebSocketSubscription(request, accessToken, fixture.organizationId);
+    await waitForOrganizationWebSocketSubscription(request, accessToken, organizationId);
 
     await expect(page.getByRole("heading", { name: /command ops/i }).first()).toBeVisible();
 
     const label = `Live Command Ops approval ${Date.now()}`;
-    createProjectedDecisionAndNotify(fixture.organizationId, label);
+    createProjectedDecisionAndNotify(organizationId, label);
 
     await expect(page.getByText(label).first()).toBeVisible({ timeout: 20_000 });
   });

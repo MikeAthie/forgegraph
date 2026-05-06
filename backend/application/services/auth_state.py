@@ -11,10 +11,12 @@ from datetime import timedelta
 from functools import lru_cache
 from typing import Any, cast
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
 from rest_framework_simplejwt.tokens import AccessToken, Token
 
 from application.services.tenancy import get_default_membership
@@ -36,6 +38,14 @@ def _redis_client() -> Redis | None:
     if not location.startswith("redis://") and not location.startswith("rediss://"):
         return None
     return Redis.from_url(location)
+
+
+@lru_cache(maxsize=1)
+def _async_redis_client() -> AsyncRedis | None:
+    location = _cache_location()
+    if not location.startswith("redis://") and not location.startswith("rediss://"):
+        return None
+    return cast(AsyncRedis, AsyncRedis.from_url(location))
 
 
 def _token_ttl_seconds(token: Token) -> int:
@@ -99,6 +109,43 @@ def issue_ws_ticket(
         redis_client.setex(key, ttl_seconds, serialized)
     else:
         cache.set(key, serialized, timeout=ttl_seconds)
+
+    return ticket, ttl_seconds
+
+
+async def async_issue_ws_ticket(
+    *,
+    access_token: Token,
+    user_id: str,
+    org_id: str,
+    permissions: list[str],
+) -> tuple[str, int]:
+    ttl_seconds = int(getattr(settings, "AUTH_WS_TICKET_TTL_SECONDS", 45))
+    ticket = secrets.token_urlsafe(32)
+    expires_at = timezone.now() + timedelta(seconds=ttl_seconds)
+    payload = {
+        "ticket": ticket,
+        "user_id": str(user_id),
+        "org_id": str(org_id),
+        "permissions": permissions,
+        "expires_at": expires_at.isoformat(),
+        "used": False,
+        "access_jti": _access_jti(access_token),
+        "issued_at": int(time.time()),
+    }
+
+    serialized = json.dumps(payload)
+    key = f"{_WS_TICKET_PREFIX}{ticket}"
+
+    redis_client = _async_redis_client()
+    if redis_client is not None:
+        await redis_client.setex(key, ttl_seconds, serialized)
+    else:
+        await sync_to_async(cache.set, thread_sensitive=False)(
+            key,
+            serialized,
+            timeout=ttl_seconds,
+        )
 
     return ticket, ttl_seconds
 
@@ -171,3 +218,41 @@ def validate_access_token(raw_token: str) -> AccessToken | None:
     if is_access_token_revoked(token):
         return None
     return token
+
+
+async def async_validate_access_token(raw_token: str) -> AccessToken | None:
+    try:
+        token = AccessToken(cast(Any, raw_token))
+    except Exception:
+        return None
+
+    jti = _access_jti(token)
+    if jti and await async_is_access_jti_revoked(jti):
+        return None
+    return token
+
+
+async def async_is_access_jti_revoked(jti: str) -> bool:
+    if not jti:
+        return False
+
+    key = f"{_REVOKED_ACCESS_PREFIX}{jti}"
+    redis_client = _async_redis_client()
+    if redis_client is not None:
+        return bool(await redis_client.exists(key))
+    return await sync_to_async(lambda: cache.get(key) is not None, thread_sensitive=False)()
+
+
+async def async_cache_increment_with_ttl(key: str, ttl_seconds: int) -> int:
+    redis_client = _async_redis_client()
+    if redis_client is not None:
+        count = int(await redis_client.incr(key))
+        if count == 1:
+            await redis_client.expire(key, max(int(ttl_seconds), 1))
+        return count
+
+    def _increment() -> int:
+        added = cache.add(key, 1, timeout=max(int(ttl_seconds), 1))
+        return 1 if added else int(cache.incr(key))
+
+    return await sync_to_async(_increment, thread_sensitive=False)()

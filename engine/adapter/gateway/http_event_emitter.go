@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
@@ -103,11 +104,13 @@ type HTTPEventEmitter struct {
 	sequences        map[string]int64
 
 	// Async event handling
-	eventChan chan *port.ExecutionEvent
-	wg        sync.WaitGroup
-	pending   sync.WaitGroup
-	closed    bool
-	closeMu   sync.Mutex
+	eventChan   chan *port.ExecutionEvent
+	eventChans  []chan *port.ExecutionEvent
+	workerCount int
+	wg          sync.WaitGroup
+	pending     sync.WaitGroup
+	closed      bool
+	closeMu     sync.Mutex
 
 	// Configuration
 	maxRetries         int
@@ -140,6 +143,9 @@ type HTTPEventEmitterConfig struct {
 	// BufferSize is the size of the async event buffer (default: 100)
 	BufferSize int
 
+	// WorkerCount is the number of run-sharded async event workers (default: 1)
+	WorkerCount int
+
 	// SignatureSecret is the shared secret for S2S callback signing (optional)
 	SignatureSecret string
 
@@ -164,6 +170,7 @@ func DefaultHTTPEventEmitterConfig(callbackURL string) HTTPEventEmitterConfig {
 		MaxRetries:  3,
 		RetryDelay:  100 * time.Millisecond,
 		BufferSize:  100,
+		WorkerCount: 1,
 	}
 }
 
@@ -195,6 +202,11 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 		bufferSize = 100
 	}
 
+	workerCount := config.WorkerCount
+	if workerCount <= 0 {
+		workerCount = 1
+	}
+
 	spoolFlushInterval := config.SpoolFlushInterval
 	if spoolFlushInterval <= 0 {
 		spoolFlushInterval = 5 * time.Second
@@ -209,6 +221,11 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 		deadLetterPath = spoolPath + ".dead.jsonl"
 	}
 
+	eventChans := make([]chan *port.ExecutionEvent, workerCount)
+	for index := range eventChans {
+		eventChans[index] = make(chan *port.ExecutionEvent, bufferSize)
+	}
+
 	emitter := &HTTPEventEmitter{
 		client:             client,
 		callbackURL:        config.CallbackURL,
@@ -216,7 +233,9 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 		eventVerbosity:     normalizeEventVerbosity(config.EventVerbosity),
 		engineInstanceID:   config.EngineInstanceID,
 		sequences:          make(map[string]int64),
-		eventChan:          make(chan *port.ExecutionEvent, bufferSize),
+		eventChan:          eventChans[0],
+		eventChans:         eventChans,
+		workerCount:        workerCount,
 		maxRetries:         maxRetries,
 		retryDelay:         retryDelay,
 		spoolFlushInterval: spoolFlushInterval,
@@ -226,9 +245,12 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 		stopCh:             make(chan struct{}),
 	}
 
-	// Start background worker for async events
-	emitter.wg.Add(2)
-	go emitter.worker()
+	// Start background workers for async events. Events are sharded by run ID so
+	// each run preserves callback order while independent runs can flush in parallel.
+	emitter.wg.Add(workerCount + 1)
+	for _, ch := range eventChans {
+		go emitter.worker(ch)
+	}
 	go emitter.spoolWorker()
 
 	return emitter, nil
@@ -358,9 +380,10 @@ func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
 		return
 	}
 
+	eventChan := e.eventChannelFor(event)
 	e.pending.Add(1)
 	select {
-	case e.eventChan <- event:
+	case eventChan <- event:
 		e.closeMu.Unlock()
 		return
 	default:
@@ -371,6 +394,27 @@ func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
 	if err := e.enqueueDurably(event, "buffer_full"); err != nil {
 		log.Printf("Critical: failed to durably enqueue overflow event %s for run %s: %v", event.Type, event.RunID, err)
 	}
+}
+
+func (e *HTTPEventEmitter) eventChannelFor(event *port.ExecutionEvent) chan *port.ExecutionEvent {
+	if len(e.eventChans) == 0 {
+		return e.eventChan
+	}
+	index := shardIndex(event.RunID, len(e.eventChans))
+	return e.eventChans[index]
+}
+
+func shardIndex(key string, shards int) int {
+	if shards <= 1 {
+		return 0
+	}
+	normalized := strings.TrimSpace(key)
+	if normalized == "" {
+		normalized = "__unknown_run__"
+	}
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(normalized))
+	return int(hasher.Sum32() % uint32(shards))
 }
 
 // Flush waits for all pending async events to be sent
@@ -405,10 +449,10 @@ func (e *HTTPEventEmitter) Flush(ctx context.Context) error {
 }
 
 // worker processes events from the async channel
-func (e *HTTPEventEmitter) worker() {
+func (e *HTTPEventEmitter) worker(events <-chan *port.ExecutionEvent) {
 	defer e.wg.Done()
 
-	for event := range e.eventChan {
+	for event := range events {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := e.sendWithRetry(ctx, event, true); err != nil {
 			log.Printf("Failed to send event %s for run %s: %v", event.Type, event.RunID, err)
@@ -1126,7 +1170,13 @@ func (e *HTTPEventEmitter) Close(ctx context.Context) error {
 	e.closeMu.Lock()
 	if !e.closed {
 		e.closed = true
-		close(e.eventChan)
+		if len(e.eventChans) > 0 {
+			for _, ch := range e.eventChans {
+				close(ch)
+			}
+		} else if e.eventChan != nil {
+			close(e.eventChan)
+		}
 		close(e.stopCh)
 	}
 	e.closeMu.Unlock()

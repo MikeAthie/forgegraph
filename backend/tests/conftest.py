@@ -5,6 +5,7 @@ Pytest configuration and fixtures.
 import json
 import time
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from rest_framework.test import APIClient
@@ -46,7 +47,7 @@ def api_client():
 def user(db):
     """Create and return a test user."""
     user = User.objects.create_user(
-        email="test@example.com",
+        email=f"test-{uuid4().hex}@example.com",
         password="testpassword123",
     )
     ensure_default_organization(user)

@@ -55,6 +55,7 @@ from application.services.websocket_subscribers import (
 from infrastructure.orm.models import Run
 
 logger = logging.getLogger(__name__)
+SUBSCRIBER_ACTIVITY_FLUSH_INTERVAL_SECONDS = 5.0
 
 
 def _query_values(query_params: dict[str, list[str]], *names: str) -> list[str]:
@@ -177,6 +178,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         self.last_seen_state_version = last_seen_state_version
         self.connection_id = str(uuid4())
         self._ws_connected = False
+        self._subscriber_activity_pending: dict[str, Any] = {}
         self.group_names = [
             run_event_group_name(run_id=run_id, level=level)
             for level in event_levels_for_subscription(requested_level)
@@ -197,6 +199,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
             last_seen_event_id=last_seen_event_id,
             last_seen_state_version=last_seen_state_version,
         )
+        self.subscriber_activity_task = asyncio.create_task(self._subscriber_activity_loop())
         record_ws_connected()
         log_event(
             logger,
@@ -295,13 +298,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
                         state_version=int(getattr(self, "last_seen_state_version", 0) or 0),
                     )
                 )
-                await sync_to_async(
-                    update_run_websocket_subscriber_activity,
-                    thread_sensitive=False,
-                )(
-                    connection_id=self.connection_id,
-                    heartbeat=True,
-                )
+                self._queue_subscriber_activity(heartbeat=True)
         except asyncio.CancelledError:
             return
 
@@ -313,17 +310,14 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         except TimeoutError:
             record_ws_message_dropped("send_timeout")
             record_ws_slow_client_disconnect("send_timeout")
-            await sync_to_async(
-                update_run_websocket_subscriber_activity,
-                thread_sensitive=False,
-            )(
-                connection_id=str(getattr(self, "connection_id", "") or ""),
+            self._queue_subscriber_activity(
                 event_type=str(message.get("type") or ""),
                 event_id=str(message.get("event_id") or ""),
                 dropped=True,
                 slow_disconnect=True,
                 slow_disconnect_reason="send_timeout",
             )
+            await self._flush_subscriber_activity()
             log_event(
                 logger,
                 logging.WARNING,
@@ -354,27 +348,63 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
                 "state_version": state_version,
             },
         )
-        await sync_to_async(
-            update_run_websocket_subscriber_activity,
-            thread_sensitive=False,
-        )(
-            connection_id=str(getattr(self, "connection_id", "") or ""),
+        self._queue_subscriber_activity(
             event_type=str(message.get("type") or ""),
             event_id=str(message.get("event_id") or ""),
             state_version=state_version,
             sent=True,
         )
 
+    def _queue_subscriber_activity(self, **kwargs: Any) -> None:
+        pending = getattr(self, "_subscriber_activity_pending", {})
+        for counter_key in ("sent", "dropped", "filtered", "heartbeat"):
+            if kwargs.pop(counter_key, False):
+                count_key = f"{counter_key}_count"
+                pending[count_key] = int(pending.get(count_key) or 0) + 1
+        state_version = kwargs.pop("state_version", None)
+        if state_version is not None:
+            pending["state_version"] = max(
+                int(pending.get("state_version") or 0),
+                int(state_version),
+            )
+        for key, value in kwargs.items():
+            if value is not None and value != "" and value is not False:
+                pending[key] = value
+        self._subscriber_activity_pending = pending
+
+    async def _subscriber_activity_loop(self) -> None:
+        try:
+            interval = float(
+                getattr(
+                    settings,
+                    "WS_SUBSCRIBER_ACTIVITY_FLUSH_INTERVAL_SECONDS",
+                    SUBSCRIBER_ACTIVITY_FLUSH_INTERVAL_SECONDS,
+                )
+            )
+        except (TypeError, ValueError):
+            interval = SUBSCRIBER_ACTIVITY_FLUSH_INTERVAL_SECONDS
+        interval = max(interval, 1.0)
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                await self._flush_subscriber_activity()
+        except asyncio.CancelledError:
+            return
+
+    async def _flush_subscriber_activity(self) -> None:
+        pending = dict(getattr(self, "_subscriber_activity_pending", {}) or {})
+        if not pending:
+            return
+        self._subscriber_activity_pending = {}
+        await sync_to_async(update_run_websocket_subscriber_activity, thread_sensitive=False)(
+            connection_id=str(getattr(self, "connection_id", "") or ""),
+            **pending,
+        )
+
     async def receive_json(self, content: dict[str, Any], **kwargs: Any) -> None:
         message_type = str(content.get("type") or "").strip().lower()
         if message_type == "pong":
-            await sync_to_async(
-                update_run_websocket_subscriber_activity,
-                thread_sensitive=False,
-            )(
-                connection_id=str(getattr(self, "connection_id", "") or ""),
-                heartbeat=True,
-            )
+            self._queue_subscriber_activity(heartbeat=True)
             return
         if message_type in {"resume", "resync"}:
             requested_state_version = content.get("last_seen_state_version")
@@ -417,6 +447,10 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         heartbeat_task = getattr(self, "heartbeat_task", None)
         if heartbeat_task is not None:
             heartbeat_task.cancel()
+        subscriber_activity_task = getattr(self, "subscriber_activity_task", None)
+        if subscriber_activity_task is not None:
+            subscriber_activity_task.cancel()
+        await self._flush_subscriber_activity()
         group_names = getattr(self, "group_names", None) or []
         for group_name in group_names:
             await self.channel_layer.group_discard(group_name, self.channel_name)
@@ -449,11 +483,7 @@ class RunUpdatesConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         public_type = str(public_message.get("type") or "")
         if event_types and public_type not in event_types:
             record_ws_message_filtered()
-            await sync_to_async(
-                update_run_websocket_subscriber_activity,
-                thread_sensitive=False,
-            )(
-                connection_id=str(getattr(self, "connection_id", "") or ""),
+            self._queue_subscriber_activity(
                 event_type=public_type,
                 event_id=str(public_message.get("event_id") or ""),
                 filtered=True,

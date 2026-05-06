@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
@@ -8,7 +10,7 @@ from uuid import UUID, uuid4
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.db.models import Max
 from django.utils import timezone
 
@@ -35,6 +37,9 @@ ORGANIZATION_STATE_EVENT_TYPES = {
     "projection.stale",
     "projection.recovered",
 }
+
+_DEADLOCK_RETRY_ATTEMPTS = 3
+_BROADCAST_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="org-state-feed")
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +117,36 @@ def _record_organization_state_feed_event(
     requires_refetch: bool = True,
     occurred_at: Any | None = None,
 ) -> tuple[dict[str, Any], bool]:
+    for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+        try:
+            return _record_organization_state_feed_event_once(
+                organization=organization,
+                event_type=event_type,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                payload=payload,
+                event_id=event_id,
+                requires_refetch=requires_refetch,
+                occurred_at=occurred_at,
+            )
+        except OperationalError as exc:
+            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+    raise RuntimeError("unreachable organization state-feed retry state")
+
+
+def _record_organization_state_feed_event_once(
+    *,
+    organization: Organization,
+    event_type: str,
+    resource_type: str,
+    resource_id: str,
+    payload: dict[str, Any] | None = None,
+    event_id: str = "",
+    requires_refetch: bool = True,
+    occurred_at: Any | None = None,
+) -> tuple[dict[str, Any], bool]:
     normalized_type = str(event_type or "").strip()
     if not normalized_type:
         raise ValueError("Organization state feed event_type is required.")
@@ -126,17 +161,17 @@ def _record_organization_state_feed_event(
         else str(occurred_at_value)
     )
 
+    organization_id = organization.id
     with transaction.atomic():
-        locked_organization = Organization.objects.select_for_update().get(id=organization.id)
         duplicate = OrganizationStateFeedEvent.objects.filter(
-            organization=locked_organization,
+            organization_id=organization_id,
             event_id=event_id_value,
         ).first()
         if duplicate is not None:
             return dict(duplicate.message), False
 
         sequence, _ = OrganizationStateFeedSequence.objects.select_for_update().get_or_create(
-            organization=locked_organization,
+            organization_id=organization_id,
             defaults={"next_sequence": 1},
         )
         state_version = int(sequence.next_sequence)
@@ -144,7 +179,7 @@ def _record_organization_state_feed_event(
         sequence.save(update_fields=["next_sequence", "updated_at"])
 
         message = build_organization_state_message(
-            organization_id=str(locked_organization.id),
+            organization_id=str(organization_id),
             event_type=normalized_type,
             event_id=event_id_value,
             state_version=state_version,
@@ -155,7 +190,7 @@ def _record_organization_state_feed_event(
             payload=payload,
         )
         OrganizationStateFeedEvent.objects.create(
-            organization=locked_organization,
+            organization_id=organization_id,
             event_id=event_id_value,
             state_version=state_version,
             type=normalized_type,
@@ -180,6 +215,7 @@ def publish_organization_state_feed_event(
     event_id: str = "",
     requires_refetch: bool = True,
     occurred_at: Any | None = None,
+    async_broadcast: bool = False,
 ) -> dict[str, Any]:
     message, created = _record_organization_state_feed_event(
         organization=organization,
@@ -192,7 +228,15 @@ def publish_organization_state_feed_event(
         occurred_at=occurred_at,
     )
     if created:
-        transaction.on_commit(lambda: broadcast_organization_state_message(message))
+        if async_broadcast:
+            transaction.on_commit(
+                lambda: _BROADCAST_EXECUTOR.submit(
+                    broadcast_organization_state_message,
+                    message,
+                )
+            )
+        else:
+            transaction.on_commit(lambda: broadcast_organization_state_message(message))
     return message
 
 
@@ -310,3 +354,7 @@ def _replay_limit(value: int | None) -> int:
         return max(int(configured), 1)
     except (TypeError, ValueError):
         return 500
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,6 +51,9 @@ func TestBuildWorkloadPlanDistributesAgentsAndRuns(t *testing.T) {
 	if len(plan.Tenants) != 25 || len(plan.Agents) != 500 || len(plan.Runs) != 500 {
 		t.Fatalf("unexpected sizes: tenants=%d agents=%d runs=%d", len(plan.Tenants), len(plan.Agents), len(plan.Runs))
 	}
+	if strings.Contains(plan.Tenants[0].Email, "T") {
+		t.Fatalf("generated tenant email must be lowercase for auth replay: %s", plan.Tenants[0].Email)
+	}
 	for _, tenant := range plan.Tenants {
 		if tenant.AgentCount != 20 {
 			t.Fatalf("tenant %d agent count = %d, want 20", tenant.Index, tenant.AgentCount)
@@ -55,6 +61,77 @@ func TestBuildWorkloadPlanDistributesAgentsAndRuns(t *testing.T) {
 		if tenant.RunCount != 20 {
 			t.Fatalf("tenant %d run count = %d, want 20", tenant.Index, tenant.RunCount)
 		}
+	}
+}
+
+func TestWriteTenantManifestDoesNotMutateCredentials(t *testing.T) {
+	startedAt := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	plan, err := BuildWorkloadPlan(Config{
+		Tenants:           1,
+		Agents:            1,
+		RunsPerTenant:     1,
+		TenantEmailDomain: defaultTenantEmailDomain,
+		Password:          defaultPassword,
+	}, nil, startedAt)
+	if err != nil {
+		t.Fatalf("BuildWorkloadPlan returned error: %v", err)
+	}
+	writer, err := NewArtifactWriter(t.TempDir(), startedAt)
+	if err != nil {
+		t.Fatalf("NewArtifactWriter returned error: %v", err)
+	}
+	if err := writer.WriteTenantManifest(plan); err != nil {
+		t.Fatalf("WriteTenantManifest returned error: %v", err)
+	}
+	if plan.Tenants[0].Password != defaultPassword {
+		t.Fatalf("plan password was mutated by manifest redaction")
+	}
+	data, err := os.ReadFile(writer.Paths.TenantManifest)
+	if err != nil {
+		t.Fatalf("read tenant manifest: %v", err)
+	}
+	var manifest WorkloadPlan
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("decode tenant manifest: %v", err)
+	}
+	if manifest.Tenants[0].Password != "" || manifest.Tenants[0].AccessToken != "" {
+		t.Fatalf("tenant manifest leaked credentials: %+v", manifest.Tenants[0])
+	}
+}
+
+func TestEnsureTenantWithCredentialsSkipsRegister(t *testing.T) {
+	registerCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/auth/register":
+			registerCalls++
+			http.Error(writer, "register should not be called", http.StatusTeapot)
+		case "/api/auth/login":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"access":"tenant-token"}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	client := NewAPIClient(Config{BaseURL: server.URL, RequestTimeout: time.Second}, nil)
+	tenant := TenantPlan{
+		Email:           "existing@example.com",
+		Password:        "password",
+		FromCredentials: true,
+		OrganizationID:  "org-1",
+		GraphVersionID:  "version-1",
+	}
+
+	if err := client.EnsureTenant(context.Background(), &tenant); err != nil {
+		t.Fatalf("EnsureTenant returned error: %v", err)
+	}
+	if registerCalls != 0 {
+		t.Fatalf("register calls = %d, want 0", registerCalls)
+	}
+	if tenant.AccessToken != "tenant-token" {
+		t.Fatalf("access token = %q, want tenant-token", tenant.AccessToken)
 	}
 }
 
@@ -122,6 +199,48 @@ func TestSignEngineEventMatchesHMACContract(t *testing.T) {
 	signature := signEngineEvent("secret", "1710000000000", []byte(`{"type":"node_completed"}`))
 	if signature != "39a7e5417c41d71f70ea3aba0dbb6f5a8733107737bd82db04e16fe2f4f6805c" {
 		t.Fatalf("signature = %s", signature)
+	}
+}
+
+func TestCanonicalEventChecksumIgnoresChecksumField(t *testing.T) {
+	envelope := map[string]any{
+		"schema_version": 2,
+		"source":         "engine",
+		"type":           "node.completed",
+		"event_id":       "evt-1",
+		"payload":        map[string]any{"node_id": "agent-1"},
+	}
+	first, err := canonicalEventChecksum(envelope)
+	if err != nil {
+		t.Fatalf("canonicalEventChecksum returned error: %v", err)
+	}
+	envelope["checksum"] = "ignored"
+	second, err := canonicalEventChecksum(envelope)
+	if err != nil {
+		t.Fatalf("canonicalEventChecksum returned error: %v", err)
+	}
+	if first != second {
+		t.Fatalf("checksum changed when checksum field was present")
+	}
+}
+
+func TestSanitizeCommandRedactsSecrets(t *testing.T) {
+	command := sanitizeCommand([]string{
+		"loadgen",
+		"--engine-callback-secret",
+		"secret-value",
+		"--password=tenant-password",
+		"--tenants",
+		"2",
+	})
+	if strings.Contains(command, "secret-value") || strings.Contains(command, "tenant-password") {
+		t.Fatalf("sanitized command leaked a secret: %s", command)
+	}
+	if !strings.Contains(command, "--engine-callback-secret [REDACTED]") {
+		t.Fatalf("sanitized command did not preserve redacted callback-secret flag: %s", command)
+	}
+	if !strings.Contains(command, "--password=[REDACTED]") {
+		t.Fatalf("sanitized command did not preserve redacted password flag: %s", command)
 	}
 }
 

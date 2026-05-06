@@ -65,17 +65,35 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 		return LoadgenReport{}, err
 	}
 
+	deadLetterBaseline := 0
+	for _, tenant := range plan.Tenants {
+		_, _, deadLetters := client.PollReadAPIs(runCtx, tenant)
+		deadLetterBaseline += deadLetters
+	}
+
 	hooks = append(hooks, RunNamedHooks(runCtx, cfg, writer, "llm-throttle-on")...)
 
 	var wsWG sync.WaitGroup
 	var wsMu sync.Mutex
 	wsClients := cfg.WSClients
+	wsReady := make(chan struct{}, max(wsClients, 1))
 	for i := 0; i < wsClients; i++ {
 		tenant := plan.Tenants[i%len(plan.Tenants)]
 		wsWG.Add(1)
 		go func(index int, tenant TenantPlan) {
 			defer wsWG.Done()
-			samples, reconnects, err := client.ConnectOrganizationWS(runCtx, tenant, 0, cfg.ReconnectStorm, writer)
+			signaledReady := false
+			ready := func() {
+				if signaledReady {
+					return
+				}
+				signaledReady = true
+				wsReady <- struct{}{}
+			}
+			samples, reconnects, err := client.ConnectOrganizationWS(runCtx, tenant, 0, cfg.ReconnectStorm, ready, writer)
+			if !signaledReady {
+				ready()
+			}
 			wsMu.Lock()
 			defer wsMu.Unlock()
 			wsSamples = append(wsSamples, samples...)
@@ -87,6 +105,22 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 				})
 			}
 		}(i, tenant)
+	}
+	if wsClients > 0 {
+		deadline := time.NewTimer(minDuration(10*time.Second, cfg.RequestTimeout))
+		readyCount := 0
+	waitForWS:
+		for readyCount < wsClients {
+			select {
+			case <-wsReady:
+				readyCount++
+			case <-deadline.C:
+				break waitForWS
+			case <-runCtx.Done():
+				break waitForWS
+			}
+		}
+		deadline.Stop()
 	}
 
 	for _, run := range plan.Runs {
@@ -153,11 +187,15 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 
 	observeDeadline := time.Now().Add(minDuration(cfg.ObservationDeadline, cfg.Duration))
 	for time.Now().Before(observeDeadline) {
+		currentDeadLetters := 0
 		for _, tenant := range plan.Tenants {
 			latencies, lag, deadLetters := client.PollReadAPIs(runCtx, tenant)
 			apiSamples = append(apiSamples, latencies...)
 			projectionLagSamples = append(projectionLagSamples, lag...)
-			metrics.DeadLetters += deadLetters
+			currentDeadLetters += deadLetters
+		}
+		if currentDeadLetters > deadLetterBaseline {
+			metrics.DeadLetters = currentDeadLetters - deadLetterBaseline
 		}
 		if len(startedRuns) > 0 {
 			break

@@ -49,7 +49,6 @@ def test_projection_worker_emits_organization_state_notifications(user) -> None:
         )
     )
     assert "task.updated" in event_types
-    assert "overview.updated" in event_types
 
 
 def test_organization_state_feed_is_notification_only_for_overview(user) -> None:

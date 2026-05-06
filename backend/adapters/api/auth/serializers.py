@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from application.services.tenancy import get_default_membership
 
@@ -43,6 +44,19 @@ class LoginSerializer(serializers.Serializer[Any]):
 
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+
+
+class ForgeGraphTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """JWT serializer that embeds backend-owned default organization claims."""
+
+    @classmethod
+    def get_token(cls, user: Any) -> Any:
+        token = super().get_token(user)
+        membership = get_default_membership(user)
+        if membership is not None:
+            token["default_organization_id"] = str(membership.organization_id)
+            token["organization_role"] = membership.role
+        return token
 
 
 class LogoutSerializer(serializers.Serializer[Any]):

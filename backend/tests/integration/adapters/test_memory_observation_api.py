@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import uuid4
 
+from django.db import OperationalError
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from application.services.memory_observation_service import MemoryObservationService
 from application.services.tenancy import ensure_default_organization
-from infrastructure.orm.models import MemoryObservation, User
+from infrastructure.orm.models import MemoryObservation, ProcessedMemoryEvent, User
 
 
 def _create_payload(**overrides: object) -> dict[str, object]:
@@ -40,6 +42,42 @@ def test_create_and_get_memory_observation(authenticated_client: APIClient, user
     assert detail_response.status_code == 200
     assert detail_response.json()["data"]["id"] == created["id"]
     assert detail_response.json()["data"]["content"] == "Customer prefers email follow-up."
+
+
+def test_create_memory_observation_retries_deadlock(
+    authenticated_client: APIClient,
+    user: User,
+    monkeypatch,
+):
+    original_create = MemoryObservationService.create_observation
+    attempts = {"count": 0}
+
+    def flaky_create(self, **kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise OperationalError("deadlock detected")
+        return original_create(self, **kwargs)
+
+    monkeypatch.setattr(MemoryObservationService, "create_observation", flaky_create)
+
+    response = authenticated_client.post(
+        "/api/memory/observations",
+        data=_create_payload(title="Retryable Memory"),
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="memory-retry-deadlock-1",
+    )
+
+    assert response.status_code == 201
+    assert attempts["count"] == 2
+    organization_id = user.default_organization_id
+    assert organization_id is not None
+    assert (
+        ProcessedMemoryEvent.objects.filter(
+            organization_id=organization_id,
+            event_id="memory-retry-deadlock-1",
+        ).count()
+        == 1
+    )
 
 
 def test_search_timeline_and_context_return_matching_observations(

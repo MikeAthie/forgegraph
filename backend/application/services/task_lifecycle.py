@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from django.db import transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.utils import timezone
 
 from application.services.redaction import redact_payload
@@ -36,6 +38,9 @@ TASK_STATUSES = {
 }
 TERMINAL_TASK_STATUSES = {"completed", "failed", "dead_lettered", "cancelled"}
 TERMINAL_RUN_STATUSES = {"succeeded", "failed", "canceled"}
+_DEADLOCK_RETRY_ATTEMPTS = 3
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_TASK_TRANSITIONS: dict[str, set[str]] = {
     "created": {
@@ -166,6 +171,13 @@ def task_title_for_node(run: Run, node_id: str, node_type: str = "") -> str:
     return f"{node_id or 'Run'} task"
 
 
+def _task_title_from_node(*, node: dict[str, Any], node_id: str) -> str:
+    raw_data = node.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+    label = str(node.get("name") or data.get("label") or data.get("name") or "").strip()
+    return f"{label or node_id or 'Run'} task"
+
+
 def ensure_lifecycle_task(
     *,
     run: Run,
@@ -211,9 +223,16 @@ def ensure_lifecycle_task(
 
 
 def initialize_lifecycle_tasks_for_run(
-    run: Run, *, source: str = "run_start"
+    run: Run,
+    *,
+    source: str = "run_start",
+    initial_status: str = "created",
+    reason: str = "task initialized from graph",
 ) -> list[TaskLifecycleRecord]:
+    if initial_status not in TASK_STATUSES:
+        raise ValueError(f"Unsupported initial task lifecycle status: {initial_status}")
     tasks: list[TaskLifecycleRecord] = []
+    organization = organization_for_run(run)
     graph_json = (
         run.dispatch_graph_json
         if isinstance(run.dispatch_graph_json, dict)
@@ -224,19 +243,164 @@ def initialize_lifecycle_tasks_for_run(
         if not node_id or not _is_executable_node(node):
             continue
         node_type = _node_type(node)
-        task = ensure_lifecycle_task(run=run, node_id=node_id, node_type=node_type)
-        tasks.append(task)
-        transition_task_lifecycle(
+        task = _initialize_lifecycle_task_for_node_with_retry(
             run=run,
+            organization=organization,
+            node=node,
             node_id=node_id,
             node_type=node_type,
-            to_status="created",
-            attempt_number=1,
             source=source,
-            idempotency_key=f"task:{run.id}:{node_id}:created:1",
-            reason="task initialized from graph",
+            initial_status=initial_status,
+            reason=reason,
         )
+        tasks.append(task)
     return tasks
+
+
+def _initialize_lifecycle_task_for_node_with_retry(
+    *,
+    run: Run,
+    organization: Organization,
+    node: dict[str, Any],
+    node_id: str,
+    node_type: str,
+    source: str,
+    initial_status: str,
+    reason: str,
+) -> TaskLifecycleRecord:
+    for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+        try:
+            return _initialize_lifecycle_task_for_node_once(
+                run=run,
+                organization=organization,
+                node=node,
+                node_id=node_id,
+                node_type=node_type,
+                source=source,
+                initial_status=initial_status,
+                reason=reason,
+            )
+        except (IntegrityError, OperationalError) as exc:
+            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                raise
+            logger.warning(
+                "task_lifecycle_initialize_deadlock_retry",
+                extra={
+                    "run_id": str(run.id),
+                    "node_id": node_id,
+                    "attempt": attempt + 1,
+                },
+            )
+            time.sleep(0.02 * (attempt + 1))
+    raise RuntimeError("unreachable task lifecycle initialize retry state")
+
+
+def _initialize_lifecycle_task_for_node_once(
+    *,
+    run: Run,
+    organization: Organization,
+    node: dict[str, Any],
+    node_id: str,
+    node_type: str,
+    source: str,
+    initial_status: str,
+    reason: str,
+) -> TaskLifecycleRecord:
+    event_time = timezone.now()
+    idempotency_key = f"task:{run.id}:{node_id}:{initial_status}:1"
+    existing_event = (
+        TaskLifecycleEvent.objects.filter(
+            organization=organization,
+            idempotency_key=idempotency_key,
+        )
+        .select_related("lifecycle_task")
+        .first()
+    )
+    if existing_event is not None:
+        return existing_event.lifecycle_task
+
+    with transaction.atomic():
+        existing_event = (
+            TaskLifecycleEvent.objects.filter(
+                organization=organization,
+                idempotency_key=idempotency_key,
+            )
+            .select_related("lifecycle_task")
+            .first()
+        )
+        if existing_event is not None:
+            return existing_event.lifecycle_task
+
+        task = TaskLifecycleRecord.objects.create(
+            organization=organization,
+            run=run,
+            source_node_id=node_id,
+            node_type=node_type,
+            external_key=lifecycle_external_key(run, node_id),
+            title=_task_title_from_node(node=node, node_id=node_id),
+            status=initial_status,
+            priority=_priority_for_task_status(initial_status),
+            summary=_summary_for_status(
+                run=run,
+                node_id=node_id,
+                status=initial_status,
+                reason=reason,
+            ),
+            current_attempt=1,
+            last_transition_at=event_time,
+        )
+        TaskAttemptRecord.objects.create(
+            lifecycle_task=task,
+            run=run,
+            attempt_number=1,
+            idempotency_key=idempotency_key,
+            owner_component="backend",
+            status=ATTEMPT_STATUS_BY_TASK_STATUS.get(initial_status, "created"),
+            retry_reason=reason if initial_status == "retry_scheduled" else "",
+            last_error=reason if initial_status in {"failed", "dead_lettered"} else "",
+            started_at=event_time if initial_status == "running" else None,
+            ended_at=(
+                event_time
+                if initial_status in {"completed", "failed", "dead_lettered", "cancelled"}
+                else None
+            ),
+        )
+        TaskLifecycleEvent.objects.create(
+            organization=organization,
+            run=run,
+            lifecycle_task=task,
+            idempotency_key=idempotency_key,
+            source=source,
+            event_type="task_lifecycle.transition",
+            from_status="created" if initial_status != "created" else "",
+            to_status=initial_status,
+            attempt_number=1,
+            outcome="accepted",
+            reason=reason,
+            payload={},
+            occurred_at=event_time,
+        )
+        return task
+
+
+def transition_task_lifecycle_with_deadlock_retry(**kwargs: Any) -> TaskTransitionResult:
+    for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+        try:
+            return transition_task_lifecycle(**kwargs)
+        except OperationalError as exc:
+            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                raise
+            logger.warning(
+                "task_lifecycle_transition_deadlock_retry",
+                extra={
+                    "run_id": str(getattr(kwargs.get("run"), "id", "")),
+                    "node_id": str(kwargs.get("node_id") or ""),
+                    "to_status": str(kwargs.get("to_status") or ""),
+                    "attempt": attempt + 1,
+                },
+            )
+            time.sleep(0.02 * (attempt + 1))
+    raise RuntimeError("unreachable task lifecycle transition retry state")
 
 
 def transition_task_lifecycle(
@@ -359,6 +523,19 @@ def transition_task_lifecycle(
             event=event,
             outcome=outcome,
         )
+
+
+def _is_deadlock(exc: BaseException) -> bool:
+    current: BaseException | None = exc
+    while current is not None:
+        code = getattr(current, "pgcode", None)
+        if code == "40P01":
+            return True
+        message = str(current).lower()
+        if "deadlock detected" in message:
+            return True
+        current = current.__cause__ if isinstance(current.__cause__, BaseException) else None
+    return False
 
 
 def transition_from_node_run(

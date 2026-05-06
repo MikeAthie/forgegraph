@@ -8,7 +8,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.utils import timezone
 
 from adapters.gateways.grpc_engine_client import (
@@ -64,6 +64,8 @@ from infrastructure.orm.models import RunQueueEntry
 
 logger = logging.getLogger(__name__)
 
+_DEADLOCK_RETRY_ATTEMPTS = 3
+
 
 def get_engine_client(
     callback_url: str = "",
@@ -88,6 +90,10 @@ def _run_has_context_pack(run: Any) -> bool:
         else None
     )
     return isinstance(metadata, dict) and bool(metadata.get("context_pack_id"))
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()
 
 
 class Command(BaseCommand):
@@ -160,16 +166,38 @@ class Command(BaseCommand):
         for lifecycle_task in run.task_lifecycle_records.exclude(
             status__in=["completed", "failed", "dead_lettered", "cancelled"]
         ):
-            transition_task_lifecycle(
-                run=run,
-                node_id=lifecycle_task.source_node_id,
-                node_type=lifecycle_task.node_type,
-                to_status="claimed",
-                attempt_number=max(lifecycle_task.current_attempt, entry.attempts or 1),
-                source="run_queue_worker",
-                idempotency_key=f"task:{run.id}:{lifecycle_task.source_node_id}:claimed:{entry.id}:{entry.attempts}",
-                reason=f"claimed by run queue worker {entry.locked_by}",
-            )
+            try:
+                self._transition_task_lifecycle_with_deadlock_retry(
+                    run=run,
+                    node_id=lifecycle_task.source_node_id,
+                    node_type=lifecycle_task.node_type,
+                    to_status="claimed",
+                    attempt_number=max(lifecycle_task.current_attempt, entry.attempts or 1),
+                    source="run_queue_worker",
+                    idempotency_key=(
+                        f"task:{run.id}:{lifecycle_task.source_node_id}:"
+                        f"claimed:{entry.id}:{entry.attempts}"
+                    ),
+                    reason=f"claimed by run queue worker {entry.locked_by}",
+                )
+            except OperationalError as exc:
+                if not _is_deadlock(exc):
+                    raise
+                logger.warning(
+                    "run_queue_task_claim_deadlock_retry_exhausted",
+                    extra={
+                        "run_id": str(run.id),
+                        "queue_entry_id": str(entry.id),
+                        "task_id": str(lifecycle_task.id),
+                    },
+                )
+                mark_failed(
+                    entry,
+                    error_message="Deadlock while claiming run lifecycle tasks.",
+                    retryable=True,
+                    settings_override=queue_settings,
+                )
+                return
 
         checkpoint = None
         try:
@@ -255,33 +283,121 @@ class Command(BaseCommand):
             self._fail_run(entry, run, f"Engine rejected run: {exc}")
             return
 
+        should_mark_tasks_queued = self._complete_engine_dispatch(
+            entry=entry,
+            run=run,
+            engine_instance_id=target.engine_id,
+        )
+        if not should_mark_tasks_queued:
+            return
+
+        for lifecycle_task in run.task_lifecycle_records.exclude(
+            status__in=["completed", "failed", "dead_lettered", "cancelled"]
+        ):
+            try:
+                self._transition_task_lifecycle_with_deadlock_retry(
+                    run=run,
+                    node_id=lifecycle_task.source_node_id,
+                    node_type=lifecycle_task.node_type,
+                    to_status="queued",
+                    attempt_number=max(lifecycle_task.current_attempt, entry.attempts or 1),
+                    source="run_queue_worker",
+                    idempotency_key=(
+                        f"task:{run.id}:{lifecycle_task.source_node_id}:"
+                        f"engine_dispatched:{entry.id}:{entry.attempts}"
+                    ),
+                    reason="run dispatched to engine; waiting for node-level lifecycle",
+                )
+            except OperationalError as exc:
+                if not _is_deadlock(exc):
+                    raise
+                logger.warning(
+                    "run_queue_task_queued_deadlock_retry_exhausted",
+                    extra={
+                        "run_id": str(run.id),
+                        "queue_entry_id": str(entry.id),
+                        "task_id": str(lifecycle_task.id),
+                    },
+                )
+
+    def _complete_engine_dispatch(
+        self,
+        *,
+        entry: RunQueueEntry,
+        run: Any,
+        engine_instance_id: str,
+    ) -> bool:
+        for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+            try:
+                return self._complete_engine_dispatch_once(
+                    entry=entry,
+                    run=run,
+                    engine_instance_id=engine_instance_id,
+                )
+            except OperationalError as exc:
+                if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                    raise
+                logger.warning(
+                    "run_queue_dispatch_finalize_deadlock_retry",
+                    extra={
+                        "run_id": str(run.id),
+                        "queue_entry_id": str(entry.id),
+                        "attempt": attempt + 1,
+                    },
+                )
+                time.sleep(0.05 * (attempt + 1))
+                run.refresh_from_db()
+                entry.refresh_from_db()
+        raise RuntimeError("unreachable run queue dispatch retry state")
+
+    def _transition_task_lifecycle_with_deadlock_retry(self, **kwargs: Any) -> Any:
+        for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+            try:
+                return transition_task_lifecycle(**kwargs)
+            except OperationalError as exc:
+                if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                    raise
+                logger.warning(
+                    "run_queue_task_lifecycle_deadlock_retry",
+                    extra={
+                        "run_id": str(getattr(kwargs.get("run"), "id", "")),
+                        "node_id": str(kwargs.get("node_id") or ""),
+                        "to_status": str(kwargs.get("to_status") or ""),
+                        "attempt": attempt + 1,
+                    },
+                )
+                time.sleep(0.05 * (attempt + 1))
+        raise RuntimeError("unreachable task lifecycle retry state")
+
+    def _complete_engine_dispatch_once(
+        self,
+        *,
+        entry: RunQueueEntry,
+        run: Any,
+        engine_instance_id: str,
+    ) -> bool:
         with transaction.atomic():
+            run = type(run).objects.select_for_update(of=("self",)).get(id=run.id)
+            entry = RunQueueEntry.objects.select_for_update(of=("self",)).get(id=entry.id)
+
+            if run.status in TERMINAL_RUN_STATUSES:
+                mark_completed(entry)
+                return False
+
             transition = apply_run_status_transition(run, "running")
             update_fields = transition.update_fields
             update_fields.extend(
                 touch_run_liveness(
                     run,
                     recovery_state=recovery_state_for_status("running"),
-                    engine_instance_id=target.engine_id,
+                    engine_instance_id=engine_instance_id,
                 )
             )
             run.save(update_fields=sorted(set(update_fields)))
-            record_run_started()
-            broadcast_run_updated(run)
             mark_completed(entry)
-        for lifecycle_task in run.task_lifecycle_records.exclude(
-            status__in=["completed", "failed", "dead_lettered", "cancelled"]
-        ):
-            transition_task_lifecycle(
-                run=run,
-                node_id=lifecycle_task.source_node_id,
-                node_type=lifecycle_task.node_type,
-                to_status="queued",
-                attempt_number=max(lifecycle_task.current_attempt, entry.attempts or 1),
-                source="run_queue_worker",
-                idempotency_key=f"task:{run.id}:{lifecycle_task.source_node_id}:engine_dispatched:{entry.id}:{entry.attempts}",
-                reason="run dispatched to engine; waiting for node-level lifecycle",
-            )
+            transaction.on_commit(record_run_started)
+            transaction.on_commit(lambda: broadcast_run_updated(run))
+        return True
 
     def _fail_run(
         self, entry: RunQueueEntry, run: Any, message: str, retryable: bool = False

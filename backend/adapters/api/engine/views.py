@@ -383,6 +383,7 @@ class EngineRunDetailView(APIView):
 
 class EngineRuntimeIntentOutcomeView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes: list[type] = []
 
     def get(self, request: Request, intent_id: UUID) -> Response:
         auth_error = _verify_engine_request(request)

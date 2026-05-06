@@ -49,6 +49,9 @@ func (writer *ArtifactWriter) AppendJSONL(path string, value any) error {
 
 func (writer *ArtifactWriter) WriteTenantManifest(plan WorkloadPlan) error {
 	publicPlan := plan
+	publicPlan.Tenants = append([]TenantPlan(nil), plan.Tenants...)
+	publicPlan.Agents = append([]AgentPlan(nil), plan.Agents...)
+	publicPlan.Runs = append([]RunPlan(nil), plan.Runs...)
 	for index := range publicPlan.Tenants {
 		publicPlan.Tenants[index].Password = ""
 		publicPlan.Tenants[index].AccessToken = ""

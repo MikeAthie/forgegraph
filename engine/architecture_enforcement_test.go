@@ -40,8 +40,6 @@ func TestEngineKeepsCheckpointStateOnlyInApprovedInMemoryScopes(t *testing.T) {
 	allowed := []string{
 		filepath.FromSlash("adapter/repository/memory_run_repository.go"),
 		filepath.FromSlash("application/usecase/scheduler_test_helpers_test.go"),
-		filepath.FromSlash("application/usecase/scheduler_test.go"),
-		filepath.FromSlash("tests/e2e/tool_side_effect_diagnostics_test.go"),
 	}
 
 	forEachGoSource(t, func(path string, source string) {

@@ -6,7 +6,7 @@ Clean Architecture: Interface Adapters layer.
 
 from django.urls import include, path
 
-from adapters.api.auth.views import WSTicketView
+from adapters.api.auth.views import ws_ticket_view
 from adapters.api.graphs.views import GraphVersionCreateView
 from adapters.api.organizations.views import (
     OrganizationCurrentView,
@@ -16,7 +16,7 @@ from adapters.api.organizations.views import (
 from adapters.api.runs.views import RunListView
 
 urlpatterns = [
-    path("ws-ticket", WSTicketView.as_view(), name="ws-ticket"),
+    path("ws-ticket", ws_ticket_view, name="ws-ticket"),
     path("auth/", include("adapters.api.auth.urls")),
     path("system-state/", include("adapters.api.system_state.urls")),
     path("agents/", include("adapters.api.agents.urls")),

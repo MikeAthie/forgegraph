@@ -9,7 +9,6 @@ from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
 from django.test import override_settings
-from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
 from application.services.auth_state import issue_ws_ticket, revoke_access_token
@@ -86,21 +85,6 @@ def _issue_ticket_for_user(user: User) -> tuple[str, str]:
 
 
 @database_sync_to_async
-def _issue_ticket_via_api(user: User) -> tuple[str, str]:
-    client = APIClient()
-    login_response = client.post(
-        "/api/auth/login",
-        {"email": user.email, "password": "testpassword123"},
-        format="json",
-    )
-    access = login_response.data["access"]
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-    response = client.post("/api/auth/ws-ticket", {}, format="json")
-    assert response.status_code == 201
-    return access, response.data["ticket"]
-
-
-@database_sync_to_async
 def _create_same_org_member(user: User) -> User:
     member = User.objects.create_user(email="viewer@example.com", password="password123")
 
@@ -140,7 +124,7 @@ async def test_run_ws_rejects_unauthenticated_user(user):
 async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
     run_id = await _create_run_for_user(user=user)
 
-    _, ticket = await _issue_ticket_via_api(user)
+    _, ticket = await _issue_ticket_for_user(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await _connect(communicator)
     assert connected is True
@@ -187,7 +171,7 @@ async def test_run_ws_allows_owner_with_ticket_and_receives_broadcast(user):
 async def test_run_ws_default_subscription_drops_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
-    _, ticket = await _issue_ticket_via_api(user)
+    _, ticket = await _issue_ticket_for_user(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}")
     connected, _ = await _connect(communicator)
     assert connected is True
@@ -225,7 +209,7 @@ async def test_run_ws_default_subscription_drops_verbose_messages(user):
 async def test_run_ws_filters_by_requested_event_type(user):
     run_id = await _create_run_for_user(user=user)
 
-    _, ticket = await _issue_ticket_via_api(user)
+    _, ticket = await _issue_ticket_for_user(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}&event_types=run_completed")
     connected, _ = await _connect(communicator)
     assert connected is True
@@ -291,7 +275,7 @@ async def test_run_ws_filters_by_requested_event_type(user):
 async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
     run_id = await _create_run_for_user(user=user)
 
-    _, ticket = await _issue_ticket_via_api(user)
+    _, ticket = await _issue_ticket_for_user(user)
     communicator = _ws(user, f"/ws/runs/{run_id}/?ticket={ticket}&last_event_id=evt-old")
     connected, _ = await _connect(communicator)
     assert connected is True
@@ -315,7 +299,7 @@ async def test_run_ws_resync_request_returns_backend_refetch_signal(user):
 async def test_run_ws_verbose_subscription_receives_verbose_messages(user):
     run_id = await _create_run_for_user(user=user)
 
-    _, ticket = await _issue_ticket_via_api(user)
+    _, ticket = await _issue_ticket_for_user(user)
     communicator = _ws(
         user,
         f"/ws/runs/{run_id}/?ticket={ticket}&event_level=verbose",

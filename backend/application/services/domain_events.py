@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
 from infrastructure.orm.models import (
@@ -32,6 +35,26 @@ class DomainEventResult:
     created: bool
 
 
+_DEADLOCK_RETRY_ATTEMPTS = 3
+_DOMAIN_EVENT_SIGNALS_SUPPRESSED: ContextVar[bool] = ContextVar(
+    "domain_event_signals_suppressed",
+    default=False,
+)
+
+
+@contextmanager
+def suppress_domain_event_signals() -> Any:
+    token = _DOMAIN_EVENT_SIGNALS_SUPPRESSED.set(True)
+    try:
+        yield
+    finally:
+        _DOMAIN_EVENT_SIGNALS_SUPPRESSED.reset(token)
+
+
+def domain_event_signals_suppressed() -> bool:
+    return bool(_DOMAIN_EVENT_SIGNALS_SUPPRESSED.get())
+
+
 def record_domain_event(
     *,
     organization: Organization,
@@ -46,11 +69,44 @@ def record_domain_event(
 ) -> DomainEventResult:
     """Record a backend-authored projection event in the caller's transaction."""
 
+    for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+        try:
+            return _record_domain_event_once(
+                organization=organization,
+                aggregate_type=aggregate_type,
+                aggregate_id=aggregate_id,
+                event_type=event_type,
+                idempotency_key=idempotency_key,
+                payload=payload,
+                tenant_id=tenant_id,
+                event_version=event_version,
+                occurred_at=occurred_at,
+            )
+        except OperationalError as exc:
+            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+    raise RuntimeError("unreachable domain event retry state")
+
+
+def _record_domain_event_once(
+    *,
+    organization: Organization,
+    aggregate_type: str,
+    aggregate_id: UUID | str,
+    event_type: str,
+    idempotency_key: str,
+    payload: dict[str, Any] | None = None,
+    tenant_id: UUID | str | None = None,
+    event_version: int = 1,
+    occurred_at: Any = None,
+) -> DomainEventResult:
     key = _compact_key(idempotency_key)
     if not key:
         raise ValueError("Domain events require an idempotency key.")
 
     aggregate_uuid = UUID(str(aggregate_id))
+    organization_id = organization.id
     existing = DomainEvent.objects.filter(idempotency_key=key).first()
     if existing is not None:
         return DomainEventResult(event=existing, created=False)
@@ -60,11 +116,11 @@ def record_domain_event(
         if existing is not None:
             return DomainEventResult(event=existing, created=False)
 
-        sequence = _allocate_sequence(organization)
+        sequence = _allocate_sequence(organization_id)
         try:
             event = DomainEvent.objects.create(
                 tenant_id=UUID(str(tenant_id or organization.id)),
-                organization=organization,
+                organization_id=organization_id,
                 aggregate_type=str(aggregate_type or "").strip()[:64],
                 aggregate_id=aggregate_uuid,
                 event_type=str(event_type or "").strip()[:128],
@@ -394,9 +450,14 @@ def organization_for_run(run: Run) -> Organization | None:
     return run.owner.default_organization
 
 
-def _allocate_sequence(organization: Organization) -> int:
+def _allocate_sequence(organization_id: UUID) -> int:
+    if connection.vendor == "postgresql":
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT nextval('domain_event_global_sequence')")
+            return int(cursor.fetchone()[0])
+
     row, _ = OrganizationDomainEventSequence.objects.select_for_update().get_or_create(
-        organization=organization,
+        organization_id=organization_id,
         defaults={"next_sequence": 1},
     )
     sequence = int(row.next_sequence)
@@ -436,3 +497,7 @@ def _iso_or_none(value: Any) -> str | None:
     if value is None:
         return None
     return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()
