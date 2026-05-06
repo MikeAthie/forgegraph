@@ -67,6 +67,33 @@ const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8002"
 ).replace(/\/$/, "");
+const API_REQUEST_TIMEOUT_MS = positiveNumberFromEnv(
+  "PLAYWRIGHT_API_REQUEST_TIMEOUT_MS",
+  process.env.CI ? 60_000 : 30_000,
+);
+const LIVE_AUTH_TIMEOUT_MS = positiveNumberFromEnv("PLAYWRIGHT_LIVE_AUTH_TIMEOUT_MS", process.env.CI ? 60_000 : 30_000);
+const ENGINE_START_RETRY_MS = positiveNumberFromEnv(
+  "PLAYWRIGHT_ENGINE_START_RETRY_MS",
+  process.env.CI ? 60_000 : 10_000,
+);
+
+function positiveNumberFromEnv(name: string, fallback: number): number {
+  const rawValue = process.env[name];
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isEngineUnavailable(status: number, body: string): boolean {
+  return status === 503 && body.includes("ENGINE_UNAVAILABLE");
+}
 
 export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -84,6 +111,7 @@ export function createTestUser(testInfo: TestInfo, prefix = "e2e"): TestUser {
 
 export async function ensureUserRegistered(request: APIRequestContext, user: TestUser): Promise<void> {
   const response = await request.post(`${API_BASE_URL}/api/auth/register`, {
+    timeout: API_REQUEST_TIMEOUT_MS,
     data: { email: user.email, password: user.password },
   });
 
@@ -99,6 +127,7 @@ export async function getAccessToken(request: APIRequestContext, user: TestUser)
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
+      timeout: API_REQUEST_TIMEOUT_MS,
       data: {
         email: user.email,
         password: user.password,
@@ -138,7 +167,7 @@ export async function loginLive(
   await page.getByRole("textbox", { name: /password/i }).fill(user.password);
   const loginResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/auth/login") && response.request().method() === "POST",
-    { timeout: 30_000 },
+    { timeout: LIVE_AUTH_TIMEOUT_MS },
   );
   await page.getByRole("button", { name: /^sign in$/i }).click();
   const loginResponse = await loginResponsePromise;
@@ -147,18 +176,28 @@ export async function loginLive(
       `Live login failed (status ${loginResponse.status()}) via ${loginResponse.url()}: ${await loginResponse.text()}`,
     );
   }
-  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
+  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: LIVE_AUTH_TIMEOUT_MS });
 
-  const token = await page.evaluate(() => window.sessionStorage.getItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__"));
+  let token: string | null = null;
+  await expect
+    .poll(
+      async () => {
+        token = await page.evaluate(() => window.sessionStorage.getItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__"));
+        return token;
+      },
+      {
+        timeout: LIVE_AUTH_TIMEOUT_MS,
+        message: "Timed out waiting for live login access token.",
+      },
+    )
+    .toBeTruthy();
   if (!token) {
     throw new Error("Live login did not produce a browser access token.");
   }
 
   if (targetPath !== "/companies") {
-    await page.goto(targetPath);
+    await page.goto(targetPath, { waitUntil: "domcontentloaded" });
   }
-  await page.waitForLoadState("networkidle");
   return token;
 }
 
@@ -213,20 +252,35 @@ export async function startRunViaApi(
     inputJson?: Record<string, unknown>;
   },
 ): Promise<RunSeedResult> {
-  const startResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    data: {
-      graph_version_id: options.versionId,
-      input_json: options.inputJson ?? {},
-    },
-  });
-  if (!startResponse.ok()) {
+  const deadline = Date.now() + ENGINE_START_RETRY_MS;
+  let attempt = 0;
+
+  while (true) {
+    attempt += 1;
+    const startResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
+      timeout: API_REQUEST_TIMEOUT_MS,
+      headers: { Authorization: `Bearer ${accessToken}` },
+      data: {
+        graph_version_id: options.versionId,
+        input_json: options.inputJson ?? {},
+      },
+    });
+    if (startResponse.ok()) {
+      const startBody = (await startResponse.json()) as { data: { id: string } };
+      return { runId: startBody.data.id };
+    }
+
+    const responseText = await startResponse.text();
+    const hasRetryBudget = Date.now() < deadline;
+    if (isEngineUnavailable(startResponse.status(), responseText) && hasRetryBudget) {
+      await sleep(Math.min(5_000, 500 * 2 ** Math.min(attempt - 1, 4)));
+      continue;
+    }
+
     throw new Error(
-      `Live run start failed with ${startResponse.status()} ${startResponse.statusText()}: ${await startResponse.text()}`,
+      `Live run start failed with ${startResponse.status()} ${startResponse.statusText()} after ${attempt} attempt(s): ${responseText}`,
     );
   }
-  const startBody = (await startResponse.json()) as { data: { id: string } };
-  return { runId: startBody.data.id };
 }
 
 export async function createHumanGateRunViaApi(

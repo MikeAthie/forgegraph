@@ -36,9 +36,20 @@ function loadRootEnvFile() {
 
 loadRootEnvFile();
 
+function positiveNumberFromEnv(name: string, fallback: number): number {
+  const rawValue = process.env[name];
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 const runtimeTarget = (process.env.PLAYWRIGHT_RUNTIME_TARGET ?? "local").toLowerCase();
 const useDockerRuntime = runtimeTarget !== "local";
 const reuseExistingServer = (process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? "false").toLowerCase() === "true";
+const webServerTimeout = positiveNumberFromEnv("PLAYWRIGHT_WEB_SERVER_TIMEOUT_MS", process.env.CI ? 180_000 : 60_000);
 const devPort = process.env.PLAYWRIGHT_DEV_PORT ? Number(process.env.PLAYWRIGHT_DEV_PORT) : 3001;
 const dockerFrontendUrl = process.env.PLAYWRIGHT_DOCKER_FRONTEND_URL ?? "http://127.0.0.1:3000";
 // Use 127.0.0.1 to keep frontend/backend on the same "site" for SameSite=Lax cookies.
@@ -199,6 +210,7 @@ export default defineConfig({
           {
             command: `node scripts/playwright-openai-mock.mjs`,
             url: `${llmMockUrl}/health`,
+            timeout: webServerTimeout,
             reuseExistingServer,
             cwd: __dirname,
             env: {
@@ -213,6 +225,7 @@ export default defineConfig({
           {
             command: "python scripts/run_playwright_backend.py",
             url: `${backendUrl}/health`,
+            timeout: webServerTimeout,
             reuseExistingServer,
             cwd: path.join(__dirname, "..", "backend"),
             env: {
@@ -268,6 +281,7 @@ export default defineConfig({
           {
             command: "go run .",
             url: `${engineMetricsUrl}/metrics`,
+            timeout: webServerTimeout,
             reuseExistingServer,
             cwd: path.join(__dirname, "..", "engine"),
             env: {
@@ -302,6 +316,7 @@ export default defineConfig({
           {
             command: `npm run dev -- -p ${devPort}`,
             url: devUrl,
+            timeout: webServerTimeout,
             reuseExistingServer,
             env: {
               ...process.env,
