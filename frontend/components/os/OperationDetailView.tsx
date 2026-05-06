@@ -56,6 +56,10 @@ function getTaskNarrative(task: TaskVM) {
   return task.resultPreview || task.issuePreview || task.summary || "No readable activity summary is available yet.";
 }
 
+function shouldPollOperationStatus(operation: OperationVM | null) {
+  return Boolean(operation && !["completed", "failed"].includes(operation.status));
+}
+
 export default function OperationDetailView({ routeParam }: OperationDetailViewProps) {
   const router = useRouter();
   const operationId = typeof router.query[routeParam] === "string" ? router.query[routeParam] : null;
@@ -65,6 +69,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const [error, setError] = useState<string | null>(null);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [actionLoading, setActionLoading] = useState<"stop" | "retry" | null>(null);
+  const shouldPollCurrentOperation = shouldPollOperationStatus(operation);
 
   const loadOperation = useCallback(
     async (options?: { showSpinner?: boolean }) => {
@@ -94,6 +99,39 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   useEffect(() => {
     void loadOperation({ showSpinner: true });
   }, [loadOperation]);
+
+  useEffect(() => {
+    if (!operationId || typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const refreshVisibleOperation = () => {
+      if (document.visibilityState === "visible") {
+        void loadOperation({ showSpinner: false });
+      }
+    };
+
+    window.addEventListener("focus", refreshVisibleOperation);
+    document.addEventListener("visibilitychange", refreshVisibleOperation);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleOperation);
+      document.removeEventListener("visibilitychange", refreshVisibleOperation);
+    };
+  }, [loadOperation, operationId]);
+
+  useEffect(() => {
+    if (!operationId || !shouldPollCurrentOperation || typeof window === "undefined") {
+      return;
+    }
+
+    const poller = window.setInterval(() => {
+      void loadOperation({ showSpinner: false });
+    }, 2000);
+
+    return () => {
+      window.clearInterval(poller);
+    };
+  }, [loadOperation, operationId, shouldPollCurrentOperation]);
 
   useRunLiveUpdates(operationId, () => loadOperation({ showSpinner: false }));
 

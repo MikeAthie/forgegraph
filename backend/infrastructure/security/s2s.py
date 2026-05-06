@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 DEFAULT_MAX_SKEW_SECONDS: Final[int] = 600
+REPLAY_CACHE_ADD_ATTEMPTS: Final[int] = 3
 
 
 def _get_secret() -> str:
@@ -94,10 +95,15 @@ def verify_request_once(
     replay_digest = hashlib.sha256(replay_material.encode("utf-8")).hexdigest()
     cache_key = f"forgegraph:s2s-replay:{replay_digest}"
     ttl_seconds = max(_get_max_skew_seconds(), 1)
-    try:
-        replay_slot_acquired = cache.add(cache_key, "1", timeout=ttl_seconds)
-    except Exception:
-        return False, "replay_cache_unavailable"
+    replay_slot_acquired = False
+    for attempt in range(REPLAY_CACHE_ADD_ATTEMPTS):
+        try:
+            replay_slot_acquired = cache.add(cache_key, "1", timeout=ttl_seconds)
+            break
+        except Exception:
+            if attempt >= REPLAY_CACHE_ADD_ATTEMPTS - 1:
+                return False, "replay_cache_unavailable"
+            time.sleep(0.01 * (attempt + 1))
     if not replay_slot_acquired:
         return False, "replayed_signature"
     return True, "ok"

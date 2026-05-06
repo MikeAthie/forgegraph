@@ -11,10 +11,10 @@ test.describe("Operator recovery live flow", () => {
     const user = createTestUser(testInfo, "operator-recovery-live");
     const accessToken = await loginLive(page, request, user, "/ops");
 
-    await expect(page.getByRole("heading", { name: /operator recovery/i })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/dead letters/i)).toBeVisible();
-    await expect(page.getByText(/projection lag/i)).toBeVisible();
-    await expect(page.getByText(/event spool/i)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /operator recovery/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /^dead letters$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^projection lag$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^event spool$/i })).toBeVisible();
 
     const deadLetters = await request.get(`${API_BASE_URL}/api/ops/dead-letters`, {
       headers: { Authorization: `Bearer ${accessToken}` },

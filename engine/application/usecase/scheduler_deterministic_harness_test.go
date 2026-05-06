@@ -18,6 +18,7 @@ type ManualClock struct {
 	now     time.Time
 	nextID  int
 	waiters []manualClockWaiter
+	notify  chan struct{}
 }
 
 type manualClockWaiter struct {
@@ -27,7 +28,7 @@ type manualClockWaiter struct {
 }
 
 func NewManualClock(start time.Time) *ManualClock {
-	return &ManualClock{now: start}
+	return &ManualClock{now: start, notify: make(chan struct{}, 1)}
 }
 
 func (c *ManualClock) Now() time.Time {
@@ -38,12 +39,11 @@ func (c *ManualClock) Now() time.Time {
 
 func (c *ManualClock) After(d time.Duration) <-chan time.Time {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	ch := make(chan time.Time, 1)
 	deadline := c.now.Add(d)
 	if !deadline.After(c.now) {
 		ch <- c.now
+		c.mu.Unlock()
 		return ch
 	}
 
@@ -53,7 +53,30 @@ func (c *ManualClock) After(d time.Duration) <-chan time.Time {
 		deadline: deadline,
 		ch:       ch,
 	})
+	c.mu.Unlock()
+
+	select {
+	case c.notify <- struct{}{}:
+	default:
+	}
 	return ch
+}
+
+func (c *ManualClock) WaitForWaiters(ctx context.Context, count int) bool {
+	for {
+		c.mu.Lock()
+		ready := len(c.waiters) >= count
+		c.mu.Unlock()
+		if ready {
+			return true
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-c.notify:
+		}
+	}
 }
 
 func (c *ManualClock) Advance(d time.Duration) time.Time {
@@ -399,6 +422,15 @@ func (e *TestEngine) AwaitBlockedAttempt(runID string, nodeID string, attempt in
 	defer cancel()
 	if !e.Stepper.WaitForAttempt(ctx, runID, nodeID, attempt) {
 		e.t.Fatalf("node %s attempt %d did not block", nodeID, attempt)
+	}
+}
+
+func (e *TestEngine) AwaitClockWaiters(count int) {
+	e.t.Helper()
+	ctx, cancel := e.waitContext()
+	defer cancel()
+	if !e.Clock.WaitForWaiters(ctx, count) {
+		e.t.Fatalf("manual clock did not observe %d waiter(s)", count)
 	}
 }
 

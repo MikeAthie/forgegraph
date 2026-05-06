@@ -52,7 +52,6 @@ test.describe("Realtime Monitoring Contract", () => {
     await initialRunResponse;
     await runSocket;
     await waitForRunWebSocketSubscription(request, accessToken, fixture.runIds.running);
-    await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("heading", { name: /operation detail/i }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: /invoice monitoring/i, level: 2 })).toBeVisible();

@@ -2454,7 +2454,11 @@ export const runsApi = {
   },
 
   get: async (runId: string): Promise<RunDetail> => {
-    const response = await api.get<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.detail(runId));
+    const response = await api.get<ApiSuccessResponse<RunDetail>>(API_PATHS.runs.detail(runId), {
+      params: {
+        _ts: Date.now(),
+      },
+    });
     return response.data.data;
   },
 
