@@ -134,7 +134,7 @@ def _signed_callback_test(
         "agent_id": None,
         "task_id": None,
         "source": "engine",
-        "type": "run_started",
+        "type": "run.started",
         "category": "state",
         "sequence": 1,
         "causation_id": None,

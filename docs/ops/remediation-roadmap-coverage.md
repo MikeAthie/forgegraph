@@ -42,7 +42,7 @@ Status meanings:
 | --- | --- | --- | --- |
 | P3.1 define 500-agent target | Covered | `docs/ops/scalability-program.md`, `scripts/stress_runner.py` Gate E definition | Approval/signoff remains external. |
 | P3.2 bottleneck removal before scaling | Guarded | Projection request-path guardrails, WS replay, bounded queue/LLM stress controls, stress harness metrics, runbooks | Actual clean 50/100/250/500-agent results are evidence pending. |
-| P3.3 capacity ramp gates | Evidence pending | Gate A-E implementation and reports in `scripts/stress_runner.py`, claim guard in `scripts/ci/check_capacity_claims.py` | Must run gates and check in three passing Gate E reports before any 500-agent claim. |
+| P3.3 capacity ramp gates | Evidence pending | Gate A-E implementation in `tools/loadgen`, beta orchestration in `docs/ops/beta-launch-verification-plan.md`, `scripts/ci/run_beta_capacity_gates.sh`, `scripts/ci/check_beta_capacity_evidence.py`, legacy/regression scenarios in `scripts/stress_runner.py`, claim guard in `scripts/ci/check_capacity_claims.py` | Must run and check in Gate A/B evidence before beta expansion; must run and check in three passing Gate E reports before any 500-agent claim. |
 
 ## Cross-Cutting Tests
 
@@ -70,8 +70,16 @@ Status meanings:
 
 ## Remaining No-Go Blockers
 
-These are the items that still block a broad production or 500-agent claim:
+These are the items that still block measured beta release or expansion:
 
 1. Complete crash-after-apply-before-ack idempotency tests for every mutation boundary.
-2. Run and check in Phase 3 evidence, including three successful Gate E reports.
+2. Run and check in Gate A and Gate B loadgen evidence before beta expansion.
 3. Complete human signoff for the state ownership ADR.
+4. Complete the operator walkthrough without raw-log dependency.
+
+These are the additional items that still block a broad production or
+500-agent claim:
+
+1. Run and check in Phase 3 Gate C/D evidence before larger cohorts.
+2. Run and check in three successful latest consecutive Gate E reports before
+   any public 500-agent claim.

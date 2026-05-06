@@ -174,6 +174,13 @@ def _record_organization_state_feed_event_once(
             organization_id=organization_id,
             defaults={"next_sequence": 1},
         )
+        duplicate = OrganizationStateFeedEvent.objects.filter(
+            organization_id=organization_id,
+            event_id=event_id_value,
+        ).first()
+        if duplicate is not None:
+            return dict(duplicate.message), False
+
         state_version = int(sequence.next_sequence)
         sequence.next_sequence = state_version + 1
         sequence.save(update_fields=["next_sequence", "updated_at"])

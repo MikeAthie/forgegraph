@@ -3,6 +3,10 @@
 This gate is the stabilization path for the Phase 1-7 production-readiness
 work. It is intentionally about evidence, not new product scope.
 
+For measured beta release decisions, use
+`docs/ops/beta-launch-verification-plan.md` as the orchestration layer over this
+gate. This document remains the canonical local production evidence command.
+
 ## Canonical Local Command
 
 Run the full local evidence gate from the repo root:
@@ -61,6 +65,19 @@ Do not push release candidates when this sequence is red locally unless the
 failure has a documented environment-only cause and CI is expected to be more
 representative.
 
+## Beta Gate Profiles
+
+The beta launch plan separates the same evidence into decision points:
+
+| Profile | Command | Blocking scope |
+| --- | --- | --- |
+| PR blocking | `bash scripts/ci/run_beta_pr_gate.sh` | Fast governance, idempotency guardrails, runtime ownership guardrails, changed-scope backend/engine/frontend checks, live no-mock guard, and loadgen dry-run smoke. |
+| Nightly/pre-release blocking | `bash scripts/ci/run_beta_nightly_gate.sh` | Full required checks, live Playwright, runtime transport chaos, load smoke, and Docker smoke. |
+| Beta release decision | `bash scripts/ci/run_beta_release_gate.sh` | Local production evidence, Gate A/B loadgen evidence, evidence package validation, Docker image smoke, and manual operator walkthrough. |
+
+The beta gate scripts are orchestration only. They must not weaken the runtime
+contract in `docs/architecture/runtime-invariants.md`.
+
 ## Review Slices
 
 Keep review and merge discussion split by behavior:
@@ -90,11 +107,13 @@ hard to start is itself a production risk.
 
 Use the capacity tiers in `docs/ops/scalability-program.md`.
 
-- Private beta proof: Phase 3 Gate A and Gate B reports.
+- Private beta proof: Phase 3 Gate A and Gate B reports produced by
+  `tools/loadgen` and validated by `scripts/ci/check_beta_capacity_evidence.py`.
 - Production v1 proof: Phase 3 Gate C report through backend, engine, Redis, Postgres, projections, and WebSocket.
 - Production scale proof: three consecutive passing Phase 3 Gate E reports with failure injection, reconnect storm, duplicate-event storm, HITL, memory, accounting, and multi-tenant coverage.
 
-The CI load smoke is regression evidence only. It is not a marketing claim.
+The CI load smoke is regression evidence only. It is not a capacity claim or a
+marketing claim.
 
 ## Claim Gate
 

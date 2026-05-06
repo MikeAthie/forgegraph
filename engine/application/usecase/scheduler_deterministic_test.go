@@ -622,6 +622,7 @@ func TestSchedulerDeterministicRetryFailure(t *testing.T) {
 		t.Fatalf("expected one executed attempt after first release, got %d", retryExec.getExecuteCount())
 	}
 
+	engine.AwaitClockWaiters(1)
 	engine.Advance(9 * time.Millisecond)
 	if engine.Stepper.AttemptCount(runID, "retry") != 1 {
 		t.Fatalf("retry attempt advanced before backoff elapsed")
@@ -634,6 +635,7 @@ func TestSchedulerDeterministicRetryFailure(t *testing.T) {
 		return countEvents(events, port.EventTypeNodeRetrying) == 2
 	})
 
+	engine.AwaitClockWaiters(1)
 	engine.Advance(10 * time.Millisecond)
 	engine.AwaitBlockedAttempt(runID, "retry", 3)
 	engine.Release(runID, "retry")

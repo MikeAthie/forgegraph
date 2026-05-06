@@ -14,6 +14,7 @@ REQUIRED_FILES = [
     "docs/architecture/launch-claims.md",
     "docs/launch/claims-policy.md",
     "docs/ops/remediation-roadmap-coverage.md",
+    "docs/ops/beta-launch-verification-plan.md",
     "docs/ops/event-spool-growth-runbook.md",
     "docs/ops/runbooks/event_spool_growth.md",
     "docs/ops/runbooks/dead_letter_spike.md",
@@ -41,6 +42,11 @@ REQUIRED_FILES = [
     "docs/perf/500-agent-benchmark.md",
     "tools/loadgen/go.mod",
     "scripts/ci/run_loadgen_smoke.sh",
+    "scripts/ci/check_beta_capacity_evidence.py",
+    "scripts/ci/run_beta_capacity_gates.sh",
+    "scripts/ci/run_beta_pr_gate.sh",
+    "scripts/ci/run_beta_nightly_gate.sh",
+    "scripts/ci/run_beta_release_gate.sh",
 ]
 
 REQUIRED_TEXT = {
@@ -48,7 +54,23 @@ REQUIRED_TEXT = {
         "P1.3 canonical event envelope | Covered",
         "P2.4 formal run state machine | Covered",
         "Remaining No-Go Blockers",
-        "three successful Gate E reports",
+        "Gate A and Gate B loadgen evidence",
+        "three successful latest consecutive Gate E reports",
+    ],
+    "docs/ops/beta-launch-verification-plan.md": [
+        "The target is a measured beta",
+        "CI load smoke is regression evidence only",
+        "tools/loadgen",
+        "Gate A",
+        "Gate B",
+        "No public 500-agent claim",
+    ],
+    "docs/ops/production-evidence-gate.md": [
+        "Beta Gate Profiles",
+        "run_beta_pr_gate.sh",
+        "run_beta_nightly_gate.sh",
+        "run_beta_release_gate.sh",
+        "check_beta_capacity_evidence.py",
     ],
     "docs/ops/scalability-program.md": [
         "Gate E must pass three consecutive checked-in reports",
@@ -64,6 +86,15 @@ REQUIRED_TEXT = {
     "scripts/ci/run_required_checks.sh": [
         "run_governance_checks.sh",
         "check_run_state_machine.py",
+    ],
+    "scripts/ci/run_beta_capacity_gates.sh": [
+        "go run ./tools/loadgen",
+        "check_beta_capacity_evidence.py",
+    ],
+    "scripts/ci/run_beta_release_gate.sh": [
+        "run_local_production_evidence.sh",
+        "run_beta_capacity_gates.sh",
+        "run_docker_full_stack_smoke.sh",
     ],
     "scripts/ci/run_governance_checks.sh": [
         "check_architecture_signoff.py",
