@@ -4203,7 +4203,7 @@ class EngineRunEventsView(APIView):
                     reason="engine callback authentication failed",
                     safe_to_discard=False,
                 )
-            setattr(request, "_forgegraph_s2s_verified", True)
+            request._forgegraph_s2s_verified = True
 
         try:
             parsed_event = parse_engine_event_payload(

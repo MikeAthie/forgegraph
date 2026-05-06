@@ -148,7 +148,7 @@ class MemoryObservationService:
                     duplicate.duplicate_count += 1
                     duplicate.last_seen_at = now
                     duplicate.save(update_fields=["duplicate_count", "last_seen_at", "updated_at"])
-                    setattr(duplicate, "_domain_event_created", False)
+                    duplicate._domain_event_created = False
                     return duplicate
 
             if update_topic and normalized["topic_key"]:
@@ -180,7 +180,7 @@ class MemoryObservationService:
                         )
                     )
                     self._schedule_index_upsert(topic_match.id)
-                    setattr(topic_match, "_domain_event_created", False)
+                    topic_match._domain_event_created = False
                     return topic_match
 
             observation = cast(
@@ -207,7 +207,7 @@ class MemoryObservationService:
                 ),
             )
             self._schedule_index_upsert(observation.id)
-            setattr(observation, "_domain_event_created", True)
+            observation._domain_event_created = True
             return observation
 
     def update_observation(
