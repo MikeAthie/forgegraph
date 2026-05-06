@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { apiBaseUrl, createGraphName, createTestUser, loginLive, startRunViaApi } from "./live-helpers";
+import {
+  apiBaseUrl,
+  createGraphName,
+  createTestUser,
+  ensureUserRegistered,
+  getAccessToken,
+  startRunViaApi,
+} from "./live-helpers";
 
 const API_BASE_URL = apiBaseUrl();
 const RUN_COUNT = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_RUNS ?? "100");
@@ -30,18 +37,19 @@ async function mapWithConcurrency<T, R>(
 }
 
 test.describe("No-LLM load smoke live flow", () => {
-  test("completes 100 concurrent output-only runs without silent task loss", async ({ page, request }, testInfo) => {
+  test("completes queued output-only runs without silent task loss", async ({ request }, testInfo) => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
     const user = createTestUser(testInfo, "load-smoke-live");
-    const accessToken = await loginLive(page, request, user, "/overview");
+    await ensureUserRegistered(request, user);
+    const accessToken = await getAccessToken(request, user);
     const graphName = createGraphName("Load Smoke Live");
 
     const graphResponse = await request.post(`${API_BASE_URL}/api/graphs/`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       data: {
         name: graphName,
-        description: "Deterministic no-LLM concurrent load smoke graph.",
+        description: "Deterministic no-LLM queued load smoke graph.",
       },
     });
     expect(graphResponse.ok()).toBeTruthy();
@@ -70,7 +78,7 @@ test.describe("No-LLM load smoke live flow", () => {
           ],
           metadata: {
             name: graphName,
-            description: "Output-only load smoke; no LLM calls are expected.",
+            description: "Output-only queued load smoke; no LLM calls are expected.",
             engine_contract_version: "2",
           },
         },
