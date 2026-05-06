@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast
 from uuid import UUID
 
 from asgiref.sync import async_to_sync
@@ -148,7 +148,7 @@ class MemoryObservationService:
                     duplicate.duplicate_count += 1
                     duplicate.last_seen_at = now
                     duplicate.save(update_fields=["duplicate_count", "last_seen_at", "updated_at"])
-                    setattr(duplicate, "_domain_event_created", False)
+                    cast(Any, duplicate)._domain_event_created = False
                     return duplicate
 
             if update_topic and normalized["topic_key"]:
@@ -180,7 +180,7 @@ class MemoryObservationService:
                         )
                     )
                     self._schedule_index_upsert(topic_match.id)
-                    setattr(topic_match, "_domain_event_created", False)
+                    cast(Any, topic_match)._domain_event_created = False
                     return topic_match
 
             observation = cast(
@@ -207,7 +207,7 @@ class MemoryObservationService:
                 ),
             )
             self._schedule_index_upsert(observation.id)
-            setattr(observation, "_domain_event_created", True)
+            cast(Any, observation)._domain_event_created = True
             return observation
 
     def update_observation(
