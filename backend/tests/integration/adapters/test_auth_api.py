@@ -5,6 +5,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
+from rest_framework_simplejwt.tokens import AccessToken
 
 from infrastructure.orm.models import OrganizationMembership
 
@@ -35,6 +36,10 @@ THROTTLED_AUTH_REST_FRAMEWORK = {
         "auth_login": "2/min",
     },
 }
+
+
+def _json(response):
+    return getattr(response, "data", None) or response.json()
 
 
 def test_register_creates_user(api_client):
@@ -112,6 +117,19 @@ def test_me_returns_current_user_with_jwt(api_client, user):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.data["email"] == user.email
+
+
+def test_login_access_token_includes_default_organization_claims(api_client, user):
+    login_response = api_client.post(
+        "/api/auth/login",
+        {"email": user.email, "password": "testpassword123"},
+        format="json",
+    )
+
+    token = AccessToken(cast(Any, login_response.data["access"]))
+
+    assert token["default_organization_id"] == str(user.default_organization_id)
+    assert token["organization_role"] == "owner"
 
 
 def test_me_creates_default_organization_when_missing(api_client, user):
@@ -227,10 +245,39 @@ def test_ws_ticket_requires_authentication_and_returns_short_lived_ticket(api_cl
     response = api_client.post("/api/auth/ws-ticket", {}, format="json")
 
     assert response.status_code == status.HTTP_201_CREATED
-    assert response.data["ticket"]
-    assert response.data["expires_in_seconds"] == settings.AUTH_WS_TICKET_TTL_SECONDS
+    data = _json(response)
+    assert data["ticket"]
+    assert data["expires_in_seconds"] == settings.AUTH_WS_TICKET_TTL_SECONDS
 
-    assert response.data["org_id"] == str(user.default_organization_id)
+    assert data["org_id"] == str(user.default_organization_id)
+
+
+@override_settings(CACHES=LOC_MEM_CACHE)
+def test_ws_ticket_uses_token_claims_without_membership_lookup(api_client, user, monkeypatch):
+    login_response = api_client.post(
+        "/api/auth/login",
+        {"email": user.email, "password": "testpassword123"},
+        format="json",
+    )
+    access = login_response.data["access"]
+
+    def fail_membership_lookup(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("WS ticket claim fast path should not query membership")
+
+    monkeypatch.setattr(
+        "adapters.api.auth.views.get_default_membership",
+        fail_membership_lookup,
+    )
+    monkeypatch.setattr(
+        "adapters.api.auth.views.ensure_default_organization",
+        fail_membership_lookup,
+    )
+
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+    response = api_client.post("/api/auth/ws-ticket", {}, format="json")
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert _json(response)["org_id"] == str(user.default_organization_id)
 
 
 @override_settings(CACHES=LOC_MEM_CACHE)

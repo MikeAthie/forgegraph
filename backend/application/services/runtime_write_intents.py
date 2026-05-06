@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import UUID
 
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from redis import Redis
@@ -94,6 +95,8 @@ SUPPORTED_RUNTIME_INTENTS = {
     "tool_execution_ambiguous",
     "upsert_node_run",
 }
+
+_DEADLOCK_RETRY_ATTEMPTS = 3
 
 IntentProcessResult = Literal["processed", "duplicate", "invalid", "ignored"]
 _UNSET = object()
@@ -244,7 +247,7 @@ def process_runtime_intent_message(
 ) -> IntentProcessResult:
     intent = decode_runtime_intent_message(fields)
     try:
-        result = _apply_runtime_intent_message(
+        result = _apply_runtime_intent_message_with_deadlock_retry(
             intent=intent,
             stream_message_id=stream_message_id,
         )
@@ -265,6 +268,24 @@ def process_runtime_intent_message(
         reason=_runtime_intent_result_reason(result),
     )
     return result
+
+
+def _apply_runtime_intent_message_with_deadlock_retry(
+    *,
+    intent: RuntimeIntentEnvelope,
+    stream_message_id: str,
+) -> IntentProcessResult:
+    for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+        try:
+            return _apply_runtime_intent_message(
+                intent=intent,
+                stream_message_id=stream_message_id,
+            )
+        except OperationalError as exc:
+            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+    raise RuntimeError("unreachable runtime intent retry state")
 
 
 def _apply_runtime_intent_message(
@@ -1333,6 +1354,10 @@ def _record_runtime_intent_outcome(
             organization_id=run.organization_id if run else None,
             run_id=run.id if run else None,
         )
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()
 
 
 def _touch_run(run: Run, *, event_time: datetime) -> None:

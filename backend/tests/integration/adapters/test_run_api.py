@@ -2960,6 +2960,72 @@ class TestEngineRunEvents:
         assert run.status == "running"
         assert run.started_at == started_at
 
+    @override_settings(
+        ENGINE_CALLBACK_SECRET="test-secret",
+        REST_FRAMEWORK={
+            "DEFAULT_AUTHENTICATION_CLASSES": [
+                "adapters.api.authentication.RevocableJWTAuthentication",
+            ],
+            "DEFAULT_PERMISSION_CLASSES": [
+                "rest_framework.permissions.IsAuthenticated",
+            ],
+            "DEFAULT_THROTTLE_CLASSES": [
+                "rest_framework.throttling.AnonRateThrottle",
+            ],
+            "DEFAULT_THROTTLE_RATES": {"anon": "1/min"},
+        },
+    )
+    def test_engine_events_endpoint_is_not_throttled_for_signed_s2s_callbacks(
+        self,
+        signed_engine_event_post,
+        user,
+    ):
+        graph = Graph.objects.create(owner=user, name="Callback Throttle Graph")
+        version = GraphVersion.objects.create(
+            graph=graph, version=1, graph_json={"nodes": [], "edges": []}
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="pending")
+        tenant_id = str(user.default_organization_id)
+        timestamp_ms = int(time.time() * 1000)
+
+        payloads = [
+            {
+                "event_id": "evt-throttle-run-started",
+                "type": "run_started",
+                "run_id": str(run.id),
+                "tenant_id": tenant_id,
+                "timestamp": timestamp_ms,
+            },
+            {
+                "event_id": "evt-throttle-node-started",
+                "type": "node_started",
+                "run_id": str(run.id),
+                "tenant_id": tenant_id,
+                "node_id": "agent-1",
+                "node_type": "agent",
+                "timestamp": timestamp_ms + 1,
+            },
+            {
+                "event_id": "evt-throttle-node-stream",
+                "type": "node_stream_chunk",
+                "run_id": str(run.id),
+                "tenant_id": tenant_id,
+                "node_id": "agent-1",
+                "node_type": "agent",
+                "output": {"chunk": "partial"},
+                "timestamp": timestamp_ms + 2,
+            },
+        ]
+
+        for payload in payloads:
+            response = signed_engine_event_post(payload)
+            assert response.status_code == status.HTTP_200_OK
+
+        assert RunEvent.objects.filter(
+            run=run,
+            external_id__in=[str(payload["event_id"]) for payload in payloads],
+        ).count() == len(payloads)
+
     @override_settings(ENGINE_CALLBACK_SECRET="test-secret")
     def test_engine_events_first_callback_assigns_engine_and_normalizes_category(
         self, signed_engine_event_post, user

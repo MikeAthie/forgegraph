@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -13,14 +14,15 @@ type WorkloadPlan struct {
 }
 
 type TenantPlan struct {
-	Index          int    `json:"index"`
-	Email          string `json:"email"`
-	Password       string `json:"-"`
-	AccessToken    string `json:"-"`
-	OrganizationID string `json:"organization_id,omitempty"`
-	GraphVersionID string `json:"graph_version_id,omitempty"`
-	AgentCount     int    `json:"agent_count"`
-	RunCount       int    `json:"run_count"`
+	Index           int    `json:"index"`
+	Email           string `json:"email"`
+	Password        string `json:"-"`
+	AccessToken     string `json:"-"`
+	FromCredentials bool   `json:"-"`
+	OrganizationID  string `json:"organization_id,omitempty"`
+	GraphVersionID  string `json:"graph_version_id,omitempty"`
+	AgentCount      int    `json:"agent_count"`
+	RunCount        int    `json:"run_count"`
 }
 
 type AgentPlan struct {
@@ -56,6 +58,7 @@ func BuildWorkloadPlan(cfg Config, credentials []TenantCredential, startedAt tim
 			tenant.Email = credential.Email
 			tenant.Password = credential.Password
 			tenant.AccessToken = credential.AccessToken
+			tenant.FromCredentials = true
 			tenant.OrganizationID = credential.OrganizationID
 			tenant.GraphVersionID = credential.GraphVersionID
 		}
@@ -87,7 +90,14 @@ func BuildWorkloadPlan(cfg Config, credentials []TenantCredential, startedAt tim
 }
 
 func generatedTenantEmail(index int, domain string, startedAt time.Time) string {
-	return fmt.Sprintf("loadgen-%s-tenant-%03d@%s", startedAt.UTC().Format("20060102T150405"), index+1, domain)
+	return strings.ToLower(
+		fmt.Sprintf(
+			"loadgen-%s-tenant-%03d@%s",
+			startedAt.UTC().Format("20060102T150405"),
+			index+1,
+			domain,
+		),
+	)
 }
 
 func max(a, b int) int {

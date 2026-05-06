@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 
 from application.services.websocket_subscribers import (
     WS_SUBSCRIBERS_CACHE_KEY,
@@ -121,4 +124,29 @@ def test_websocket_subscriber_snapshot_tracks_fanout_and_slow_clients() -> None:
     assert snapshot["connections"][0]["last_seen_state_version"] == 7
 
     unregister_run_websocket_subscriber(connection_id="conn-a")
+    assert get_websocket_subscriber_snapshot()["active_connections"] == 0
+
+
+@override_settings(CACHES=LOC_MEM_CACHE, WS_SUBSCRIBER_STALE_AFTER_SECONDS=1)
+def test_websocket_subscriber_limits_prune_stale_connections() -> None:
+    stale_at = (timezone.now() - timedelta(seconds=5)).isoformat()
+    cache.set(
+        WS_SUBSCRIBERS_CACHE_KEY,
+        {
+            "stale": {
+                "connection_id": "stale",
+                "organization_id": "org-a",
+                "user_id": "user-a",
+                "last_seen_at": stale_at,
+            }
+        },
+    )
+
+    accepted, details = can_accept_run_websocket_subscriber(
+        organization_id="org-a",
+        user_id="user-a",
+    )
+
+    assert accepted is True
+    assert details["counts"] == {"organization": 0, "user": 0}
     assert get_websocket_subscriber_snapshot()["active_connections"] == 0

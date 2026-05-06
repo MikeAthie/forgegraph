@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json as pyjson
 import logging
+import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -17,7 +18,7 @@ from uuid import UUID, uuid4
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import IntegrityError, models, transaction
+from django.db import IntegrityError, OperationalError, models, transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
 from django.http import StreamingHttpResponse
 from django.utils import timezone
@@ -197,7 +198,6 @@ from infrastructure.orm.models import (
     RunCheckpoint,
     RunEvent,
     RunEventProjection,
-    TaskLifecycleRecord,
     TenantSubscription,
     User,
 )
@@ -205,6 +205,11 @@ from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
 _UNSET = object()
+_DEADLOCK_RETRY_ATTEMPTS = 3
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()
 
 
 def _lock_run_for_update(run_id: UUID) -> Run:
@@ -558,6 +563,24 @@ def _memory_intent_payload_from_event(event: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _log_payload_summary(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        keys = [str(key) for key in value.keys()]
+        return {
+            "type": "object",
+            "key_count": len(keys),
+            "keys": keys[:12],
+            "truncated": len(keys) > 12,
+        }
+    if isinstance(value, list):
+        return {"type": "array", "length": len(value)}
+    if isinstance(value, str):
+        return {"type": "string", "length": len(value)}
+    if value is None:
+        return {"type": "null"}
+    return {"type": type(value).__name__}
+
+
 def _trace_metadata_from_graph(graph_json: dict[str, Any]) -> dict[str, str]:
     metadata = graph_json.get("metadata")
     if not isinstance(metadata, dict):
@@ -610,6 +633,49 @@ def _queue_response_meta(*, run: Run, tenant_id: str) -> dict[str, Any]:
         "queue_worker_age_seconds": health.age_seconds,
         "queue_warning": None if health.active else "run_queue_worker_unavailable",
     }
+
+
+def _run_start_slow_log_threshold_ms() -> float:
+    return float(getattr(settings, "RUN_START_SLOW_LOG_MS", 250))
+
+
+def _log_run_start_timing(
+    *,
+    run: Run,
+    tenant_id: str,
+    queued: bool,
+    started_at: float,
+    marks: list[tuple[str, float]],
+) -> None:
+    elapsed_ms = (time.perf_counter() - started_at) * 1000
+    if elapsed_ms < _run_start_slow_log_threshold_ms():
+        return
+    previous = started_at
+    phases: list[dict[str, Any]] = []
+    for stage, mark in marks:
+        phases.append(
+            {
+                "stage": stage,
+                "elapsed_ms": round((mark - started_at) * 1000, 2),
+                "delta_ms": round((mark - previous) * 1000, 2),
+            }
+        )
+        previous = mark
+    log_event(
+        logger,
+        logging.INFO,
+        "run_start_timing",
+        run_id=str(run.id),
+        tenant_id=tenant_id,
+        duration_ms=round(elapsed_ms, 2),
+        status=run.status,
+        payload={
+            "queued": queued,
+            "phase_count": len(phases),
+            "phases": phases,
+        },
+        message="Slow run start timing",
+    )
 
 
 def _public_llm_access_payload(run: Run) -> dict[str, Any]:
@@ -2082,6 +2148,12 @@ class RunStartView(APIView):
 
     def post(self, request: Request) -> Response:
         """Start a new run."""
+        timing_started_at = time.perf_counter()
+        timing_marks: list[tuple[str, float]] = []
+
+        def mark(stage: str) -> None:
+            timing_marks.append((stage, time.perf_counter()))
+
         serializer = RunStartSerializer(data=request.data)
         if not serializer.is_valid():
             return error_response(
@@ -2134,6 +2206,7 @@ class RunStartView(APIView):
         active_guardrail_response = _active_run_guardrail_response(tenant_uuid=tenant_uuid)
         if active_guardrail_response is not None:
             return active_guardrail_response
+        mark("validated")
 
         try:
             graph_version = (
@@ -2154,6 +2227,7 @@ class RunStartView(APIView):
                 message=f"GraphVersion with id '{graph_version_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
             )
+        mark("graph_loaded")
         try:
             llm_access = resolve_llm_access_for_dispatch(llm_access, user)
         except LLMAccessValidationError as exc:
@@ -2170,6 +2244,7 @@ class RunStartView(APIView):
         budget_response = check_llm_budget(user)
         if budget_response is not None:
             return budget_response
+        mark("policy_checked")
 
         input_schema, _, _, _ = extract_schema_metadata(graph_version.graph_json)
         if input_schema:
@@ -2206,6 +2281,7 @@ class RunStartView(APIView):
         except (PromptTemplateResolutionError, SubgraphResolutionError, ValueError) as exc:
             return _run_preparation_error_response(exc)
         trace_metadata = _trace_metadata_from_graph(prepared_graph)
+        mark("graph_prepared")
 
         managed_limit_response = _managed_llm_limit_response(
             user=user,
@@ -2227,6 +2303,7 @@ class RunStartView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
                 details=credential_errors,
             )
+        mark("credentials_checked")
 
         run = Run.objects.create(
             owner=user,
@@ -2242,28 +2319,22 @@ class RunStartView(APIView):
             error_message="",
             trace_id=trace_metadata["trace_id"],
         )
-        initialize_lifecycle_tasks_for_run(run, source="run_start")
-        try:
-            outbound_graph = prepare_tool_executions_for_dispatch(
-                run=run,
-                graph_json=prepared_graph,
-            )
-            outbound_graph = _attach_operation_context_pack(run, outbound_graph)
-        except ToolExecutionDispatchBlocked as exc:
-            transition = apply_run_status_transition(run, "failed")
-            run.ended_at = timezone.now()
-            run.error_message = str(exc)
-            run.save(
-                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
-            )
-            mark_run_tasks_terminal(
-                run=run,
-                status_value="failed",
-                source="run_start",
-                reason=str(exc),
-            )
-            return _tool_execution_dispatch_error_response(exc)
-        broadcast_run_updated(run)
+        mark("run_created")
+        queue_enabled = bool(getattr(settings, "RUN_QUEUE_ENABLED", False))
+        initialize_lifecycle_tasks_for_run(
+            run,
+            source="run_start",
+            initial_status="queued" if queue_enabled else "created",
+            reason=(
+                "run queued for backend-owned dispatch"
+                if queue_enabled
+                else "task initialized from graph"
+            ),
+        )
+        mark("lifecycle_initialized")
+        if not queue_enabled:
+            broadcast_run_updated(run)
+            mark("run_broadcast")
         record_audit_log(
             actor=user,
             tenant_id=get_tenant_id_for_user(user),
@@ -2276,23 +2347,15 @@ class RunStartView(APIView):
                 trigger="start",
             ),
         )
+        mark("audit_recorded")
 
         # Track memory session for cross-run buffers.
         upsert_memory_session(user, session_id)
+        mark("memory_session")
 
-        if getattr(settings, "RUN_QUEUE_ENABLED", False):
+        if queue_enabled:
             queue_entry = enqueue_run(run, tenant_id=tenant_id)
-            for lifecycle_task in TaskLifecycleRecord.objects.filter(run=run):
-                transition_task_lifecycle(
-                    run=run,
-                    node_id=lifecycle_task.source_node_id,
-                    node_type=lifecycle_task.node_type,
-                    to_status="queued",
-                    attempt_number=lifecycle_task.current_attempt,
-                    source="run_queue",
-                    idempotency_key=f"task:{run.id}:{lifecycle_task.source_node_id}:queued:{queue_entry.id}",
-                    reason="run queued for backend-owned dispatch",
-                )
+            mark("run_enqueued")
             run_data = {
                 "id": run.id,
                 "owner_id": run.owner_id,
@@ -2317,17 +2380,49 @@ class RunStartView(APIView):
                 "node_runs": [],
             }
             serialized_data = RunDetailWithNodeRunsSerializer(run_data).data
+            mark("serialized")
             response = success_response(
                 serialized_data,
                 status=status.HTTP_201_CREATED,
                 meta=_queue_response_meta(run=run, tenant_id=tenant_id),
             )
-            return record_processed_command(
+            mark("response_built")
+            response = record_processed_command(
                 context=command_context,
                 response=response,
                 resource_type="run",
                 resource_id=str(run.id),
             )
+            mark("processed_command_recorded")
+            _log_run_start_timing(
+                run=run,
+                tenant_id=tenant_id,
+                queued=True,
+                started_at=timing_started_at,
+                marks=timing_marks,
+            )
+            return response
+
+        try:
+            outbound_graph = prepare_tool_executions_for_dispatch(
+                run=run,
+                graph_json=prepared_graph,
+            )
+            outbound_graph = _attach_operation_context_pack(run, outbound_graph)
+        except ToolExecutionDispatchBlocked as exc:
+            transition = apply_run_status_transition(run, "failed")
+            run.ended_at = timezone.now()
+            run.error_message = str(exc)
+            run.save(
+                update_fields=sorted(set(transition.update_fields + ["ended_at", "error_message"]))
+            )
+            mark_run_tasks_terminal(
+                run=run,
+                status_value="failed",
+                source="run_start",
+                reason=str(exc),
+            )
+            return _tool_execution_dispatch_error_response(exc)
 
         # Send run to the engine
         callback_url = resolve_engine_callback_url(run_id=str(run.id))
@@ -4062,33 +4157,53 @@ class EngineRunEventsView(APIView):
     """
 
     permission_classes = [AllowAny]
+    throttle_classes: list[type] = []
 
     def post(self, request: Request) -> Response:
-        timestamp_header = request.headers.get("X-Forgegraph-Timestamp", "")
-        signature_header = request.headers.get("X-Forgegraph-Signature", "")
-        ok, reason = s2s.verify_request_once(
-            timestamp_ms=timestamp_header,
-            signature=signature_header,
-            body=request.body or b"",
-            method=request.method or "",
-            path=request.path,
-        )
-        if not ok:
-            record_callback_auth_failure(reason)
-            _record_engine_callback_dead_letter(
-                event={"path": request.path, "body_size": len(request.body or b"")},
-                reason="engine callback authentication failed",
-                error_class="engine_callback_auth_failed",
+        for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+            try:
+                return self._post_once(
+                    request,
+                    verify_signature=not bool(getattr(request, "_forgegraph_s2s_verified", False)),
+                )
+            except OperationalError as exc:
+                if (
+                    not _is_deadlock(exc)
+                    or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1
+                    or not bool(getattr(request, "_forgegraph_s2s_verified", False))
+                ):
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+        raise RuntimeError("unreachable engine callback retry state")
+
+    def _post_once(self, request: Request, *, verify_signature: bool) -> Response:
+        if verify_signature:
+            timestamp_header = request.headers.get("X-Forgegraph-Timestamp", "")
+            signature_header = request.headers.get("X-Forgegraph-Signature", "")
+            ok, reason = s2s.verify_request_once(
+                timestamp_ms=timestamp_header,
+                signature=signature_header,
+                body=request.body or b"",
+                method=request.method or "",
+                path=request.path,
             )
-            return _engine_callback_problem(
-                type_uri="https://forgegraph.dev/problems/engine-callback-unauthorized",
-                title="Unauthorized",
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Engine callback verification failed: {reason}",
-                decision="reject_invalid",
-                reason="engine callback authentication failed",
-                safe_to_discard=False,
-            )
+            if not ok:
+                record_callback_auth_failure(reason)
+                _record_engine_callback_dead_letter(
+                    event={"path": request.path, "body_size": len(request.body or b"")},
+                    reason="engine callback authentication failed",
+                    error_class="engine_callback_auth_failed",
+                )
+                return _engine_callback_problem(
+                    type_uri="https://forgegraph.dev/problems/engine-callback-unauthorized",
+                    title="Unauthorized",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Engine callback verification failed: {reason}",
+                    decision="reject_invalid",
+                    reason="engine callback authentication failed",
+                    safe_to_discard=False,
+                )
+            setattr(request, "_forgegraph_s2s_verified", True)
 
         try:
             parsed_event = parse_engine_event_payload(
@@ -4612,6 +4727,19 @@ class EngineRunEventsView(APIView):
             "run_resumed",
             "run_canceled",
         }:
+            if event_type == "run_started" and run.status != "pending":
+                return _callback_success(
+                    {
+                        "received": True,
+                        "duplicate": True,
+                        "current_status": run.status,
+                    },
+                    decision="duplicate",
+                    reason="run_started was already superseded by backend state",
+                    backend_event_id=str(event_id or ""),
+                    safe_to_discard=True,
+                    idempotency_status="already_applied",
+                )
             try:
                 assert_runtime_state_mutation_allowed(
                     event_type,
@@ -4663,6 +4791,44 @@ class EngineRunEventsView(APIView):
             with transaction.atomic():
                 run = _lock_run_for_update(run.id)
                 previous_status = run.status
+                if event_type == "run_started" and previous_status != "pending":
+                    return _callback_success(
+                        {
+                            "received": True,
+                            "duplicate": True,
+                            "current_status": previous_status,
+                        },
+                        decision="duplicate",
+                        reason="run_started was already superseded by backend state",
+                        backend_event_id=str(event_id or ""),
+                        safe_to_discard=True,
+                        idempotency_status="already_applied",
+                    )
+                try:
+                    _validate_run_event_transition(
+                        current_status=previous_status,
+                        event_type=event_type,
+                    )
+                except ValueError as exc:
+                    _record_engine_callback_dead_letter(
+                        event=event,
+                        run=run,
+                        reason="run state ordering conflict",
+                        error_class="run_state_ordering_conflict",
+                        event_id=str(event_id or ""),
+                        event_type=str(event_type or ""),
+                    )
+                    return _engine_callback_problem(
+                        type_uri="https://forgegraph.dev/problems/invalid-run-transition",
+                        title="Invalid run transition",
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=str(exc),
+                        decision="retry_required",
+                        reason="run state ordering conflict",
+                        backend_event_id=str(event_id or ""),
+                        safe_to_discard=False,
+                        conflict_code="409_ORDERING_CONFLICT",
+                    )
                 previous_paused_node_id = run.paused_node_id
                 previous_pause_state = (
                     dict(run.pause_state_json) if isinstance(run.pause_state_json, dict) else {}
@@ -5006,7 +5172,7 @@ class EngineRunEventsView(APIView):
                     attempt=attempt,
                     attempt_id=attempt_id,
                     engine_instance_id=callback_engine_instance_id,
-                    payload=node_payload["input_json"],
+                    payload=_log_payload_summary(node_payload["input_json"]),
                     message="Engine node input received",
                 )
                 node_payload["status"] = "running"
@@ -5028,7 +5194,7 @@ class EngineRunEventsView(APIView):
                     attempt=attempt,
                     attempt_id=attempt_id,
                     engine_instance_id=callback_engine_instance_id,
-                    payload=node_payload["output_json"],
+                    payload=_log_payload_summary(node_payload["output_json"]),
                     message="Engine node output received",
                 )
             elif event_type == "node_failed":
@@ -5058,7 +5224,7 @@ class EngineRunEventsView(APIView):
                     attempt=attempt,
                     attempt_id=attempt_id,
                     engine_instance_id=callback_engine_instance_id,
-                    payload=node_payload["error_json"],
+                    payload=_log_payload_summary(node_payload["error_json"]),
                     message="Engine node failure output received",
                 )
             elif event_type == "node_skipped":

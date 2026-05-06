@@ -76,6 +76,18 @@ func TestEmitAsyncSpoolsWhenBufferFull(t *testing.T) {
 	}
 }
 
+func TestEventShardIndexPreservesRunAffinity(t *testing.T) {
+	const shards = 8
+	first := shardIndex("run-a", shards)
+	second := shardIndex("run-a", shards)
+	if first != second {
+		t.Fatalf("same run routed to different shards: %d != %d", first, second)
+	}
+	if first < 0 || first >= shards {
+		t.Fatalf("shard index = %d, want within [0,%d)", first, shards)
+	}
+}
+
 func TestEmitAsyncAfterCloseSpoolsInsteadOfDropping(t *testing.T) {
 	spoolPath := filepath.Join(t.TempDir(), "events.jsonl")
 	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{

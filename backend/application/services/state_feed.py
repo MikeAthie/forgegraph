@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
 from django.conf import settings
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.db.models import Max, Q
 
 from application.services.run_event_streaming import (
@@ -25,6 +26,9 @@ class StateFeedReplay:
     reason: str = ""
 
 
+_DEADLOCK_RETRY_ATTEMPTS = 3
+
+
 def record_state_feed_event(
     *,
     run: Run,
@@ -37,6 +41,28 @@ def record_state_feed_event(
     if public_message is None:
         raise ValueError("Cannot persist an invalid state-feed message.")
 
+    for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+        try:
+            return _record_state_feed_event_once(
+                run=run,
+                message=message,
+                public_message=public_message,
+                requires_refetch=requires_refetch,
+            )
+        except OperationalError as exc:
+            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+    raise RuntimeError("unreachable state-feed retry state")
+
+
+def _record_state_feed_event_once(
+    *,
+    run: Run,
+    message: dict[str, Any],
+    public_message: dict[str, Any],
+    requires_refetch: bool,
+) -> dict[str, Any]:
     with transaction.atomic():
         locked_run = (
             Run.objects.select_for_update(of=("self",))
@@ -209,3 +235,7 @@ def _replay_limit(value: int | None) -> int:
         return max(int(configured), 1)
     except (TypeError, ValueError):
         return 200
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()

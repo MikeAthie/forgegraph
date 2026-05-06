@@ -173,7 +173,7 @@ func NewReport(cfg Config, command []string, startedAt, completedAt time.Time, m
 		ClaimStatus:   claimStatus,
 		StartedAt:     startedAt,
 		CompletedAt:   completedAt,
-		Command:       strings.Join(command, " "),
+		Command:       sanitizeCommand(command),
 		Target: map[string]any{
 			"tenants":          cfg.Tenants,
 			"agents":           cfg.Agents,
@@ -197,6 +197,42 @@ func NewReport(cfg Config, command []string, startedAt, completedAt time.Time, m
 		BlockingReasons: reasons,
 		Artifacts:       artifacts,
 	}
+}
+
+func sanitizeCommand(command []string) string {
+	if len(command) == 0 {
+		return ""
+	}
+	redacted := make([]string, 0, len(command))
+	sensitiveFlags := map[string]bool{
+		"--engine-callback-secret": true,
+		"--password":               true,
+	}
+	for i := 0; i < len(command); i++ {
+		part := command[i]
+		if sensitiveFlags[part] {
+			redacted = append(redacted, part)
+			if i+1 < len(command) {
+				redacted = append(redacted, "[REDACTED]")
+				i++
+			}
+			continue
+		}
+		replaced := false
+		for flag := range sensitiveFlags {
+			prefix := flag + "="
+			if strings.HasPrefix(part, prefix) {
+				redacted = append(redacted, prefix+"[REDACTED]")
+				replaced = true
+				break
+			}
+		}
+		if replaced {
+			continue
+		}
+		redacted = append(redacted, part)
+	}
+	return strings.Join(redacted, " ")
 }
 
 func WriteReports(report LoadgenReport, cfg Config) (LoadgenReport, error) {

@@ -177,3 +177,71 @@ def test_process_run_queue_completes_stale_entry_for_terminal_run(monkeypatch, u
     assert run.status == "succeeded"
     assert entry.status == "completed"
     assert entry.locked_by == ""
+
+
+@pytest.mark.django_db
+def test_process_run_queue_does_not_regress_terminal_run_after_engine_accept(monkeypatch, user):
+    graph = Graph.objects.create(owner=user, name="Fast Terminal Queued Graph")
+    version = GraphVersion.objects.create(
+        graph=graph,
+        version=1,
+        graph_json={
+            "nodes": [{"id": "source", "type": "transform", "name": "Source"}],
+            "edges": [],
+        },
+    )
+    run = Run.objects.create(
+        owner=user,
+        graph_version=version,
+        status="pending",
+        input_json={"hello": "queue"},
+        dispatch_graph_json={
+            "nodes": [{"id": "agent_1", "type": "agent", "name": "Agent"}],
+            "edges": [],
+        },
+    )
+    entry = enqueue_run(run, tenant_id=str(user.default_organization_id))
+
+    class _CompletingEngineClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def start_run(self, **kwargs):
+            Run.objects.filter(id=kwargs["run_id"]).update(status="succeeded")
+
+    monkeypatch.setattr(
+        process_run_queue,
+        "validate_prompt_credentials",
+        lambda graph, owner, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        process_run_queue, "resolve_engine_callback_url", lambda run_id: "http://callback"
+    )
+    monkeypatch.setattr(
+        process_run_queue,
+        "select_engine_target",
+        lambda run_id: SimpleNamespace(host="localhost", port=50051, engine_id="engine-1"),
+    )
+    monkeypatch.setattr(
+        process_run_queue, "get_engine_client", lambda *args, **kwargs: _CompletingEngineClient()
+    )
+    monkeypatch.setattr(process_run_queue, "broadcast_run_updated", lambda run: None)
+    monkeypatch.setattr(process_run_queue, "record_run_started", lambda: None)
+
+    Command()._process_entry(
+        entry,
+        RunQueueSettings(
+            max_per_tenant=1,
+            lock_timeout_seconds=300,
+            retry_delay_seconds=30,
+        ),
+    )
+
+    run.refresh_from_db()
+    entry.refresh_from_db()
+
+    assert run.status == "succeeded"
+    assert entry.status == "completed"

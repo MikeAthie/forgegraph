@@ -252,6 +252,15 @@ func (g *LLMGateway) Generate(ctx context.Context, req LLMRequest) (LLMResponse,
 
 	if err := g.circuit.beforeRequest(time.Now()); err != nil {
 		normalized := normalizeProviderError(err, ctx, provider)
+		if g.fallback != nil {
+			fallbackCtx := ctx
+			cancel := func() {}
+			if g.cfg.RequestTimeout > 0 {
+				fallbackCtx, cancel = context.WithTimeout(ctx, g.cfg.RequestTimeout)
+			}
+			defer cancel()
+			return g.attemptFallback(fallbackCtx, req, provider, normalized, start, queueWait)
+		}
 		response := failedLLMResponse(provider, time.Since(start), normalized)
 		response = g.finalizeCall(req, response, queueWait)
 		return response, normalized
@@ -294,42 +303,53 @@ func (g *LLMGateway) Generate(ctx context.Context, req LLMRequest) (LLMResponse,
 	g.circuit.recordFailure(time.Now())
 
 	if g.fallback != nil {
-		g.metrics.fallbackCount.Add(1)
-		fallbackResponse, fallbackErr := g.fallback.Generate(callCtx, req)
-		fallbackProvider := providerName(g.fallback, "fallback")
-		if fallbackErr == nil && fallbackResponse.Status != LLMStatusFailed {
-			fallbackResponse.Status = LLMStatusSuccess
-			fallbackResponse.FallbackUsed = true
-			if fallbackResponse.Provider == "" {
-				fallbackResponse.Provider = fallbackProvider
-			}
-			fallbackResponse.LatencyMS = int64(time.Since(start) / time.Millisecond)
-			metrics.RecordLLMFallback(fallbackProvider, LLMStatusSuccess)
-			fallbackResponse = g.finalizeCall(req, fallbackResponse, queueWait)
-			return fallbackResponse, nil
-		}
-
-		metrics.RecordLLMFallback(fallbackProvider, LLMStatusFailed)
-		normalizedFallback := normalizeProviderError(fallbackErr, callCtx, fallbackProvider)
-		if fallbackResponse.ErrorType != "" {
-			normalizedFallback.Type = fallbackResponse.ErrorType
-		}
-		normalizedFallback.Details = mergeLLMDetails(
-			normalizedFallback.Details,
-			map[string]any{
-				"primary_provider":   provider,
-				"primary_error_type": normalizedPrimary.Type,
-			},
-		)
-		response := failedLLMResponse(fallbackProvider, time.Since(start), normalizedFallback)
-		response.FallbackUsed = true
-		response = g.finalizeCall(req, response, queueWait)
-		return response, normalizedFallback
+		return g.attemptFallback(callCtx, req, provider, normalizedPrimary, start, queueWait)
 	}
 
 	failed := failedLLMResponse(provider, time.Since(start), normalizedPrimary)
 	failed = g.finalizeCall(req, failed, queueWait)
 	return failed, normalizedPrimary
+}
+
+func (g *LLMGateway) attemptFallback(
+	callCtx context.Context,
+	req LLMRequest,
+	provider string,
+	normalizedPrimary *LLMError,
+	start time.Time,
+	queueWait time.Duration,
+) (LLMResponse, error) {
+	g.metrics.fallbackCount.Add(1)
+	fallbackResponse, fallbackErr := g.fallback.Generate(callCtx, req)
+	fallbackProvider := providerName(g.fallback, "fallback")
+	if fallbackErr == nil && fallbackResponse.Status != LLMStatusFailed {
+		fallbackResponse.Status = LLMStatusSuccess
+		fallbackResponse.FallbackUsed = true
+		if fallbackResponse.Provider == "" {
+			fallbackResponse.Provider = fallbackProvider
+		}
+		fallbackResponse.LatencyMS = int64(time.Since(start) / time.Millisecond)
+		metrics.RecordLLMFallback(fallbackProvider, LLMStatusSuccess)
+		fallbackResponse = g.finalizeCall(req, fallbackResponse, queueWait)
+		return fallbackResponse, nil
+	}
+
+	metrics.RecordLLMFallback(fallbackProvider, LLMStatusFailed)
+	normalizedFallback := normalizeProviderError(fallbackErr, callCtx, fallbackProvider)
+	if fallbackResponse.ErrorType != "" {
+		normalizedFallback.Type = fallbackResponse.ErrorType
+	}
+	normalizedFallback.Details = mergeLLMDetails(
+		normalizedFallback.Details,
+		map[string]any{
+			"primary_provider":   provider,
+			"primary_error_type": normalizedPrimary.Type,
+		},
+	)
+	response := failedLLMResponse(fallbackProvider, time.Since(start), normalizedFallback)
+	response.FallbackUsed = true
+	response = g.finalizeCall(req, response, queueWait)
+	return response, normalizedFallback
 }
 
 func validateGatewayRequest(req LLMRequest, provider string) *LLMError {

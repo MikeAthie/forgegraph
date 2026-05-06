@@ -132,24 +132,22 @@ def _signed_callback_test(
         "org_id": tenant_id,
         "run_id": run_id,
         "agent_id": None,
-        "task_id": "release-smoke-observability",
+        "task_id": None,
         "source": "engine",
-        "type": "node.stream_chunk",
+        "type": "run_started",
+        "category": "state",
         "sequence": 1,
         "causation_id": None,
         "correlation_id": run_id,
         "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "schema_version": 2,
         "payload": {
-            "category": "observability",
-            "node_id": "release-smoke-observability",
-            "node_type": "output",
-            "attempt": 1,
-            "output": {"chunk": "release smoke callback", "chunk_index": 0},
+            "category": "state",
+            "status": "running",
         },
     }
     if engine_instance_id:
-        payload["payload"]["engine_instance_id"] = engine_instance_id  # type: ignore[index]
+        payload["engine_instance_id"] = engine_instance_id
     payload["checksum"] = _canonical_event_checksum(payload)
     status_code, body = _post_signed_callback(
         opener,

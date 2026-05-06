@@ -205,6 +205,41 @@ func TestLLMGatewayUsesFallbackOnceAfterPrimaryFailure(t *testing.T) {
 	}
 }
 
+func TestLLMGatewayUsesFallbackWhenCircuitIsOpen(t *testing.T) {
+	primary := &gatewayTestProvider{name: "local", err: context.DeadlineExceeded}
+	fallback := NewMockFallbackLLMClient("fallback response")
+	cfg := testGatewayConfig()
+	cfg.CircuitFailureRateThreshold = 0.5
+	cfg.CircuitMinRequests = 2
+	cfg.CircuitWindowSize = 2
+	cfg.CircuitCooldown = time.Second
+	gw := NewLLMGateway(primary, fallback, cfg)
+
+	for i := 0; i < 2; i++ {
+		response, err := gw.Generate(context.Background(), LLMRequest{Prompt: "fail", Model: "m"})
+		if err != nil {
+			t.Fatalf("Generate() error = %v", err)
+		}
+		if !response.FallbackUsed {
+			t.Fatalf("fallback_used = false on warmup call %d", i+1)
+		}
+	}
+	if snapshot := gw.MetricsSnapshot(); !snapshot.CircuitOpen {
+		t.Fatalf("expected circuit open, got %#v", snapshot)
+	}
+
+	response, err := gw.Generate(context.Background(), LLMRequest{Prompt: "circuit open", Model: "m"})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if !response.FallbackUsed || response.Provider != "fallback" {
+		t.Fatalf("expected fallback response while circuit open, got %#v", response)
+	}
+	if primary.callCount != 2 {
+		t.Fatalf("primary calls = %d, want 2", primary.callCount)
+	}
+}
+
 func TestLLMGatewayRejectsWhenQueueIsFull(t *testing.T) {
 	primary := &gatewayTestProvider{
 		name:    "local",

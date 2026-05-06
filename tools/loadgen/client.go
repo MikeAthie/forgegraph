@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -108,10 +109,12 @@ func (client *APIClient) EnsureTenant(ctx context.Context, tenant *TenantPlan) e
 		if tenant.Password == "" {
 			return fmt.Errorf("tenant %s is missing password and access token", tenant.Email)
 		}
-		registerPayload := map[string]any{"email": tenant.Email, "password": tenant.Password}
-		if result, err := client.doJSON(ctx, http.MethodPost, "/api/auth/register", "", "", registerPayload); err == nil {
-			if tenant.OrganizationID == "" {
-				tenant.OrganizationID = firstString(result.Body, "default_organization_id", "organization_id", "org_id")
+		if !tenant.FromCredentials {
+			registerPayload := map[string]any{"email": tenant.Email, "password": tenant.Password}
+			if result, err := client.doJSON(ctx, http.MethodPost, "/api/auth/register", "", "", registerPayload); err == nil {
+				if tenant.OrganizationID == "" {
+					tenant.OrganizationID = firstString(result.Body, "default_organization_id", "organization_id", "org_id")
+				}
 			}
 		}
 		loginPayload := map[string]any{"email": tenant.Email, "password": tenant.Password}
@@ -174,7 +177,19 @@ func (client *APIClient) CreateGraphVersion(ctx context.Context, token string) (
 	}
 	graphJSON := map[string]any{
 		"nodes": []map[string]any{
-			{"id": "agent-1", "type": "agent", "name": "Capacity Agent", "config": map[string]any{}},
+			{
+				"id":   "agent-1",
+				"type": "agent",
+				"name": "Capacity Agent",
+				"config": map[string]any{
+					"provider":       "openai",
+					"model":          "gpt-4.1-mini",
+					"tools":          []any{"loadgen_noop"},
+					"max_steps":      1,
+					"max_tool_calls": 1,
+					"system_prompt":  `Return only {"action":"final_answer","final_answer":"Loadgen agent completed."}.`,
+				},
+			},
 			{"id": "output-1", "type": "output", "name": "Output", "config": map[string]any{}},
 		},
 		"edges": []map[string]any{
@@ -216,16 +231,16 @@ func (client *APIClient) StartRun(ctx context.Context, tenant TenantPlan, run Ru
 }
 
 func (client *APIClient) CreateMemoryObservation(ctx context.Context, tenant TenantPlan, runID string, index int) (float64, error) {
-	result, err := client.doJSON(ctx, http.MethodPost, "/api/memory/observations", tenant.AccessToken, fmt.Sprintf("loadgen:memory:%s:%d", runID, index), map[string]any{
+	payload := map[string]any{
 		"idempotency_key": fmt.Sprintf("loadgen:memory:%s:%d", runID, index),
 		"type":            "fact",
 		"title":           "Loadgen capacity observation",
 		"content":         fmt.Sprintf("Loadgen fact for run %s attempt %d", runID, index),
 		"scope":           "run",
 		"run_id":          runID,
-		"agent_id":        "agent-1",
 		"dedupe":          true,
-	})
+	}
+	result, err := client.doJSON(ctx, http.MethodPost, "/api/memory/observations", tenant.AccessToken, fmt.Sprintf("loadgen:memory:%s:%d", runID, index), payload)
 	return result.DurationMS, err
 }
 
@@ -258,33 +273,46 @@ func (client *APIClient) PauseRunForHITL(ctx context.Context, tenant TenantPlan,
 }
 
 func (client *APIClient) PostEngineNodeCompleted(ctx context.Context, cfg Config, tenant TenantPlan, runID string, eventID string) (float64, error) {
-	timestamp := engineEventTimestamp(time.Now().UTC())
+	requestTimestamp := engineEventTimestamp(time.Now().UTC())
+	occurredAt := deterministicEventTime(eventID).Format(time.RFC3339Nano)
 	payload := map[string]any{
-		"type":            "node_completed",
+		"node_id":     "agent-1",
+		"node_type":   "agent",
+		"node_name":   "Capacity Agent",
+		"attempt":     1,
+		"attempt_id":  eventID + ":attempt",
+		"duration_ms": 25,
+		"output": map[string]any{
+			"final_output":      "loadgen accounting sample",
+			"stop_reason":       "stop",
+			"provider":          "openai",
+			"model":             "loadgen-simulated",
+			"usage":             map[string]any{"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
+			"loadgen_generated": true,
+		},
+	}
+	envelope := map[string]any{
+		"schema_version":  2,
+		"source":          "engine",
+		"type":            "node.completed",
 		"event_id":        eventID,
 		"idempotency_key": eventID,
 		"run_id":          runID,
 		"tenant_id":       tenant.OrganizationID,
 		"org_id":          tenant.OrganizationID,
-		"node_id":         "agent-1",
-		"node_type":       "agent",
-		"node_name":       "Capacity Agent",
-		"attempt":         1,
-		"attempt_id":      eventID + ":attempt",
-		"timestamp":       timestamp,
-		"duration_ms":     25,
-		"output": map[string]any{
-			"output": map[string]any{
-				"final_output":      "loadgen accounting sample",
-				"stop_reason":       "stop",
-				"provider":          "openai",
-				"model":             "loadgen-simulated",
-				"usage":             map[string]any{"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
-				"loadgen_generated": true,
-			},
-		},
+		"agent_id":        "agent-1",
+		"task_id":         "agent-1",
+		"sequence":        1,
+		"correlation_id":  eventID,
+		"occurred_at":     occurredAt,
+		"payload":         payload,
 	}
-	body, err := json.Marshal(payload)
+	checksum, err := canonicalEventChecksum(envelope)
+	if err != nil {
+		return 0, err
+	}
+	envelope["checksum"] = checksum
+	body, err := json.Marshal(envelope)
 	if err != nil {
 		return 0, err
 	}
@@ -294,8 +322,8 @@ func (client *APIClient) PostEngineNodeCompleted(ctx context.Context, cfg Config
 		return 0, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-ForgeGraph-Timestamp", timestamp)
-	request.Header.Set("X-ForgeGraph-Signature", signEngineEvent(cfg.EngineCallbackSecret, timestamp, body))
+	request.Header.Set("X-ForgeGraph-Timestamp", requestTimestamp)
+	request.Header.Set("X-ForgeGraph-Signature", signEngineEvent(cfg.EngineCallbackSecret, requestTimestamp, body))
 	response, err := client.http.Do(request)
 	endedAt := time.Now().UTC()
 	durationMS := float64(endedAt.Sub(startedAt).Microseconds()) / 1000
@@ -330,7 +358,7 @@ func (client *APIClient) PostEngineNodeCompleted(ctx context.Context, cfg Config
 
 func (client *APIClient) PollReadAPIs(ctx context.Context, tenant TenantPlan) (apiLatencies []float64, projectionLag []float64, deadLetters int) {
 	for _, apiPath := range []string{
-		"/api/system-state/overview/",
+		"/api/system-state/overview",
 		"/api/ops/projection-lag",
 		"/api/ops/dead-letters",
 		"/api/ops/event-spool",
@@ -374,7 +402,7 @@ func (client *APIClient) AcquireWSTicket(ctx context.Context, token string) (str
 	return firstString(result.Body, "ticket", "token"), nil
 }
 
-func (client *APIClient) ConnectOrganizationWS(ctx context.Context, tenant TenantPlan, lastSeen int64, reconnect bool, writer *ArtifactWriter) (samples []float64, reconnects int, err error) {
+func (client *APIClient) ConnectOrganizationWS(ctx context.Context, tenant TenantPlan, lastSeen int64, reconnect bool, ready func(), writer *ArtifactWriter) (samples []float64, reconnects int, err error) {
 	ticket, err := client.AcquireWSTicket(ctx, tenant.AccessToken)
 	if err != nil {
 		return nil, 0, err
@@ -389,34 +417,62 @@ func (client *APIClient) ConnectOrganizationWS(ctx context.Context, tenant Tenan
 		return nil, 0, err
 	}
 	defer conn.Close()
+	connectedAt := time.Now().UTC()
+	readDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-readDone:
+		}
+	}()
+	defer close(readDone)
+	if ready != nil {
+		ready()
+	}
 	if lastSeen > 0 {
 		_ = conn.WriteJSON(map[string]any{"type": "resume", "last_seen_state_version": lastSeen})
 	}
-	readUntil := time.After(2 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
 			return samples, reconnects, ctx.Err()
-		case <-readUntil:
-			if reconnect {
-				reconnects++
-			}
-			return samples, reconnects, nil
 		default:
-			_ = conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
+			if reconnect {
+				_ = conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
+			} else {
+				_ = conn.SetReadDeadline(time.Time{})
+			}
 			var message map[string]any
 			if err := conn.ReadJSON(&message); err != nil {
-				if websocket.IsCloseError(err, websocket.CloseNormalClosure) || strings.Contains(err.Error(), "timeout") {
+				var netErr net.Error
+				if errors.As(err, &netErr) && netErr.Timeout() {
+					if reconnect {
+						reconnects++
+						return samples, reconnects, nil
+					}
 					continue
+				}
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+					if reconnect {
+						reconnects++
+					}
+					return samples, reconnects, nil
 				}
 				return samples, reconnects, err
 			}
 			if message["type"] == "ping" || message["type"] == "heartbeat" {
 				_ = conn.WriteJSON(map[string]any{"type": "pong"})
 			}
+			receivedAt := time.Now().UTC()
+			message["received_at"] = receivedAt.Format(time.RFC3339Nano)
 			if occurredAt := stringFromAny(message["occurred_at"]); occurredAt != "" {
 				if parsed, err := time.Parse(time.RFC3339Nano, occurredAt); err == nil {
-					samples = append(samples, float64(time.Since(parsed).Microseconds())/1000)
+					deliveryMS := float64(receivedAt.Sub(parsed).Microseconds()) / 1000
+					message["delivery_latency_ms"] = deliveryMS
+					if !parsed.Before(connectedAt.Add(-1 * time.Second)) {
+						samples = append(samples, deliveryMS)
+					}
 				}
 			}
 			if writer != nil {

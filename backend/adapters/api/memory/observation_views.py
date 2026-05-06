@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import time
 from typing import Any, cast
 from uuid import UUID
 
-from django.db import transaction
+from django.db import IntegrityError, OperationalError, transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -20,6 +21,10 @@ from adapters.api.memory.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from application.services.audit_log import record_audit_log
+from application.services.domain_events import (
+    record_memory_observation_domain_event,
+    suppress_domain_event_signals,
+)
 from application.services.idempotency import (
     annotate_response,
     annotated_response_from_body,
@@ -35,6 +40,8 @@ from application.services.memory_observation_service import (
 from application.services.rbac import has_min_role
 from application.services.tenancy import get_tenant_id_for_user
 from infrastructure.orm.models import MemoryObservation, ProcessedMemoryEvent, User
+
+_DEADLOCK_RETRY_ATTEMPTS = 3
 
 
 def _observation_payload(observation: MemoryObservation) -> dict[str, Any]:
@@ -76,6 +83,58 @@ def _observation_payload(observation: MemoryObservation) -> dict[str, Any]:
                 "is_deleted": observation.deleted_at is not None,
             }
         ).data,
+    )
+
+
+def _is_deadlock(exc: OperationalError) -> bool:
+    return "deadlock detected" in str(exc).lower()
+
+
+def _processed_memory_response(
+    *,
+    tenant_id: UUID,
+    idempotency_key: str,
+    request_hash: str,
+) -> Response | None:
+    if not idempotency_key:
+        return None
+
+    processed = ProcessedMemoryEvent.objects.filter(
+        organization_id=tenant_id,
+        event_id=idempotency_key,
+    ).first()
+    if processed is None:
+        return None
+
+    if processed.request_hash != request_hash:
+        record_idempotency_observation(
+            boundary="memory_write",
+            status="rejected",
+            idempotency_key=idempotency_key,
+            resource_type="memory_observation",
+            organization_id=tenant_id,
+        )
+        return error_response(
+            code="IDEMPOTENCY_CONFLICT",
+            message="Idempotency key was already used with a different request body.",
+            status=status.HTTP_409_CONFLICT,
+            details=[{"idempotency_key": idempotency_key}],
+        )
+
+    record_idempotency_observation(
+        boundary="memory_write",
+        status="already_applied",
+        idempotency_key=idempotency_key,
+        resource_type="memory_observation",
+        organization_id=tenant_id,
+    )
+    return annotated_response_from_body(
+        processed.response_body,
+        response_status=processed.response_status,
+        status="already_applied",
+        idempotency_key=idempotency_key,
+        resource_type="memory_observation",
+        resource_id=str((processed.observation_ids_json or [""])[0] or ""),
     )
 
 
@@ -141,7 +200,7 @@ class MemoryObservationListCreateView(APIView):
         if not serializer.is_valid():
             return _validation_error(serializer)
 
-        tenant_id = get_tenant_id_for_user(user)
+        tenant_id = UUID(get_tenant_id_for_user(user))
         validated_data = dict(serializer.validated_data)
         body_idempotency_key = str(validated_data.pop("idempotency_key", "") or "").strip()
         idempotency_key = normalize_idempotency_key(
@@ -150,89 +209,111 @@ class MemoryObservationListCreateView(APIView):
         )
         request_hash = hash_request_payload(validated_data)
         if idempotency_key:
-            processed = ProcessedMemoryEvent.objects.filter(
-                organization_id=tenant_id,
-                event_id=idempotency_key,
-            ).first()
-            if processed is not None:
-                if processed.request_hash != request_hash:
-                    record_idempotency_observation(
-                        boundary="memory_write",
-                        status="rejected",
-                        idempotency_key=idempotency_key,
-                        resource_type="memory_observation",
-                        organization_id=tenant_id,
-                    )
-                    return error_response(
-                        code="IDEMPOTENCY_CONFLICT",
-                        message="Idempotency key was already used with a different request body.",
-                        status=status.HTTP_409_CONFLICT,
-                        details=[{"idempotency_key": idempotency_key}],
-                    )
-                record_idempotency_observation(
-                    boundary="memory_write",
-                    status="already_applied",
-                    idempotency_key=idempotency_key,
-                    resource_type="memory_observation",
-                    organization_id=tenant_id,
-                )
-                return annotated_response_from_body(
-                    processed.response_body,
-                    response_status=processed.response_status,
-                    status="already_applied",
-                    idempotency_key=idempotency_key,
-                    resource_type="memory_observation",
-                    resource_id=str((processed.observation_ids_json or [""])[0] or ""),
-                )
+            processed_response = _processed_memory_response(
+                tenant_id=tenant_id,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+            )
+            if processed_response is not None:
+                return processed_response
 
         service = MemoryObservationService()
-        try:
-            with transaction.atomic():
+        for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
+            try:
+                return self._create_observation_response(
+                    user=user,
+                    tenant_id=tenant_id,
+                    validated_data=validated_data,
+                    service=service,
+                    idempotency_key=idempotency_key,
+                    request_hash=request_hash,
+                )
+            except IntegrityError:
+                if not idempotency_key:
+                    raise
+                processed_response = _processed_memory_response(
+                    tenant_id=tenant_id,
+                    idempotency_key=idempotency_key,
+                    request_hash=request_hash,
+                )
+                if processed_response is not None:
+                    return processed_response
+                raise
+            except OperationalError as exc:
+                if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+                    raise
+                if idempotency_key:
+                    processed_response = _processed_memory_response(
+                        tenant_id=tenant_id,
+                        idempotency_key=idempotency_key,
+                        request_hash=request_hash,
+                    )
+                    if processed_response is not None:
+                        return processed_response
+                time.sleep(0.02 * (attempt + 1))
+            except ValueError as exc:
+                return error_response(
+                    code="VALIDATION_ERROR",
+                    message=str(exc),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        raise RuntimeError("unreachable memory observation retry state")
+
+    def _create_observation_response(
+        self,
+        *,
+        user: User,
+        tenant_id: UUID,
+        validated_data: dict[str, Any],
+        service: MemoryObservationService,
+        idempotency_key: str,
+        request_hash: str,
+    ) -> Response:
+        with transaction.atomic():
+            with suppress_domain_event_signals():
                 observation = service.create_observation(
                     tenant_id=tenant_id,
                     **validated_data,
                 )
-                _record_memory_observation_audit(
-                    user=user,
-                    action="memory.observation_created",
-                    observation=observation,
-                )
-                response = success_response(
-                    _observation_payload(observation),
-                    status=status.HTTP_201_CREATED,
-                )
-                if idempotency_key:
-                    annotate_response(
-                        response,
-                        status="applied",
-                        idempotency_key=idempotency_key,
-                        resource_type="memory_observation",
-                        resource_id=str(observation.id),
-                    )
-                    ProcessedMemoryEvent.objects.create(
-                        organization_id=tenant_id,
-                        event_id=idempotency_key,
-                        idempotency_key=idempotency_key,
-                        event_type="memory.observation.create",
-                        request_hash=request_hash,
-                        observation_ids_json=[str(observation.id)],
-                        response_status=response.status_code,
-                        response_body=response_body(response),
-                    )
-                    record_idempotency_observation(
-                        boundary="memory_write",
-                        status="applied",
-                        idempotency_key=idempotency_key,
-                        resource_type="memory_observation",
-                        organization_id=tenant_id,
-                    )
-        except ValueError as exc:
-            return error_response(
-                code="VALIDATION_ERROR",
-                message=str(exc),
-                status=status.HTTP_400_BAD_REQUEST,
+            _record_memory_observation_audit(
+                user=user,
+                action="memory.observation_created",
+                observation=observation,
             )
-
+            response = success_response(
+                _observation_payload(observation),
+                status=status.HTTP_201_CREATED,
+            )
+            if idempotency_key:
+                annotate_response(
+                    response,
+                    status="applied",
+                    idempotency_key=idempotency_key,
+                    resource_type="memory_observation",
+                    resource_id=str(observation.id),
+                )
+                ProcessedMemoryEvent.objects.create(
+                    organization_id=tenant_id,
+                    event_id=idempotency_key,
+                    idempotency_key=idempotency_key,
+                    event_type="memory.observation.create",
+                    request_hash=request_hash,
+                    observation_ids_json=[str(observation.id)],
+                    response_status=response.status_code,
+                    response_body=response_body(response),
+                )
+                record_idempotency_observation(
+                    boundary="memory_write",
+                    status="applied",
+                    idempotency_key=idempotency_key,
+                    resource_type="memory_observation",
+                    organization_id=tenant_id,
+                )
+            record_memory_observation_domain_event(
+                observation,
+                created=bool(getattr(observation, "_domain_event_created", True)),
+            )
         return response
 
 

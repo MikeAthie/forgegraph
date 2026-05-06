@@ -48,13 +48,25 @@ class Command(BaseCommand):
                 organization_id=organization_id,
                 batch_size=batch_size,
             )
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "Processed OS projection events "
-                    f"(processed={result.processed}, skipped={result.skipped}, "
-                    f"deadlettered={result.deadlettered})."
-                )
+            projection_timing = ", ".join(
+                f"{name}={duration:.3f}s"
+                for name, duration in (result.projection_durations or {}).items()
             )
+            projection_timing_suffix = (
+                f", projection_durations=[{projection_timing}]" if projection_timing else ""
+            )
+            if result.events_selected > 0 or result.deadlettered > 0:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        "Processed OS projection events "
+                        f"(organizations={result.organizations}, events={result.events_selected}, "
+                        f"processed={result.processed}, skipped={result.skipped}, "
+                        f"noop={result.noop}, deadlettered={result.deadlettered}, "
+                        f"duration={result.duration_seconds:.3f}s"
+                        f"{projection_timing_suffix})."
+                    )
+                )
             if run_once:
                 return
-            time.sleep(sleep_seconds)
+            if result.events_selected == 0:
+                time.sleep(sleep_seconds)

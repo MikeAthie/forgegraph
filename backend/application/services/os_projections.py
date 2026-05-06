@@ -700,9 +700,10 @@ def projection_metadata(organization: Organization) -> dict[str, Any]:
         .first()
         or 0
     )
-    latest_event = (
-        DomainEvent.objects.filter(organization=organization).order_by("-sequence").first()
+    projection_events = DomainEvent.objects.filter(organization=organization).exclude(
+        event_type__startswith="run_event."
     )
+    latest_event = projection_events.order_by("-sequence").first()
     cursors = list(ProjectionCursor.objects.filter(organization=organization))
     cursor = min(cursors, key=lambda value: int(value.last_sequence), default=None)
     last_sequence = int(cursor.last_sequence) if cursor is not None else 0
@@ -710,9 +711,7 @@ def projection_metadata(organization: Organization) -> dict[str, Any]:
     pending_event = None
     if latest_event is not None and last_sequence < int(latest_event.sequence):
         pending_event = (
-            DomainEvent.objects.filter(organization=organization, sequence__gt=last_sequence)
-            .order_by("sequence")
-            .first()
+            projection_events.filter(sequence__gt=last_sequence).order_by("sequence").first()
         )
     lag_seconds = 0.0
     if pending_event is not None:
@@ -852,7 +851,11 @@ def cost_ledger_summary(entry: CostLedgerEntry) -> dict[str, Any]:
     }
 
 
-def accounting_overview(organization: Organization) -> dict[str, Any]:
+def accounting_overview(
+    organization: Organization,
+    *,
+    projection: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     computed_at = timezone.now().isoformat()
     ledger_qs = CostLedgerEntry.objects.filter(organization=organization)
     total_cost = (
@@ -893,7 +896,7 @@ def accounting_overview(organization: Organization) -> dict[str, Any]:
         "organization_id": str(organization.id),
         "total_cost_usd": float(total_cost),
         "generated_at": computed_at,
-        "projection": projection_metadata(organization),
+        "projection": projection or projection_metadata(organization),
         "metrics": {
             "cost": cost_metric,
             "revenue": revenue_metric,
@@ -1030,13 +1033,8 @@ def organization_state_summary(organization: Organization) -> dict[str, Any]:
     memory_count = MemoryObservation.objects.filter(
         tenant_id=organization.id, deleted_at__isnull=True
     ).count()
-    total_cost = (
-        CostLedgerEntry.objects.filter(organization=organization)
-        .aggregate(total=models.Sum("total_cost_usd"))
-        .get("total")
-        or DECIMAL_ZERO
-    )
-    accounting = accounting_overview(organization)
+    accounting = accounting_overview(organization, projection=projection)
+    total_cost = Decimal(str(accounting.get("total_cost_usd") or 0))
     task_dead_letter_count = TaskDeadLetterRecord.objects.filter(
         lifecycle_task__organization=organization,
         status="active",

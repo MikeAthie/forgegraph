@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	fallbackLLMModeError = "error"
-	fallbackLLMModeMock  = "mock"
-	fallbackLLMModeOff   = "off"
+	fallbackLLMModeError   = "error"
+	fallbackLLMModeMock    = "mock"
+	fallbackLLMModeEnabled = "fallback"
+	fallbackLLMModeOff     = "off"
 )
 
 // FallbackLLMClient is a deterministic placeholder secondary provider.
@@ -32,6 +33,9 @@ func NewFallbackLLMClientFromEnv() *FallbackLLMClient {
 	}
 	if mode == fallbackLLMModeOff {
 		return nil
+	}
+	if mode == fallbackLLMModeEnabled {
+		mode = fallbackLLMModeMock
 	}
 	content := strings.TrimSpace(firstEnv(
 		"ENGINE_LLM_FALLBACK_CONTENT",

@@ -5,7 +5,12 @@ from uuid import uuid4
 import pytest
 
 from application.services.domain_events import record_domain_event
-from infrastructure.orm.models import DomainEvent
+from infrastructure.orm.models import (
+    DomainEvent,
+    Organization,
+    OrganizationDomainEventSequence,
+    OrganizationStateFeedSequence,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -45,3 +50,16 @@ def test_domain_event_recording_is_idempotent_and_org_sequenced(user) -> None:
     assert duplicate.event.id == first.event.id
     assert second.event.sequence == first.event.sequence + 1
     assert DomainEvent.objects.filter(organization=organization).count() == 2
+
+
+def test_new_organization_precreates_projection_sequence_ledgers() -> None:
+    organization = Organization.objects.create(name="Sequence Ledger Org")
+
+    assert OrganizationDomainEventSequence.objects.filter(
+        organization=organization,
+        next_sequence=1,
+    ).exists()
+    assert OrganizationStateFeedSequence.objects.filter(
+        organization=organization,
+        next_sequence=1,
+    ).exists()

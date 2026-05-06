@@ -101,6 +101,59 @@ class TestEngineRunApi:
         assert response.status_code == 404
         assert response.data["error"]["code"] == "RUNTIME_INTENT_PENDING"
 
+    @override_settings(
+        REST_FRAMEWORK={
+            "DEFAULT_AUTHENTICATION_CLASSES": [
+                "adapters.api.authentication.RevocableJWTAuthentication",
+            ],
+            "DEFAULT_PERMISSION_CLASSES": [
+                "rest_framework.permissions.IsAuthenticated",
+            ],
+            "DEFAULT_THROTTLE_CLASSES": [
+                "rest_framework.throttling.AnonRateThrottle",
+            ],
+            "DEFAULT_THROTTLE_RATES": {"anon": "1/min"},
+        }
+    )
+    def test_runtime_intent_outcome_lookup_is_not_throttled_for_engine_polling(
+        self,
+        api_client,
+    ):
+        user = User.objects.create_user(
+            email="engine-outcome-throttle@example.com",
+            password="password123",
+        )
+        graph = Graph.objects.create(owner=user, name="Engine Outcome Throttle")
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=1,
+            graph_json={"nodes": [], "edges": []},
+        )
+        run = Run.objects.create(owner=user, graph_version=version, status="running")
+        intent_id = uuid4()
+        RuntimeIntentOutcome.objects.create(
+            intent_id=intent_id,
+            run=run,
+            intent_type="start_run",
+            attempt_id="attempt-1",
+            outcome="processed",
+            reason="processed",
+        )
+
+        base_timestamp = int(time.time() * 1000)
+        for offset in range(3):
+            timestamp_ms = str(base_timestamp + offset)
+            response = api_client.get(
+                f"/api/engine/runtime-intents/{intent_id}",
+                HTTP_X_FORGEGRAPH_TIMESTAMP=timestamp_ms,
+                HTTP_X_FORGEGRAPH_SIGNATURE=s2s.build_signature(
+                    "test-secret",
+                    timestamp_ms,
+                    b"",
+                ),
+            )
+            assert response.status_code == 200
+
     def test_run_detail_round_trip(self, api_client):
         user = User.objects.create_user(email="engine-api@example.com", password="password123")
         graph = Graph.objects.create(owner=user, name="Engine API Graph")

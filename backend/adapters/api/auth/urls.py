@@ -12,7 +12,7 @@ from adapters.api.auth.views import (
     MeView,
     RegisterView,
     TokenRefreshView,
-    WSTicketView,
+    ws_ticket_view,
 )
 
 urlpatterns = [
@@ -21,6 +21,6 @@ urlpatterns = [
     path("logout", LogoutView.as_view(), name="auth-logout"),
     path("refresh", TokenRefreshView.as_view(), name="auth-refresh"),
     path("me", MeView.as_view(), name="auth-me"),
-    path("ws-ticket", WSTicketView.as_view(), name="auth-ws-ticket"),
+    path("ws-ticket", ws_ticket_view, name="auth-ws-ticket"),
     path("sso/", include("adapters.api.sso.urls")),
 ]

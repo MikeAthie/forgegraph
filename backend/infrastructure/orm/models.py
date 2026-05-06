@@ -4311,6 +4311,22 @@ def ensure_default_organization(
     User.objects.filter(pk=instance.pk).update(default_organization=organization)
 
 
+@receiver(post_save, sender=Organization)
+def ensure_organization_runtime_ledgers(
+    sender: type[Organization], instance: Organization, created: bool, **kwargs: Any
+) -> None:
+    if kwargs.get("raw") or not created:
+        return
+    OrganizationDomainEventSequence.objects.get_or_create(
+        organization_id=instance.id,
+        defaults={"next_sequence": 1},
+    )
+    OrganizationStateFeedSequence.objects.get_or_create(
+        organization_id=instance.id,
+        defaults={"next_sequence": 1},
+    )
+
+
 @receiver(post_save, sender=Run)
 def record_run_domain_event_signal(
     sender: type[Run], instance: Run, created: bool, **kwargs: Any
@@ -4394,7 +4410,13 @@ def record_memory_observation_domain_event_signal(
 ) -> None:
     if kwargs.get("raw"):
         return
-    from application.services.domain_events import record_memory_observation_domain_event
+    from application.services.domain_events import (
+        domain_event_signals_suppressed,
+        record_memory_observation_domain_event,
+    )
+
+    if domain_event_signals_suppressed():
+        return
 
     record_memory_observation_domain_event(instance, created=created)
 
