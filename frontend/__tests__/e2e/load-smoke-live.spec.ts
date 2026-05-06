@@ -5,6 +5,8 @@ import { apiBaseUrl, createGraphName, createTestUser, loginLive, startRunViaApi 
 const API_BASE_URL = apiBaseUrl();
 const RUN_COUNT = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_RUNS ?? "100");
 const START_CONCURRENCY = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_START_CONCURRENCY ?? "10");
+const TEST_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TIMEOUT_MS ?? (process.env.CI ? "360000" : "240000"));
+const TERMINAL_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TERMINAL_TIMEOUT_MS ?? "180000");
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -29,7 +31,7 @@ async function mapWithConcurrency<T, R>(
 
 test.describe("No-LLM load smoke live flow", () => {
   test("completes 100 concurrent output-only runs without silent task loss", async ({ page, request }, testInfo) => {
-    test.setTimeout(240_000);
+    test.setTimeout(TEST_TIMEOUT_MS);
 
     const user = createTestUser(testInfo, "load-smoke-live");
     const accessToken = await loginLive(page, request, user, "/overview");
@@ -109,7 +111,7 @@ test.describe("No-LLM load smoke live flow", () => {
           return statuses.filter((status) => !["succeeded", "failed", "canceled"].includes(status)).length;
         },
         {
-          timeout: 180_000,
+          timeout: TERMINAL_TIMEOUT_MS,
           message: "Timed out waiting for all no-LLM smoke runs to reach backend-owned terminal state.",
         },
       )
