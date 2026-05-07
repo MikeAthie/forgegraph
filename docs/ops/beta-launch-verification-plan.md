@@ -50,8 +50,8 @@ release decisions.
 
 | Gate | Command | Exit criteria | Blocks |
 | --- | --- | --- | --- |
-| Gate A | `go run ./tools/loadgen --gate A --base-url http://127.0.0.1:8000 --output-dir logs/loadgen --capacity-report-dir docs/ops/capacity` | 25 agents for 1h, silent drops = 0, checked-in report under `docs/ops/capacity/`, raw artifacts under `logs/loadgen/`. | Private beta expansion. |
-| Gate B | `go run ./tools/loadgen --gate B --base-url http://127.0.0.1:8000 --output-dir logs/loadgen --capacity-report-dir docs/ops/capacity` | 50 agents for 2h, projection lag p95 < 2s, silent drops = 0, checked-in report under `docs/ops/capacity/`, raw artifacts under `logs/loadgen/`. | Private beta expansion. |
+| Gate A | `go run ./tools/loadgen --gate A --base-url http://127.0.0.1:8000 --output-dir logs/loadgen --capacity-report-dir docs/ops/capacity` | 25 agents for 1h, every planned run starts and reaches backend-owned `succeeded`, terminal run failures = 0, silent drops = 0, checked-in report under `docs/ops/capacity/`, raw artifacts under `logs/loadgen/`. | Private beta expansion. |
+| Gate B | `go run ./tools/loadgen --gate B --base-url http://127.0.0.1:8000 --output-dir logs/loadgen --capacity-report-dir docs/ops/capacity` | 50 agents for 2h, every planned run starts and reaches backend-owned `succeeded`, terminal run failures = 0, projection lag p95 < 2s, silent drops = 0, checked-in report under `docs/ops/capacity/`, raw artifacts under `logs/loadgen/`. | Private beta expansion. |
 
 The release wrapper runs both gates through:
 

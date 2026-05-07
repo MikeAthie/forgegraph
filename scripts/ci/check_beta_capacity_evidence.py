@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None, *, root: Path | None = None) -> int:
             failures.append(
                 f"latest Gate {gate} report is not passing: {latest.path.relative_to(repo_root)}"
             )
+        failures.extend(validate_terminal_run_evidence(repo_root, latest.path))
         if latest.path.parent.resolve() != report_dir:
             failures.append(
                 f"Gate {gate} report is outside capacity report dir: {latest.path}"
@@ -91,6 +92,11 @@ def main(argv: list[str] | None = None, *, root: Path | None = None) -> int:
         elif not artifact_root.is_dir():
             failures.append(
                 f"Gate {gate} raw artifact root is missing: {latest.artifacts_root}"
+            )
+        elif not (artifact_root / "metrics-summary.json").is_file():
+            failures.append(
+                f"Gate {gate} raw artifact metrics summary is missing: "
+                f"{latest.artifacts_root / 'metrics-summary.json'}"
             )
 
     if failures:
@@ -148,6 +154,115 @@ def report_sort_key(path: Path, payload: dict[str, object]) -> datetime:
         return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
     except OSError:
         return datetime.fromtimestamp(0, timezone.utc)
+
+
+def validate_terminal_run_evidence(repo_root: Path, report_path: Path) -> list[str]:
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"could not read capacity report {report_path}: {exc}"]
+
+    target = payload.get("target")
+    metrics = payload.get("metrics")
+    if not isinstance(target, dict) or not isinstance(metrics, dict):
+        return [
+            f"Gate report is missing target/metrics payload: "
+            f"{report_path.relative_to(repo_root)}"
+        ]
+
+    tenants = int_value(target.get("tenants"))
+    runs_per_tenant = int_value(target.get("runs_per_tenant"))
+    expected_runs = tenants * runs_per_tenant
+    runs_started = int_value(metrics.get("runs_started"))
+    runs_completed = int_value(metrics.get("runs_completed"))
+    runs_failed = int_value(metrics.get("runs_failed"))
+    silent_drops = int_value(metrics.get("silent_drops"))
+
+    failures: list[str] = []
+    rel_path = report_path.relative_to(repo_root)
+    if expected_runs <= 0:
+        failures.append(f"Gate report has invalid expected run count: {rel_path}")
+    if runs_started < expected_runs:
+        failures.append(
+            f"Gate report did not start all planned runs: {rel_path} "
+            f"started={runs_started} expected={expected_runs}"
+        )
+    if runs_completed != runs_started:
+        failures.append(
+            f"Gate report did not complete all started runs: {rel_path} "
+            f"completed={runs_completed} started={runs_started} failed={runs_failed}"
+        )
+    if runs_failed != 0:
+        failures.append(
+            f"Gate report has terminal run failures: {rel_path} failed={runs_failed}"
+        )
+    if silent_drops != 0:
+        failures.append(
+            f"Gate report has silent drops: {rel_path} silent_drops={silent_drops}"
+        )
+    artifacts = payload.get("artifacts")
+    runs_jsonl = None
+    if isinstance(artifacts, dict) and isinstance(artifacts.get("runs_jsonl"), str):
+        runs_jsonl = resolve_report_path(repo_root, Path(artifacts["runs_jsonl"]))
+    if runs_jsonl is None:
+        failures.append(f"Gate report has no runs_jsonl artifact path: {rel_path}")
+    elif not runs_jsonl.is_file():
+        failures.append(
+            f"Gate report runs_jsonl artifact is missing: "
+            f"{runs_jsonl.relative_to(repo_root)}"
+        )
+    else:
+        succeeded, failed_statuses = count_run_statuses(runs_jsonl)
+        if succeeded < runs_completed:
+            failures.append(
+                f"Gate report runs_jsonl does not contain completed evidence: "
+                f"{runs_jsonl.relative_to(repo_root)} succeeded={succeeded} "
+                f"runs_completed={runs_completed}"
+            )
+        if failed_statuses != runs_failed:
+            failures.append(
+                f"Gate report runs_jsonl failure count disagrees with metrics: "
+                f"{runs_jsonl.relative_to(repo_root)} statuses={failed_statuses} "
+                f"runs_failed={runs_failed}"
+            )
+    return failures
+
+
+def count_run_statuses(path: Path) -> tuple[int, int]:
+    succeeded = 0
+    failed = 0
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return succeeded, failed
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        status = str(record.get("status") or "")
+        if status == "succeeded":
+            succeeded += 1
+        elif status in {"failed", "canceled", "cancelled"}:
+            failed += 1
+    return succeeded, failed
+
+
+def int_value(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
 
 
 def resolve_report_path(repo_root: Path, path: Path) -> Path:

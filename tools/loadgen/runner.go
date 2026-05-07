@@ -9,12 +9,19 @@ import (
 )
 
 type runRecord struct {
-	RunID       string    `json:"run_id"`
-	TenantIndex int       `json:"tenant_index"`
-	AgentIndex  int       `json:"agent_index"`
-	StartedAt   time.Time `json:"started_at"`
-	Status      string    `json:"status"`
-	Error       string    `json:"error,omitempty"`
+	RunID       string     `json:"run_id"`
+	TenantIndex int        `json:"tenant_index"`
+	AgentIndex  int        `json:"agent_index"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	Status      string     `json:"status"`
+	ObservedAt  *time.Time `json:"observed_at,omitempty"`
+	Error       string     `json:"error,omitempty"`
+}
+
+type startedRunRecord struct {
+	runID      string
+	tenant     TenantPlan
+	agentIndex int
 }
 
 func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, error) {
@@ -51,10 +58,7 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 	ingestionSamples := make([]float64, 0)
 	projectionLagSamples := make([]float64, 0)
 	wsSamples := make([]float64, 0)
-	startedRuns := make([]struct {
-		runID  string
-		tenant TenantPlan
-	}, 0, len(plan.Runs))
+	startedRuns := make([]startedRunRecord, 0, len(plan.Runs))
 
 	for index := range plan.Tenants {
 		if err := client.EnsureTenant(runCtx, &plan.Tenants[index]); err != nil {
@@ -131,7 +135,7 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 			RunID:       runID,
 			TenantIndex: tenant.Index,
 			AgentIndex:  run.AgentIndex,
-			StartedAt:   time.Now().UTC(),
+			StartedAt:   timePtr(time.Now().UTC()),
 			Status:      "started",
 		}
 		if err != nil {
@@ -143,10 +147,11 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 		}
 		metrics.AcceptedMutations++
 		metrics.RunsStarted++
-		startedRuns = append(startedRuns, struct {
-			runID  string
-			tenant TenantPlan
-		}{runID: runID, tenant: tenant})
+		startedRuns = append(startedRuns, startedRunRecord{
+			runID:      runID,
+			tenant:     tenant,
+			agentIndex: run.AgentIndex,
+		})
 		_ = writer.AppendJSONL(writer.Paths.RunsJSONL, record)
 
 		if cfg.WithMemory {
@@ -204,11 +209,14 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 	}
 
 	if len(startedRuns) > 0 {
-		for _, startedRun := range startedRuns {
-			if visibleRun(runCtx, client, startedRun.tenant, startedRun.runID) {
-				metrics.VisibleMutations++
-			}
-		}
+		metrics.VisibleMutations, metrics.RunsCompleted, metrics.RunsFailed = observeRunStatuses(
+			runCtx,
+			client,
+			writer,
+			startedRuns,
+			metrics.RunsFailed,
+			observeDeadline,
+		)
 		if len(plan.Tenants) > 1 {
 			metrics.TenantIsolationChecks++
 			if !client.CheckTenantIsolation(runCtx, plan.Tenants[1].AccessToken, startedRuns[0].runID) {
@@ -242,9 +250,86 @@ func Run(ctx context.Context, cfg Config, command []string) (LoadgenReport, erro
 	return WriteReports(report, cfg)
 }
 
-func visibleRun(ctx context.Context, client *APIClient, tenant TenantPlan, runID string) bool {
+func observeRunStatuses(
+	ctx context.Context,
+	client *APIClient,
+	writer *ArtifactWriter,
+	startedRuns []startedRunRecord,
+	initialFailures int,
+	deadline time.Time,
+) (visible int, completed int, failed int) {
+	failed = initialFailures
+	visibleRuns := make(map[string]bool, len(startedRuns))
+	terminalRuns := make(map[string]bool, len(startedRuns))
+	statuses := make(map[string]string, len(startedRuns))
+
+	for {
+		for _, startedRun := range startedRuns {
+			if terminalRuns[startedRun.runID] {
+				continue
+			}
+			statusValue, ok := runStatus(ctx, client, startedRun.tenant, startedRun.runID)
+			if !ok {
+				continue
+			}
+			visibleRuns[startedRun.runID] = true
+			if statuses[startedRun.runID] == statusValue {
+				continue
+			}
+			statuses[startedRun.runID] = statusValue
+			if isSuccessfulRunStatus(statusValue) {
+				completed++
+				terminalRuns[startedRun.runID] = true
+				appendObservedRunStatus(writer, startedRun, statusValue)
+			} else if isFailedRunStatus(statusValue) {
+				failed++
+				terminalRuns[startedRun.runID] = true
+				appendObservedRunStatus(writer, startedRun, statusValue)
+			}
+		}
+		if len(terminalRuns) == len(startedRuns) || !time.Now().Before(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return len(visibleRuns), completed, failed
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return len(visibleRuns), completed, failed
+}
+
+func runStatus(ctx context.Context, client *APIClient, tenant TenantPlan, runID string) (string, bool) {
 	result, err := client.doJSON(ctx, http.MethodGet, "/api/runs/"+runID, tenant.AccessToken, "", nil)
-	return err == nil && result.StatusCode == http.StatusOK
+	if err != nil || result.StatusCode != http.StatusOK {
+		return "", false
+	}
+	statusValue := firstString(dataObject(result.Body), "status")
+	if statusValue == "" {
+		return "", false
+	}
+	return statusValue, true
+}
+
+func appendObservedRunStatus(writer *ArtifactWriter, startedRun startedRunRecord, statusValue string) {
+	if writer == nil {
+		return
+	}
+	_ = writer.AppendJSONL(writer.Paths.RunsJSONL, runRecord{
+		RunID:       startedRun.runID,
+		TenantIndex: startedRun.tenant.Index,
+		AgentIndex:  startedRun.agentIndex,
+		ObservedAt:  timePtr(time.Now().UTC()),
+		Status:      statusValue,
+	})
+}
+
+func isSuccessfulRunStatus(statusValue string) bool {
+	return statusValue == "succeeded"
+}
+
+func isFailedRunStatus(statusValue string) bool {
+	return statusValue == "failed" || statusValue == "canceled" || statusValue == "cancelled"
 }
 
 func syntheticDryRunMetrics(cfg Config) Metrics {
@@ -270,4 +355,8 @@ func minDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+func timePtr(value time.Time) *time.Time {
+	return &value
 }

@@ -1,0 +1,158 @@
+{
+  "schema_version": "forgegraph.loadgen.report.v1",
+  "gate": "B",
+  "passed": true,
+  "claim_status": "gate passed; 500-agent claim remains blocked until three Gate E passes",
+  "started_at": "2026-05-07T21:13:03.184066066Z",
+  "completed_at": "2026-05-07T23:12:52.684065746Z",
+  "command": "/home/mathi/.cache/go-build/60/60a5ac0f166c030ade548c7977049127d57fbfa737545ea168670efa53fe70f3-d/loadgen --base-url http://127.0.0.1:8000 --gate B --output-dir logs/loadgen --capacity-report-dir docs/ops/capacity",
+  "target": {
+    "agents": 50,
+    "duration_seconds": 7200,
+    "runs_per_tenant": 1,
+    "tenants": 1,
+    "ws_clients": 0
+  },
+  "features": {
+    "accounting": false,
+    "duplicate_event_storm": false,
+    "hitl": false,
+    "llm_throttling": false,
+    "memory": false,
+    "reconnect_storm": false
+  },
+  "environment": {
+    "base_url": "http://127.0.0.1:8000"
+  },
+  "metrics": {
+    "backend_api_latency_ms": {
+      "count": 7,
+      "p50": 34.412,
+      "p95": 66.39,
+      "max": 66.39
+    },
+    "event_ingestion_latency_ms": {
+      "count": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "projection_lag_seconds": {
+      "count": 2,
+      "p50": 0.052745,
+      "p95": 0.121239,
+      "max": 0.121239
+    },
+    "ws_delivery_latency_ms": {
+      "count": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "accepted_mutations": 1,
+    "visible_mutations": 1,
+    "dead_letters": 0,
+    "silent_drops": 0,
+    "tenant_isolation_checks": 0,
+    "tenant_isolation_failures": 0,
+    "duplicate_callback_attempts": 0,
+    "duplicate_cost_drift": 0,
+    "memory_duplicate_drift": 0,
+    "reconnect_count": 0,
+    "runs_started": 1,
+    "runs_completed": 1,
+    "runs_failed": 0
+  },
+  "requirements": [
+    {
+      "name": "target agent count",
+      "passed": true,
+      "detail": "agents=50 target=50"
+    },
+    {
+      "name": "tenant count",
+      "passed": true,
+      "detail": "tenants=1 minimum=1"
+    },
+    {
+      "name": "runs per tenant",
+      "passed": true,
+      "detail": "runs_per_tenant=1 minimum=1"
+    },
+    {
+      "name": "duration",
+      "passed": true,
+      "detail": "observed=1h59m49s required=2h0m0s"
+    },
+    {
+      "name": "backend API p95",
+      "passed": true,
+      "detail": "p95=66.39ms target\u003c300ms"
+    },
+    {
+      "name": "event ingestion p95",
+      "passed": true,
+      "detail": "not required without accounting callback coverage"
+    },
+    {
+      "name": "projection lag p95",
+      "passed": true,
+      "detail": "p95=0.12s target\u003c2s"
+    },
+    {
+      "name": "websocket delivery p95",
+      "passed": true,
+      "detail": "p95=0.00ms target\u003c1000ms"
+    },
+    {
+      "name": "dead-letter rate",
+      "passed": true,
+      "detail": "rate=0.00000 target\u003c0.001"
+    },
+    {
+      "name": "silent drops",
+      "passed": true,
+      "detail": "silent_drops=0"
+    },
+    {
+      "name": "tenant isolation",
+      "passed": true,
+      "detail": "failures=0 checks=0"
+    },
+    {
+      "name": "cost duplicate drift",
+      "passed": true,
+      "detail": "duplicate_cost_drift=0"
+    },
+    {
+      "name": "run start acceptance",
+      "passed": true,
+      "detail": "started=1 expected=1"
+    },
+    {
+      "name": "terminal run completion",
+      "passed": true,
+      "detail": "completed=1 started=1 failed=0"
+    },
+    {
+      "name": "terminal run failures",
+      "passed": true,
+      "detail": "failed=0"
+    }
+  ],
+  "blocking_reasons": null,
+  "artifacts": {
+    "root": "logs/loadgen/20260507T211303Z",
+    "requests_jsonl": "logs/loadgen/20260507T211303Z/requests.jsonl",
+    "runs_jsonl": "logs/loadgen/20260507T211303Z/runs.jsonl",
+    "ws_events_jsonl": "logs/loadgen/20260507T211303Z/ws-events.jsonl",
+    "hook_timeline": "logs/loadgen/20260507T211303Z/hook-timeline.jsonl",
+    "metrics_summary": "logs/loadgen/20260507T211303Z/metrics-summary.json",
+    "tenant_manifest": "logs/loadgen/20260507T211303Z/tenant-manifest.json"
+  },
+  "report_paths": [
+    "logs/loadgen/20260507T211303Z/metrics-summary.json",
+    "docs/ops/capacity/gate-b-2026-05-07.json",
+    "docs/ops/capacity/gate-b-2026-05-07.md"
+  ]
+}
