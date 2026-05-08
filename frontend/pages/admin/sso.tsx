@@ -294,7 +294,7 @@ export default function AdminSsoPage() {
                   {saving ? (
                     <>
                       <Spinner size="xs" className="mr-2" />
-                      Saving...
+                      Saving
                     </>
                   ) : (
                     "Save Settings"
@@ -337,7 +337,7 @@ export default function AdminSsoPage() {
                   {rotating ? (
                     <>
                       <Spinner size="xs" className="mr-2" />
-                      Rotating...
+                      Rotating…
                     </>
                   ) : (
                     "Rotate Token"

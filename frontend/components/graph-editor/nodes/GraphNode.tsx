@@ -169,7 +169,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
       data-node-id={id}
       data-node-type={nodeType}
       className={cn(
-        "group relative min-w-[200px] rounded-xl border border-border bg-card shadow-sm transition-all",
+        "group relative min-w-[200px] rounded-xl border border-border bg-card shadow-sm transition-[color,background-color,border-color,box-shadow,transform] motion-reduce:transition-none motion-reduce:transform-none",
         isDisabled && "opacity-50 grayscale border-dashed border-muted-foreground/40",
         isSkipped && "opacity-70",
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
@@ -207,7 +207,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
         <button
           type="button"
           onClick={handleDelete}
-          className="absolute top-2 right-2 w-6 h-6 bg-destructive hover:bg-destructive/90 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-20"
+          className="absolute top-2 right-2 z-20 flex size-11 items-center justify-center rounded-full bg-destructive text-white shadow-md transition-colors hover:bg-destructive/90 motion-reduce:transition-none md:size-6"
           aria-label="Delete step"
         >
           <X className="w-3 h-3" />
@@ -377,19 +377,19 @@ function getConfigPreview(nodeType: string, config: Record<string, unknown>): st
       if (config.prompt_id) {
         return `Prompt: ${config.prompt_id}`;
       }
-      return config.prompt_template ? `${String(config.prompt_template).slice(0, 30)}...` : "No prompt configured";
+      return config.prompt_template ? `${String(config.prompt_template).slice(0, 30)}…` : "No prompt configured";
     case NODE_TYPES.HTTP:
-      return config.url ? `${config.method ?? "GET"} ${String(config.url).slice(0, 30)}...` : "No URL configured";
+      return config.url ? `${config.method ?? "GET"} ${String(config.url).slice(0, 30)}…` : "No URL configured";
     case NODE_TYPES.TRANSFORM:
-      return config.expression ? `${String(config.expression).slice(0, 30)}...` : "No expression";
+      return config.expression ? `${String(config.expression).slice(0, 30)}…` : "No expression";
     case NODE_TYPES.OUTPUT:
       return "Final output";
     case NODE_TYPES.BRANCH:
-      return config.condition ? `If: ${String(config.condition).slice(0, 25)}...` : "No condition set";
+      return config.condition ? `If: ${String(config.condition).slice(0, 25)}…` : "No condition set";
     case NODE_TYPES.MERGE:
       return `Strategy: ${(config.merge_strategy as string) ?? "namespaced"}`;
     case NODE_TYPES.HUMAN_GATE:
-      return config.prompt_message ? `${String(config.prompt_message).slice(0, 30)}...` : "Requires approval";
+      return config.prompt_message ? `${String(config.prompt_message).slice(0, 30)}…` : "Requires approval";
     case NODE_TYPES.MEMORY: {
       const action = (config.action as string) ?? "get";
       const key = (config.key as string) ?? "";
@@ -410,7 +410,7 @@ function getConfigPreview(nodeType: string, config: Record<string, unknown>): st
       const query =
         (config.query as string) ?? (config.query_path as string) ?? (config.query_template as string) ?? "";
       if (query) {
-        return `Search · ${String(query).slice(0, 24)}...`;
+        return `Search · ${String(query).slice(0, 24)}…`;
       }
       return "Search observations";
     }
@@ -418,7 +418,7 @@ function getConfigPreview(nodeType: string, config: Record<string, unknown>): st
       const query =
         (config.query as string) ?? (config.query_path as string) ?? (config.query_template as string) ?? "";
       if (query) {
-        return `Context · ${String(query).slice(0, 23)}...`;
+        return `Context · ${String(query).slice(0, 23)}…`;
       }
       return "Assemble context";
     }

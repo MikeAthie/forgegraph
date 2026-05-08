@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from application.services.redaction import redact_payload
 from infrastructure.orm.models import (
+    ApprovalTask,
     DecisionRecord,
     NodeRun,
     Organization,
@@ -21,6 +22,7 @@ from infrastructure.orm.models import (
     TaskDeadLetterRecord,
     TaskLifecycleEvent,
     TaskLifecycleRecord,
+    User,
 )
 
 TASK_STATUSES = {
@@ -148,6 +150,25 @@ def organization_for_run(run: Run) -> Organization:
     if run.owner.default_organization_id:
         return cast(Organization, run.owner.default_organization)
     raise ValueError("Run does not have an organization for task lifecycle state.")
+
+
+def create_backend_approval_task(
+    *,
+    run: Run,
+    node_id: str,
+    assignee: User | None,
+    payload: dict[str, Any],
+    status: str = "pending",
+) -> ApprovalTask:
+    """Create an approval task from the approved backend runtime write boundary."""
+
+    return ApprovalTask.objects.create(
+        run=run,
+        node_id=node_id,
+        assignee=assignee,
+        status=status,
+        payload=redact_payload(payload),
+    )
 
 
 def lifecycle_external_key(run: Run, node_id: str) -> str:

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRouter } from "next/router";
 
 import * as api from "@/lib/api";
 import LLMAnalyticsPage from "@/pages/analytics/llm";
@@ -15,10 +16,22 @@ jest.mock("@/components/ProtectedRoute", () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+jest.mock("next/router");
+
+const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
 describe("Analytics pages", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseRouter.mockReturnValue({
+      pathname: "/analytics/llm",
+      query: {},
+      asPath: "/analytics/llm",
+      isReady: true,
+      replace: jest.fn(),
+      push: jest.fn(),
+      prefetch: jest.fn(),
+    } as any);
   });
 
   it("renders LLM quota details and calls export", async () => {
@@ -77,6 +90,11 @@ describe("Analytics pages", () => {
     });
 
     expect(screen.getByText("5,000")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /llm cost trend/i })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: /monthly llm budget usage/i })).toHaveAttribute(
+      "aria-valuetext",
+      expect.stringContaining("Within budget"),
+    );
 
     await user.click(screen.getByRole("button", { name: /export usage csv/i }));
 
@@ -105,6 +123,15 @@ describe("Analytics pages", () => {
   });
 
   it("renders curated memory observation and indexing stats", async () => {
+    mockUseRouter.mockReturnValue({
+      pathname: "/analytics/memory",
+      query: {},
+      asPath: "/analytics/memory",
+      isReady: true,
+      replace: jest.fn(),
+      push: jest.fn(),
+      prefetch: jest.fn(),
+    } as any);
     jest.spyOn(api.analyticsApi, "getMemoryUsage").mockResolvedValue({
       period: "30d",
       start_date: "2026-03-01",

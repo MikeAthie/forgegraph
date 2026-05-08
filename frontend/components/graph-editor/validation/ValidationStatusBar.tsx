@@ -150,7 +150,7 @@ function ValidationErrorItem({ error, onFocusNode, onFocusEdge, onQuickFix }: Va
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {(error.nodeId || error.edgeId) && (
-          <Button variant="ghost" size="sm" onClick={handleGoTo} className="h-7 px-2 text-xs">
+          <Button variant="ghost" size="sm" onClick={handleGoTo} className="px-2 text-xs md:min-h-8">
             <ExternalLink className="w-3 h-3 mr-1" />
             Go to
           </Button>
@@ -161,7 +161,7 @@ function ValidationErrorItem({ error, onFocusNode, onFocusEdge, onQuickFix }: Va
             variant="outline"
             size="sm"
             onClick={() => onQuickFix?.(error, fix.label)}
-            className="h-7 px-2 text-xs"
+            className="px-2 text-xs md:min-h-8"
             title={fix.description}
           >
             {fix.label}

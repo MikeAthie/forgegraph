@@ -34,7 +34,7 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
           <button
             type="button"
             onClick={onAddStartNode}
-            className="group flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 hover:border-amber-500 transition-all"
+            className="group flex min-h-11 flex-col items-center gap-2 rounded-xl border-2 border-dashed border-amber-500/50 bg-amber-500/10 p-4 transition-[color,background-color,border-color,box-shadow] hover:border-amber-500 hover:bg-amber-500/20 motion-reduce:transition-none"
           >
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-amber-500/20 group-hover:bg-amber-500/30 transition-colors">
               <AlertCircle className="w-6 h-6 text-amber-500" />
@@ -56,7 +56,7 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
           <button
             type="button"
             onClick={onAddOutputNode}
-            className="group flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 hover:border-rose-500 transition-all"
+            className="group flex min-h-11 flex-col items-center gap-2 rounded-xl border-2 border-dashed border-rose-500/50 bg-rose-500/10 p-4 transition-[color,background-color,border-color,box-shadow] hover:border-rose-500 hover:bg-rose-500/20 motion-reduce:transition-none"
           >
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-rose-500/20 group-hover:bg-rose-500/30 transition-colors">
               <AlertCircle className="w-6 h-6 text-rose-500" />

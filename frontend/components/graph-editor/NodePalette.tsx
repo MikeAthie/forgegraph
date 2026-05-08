@@ -165,7 +165,7 @@ export function NodePalette({
         <Input
           ref={searchInputRef}
           type="text"
-          placeholder="Search steps..."
+          placeholder="Search steps"
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
@@ -258,7 +258,7 @@ export function NodePalette({
                   data-testid={`palette-item-${item.id}`}
                   onClick={() => addPaletteItem(item)}
                   disabled={!item.enabled}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                  className={`w-full flex min-h-11 items-center gap-3 rounded-lg border p-3 transition-[color,background-color,border-color,box-shadow] motion-reduce:transition-none ${
                     activeSearchItemId === item.id && searchQuery.trim()
                       ? "border-primary ring-1 ring-primary/40 bg-accent/50"
                       : ""

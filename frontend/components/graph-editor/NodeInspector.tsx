@@ -260,7 +260,7 @@ export function NodeInspector({
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={() => void handleSaveMetadata()} disabled={savingMetadata}>
-                {savingMetadata ? "Saving..." : "Save"}
+                {savingMetadata ? "Saving" : "Save"}
               </Button>
               <Button
                 size="sm"
@@ -342,7 +342,7 @@ export function NodeInspector({
           <Input
             value={(nodeData.label as string) ?? ""}
             onChange={(e) => onUpdateNode(selectedNode.id, { label: e.target.value })}
-            className="text-sm font-semibold h-8"
+            className="text-sm font-semibold md:min-h-8"
             aria-label="Step name"
           />
           <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary capitalize">
@@ -600,7 +600,7 @@ function NoteNodeConfig({ text, onChange }: { text: string; onChange: (text: str
         <Textarea
           value={text}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Write a note to document this part of the operating model..."
+          placeholder="Write a note to document this part of the operating model"
           rows={6}
           className="text-sm"
         />
@@ -845,12 +845,12 @@ function PromptNodeConfig({
             setPromptLoadError(null);
             onChange(nextConfig);
           }}
-          placeholder="Write the prompt template (required to run)..."
+          placeholder="Write the prompt template required for operation"
           rows={10}
           className="text-sm font-mono"
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          This is what the engine executes. Editing detaches from the Prompt Library ID.
+          This is what the AI worker uses. Editing detaches from the Prompt Library ID.
         </p>
       </div>
       <div>
@@ -858,7 +858,7 @@ function PromptNodeConfig({
         <Textarea
           value={(config.system_prompt as string) ?? ""}
           onChange={(e) => onChange({ ...config, system_prompt: e.target.value })}
-          placeholder="You are a helpful assistant..."
+          placeholder="You are a helpful assistant"
           rows={4}
           className="text-sm font-mono"
         />
@@ -989,7 +989,7 @@ function HttpNodeConfig({
             onChange({ ...config, url: e.target.value });
           }}
           onBlur={(e) => validateUrl(e.target.value)}
-          placeholder="https://api.example.com/..."
+          placeholder="https://api.example.com/endpoint"
           className="text-sm"
           aria-invalid={!!urlError}
         />
@@ -1873,7 +1873,7 @@ function HumanGateNodeConfig({
             onChange({ ...config, prompt_message: e.target.value });
           }}
           onBlur={(e) => validatePromptMessage(e.target.value)}
-          placeholder="Please review and approve this step..."
+          placeholder="Please review and approve this step"
           rows={3}
           className="text-sm"
           aria-invalid={!!promptError}

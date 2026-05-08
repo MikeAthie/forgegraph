@@ -50,7 +50,7 @@ const MEMORY_DEPTH_OPTIONS = [
   { value: "medium", label: "Medium (last 20 messages)", bufferSize: 20 },
   { value: "long", label: "Long (last 50 messages)", bufferSize: 50 },
   { value: "extended", label: "Extended (last 100 messages)", bufferSize: 100 },
-  { value: "custom", label: "Custom...", bufferSize: null },
+  { value: "custom", label: "Custom", bufferSize: null },
 ] as const;
 
 export function MemoryNodeForm({ config, onChange }: NodeFormProps) {

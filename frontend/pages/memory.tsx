@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -15,6 +16,9 @@ import { Alert, AlertDescription } from "@/components/ui";
 import { BookCopy, BrainCircuit, DatabaseZap, ShieldCheck } from "lucide-react";
 
 const RESULT_LIMIT = 24;
+
+const isMemoryScopeQuery = (value: unknown): value is MemoryScopeVM =>
+  value === "all" || value === "company" || value === "operation" || value === "session";
 
 const formatRelativeDate = (value: string | null) => {
   if (!value) {
@@ -39,7 +43,9 @@ const formatRelativeDate = (value: string | null) => {
 };
 
 export default function MemoryBrowserPage() {
+  const router = useRouter();
   const { user } = useAuth();
+  const requestedObservationIdRef = useRef<string | null>(null);
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
   const [scopeFilter, setScopeFilter] = useState("all");
@@ -81,15 +87,25 @@ export default function MemoryBrowserPage() {
           });
 
       setObservations(data);
+      const requestedObservationId = requestedObservationIdRef.current;
       setSelectedObservationId((currentId) => {
         if (currentId && data.some((observation) => observation.id === currentId)) {
           return currentId;
+        }
+        if (requestedObservationId && data.some((observation) => observation.id === requestedObservationId)) {
+          return requestedObservationId;
         }
         return data[0]?.id ?? null;
       });
       setSelectedObservation((currentObservation) => {
         if (currentObservation && data.some((observation) => observation.id === currentObservation.id)) {
           return currentObservation;
+        }
+        if (requestedObservationId) {
+          const requestedObservation = data.find((observation) => observation.id === requestedObservationId);
+          if (requestedObservation) {
+            return requestedObservation;
+          }
         }
         return data[0] ?? null;
       });
@@ -106,6 +122,25 @@ export default function MemoryBrowserPage() {
   useEffect(() => {
     void refreshObservations();
   }, [refreshObservations]);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+
+    const nextQuery = typeof router.query.q === "string" ? router.query.q : "";
+    const nextScope = isMemoryScopeQuery(router.query.scope) ? router.query.scope : "all";
+    const nextType = typeof router.query.type === "string" && router.query.type ? router.query.type : "all";
+    const nextObservation =
+      typeof router.query.observation === "string" && router.query.observation ? router.query.observation : null;
+
+    requestedObservationIdRef.current = nextObservation;
+    setQueryDraft(nextQuery);
+    setQuery(nextQuery.trim());
+    setScopeFilter(nextScope);
+    setTypeFilter(nextType);
+    setSelectedObservationId(nextObservation);
+  }, [router.isReady, router.query.observation, router.query.q, router.query.scope, router.query.type]);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,16 +221,80 @@ export default function MemoryBrowserPage() {
   );
   const freshestSeenAt = observations[0]?.lastSeenAt ?? selectedObservation?.lastSeenAt ?? null;
 
-  const handleQuerySearch = useCallback((value: string) => {
-    const normalized = value.trim();
-    setQuery((currentValue) => (currentValue === normalized ? currentValue : normalized));
-  }, []);
+  const replaceMemoryQuery = useCallback(
+    (next: { q?: string; scope?: string; type?: string; observation?: string | null }) => {
+      if (!router.isReady) {
+        return;
+      }
 
-  const handleSelectObservation = useCallback((observation: MemoryObservationVM) => {
-    setSelectedObservation(observation);
-    setDetailError(null);
-    setSelectedObservationId(observation.id);
-  }, []);
+      const queryParams = { ...router.query };
+      delete queryParams.q;
+      delete queryParams.scope;
+      delete queryParams.type;
+      delete queryParams.observation;
+
+      const nextQuery = next.q ?? query;
+      const nextScope = next.scope ?? scopeFilter;
+      const nextType = next.type ?? typeFilter;
+      const nextObservation =
+        next.observation !== undefined
+          ? next.observation
+          : (selectedObservationId ?? requestedObservationIdRef.current);
+
+      if (nextQuery.trim()) {
+        queryParams.q = nextQuery.trim();
+      }
+      queryParams.scope = nextScope;
+      if (nextType && nextType !== "all") {
+        queryParams.type = nextType;
+      }
+      if (nextObservation) {
+        queryParams.observation = nextObservation;
+      }
+
+      void router.replace({ pathname: router.pathname, query: queryParams }, undefined, {
+        shallow: true,
+        scroll: false,
+      });
+    },
+    [query, router, scopeFilter, selectedObservationId, typeFilter],
+  );
+
+  const handleQuerySearch = useCallback(
+    (value: string) => {
+      const normalized = value.trim();
+      setQuery((currentValue) => (currentValue === normalized ? currentValue : normalized));
+      replaceMemoryQuery({ q: normalized });
+    },
+    [replaceMemoryQuery],
+  );
+
+  const handleSelectObservation = useCallback(
+    (observation: MemoryObservationVM) => {
+      requestedObservationIdRef.current = observation.id;
+      setSelectedObservation(observation);
+      setDetailError(null);
+      setSelectedObservationId(observation.id);
+      replaceMemoryQuery({ observation: observation.id });
+    },
+    [replaceMemoryQuery],
+  );
+
+  const handleScopeChange = useCallback(
+    (value: string) => {
+      setScopeFilter(value);
+      replaceMemoryQuery({ scope: value });
+    },
+    [replaceMemoryQuery],
+  );
+
+  const handleTypeChange = useCallback(
+    (value: string) => {
+      setTypeFilter(value);
+      replaceMemoryQuery({ type: value });
+    },
+    [replaceMemoryQuery],
+  );
 
   const modeLabel = isSearchMode ? "Search results" : "Timeline";
   const currentRole = user?.organization_role ?? "member";
@@ -331,9 +430,9 @@ export default function MemoryBrowserPage() {
                 onQueryDraftChange={setQueryDraft}
                 onQuerySearch={handleQuerySearch}
                 onRefresh={() => void refreshObservations()}
-                onScopeChange={setScopeFilter}
+                onScopeChange={handleScopeChange}
                 onSelectObservation={handleSelectObservation}
-                onTypeChange={setTypeFilter}
+                onTypeChange={handleTypeChange}
               />
             </Panel>
 

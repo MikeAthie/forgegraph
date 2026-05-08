@@ -1,0 +1,9 @@
+{
+  "slug": "01-registration",
+  "captured_at": "2026-05-08T20:35:19.070Z",
+  "test_id": "ed0f6c24c2601712c977-ce51781fccc9bc91e290",
+  "video": "01-registration.webm",
+  "sensitive_data_policy": "Tutorial-only generated users and sanitized demo state. No payment data, private customer data, API keys, or raw logs.",
+  "step": "Register a new tutorial user through the public UI.",
+  "email": "legacy-tutorial-1778272512855-0-910ccf443db78@example.com"
+}

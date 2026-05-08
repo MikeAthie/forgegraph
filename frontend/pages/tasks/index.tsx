@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { Play, Save, Scale, Trash2 } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
@@ -18,12 +19,61 @@ import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { operationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { TaskVM } from "@/domain/translation";
+import { tasksApi, type TaskJudge } from "@/lib/api";
+
+function splitCriteria(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function judgeSummaryFrom(judge: TaskJudge): TaskVM["judge"] {
+  return {
+    id: judge.id,
+    title: judge.title,
+    criteriaCount: judge.criteria.length,
+    passThreshold: judge.pass_threshold,
+    status: judge.status,
+    score: judge.score,
+    evaluatedAt: judge.evaluated_at,
+  };
+}
+
+function judgeStatusLabel(judge: TaskJudge | TaskVM["judge"] | null | undefined): string {
+  if (!judge) return "No judge";
+  if (judge.status === "passed") return `Passed${judge.score == null ? "" : ` · ${judge.score}`}`;
+  if (judge.status === "failed") return `Failed${judge.score == null ? "" : ` · ${judge.score}`}`;
+  if (judge.status === "inconclusive") return "Inconclusive";
+  return "Pending";
+}
+
+function judgeGradeLabel(judge: TaskJudge): string {
+  return judge.score == null ? "Not graded" : `${judge.score}/100`;
+}
+
+function getJudgeCriteriaResults(judge: TaskJudge | null) {
+  const rawCriteria = judge?.result?.criteria;
+  return Array.isArray(rawCriteria)
+    ? rawCriteria
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+        .slice(0, 6)
+    : [];
+}
 
 export default function TasksPage() {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskVM[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [judge, setJudge] = useState<TaskJudge | null>(null);
+  const [judgeLoading, setJudgeLoading] = useState(false);
+  const [judgeSaving, setJudgeSaving] = useState(false);
+  const [judgeError, setJudgeError] = useState<string | null>(null);
+  const [judgeTitle, setJudgeTitle] = useState("");
+  const [judgeInstructions, setJudgeInstructions] = useState("");
+  const [judgeCriteria, setJudgeCriteria] = useState("");
+  const [judgeThreshold, setJudgeThreshold] = useState(80);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +109,109 @@ export default function TasksPage() {
     () => tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null,
     [selectedTaskId, tasks],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadJudge = async () => {
+      if (!selectedTask?.id) {
+        setJudge(null);
+        return;
+      }
+      setJudgeLoading(true);
+      setJudgeError(null);
+      try {
+        const data = await tasksApi.getJudge(selectedTask.id);
+        if (cancelled) return;
+        setJudge(data);
+        setJudgeTitle(data?.title || `Judge: ${selectedTask.title}`);
+        setJudgeInstructions(data?.instructions || "");
+        setJudgeCriteria(data?.criteria?.join("\n") || "");
+        setJudgeThreshold(data?.pass_threshold ?? 80);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setJudgeError(translateProductError(err, "department"));
+        }
+      } finally {
+        if (!cancelled) {
+          setJudgeLoading(false);
+        }
+      }
+    };
+
+    void loadJudge();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTask?.id, selectedTask?.title]);
+
+  const updateTaskJudgeSummary = useCallback((taskId: string, updatedJudge: TaskJudge | null) => {
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              judge: updatedJudge ? judgeSummaryFrom(updatedJudge) : null,
+            }
+          : task,
+      ),
+    );
+  }, []);
+
+  const handleSaveJudge = useCallback(async () => {
+    if (!selectedTask) return;
+    setJudgeSaving(true);
+    setJudgeError(null);
+    try {
+      const savedJudge = await tasksApi.saveJudge(selectedTask.id, {
+        title: judgeTitle,
+        instructions: judgeInstructions,
+        criteria: splitCriteria(judgeCriteria),
+        pass_threshold: judgeThreshold,
+      });
+      setJudge(savedJudge);
+      updateTaskJudgeSummary(selectedTask.id, savedJudge);
+    } catch (err: unknown) {
+      setJudgeError(translateProductError(err, "department"));
+    } finally {
+      setJudgeSaving(false);
+    }
+  }, [judgeCriteria, judgeInstructions, judgeThreshold, judgeTitle, selectedTask, updateTaskJudgeSummary]);
+
+  const handleEvaluateJudge = useCallback(async () => {
+    if (!selectedTask) return;
+    setJudgeSaving(true);
+    setJudgeError(null);
+    try {
+      const evaluatedJudge = await tasksApi.evaluateJudge(selectedTask.id);
+      setJudge(evaluatedJudge);
+      updateTaskJudgeSummary(selectedTask.id, evaluatedJudge);
+    } catch (err: unknown) {
+      setJudgeError(translateProductError(err, "department"));
+    } finally {
+      setJudgeSaving(false);
+    }
+  }, [selectedTask, updateTaskJudgeSummary]);
+
+  const handleDeleteJudge = useCallback(async () => {
+    if (!selectedTask) return;
+    setJudgeSaving(true);
+    setJudgeError(null);
+    try {
+      await tasksApi.deleteJudge(selectedTask.id);
+      setJudge(null);
+      setJudgeTitle(`Judge: ${selectedTask.title}`);
+      setJudgeInstructions("");
+      setJudgeCriteria("");
+      setJudgeThreshold(80);
+      updateTaskJudgeSummary(selectedTask.id, null);
+    } catch (err: unknown) {
+      setJudgeError(translateProductError(err, "department"));
+    } finally {
+      setJudgeSaving(false);
+    }
+  }, [selectedTask, updateTaskJudgeSummary]);
 
   const groupedCounts = useMemo(
     () => ({
@@ -159,7 +312,7 @@ export default function TasksPage() {
               description="Task projections will appear here when operations create operator-facing work."
             />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
+            <div className="grid gap-6 2xl:grid-cols-[0.78fr_1.22fr]">
               <Panel title="Activity queue" description="Select a task to inspect its current state and next action.">
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8">
@@ -192,9 +345,15 @@ export default function TasksPage() {
                     void router.replace({ pathname: "/tasks", query: { task: task.id } }, undefined, { shallow: true });
                   }}
                   renderTitle={(task) => (
-                    <div className="flex items-center gap-3">
-                      <span>{task.title}</span>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="min-w-0 truncate">{task.title}</span>
                       <StatusBadge status={task.status} />
+                      {task.judge ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-slate-900/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:border-white/10 dark:text-slate-300">
+                          <Scale className="h-3 w-3" aria-hidden="true" />
+                          {judgeStatusLabel(task.judge)}
+                        </span>
+                      ) : null}
                     </div>
                   )}
                   renderBody={(task) => (
@@ -220,7 +379,7 @@ export default function TasksPage() {
                   title={selectedTask.title}
                   description="Summary first, deeper operation detail one click away."
                   action={
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={selectedTask.status} />
                       <Button asChild variant="outline" className="rounded-full">
                         <Link href={`/runs/${selectedTask.operationId}`}>Open operation</Link>
@@ -290,6 +449,154 @@ export default function TasksPage() {
                 </Panel>
 
                 <div className="grid gap-6 2xl:grid-cols-2">
+                  <Panel
+                    title="Task judge"
+                    description="Acceptance criteria and backend evaluation for this task."
+                    action={
+                      judge ? (
+                        <StatusBadge
+                          status={
+                            judge.status === "passed"
+                              ? "completed"
+                              : judge.status === "failed"
+                                ? "failed"
+                                : judge.status === "inconclusive"
+                                  ? "paused"
+                                  : "queued"
+                          }
+                        />
+                      ) : null
+                    }
+                  >
+                    {judgeError ? (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertDescription>{judgeError}</AlertDescription>
+                      </Alert>
+                    ) : null}
+                    {judgeLoading ? (
+                      <div className="flex min-h-[180px] items-center justify-center">
+                        <Spinner />
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">Name</span>
+                            <input
+                              value={judgeTitle}
+                              onChange={(event) => setJudgeTitle(event.target.value)}
+                              className="w-full rounded-lg border border-slate-900/10 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-900/30 dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 dark:focus:border-white/30"
+                            />
+                          </label>
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">Pass</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={judgeThreshold}
+                              onChange={(event) => setJudgeThreshold(Number(event.target.value))}
+                              className="w-full rounded-lg border border-slate-900/10 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-900/30 dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 dark:focus:border-white/30"
+                            />
+                          </label>
+                        </div>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium text-slate-700 dark:text-slate-200">Criteria</span>
+                          <textarea
+                            value={judgeCriteria}
+                            onChange={(event) => setJudgeCriteria(event.target.value)}
+                            rows={5}
+                            className="w-full rounded-lg border border-slate-900/10 bg-white px-3 py-2 text-sm leading-6 text-slate-950 outline-none focus:border-slate-900/30 dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 dark:focus:border-white/30"
+                            placeholder="One criterion per line"
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium text-slate-700 dark:text-slate-200">Rubric note</span>
+                          <textarea
+                            value={judgeInstructions}
+                            onChange={(event) => setJudgeInstructions(event.target.value)}
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-900/10 bg-white px-3 py-2 text-sm leading-6 text-slate-950 outline-none focus:border-slate-900/30 dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 dark:focus:border-white/30"
+                          />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button onClick={handleSaveJudge} disabled={judgeSaving} className="rounded-full">
+                            <Save className="mr-2 h-4 w-4" aria-hidden="true" />
+                            Save judge
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={handleEvaluateJudge}
+                            disabled={!judge || judgeSaving}
+                            className="rounded-full"
+                          >
+                            <Play className="mr-2 h-4 w-4" aria-hidden="true" />
+                            Evaluate task
+                          </Button>
+                          {judge ? (
+                            <Button
+                              variant="ghost"
+                              onClick={handleDeleteJudge}
+                              disabled={judgeSaving}
+                              className="rounded-full"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                              Remove
+                            </Button>
+                          ) : null}
+                        </div>
+                        {judge ? (
+                          <div className="rounded-lg border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 text-sm dark:border-white/8">
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                  Status
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-950 dark:text-slate-50">
+                                  {judgeStatusLabel(judge)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                  Grade
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-950 dark:text-slate-50">
+                                  {judgeGradeLabel(judge)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                  Pass mark
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-950 dark:text-slate-50">
+                                  {judge.pass_threshold}/100
+                                </p>
+                              </div>
+                            </div>
+                            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                              {judge.evaluated_at ? formatDateTime(judge.evaluated_at) : "Not evaluated"}
+                            </p>
+                            {getJudgeCriteriaResults(judge).length ? (
+                              <div className="mt-3 space-y-2">
+                                {getJudgeCriteriaResults(judge).map((criterion, index) => (
+                                  <div key={`${String(criterion.criterion)}-${index}`} className="flex gap-3">
+                                    <span
+                                      className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-400 data-[passed=true]:bg-emerald-500"
+                                      data-passed={criterion.passed === true}
+                                    />
+                                    <p className="text-slate-700 dark:text-slate-200">
+                                      {String(criterion.criterion ?? "Criterion")} · {String(criterion.score ?? 0)}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </Panel>
+
                   <Panel
                     title="Operation detail"
                     description="Use the operation view when you need department-by-department detail."

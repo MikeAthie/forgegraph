@@ -78,14 +78,14 @@ function KeyValueEditor({
               value={key}
               onChange={(e) => handleKeyChange(key, e.target.value)}
               placeholder={keyPlaceholder}
-              className="flex-1 text-sm h-8"
+              className="flex-1 text-sm md:min-h-8"
               disabled={disabled}
             />
             <Input
               value={val}
               onChange={(e) => handleValueChange(key, e.target.value)}
               placeholder={valuePlaceholder}
-              className="flex-1 text-sm h-8"
+              className="flex-1 text-sm md:min-h-8"
               disabled={disabled}
             />
             <Button

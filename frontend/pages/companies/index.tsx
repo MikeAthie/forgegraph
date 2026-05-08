@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { ArrowRight, Building2, Plus } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
@@ -21,6 +22,9 @@ import { cn } from "@/lib/utils";
 
 type CompanyFilter = "all" | "operating" | "attention";
 
+const isCompanyFilter = (value: unknown): value is CompanyFilter =>
+  value === "all" || value === "operating" || value === "attention";
+
 function isCompanyOperating(company: CompanyVM): boolean {
   return company.latestOperation?.status === "running";
 }
@@ -30,6 +34,7 @@ function needsAttention(company: CompanyVM): boolean {
 }
 
 export default function CompaniesIndexPage() {
+  const router = useRouter();
   const [companies, setCompanies] = useState<CompanyVM[]>([]);
   const [activeFilter, setActiveFilter] = useState<CompanyFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -62,6 +67,31 @@ export default function CompaniesIndexPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+    const posture = router.query.posture;
+    if (isCompanyFilter(posture)) {
+      setActiveFilter(posture);
+    }
+  }, [router.isReady, router.query.posture]);
+
+  const updateActiveFilter = (filter: CompanyFilter) => {
+    setActiveFilter(filter);
+    if (!router.isReady) {
+      return;
+    }
+    void router.replace(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, posture: filter },
+      },
+      undefined,
+      { shallow: true, scroll: false },
+    );
+  };
+
   const summary = useMemo(
     () => ({
       total: companies.length,
@@ -80,6 +110,8 @@ export default function CompaniesIndexPage() {
     }
     return companies;
   }, [activeFilter, companies]);
+  const visibleCompanies = filteredCompanies.slice(0, 50);
+  const hiddenCompanyCount = Math.max(filteredCompanies.length - visibleCompanies.length, 0);
 
   const filterCards: Array<{
     id: CompanyFilter;
@@ -133,7 +165,7 @@ export default function CompaniesIndexPage() {
           <SectionHeader
             eyebrow="Companies"
             title="Operate AI-driven companies"
-            description="Select an existing company, review its current posture, or create a new company without seeing engine language."
+            description="Select an existing company, review its current posture, or create a new company without seeing technical implementation language."
             action={
               <Button asChild className="rounded-full">
                 <Link href="/companies/new">
@@ -168,7 +200,7 @@ export default function CompaniesIndexPage() {
                         key={filter.id}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => setActiveFilter(filter.id)}
+                        onClick={() => updateActiveFilter(filter.id)}
                         className={cn(
                           "min-h-[7.75rem] rounded-[1.2rem] border px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950",
                           selected
@@ -213,7 +245,7 @@ export default function CompaniesIndexPage() {
                 {companies.length ? (
                   filteredCompanies.length ? (
                     <div className="grid gap-4 lg:grid-cols-2">
-                      {filteredCompanies.map((company) => {
+                      {visibleCompanies.map((company) => {
                         const profile = company.profile;
                         const status = company.status;
                         const latestOperation = company.latestOperation;
@@ -222,7 +254,7 @@ export default function CompaniesIndexPage() {
                           <Link
                             key={company.id}
                             href={`/companies/${company.id}`}
-                            className="group rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-5 py-5 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-900/18 hover:bg-white hover:shadow-[0_24px_56px_-42px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/8 dark:hover:border-white/18 dark:hover:bg-white/[0.07] dark:hover:shadow-[0_24px_56px_-42px_rgba(0,0,0,0.75)] dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                            className="group min-w-0 rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-5 py-5 transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out motion-reduce:transition-none motion-reduce:transform-none hover:-translate-y-0.5 hover:border-slate-900/18 hover:bg-white hover:shadow-[0_24px_56px_-42px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/8 dark:hover:border-white/18 dark:hover:bg-white/[0.07] dark:hover:shadow-[0_24px_56px_-42px_rgba(0,0,0,0.75)] dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div className="min-w-0">
@@ -291,6 +323,12 @@ export default function CompaniesIndexPage() {
                     description="Create the first company to begin operating ForgeGraph in company-first language."
                   />
                 )}
+                {hiddenCompanyCount > 0 ? (
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Showing first 50 of {filteredCompanies.length} companies. Use the posture filters to narrow the
+                    workspace list.
+                  </p>
+                ) : null}
               </Panel>
             </>
           )}

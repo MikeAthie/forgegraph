@@ -142,7 +142,7 @@ export default function GraphDetailPage() {
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center space-x-3 text-muted-foreground">
               <Spinner size="md" />
-              <span className="text-sm">Loading advanced operating model...</span>
+              <span className="text-sm">Loading advanced operating model</span>
             </div>
           </div>
         </div>

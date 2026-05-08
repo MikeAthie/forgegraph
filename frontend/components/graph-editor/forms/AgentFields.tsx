@@ -155,7 +155,7 @@ export function AgentFields({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => handleRemoveExample(index)}
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    className="text-muted-foreground hover:text-destructive"
                   >
                     <X className="w-3.5 h-3.5" />
                   </Button>
@@ -166,7 +166,7 @@ export function AgentFields({
                     <Textarea
                       value={example.input}
                       onChange={(e) => handleExampleChange(index, "input", e.target.value)}
-                      placeholder="Example input or user message..."
+                      placeholder="Example input or user message"
                       rows={2}
                       className="text-sm resize-none mt-1"
                     />
@@ -176,7 +176,7 @@ export function AgentFields({
                     <Textarea
                       value={example.output}
                       onChange={(e) => handleExampleChange(index, "output", e.target.value)}
-                      placeholder="Expected agent response..."
+                      placeholder="Expected agent response"
                       rows={2}
                       className="text-sm resize-none mt-1"
                     />

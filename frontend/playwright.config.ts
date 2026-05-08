@@ -156,7 +156,7 @@ const workerCount =
 
 export default defineConfig({
   testDir: "./__tests__",
-  testMatch: ["**/e2e/**/*.spec.ts", "**/consulting/specs/*.spec.ts"],
+  testMatch: ["**/e2e/**/*.spec.ts", "**/consulting/specs/*.spec.ts", "**/legacy-ultimate-test/specs/*.spec.ts"],
   testIgnore: [
     "**/agent-authoring.spec.ts",
     "**/graph-editor.spec.ts",
@@ -248,6 +248,8 @@ export default defineConfig({
               AUTH_LOGIN_THROTTLE_RATE: process.env.PLAYWRIGHT_AUTH_LOGIN_THROTTLE_RATE ?? "10000/min",
               AUTH_REFRESH_THROTTLE_RATE: process.env.PLAYWRIGHT_AUTH_REFRESH_THROTTLE_RATE ?? "10000/min",
               AUTH_WS_TICKET_THROTTLE_RATE: process.env.PLAYWRIGHT_AUTH_WS_TICKET_THROTTLE_RATE ?? "10000/min",
+              RUN_START_RATE_LIMIT_PER_MIN: process.env.PLAYWRIGHT_RUN_START_RATE_LIMIT_PER_MIN ?? "0",
+              RUN_MAX_ACTIVE_PER_TENANT: process.env.PLAYWRIGHT_RUN_MAX_ACTIVE_PER_TENANT ?? "0",
               FRONTEND_URL: devUrl,
               DB_HOST: dbHost,
               DB_PORT: dbPort,

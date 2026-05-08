@@ -13,6 +13,19 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
   const router = useRouter();
   const isLogin = router.pathname.startsWith("/login");
   const isRegister = router.pathname.startsWith("/register");
+  const heroCopy = isRegister
+    ? {
+        eyebrow: "New workspace",
+        title: "Create your operating workspace before the first company operation.",
+        description:
+          "ForgeGraph starts with company work, approval gates, deliverables, and operating controls in one scoped workspace.",
+      }
+    : {
+        eyebrow: "Authentication",
+        title: "Sign in to create and operate AI-driven companies from one workspace.",
+        description:
+          "ForgeGraph opens on company work, approvals, deliverables, and operating controls instead of internal tooling.",
+      };
 
   return (
     <div className="min-h-screen">
@@ -54,17 +67,16 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
           <div className="grid w-full gap-10 xl:grid-cols-[0.9fr_0.7fr] xl:items-center">
             <section className="hidden xl:block">
               <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                Authentication
+                {heroCopy.eyebrow}
               </p>
               <h1
                 className="mt-4 max-w-3xl text-5xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
                 style={{ fontFamily: "var(--font-serif)" }}
               >
-                Sign in to create and operate AI-driven companies from one workspace.
+                {heroCopy.title}
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
-                ForgeGraph opens on company work, approvals, deliverables, and operating controls instead of internal
-                tooling.
+                {heroCopy.description}
               </p>
             </section>
 

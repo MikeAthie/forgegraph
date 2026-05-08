@@ -270,7 +270,7 @@ export default function AccountingPage() {
                 </Panel>
               </div>
 
-              <Panel title="Ledger" description="Atomic accounting records kept close to the source of truth.">
+              <Panel title="Ledger" description="Atomic accounting records kept close to the backend-governed ledger.">
                 {ledger.length ? (
                   <div className="overflow-hidden rounded-[1.4rem] border border-slate-900/8 dark:border-white/8">
                     <table className="min-w-full divide-y divide-slate-900/8 dark:divide-white/8">

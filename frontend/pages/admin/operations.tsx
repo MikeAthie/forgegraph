@@ -562,7 +562,7 @@ export default function AdminOperationsPage() {
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Spinner className="h-5 w-5" />
-              Loading operator controls...
+              Loading operator controls…
             </div>
           ) : data ? (
             <>
@@ -1057,7 +1057,7 @@ export default function AdminOperationsPage() {
                         {previewLoading ? (
                           <>
                             <Spinner size="xs" className="mr-2" />
-                            Previewing...
+                            Previewing…
                           </>
                         ) : (
                           "Preview cleanup impact"
@@ -1129,7 +1129,7 @@ export default function AdminOperationsPage() {
                             <>
                               <span className="inline-flex items-center">
                                 <Spinner size="xs" className="mr-2" />
-                                Exporting...
+                                Exporting…
                               </span>
                               <HardDriveDownload className="h-4 w-4" aria-hidden="true" />
                             </>

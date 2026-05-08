@@ -119,4 +119,6 @@ def decrypt_api_key(encrypted_key: bytes) -> str:
     Returns:
         Decrypted API key string.
     """
+    if isinstance(encrypted_key, memoryview):
+        encrypted_key = encrypted_key.tobytes()
     return EncryptionService.get_instance().decrypt(encrypted_key)

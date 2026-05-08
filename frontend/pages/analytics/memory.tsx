@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -33,6 +34,9 @@ const PERIOD_OPTIONS = [
   { value: "90d", label: "Last 90 days" },
   { value: "365d", label: "Last 12 months" },
 ];
+
+const isPeriodOption = (value: unknown): value is string =>
+  typeof value === "string" && PERIOD_OPTIONS.some((option) => option.value === value);
 
 const formatNumber = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "—";
@@ -73,10 +77,20 @@ const buildSparkline = (values: number[], width = 180, height = 48) => {
     .join(" ");
 };
 
-function Sparkline({ values, className }: { values: number[]; className?: string }) {
+const describeSparkline = (values: number[], label: string) => {
+  if (!values.length) {
+    return `${label}: no data available for the selected period.`;
+  }
+  const first = values[0] ?? 0;
+  const latest = values[values.length - 1] ?? 0;
+  const max = Math.max(...values);
+  return `${label}: ${values.length} points, from ${formatNumber(first)} to ${formatNumber(latest)}, peak ${formatNumber(max)}.`;
+};
+
+function Sparkline({ values, className, label }: { values: number[]; className?: string; label: string }) {
   const points = buildSparkline(values);
   return (
-    <svg viewBox="0 0 180 48" className={className} aria-hidden="true">
+    <svg viewBox="0 0 180 48" className={className} role="img" aria-label={describeSparkline(values, label)}>
       {points ? (
         <>
           <polyline
@@ -106,6 +120,7 @@ const downloadBlob = (blob: Blob, filename: string) => {
 };
 
 export default function MemoryAnalyticsPage() {
+  const router = useRouter();
   const [period, setPeriod] = useState("30d");
   const [usage, setUsage] = useState<MemoryAnalyticsUsage | null>(null);
   const [costs, setCosts] = useState<MemoryAnalyticsCosts | null>(null);
@@ -137,6 +152,30 @@ export default function MemoryAnalyticsPage() {
   useEffect(() => {
     void fetchAnalytics(period);
   }, [fetchAnalytics, period]);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+    if (isPeriodOption(router.query.period)) {
+      setPeriod(router.query.period);
+    }
+  }, [router.isReady, router.query.period]);
+
+  const handlePeriodChange = (nextPeriod: string) => {
+    setPeriod(nextPeriod);
+    if (!router.isReady) {
+      return;
+    }
+    void router.replace(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, period: nextPeriod },
+      },
+      undefined,
+      { shallow: true, scroll: false },
+    );
+  };
 
   const costSparklineValues = useMemo(
     () => costs?.series.map((entry) => entry.summarization_cost_usd ?? 0) ?? [],
@@ -181,12 +220,12 @@ export default function MemoryAnalyticsPage() {
                   Signal, not noise.
                 </h1>
                 <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  Monitor how memory tiers perform across operations, costs, and storage saturation. Snapshot refreshed
-                  on demand.
+                  Monitor how memory tiers perform across operations, costs, and storage saturation. View refreshed on
+                  demand.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <Select value={period} onValueChange={setPeriod}>
+                <Select value={period} onValueChange={handlePeriodChange}>
                   <SelectTrigger className="w-[170px]">
                     <SelectValue placeholder="Period" />
                   </SelectTrigger>
@@ -247,7 +286,7 @@ export default function MemoryAnalyticsPage() {
                       <span className="text-muted-foreground">Peak buffer size</span>
                       <span className="font-medium">{formatNumber(usage?.tier1.peak_buffer_size)}</span>
                     </div>
-                    <Sparkline values={usageTokenSeries} className="text-cyan-500" />
+                    <Sparkline values={usageTokenSeries} className="text-cyan-500" label="Tier 1 token trend" />
                   </CardContent>
                 </Card>
 
@@ -296,6 +335,7 @@ export default function MemoryAnalyticsPage() {
                     <Sparkline
                       values={usage?.usage_series.map((entry) => entry.summarization_cost_usd ?? 0) ?? []}
                       className="text-amber-500"
+                      label="Tier 3 summarization cost trend"
                     />
                   </CardContent>
                 </Card>
@@ -356,7 +396,11 @@ export default function MemoryAnalyticsPage() {
                         </div>
                       </div>
                       <div className="rounded-2xl border border-border/40 bg-gradient-to-br from-cyan-500/10 via-transparent to-amber-500/10 p-4">
-                        <Sparkline values={costSparklineValues} className="h-16 w-full text-cyan-600" />
+                        <Sparkline
+                          values={costSparklineValues}
+                          className="h-16 w-full text-cyan-600"
+                          label="Memory summarization cost trend"
+                        />
                         <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
                           {costs?.series.slice(-5).map((entry) => (
                             <div
@@ -398,7 +442,7 @@ export default function MemoryAnalyticsPage() {
 
               <Card className="border-border/50 bg-card/60">
                 <CardHeader>
-                  <CardTitle>Performance snapshot</CardTitle>
+                  <CardTitle>Performance summary</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-border/40 bg-muted/30 p-4">

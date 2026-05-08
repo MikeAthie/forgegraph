@@ -1,0 +1,87 @@
+{
+  "results": [
+    {
+      "name": "login-desktop-light.png",
+      "url": "/login",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "light",
+      "title": "Sign in to create and operate AI-driven companies from one workspace.",
+      "horizontalOverflow": false
+    },
+    {
+      "name": "companies-desktop-light.png",
+      "url": "/companies",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "light",
+      "title": "Company Workspace",
+      "horizontalOverflow": false
+    },
+    {
+      "name": "companies-mobile-light.png",
+      "url": "/companies",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "theme": "light",
+      "title": "Company Workspace",
+      "horizontalOverflow": false
+    },
+    {
+      "name": "companies-desktop-dark.png",
+      "url": "/companies",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "dark",
+      "title": "Company Workspace",
+      "horizontalOverflow": false
+    },
+    {
+      "name": "overview-wide-light.png",
+      "url": "/overview",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "theme": "light",
+      "title": "Command Ops",
+      "horizontalOverflow": false
+    },
+    {
+      "name": "llm-analytics-tablet-light.png",
+      "url": "/analytics/llm",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "theme": "light",
+      "title": "ForgeGraph",
+      "horizontalOverflow": false
+    }
+  ],
+  "errors": [
+    {
+      "name": "companies-mobile-light.png",
+      "type": "error",
+      "message": "WebSocket connection to 'ws://localhost:8000/ws/organizations/org-1/state/?ticket=undefined&event_types=decision.created%2Cdecision.updated%2Coverview.updated' failed: Error during WebSocket handshake: Unexpected response code: 500"
+    },
+    {
+      "name": "overview-wide-light.png",
+      "type": "error",
+      "message": "WebSocket connection to 'ws://localhost:8000/ws/organizations/org-1/state/?ticket=undefined&event_types=decision.created%2Cdecision.updated%2Coverview.updated' failed: Error during WebSocket handshake: Unexpected response code: 500"
+    },
+    {
+      "name": "llm-analytics-tablet-light.png",
+      "type": "error",
+      "message": "WebSocket connection to 'ws://localhost:8000/ws/organizations/org-1/state/?ticket=undefined&event_types=decision.created%2Cdecision.updated%2Coverview.updated' failed: Error during WebSocket handshake: Unexpected response code: 500"
+    }
+  ]
+}

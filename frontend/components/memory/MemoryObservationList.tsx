@@ -48,7 +48,7 @@ const summarizeContent = (content: string) => {
   if (content.length <= 170) {
     return content;
   }
-  return `${content.slice(0, 167)}...`;
+  return `${content.slice(0, 167)}…`;
 };
 
 interface MemoryObservationListProps {
@@ -155,7 +155,7 @@ export function MemoryObservationList({
       {loading ? (
         <div className="flex min-h-72 items-center justify-center gap-3 rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] dark:border-white/8">
           <Spinner size="md" />
-          <span className="text-sm text-slate-500 dark:text-slate-400">Loading knowledge records...</span>
+          <span className="text-sm text-slate-500 dark:text-slate-400">Loading knowledge records</span>
         </div>
       ) : null}
 

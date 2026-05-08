@@ -40,7 +40,7 @@ const autonomyOptions: Array<{
   description: string;
 }> = [
   { id: "manual", label: "Manual", description: "Nothing moves forward without explicit approval." },
-  { id: "assisted", label: "Assisted", description: "Recommended for alpha. The company pauses at key checkpoints." },
+  { id: "assisted", label: "Assisted", description: "Recommended for alpha. The company pauses at key review points." },
   { id: "autonomous", label: "Autonomous", description: "Keeps operating within budget and safety limits." },
 ];
 
@@ -147,6 +147,21 @@ function getStepError(
       return values.selectedDepartments.length ? null : "Select at least one department before continuing.";
     default:
       return null;
+  }
+}
+
+function getNextStepLabel(stepId: BuilderStepId): string {
+  switch (stepId) {
+    case "objective":
+      return "Review Suggested Setup";
+    case "suggestion":
+      return "Adjust Team";
+    case "team":
+      return "Choose Policy";
+    case "policy":
+      return "Review Launch";
+    default:
+      return "Continue";
   }
 }
 
@@ -343,7 +358,7 @@ function BuilderCompanyMap({
 
         <MicroExplanation className="mt-4">
           ForgeGraph connects these departments as one operating flow under the hood, so the company can move work from
-          objective to deliverable without exposing engine internals.
+          objective to deliverable without exposing technical internals.
         </MicroExplanation>
       </div>
     </div>
@@ -369,6 +384,7 @@ export function CompanyBuilderForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [questModeEnabled, setQuestModeEnabled] = useState(false);
+  const [guidePromptVisible, setGuidePromptVisible] = useState(false);
 
   const currentStep = builderSteps[currentStepIndex] ?? builderSteps[0];
   const selectedPreset = useMemo(
@@ -448,11 +464,11 @@ export function CompanyBuilderForm() {
           return;
         }
         const guidedMilestone = milestones.find((item) => item.key === "company_first_run_explained");
-        setQuestModeEnabled(!guidedMilestone?.completed);
+        setGuidePromptVisible(!guidedMilestone?.completed);
       })
       .catch(() => {
         if (mounted) {
-          setQuestModeEnabled(false);
+          setGuidePromptVisible(false);
         }
       });
 
@@ -460,6 +476,21 @@ export function CompanyBuilderForm() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+    const guideParam = router.query.guide;
+    const shouldOpenGuide =
+      guideParam === "1" ||
+      guideParam === "true" ||
+      (Array.isArray(guideParam) && (guideParam.includes("1") || guideParam.includes("true")));
+    if (shouldOpenGuide) {
+      setGuidePromptVisible(false);
+      setQuestModeEnabled(true);
+    }
+  }, [router.isReady, router.query.guide]);
 
   const applyPresetSuggestion = (preset: CompanyPreset) => {
     setSelectedPresetId(preset.id);
@@ -513,15 +544,14 @@ export function CompanyBuilderForm() {
 
   const dismissQuestMode = async (reason: "skip" | "complete") => {
     setQuestModeEnabled(false);
-    if (reason === "skip") {
-      try {
-        await onboardingApi.complete("company_first_run_explained", {
-          source: "builder",
-          reason: "skipped",
-        });
-      } catch {
-        // Ignore onboarding guide persistence failures to keep the builder moving.
-      }
+    setGuidePromptVisible(false);
+    try {
+      await onboardingApi.complete("company_first_run_explained", {
+        source: "builder",
+        reason: reason === "skip" ? "skipped" : "complete",
+      });
+    } catch {
+      // Ignore onboarding guide persistence failures to keep the builder moving.
     }
   };
 
@@ -987,7 +1017,7 @@ export function CompanyBuilderForm() {
                       type="password"
                       value={byokApiKey}
                       onChange={(event) => setByokApiKey(event.target.value)}
-                      placeholder="sk-proj-..."
+                      placeholder="sk-proj-example"
                     />
                   </div>
                 ) : null}
@@ -1105,7 +1135,7 @@ export function CompanyBuilderForm() {
     <ProtectedRoute>
       <DashboardLayout
         inspector={
-          <div className="sticky top-[6.5rem] space-y-4">
+          <div className="space-y-4 2xl:sticky 2xl:top-[6.5rem]">
             <Surface className="overflow-hidden">
               <div className="border-b border-slate-900/8 px-6 py-6 dark:border-white/8">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
@@ -1158,6 +1188,51 @@ export function CompanyBuilderForm() {
             }
           />
 
+          {guidePromptVisible ? (
+            <Surface
+              data-testid="company-guide-prompt"
+              className="border-sky-900/10 bg-sky-50/80 px-5 py-4 dark:border-sky-200/15 dark:bg-sky-500/10"
+            >
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 gap-3">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-100">
+                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Guided setup is available</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                      Start the focused walkthrough when useful. The builder stays ready for direct setup.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => {
+                      setGuidePromptVisible(false);
+                      setQuestModeEnabled(true);
+                    }}
+                  >
+                    Start guided setup
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => {
+                      void dismissQuestMode("skip");
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            </Surface>
+          ) : null}
+
           {error ? (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -1195,7 +1270,7 @@ export function CompanyBuilderForm() {
             </div>
           </Panel>
 
-          <div className="grid gap-6 xl:grid-cols-[1.18fr_0.82fr]">
+          <div className="grid gap-6 2xl:grid-cols-[1.18fr_0.82fr]">
             <div className="space-y-6">
               {renderStepPanel()}
 
@@ -1206,7 +1281,7 @@ export function CompanyBuilderForm() {
                 </Button>
                 {currentStep.id !== "launch" ? (
                   <Button onClick={() => moveStep("next")}>
-                    Continue
+                    {getNextStepLabel(currentStep.id)}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : null}
@@ -1214,7 +1289,7 @@ export function CompanyBuilderForm() {
             </div>
 
             <div className="space-y-6">
-              <Panel title="Launch snapshot" description="The essentials you are about to launch.">
+              <Panel title="Launch summary" description="The essentials you are about to launch.">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">

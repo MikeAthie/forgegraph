@@ -1356,7 +1356,7 @@ export function GraphEditor({
   }, [edges, nodes, saveGraphSnapshot]);
 
   const runDisabledReason = startingRun
-    ? "Starting run..."
+    ? "Starting run"
     : saving
       ? "Save in progress"
       : loadingVersion
@@ -1609,7 +1609,7 @@ export function GraphEditor({
         return;
       }
 
-      showInfo("Starting test operation", "Saving the operating model and launching a test operation...");
+      showInfo("Starting test operation", "Saving the operating model and launching a test operation");
 
       let versionId = currentVersionId;
 
@@ -1859,16 +1859,16 @@ export function GraphEditor({
                         title={runDisabledReason ?? "Launch test operation"}
                         className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        {startingRun ? "Starting..." : <Play aria-hidden="true" className="h-4 w-4" />}
+                        {startingRun ? "Starting" : <Play aria-hidden="true" className="h-4 w-4" />}
                       </button>
                       <button
                         type="button"
-                        aria-label={saving ? "Saving..." : "Save"}
+                        aria-label={saving ? "Saving" : "Save"}
                         onClick={() => void handleSave()}
                         disabled={saving || !isDirty}
                         className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        {saving ? "Saving..." : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
+                        {saving ? "Saving" : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
                       </button>
                     </>
                   )}
@@ -1910,7 +1910,7 @@ export function GraphEditor({
                   </div>
 
                   {overlayRunLoading && !overlayRun && (
-                    <p className="text-xs text-muted-foreground">Loading operation detail...</p>
+                    <p className="text-xs text-muted-foreground">Loading operation detail…</p>
                   )}
 
                   {overlayRunError && <p className="text-xs text-destructive whitespace-pre-wrap">{overlayRunError}</p>}
@@ -1934,7 +1934,7 @@ export function GraphEditor({
                             disabled={overlayCanceling}
                             className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
-                            {overlayCanceling ? "Stopping..." : "Stop"}
+                            {overlayCanceling ? "Stopping" : "Stop"}
                           </button>
                         )}
                         <button
@@ -1943,7 +1943,7 @@ export function GraphEditor({
                           disabled={overlayRunLoading || overlayRunRefreshing}
                           className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                          {overlayRunLoading || overlayRunRefreshing ? "Refreshing..." : "Refresh"}
+                          {overlayRunLoading || overlayRunRefreshing ? "Refreshing" : "Refresh"}
                         </button>
                       </div>
 

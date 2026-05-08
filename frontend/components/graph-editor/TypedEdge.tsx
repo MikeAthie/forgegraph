@@ -185,10 +185,10 @@ function TypedEdgeComponent({
               type="button"
               onClick={handleInsertClick}
               className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center",
+                "flex size-11 items-center justify-center rounded-full md:size-6",
                 "bg-primary text-white shadow-lg",
                 "hover:bg-primary/90 hover:scale-110",
-                "transition-all duration-150",
+                "transition-[color,background-color,box-shadow,transform] duration-150 motion-reduce:transition-none motion-reduce:transform-none",
               )}
               aria-label="Insert node"
               title="Insert node here"

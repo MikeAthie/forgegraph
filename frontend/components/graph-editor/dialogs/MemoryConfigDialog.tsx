@@ -24,7 +24,7 @@ const MEMORY_DEPTH_OPTIONS: Array<{ value: MemoryDepth; label: string; bufferSiz
   { value: "medium", label: "Medium (last 20 messages)", bufferSize: 20 },
   { value: "long", label: "Long (last 50 messages)", bufferSize: 50 },
   { value: "extended", label: "Extended (last 100 messages)", bufferSize: 100 },
-  { value: "custom", label: "Custom...", bufferSize: null },
+  { value: "custom", label: "Custom", bufferSize: null },
 ];
 
 type MemoryConfigFormState = {
@@ -205,7 +205,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
         </DialogHeader>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading memory configuration...</p>
+          <p className="text-sm text-muted-foreground">Loading memory configuration…</p>
         ) : (
           <div className="space-y-4">
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -495,7 +495,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
             Cancel
           </Button>
           <Button type="button" onClick={handleSave} disabled={saving || loading}>
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? "Saving" : "Save Settings"}
           </Button>
         </DialogFooter>
       </DialogContent>

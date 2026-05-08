@@ -17,6 +17,8 @@ const customJestConfig = {
   testPathIgnorePatterns: [
     "<rootDir>/__tests__/e2e/",
     "<rootDir>/__tests__/consulting/",
+    "<rootDir>/__tests__/demo-captures/",
+    "<rootDir>/__tests__/legacy-ultimate-test/",
     "<rootDir>/__tests__/.*/fixtures/",
   ],
   modulePathIgnorePatterns: ["<rootDir>/.next/"],

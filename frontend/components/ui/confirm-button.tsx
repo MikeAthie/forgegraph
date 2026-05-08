@@ -85,7 +85,7 @@ export function ConfirmButton({
             {isLoading ? (
               <>
                 <Spinner size="xs" className="mr-2" />
-                {confirmText}...
+                {confirmText}…
               </>
             ) : (
               confirmText

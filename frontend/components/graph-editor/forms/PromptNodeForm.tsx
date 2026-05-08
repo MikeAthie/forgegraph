@@ -127,7 +127,7 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
             id="system-prompt"
             value={promptConfig.system_prompt || ""}
             onChange={(e) => handleChange("system_prompt", e.target.value)}
-            placeholder="You are a helpful assistant that..."
+            placeholder="You are a helpful assistant that"
             rows={3}
             className="text-sm resize-none font-mono"
           />

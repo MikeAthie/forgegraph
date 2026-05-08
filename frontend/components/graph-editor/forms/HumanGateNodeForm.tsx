@@ -100,7 +100,7 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
             id="instructions"
             value={gateConfig.instructions || ""}
             onChange={(e) => handleChange("instructions", e.target.value)}
-            placeholder="Check for accuracy, tone, and compliance with brand guidelines..."
+            placeholder="Check for accuracy, tone, and compliance with brand guidelines"
             rows={3}
             className="text-sm resize-none"
           />

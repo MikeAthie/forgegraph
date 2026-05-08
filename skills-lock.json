@@ -1,10 +1,20 @@
 {
   "version": 1,
   "skills": {
+    "accessibility": {
+      "source": "addyosmani/web-quality-skills",
+      "sourceType": "autoskills-registry",
+      "computedHash": "bffe3d08cfe92ebad63699f74ce29e35c19850ebfbf474c1463183cfe34d6a09"
+    },
     "ai-seo": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
       "computedHash": "ede5108491794bd39caf5f673ecfd2349e5a398e7034d1beedc615ef59c74958"
+    },
+    "bash-defensive-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "autoskills-registry",
+      "computedHash": "1f566c2d9c3b50a784b05d08f6b08ebfeb31f038e4d4173f2d488484edb058a6"
     },
     "django-expert": {
       "source": "vintasoftware/django-ai-plugins",
@@ -16,10 +26,36 @@
       "sourceType": "github",
       "computedHash": "7d7a2cd3340482d1a99b5f0a5ab2929ad7a5259c81973d09e8676fb19565c624"
     },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "autoskills-registry",
+      "computedHash": "82fb11a63fb1e35ee2469516ed02d54695f783115b1540c0e783197af4240a3a"
+    },
+    "golang-patterns": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "autoskills-registry",
+      "computedHash": "669ccfb110e3a3932669684801fc8992cda87ec6d9c1fd72ff13ae9f5e7c748e"
+    },
+    "golang-testing": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "autoskills-registry",
+      "computedHash": "4c1e0c6805760534d8fd1a9fa2e4b5eb700b402f054254383437bd679d341cbd"
+    },
+    "seo": {
+      "source": "addyosmani/web-quality-skills",
+      "sourceType": "autoskills-registry",
+      "computedHash": "c184da724d1c61ad077f27418ea8e7e88fd54bcdf98165e18be7e4681cbd5e20"
+    },
     "seo-audit": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
       "computedHash": "8d29f46f5d494dd41d65b7d1539b0e4bd7e1b5f4d73b8316cd1e744764705594"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "6337038fe1fe6bbe1b9f252ab678ee575859190bab6f0f246f4061824eb40875"
     }
   }
 }

@@ -240,7 +240,7 @@ export default function GraphsPage() {
             <div className="flex items-center justify-center py-16">
               <div className="flex items-center space-x-3 text-muted-foreground">
                 <Spinner size="md" />
-                <span className="text-sm">Loading operating models...</span>
+                <span className="text-sm">Loading operating models</span>
               </div>
             </div>
           ) : sortedGraphs.length === 0 ? (
@@ -376,7 +376,7 @@ export default function GraphsPage() {
                 {isCreating ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
-                    Creating...
+                    Creating
                   </>
                 ) : (
                   "Create"
@@ -429,7 +429,7 @@ export default function GraphsPage() {
                 {isSavingEdit ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
-                    Saving...
+                    Saving
                   </>
                 ) : (
                   "Save"
@@ -459,7 +459,7 @@ export default function GraphsPage() {
             {versionsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner size="md" />
-                <span className="ml-3 text-sm text-muted-foreground">Loading saved versions...</span>
+                <span className="ml-3 text-sm text-muted-foreground">Loading saved versions</span>
               </div>
             ) : versions.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">No saved versions yet.</div>

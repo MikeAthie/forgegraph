@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRouter } from "next/router";
 
 import { useAuth } from "@/contexts/AuthContext";
 import * as api from "@/lib/api";
@@ -16,8 +17,11 @@ jest.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 jest.mock("@/contexts/AuthContext");
+jest.mock("next/router");
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
+const replaceMock = jest.fn();
 
 const observationOne: api.MemoryObservation = {
   id: "obs-1",
@@ -87,6 +91,16 @@ const renderPage = async () => {
 describe("Memory Browser Page", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    replaceMock.mockClear();
+    mockUseRouter.mockReturnValue({
+      pathname: "/memory",
+      query: {},
+      asPath: "/memory",
+      isReady: true,
+      replace: replaceMock,
+      push: jest.fn(),
+      prefetch: jest.fn(),
+    } as any);
     mockUseAuth.mockReturnValue({
       user: {
         id: "u1",
@@ -216,6 +230,11 @@ describe("Memory Browser Page", () => {
         limit: 24,
       });
     });
+    expect(replaceMock).toHaveBeenCalledWith(
+      { pathname: "/memory", query: expect.objectContaining({ scope: "all", type: "summary" }) },
+      undefined,
+      { shallow: true, scroll: false },
+    );
 
     await waitFor(() => {
       expect(screen.getByText(/no observations matched/i)).toBeInTheDocument();
@@ -241,6 +260,11 @@ describe("Memory Browser Page", () => {
     await waitFor(() => {
       expect(timelineSpy).toHaveBeenLastCalledWith({ scope: "graph", limit: 24 });
     });
+    expect(replaceMock).toHaveBeenCalledWith(
+      { pathname: "/memory", query: expect.objectContaining({ scope: "company" }) },
+      undefined,
+      { shallow: true, scroll: false },
+    );
   });
 
   it("renders an error banner when the API request fails", async () => {

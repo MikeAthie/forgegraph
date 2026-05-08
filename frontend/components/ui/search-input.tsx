@@ -21,7 +21,7 @@ export function SearchInput({
   onSearch,
   debounceMs = 300,
   className,
-  placeholder = "Search...",
+  placeholder = "Search",
   ...props
 }: SearchInputProps) {
   const isControlled = controlledValue !== undefined;
@@ -77,14 +77,14 @@ export function SearchInput({
         value={internalValue}
         onChange={handleChange}
         placeholder={placeholder}
-        className="pl-9 pr-8"
+        className="pl-9 pr-11"
         {...props}
       />
       {internalValue && (
         <button
           type="button"
           onClick={handleClear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+          className="absolute right-0 top-1/2 flex size-11 -translate-y-1/2 touch-manipulation items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
           aria-label="Clear search"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">

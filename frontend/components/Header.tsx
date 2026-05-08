@@ -272,7 +272,7 @@ export default function Header() {
                     {isLoggingOut ? (
                       <>
                         <Spinner size="xs" className="mr-2" />
-                        Signing out...
+                        Signing out
                       </>
                     ) : (
                       "Sign out"

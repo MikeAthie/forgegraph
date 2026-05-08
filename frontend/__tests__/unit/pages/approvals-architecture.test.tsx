@@ -104,7 +104,7 @@ describe("Approvals architecture behavior", () => {
       true,
       undefined,
     );
-    expect(screen.getByText("Submitting")).toBeInTheDocument();
+    expect(screen.getAllByText("Submitting")).not.toHaveLength(0);
     expect(screen.queryByText("Accepted by backend")).not.toBeInTheDocument();
     for (const button of screen.getAllByRole("button", { name: /submitting/i })) {
       expect(button).toBeDisabled();

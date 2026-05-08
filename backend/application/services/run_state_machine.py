@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
-from infrastructure.orm.models import Run
+from django.utils import timezone
+
+from infrastructure.orm.models import GraphVersion, Organization, Run, User
 
 RUN_STATUSES = {
     "pending",
@@ -106,3 +109,40 @@ def normalize_run_status(status: object) -> str:
             reason=f"unsupported run status: {value or 'empty'}",
         )
     return value
+
+
+def create_backend_owned_run(
+    *,
+    owner: User,
+    organization: Organization | None,
+    graph_version: GraphVersion,
+    input_json: dict[str, Any],
+    dispatch_graph_json: dict[str, Any],
+    status: str = "pending",
+    started_at: datetime | None = None,
+    output_json: dict[str, Any] | None = None,
+    error_message: str = "",
+) -> Run:
+    """Create a durable run from the approved backend runtime write boundary."""
+
+    return Run.objects.create(
+        owner=owner,
+        organization=organization,
+        graph_version=graph_version,
+        status=normalize_run_status(status),
+        started_at=started_at or timezone.now(),
+        input_json=dict(input_json),
+        dispatch_graph_json=dict(dispatch_graph_json),
+        output_json=output_json,
+        error_message=error_message,
+    )
+
+
+def merge_run_input_json(run: Run, values: dict[str, Any]) -> Run:
+    """Persist backend-owned additions to a run input payload."""
+
+    input_json = dict(run.input_json or {})
+    input_json.update(values)
+    run.input_json = input_json
+    run.save(update_fields=["input_json"])
+    return run

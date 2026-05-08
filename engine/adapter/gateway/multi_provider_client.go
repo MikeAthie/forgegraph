@@ -81,6 +81,12 @@ func (c *MultiProviderClient) Complete(ctx context.Context, request *executor.LL
 		}
 		client := NewAnthropicClientWithKey(apiKey)
 		return client.Complete(ctx, request)
+	case "google":
+		if apiKey == "" {
+			return nil, fmt.Errorf("google api key missing")
+		}
+		client := NewGeminiClientWithKey(apiKey)
+		return client.Complete(ctx, request)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", provider)
 	}
@@ -150,6 +156,12 @@ func (c *MultiProviderClient) StreamComplete(
 			return nil, fmt.Errorf("anthropic api key missing")
 		}
 		client := NewAnthropicClientWithKey(apiKey)
+		return client.StreamComplete(ctx, request, onChunk)
+	case "google":
+		if apiKey == "" {
+			return nil, fmt.Errorf("google api key missing")
+		}
+		client := NewGeminiClientWithKey(apiKey)
 		return client.StreamComplete(ctx, request, onChunk)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", provider)

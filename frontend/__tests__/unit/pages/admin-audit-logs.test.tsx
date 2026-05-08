@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRouter } from "next/router";
 
 import * as api from "@/lib/api";
 import AuditLogsPage from "@/pages/admin/audit-logs";
@@ -14,6 +15,10 @@ jest.mock("@/components/ProtectedRoute", () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+jest.mock("next/router");
+
+const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
+const replaceMock = jest.fn();
 
 const auditEntry: api.AuditLogEntry = {
   id: "audit-1",
@@ -44,6 +49,16 @@ const renderPage = async () => {
 describe("AuditLogsPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    replaceMock.mockClear();
+    mockUseRouter.mockReturnValue({
+      pathname: "/admin/audit-logs",
+      query: {},
+      asPath: "/admin/audit-logs",
+      isReady: true,
+      replace: replaceMock,
+      push: jest.fn(),
+      prefetch: jest.fn(),
+    } as any);
   });
 
   it("renders the human-readable audit description", async () => {
@@ -54,7 +69,7 @@ describe("AuditLogsPage", () => {
         timestamp: "2026-03-13T12:00:00Z",
         pagination: {
           page: 1,
-          pageSize: 100,
+          pageSize: 50,
           totalCount: 1,
           totalPages: 1,
           hasNext: false,
@@ -81,7 +96,7 @@ describe("AuditLogsPage", () => {
         timestamp: "2026-03-13T12:00:00Z",
         pagination: {
           page: 1,
-          pageSize: 100,
+          pageSize: 50,
           totalCount: 1,
           totalPages: 1,
           hasNext: false,
@@ -98,14 +113,14 @@ describe("AuditLogsPage", () => {
     });
 
     await act(async () => {
-      await user.clear(screen.getByPlaceholderText(/action/i));
-      await user.type(screen.getByPlaceholderText(/action/i), "memory.observation_created");
-      await user.clear(screen.getByPlaceholderText(/resource type/i));
-      await user.type(screen.getByPlaceholderText(/resource type/i), "memory_observation");
-      await user.clear(screen.getByPlaceholderText(/resource id/i));
-      await user.type(screen.getByPlaceholderText(/resource id/i), "obs-1");
-      await user.clear(screen.getByPlaceholderText(/actor email/i));
-      await user.type(screen.getByPlaceholderText(/actor email/i), "owner@example.com");
+      await user.clear(screen.getByLabelText(/^action$/i));
+      await user.type(screen.getByLabelText(/^action$/i), "memory.observation_created");
+      await user.clear(screen.getByLabelText(/resource type/i));
+      await user.type(screen.getByLabelText(/resource type/i), "memory_observation");
+      await user.clear(screen.getByLabelText(/resource id/i));
+      await user.type(screen.getByLabelText(/resource id/i), "obs-1");
+      await user.clear(screen.getByLabelText(/actor email/i));
+      await user.type(screen.getByLabelText(/actor email/i), "owner@example.com");
       await user.clear(screen.getByLabelText(/created from/i));
       await user.type(screen.getByLabelText(/created from/i), "2026-03-10T08:30");
       await user.clear(screen.getByLabelText(/created to/i));
@@ -123,9 +138,23 @@ describe("AuditLogsPage", () => {
         created_from: toExpectedIso("2026-03-10T08:30"),
         created_to: toExpectedIso("2026-03-13T18:30"),
         tenant_id: undefined,
-        limit: 100,
+        limit: 50,
         offset: 0,
       });
     });
+    expect(replaceMock).toHaveBeenCalledWith(
+      {
+        pathname: "/admin/audit-logs",
+        query: expect.objectContaining({
+          action: "memory.observation_created",
+          resource_type: "memory_observation",
+          resource_id: "obs-1",
+          actor_email: "owner@example.com",
+          offset: "0",
+        }),
+      },
+      undefined,
+      { shallow: true, scroll: false },
+    );
   });
 });

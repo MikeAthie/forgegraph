@@ -194,7 +194,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
   const isWaitingForApproval = operation?.status === "paused" || Boolean(decisionTask);
   const canRetryOperation = Boolean(operation) && !canStopOperation && !isWaitingForApproval;
   const retryButtonLabel =
-    actionLoading === "retry" ? "Retrying..." : operation?.status === "completed" ? "Start again" : "Retry operation";
+    actionLoading === "retry" ? "Retrying" : operation?.status === "completed" ? "Start again" : "Retry operation";
   const actionTitle =
     failedTask || operation?.failure
       ? "Failure needs review"
@@ -308,7 +308,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
           <SectionHeader
             eyebrow="Operation Detail"
             title={operation?.companyName ?? "Operation"}
-            description="Inspect department activity, approvals, deliverables, and attention points without exposing engine internals."
+            description="Inspect department activity, approvals, deliverables, and attention points without exposing technical internals."
           />
 
           {error ? (
@@ -372,7 +372,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         disabled={actionLoading !== null}
                       >
                         <Square className="h-4 w-4" />
-                        {actionLoading === "stop" ? "Stopping..." : "Stop operation"}
+                        {actionLoading === "stop" ? "Stopping" : "Stop operation"}
                       </Button>
                     ) : null}
 

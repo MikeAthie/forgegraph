@@ -41,7 +41,7 @@ export function MemoryObservationDetailPanel({ error, loading, observation }: Me
       {loading ? (
         <div className="flex min-h-96 items-center justify-center gap-3 rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] dark:border-white/8">
           <Spinner size="md" />
-          <span className="text-sm text-slate-500 dark:text-slate-400">Loading observation detail...</span>
+          <span className="text-sm text-slate-500 dark:text-slate-400">Loading observation detail</span>
         </div>
       ) : null}
 

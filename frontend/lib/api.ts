@@ -143,6 +143,44 @@ const API_PATHS = {
     currentBrief: "/api/interaction/briefs/current",
     events: "/api/interaction/events",
   },
+  inventory: {
+    overview: "/api/inventory/overview",
+    reservations: "/api/inventory/reservations",
+    releaseReservation: (reservationId: string) => `/api/inventory/reservations/${reservationId}/release`,
+    extendReservation: (reservationId: string) => `/api/inventory/reservations/${reservationId}/extend`,
+    orderShell: (reservationId: string) => `/api/inventory/reservations/${reservationId}/order-shell`,
+    expireDue: "/api/inventory/reservations/expire-due",
+  },
+  commerce: {
+    checkoutSessions: "/api/commerce/checkout-sessions",
+    overview: "/api/commerce/overview",
+    orders: "/api/commerce/orders",
+    orderDetail: (orderId: string) => `/api/commerce/orders/${orderId}`,
+    fulfillmentBlock: (orderId: string) => `/api/commerce/orders/${orderId}/fulfillment/block`,
+    fulfillmentReady: (orderId: string) => `/api/commerce/orders/${orderId}/fulfillment/mark-ready`,
+    fulfillmentShip: (orderId: string) => `/api/commerce/orders/${orderId}/fulfillment/ship`,
+    fulfillmentDeliver: (orderId: string) => `/api/commerce/orders/${orderId}/fulfillment/deliver`,
+    operatorNote: (orderId: string) => `/api/commerce/orders/${orderId}/operator-note`,
+  },
+  companyOps: {
+    overview: "/api/company-ops/overview",
+    signals: "/api/company-ops/signals",
+    qualifySignal: (signalId: string) => `/api/company-ops/signals/${signalId}/qualify`,
+    opportunities: "/api/company-ops/opportunities",
+    opportunityStatus: (opportunityId: string) => `/api/company-ops/opportunities/${opportunityId}/status`,
+    publicationDrafts: "/api/company-ops/publication-drafts",
+    publicationDraftApproval: (draftId: string) => `/api/company-ops/publication-drafts/${draftId}/request-approval`,
+    procurementDrafts: "/api/company-ops/procurement-drafts",
+    procurementDraftApproval: (draftId: string) => `/api/company-ops/procurement-drafts/${draftId}/request-approval`,
+    operations: "/api/company-ops/operations",
+    operationObjectiveEvaluation: (operationId: string) =>
+      `/api/company-ops/operations/${operationId}/objective-evaluation`,
+  },
+  storefront: {
+    products: (companySlug: string) => `/api/storefront/${companySlug}/products`,
+    checkoutSessions: (companySlug: string) => `/api/storefront/${companySlug}/checkout-sessions`,
+    orderStatus: (companySlug: string, token: string) => `/api/storefront/${companySlug}/orders/${token}`,
+  },
   runs: {
     list: "/api/runs/",
     detail: (runId: string) => `/api/runs/${runId}`,
@@ -186,6 +224,8 @@ const API_PATHS = {
   tasks: {
     list: "/api/tasks/",
     detail: (taskId: string) => `/api/tasks/${taskId}`,
+    judge: (taskId: string) => `/api/tasks/${taskId}/judge`,
+    judgeEvaluation: (taskId: string) => `/api/tasks/${taskId}/judge/evaluate`,
   },
   operator: {
     runState: (runId: string) => `/api/operator/runs/${runId}/state`,
@@ -903,6 +943,749 @@ export const graphsApi = {
 
   updateMemoryConfig: async (graphId: string, input: Partial<MemoryConfig>): Promise<MemoryConfig> => {
     const response = await api.patch<ApiSuccessResponse<MemoryConfig>>(API_PATHS.graphs.memoryConfig(graphId), input);
+    return response.data.data;
+  },
+};
+
+export type InventorySummary = {
+  total_units: number;
+  available_units: number;
+  held_units: number;
+  sold_units: number;
+  removed_units: number;
+  low_stock_products: number;
+  last_piece_products?: number;
+  sold_out_products?: number;
+  active_holds: number;
+};
+
+export type StockStateSummary = {
+  active_count: number;
+  low_stock_count: number;
+  last_piece_count: number;
+  sold_out_count: number;
+  definition_used: string;
+};
+
+export type InventoryProduct = {
+  id: string;
+  company_id: string;
+  sku: string;
+  model: string;
+  name: string;
+  variant: string;
+  color: string;
+  photo_url: string;
+  price_mxn: string;
+  cost_mxn: string;
+  target_margin_pct: string | null;
+  anchor_model: boolean;
+  scarcity_tag: string;
+  status: string;
+  total_units: number;
+  available_units: number;
+  held_units: number;
+  sold_units: number;
+  removed_units: number;
+  stock_state?: "active" | "low_stock" | "last_piece" | "sold_out" | null | string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InventoryOrderShell = {
+  id: string;
+  company_id: string;
+  reservation_id: string;
+  order_number: string;
+  public_reference?: string;
+  public_status_token?: string;
+  status: string;
+  stripe_session_id?: string;
+  stripe_payment_intent_id?: string;
+  stripe_checkout_url?: string;
+  customer_email?: string;
+  customer_name?: string;
+  paid_at?: string | null;
+  payment_expired_at?: string | null;
+  commerce_payment?: CommercePayment | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommercePayment = {
+  id: string;
+  company_id?: string;
+  reservation_id?: string;
+  order_id?: string;
+  product_id?: string;
+  provider?: string;
+  status: string;
+  amount_mxn: string;
+  currency: string;
+  quantity?: number;
+  stripe_session_id?: string;
+  stripe_payment_intent_id?: string;
+  checkout_url?: string;
+  latest_event_id?: string;
+  customer_email?: string;
+  customer_name?: string;
+  error_message?: string;
+  paid_at?: string | null;
+  expired_at?: string | null;
+};
+
+export type InventoryReservation = {
+  id: string;
+  company_id: string;
+  product_id: string;
+  product_sku: string;
+  product_model: string;
+  status: string;
+  quantity: number;
+  buyer_alias: string;
+  channel: string;
+  note: string;
+  expires_at: string;
+  released_at: string | null;
+  converted_at: string | null;
+  order_shell: InventoryOrderShell | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InventoryEvent = {
+  id: string;
+  company_id: string;
+  product_id: string | null;
+  product_sku: string;
+  reservation_id: string | null;
+  order_id: string | null;
+  actor_user_id: string | null;
+  event_type: string;
+  quantity_delta: number;
+  message: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type InventoryOverview = {
+  company_id: string;
+  generated_at: string;
+  summary: InventorySummary;
+  stock_state_summary?: StockStateSummary;
+  products: InventoryProduct[];
+  reservations: InventoryReservation[];
+  events: InventoryEvent[];
+};
+
+export type CreateInventoryReservationInput = {
+  company_id: string;
+  product_id?: string;
+  sku?: string;
+  quantity: number;
+  buyer_alias?: string;
+  channel?: "manual" | "instagram" | "whatsapp" | "dm" | "storefront" | "other";
+  note?: string;
+  ttl_minutes?: number;
+};
+
+export type CommerceCheckoutSessionResponse = {
+  checkout_url: string;
+  stripe_session_id: string;
+  payment: CommercePayment;
+  order_shell: InventoryOrderShell;
+  reservation: InventoryReservation;
+};
+
+export type StorefrontProduct = {
+  id: string;
+  sku: string;
+  model: string;
+  name: string;
+  variant: string;
+  color: string;
+  photo_url: string;
+  price_amount?: string;
+  price_mxn: string;
+  currency?: string;
+  anchor_model: boolean;
+  scarcity_tag: string;
+  available_units: number;
+  sold_out: boolean;
+};
+
+export type StorefrontProductsResponse = {
+  company_id: string;
+  company_slug: string;
+  storefront_display_name?: string;
+  currency: string;
+  products: StorefrontProduct[];
+};
+
+export type CommerceFulfillment = {
+  id: string;
+  order_id: string;
+  payment_id: string;
+  reservation_id: string;
+  status: string;
+  reason_code: string;
+  operator_note: string;
+  carrier: string;
+  tracking_number: string;
+  tracking_url: string;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommerceOrder = {
+  id: string;
+  company_id: string;
+  order_number: string;
+  public_reference: string;
+  status: string;
+  product: {
+    id: string;
+    sku: string;
+    model: string;
+    name: string;
+    photo_url: string;
+  };
+  quantity: number;
+  buyer_alias: string;
+  channel: string;
+  payment: CommercePayment | null;
+  fulfillment: CommerceFulfillment | null;
+  paid_at: string | null;
+  payment_expired_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommerceOperationsOverview = {
+  company_id: string;
+  generated_at: string;
+  storefront: {
+    id: string;
+    company_id: string;
+    slug: string;
+    display_name: string;
+    enabled: boolean;
+    currency: string;
+  } | null;
+  summary: {
+    orders_total: number;
+    orders_paid: number;
+    orders_pending_payment: number;
+    orders_stuck: number;
+    payments_succeeded: number;
+    payments_review_required: number;
+    fulfillment_pending: number;
+    fulfillment_ready: number;
+    fulfillment_blocked: number;
+    fulfillment_shipped: number;
+    fulfillment_delivered: number;
+    cash_sales_mxn: string;
+  };
+  stuck_orders: CommerceOrder[];
+  recent_orders: CommerceOrder[];
+  fulfillment_events: Array<{
+    id: string;
+    fulfillment_id: string;
+    order_id: string;
+    actor_user_id: string | null;
+    event_type: string;
+    status_from: string;
+    status_to: string;
+    message: string;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }>;
+};
+
+export type StorefrontOrderStatusResponse = {
+  storefront: {
+    slug: string;
+    display_name: string;
+    currency: string;
+  } | null;
+  order: {
+    reference: string;
+    status: string;
+    payment_status: string;
+    fulfillment_status: string;
+    item: {
+      sku: string;
+      model: string;
+      name: string;
+      quantity: number;
+    };
+    paid_at: string | null;
+    updated_at: string;
+  };
+};
+
+export type CompanySignal = {
+  id: string;
+  company_id: string;
+  product_id: string | null;
+  order_id: string | null;
+  fulfillment_id: string | null;
+  operation_id: string | null;
+  signal_type: string;
+  status: string;
+  source: string;
+  external_key: string;
+  title: string;
+  summary: string;
+  channel: string;
+  contact_alias: string;
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompanyOpportunity = {
+  id: string;
+  company_id: string;
+  signal_id: string | null;
+  product_id: string | null;
+  reservation_id: string | null;
+  order_id: string | null;
+  status: string;
+  title: string;
+  summary: string;
+  contact_alias: string;
+  channel: string;
+  estimated_value_amount: string;
+  currency: string;
+  next_action: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublicationDraft = {
+  id: string;
+  company_id: string;
+  signal_id: string | null;
+  opportunity_id: string | null;
+  origin_operation_id: string | null;
+  asset_id: string | null;
+  asset_version_id: string | null;
+  media_job_id: string | null;
+  approval_task_id: string | null;
+  title: string;
+  channel: string;
+  audience: string;
+  body: string;
+  call_to_action: string;
+  status: string;
+  approved_at: string | null;
+  published_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProcurementDraft = {
+  id: string;
+  company_id: string;
+  origin_operation_id: string | null;
+  approval_task_id: string | null;
+  title: string;
+  rationale: string;
+  budget_amount: string;
+  currency: string;
+  status: string;
+  approved_at: string | null;
+  metadata: Record<string, unknown>;
+  lines: Array<{
+    id: string;
+    product_id: string | null;
+    sku: string;
+    description: string;
+    quantity: number;
+    unit_cost_amount: string;
+    currency: string;
+    metadata: Record<string, unknown>;
+  }>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompanyOpsOperation = {
+  id: string;
+  company_id: string;
+  graph_version_id: string;
+  status: string;
+  operation_type: string;
+  operation_brief: string;
+  context_pack_id: string;
+  objective_contract_id: string | null;
+  objective_contract: CompanyOperationObjective | null;
+  started_at: string | null;
+  created_at: string | null;
+};
+
+export type CompanyOperationObjective = {
+  id: string;
+  company_id: string;
+  operation_id: string;
+  source_signal_id: string | null;
+  run_type: string;
+  status: string;
+  run_goal: string;
+  hypothesis: string;
+  target_signal: string;
+  action_plan: Array<{
+    department: string;
+    responsibility: string;
+  }>;
+  integrity_gates: Record<string, unknown>;
+  success_score: number | null;
+  miss_analysis: string;
+  next_decision: string;
+  evaluated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompanyOpsOverview = {
+  company_id: string;
+  generated_at: string;
+  summary: {
+    signals_new: number;
+    signals_qualified: number;
+    opportunities_open: number;
+    publication_drafts: number;
+    procurement_drafts: number;
+    paid_orders: number;
+    stuck_orders: number;
+    low_stock_products: number;
+    cash_sales_mxn: string;
+  };
+  stock_state_summary?: StockStateSummary;
+  recommended_operations: Array<{
+    operation_type: string;
+    label: string;
+    reason: string;
+  }>;
+  signals: CompanySignal[];
+  opportunities: CompanyOpportunity[];
+  publication_drafts: PublicationDraft[];
+  procurement_drafts: ProcurementDraft[];
+  objective_contracts: CompanyOperationObjective[];
+  recent_decisions: Array<{
+    id: string;
+    operation_id: string | null;
+    approval_task_id: string | null;
+    decision_type: string;
+    status: string;
+    context: Record<string, unknown>;
+    resolution: Record<string, unknown>;
+    requested_at: string | null;
+    resolved_at: string | null;
+  }>;
+  policies: Array<{
+    id: string;
+    title: string;
+    scope_type: string;
+    scope_id: string;
+    status: string;
+    confidence: number;
+    condition: Record<string, unknown>;
+    recommendation: Record<string, unknown>;
+  }>;
+};
+
+export const inventoryApi = {
+  getOverview: async (companyId: string): Promise<InventoryOverview> => {
+    const response = await api.get<ApiSuccessResponse<{ inventory: InventoryOverview }>>(API_PATHS.inventory.overview, {
+      params: { company_id: companyId },
+    });
+    return response.data.data.inventory;
+  },
+
+  createReservation: async (
+    input: CreateInventoryReservationInput,
+    options: IdempotencyOptions,
+  ): Promise<InventoryReservation> => {
+    const response = await api.post<ApiSuccessResponse<{ reservation: InventoryReservation }>>(
+      API_PATHS.inventory.reservations,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.reservation;
+  },
+
+  releaseReservation: async (
+    reservationId: string,
+    input: { reason?: string },
+    options: IdempotencyOptions,
+  ): Promise<InventoryReservation> => {
+    const response = await api.post<ApiSuccessResponse<{ reservation: InventoryReservation }>>(
+      API_PATHS.inventory.releaseReservation(reservationId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.reservation;
+  },
+
+  extendReservation: async (
+    reservationId: string,
+    input: { minutes: number },
+    options: IdempotencyOptions,
+  ): Promise<InventoryReservation> => {
+    const response = await api.post<ApiSuccessResponse<{ reservation: InventoryReservation }>>(
+      API_PATHS.inventory.extendReservation(reservationId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.reservation;
+  },
+
+  createOrderShell: async (reservationId: string, options: IdempotencyOptions): Promise<InventoryOrderShell> => {
+    const response = await api.post<ApiSuccessResponse<{ order_shell: InventoryOrderShell }>>(
+      API_PATHS.inventory.orderShell(reservationId),
+      {},
+      idempotencyConfig(options),
+    );
+    return response.data.data.order_shell;
+  },
+
+  expireDue: async (companyId: string, options: IdempotencyOptions): Promise<{ expired_count: number }> => {
+    const response = await api.post<ApiSuccessResponse<{ expired_count: number }>>(
+      API_PATHS.inventory.expireDue,
+      { company_id: companyId },
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+};
+
+export const commerceApi = {
+  createCheckoutSession: async (
+    input: { company_id: string; reservation_id?: string; order_shell_id?: string },
+    options: IdempotencyOptions,
+  ): Promise<CommerceCheckoutSessionResponse> => {
+    const response = await api.post<ApiSuccessResponse<CommerceCheckoutSessionResponse>>(
+      API_PATHS.commerce.checkoutSessions,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+
+  getOverview: async (companyId: string): Promise<CommerceOperationsOverview> => {
+    const response = await api.get<ApiSuccessResponse<{ commerce: CommerceOperationsOverview }>>(
+      API_PATHS.commerce.overview,
+      { params: { company_id: companyId } },
+    );
+    return response.data.data.commerce;
+  },
+
+  listOrders: async (companyId: string): Promise<{ company_id: string; orders: CommerceOrder[] }> => {
+    const response = await api.get<ApiSuccessResponse<{ company_id: string; orders: CommerceOrder[] }>>(
+      API_PATHS.commerce.orders,
+      { params: { company_id: companyId } },
+    );
+    return response.data.data;
+  },
+
+  blockFulfillment: async (
+    orderId: string,
+    input: { reason_code?: string; note?: string },
+    options: IdempotencyOptions,
+  ): Promise<CommerceFulfillment> => {
+    const response = await api.post<ApiSuccessResponse<{ fulfillment: CommerceFulfillment }>>(
+      API_PATHS.commerce.fulfillmentBlock(orderId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.fulfillment;
+  },
+
+  markFulfillmentReady: async (
+    orderId: string,
+    input: { note?: string },
+    options: IdempotencyOptions,
+  ): Promise<CommerceFulfillment> => {
+    const response = await api.post<ApiSuccessResponse<{ fulfillment: CommerceFulfillment }>>(
+      API_PATHS.commerce.fulfillmentReady(orderId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.fulfillment;
+  },
+
+  shipFulfillment: async (
+    orderId: string,
+    input: { carrier?: string; tracking_number?: string; tracking_url?: string; note?: string },
+    options: IdempotencyOptions,
+  ): Promise<CommerceFulfillment> => {
+    const response = await api.post<ApiSuccessResponse<{ fulfillment: CommerceFulfillment }>>(
+      API_PATHS.commerce.fulfillmentShip(orderId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.fulfillment;
+  },
+
+  deliverFulfillment: async (
+    orderId: string,
+    input: { note?: string },
+    options: IdempotencyOptions,
+  ): Promise<CommerceFulfillment> => {
+    const response = await api.post<ApiSuccessResponse<{ fulfillment: CommerceFulfillment }>>(
+      API_PATHS.commerce.fulfillmentDeliver(orderId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.fulfillment;
+  },
+};
+
+export const companyOpsApi = {
+  getOverview: async (companyId: string): Promise<CompanyOpsOverview> => {
+    const response = await api.get<ApiSuccessResponse<{ company_ops: CompanyOpsOverview }>>(
+      API_PATHS.companyOps.overview,
+      { params: { company_id: companyId } },
+    );
+    return response.data.data.company_ops;
+  },
+
+  createSignal: async (
+    input: {
+      company_id: string;
+      signal_type: string;
+      title: string;
+      summary?: string;
+      source?: string;
+      external_key?: string;
+      channel?: string;
+      contact_alias?: string;
+      product_id?: string | null;
+      order_id?: string | null;
+      fulfillment_id?: string | null;
+      metadata?: Record<string, unknown>;
+    },
+    options: IdempotencyOptions,
+  ): Promise<CompanySignal> => {
+    const response = await api.post<ApiSuccessResponse<{ signal: CompanySignal }>>(
+      API_PATHS.companyOps.signals,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.signal;
+  },
+
+  qualifySignal: async (
+    signalId: string,
+    input: { title?: string; summary?: string; next_action?: string },
+    options: IdempotencyOptions,
+  ): Promise<CompanyOpportunity> => {
+    const response = await api.post<ApiSuccessResponse<{ opportunity: CompanyOpportunity }>>(
+      API_PATHS.companyOps.qualifySignal(signalId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.opportunity;
+  },
+
+  requestPublicationApproval: async (
+    draftId: string,
+    input: { note?: string },
+    options: IdempotencyOptions,
+  ): Promise<PublicationDraft> => {
+    const response = await api.post<ApiSuccessResponse<{ publication_draft: PublicationDraft }>>(
+      API_PATHS.companyOps.publicationDraftApproval(draftId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.publication_draft;
+  },
+
+  requestProcurementApproval: async (
+    draftId: string,
+    input: { note?: string },
+    options: IdempotencyOptions,
+  ): Promise<ProcurementDraft> => {
+    const response = await api.post<ApiSuccessResponse<{ procurement_draft: ProcurementDraft }>>(
+      API_PATHS.companyOps.procurementDraftApproval(draftId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.procurement_draft;
+  },
+
+  launchOperation: async (
+    input: {
+      company_id: string;
+      operation_type: string;
+      source_signal_id?: string | null;
+      context_note?: string;
+      run_type?: string;
+      run_goal?: string;
+      hypothesis?: string;
+      target_signal?: string;
+    },
+    options: IdempotencyOptions,
+  ): Promise<CompanyOpsOperation> => {
+    const response = await api.post<ApiSuccessResponse<{ operation: CompanyOpsOperation }>>(
+      API_PATHS.companyOps.operations,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.operation;
+  },
+
+  evaluateOperationObjective: async (
+    operationId: string,
+    input: {
+      success_score: number;
+      miss_analysis?: string;
+      next_decision?: string;
+      integrity_gates?: Record<string, unknown>;
+    },
+    options: IdempotencyOptions,
+  ): Promise<CompanyOperationObjective> => {
+    const response = await api.post<ApiSuccessResponse<{ objective_contract: CompanyOperationObjective }>>(
+      API_PATHS.companyOps.operationObjectiveEvaluation(operationId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.objective_contract;
+  },
+};
+
+export const storefrontApi = {
+  listProducts: async (companySlug: string): Promise<StorefrontProductsResponse> => {
+    const response = await api.get<ApiSuccessResponse<StorefrontProductsResponse>>(
+      API_PATHS.storefront.products(companySlug),
+    );
+    return response.data.data;
+  },
+
+  createCheckoutSession: async (
+    companySlug: string,
+    input: { product_id?: string; sku?: string; quantity?: number; buyer_alias?: string },
+    options: IdempotencyOptions,
+  ): Promise<CommerceCheckoutSessionResponse> => {
+    const response = await api.post<ApiSuccessResponse<CommerceCheckoutSessionResponse>>(
+      API_PATHS.storefront.checkoutSessions(companySlug),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+
+  getOrderStatus: async (companySlug: string, token: string): Promise<StorefrontOrderStatusResponse> => {
+    const response = await api.get<ApiSuccessResponse<StorefrontOrderStatusResponse>>(
+      API_PATHS.storefront.orderStatus(companySlug, token),
+    );
     return response.data.data;
   },
 };
@@ -1905,11 +2688,48 @@ export interface TaskRecord {
   stale_event_count?: number | null;
   late_event_count?: number | null;
   recovery_options?: string[] | null;
+  judge?: TaskJudgeSummary | null;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface TaskJudgeSummary {
+  id: string;
+  title: string;
+  criteria_count: number;
+  pass_threshold: number;
+  status: "pending" | "passed" | "failed" | "inconclusive" | string;
+  score: number | null;
+  evaluated_at: string | null;
+}
+
+export interface TaskJudge {
+  id: string;
+  task_id: string;
+  organization_id: string;
+  execution_id: string;
+  source_node_id: string;
+  title: string;
+  instructions: string;
+  criteria: string[];
+  pass_threshold: number;
+  status: "pending" | "passed" | "failed" | "inconclusive" | string;
+  score: number | null;
+  result: Record<string, unknown>;
+  evaluated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TaskJudgeInput = {
+  title?: string;
+  instructions?: string;
+  criteria: string[];
+  pass_threshold?: number;
+  evidence_snapshot?: Record<string, unknown>;
+};
 
 export interface DecisionRecord {
   id: string;
@@ -2645,6 +3465,21 @@ export const tasksApi = {
   get: async (taskId: string): Promise<TaskRecord> => {
     const response = await api.get<ApiSuccessResponse<TaskRecord>>(API_PATHS.tasks.detail(taskId));
     return response.data.data;
+  },
+  getJudge: async (taskId: string): Promise<TaskJudge | null> => {
+    const response = await api.get<ApiSuccessResponse<{ judge: TaskJudge | null }>>(API_PATHS.tasks.judge(taskId));
+    return response.data.data.judge;
+  },
+  saveJudge: async (taskId: string, input: TaskJudgeInput): Promise<TaskJudge> => {
+    const response = await api.put<ApiSuccessResponse<{ judge: TaskJudge }>>(API_PATHS.tasks.judge(taskId), input);
+    return response.data.data.judge;
+  },
+  deleteJudge: async (taskId: string): Promise<void> => {
+    await api.delete<ApiSuccessResponse<{ judge: null }>>(API_PATHS.tasks.judge(taskId));
+  },
+  evaluateJudge: async (taskId: string): Promise<TaskJudge> => {
+    const response = await api.post<ApiSuccessResponse<{ judge: TaskJudge }>>(API_PATHS.tasks.judgeEvaluation(taskId));
+    return response.data.data.judge;
   },
 };
 

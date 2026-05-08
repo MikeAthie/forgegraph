@@ -185,7 +185,7 @@ export default function LoginPage() {
                 {isSubmitting ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
-                    Signing in...
+                    Signing in
                   </>
                 ) : (
                   "Sign in"
@@ -208,7 +208,7 @@ export default function LoginPage() {
                 {isSsoLoading ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
-                    Redirecting...
+                    Redirecting
                   </>
                 ) : (
                   "Continue with Auth0 SSO"
