@@ -317,14 +317,14 @@ export function PromptNodeWizardDialog({
                 <Input
                   value={existingPromptId}
                   onChange={(e) => setExistingPromptId(e.target.value)}
-                  placeholder="e.g. 0f2f4d7d-..."
+                  placeholder="e.g. 0f2f4d7d-example"
                   className="text-sm"
                 />
                 <Button type="button" variant="secondary" onClick={loadExistingPrompt} disabled={loadingExisting}>
                   {loadingExisting ? (
                     <>
                       <Spinner size="sm" />
-                      Loading...
+                      Loading
                     </>
                   ) : (
                     "Load"
@@ -374,7 +374,7 @@ export function PromptNodeWizardDialog({
               <Input
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                placeholder="You are a..."
+                placeholder="You are a"
                 className="text-sm"
               />
             </FormField>
@@ -417,7 +417,7 @@ export function PromptNodeWizardDialog({
                   setTask(e.target.value);
                   setTaskError(null);
                 }}
-                placeholder="Write a clear task description..."
+                placeholder="Write a clear task description"
                 rows={8}
                 className="text-sm"
               />
@@ -453,7 +453,7 @@ export function PromptNodeWizardDialog({
                     <Textarea
                       value={example.input}
                       onChange={(e) => setExampleField(index, "input", e.target.value)}
-                      placeholder="User input..."
+                      placeholder="User input"
                       rows={4}
                       className="text-sm"
                     />
@@ -463,7 +463,7 @@ export function PromptNodeWizardDialog({
                     <Textarea
                       value={example.output}
                       onChange={(e) => setExampleField(index, "output", e.target.value)}
-                      placeholder="Ideal assistant output..."
+                      placeholder="Ideal assistant output"
                       rows={4}
                       className="text-sm"
                     />
@@ -511,10 +511,10 @@ export function PromptNodeWizardDialog({
                 onChange={(e) => setOutputInstructions(e.target.value)}
                 placeholder={
                   outputPreset === "json"
-                    ? "Describe the JSON shape (optional)..."
+                    ? "Describe the JSON shape (optional)"
                     : outputPreset === "bullet_list"
-                      ? "Any extra bullet-list constraints (optional)..."
-                      : "Format constraints (optional)..."
+                      ? "Any extra bullet-list constraints (optional)"
+                      : "Format constraints (optional)"
                 }
                 rows={6}
                 className="text-sm"
@@ -620,9 +620,7 @@ export function PromptNodeWizardDialog({
               <Textarea
                 value={promptTemplate}
                 readOnly
-                placeholder={
-                  mode === "existing" ? "Load a prompt to preview it..." : "Start typing to see the preview..."
-                }
+                placeholder={mode === "existing" ? "Load a prompt to preview it" : "Start typing to see the preview"}
                 rows={18}
                 className="mt-2 font-mono text-xs"
               />
@@ -658,7 +656,7 @@ export function PromptNodeWizardDialog({
               {submitting ? (
                 <>
                   <Spinner size="sm" />
-                  Creating...
+                  Creating
                 </>
               ) : (
                 "Finish"

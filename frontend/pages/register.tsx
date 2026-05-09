@@ -97,7 +97,7 @@ export default function RegisterPage() {
   if (loading) {
     return (
       <AuthLayout>
-        <Spinner size="lg" label="Loading account creation" />
+        <Spinner size="lg" label="Preparing account setup" />
       </AuthLayout>
     );
   }
@@ -184,7 +184,7 @@ export default function RegisterPage() {
                 {isSubmitting ? (
                   <>
                     <Spinner size="xs" className="mr-2" />
-                    Creating account...
+                    Creating account…
                   </>
                 ) : (
                   "Create account"

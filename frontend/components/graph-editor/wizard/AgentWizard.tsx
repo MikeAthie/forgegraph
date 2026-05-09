@@ -249,7 +249,7 @@ function RoleStep() {
     <div className="space-y-4">
       <p className="text-muted-foreground">
         Define the actual runtime behavior for the new AI worker step. These values become the advanced step config the
-        engine executes.
+        AI worker uses.
       </p>
 
       <div className="space-y-4">

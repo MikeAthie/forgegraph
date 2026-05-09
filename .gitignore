@@ -14,6 +14,12 @@ pnpm-debug.log*
 /logs/loadgen*.json
 /logs/loadgen-smoke/
 /logs/loadgen-smoke-live/
+/logs/media-generations/
+/logs/legacy-media/
+/logs/demo-captures/
+/logs/demo-captures-*/
+/logs/*.sqlite3
+/logs/*.db
 
 # Node / Next.js
 node_modules/
@@ -25,6 +31,7 @@ coverage/
 
 # Playwright
 playwright-report/
+playwright-demo-report/
 test-results/
 .cache/ms-playwright/
 .jest-cache/

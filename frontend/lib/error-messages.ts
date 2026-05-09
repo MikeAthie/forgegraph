@@ -182,7 +182,7 @@ export function sanitizeErrorMessage(rawMessage: string, fallback: string): stri
 
   // Truncate if too long
   if (cleanMessage.length > MAX_ERROR_LENGTH) {
-    cleanMessage = cleanMessage.substring(0, MAX_ERROR_LENGTH - 3) + "...";
+    cleanMessage = cleanMessage.substring(0, MAX_ERROR_LENGTH - 1) + "…";
   }
 
   // If the message still looks technical, use fallback

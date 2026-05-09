@@ -3179,6 +3179,78 @@ class TaskRecord(models.Model):
         return f"{self.title} ({self.status})"
 
 
+class TaskJudge(models.Model):
+    """Backend-owned acceptance judge attached to one operator-facing task."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("passed", "Passed"),
+        ("failed", "Failed"),
+        ("inconclusive", "Inconclusive"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="task_judges",
+    )
+    task = models.OneToOneField(
+        TaskRecord,
+        on_delete=models.CASCADE,
+        related_name="judge",
+    )
+    execution = models.ForeignKey(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="task_judges",
+    )
+    source_node_id = models.CharField(max_length=255, blank=True, default="")
+    title = models.CharField(max_length=255, blank=True, default="")
+    instructions = models.TextField(blank=True, default="")
+    criteria_json = models.JSONField(default=list, blank=True)
+    pass_threshold = models.PositiveSmallIntegerField(
+        default=80,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    score = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    result_json = models.JSONField(default=dict, blank=True)
+    evaluated_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_task_judges",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_task_judges",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "task_judges"
+        ordering = ["-updated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="task_judges_org_status_idx"),
+            models.Index(fields=["execution", "source_node_id"], name="task_judges_exec_node_idx"),
+            models.Index(fields=["evaluated_at"], name="task_judges_eval_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title or self.task.title} judge ({self.status})"
+
+
 class DecisionRecord(models.Model):
     """Unified decision ledger for human and automated supervision decisions."""
 
@@ -3194,6 +3266,7 @@ class DecisionRecord(models.Model):
         ("policy_guardrail", "Policy Guardrail"),
         ("marketplace_review", "Marketplace Review"),
         ("operator_intervention", "Operator Intervention"),
+        ("objective_evaluation", "Objective Evaluation"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -3440,6 +3513,7 @@ class Asset(models.Model):
     ASSET_TYPE_CHOICES = [
         ("document", "Document"),
         ("image", "Image"),
+        ("video", "Video"),
         ("dataset", "Dataset"),
         ("report", "Report"),
         ("deliverable", "Deliverable"),
@@ -3565,6 +3639,1329 @@ class AssetVersion(models.Model):
 
     def __str__(self) -> str:
         return f"{self.asset_id} v{self.version_number}"
+
+
+class MediaGenerationJob(models.Model):
+    """Backend-owned Gemini media generation state for draft assets."""
+
+    MODALITY_CHOICES = [
+        ("image", "Image"),
+        ("video", "Video"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("succeeded", "Succeeded"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="media_generation_jobs",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="media_generation_jobs",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="media_generation_jobs",
+    )
+    credential = models.ForeignKey(
+        "APIKey",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="media_generation_jobs",
+    )
+    modality = models.CharField(max_length=16, choices=MODALITY_CHOICES)
+    provider = models.CharField(max_length=32, default="google")
+    model = models.CharField(max_length=128)
+    prompt = models.TextField()
+    prompt_hash = models.CharField(max_length=64)
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    provider_operation_name = models.CharField(max_length=512, blank=True, default="")
+    output_asset = models.ForeignKey(
+        Asset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    output_asset_version = models.ForeignKey(
+        AssetVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    output_mime_type = models.CharField(max_length=128, blank=True, default="")
+    output_size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    request_json = models.JSONField(default=dict, blank=True)
+    response_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "media_generation_jobs"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="media_job_company_idempotency_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="media_job_org_status_idx"),
+            models.Index(fields=["company", "status"], name="media_job_company_status_idx"),
+            models.Index(
+                fields=["provider_operation_name"],
+                name="media_job_provider_op_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.modality} media job {self.id} ({self.status})"
+
+
+class InventoryProduct(models.Model):
+    """Reusable company-scoped inventory product/SKU."""
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("archived", "Archived"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="inventory_products",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="inventory_products",
+    )
+    sku = models.CharField(max_length=128)
+    model = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, blank=True, default="")
+    variant = models.CharField(max_length=255, blank=True, default="")
+    color = models.CharField(max_length=128, blank=True, default="")
+    photo_url = models.CharField(max_length=1024, blank=True, default="")
+    price_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    cost_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default="mxn")
+    price_mxn = models.DecimalField(max_digits=10, decimal_places=2)
+    cost_mxn = models.DecimalField(max_digits=10, decimal_places=2)
+    target_margin_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    anchor_model = models.BooleanField(default=False)
+    scarcity_tag = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inventory_products"
+        ordering = ["model", "sku"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "sku"],
+                name="inventory_product_company_sku_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="inventory_prod_org_status_idx"),
+            models.Index(fields=["company", "status"], name="inv_prod_company_status_idx"),
+            models.Index(fields=["company", "anchor_model"], name="inventory_prod_anchor_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.model} ({self.sku})"
+
+
+class InventoryReservation(models.Model):
+    """Backend-owned temporary hold on scarce stock."""
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("expired", "Expired"),
+        ("released", "Released"),
+        ("converted", "Converted"),
+    ]
+    CHANNEL_CHOICES = [
+        ("manual", "Manual"),
+        ("instagram", "Instagram"),
+        ("whatsapp", "WhatsApp"),
+        ("dm", "DM"),
+        ("storefront", "Storefront"),
+        ("other", "Other"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="inventory_reservations",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="inventory_reservations",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.PROTECT,
+        related_name="reservations",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_reservations",
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+    quantity = models.PositiveIntegerField(default=1)
+    buyer_alias = models.CharField(max_length=120, blank=True, default="")
+    channel = models.CharField(max_length=32, choices=CHANNEL_CHOICES, default="manual")
+    note = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    expires_at = models.DateTimeField()
+    released_at = models.DateTimeField(null=True, blank=True)
+    converted_at = models.DateTimeField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inventory_reservations"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="inventory_res_company_idem_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="inventory_res_org_status_idx"),
+            models.Index(fields=["company", "status"], name="inv_res_company_status_idx"),
+            models.Index(fields=["company", "expires_at"], name="inventory_res_expiry_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.sku} x{self.quantity} ({self.status})"
+
+
+class InventoryStockUnit(models.Model):
+    """One row per physical stock unit."""
+
+    STATUS_CHOICES = [
+        ("available", "Available"),
+        ("reserved", "Reserved"),
+        ("sold", "Sold"),
+        ("removed", "Removed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="inventory_stock_units",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="inventory_stock_units",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.CASCADE,
+        related_name="stock_units",
+    )
+    current_reservation = models.ForeignKey(
+        InventoryReservation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stock_units",
+    )
+    unit_number = models.PositiveIntegerField()
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="available")
+    source = models.CharField(max_length=64, blank=True, default="csv_import")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inventory_stock_units"
+        ordering = ["product", "unit_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "unit_number"],
+                name="inventory_stock_product_unit_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="inventory_stock_org_status_idx"),
+            models.Index(fields=["company", "status"], name="inv_stock_company_status_idx"),
+            models.Index(fields=["product", "status"], name="inv_stock_product_status_idx"),
+            models.Index(fields=["current_reservation"], name="inventory_stock_res_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.sku} unit {self.unit_number} ({self.status})"
+
+
+class InventoryOrderShell(models.Model):
+    """Reusable order shell owned by backend commerce state."""
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_payment", "Pending Payment"),
+        ("paid", "Paid"),
+        ("payment_expired", "Payment Expired"),
+        ("cancelled", "Cancelled"),
+        ("payment_review_required", "Payment Review Required"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="inventory_order_shells",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="inventory_order_shells",
+    )
+    reservation = models.OneToOneField(
+        InventoryReservation,
+        on_delete=models.PROTECT,
+        related_name="order",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_order_shells",
+    )
+    order_number = models.CharField(max_length=64)
+    public_reference = models.CharField(max_length=64, blank=True, default="")
+    public_status_token = models.CharField(max_length=128, blank=True, default="")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="pending_payment")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    stripe_session_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_checkout_url = models.CharField(max_length=2048, blank=True, default="")
+    customer_email = models.CharField(max_length=255, blank=True, default="")
+    customer_name = models.CharField(max_length=255, blank=True, default="")
+    shipping_json = models.JSONField(default=dict, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    payment_expired_at = models.DateTimeField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inventory_order_shells"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "order_number"],
+                name="inventory_order_company_number_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="inventory_order_company_idem_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["stripe_session_id"],
+                condition=models.Q(stripe_session_id__gt=""),
+                name="inventory_order_stripe_session_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "public_reference"],
+                condition=models.Q(public_reference__gt=""),
+                name="inventory_order_public_ref_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["public_status_token"],
+                condition=models.Q(public_status_token__gt=""),
+                name="inventory_order_public_token_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="inventory_order_org_status_idx"),
+            models.Index(fields=["company", "status"], name="inv_order_company_status_idx"),
+            models.Index(fields=["stripe_session_id"], name="inv_order_stripe_sess_idx"),
+            models.Index(fields=["public_status_token"], name="inv_order_public_token_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.order_number} ({self.status})"
+
+
+class CommerceStorefrontProfile(models.Model):
+    """Backend-owned public storefront configuration for a company."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commerce_storefront_profiles",
+    )
+    company = models.OneToOneField(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="commerce_storefront_profile",
+    )
+    slug = models.SlugField(max_length=128, unique=True)
+    display_name = models.CharField(max_length=255)
+    enabled = models.BooleanField(default=True)
+    currency = models.CharField(max_length=8, default="mxn")
+    stripe_credential = models.ForeignKey(
+        "APIKey",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_storefront_profiles",
+    )
+    success_path = models.CharField(max_length=255, blank=True, default="")
+    cancel_path = models.CharField(max_length=255, blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "commerce_storefront_profiles"
+        ordering = ["slug"]
+        indexes = [
+            models.Index(fields=["organization", "enabled"], name="storefront_org_enabled_idx"),
+            models.Index(fields=["company", "enabled"], name="storefront_company_enabled_idx"),
+            models.Index(fields=["slug", "enabled"], name="storefront_slug_enabled_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.display_name} ({self.slug})"
+
+
+class CommercePayment(models.Model):
+    """Backend-owned payment state for one-time commerce checkout."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("succeeded", "Succeeded"),
+        ("expired", "Expired"),
+        ("failed", "Failed"),
+        ("review_required", "Review Required"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commerce_payments",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="commerce_payments",
+    )
+    reservation = models.ForeignKey(
+        InventoryReservation,
+        on_delete=models.PROTECT,
+        related_name="commerce_payments",
+    )
+    order = models.OneToOneField(
+        InventoryOrderShell,
+        on_delete=models.PROTECT,
+        related_name="commerce_payment",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.PROTECT,
+        related_name="commerce_payments",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_payments",
+    )
+    provider = models.CharField(max_length=32, default="stripe")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="pending")
+    amount_mxn = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=8, default="mxn")
+    quantity = models.PositiveIntegerField(default=1)
+    stripe_session_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, default="")
+    checkout_url = models.CharField(max_length=2048, blank=True, default="")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    latest_event_id = models.CharField(max_length=255, blank=True, default="")
+    processed_event_ids = models.JSONField(default=list, blank=True)
+    customer_email = models.CharField(max_length=255, blank=True, default="")
+    customer_name = models.CharField(max_length=255, blank=True, default="")
+    shipping_json = models.JSONField(default=dict, blank=True)
+    error_message = models.CharField(max_length=1000, blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    expired_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "commerce_payments"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="commerce_payment_company_idem_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["stripe_session_id"],
+                condition=models.Q(stripe_session_id__gt=""),
+                name="commerce_payment_stripe_session_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="comm_pay_org_status_idx"),
+            models.Index(fields=["company", "status"], name="comm_pay_company_status_idx"),
+            models.Index(fields=["stripe_session_id"], name="comm_pay_stripe_sess_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.provider} {self.amount_mxn} {self.currency} ({self.status})"
+
+
+class CommerceCashLedgerEntry(models.Model):
+    """Backend-owned cash ledger entry for commerce events."""
+
+    ENTRY_TYPE_CHOICES = [
+        ("sale", "Sale"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commerce_cash_ledger_entries",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="commerce_cash_ledger_entries",
+    )
+    payment = models.OneToOneField(
+        CommercePayment,
+        on_delete=models.PROTECT,
+        related_name="cash_ledger_entry",
+    )
+    order = models.ForeignKey(
+        InventoryOrderShell,
+        on_delete=models.PROTECT,
+        related_name="cash_ledger_entries",
+    )
+    entry_type = models.CharField(max_length=32, choices=ENTRY_TYPE_CHOICES, default="sale")
+    amount_mxn = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=8, default="mxn")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    occurred_at = models.DateTimeField()
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "commerce_cash_ledger_entries"
+        ordering = ["-occurred_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="commerce_cash_company_idem_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "occurred_at"], name="commerce_cash_org_time_idx"),
+            models.Index(fields=["company", "occurred_at"], name="commerce_cash_company_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.entry_type} {self.amount_mxn} {self.currency}"
+
+
+class CommerceStripeEvent(models.Model):
+    """Idempotency record for Stripe webhook events."""
+
+    STATUS_CHOICES = [
+        ("processed", "Processed"),
+        ("ignored", "Ignored"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_stripe_events",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_stripe_events",
+    )
+    stripe_event_id = models.CharField(max_length=255, unique=True)
+    event_type = models.CharField(max_length=128)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    payload_json = models.JSONField(default=dict, blank=True)
+    error_message = models.CharField(max_length=1000, blank=True, default="")
+    processed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "commerce_stripe_events"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["stripe_event_id"], name="commerce_stripe_event_id_idx"),
+            models.Index(fields=["company", "event_type"], name="comm_stripe_company_type_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} {self.stripe_event_id} ({self.status})"
+
+
+class CommerceFulfillment(models.Model):
+    """Backend-owned fulfillment state for paid commerce orders."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("ready", "Ready"),
+        ("blocked", "Blocked"),
+        ("shipped", "Shipped"),
+        ("delivered", "Delivered"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commerce_fulfillments",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="commerce_fulfillments",
+    )
+    order = models.OneToOneField(
+        InventoryOrderShell,
+        on_delete=models.PROTECT,
+        related_name="commerce_fulfillment",
+    )
+    payment = models.OneToOneField(
+        CommercePayment,
+        on_delete=models.PROTECT,
+        related_name="commerce_fulfillment",
+    )
+    reservation = models.ForeignKey(
+        InventoryReservation,
+        on_delete=models.PROTECT,
+        related_name="commerce_fulfillments",
+    )
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="pending")
+    reason_code = models.CharField(max_length=64, blank=True, default="")
+    operator_note = models.TextField(blank=True, default="")
+    carrier = models.CharField(max_length=120, blank=True, default="")
+    tracking_number = models.CharField(max_length=120, blank=True, default="")
+    tracking_url = models.CharField(max_length=1024, blank=True, default="")
+    shipped_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "commerce_fulfillments"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="comm_fulfill_org_status_idx"),
+            models.Index(fields=["company", "status"], name="comm_fulfill_company_status"),
+            models.Index(fields=["company", "updated_at"], name="comm_fulfill_company_time"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.order.order_number} fulfillment ({self.status})"
+
+
+class CommerceFulfillmentEvent(models.Model):
+    """Append-only fulfillment timeline for operator-visible order operations."""
+
+    EVENT_TYPE_CHOICES = [
+        ("created", "Created"),
+        ("ready", "Ready"),
+        ("blocked", "Blocked"),
+        ("shipped", "Shipped"),
+        ("delivered", "Delivered"),
+        ("cancelled", "Cancelled"),
+        ("note", "Note"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commerce_fulfillment_events",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="commerce_fulfillment_events",
+    )
+    fulfillment = models.ForeignKey(
+        CommerceFulfillment,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    order = models.ForeignKey(
+        InventoryOrderShell,
+        on_delete=models.PROTECT,
+        related_name="fulfillment_events",
+    )
+    actor_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_fulfillment_events",
+    )
+    event_type = models.CharField(max_length=32, choices=EVENT_TYPE_CHOICES)
+    status_from = models.CharField(max_length=32, blank=True, default="")
+    status_to = models.CharField(max_length=32, blank=True, default="")
+    message = models.CharField(max_length=512, blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "commerce_fulfillment_events"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "created_at"], name="commerce_fevent_org_time_idx"
+            ),
+            models.Index(fields=["company", "created_at"], name="comm_fevent_company_time"),
+            models.Index(fields=["fulfillment", "created_at"], name="commerce_fevent_fulfill_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} {self.order_id}"
+
+
+class CompanySignal(models.Model):
+    """Backend-owned business signal for operating-loop work."""
+
+    SIGNAL_TYPE_CHOICES = [
+        ("demand", "Demand"),
+        ("lead", "Lead"),
+        ("stockout", "Stockout"),
+        ("content_response", "Content Response"),
+        ("fulfillment_issue", "Fulfillment Issue"),
+        ("paid_order", "Paid Order"),
+        ("manual", "Manual"),
+    ]
+    STATUS_CHOICES = [
+        ("new", "New"),
+        ("qualified", "Qualified"),
+        ("converted", "Converted"),
+        ("dismissed", "Dismissed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="company_signals",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="company_signals",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_signals",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_signals",
+    )
+    order = models.ForeignKey(
+        InventoryOrderShell,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_signals",
+    )
+    fulfillment = models.ForeignKey(
+        CommerceFulfillment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_signals",
+    )
+    operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_signals",
+    )
+    signal_type = models.CharField(max_length=32, choices=SIGNAL_TYPE_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="new")
+    source = models.CharField(max_length=64, blank=True, default="manual")
+    external_key = models.CharField(max_length=255, blank=True, default="")
+    title = models.CharField(max_length=255)
+    summary = models.TextField(blank=True, default="")
+    channel = models.CharField(max_length=64, blank=True, default="")
+    contact_alias = models.CharField(max_length=120, blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "company_signals"
+        ordering = ["-occurred_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "source", "external_key"],
+                condition=models.Q(external_key__gt=""),
+                name="company_signal_source_ext_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="company_signal_org_status_idx"),
+            models.Index(fields=["company", "signal_type"], name="company_signal_type_idx"),
+            models.Index(fields=["company", "status"], name="company_signal_status_idx"),
+            models.Index(fields=["company", "occurred_at"], name="company_signal_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.signal_type} signal ({self.status})"
+
+
+class CompanyOperationObjective(models.Model):
+    """Objective contract and evaluation for a company operation run."""
+
+    RUN_TYPE_CHOICES = [
+        ("rehearsal", "Rehearsal"),
+        ("demand", "Demand"),
+        ("commerce", "Commerce"),
+        ("live_selling", "Live Selling"),
+    ]
+    STATUS_CHOICES = [
+        ("planned", "Planned"),
+        ("evaluated", "Evaluated"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="company_operation_objectives",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="company_operation_objectives",
+    )
+    operation = models.OneToOneField(
+        Run,
+        on_delete=models.CASCADE,
+        related_name="company_objective",
+    )
+    source_signal = models.ForeignKey(
+        CompanySignal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operation_objectives",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_operation_objectives",
+    )
+    run_type = models.CharField(max_length=32, choices=RUN_TYPE_CHOICES, default="rehearsal")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="planned")
+    run_goal = models.TextField()
+    hypothesis = models.TextField(blank=True, default="")
+    target_signal = models.TextField(blank=True, default="")
+    action_plan_json = models.JSONField(default=list, blank=True)
+    integrity_gates_json = models.JSONField(default=dict, blank=True)
+    success_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    miss_analysis = models.TextField(blank=True, default="")
+    next_decision = models.TextField(blank=True, default="")
+    evaluated_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "company_operation_objectives"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["company", "status"], name="company_obj_status_idx"),
+            models.Index(fields=["company", "run_type"], name="company_obj_run_type_idx"),
+            models.Index(fields=["organization", "created_at"], name="company_obj_org_time_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.run_type} objective for {self.operation_id}"
+
+
+class CompanyOpportunity(models.Model):
+    """Qualified business opportunity derived from company signals."""
+
+    STATUS_CHOICES = [
+        ("new", "New"),
+        ("qualified", "Qualified"),
+        ("follow_up", "Follow Up"),
+        ("reserved", "Reserved"),
+        ("converted", "Converted"),
+        ("lost", "Lost"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="company_opportunities",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="company_opportunities",
+    )
+    signal = models.ForeignKey(
+        CompanySignal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="opportunities",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_opportunities",
+    )
+    reservation = models.ForeignKey(
+        InventoryReservation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_opportunities",
+    )
+    order = models.ForeignKey(
+        InventoryOrderShell,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_opportunities",
+    )
+    owner_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_opportunities",
+    )
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="qualified")
+    external_key = models.CharField(max_length=255, blank=True, default="")
+    title = models.CharField(max_length=255)
+    summary = models.TextField(blank=True, default="")
+    contact_alias = models.CharField(max_length=120, blank=True, default="")
+    channel = models.CharField(max_length=64, blank=True, default="")
+    estimated_value_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default="mxn")
+    next_action = models.CharField(max_length=255, blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "company_opportunities"
+        ordering = ["-updated_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "external_key"],
+                condition=models.Q(external_key__gt=""),
+                name="company_opp_external_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="company_opp_org_status_idx"),
+            models.Index(fields=["company", "status"], name="company_opp_status_idx"),
+            models.Index(fields=["company", "updated_at"], name="company_opp_updated_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class PublicationDraft(models.Model):
+    """Human-gated publication or content draft for a company."""
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("approval_requested", "Approval Requested"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("published", "Published"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="publication_drafts",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="publication_drafts",
+    )
+    signal = models.ForeignKey(
+        CompanySignal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    opportunity = models.ForeignKey(
+        CompanyOpportunity,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    origin_operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_publication_drafts",
+    )
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_publication_drafts",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    asset_version = models.ForeignKey(
+        AssetVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    media_job = models.ForeignKey(
+        MediaGenerationJob,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    approval_task = models.ForeignKey(
+        ApprovalTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publication_drafts",
+    )
+    title = models.CharField(max_length=255)
+    channel = models.CharField(max_length=64, blank=True, default="")
+    audience = models.CharField(max_length=255, blank=True, default="")
+    body = models.TextField(blank=True, default="")
+    call_to_action = models.CharField(max_length=255, blank=True, default="")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="draft")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "publication_drafts"
+        ordering = ["-updated_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="publication_draft_company_idem_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="pub_draft_org_status_idx"),
+            models.Index(fields=["company", "status"], name="pub_draft_company_status_idx"),
+            models.Index(fields=["company", "updated_at"], name="pub_draft_updated_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class CommerceProcurementDraft(models.Model):
+    """Human-gated procurement/reorder proposal for a company."""
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("approval_requested", "Approval Requested"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("ordered", "Ordered"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commerce_procurement_drafts",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="commerce_procurement_drafts",
+    )
+    origin_operation = models.ForeignKey(
+        Run,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_procurement_drafts",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_procurement_drafts",
+    )
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_procurement_drafts",
+    )
+    approval_task = models.ForeignKey(
+        ApprovalTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commerce_procurement_drafts",
+    )
+    title = models.CharField(max_length=255)
+    rationale = models.TextField(blank=True, default="")
+    budget_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default="mxn")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="draft")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "commerce_procurement_drafts"
+        ordering = ["-updated_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="procurement_draft_company_idem_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="proc_draft_org_status_idx"),
+            models.Index(fields=["company", "status"], name="proc_draft_company_status_idx"),
+            models.Index(fields=["company", "updated_at"], name="proc_draft_updated_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class CommerceProcurementDraftLine(models.Model):
+    """Line item for a procurement draft."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    draft = models.ForeignKey(
+        CommerceProcurementDraft,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="procurement_draft_lines",
+    )
+    sku = models.CharField(max_length=128, blank=True, default="")
+    description = models.CharField(max_length=255, blank=True, default="")
+    quantity = models.PositiveIntegerField(default=1)
+    unit_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default="mxn")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "commerce_procurement_draft_lines"
+        ordering = ["draft", "created_at"]
+        indexes = [
+            models.Index(fields=["draft"], name="proc_line_draft_idx"),
+            models.Index(fields=["product"], name="proc_line_product_idx"),
+        ]
+
+    def __str__(self) -> str:
+        label = self.sku or self.description or str(self.product_id or "")
+        return f"{label} x{self.quantity}"
+
+
+class InventoryEvent(models.Model):
+    """Append-only reusable inventory timeline."""
+
+    EVENT_TYPE_CHOICES = [
+        ("import", "Import"),
+        ("reserve", "Reserve"),
+        ("release", "Release"),
+        ("expire", "Expire"),
+        ("extend", "Extend"),
+        ("order_shell", "Order Shell"),
+        ("sell", "Sell"),
+        ("payment_expire", "Payment Expire"),
+        ("payment_review", "Payment Review"),
+        ("adjust", "Adjust"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="inventory_events",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="inventory_events",
+    )
+    product = models.ForeignKey(
+        InventoryProduct,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_events",
+    )
+    stock_unit = models.ForeignKey(
+        InventoryStockUnit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_events",
+    )
+    reservation = models.ForeignKey(
+        InventoryReservation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_events",
+    )
+    order = models.ForeignKey(
+        InventoryOrderShell,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_events",
+    )
+    actor_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_events",
+    )
+    event_type = models.CharField(max_length=32, choices=EVENT_TYPE_CHOICES)
+    quantity_delta = models.IntegerField(default=0)
+    message = models.CharField(max_length=512, blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_events"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "created_at"], name="inventory_event_org_time_idx"
+            ),
+            models.Index(fields=["company", "created_at"], name="inv_event_company_time_idx"),
+            models.Index(fields=["product", "created_at"], name="inv_event_product_time_idx"),
+            models.Index(fields=["reservation"], name="inventory_event_res_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} ({self.company_id})"
 
 
 class AssetExtract(models.Model):
@@ -4241,6 +5638,7 @@ class APIKey(models.Model):
         ("google_drive", "Google Drive"),
         ("telegram", "Telegram"),
         ("twilio", "Twilio"),
+        ("stripe", "Stripe"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

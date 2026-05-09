@@ -99,6 +99,17 @@ export type TaskVM = {
   staleEventCount?: number;
   lateEventCount?: number;
   recoveryOptions?: string[];
+  judge?: TaskJudgeVM | null;
+};
+
+export type TaskJudgeVM = {
+  id: string;
+  title: string;
+  criteriaCount: number;
+  passThreshold: number;
+  status: "pending" | "passed" | "failed" | "inconclusive" | string;
+  score: number | null;
+  evaluatedAt: string | null;
 };
 
 export type OperationFailureVM = Omit<CompanyFailure, "technicalDetails"> & {

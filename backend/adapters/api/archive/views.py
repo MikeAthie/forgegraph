@@ -5,13 +5,18 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import UUID
 
+from django.http import HttpResponse
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from adapters.api.archive.serializers import AssetListQuerySerializer, EvidenceLinkQuerySerializer
+from adapters.api.archive.serializers import (
+    AssetListQuerySerializer,
+    EvidenceLinkQuerySerializer,
+    MediaGenerationCreateSerializer,
+)
 from adapters.api.responses import error_response, success_response
 from application.services.company_archive import (
     ArchiveService,
@@ -20,8 +25,23 @@ from application.services.company_archive import (
     context_pack_payload,
     evidence_link_payload,
 )
+from application.services.gemini_media import (
+    GeminiMediaError,
+    MediaGenerationService,
+    media_generation_job_payload,
+    read_media_asset_version_content,
+)
 from application.services.rbac import has_min_role
-from infrastructure.orm.models import Asset, AssetVersion, ContextPack, EvidenceLink, Graph, User
+from infrastructure.orm.models import (
+    APIKey,
+    Asset,
+    AssetVersion,
+    ContextPack,
+    EvidenceLink,
+    Graph,
+    MediaGenerationJob,
+    User,
+)
 
 
 class AssetListView(APIView):
@@ -74,6 +94,110 @@ class AssetVersionListView(APIView):
         return success_response(
             {"versions": [asset_version_payload(version) for version in versions]}
         )
+
+
+class AssetVersionContentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, asset_id: UUID, version_id: UUID) -> HttpResponse | Response:
+        user = cast(User, request.user)
+        asset = _get_asset_for_user(user=user, asset_id=asset_id)
+        if asset is None:
+            return _not_found("Asset was not found.")
+        if not _has_company_role(user, asset.company, "viewer"):
+            return _forbidden("You do not have permission to view this asset.")
+        version = AssetVersion.objects.filter(id=version_id, asset=asset).first()
+        if version is None:
+            return _not_found("Asset version was not found.")
+        try:
+            content, mime_type, filename = read_media_asset_version_content(version)
+        except FileNotFoundError:
+            return _not_found("Asset content was not found.")
+        except PermissionError:
+            return _forbidden("Asset content path is not allowed.")
+        response = HttpResponse(content, content_type=mime_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class MediaGenerationCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = MediaGenerationCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        user = cast(User, request.user)
+        company = _get_company(user, serializer.validated_data["company_id"])
+        if company is None:
+            return _not_found("Company was not found or you do not have access to it.")
+        if company.organization_id is None:
+            return _not_found("Company organization was not found.")
+        if not _has_company_role(user, company, "member"):
+            return _forbidden("You do not have permission to generate media for this company.")
+
+        credential = APIKey.objects.filter(
+            id=serializer.validated_data["credential_id"],
+            organization_id=company.organization_id,
+            provider="google",
+        ).first()
+        if credential is None:
+            return _not_found("Google credential was not found for this company.")
+
+        try:
+            job = MediaGenerationService().create_job(
+                user=user,
+                company=company,
+                credential=credential,
+                modality=str(serializer.validated_data["modality"]),
+                prompt=str(serializer.validated_data["prompt"]),
+                idempotency_key=str(serializer.validated_data.get("idempotency_key") or ""),
+                model=str(serializer.validated_data.get("model") or ""),
+            )
+        except GeminiMediaError as exc:
+            return error_response(
+                code=exc.code.upper(),
+                message=exc.message,
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        return success_response(
+            {"media_generation": media_generation_job_payload(job)},
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class MediaGenerationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, job_id: UUID) -> Response:
+        user = cast(User, request.user)
+        job = _get_media_job_for_user(user=user, job_id=job_id)
+        if job is None:
+            return _not_found("Media generation job was not found.")
+        if not _has_company_role(user, job.company, "viewer"):
+            return _forbidden("You do not have permission to view this media generation job.")
+        return success_response({"media_generation": media_generation_job_payload(job)})
+
+
+class MediaGenerationPollView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, job_id: UUID) -> Response:
+        user = cast(User, request.user)
+        job = _get_media_job_for_user(user=user, job_id=job_id)
+        if job is None:
+            return _not_found("Media generation job was not found.")
+        if not _has_company_role(user, job.company, "member"):
+            return _forbidden("You do not have permission to poll this media generation job.")
+        try:
+            job = MediaGenerationService().poll_video_job(job=job)
+        except GeminiMediaError as exc:
+            return error_response(
+                code=exc.code.upper(),
+                message=exc.message,
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        return success_response({"media_generation": media_generation_job_payload(job)})
 
 
 class ContextPackDetailView(APIView):
@@ -135,6 +259,20 @@ def _get_asset_for_user(*, user: User, asset_id: UUID) -> Asset | None:
     return (
         Asset.objects.select_related("company", "organization")
         .filter(id=asset_id, company__in=Graph.objects.for_user(user))
+        .first()
+    )
+
+
+def _get_media_job_for_user(*, user: User, job_id: UUID) -> MediaGenerationJob | None:
+    return (
+        MediaGenerationJob.objects.select_related(
+            "company",
+            "organization",
+            "credential",
+            "output_asset",
+            "output_asset_version",
+        )
+        .filter(id=job_id, company__in=Graph.objects.for_user(user))
         .first()
     )
 

@@ -74,7 +74,7 @@ const PACKAGE_KIND_OPTIONS = [
   {
     value: "runtime_tool",
     label: "Runtime Tool",
-    help: "Executable tool. Delivered to the engine when runtime-ready.",
+    help: "Executable tool. Delivered to the runtime service when ready.",
   },
   {
     value: "runtime_transform",
@@ -340,15 +340,15 @@ export default function MarketplaceAdminPage() {
             <CardHeader>
               <CardTitle>Approved packages</CardTitle>
               <CardDescription>
-                Template packages stay addable as editor presets. Only runtime-ready packages are delivered to the
-                engine.
+                Template packages stay addable as editor presets. Only ready runtime packages are delivered to the
+                runtime service.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {loading ? (
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <Spinner size="sm" />
-                  Loading packages...
+                  Loading packages…
                 </div>
               ) : catalog.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No approved packages found.</p>
@@ -389,7 +389,7 @@ export default function MarketplaceAdminPage() {
                       </div>
                       <Button size="sm" onClick={() => void handleInstall(pkg)} disabled={installingSlug === pkg.slug}>
                         {installingSlug === pkg.slug
-                          ? "Installing..."
+                          ? "Installing"
                           : installedVersion
                             ? upToDate
                               ? "Reinstall"
@@ -407,7 +407,8 @@ export default function MarketplaceAdminPage() {
             <CardHeader>
               <CardTitle>Runtime manifest preview</CardTitle>
               <CardDescription>
-                Operator view of the tenant-scoped manifest payload the engine can fetch without local file edits.
+                Operator view of the tenant-scoped manifest payload available to the runtime service without local file
+                edits.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -545,7 +546,7 @@ export default function MarketplaceAdminPage() {
               <div className="rounded-lg border border-border p-3 text-sm">
                 <p className="font-medium text-foreground">Derived execution node type: {executionNodeType}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Package class is the source of truth. The execution node type is derived from it.
+                  Package class governs the release shape. The execution node type is derived from it.
                 </p>
               </div>
 
@@ -607,7 +608,7 @@ export default function MarketplaceAdminPage() {
               )}
 
               <Button onClick={() => void handlePublishRelease()} disabled={publishing}>
-                {publishing ? "Submitting..." : "Submit release"}
+                {publishing ? "Submitting" : "Submit release"}
               </Button>
             </CardContent>
           </Card>

@@ -1,0 +1,401 @@
+# Legacy Phase 6 Evidence Packet
+
+## Commands
+```json
+[
+  "uv run python manage.py legacy_glasswear_first_run --database postgres --json --strict",
+  "uv run python manage.py import_legacy_gemini_credential --env-var GEMINI_LEGACY --json",
+  "PLAYWRIGHT_LEGACY_PHASE6_TEST=true npx playwright test frontend/__tests__/legacy-ultimate-test/specs/legacy_phase6_operator_surface.spec.ts"
+]
+```
+
+## Observed Data
+```json
+{
+  "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+  "visual_run_id": "8ed13376-aae3-4598-82e8-13969c681f9e",
+  "judge_run_id": "a307b23a-9a70-43df-bf9d-0c19cfcd5f28",
+  "judge_task_id": "2289b055-d448-41ed-84fa-1e395bd46be8",
+  "judge_id": "0964a1fc-9422-4a4c-876d-5a9cbae3d98e",
+  "judge_grade": "100/100",
+  "products_imported": 21,
+  "active_units_imported": 62,
+  "stock_semantics_report": {
+    "active_count": 12,
+    "low_stock_count": 1,
+    "last_piece_count": 2,
+    "sold_out_count": 6,
+    "definition_used": "Only active products are counted; sold_out means available_units == 0, last_piece means available_units == 1, low_stock means available_units == 2, and active means available_units >= 3."
+  },
+  "gemini_credential_id": "9605da2e-e943-4baa-a974-d92a1f09db59",
+  "visual_asset_briefs": [
+    {
+      "product_name": "GAGA",
+      "sku": "NC-29046",
+      "stock_state": "low_stock",
+      "shot_list": [
+        "Close-up on GAGA frames, highlighting unique design.",
+        "Lifestyle shot with model wearing GAGA, natural light.",
+        "Detail shot of temple arm engraving."
+      ],
+      "caption_angle": "Don't miss out on the iconic GAGA frames – stock is running low! Grab yours before they're gone.",
+      "background_or_prop_needs": [
+        "Clean, minimalist background (white or light grey)",
+        "Natural light setting (e.g., near a window)",
+        "Simple, neutral-colored fabric drape (if available)"
+      ],
+      "approval_task_title": "Approve Visual Brief for GAGA Frames"
+    },
+    {
+      "product_name": "HENDRIX",
+      "sku": "NC-29026",
+      "stock_state": "last_piece",
+      "shot_list": [
+        "Hero shot of HENDRIX frames, front view.",
+        "Side profile shot, emphasizing frame shape.",
+        "Shot showcasing the unique texture/material of the frames."
+      ],
+      "caption_angle": "This is it! The very last pair of HENDRIX frames. Secure this unique piece of style before it's gone forever.",
+      "background_or_prop_needs": [
+        "Darker, moody background to create drama",
+        "Single spotlight or directional light source (if available)",
+        "Small, natural element like a smooth stone or dried leaf (if available, zero-cost)"
+      ],
+      "approval_task_title": "Approve Visual Brief for HENDRIX Frames"
+    },
+    {
+      "product_name": "WINEHOUSE",
+      "sku": "YD-GN1127T",
+      "stock_state": "last_piece",
+      "shot_list": [
+        "Elegant flat lay of WINEHOUSE frames with a subtle accessory.",
+        "Model wearing WINEHOUSE, looking sophisticated.",
+        "Close-up on the bridge and nose pads for comfort detail."
+      ],
+      "caption_angle": "The final curtain call for WINEHOUSE. Don't miss your chance to own this timeless design. Only one left!",
+      "background_or_prop_needs": [
+        "Vintage-inspired background (e.g., old book, wooden surface)",
+        "Soft, diffused lighting",
+        "Small, elegant prop like a pearl necklace or silk scarf (if available, zero-cost)"
+      ],
+      "approval_task_title": "Approve Visual Brief for WINEHOUSE Frames"
+    },
+    {
+      "product_name": "WATSON",
+      "sku": "NG-1059",
+      "stock_state": "active",
+      "shot_list": [
+        "Dynamic shot of WATSON frames in an active setting.",
+        "Close-up on the lens clarity and frame durability.",
+        "Model wearing WATSON, showcasing versatility for everyday wear."
+      ],
+      "caption_angle": "Discover the versatile WATSON frames – perfect for any adventure. Style meets durability.",
+      "background_or_prop_needs": [
+        "Bright, outdoor-inspired background (e.g., blurred greenery, concrete wall)",
+        "Natural daylight",
+        "Minimalist, functional props like a notebook or a coffee cup (if available, zero-cost)"
+      ],
+      "approval_task_title": "Approve Visual Brief for WATSON Frames"
+    },
+    {
+      "product_name": "MAVERICK",
+      "sku": "NC-39025",
+      "stock_state": "active",
+      "shot_list": [
+        "Bold, front-facing shot of MAVERICK frames.",
+        "Profile shot emphasizing the unique frame architecture.",
+        "Model wearing MAVERICK, exuding confidence and individuality."
+      ],
+      "caption_angle": "Unleash your inner rebel with MAVERICK frames. Stand out from the crowd with this distinctive design.",
+      "background_or_prop_needs": [
+        "Urban, slightly gritty background (e.g., brick wall, industrial texture)",
+        "Strong, directional lighting to create shadows",
+        "No specific props needed, focus on the frames and attitude"
+      ],
+      "approval_task_title": "Approve Visual Brief for MAVERICK Frames"
+    }
+  ],
+  "next_run_plan": [
+    "Review and approve the visual asset briefs for GAGA, HENDRIX, WINEHOUSE, WATSON, and MAVERICK.",
+    "Upon approval, schedule an internal photography session using existing equipment and available models/staff for the approved visual briefs.",
+    "Prepare product inventory (GAGA, HENDRIX, WINEHOUSE, WATSON, MAVERICK) for the scheduled photography session.",
+    "Draft initial social media copy and website descriptions for each product based on the approved caption angles, awaiting visual assets."
+  ],
+  "publication_drafts": [
+    {
+      "id": "4600a91b-36a4-45a5-ac80-0870b3aff1b3",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "signal_id": null,
+      "opportunity_id": null,
+      "origin_operation_id": "f09a3359-1484-49a9-afe0-52afe8d09948",
+      "asset_id": null,
+      "asset_version_id": null,
+      "media_job_id": null,
+      "approval_task_id": "05412d16-2b5f-4081-bd1d-818fd98a994e",
+      "title": "Approve Visual Brief for GAGA Frames",
+      "channel": "instagram_draft",
+      "audience": "Legacy Glasswear followers",
+      "body": "Product: GAGA (NC-29046) Stock state: low_stock Caption angle: Don't miss out on the iconic GAGA frames – stock is running low! Grab yours before they're gone. Shot list: Close-up on GAGA frames, highlighting unique design.; Lifestyle shot with model wearing GAGA, natural light.; Detail shot of temple arm engraving. Props/background: Clean, minimalist background (white or light grey); Natural light setting (e.g., near a window); Simple, neutral-colored fabric drape (if available)",
+      "call_to_action": "Hold for human approval before any external post.",
+      "status": "approval_requested",
+      "approved_at": null,
+      "published_at": null,
+      "metadata": {},
+      "created_at": "2026-05-08T22:44:39.276712+00:00",
+      "updated_at": "2026-05-08T22:44:41.515419+00:00"
+    },
+    {
+      "id": "84e0ebb3-680e-41a2-b2e4-8129cda9f66a",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "signal_id": null,
+      "opportunity_id": null,
+      "origin_operation_id": "6971eb76-5175-4896-85ab-9a46e7847fd7",
+      "asset_id": null,
+      "asset_version_id": null,
+      "media_job_id": null,
+      "approval_task_id": "dc42637c-5bba-4545-b12a-414a22b8256d",
+      "title": "Approve Visual Brief for HENDRIX Frames",
+      "channel": "instagram_draft",
+      "audience": "Legacy Glasswear followers",
+      "body": "Product: HENDRIX (NC-29026) Stock state: last_piece Caption angle: This is it! The very last pair of HENDRIX frames. Secure this unique piece of style before it's gone forever. Shot list: Hero shot of HENDRIX frames, front view.; Side profile shot, emphasizing frame shape.; Shot showcasing the unique texture/material of the frames. Props/background: Darker, moody background to create drama; Single spotlight or directional light source (if available); Small, natural element like a smooth stone or dried leaf (if available, zero-cost)",
+      "call_to_action": "Hold for human approval before any external post.",
+      "status": "approval_requested",
+      "approved_at": null,
+      "published_at": null,
+      "metadata": {},
+      "created_at": "2026-05-08T22:44:43.623768+00:00",
+      "updated_at": "2026-05-08T22:44:45.880474+00:00"
+    },
+    {
+      "id": "c3d21360-0256-46f3-9b77-1aa560ada3db",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "signal_id": null,
+      "opportunity_id": null,
+      "origin_operation_id": "425fdf28-2075-47a5-90d7-99811ba46226",
+      "asset_id": null,
+      "asset_version_id": null,
+      "media_job_id": null,
+      "approval_task_id": "8493cbe9-29ce-4115-8bd9-4318de5d4f5f",
+      "title": "Approve Visual Brief for WINEHOUSE Frames",
+      "channel": "instagram_draft",
+      "audience": "Legacy Glasswear followers",
+      "body": "Product: WINEHOUSE (YD-GN1127T) Stock state: last_piece Caption angle: The final curtain call for WINEHOUSE. Don't miss your chance to own this timeless design. Only one left! Shot list: Elegant flat lay of WINEHOUSE frames with a subtle accessory.; Model wearing WINEHOUSE, looking sophisticated.; Close-up on the bridge and nose pads for comfort detail. Props/background: Vintage-inspired background (e.g., old book, wooden surface); Soft, diffused lighting; Small, elegant prop like a pearl necklace or silk scarf (if available, zero-cost)",
+      "call_to_action": "Hold for human approval before any external post.",
+      "status": "approval_requested",
+      "approved_at": null,
+      "published_at": null,
+      "metadata": {},
+      "created_at": "2026-05-08T22:44:47.969043+00:00",
+      "updated_at": "2026-05-08T22:44:50.224526+00:00"
+    },
+    {
+      "id": "a6950623-663d-492a-b111-96a1339d94af",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "signal_id": null,
+      "opportunity_id": null,
+      "origin_operation_id": "736f7736-c6c3-4417-b459-1ed39fc79706",
+      "asset_id": null,
+      "asset_version_id": null,
+      "media_job_id": null,
+      "approval_task_id": "6477c111-9ef3-4421-8163-c00cc866a20d",
+      "title": "Approve Visual Brief for WATSON Frames",
+      "channel": "instagram_draft",
+      "audience": "Legacy Glasswear followers",
+      "body": "Product: WATSON (NG-1059) Stock state: active Caption angle: Discover the versatile WATSON frames – perfect for any adventure. Style meets durability. Shot list: Dynamic shot of WATSON frames in an active setting.; Close-up on the lens clarity and frame durability.; Model wearing WATSON, showcasing versatility for everyday wear. Props/background: Bright, outdoor-inspired background (e.g., blurred greenery, concrete wall); Natural daylight; Minimalist, functional props like a notebook or a coffee cup (if available, zero-cost)",
+      "call_to_action": "Hold for human approval before any external post.",
+      "status": "approval_requested",
+      "approved_at": null,
+      "published_at": null,
+      "metadata": {},
+      "created_at": "2026-05-08T22:44:52.324989+00:00",
+      "updated_at": "2026-05-08T22:44:54.636118+00:00"
+    },
+    {
+      "id": "7ac52761-5d8b-4321-a4d4-32f312a54062",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "signal_id": null,
+      "opportunity_id": null,
+      "origin_operation_id": "c893ebe9-4a8a-4b9e-9604-c1edbae97c00",
+      "asset_id": null,
+      "asset_version_id": null,
+      "media_job_id": null,
+      "approval_task_id": "2d3a9349-16db-4842-8c7f-0c77bc5265f0",
+      "title": "Approve Visual Brief for MAVERICK Frames",
+      "channel": "instagram_draft",
+      "audience": "Legacy Glasswear followers",
+      "body": "Product: MAVERICK (NC-39025) Stock state: active Caption angle: Unleash your inner rebel with MAVERICK frames. Stand out from the crowd with this distinctive design. Shot list: Bold, front-facing shot of MAVERICK frames.; Profile shot emphasizing the unique frame architecture.; Model wearing MAVERICK, exuding confidence and individuality. Props/background: Urban, slightly gritty background (e.g., brick wall, industrial texture); Strong, directional lighting to create shadows; No specific props needed, focus on the frames and attitude",
+      "call_to_action": "Hold for human approval before any external post.",
+      "status": "approval_requested",
+      "approved_at": null,
+      "published_at": null,
+      "metadata": {},
+      "created_at": "2026-05-08T22:44:56.785987+00:00",
+      "updated_at": "2026-05-08T22:44:59.145202+00:00"
+    }
+  ],
+  "procurement_draft": {
+    "id": "3e413ae9-86a1-442b-89d2-66435c0b1f40",
+    "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+    "origin_operation_id": "7c5d6812-ac45-44c8-adda-0ad9c252b9ec",
+    "approval_task_id": "3ed91a68-6c4d-4e76-a14d-43c537c1236e",
+    "title": "Legacy Phase 6 zero-cash procurement review",
+    "rationale": "Approval-gated reorder review only. No procurement execution and no cash spend.",
+    "budget_amount": "0.00",
+    "currency": "mxn",
+    "status": "approval_requested",
+    "approved_at": null,
+    "metadata": {},
+    "lines": [
+      {
+        "id": "40d5eecf-4ccb-48d1-9b61-9be04cb40e21",
+        "product_id": "a33ae1c0-bb9e-4356-a03d-48fb7a7c3d63",
+        "sku": "NC-29046",
+        "description": "GAGA zero-cash-spend review line",
+        "quantity": 1,
+        "unit_cost_amount": "0.00",
+        "currency": "mxn",
+        "metadata": {
+          "phase": "legacy_phase_6",
+          "stock_state": "low_stock"
+        }
+      },
+      {
+        "id": "509e66cd-9a08-45f4-9a24-afebb5386714",
+        "product_id": "cefa1b80-7516-40b2-a659-1f31fdfe5897",
+        "sku": "NC-29026",
+        "description": "HENDRIX zero-cash-spend review line",
+        "quantity": 1,
+        "unit_cost_amount": "0.00",
+        "currency": "mxn",
+        "metadata": {
+          "phase": "legacy_phase_6",
+          "stock_state": "last_piece"
+        }
+      },
+      {
+        "id": "b6e13157-0527-49ad-ab46-660115de20f5",
+        "product_id": "ff4cc245-78c1-4613-b67b-79a19f034390",
+        "sku": "YD-GN1127T",
+        "description": "WINEHOUSE zero-cash-spend review line",
+        "quantity": 1,
+        "unit_cost_amount": "0.00",
+        "currency": "mxn",
+        "metadata": {
+          "phase": "legacy_phase_6",
+          "stock_state": "last_piece"
+        }
+      },
+      {
+        "id": "3e2f9c27-ebd6-40b0-9ba1-046f3bebc15b",
+        "product_id": "d418d68f-39a0-490b-89f0-b2115253ff3b",
+        "sku": "NG-1059",
+        "description": "WATSON zero-cash-spend review line",
+        "quantity": 1,
+        "unit_cost_amount": "0.00",
+        "currency": "mxn",
+        "metadata": {
+          "phase": "legacy_phase_6",
+          "stock_state": "active"
+        }
+      },
+      {
+        "id": "cae94a12-65d0-4be3-aac9-413531193f8f",
+        "product_id": "4f53fcb5-9bf3-4bbf-a9d7-ad26d5d52de4",
+        "sku": "NC-39025",
+        "description": "MAVERICK zero-cash-spend review line",
+        "quantity": 1,
+        "unit_cost_amount": "0.00",
+        "currency": "mxn",
+        "metadata": {
+          "phase": "legacy_phase_6",
+          "stock_state": "active"
+        }
+      }
+    ],
+    "created_at": "2026-05-08T22:45:01.253074+00:00",
+    "updated_at": "2026-05-08T22:45:03.549669+00:00"
+  },
+  "reservation_proof": {
+    "reservation": {
+      "id": "16aa365d-5c9c-45ac-96c7-4468869ed2e6",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "product_id": "009e05c5-b8c3-4be4-a664-1b7eb0fdad50",
+      "product_sku": "ZD-8809T",
+      "product_model": "DEPP",
+      "status": "active",
+      "quantity": 1,
+      "buyer_alias": "phase6-dry-run",
+      "channel": "manual",
+      "note": "Phase 6 dry-run reservation proof.",
+      "expires_at": "2026-05-08T23:14:35.069941+00:00",
+      "released_at": null,
+      "converted_at": null,
+      "order_shell": null,
+      "created_at": "2026-05-08T22:44:35.070223+00:00",
+      "updated_at": "2026-05-08T22:44:35.070228+00:00"
+    },
+    "released": {
+      "id": "16aa365d-5c9c-45ac-96c7-4468869ed2e6",
+      "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+      "product_id": "009e05c5-b8c3-4be4-a664-1b7eb0fdad50",
+      "product_sku": "ZD-8809T",
+      "product_model": "DEPP",
+      "status": "released",
+      "quantity": 1,
+      "buyer_alias": "phase6-dry-run",
+      "channel": "manual",
+      "note": "Phase 6 dry-run reservation proof.",
+      "expires_at": "2026-05-08T23:14:35.069941+00:00",
+      "released_at": "2026-05-08T22:44:37.183797+00:00",
+      "converted_at": null,
+      "order_shell": null,
+      "created_at": "2026-05-08T22:44:35.070223+00:00",
+      "updated_at": "2026-05-08T22:44:37.183906+00:00"
+    }
+  }
+}
+```
+
+## Verification Result
+```json
+{
+  "passed": true,
+  "bootstrap": {
+    "checks": {
+      "inventory_active_units_62": true,
+      "inventory_products_21": true,
+      "inventory_zero_warnings": true,
+      "phase0_single_company": true,
+      "stock_semantics_agree": true
+    },
+    "failures": [],
+    "passed": true,
+    "warnings": [
+      "Created Legacy Glasswear graph version 31."
+    ]
+  },
+  "judge_status": "passed",
+  "judge_score": 100,
+  "acceptance": {
+    "operator_surface_verified": true,
+    "stock_semantics_consistent": true,
+    "visual_briefs_actionable": true,
+    "zero_budget_policy_respected": true,
+    "approval_gates_present": true,
+    "no_private_customer_data_sent_to_llm": true,
+    "evidence_packet_complete": true,
+    "next_run_plan_clear": true,
+    "visual_run_id": "8ed13376-aae3-4598-82e8-13969c681f9e",
+    "publication_draft_count": 5,
+    "procurement_draft_status": "approval_requested"
+  }
+}
+```
+
+## Bugs Or Gaps
+```json
+[]
+```
+
+## Decision
+Legacy is ready for approval-gated visual/content preparation, not live sales or public-channel autonomy.

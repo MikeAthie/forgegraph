@@ -184,7 +184,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
               id="tool-description"
               value={toolConfig.tool_description || ""}
               onChange={(e) => handleChange("tool_description", e.target.value)}
-              placeholder="This tool searches the web for current information about a given query..."
+              placeholder="This tool searches the web for current information about a given query"
               rows={3}
               className="text-sm resize-none"
             />

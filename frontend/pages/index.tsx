@@ -242,7 +242,7 @@ export default function Home() {
               <ul className="mt-4 space-y-4 text-sm leading-7 text-slate-700 dark:text-slate-200">
                 <li>Companies are primary. Operating models are secondary.</li>
                 <li>Operations, approvals, deliverables, and controls are visible without reading logs.</li>
-                <li>Technical engine detail remains available, but only when the user chooses advanced mode.</li>
+                <li>Technical detail remains available, but only when the user chooses advanced mode.</li>
                 <li>Time, status, and history stay visible across every company surface.</li>
               </ul>
             </div>

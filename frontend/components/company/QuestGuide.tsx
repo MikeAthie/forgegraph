@@ -116,10 +116,10 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
   const isLastStep = stepIndex === steps.length - 1;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[70]">
+    <div data-testid="quest-guide-overlay" className="pointer-events-none fixed inset-0 z-[70]">
       <div className="absolute inset-0 bg-slate-950/10 backdrop-blur-[1px]" />
       <div
-        className="pointer-events-none fixed rounded-[1.6rem] border-2 border-sky-500/70 shadow-[0_0_0_9999px_rgba(15,23,42,0.14)] transition-all"
+        className="pointer-events-none fixed rounded-[1.6rem] border-2 border-sky-500/70 shadow-[0_0_0_9999px_rgba(15,23,42,0.14)] transition-[top,left,width,height,border-color,box-shadow,opacity] motion-reduce:transition-none"
         style={{
           top: Math.max(8, targetRect.top - 8),
           left: Math.max(8, targetRect.left - 8),

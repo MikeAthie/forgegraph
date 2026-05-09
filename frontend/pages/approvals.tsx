@@ -449,7 +449,7 @@ export default function ApprovalsPage() {
                       disabled={submitting || selectedApproval.status !== "pending"}
                       onClick={() => void handleDecision(true)}
                     >
-                      {submitting ? "Submitting..." : editNotes.trim() ? "Approve with notes" : "Approve"}
+                      {submitting ? "Submitting" : editNotes.trim() ? "Approve with notes" : "Approve"}
                     </Button>
                     <Button
                       variant="outline"
@@ -457,7 +457,7 @@ export default function ApprovalsPage() {
                       disabled={submitting || selectedApproval.status !== "pending"}
                       onClick={() => void handleDecision(false)}
                     >
-                      {submitting ? "Submitting..." : "Reject"}
+                      {submitting ? "Submitting" : "Reject"}
                     </Button>
                     {selectedApproval.status !== "pending" ? (
                       <StatusBadge status={selectedApproval.status} label="Read only" />

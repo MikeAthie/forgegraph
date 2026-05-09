@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/router";
 import { Plus, RefreshCw } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
@@ -68,6 +69,12 @@ const OWNERSHIP_OPTIONS: { value: PromptOwnershipFilter; label: string }[] = [
   { value: "mine", label: "My prompts" },
 ];
 
+const isPromptOwnershipFilter = (value: unknown): value is PromptOwnershipFilter =>
+  value === "all" || value === "builtin" || value === "mine";
+
+const isPromptCategory = (value: unknown): value is PromptCategory =>
+  typeof value === "string" && CATEGORIES.some((category) => category.value === value);
+
 const formatDateTime = (isoString: string) => {
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) {
@@ -101,10 +108,12 @@ const parseVariablesSchema = (
 };
 
 export default function PromptsPage() {
+  const router = useRouter();
   const { user } = useAuth();
 
   const [ownership, setOwnership] = useState<PromptOwnershipFilter>("all");
   const [category, setCategory] = useState<string>("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [prompts, setPrompts] = useState<PromptListItem[]>([]);
@@ -152,7 +161,74 @@ export default function PromptsPage() {
     [ownership, category, searchQuery],
   );
 
-  const refreshPrompts = async () => {
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+
+    const nextOwnership = isPromptOwnershipFilter(router.query.ownership) ? router.query.ownership : "all";
+    const nextCategory = isPromptCategory(router.query.category) ? router.query.category : "";
+    const nextSearch = typeof router.query.q === "string" ? router.query.q : "";
+
+    setOwnership(nextOwnership);
+    setCategory(nextCategory);
+    setSearchDraft(nextSearch);
+    setSearchQuery(nextSearch.trim());
+  }, [router.isReady, router.query.category, router.query.ownership, router.query.q]);
+
+  const replacePromptQuery = useCallback(
+    (next: { ownership?: PromptOwnershipFilter; category?: string; q?: string; prompt?: string | null }) => {
+      if (!router.isReady) {
+        return;
+      }
+
+      const queryParams = { ...router.query };
+      delete queryParams.ownership;
+      delete queryParams.category;
+      delete queryParams.q;
+      delete queryParams.prompt;
+
+      queryParams.ownership = next.ownership ?? ownership;
+      const nextCategory = next.category ?? category;
+      const nextSearch = next.q ?? searchQuery;
+      const nextPrompt = next.prompt !== undefined ? next.prompt : selectedPromptId;
+
+      if (nextCategory) {
+        queryParams.category = nextCategory;
+      }
+      if (nextSearch.trim()) {
+        queryParams.q = nextSearch.trim();
+      }
+      if (nextPrompt) {
+        queryParams.prompt = nextPrompt;
+      }
+
+      void router.replace({ pathname: router.pathname, query: queryParams }, undefined, {
+        shallow: true,
+        scroll: false,
+      });
+    },
+    [category, ownership, router, searchQuery, selectedPromptId],
+  );
+
+  const updateOwnership = (value: PromptOwnershipFilter) => {
+    setOwnership(value);
+    replacePromptQuery({ ownership: value });
+  };
+
+  const updateCategory = (value: string) => {
+    const nextCategory = value === "all" ? "" : value;
+    setCategory(nextCategory);
+    replacePromptQuery({ category: nextCategory });
+  };
+
+  const applySearch = (value: string) => {
+    const normalized = value.trim();
+    setSearchQuery(normalized);
+    replacePromptQuery({ q: normalized });
+  };
+
+  const refreshPrompts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -163,7 +239,7 @@ export default function PromptsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   useEffect(() => {
     let isActive = true;
@@ -245,32 +321,68 @@ export default function PromptsPage() {
     }
   };
 
-  const openDetail = async (promptId: string) => {
-    setSelectedPromptId(promptId);
-    setSelectedPrompt(null);
-    setDetailError(null);
-    setIsEditing(false);
-    setEditError(null);
-    setDetailLoading(true);
+  const openDetail = useCallback(
+    async (promptId: string, syncUrl = true) => {
+      setSelectedPromptId(promptId);
+      setSelectedPrompt(null);
+      setDetailError(null);
+      setIsEditing(false);
+      setEditError(null);
+      setDetailLoading(true);
 
-    try {
-      const detail = await promptsApi.get(promptId);
-      setSelectedPrompt(detail);
-    } catch (err: unknown) {
-      setDetailError(getApiErrorMessage(err, "Failed to load prompt."));
-    } finally {
-      setDetailLoading(false);
+      try {
+        const detail = await promptsApi.get(promptId);
+        setSelectedPrompt(detail);
+        if (syncUrl) {
+          replacePromptQuery({ prompt: promptId });
+        }
+      } catch (err: unknown) {
+        setDetailError(getApiErrorMessage(err, "Failed to load prompt."));
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [replacePromptQuery],
+  );
+
+  const closeDetail = useCallback(
+    (syncUrl = true) => {
+      if (detailLoading || isCloning || isSaving || isPublishing) return;
+      setSelectedPromptId(null);
+      setSelectedPrompt(null);
+      setDetailError(null);
+      setIsEditing(false);
+      setEditError(null);
+      if (syncUrl) {
+        replacePromptQuery({ prompt: null });
+      }
+    },
+    [detailLoading, isCloning, isPublishing, isSaving, replacePromptQuery],
+  );
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
     }
-  };
 
-  const closeDetail = () => {
-    if (detailLoading || isCloning || isSaving || isPublishing) return;
-    setSelectedPromptId(null);
-    setSelectedPrompt(null);
-    setDetailError(null);
-    setIsEditing(false);
-    setEditError(null);
-  };
+    const promptId = typeof router.query.prompt === "string" ? router.query.prompt : "";
+    if (promptId && promptId !== selectedPromptId) {
+      void openDetail(promptId, false);
+    }
+    if (!promptId && selectedPromptId && !detailLoading && !isCloning && !isSaving && !isPublishing) {
+      closeDetail(false);
+    }
+  }, [
+    closeDetail,
+    detailLoading,
+    isCloning,
+    isPublishing,
+    isSaving,
+    openDetail,
+    router.isReady,
+    router.query.prompt,
+    selectedPromptId,
+  ]);
 
   const canCloneSelected = Boolean(
     selectedPrompt && selectedPrompt.visibility === "public" && selectedPrompt.owner_id !== user?.id,
@@ -410,6 +522,8 @@ export default function PromptsPage() {
       : ownership === "builtin"
         ? "Seed data may not be loaded yet."
         : "Try adjusting your filters.";
+  const visiblePrompts = prompts.slice(0, 50);
+  const hiddenPromptCount = Math.max(prompts.length - visiblePrompts.length, 0);
 
   return (
     <ProtectedRoute>
@@ -449,7 +563,7 @@ export default function PromptsPage() {
                       key={o.value}
                       variant={ownership === o.value ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setOwnership(o.value)}
+                      onClick={() => updateOwnership(o.value)}
                     >
                       {o.label}
                     </Button>
@@ -457,7 +571,7 @@ export default function PromptsPage() {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? "" : v)}>
+                  <Select value={category || "all"} onValueChange={updateCategory}>
                     <SelectTrigger className="w-full sm:w-48">
                       <SelectValue placeholder="All categories" />
                     </SelectTrigger>
@@ -472,9 +586,11 @@ export default function PromptsPage() {
                   </Select>
 
                   <SearchInput
-                    placeholder="Search prompts..."
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    placeholder="Search prompts"
                     className="w-full sm:w-64"
-                    onSearch={setSearchQuery}
+                    onSearch={applySearch}
                     debounceMs={300}
                   />
                 </div>
@@ -491,7 +607,7 @@ export default function PromptsPage() {
           {loading ? (
             <div className="flex items-center justify-center py-10">
               <Spinner size="md" />
-              <span className="ml-3 text-sm text-muted-foreground">Loading prompts...</span>
+              <span className="ml-3 text-sm text-muted-foreground">Loading prompts</span>
             </div>
           ) : prompts.length === 0 ? (
             <EmptyState
@@ -501,35 +617,44 @@ export default function PromptsPage() {
               action={ownership !== "builtin" ? <Button onClick={openCreate}>Create a prompt</Button> : undefined}
             />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {prompts.map((prompt) => (
-                <Card key={prompt.id} className={prompt.is_builtin ? "border-primary/30 bg-primary/5" : ""}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-base line-clamp-2">{prompt.title}</CardTitle>
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge variant={prompt.is_builtin ? "default" : "secondary"}>
-                          {prompt.is_builtin ? "Built-in" : "Custom"}
-                        </Badge>
-                        <Badge variant={prompt.visibility === "public" ? "outline" : "secondary"}>
-                          {prompt.visibility === "public" ? "Public" : "Private"}
-                        </Badge>
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {visiblePrompts.map((prompt) => (
+                  <Card key={prompt.id} className={prompt.is_builtin ? "border-primary/30 bg-primary/5" : ""}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base line-clamp-2">{prompt.title}</CardTitle>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge variant={prompt.is_builtin ? "default" : "secondary"}>
+                            {prompt.is_builtin ? "Built-in" : "Custom"}
+                          </Badge>
+                          <Badge variant={prompt.visibility === "public" ? "outline" : "secondary"}>
+                            {prompt.visibility === "public" ? "Public" : "Private"}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                    <CardDescription className="line-clamp-2">{prompt.description || "No description"}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                      <span>{formatCategory(prompt.category)}</span>
-                      <span>{formatDateTime(prompt.created_at)}</span>
-                    </div>
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => void openDetail(prompt.id)}>
-                      View
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      <CardDescription className="line-clamp-2">
+                        {prompt.description || "No description"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+                        <span>{formatCategory(prompt.category)}</span>
+                        <span>{formatDateTime(prompt.created_at)}</span>
+                      </div>
+                      <Button variant="outline" size="sm" className="w-full" onClick={() => void openDetail(prompt.id)}>
+                        View
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {hiddenPromptCount > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Showing first 50 of {prompts.length} prompts. Narrow the filters or search to reduce the list.
+                </p>
+              ) : null}
+            </>
           )}
 
           {/* Create Dialog */}
@@ -551,6 +676,8 @@ export default function PromptsPage() {
                   <FormField label="Title" required htmlFor="create-prompt-title">
                     <Input
                       id="create-prompt-title"
+                      name="prompt_title"
+                      autoComplete="off"
                       value={createForm.title}
                       onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
                       disabled={isCreating}
@@ -580,6 +707,8 @@ export default function PromptsPage() {
                 <FormField label="Description" htmlFor="create-prompt-description">
                   <Input
                     id="create-prompt-description"
+                    name="prompt_description"
+                    autoComplete="off"
                     value={createForm.description}
                     onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                     disabled={isCreating}
@@ -589,6 +718,8 @@ export default function PromptsPage() {
                 <FormField label="Content" required htmlFor="create-prompt-content">
                   <Textarea
                     id="create-prompt-content"
+                    name="prompt_content"
+                    autoComplete="off"
                     value={createForm.content}
                     onChange={(e) => setCreateForm((prev) => ({ ...prev, content: e.target.value }))}
                     disabled={isCreating}
@@ -604,6 +735,8 @@ export default function PromptsPage() {
                 >
                   <Textarea
                     id="create-prompt-variables"
+                    name="prompt_variables_schema"
+                    autoComplete="off"
                     value={createForm.variablesSchemaText}
                     onChange={(e) => setCreateForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
                     disabled={isCreating}
@@ -621,7 +754,7 @@ export default function PromptsPage() {
                   {isCreating ? (
                     <>
                       <Spinner size="xs" className="mr-2" />
-                      Creating...
+                      Creating
                     </>
                   ) : (
                     "Create"
@@ -643,6 +776,11 @@ export default function PromptsPage() {
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{selectedPrompt ? selectedPrompt.title : "Prompt"}</DialogTitle>
+                <DialogDescription>
+                  {selectedPrompt
+                    ? selectedPrompt.description || "Review prompt details, variables, and sharing controls."
+                    : "Loading prompt details."}
+                </DialogDescription>
                 {selectedPrompt && (
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant={selectedPrompt.owner_id ? "secondary" : "default"}>
@@ -663,7 +801,7 @@ export default function PromptsPage() {
               {detailLoading ? (
                 <div className="flex items-center justify-center py-10">
                   <Spinner size="md" />
-                  <span className="ml-3 text-sm text-muted-foreground">Loading prompt...</span>
+                  <span className="ml-3 text-sm text-muted-foreground">Loading prompt</span>
                 </div>
               ) : !selectedPrompt ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">Prompt not available.</div>
@@ -680,6 +818,8 @@ export default function PromptsPage() {
                       <FormField label="Title" required htmlFor="edit-prompt-title">
                         <Input
                           id="edit-prompt-title"
+                          name="edit_prompt_title"
+                          autoComplete="off"
                           value={editForm.title}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
                           disabled={isSaving}
@@ -696,6 +836,8 @@ export default function PromptsPage() {
                     <FormField label="Description" htmlFor="edit-prompt-description">
                       <Input
                         id="edit-prompt-description"
+                        name="edit_prompt_description"
+                        autoComplete="off"
                         value={editForm.description}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
                         disabled={isSaving}
@@ -705,6 +847,8 @@ export default function PromptsPage() {
                     <FormField label="Content" required htmlFor="edit-prompt-content">
                       <Textarea
                         id="edit-prompt-content"
+                        name="edit_prompt_content"
+                        autoComplete="off"
                         value={editForm.content}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
                         disabled={isSaving}
@@ -716,6 +860,8 @@ export default function PromptsPage() {
                     <FormField label="Variables schema (JSON)" htmlFor="edit-prompt-variables">
                       <Textarea
                         id="edit-prompt-variables"
+                        name="edit_prompt_variables_schema"
+                        autoComplete="off"
                         value={editForm.variablesSchemaText}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
                         disabled={isSaving}
@@ -733,7 +879,7 @@ export default function PromptsPage() {
                       {isSaving ? (
                         <>
                           <Spinner size="xs" className="mr-2" />
-                          Saving...
+                          Saving
                         </>
                       ) : (
                         "Save"
@@ -794,7 +940,7 @@ export default function PromptsPage() {
                         {isCloning ? (
                           <>
                             <Spinner size="xs" className="mr-2" />
-                            Cloning...
+                            Cloning
                           </>
                         ) : (
                           "Clone"
@@ -807,7 +953,7 @@ export default function PromptsPage() {
                         {isPublishing ? (
                           <>
                             <Spinner size="xs" className="mr-2" />
-                            Publishing...
+                            Publishing
                           </>
                         ) : (
                           "Publish"
@@ -832,7 +978,7 @@ export default function PromptsPage() {
                       </>
                     )}
 
-                    <Button variant="outline" onClick={closeDetail}>
+                    <Button variant="outline" onClick={() => closeDetail()}>
                       Close
                     </Button>
                   </DialogFooter>

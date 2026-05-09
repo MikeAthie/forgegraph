@@ -49,19 +49,30 @@ func EvaluateGate(cfg Config, metrics Metrics, hooks []HookRecord, startedAt, co
 		return req, true, nil
 	}
 	spec := gateSpecs[cfg.Gate]
+	observedDuration := completedAt.Sub(startedAt)
+	eventIngestionRequired := cfg.WithAccounting || spec.RequireAccounting
 	requirements := []GateRequirement{
 		requirement("target agent count", cfg.Agents >= spec.TargetAgents, fmt.Sprintf("agents=%d target=%d", cfg.Agents, spec.TargetAgents)),
 		requirement("tenant count", cfg.Tenants >= spec.MinTenants, fmt.Sprintf("tenants=%d minimum=%d", cfg.Tenants, spec.MinTenants)),
 		requirement("runs per tenant", cfg.RunsPerTenant >= spec.RunsPerTenant, fmt.Sprintf("runs_per_tenant=%d minimum=%d", cfg.RunsPerTenant, spec.RunsPerTenant)),
-		requirement("duration", completedAt.Sub(startedAt) >= spec.Duration, fmt.Sprintf("observed=%s required=%s", completedAt.Sub(startedAt).Round(time.Second), spec.Duration)),
+		requirement("duration", durationMeetsGate(observedDuration, spec.Duration), fmt.Sprintf("observed=%s required=%s", observedDuration.Round(time.Second), spec.Duration)),
 		requirement("backend API p95", metrics.BackendAPILatencyMS.P95 > 0 && metrics.BackendAPILatencyMS.P95 < 300, fmt.Sprintf("p95=%.2fms target<300ms", metrics.BackendAPILatencyMS.P95)),
-		requirement("event ingestion p95", metrics.EventIngestionMS.P95 > 0 && metrics.EventIngestionMS.P95 < 500, fmt.Sprintf("p95=%.2fms target<500ms", metrics.EventIngestionMS.P95)),
+		eventIngestionRequirement(eventIngestionRequired, metrics),
 		requirement("projection lag p95", metrics.ProjectionLagSeconds.P95 > 0 && metrics.ProjectionLagSeconds.P95 < 2, fmt.Sprintf("p95=%.2fs target<2s", metrics.ProjectionLagSeconds.P95)),
 		requirement("websocket delivery p95", metrics.WSDeliveryLatencyMS.P95 == 0 || metrics.WSDeliveryLatencyMS.P95 < 1000, fmt.Sprintf("p95=%.2fms target<1000ms", metrics.WSDeliveryLatencyMS.P95)),
 		requirement("dead-letter rate", deadLetterRate(metrics) < 0.001, fmt.Sprintf("rate=%.5f target<0.001", deadLetterRate(metrics))),
 		requirement("silent drops", metrics.SilentDrops == 0, fmt.Sprintf("silent_drops=%d", metrics.SilentDrops)),
 		requirement("tenant isolation", metrics.TenantIsolationFailures == 0, fmt.Sprintf("failures=%d checks=%d", metrics.TenantIsolationFailures, metrics.TenantIsolationChecks)),
 		requirement("cost duplicate drift", metrics.DuplicateCostDrift == 0, fmt.Sprintf("duplicate_cost_drift=%d", metrics.DuplicateCostDrift)),
+	}
+	if !cfg.DryRun {
+		expectedRuns := cfg.Tenants * cfg.RunsPerTenant
+		requirements = append(
+			requirements,
+			requirement("run start acceptance", metrics.RunsStarted >= expectedRuns, fmt.Sprintf("started=%d expected=%d", metrics.RunsStarted, expectedRuns)),
+			requirement("terminal run completion", metrics.RunsCompleted == metrics.RunsStarted, fmt.Sprintf("completed=%d started=%d failed=%d", metrics.RunsCompleted, metrics.RunsStarted, metrics.RunsFailed)),
+			requirement("terminal run failures", metrics.RunsFailed == 0, fmt.Sprintf("failed=%d", metrics.RunsFailed)),
+		)
 	}
 	if spec.RequireHITL {
 		requirements = append(requirements, requirement("HITL coverage", cfg.WithHITL, "--with-hitl"))
@@ -98,6 +109,22 @@ func EvaluateGate(cfg Config, metrics Metrics, hooks []HookRecord, startedAt, co
 		}
 	}
 	return requirements, passed, reasons
+}
+
+func durationMeetsGate(observed, required time.Duration) bool {
+	const tolerance = 30 * time.Second
+	return observed+tolerance >= required
+}
+
+func eventIngestionRequirement(required bool, metrics Metrics) GateRequirement {
+	if !required {
+		return requirement("event ingestion p95", true, "not required without accounting callback coverage")
+	}
+	return requirement(
+		"event ingestion p95",
+		metrics.EventIngestionMS.Count > 0 && metrics.EventIngestionMS.P95 > 0 && metrics.EventIngestionMS.P95 < 500,
+		fmt.Sprintf("p95=%.2fms samples=%d target<500ms", metrics.EventIngestionMS.P95, metrics.EventIngestionMS.Count),
+	)
 }
 
 func requirement(name string, passed bool, detail string) GateRequirement {

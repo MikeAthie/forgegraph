@@ -274,7 +274,7 @@ describe("Header", () => {
 
       // Should show loading state
       await waitFor(() => {
-        expect(screen.getByText("Signing out...")).toBeInTheDocument();
+        expect(screen.getByText("Signing out")).toBeInTheDocument();
       });
     });
 
@@ -299,7 +299,7 @@ describe("Header", () => {
 
       // Button should be disabled
       await waitFor(() => {
-        const signingOutButton = screen.getByText("Signing out...").closest("button");
+        const signingOutButton = screen.getByText("Signing out").closest("button");
         expect(signingOutButton).toBeDisabled();
       });
     });

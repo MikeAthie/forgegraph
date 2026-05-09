@@ -36,6 +36,7 @@ from infrastructure.orm.models import (
     Run,
     RuntimeIntentOutcome,
     TaskDeadLetterRecord,
+    TaskJudge,
     TaskLifecycleRecord,
     TaskRecord,
     TenantPolicy,
@@ -779,6 +780,10 @@ def agent_summary(agent: AgentRegistryEntry) -> dict[str, Any]:
 
 def task_summary(task: TaskRecord) -> dict[str, Any]:
     lifecycle_task = task.lifecycle_task if task.lifecycle_task_id else None
+    try:
+        judge = task.judge
+    except TaskJudge.DoesNotExist:
+        judge = None
     return {
         "id": str(task.id),
         "organization_id": str(task.organization_id),
@@ -800,6 +805,19 @@ def task_summary(task: TaskRecord) -> dict[str, Any]:
         "stale_event_count": lifecycle_task.stale_event_count if lifecycle_task is not None else 0,
         "late_event_count": lifecycle_task.late_event_count if lifecycle_task is not None else 0,
         "recovery_options": lifecycle_task.recovery_options if lifecycle_task is not None else [],
+        "judge": {
+            "id": str(judge.id),
+            "title": judge.title,
+            "criteria_count": len(
+                judge.criteria_json if isinstance(judge.criteria_json, list) else []
+            ),
+            "pass_threshold": judge.pass_threshold,
+            "status": judge.status,
+            "score": judge.score,
+            "evaluated_at": judge.evaluated_at.isoformat() if judge.evaluated_at else None,
+        }
+        if judge is not None
+        else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "ended_at": task.ended_at.isoformat() if task.ended_at else None,
         "created_at": task.created_at.isoformat(),

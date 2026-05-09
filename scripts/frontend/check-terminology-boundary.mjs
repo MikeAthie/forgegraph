@@ -60,6 +60,24 @@ const forbiddenPatterns = [
   /\bWorkflow[A-Z][A-Za-z0-9_]*\b/,
 ];
 
+const runtimeCopyForbiddenPatterns = [
+  /\bengine\b/i,
+  /\bsnapshot\b/i,
+  /\bcheckpoints?\b/i,
+  /\bsource of truth\b/i,
+];
+
+const runtimeCopyAllowlist = [
+  {
+    path: /^frontend\/components\/company\/CompanyBuilderForm\.tsx$/,
+    line: /technical execution internals/i,
+  },
+  {
+    path: /^frontend\/components\/os\/OperationDetailView\.tsx$/,
+    line: /technical execution internals/i,
+  },
+];
+
 function toRepoPath(filePath) {
   return path.relative(repoRoot, filePath).replaceAll(path.sep, "/");
 }
@@ -70,6 +88,14 @@ function shouldScanFile(filePath) {
     return false;
   }
   return !advancedPathPatterns.some((pattern) => pattern.test(repoPath));
+}
+
+function shouldScanRuntimeCopyFile(filePath) {
+  return /\.(tsx?|jsx?)$/.test(toRepoPath(filePath));
+}
+
+function isRuntimeCopyAllowed(repoPath, line) {
+  return runtimeCopyAllowlist.some((entry) => entry.path.test(repoPath) && entry.line.test(line));
 }
 
 function collectFiles(root) {
@@ -103,6 +129,32 @@ const files = [
     .filter((file) => fs.existsSync(file)),
 ];
 
+const runtimeCopyFiles = scanRoots
+  .flatMap((root) => {
+    const absoluteRoot = path.join(repoRoot, root);
+    if (!fs.existsSync(absoluteRoot)) {
+      return [];
+    }
+
+    const pending = [absoluteRoot];
+    const collected = [];
+
+    while (pending.length > 0) {
+      const current = pending.pop();
+      const stat = fs.statSync(current);
+      if (stat.isDirectory()) {
+        for (const child of fs.readdirSync(current)) {
+          pending.push(path.join(current, child));
+        }
+      } else if (shouldScanRuntimeCopyFile(current)) {
+        collected.push(current);
+      }
+    }
+
+    return collected;
+  })
+  .filter((file, index, allFiles) => allFiles.indexOf(file) === index);
+
 const violations = [];
 
 for (const file of files) {
@@ -117,6 +169,22 @@ for (const file of files) {
     const match = forbiddenPatterns.find((pattern) =>
       pattern.test(searchableLine),
     );
+    if (match) {
+      violations.push(`${repoPath}:${index + 1}: ${line.trim()}`);
+    }
+  });
+}
+
+for (const file of runtimeCopyFiles) {
+  const repoPath = toRepoPath(file);
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+
+  lines.forEach((line, index) => {
+    if (isRuntimeCopyAllowed(repoPath, line)) {
+      return;
+    }
+
+    const match = runtimeCopyForbiddenPatterns.find((pattern) => pattern.test(line));
     if (match) {
       violations.push(`${repoPath}:${index + 1}: ${line.trim()}`);
     }

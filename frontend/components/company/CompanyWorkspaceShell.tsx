@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import { CommerceInventoryPanel } from "@/components/company/CommerceInventoryPanel";
 import { QuestGuide } from "@/components/company/QuestGuide";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import {
@@ -1471,7 +1472,7 @@ Examples:
                             className="mt-2"
                             value={operationBrief}
                             onChange={(event) => setOperationBrief(event.target.value)}
-                            placeholder="Start the next company operation..."
+                            placeholder="Start the next company operation"
                           />
                           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                             Use one clear instruction. The company will turn it into work across the selected
@@ -1563,6 +1564,8 @@ Examples:
                   </Panel>
                 </div>
               </div>
+
+              <CommerceInventoryPanel companyId={companyId} />
             </>
           )}
         </div>

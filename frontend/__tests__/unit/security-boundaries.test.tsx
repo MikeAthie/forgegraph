@@ -52,7 +52,7 @@ describe("security boundary enforcement", () => {
       </ProtectedRoute>,
     );
 
-    expect(screen.getByText("Redirecting to sign in...")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Redirecting to sign in" })).toBeInTheDocument();
     expect(screen.queryByText(/SECRET_RUN_ID/)).not.toBeInTheDocument();
   });
 

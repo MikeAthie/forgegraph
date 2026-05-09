@@ -195,6 +195,99 @@ func TestEvaluateGateERequiresDisruptionHooksAndNoCostDrift(t *testing.T) {
 	}
 }
 
+func TestEvaluateGateAAllowsNoAccountingEventIngestionSamples(t *testing.T) {
+	cfg, err := ParseConfig([]string{"--gate", "A"})
+	if err != nil {
+		t.Fatalf("ParseConfig returned error: %v", err)
+	}
+	metrics := BuildMetrics(
+		[]float64{50, 70, 90},
+		nil,
+		[]float64{0.2, 0.3, 0.4},
+		nil,
+	)
+	metrics.AcceptedMutations = 1
+	metrics.VisibleMutations = 1
+	metrics.RunsStarted = 1
+	metrics.RunsCompleted = 1
+	startedAt := time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC)
+
+	_, passed, reasons := EvaluateGate(cfg, metrics, nil, startedAt, startedAt.Add(time.Hour-15*time.Second))
+	if !passed {
+		t.Fatalf("Gate A should pass without accounting ingestion samples: %v", reasons)
+	}
+}
+
+func TestEvaluateGateBlocksTerminalRunFailures(t *testing.T) {
+	cfg, err := ParseConfig([]string{"--gate", "A"})
+	if err != nil {
+		t.Fatalf("ParseConfig returned error: %v", err)
+	}
+	metrics := BuildMetrics(
+		[]float64{50, 70, 90},
+		nil,
+		[]float64{0.2, 0.3, 0.4},
+		nil,
+	)
+	metrics.AcceptedMutations = 1
+	metrics.VisibleMutations = 1
+	metrics.RunsStarted = 1
+	metrics.RunsFailed = 1
+	startedAt := time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC)
+
+	_, passed, reasons := EvaluateGate(cfg, metrics, nil, startedAt, startedAt.Add(time.Hour))
+	if passed {
+		t.Fatal("Gate A passed despite a terminal run failure")
+	}
+	joined := strings.Join(reasons, "\n")
+	if !strings.Contains(joined, "terminal run completion") || !strings.Contains(joined, "terminal run failures") {
+		t.Fatalf("missing terminal failure reasons: %v", reasons)
+	}
+}
+
+func TestEvaluateGateCRequiresAccountingEventIngestionSamples(t *testing.T) {
+	cfg, err := ParseConfig([]string{"--gate", "C", "--engine-callback-secret", "test-secret"})
+	if err != nil {
+		t.Fatalf("ParseConfig returned error: %v", err)
+	}
+	metrics := BuildMetrics(
+		[]float64{50, 70, 90},
+		nil,
+		[]float64{0.2, 0.3, 0.4},
+		nil,
+	)
+	metrics.AcceptedMutations = 100
+	metrics.VisibleMutations = 100
+	metrics.RunsStarted = 100
+	startedAt := time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC)
+
+	_, passed, reasons := EvaluateGate(cfg, metrics, nil, startedAt, startedAt.Add(4*time.Hour))
+	if passed {
+		t.Fatal("Gate C passed without accounting ingestion samples")
+	}
+	if !strings.Contains(strings.Join(reasons, "\n"), "event ingestion p95") {
+		t.Fatalf("missing event ingestion reason: %v", reasons)
+	}
+}
+
+func TestLoadgenGraphUsesOutputOnlyNoLLMPath(t *testing.T) {
+	encoded, err := json.Marshal(loadgenGraphJSON())
+	if err != nil {
+		t.Fatalf("marshal graph json: %v", err)
+	}
+	graph := string(encoded)
+	for _, unexpected := range []string{`"type":"agent"`, `"provider"`, `"model"`, `"loadgen_noop"`} {
+		if strings.Contains(graph, unexpected) {
+			t.Fatalf("loadgen graph unexpectedly contains %s: %s", unexpected, graph)
+		}
+	}
+	for _, expected := range []string{`"type":"output"`, `"from":"START"`, `"to":"END"`, `"engine_contract_version":"2"`} {
+		if !strings.Contains(graph, expected) {
+			t.Fatalf("loadgen graph missing %s: %s", expected, graph)
+		}
+	}
+}
+
 func TestSignEngineEventMatchesHMACContract(t *testing.T) {
 	signature := signEngineEvent("secret", "1710000000000", []byte(`{"type":"node_completed"}`))
 	if signature != "39a7e5417c41d71f70ea3aba0dbb6f5a8733107737bd82db04e16fe2f4f6805c" {

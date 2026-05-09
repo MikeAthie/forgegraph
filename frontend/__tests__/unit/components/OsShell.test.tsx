@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { useRouter } from "next/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -101,6 +101,39 @@ describe("OsShell", () => {
     expect(screen.getAllByRole("link", { name: /approvals/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: /^agents$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^executions$/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps mobile primary navigation capped with an overflow menu", () => {
+    renderShell(
+      <OsShell>
+        <h2>Department thinking surface</h2>
+      </OsShell>,
+    );
+
+    const mobileNav = screen.getByRole("navigation", { name: /mobile primary navigation/i });
+    expect(within(mobileNav).getAllByRole("link")).toHaveLength(5);
+    expect(within(mobileNav).getByRole("button", { name: /more/i })).toBeInTheDocument();
+    expect(within(mobileNav).queryByRole("link", { name: /advanced operating models/i })).not.toBeInTheDocument();
+  });
+
+  it("shows specialist route metadata instead of the generic product title", () => {
+    mockUseRouter.mockReturnValue({
+      push: jest.fn(),
+      replace: jest.fn(),
+      prefetch: jest.fn(),
+      pathname: "/analytics/llm",
+      query: {},
+      asPath: "/analytics/llm",
+      isReady: true,
+    } as any);
+
+    renderShell(
+      <OsShell>
+        <h2>LLM details</h2>
+      </OsShell>,
+    );
+
+    expect(screen.getByRole("heading", { name: /llm analytics/i })).toBeInTheDocument();
   });
 
   it("shows recovery navigation only to operators", () => {

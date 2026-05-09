@@ -45,7 +45,7 @@ export default function SsoCallbackPage() {
     <AuthLayout>
       <div className="mx-auto w-full max-w-md text-center">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Signing you in</h1>
-        <p className="mt-3 text-sm text-slate-600">{error ? "We ran into an issue." : "Completing SSO login..."}</p>
+        <p className="mt-3 text-sm text-slate-600">{error ? "We ran into an issue." : "Completing SSO login"}</p>
         {error && (
           <div className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}

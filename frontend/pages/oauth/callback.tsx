@@ -11,7 +11,7 @@ type CallbackStatus = "loading" | "error" | "success";
 export default function OAuthCallbackPage() {
   const router = useRouter();
   const [status, setStatus] = useState<CallbackStatus>("loading");
-  const [message, setMessage] = useState("Finalizing OAuth connection...");
+  const [message, setMessage] = useState("Finalizing OAuth connection");
 
   const callbackPayload = useMemo(() => {
     const code = router.query.code;
@@ -54,7 +54,7 @@ export default function OAuthCallbackPage() {
         });
         if (cancelled) return;
         setStatus("success");
-        setMessage("OAuth credential connected. Redirecting to credentials...");
+        setMessage("OAuth credential connected. Redirecting to credentials");
         setTimeout(() => {
           void router.replace("/credentials");
         }, 900);

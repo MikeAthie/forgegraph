@@ -416,7 +416,7 @@ export default function CredentialsPage() {
                     <DialogHeader>
                       <DialogTitle>Add provider credential</DialogTitle>
                       <DialogDescription>
-                        Store API keys for non-OAuth providers used in prompt nodes. OAuth providers connect below.
+                        Store API keys for non-OAuth providers used by AI workers. OAuth providers connect below.
                       </DialogDescription>
                     </DialogHeader>
 
@@ -446,6 +446,8 @@ export default function CredentialsPage() {
                     <FormField label="Name" htmlFor="name" description="Friendly name to identify this key.">
                       <Input
                         id="name"
+                        name="credential_name"
+                        autoComplete="off"
                         value={formState.name}
                         onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
                         placeholder="Production OpenAI"
@@ -460,10 +462,12 @@ export default function CredentialsPage() {
                     >
                       <Input
                         id="api_key"
+                        name="api_key"
                         type="password"
+                        autoComplete="new-password"
                         value={formState.api_key}
                         onChange={(event) => setFormState((prev) => ({ ...prev, api_key: event.target.value }))}
-                        placeholder="sk-..."
+                        placeholder="sk-proj-example"
                         required
                       />
                     </FormField>
@@ -529,7 +533,7 @@ export default function CredentialsPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-6 px-2 text-xs"
+                      className="min-h-11 px-3 text-xs md:min-h-8"
                       onClick={() => void handleCopyText("Redirect URI", oauthChecklist.redirectUri)}
                     >
                       <Copy className="mr-1 h-3.5 w-3.5" />
@@ -612,7 +616,7 @@ export default function CredentialsPage() {
                           {oauthStartingProvider === provider ? (
                             <>
                               <Spinner className="mr-2 h-4 w-4" />
-                              Connecting...
+                              Connecting
                             </>
                           ) : (
                             connectButtonLabel
@@ -642,12 +646,12 @@ export default function CredentialsPage() {
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Spinner className="h-5 w-5" />
-              Loading credentials...
+              Loading credentials
             </div>
           ) : !hasCredentials ? (
             <EmptyState
               title="No credentials yet"
-              description="Add a provider key to unlock multi-model prompt nodes."
+              description="Add a provider key to unlock multi-model AI workers."
               action={
                 canManageCredentials ? (
                   <Button onClick={() => setIsDialogOpen(true)}>
@@ -713,7 +717,7 @@ export default function CredentialsPage() {
                           {oauthStartingProvider === oauthProvider ? (
                             <>
                               <Spinner className="mr-2 h-4 w-4" />
-                              Reconnecting...
+                              Reconnecting
                             </>
                           ) : (
                             "Reconnect OAuth"

@@ -666,7 +666,7 @@ export function summarizeDeliverable(run: Pick<RunDetail, "output_json" | "node_
     if (serialized.length <= 180) {
       return serialized;
     }
-    return `${serialized.slice(0, 177)}...`;
+    return `${serialized.slice(0, 179)}…`;
   }
 
   const lastNodeRun = [...run.node_runs].reverse().find((nodeRun) => nodeRun.output_json);
@@ -675,7 +675,7 @@ export function summarizeDeliverable(run: Pick<RunDetail, "output_json" | "node_
   }
 
   const serialized = JSON.stringify(lastNodeRun.output_json);
-  return serialized.length <= 180 ? serialized : `${serialized.slice(0, 177)}...`;
+  return serialized.length <= 180 ? serialized : `${serialized.slice(0, 179)}…`;
 }
 
 export function getDepartmentTaskLabel(

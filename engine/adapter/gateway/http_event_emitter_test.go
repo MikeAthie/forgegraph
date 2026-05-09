@@ -239,24 +239,15 @@ func TestFlushSpoolRequeuesRawNotFoundEvents(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", writeErr)
 	}
 
-	emitter, err := NewHTTPEventEmitter(HTTPEventEmitterConfig{
-		CallbackURL:        server.URL,
-		Client:             server.Client(),
-		MaxRetries:         3,
-		RetryDelay:         10 * time.Millisecond,
-		SpoolPath:          spoolPath,
-		SpoolFlushInterval: time.Hour,
-	})
-	if err != nil {
-		t.Fatalf("NewHTTPEventEmitter() error = %v", err)
+	emitter := &HTTPEventEmitter{
+		callbackURL:    server.URL,
+		client:         server.Client(),
+		maxRetries:     3,
+		retryDelay:     10 * time.Millisecond,
+		spoolPath:      spoolPath,
+		deadLetterPath: spoolPath + ".dead.jsonl",
+		spoolFlushCh:   make(chan struct{}, 1),
 	}
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := emitter.Close(closeCtx); err != nil {
-			t.Fatalf("Close() error = %v", err)
-		}
-	}()
 
 	remaining, err := emitter.flushSpool(context.Background())
 	if err != nil {

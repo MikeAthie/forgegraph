@@ -1,0 +1,144 @@
+{
+  "schema_version": "forgegraph.loadgen.report.v1",
+  "gate": "B",
+  "passed": false,
+  "claim_status": "claim blocked",
+  "started_at": "2026-05-06T20:59:31.693532669Z",
+  "completed_at": "2026-05-06T22:59:06.658493267Z",
+  "command": "/home/mathi/.cache/go-build/66/66d4e40d4aa3b4a4723e43912fb84fe789ca25907bb88084ca475fbe367c902e-d/loadgen --base-url http://127.0.0.1:8000 --gate B --output-dir logs/loadgen --capacity-report-dir docs/ops/capacity",
+  "target": {
+    "agents": 50,
+    "duration_seconds": 7200,
+    "runs_per_tenant": 1,
+    "tenants": 1,
+    "ws_clients": 0
+  },
+  "features": {
+    "accounting": false,
+    "duplicate_event_storm": false,
+    "hitl": false,
+    "llm_throttling": false,
+    "memory": false,
+    "reconnect_storm": false
+  },
+  "environment": {
+    "base_url": "http://127.0.0.1:8000"
+  },
+  "metrics": {
+    "backend_api_latency_ms": {
+      "count": 7,
+      "p50": 29.492,
+      "p95": 68.232,
+      "max": 68.232
+    },
+    "event_ingestion_latency_ms": {
+      "count": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "projection_lag_seconds": {
+      "count": 1,
+      "p50": 0.30808,
+      "p95": 0.30808,
+      "max": 0.30808
+    },
+    "ws_delivery_latency_ms": {
+      "count": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "accepted_mutations": 1,
+    "visible_mutations": 1,
+    "dead_letters": 0,
+    "silent_drops": 0,
+    "tenant_isolation_checks": 0,
+    "tenant_isolation_failures": 0,
+    "duplicate_callback_attempts": 0,
+    "duplicate_cost_drift": 0,
+    "memory_duplicate_drift": 0,
+    "reconnect_count": 0,
+    "runs_started": 1,
+    "runs_completed": 0,
+    "runs_failed": 0
+  },
+  "requirements": [
+    {
+      "name": "target agent count",
+      "passed": true,
+      "detail": "agents=50 target=50"
+    },
+    {
+      "name": "tenant count",
+      "passed": true,
+      "detail": "tenants=1 minimum=1"
+    },
+    {
+      "name": "runs per tenant",
+      "passed": true,
+      "detail": "runs_per_tenant=1 minimum=1"
+    },
+    {
+      "name": "duration",
+      "passed": false,
+      "detail": "observed=1h59m35s required=2h0m0s"
+    },
+    {
+      "name": "backend API p95",
+      "passed": true,
+      "detail": "p95=68.23ms target\u003c300ms"
+    },
+    {
+      "name": "event ingestion p95",
+      "passed": false,
+      "detail": "p95=0.00ms target\u003c500ms"
+    },
+    {
+      "name": "projection lag p95",
+      "passed": true,
+      "detail": "p95=0.31s target\u003c2s"
+    },
+    {
+      "name": "websocket delivery p95",
+      "passed": true,
+      "detail": "p95=0.00ms target\u003c1000ms"
+    },
+    {
+      "name": "dead-letter rate",
+      "passed": true,
+      "detail": "rate=0.00000 target\u003c0.001"
+    },
+    {
+      "name": "silent drops",
+      "passed": true,
+      "detail": "silent_drops=0"
+    },
+    {
+      "name": "tenant isolation",
+      "passed": true,
+      "detail": "failures=0 checks=0"
+    },
+    {
+      "name": "cost duplicate drift",
+      "passed": true,
+      "detail": "duplicate_cost_drift=0"
+    }
+  ],
+  "blocking_reasons": [
+    "duration: observed=1h59m35s required=2h0m0s",
+    "event ingestion p95: p95=0.00ms target\u003c500ms"
+  ],
+  "artifacts": {
+    "root": "logs/loadgen/20260506T205931Z",
+    "requests_jsonl": "logs/loadgen/20260506T205931Z/requests.jsonl",
+    "runs_jsonl": "logs/loadgen/20260506T205931Z/runs.jsonl",
+    "ws_events_jsonl": "logs/loadgen/20260506T205931Z/ws-events.jsonl",
+    "hook_timeline": "logs/loadgen/20260506T205931Z/hook-timeline.jsonl",
+    "metrics_summary": "logs/loadgen/20260506T205931Z/metrics-summary.json",
+    "tenant_manifest": "logs/loadgen/20260506T205931Z/tenant-manifest.json"
+  },
+  "report_paths": [
+    "logs/loadgen/20260506T205931Z/metrics-summary.json"
+  ]
+}

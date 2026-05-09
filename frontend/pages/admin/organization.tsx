@@ -207,7 +207,7 @@ export default function OrganizationPage() {
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Spinner className="h-5 w-5" />
-              Loading workspace access...
+              Loading workspace access…
             </div>
           ) : organization ? (
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
@@ -347,7 +347,7 @@ export default function OrganizationPage() {
                       {isSubmitting ? (
                         <>
                           <Spinner size="xs" className="mr-2" />
-                          Adding...
+                          Adding…
                         </>
                       ) : (
                         "Add member"
@@ -367,7 +367,7 @@ export default function OrganizationPage() {
                 membersLoading ? (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Spinner className="h-5 w-5" />
-                    Loading members...
+                    Loading members…
                   </div>
                 ) : members.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No members found.</p>

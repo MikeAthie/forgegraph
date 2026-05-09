@@ -102,7 +102,7 @@ export function suggestPromptTitle({ role, task }: { role: string; task: string 
     const withoutPrefix = roleText.replace(/^you are\s+/i, "");
     const trimmed = withoutPrefix.trim();
     if (trimmed) {
-      return trimmed.length > 60 ? `${trimmed.slice(0, 57)}...` : trimmed;
+      return trimmed.length > 60 ? `${trimmed.slice(0, 59)}…` : trimmed;
     }
   }
 
@@ -111,5 +111,5 @@ export function suggestPromptTitle({ role, task }: { role: string; task: string 
 
   const firstLine = taskText.split("\n")[0]?.trim() ?? "";
   if (!firstLine) return "New Prompt";
-  return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
+  return firstLine.length > 60 ? `${firstLine.slice(0, 59)}…` : firstLine;
 }

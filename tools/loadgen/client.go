@@ -34,6 +34,8 @@ type HTTPResult struct {
 	Body       map[string]any `json:"body,omitempty"`
 }
 
+const loadgenTerminalNodeID = "final_output"
+
 func NewAPIClient(cfg Config, writer *ArtifactWriter) *APIClient {
 	return &APIClient{
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
@@ -175,30 +177,8 @@ func (client *APIClient) CreateGraphVersion(ctx context.Context, token string) (
 	if graphID == "" {
 		return "", errors.New("graph create response did not include id")
 	}
-	graphJSON := map[string]any{
-		"nodes": []map[string]any{
-			{
-				"id":   "agent-1",
-				"type": "agent",
-				"name": "Capacity Agent",
-				"config": map[string]any{
-					"provider":       "openai",
-					"model":          "gpt-4.1-mini",
-					"tools":          []any{"loadgen_noop"},
-					"max_steps":      1,
-					"max_tool_calls": 1,
-					"system_prompt":  `Return only {"action":"final_answer","final_answer":"Loadgen agent completed."}.`,
-				},
-			},
-			{"id": "output-1", "type": "output", "name": "Output", "config": map[string]any{}},
-		},
-		"edges": []map[string]any{
-			{"id": "edge-1", "from": "START", "to": "agent-1"},
-			{"id": "edge-2", "from": "agent-1", "to": "output-1"},
-		},
-	}
 	result, err = client.doJSON(ctx, http.MethodPost, "/api/graphs/"+graphID+"/versions", token, "", map[string]any{
-		"graph_json": graphJSON,
+		"graph_json": loadgenGraphJSON(),
 	})
 	if err != nil {
 		return "", err
@@ -208,6 +188,35 @@ func (client *APIClient) CreateGraphVersion(ctx context.Context, token string) (
 		return "", errors.New("graph version response did not include id")
 	}
 	return graphVersionID, nil
+}
+
+func loadgenGraphJSON() map[string]any {
+	return map[string]any{
+		"nodes": []map[string]any{
+			{
+				"id":   loadgenTerminalNodeID,
+				"type": "output",
+				"name": "Final Output",
+				"config": map[string]any{
+					"output_mapping": map[string]any{
+						"loadgen":      "input.loadgen",
+						"tenant_index": "input.tenant_index",
+						"run_index":    "input.run_index",
+						"agent_index":  "input.agent_index",
+					},
+				},
+			},
+		},
+		"edges": []map[string]any{
+			{"id": "start-final", "from": "START", "to": loadgenTerminalNodeID},
+			{"id": "final-end", "from": loadgenTerminalNodeID, "to": "END"},
+		},
+		"metadata": map[string]any{
+			"name":                    "Loadgen capacity graph",
+			"description":             "Output-only loadgen graph; no LLM calls are expected.",
+			"engine_contract_version": "2",
+		},
+	}
 }
 
 func (client *APIClient) StartRun(ctx context.Context, tenant TenantPlan, run RunPlan) (string, float64, error) {
@@ -276,9 +285,9 @@ func (client *APIClient) PostEngineNodeCompleted(ctx context.Context, cfg Config
 	requestTimestamp := engineEventTimestamp(time.Now().UTC())
 	occurredAt := deterministicEventTime(eventID).Format(time.RFC3339Nano)
 	payload := map[string]any{
-		"node_id":     "agent-1",
-		"node_type":   "agent",
-		"node_name":   "Capacity Agent",
+		"node_id":     loadgenTerminalNodeID,
+		"node_type":   "output",
+		"node_name":   "Final Output",
 		"attempt":     1,
 		"attempt_id":  eventID + ":attempt",
 		"duration_ms": 25,
@@ -300,8 +309,8 @@ func (client *APIClient) PostEngineNodeCompleted(ctx context.Context, cfg Config
 		"run_id":          runID,
 		"tenant_id":       tenant.OrganizationID,
 		"org_id":          tenant.OrganizationID,
-		"agent_id":        "agent-1",
-		"task_id":         "agent-1",
+		"agent_id":        loadgenTerminalNodeID,
+		"task_id":         loadgenTerminalNodeID,
 		"sequence":        1,
 		"correlation_id":  eventID,
 		"occurred_at":     occurredAt,

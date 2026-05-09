@@ -220,7 +220,7 @@ describe("GraphNode", () => {
       // Should show truncated version with ellipsis
       const preview = screen.getByTestId("node-config-preview");
       expect(preview.textContent).toContain("GET https://api.example.com/very");
-      expect(preview.textContent).toContain("...");
+      expect(preview.textContent).toContain("…");
     });
 
     it("should not show config preview when config is empty", () => {
@@ -240,7 +240,7 @@ describe("GraphNode", () => {
 
       const preview = screen.getByTestId("node-config-preview");
       expect(preview.textContent).toContain("state.input | uppercase");
-      expect(preview.textContent).toContain("...");
+      expect(preview.textContent).toContain("…");
     });
 
     it("should truncate long expressions", () => {
@@ -252,7 +252,7 @@ describe("GraphNode", () => {
 
       const preview = screen.getByTestId("node-config-preview");
       expect(preview.textContent).toContain("state.very.long.expression");
-      expect(preview.textContent).toContain("...");
+      expect(preview.textContent).toContain("…");
     });
 
     it("should not show config preview when config is empty", () => {
@@ -412,7 +412,8 @@ describe("GraphNode", () => {
       const { container } = render(<GraphNode {...props} />);
 
       const nodeElement = container.firstChild;
-      expect(nodeElement).toHaveClass("transition-all");
+      expect(nodeElement).toHaveClass("transition-[color,background-color,border-color,box-shadow,transform]");
+      expect(nodeElement).toHaveClass("motion-reduce:transition-none");
     });
   });
 

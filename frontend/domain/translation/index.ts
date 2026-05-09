@@ -35,7 +35,7 @@ import type {
 export type * from "./viewModels";
 
 function truncate(value: string, length = 220): string {
-  return value.length <= length ? value : `${value.slice(0, length - 3)}...`;
+  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }
 
 function stringifyPreview(value: unknown): string | null {
@@ -173,6 +173,17 @@ export function toTaskVMFromRecord(record: TaskRecord): TaskVM {
     staleEventCount: record.stale_event_count ?? 0,
     lateEventCount: record.late_event_count ?? 0,
     recoveryOptions: record.recovery_options ?? [],
+    judge: record.judge
+      ? {
+          id: record.judge.id,
+          title: record.judge.title,
+          criteriaCount: record.judge.criteria_count,
+          passThreshold: record.judge.pass_threshold,
+          status: record.judge.status,
+          score: record.judge.score,
+          evaluatedAt: record.judge.evaluated_at,
+        }
+      : null,
   };
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 import DashboardLayout from "../../components/DashboardLayout";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -22,6 +23,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  FormField,
   Input,
   Select,
   SelectContent,
@@ -37,6 +39,9 @@ const PERIOD_OPTIONS = [
   { value: "90d", label: "Last 90 days" },
   { value: "365d", label: "Last 12 months" },
 ];
+
+const isPeriodOption = (value: unknown): value is string =>
+  typeof value === "string" && PERIOD_OPTIONS.some((option) => option.value === value);
 
 const formatNumber = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "—";
@@ -71,10 +76,20 @@ const buildSparkline = (values: number[], width = 200, height = 60) => {
     .join(" ");
 };
 
-function Sparkline({ values, className }: { values: number[]; className?: string }) {
+const describeSparkline = (values: number[], label: string) => {
+  if (!values.length) {
+    return `${label}: no data available for the selected period.`;
+  }
+  const first = values[0] ?? 0;
+  const latest = values[values.length - 1] ?? 0;
+  const max = Math.max(...values);
+  return `${label}: ${values.length} points, from ${formatCurrency(first)} to ${formatCurrency(latest)}, peak ${formatCurrency(max)}.`;
+};
+
+function Sparkline({ values, className, label }: { values: number[]; className?: string; label: string }) {
   const points = buildSparkline(values);
   return (
-    <svg viewBox="0 0 200 60" className={className} aria-hidden="true">
+    <svg viewBox="0 0 200 60" className={className} role="img" aria-label={describeSparkline(values, label)}>
       {points ? (
         <>
           <polyline
@@ -104,6 +119,7 @@ const downloadBlob = (blob: Blob, filename: string) => {
 };
 
 export default function LLMAnalyticsPage() {
+  const router = useRouter();
   const [period, setPeriod] = useState("30d");
   const [usage, setUsage] = useState<LLMAnalyticsUsage | null>(null);
   const [costs, setCosts] = useState<LLMAnalyticsCosts | null>(null);
@@ -144,6 +160,30 @@ export default function LLMAnalyticsPage() {
   }, [fetchAnalytics, period]);
 
   useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+    if (isPeriodOption(router.query.period)) {
+      setPeriod(router.query.period);
+    }
+  }, [router.isReady, router.query.period]);
+
+  const handlePeriodChange = (nextPeriod: string) => {
+    setPeriod(nextPeriod);
+    if (!router.isReady) {
+      return;
+    }
+    void router.replace(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, period: nextPeriod },
+      },
+      undefined,
+      { shallow: true, scroll: false },
+    );
+  };
+
+  useEffect(() => {
     if (budget?.budget?.monthly_limit_usd != null) {
       setBudgetLimit(String(budget.budget.monthly_limit_usd));
     }
@@ -157,6 +197,12 @@ export default function LLMAnalyticsPage() {
   const budgetUsed = budget?.usage.month_cost_usd ?? 0;
   const budgetLimitValue = budget?.budget?.monthly_limit_usd ?? null;
   const budgetProgress = budgetLimitValue ? Math.min(budgetUsed / budgetLimitValue, 1) : 0;
+  const budgetProgressPercent = Math.round(budgetProgress * 100);
+  const budgetStatusLabel = budget?.over_budget
+    ? "Over budget"
+    : budget?.warning
+      ? "Warning threshold crossed"
+      : "Within budget";
 
   const saveBudget = async () => {
     if (!budgetLimit) return;
@@ -212,7 +258,7 @@ export default function LLMAnalyticsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={period} onValueChange={setPeriod}>
+                <Select value={period} onValueChange={handlePeriodChange}>
                   <SelectTrigger className="w-[170px]">
                     <SelectValue placeholder="Period" />
                   </SelectTrigger>
@@ -271,7 +317,7 @@ export default function LLMAnalyticsPage() {
                     <div className="text-sm text-muted-foreground">
                       {formatNumber(usage?.totals.total_tokens)} tokens across all providers.
                     </div>
-                    <Sparkline values={costSparklineValues} className="text-emerald-500" />
+                    <Sparkline values={costSparklineValues} className="text-emerald-500" label="LLM cost trend" />
                   </CardContent>
                 </Card>
 
@@ -330,14 +376,23 @@ export default function LLMAnalyticsPage() {
                           <span className="text-muted-foreground">Monthly limit</span>
                           <span className="font-semibold">{formatCurrency(budgetLimitValue)}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                        <div
+                          className="h-3 overflow-hidden rounded-full bg-muted/60"
+                          role="progressbar"
+                          aria-label="Monthly LLM budget usage"
+                          aria-valuemin={0}
+                          aria-valuemax={budgetLimitValue ?? undefined}
+                          aria-valuenow={budgetUsed}
+                          aria-valuetext={`${budgetStatusLabel}. ${budgetProgressPercent}% of monthly budget used.`}
+                        >
                           <div
-                            className="h-full bg-emerald-500 transition-all"
-                            style={{ width: `${Math.round(budgetProgress * 100)}%` }}
+                            className="h-full bg-emerald-500 transition-[width] duration-200 motion-reduce:transition-none"
+                            style={{ width: `${budgetProgressPercent}%` }}
                           />
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          Warning at {formatPercent(budget?.budget?.warning_threshold_pct)}
+                          {budgetStatusLabel}. {budgetProgressPercent}% used. Warning at{" "}
+                          {formatPercent(budget?.budget?.warning_threshold_pct)}.
                         </div>
                       </>
                     ) : (
@@ -347,18 +402,33 @@ export default function LLMAnalyticsPage() {
                     )}
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="text-xs text-muted-foreground">Monthly limit (USD)</label>
-                        <Input value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} placeholder="200" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground">Warning threshold (%)</label>
+                      <FormField label="Monthly limit (USD)" htmlFor="llm-budget-limit">
                         <Input
+                          id="llm-budget-limit"
+                          name="budget_monthly_limit_usd"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="0.01"
+                          autoComplete="off"
+                          value={budgetLimit}
+                          onChange={(e) => setBudgetLimit(e.target.value)}
+                          placeholder="200"
+                        />
+                      </FormField>
+                      <FormField label="Warning threshold (%)" htmlFor="llm-budget-threshold">
+                        <Input
+                          id="llm-budget-threshold"
+                          name="budget_warning_threshold"
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={100}
                           value={budgetThreshold}
                           onChange={(e) => setBudgetThreshold(e.target.value)}
                           placeholder="80"
                         />
-                      </div>
+                      </FormField>
                     </div>
                     <Button onClick={saveBudget} disabled={isSavingBudget || !budgetLimit}>
                       {isSavingBudget ? <Spinner size="xs" className="mr-2" /> : null}

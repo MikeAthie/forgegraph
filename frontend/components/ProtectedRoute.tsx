@@ -19,7 +19,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex items-center justify-center bg-background" aria-live="polite">
         <div className="flex flex-col items-center space-y-4">
           <Spinner size="lg" label="Loading workspace" />
-          <p className="text-sm text-muted-foreground">Loading workspace...</p>
+          <p className="text-sm text-muted-foreground">Loading workspace</p>
         </div>
       </div>
     );
@@ -30,7 +30,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex items-center justify-center bg-background" aria-live="polite">
         <div className="flex flex-col items-center space-y-4">
           <Spinner size="lg" label="Redirecting to sign in" />
-          <p className="text-sm text-muted-foreground">Redirecting to sign in...</p>
+          <p className="text-sm text-muted-foreground">Redirecting to sign in</p>
         </div>
       </div>
     );

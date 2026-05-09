@@ -30,7 +30,7 @@ export function WizardProgress() {
               onClick={() => canNavigate && goToStep(index)}
               disabled={!canNavigate}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                "flex min-h-11 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium transition-[color,background-color,box-shadow] motion-reduce:transition-none md:min-h-8 md:py-1.5",
                 "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
                 isActive && "bg-primary text-primary-foreground",
                 isCompleted && !isActive && "bg-primary/20 text-primary hover:bg-primary/30",

@@ -170,7 +170,7 @@ export default function AdminBillingPage() {
                       {actionLoading === "portal" ? (
                         <>
                           <Spinner size="xs" className="mr-2" />
-                          Opening...
+                          Opening
                         </>
                       ) : (
                         "Manage Billing"
@@ -271,7 +271,7 @@ export default function AdminBillingPage() {
                     {actionLoading === plan.id ? (
                       <>
                         <Spinner size="xs" className="mr-2" />
-                        Redirecting...
+                        Redirecting
                       </>
                     ) : (
                       "Choose Plan"

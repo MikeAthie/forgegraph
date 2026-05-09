@@ -16,6 +16,7 @@ import {
   LibraryBig,
   LogOut,
   Loader2,
+  Menu,
   Plus,
   ShieldCheck,
   UserCircle,
@@ -73,6 +74,8 @@ const navItems: NavItem[] = [
   { href: "/settings", label: "Settings", icon: ShieldCheck, section: "build" },
 ];
 
+const mobilePrimaryHrefs = new Set(["/companies", "/overview", "/tasks", "/approvals", "/memory"]);
+
 const DECISION_BADGE_FEED_EVENTS = ["decision.created", "decision.updated", "overview.updated"];
 
 function stateFeedMessageType(message: StateFeedMessage) {
@@ -120,6 +123,84 @@ const pageMeta = (pathname: string) => {
     return {
       title: "Usage And Budget",
       description: "Track AI usage, spend concentration, and company operating limits.",
+    };
+  }
+  if (pathname.startsWith("/analytics/llm")) {
+    return {
+      title: "LLM Analytics",
+      description: "Review AI usage, cost, quota, and budget posture across the workspace.",
+    };
+  }
+  if (pathname.startsWith("/analytics/memory")) {
+    return {
+      title: "Memory Analytics",
+      description: "Review knowledge retention, indexing, retrieval, and memory-cost posture.",
+    };
+  }
+  if (pathname.startsWith("/analytics")) {
+    return {
+      title: "Analytics",
+      description: "Inspect specialist usage and operational telemetry for the workspace.",
+    };
+  }
+  if (pathname.startsWith("/credentials")) {
+    return {
+      title: "AI Access Credentials",
+      description: "Manage governed provider credentials and connection health for company operations.",
+    };
+  }
+  if (pathname.startsWith("/prompts")) {
+    return {
+      title: "Prompt Library",
+      description: "Browse reusable prompt templates and manage governed company playbooks.",
+    };
+  }
+  if (pathname.startsWith("/onboarding")) {
+    return {
+      title: "Workspace Onboarding",
+      description: "Complete the guided setup steps for operating companies in this organization.",
+    };
+  }
+  if (pathname.startsWith("/storefront")) {
+    return {
+      title: "Storefront",
+      description: "Review customer-facing commerce surfaces connected to the operating company.",
+    };
+  }
+  if (pathname.startsWith("/admin/audit-logs")) {
+    return {
+      title: "Activity Log",
+      description: "Search the operator trail across operations, access, credentials, retention, and knowledge.",
+    };
+  }
+  if (pathname.startsWith("/admin/marketplace")) {
+    return {
+      title: "Marketplace Governance",
+      description: "Review governed packages, releases, and tenant-scoped manifest previews.",
+    };
+  }
+  if (pathname.startsWith("/admin/organization")) {
+    return {
+      title: "Workspace Access",
+      description: "Manage organization members, roles, and access posture.",
+    };
+  }
+  if (pathname.startsWith("/admin/sso")) {
+    return {
+      title: "SSO Configuration",
+      description: "Configure enterprise identity settings for the workspace.",
+    };
+  }
+  if (pathname.startsWith("/admin/billing")) {
+    return {
+      title: "Billing",
+      description: "Manage subscription, entitlement, and workspace billing controls.",
+    };
+  }
+  if (pathname.startsWith("/admin/help")) {
+    return {
+      title: "Support",
+      description: "Find operational support resources and implementation references.",
     };
   }
   if (pathname.startsWith("/ops")) {
@@ -332,6 +413,8 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
       ...item,
       badge: item.href === "/approvals" ? pendingDecisionCount : item.badge,
     }));
+  const mobilePrimaryItems = items.filter((item) => mobilePrimaryHrefs.has(item.href));
+  const mobileOverflowItems = items.filter((item) => !mobilePrimaryHrefs.has(item.href));
 
   return (
     <div className="min-h-screen text-foreground">
@@ -651,7 +734,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                 aria-label="Mobile primary navigation"
                 className="grid grid-cols-2 gap-2 pb-1 sm:grid-cols-3 lg:hidden"
               >
-                {items.map((item) => {
+                {mobilePrimaryItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActivePath(router.pathname, item.href);
                   return (
@@ -672,6 +755,36 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                     </Link>
                   );
                 })}
+                {mobileOverflowItems.length > 0 ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-slate-900/10 bg-white/75 px-3 py-2 text-center text-sm text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                      >
+                        <Menu className="h-4 w-4" />
+                        <span>More</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-72 lg:hidden">
+                      <DropdownMenuLabel>More destinations</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {mobileOverflowItems.map((item) => {
+                        const Icon = item.icon;
+                        const active = isActivePath(router.pathname, item.href);
+                        return (
+                          <DropdownMenuItem key={item.href} asChild>
+                            <Link href={item.href} aria-current={active ? "page" : undefined}>
+                              <Icon className="h-4 w-4" />
+                              <span className="min-w-0 truncate">{item.label}</span>
+                              {item.badge && item.badge > 0 ? <Badge variant="secondary">{item.badge}</Badge> : null}
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
               </nav>
             </div>
           </header>

@@ -462,6 +462,11 @@ BACKEND_WATCHDOG_LOG_THROTTLE_SECONDS = int(
 # Stripe billing configuration
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+COMMERCE_STRIPE_WEBHOOK_SECRET = os.environ.get(
+    "COMMERCE_STRIPE_WEBHOOK_SECRET",
+    os.environ.get("LEGACY_STRIPE_WEBHOOK_SECRET", ""),
+)
+LEGACY_STRIPE_WEBHOOK_SECRET = COMMERCE_STRIPE_WEBHOOK_SECRET
 
 # Engine Configuration (Go gRPC service)
 ENGINE_HOST = os.environ.get("ENGINE_HOST", "localhost")
@@ -499,10 +504,25 @@ RUN_EVENT_STREAM_SUMMARY_MAX_ACTIVE_STREAMS_PER_RUN = int(
 RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN = _get_bool_env("RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN", False)
 ALLOWED_LLM_PROVIDERS = [
     provider.strip().lower()
-    for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic").split(",")
+    for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic,google").split(",")
     if provider.strip()
 ]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+GEMINI_API_BASE_URL = os.environ.get(
+    "GEMINI_API_BASE_URL",
+    "https://generativelanguage.googleapis.com/v1beta",
+).rstrip("/")
+GEMINI_IMAGEN_MODEL = os.environ.get("GEMINI_IMAGEN_MODEL", "imagen-4.0-generate-001")
+GEMINI_VEO_MODEL = os.environ.get("GEMINI_VEO_MODEL", "veo-3.1-generate-preview")
+MEDIA_GENERATION_ARTIFACT_ROOT = Path(
+    os.environ.get(
+        "MEDIA_GENERATION_ARTIFACT_ROOT",
+        os.environ.get(
+            "LEGACY_MEDIA_ARTIFACT_ROOT", str(BASE_DIR.parent / "logs" / "media-generations")
+        ),
+    )
+)
+LEGACY_MEDIA_ARTIFACT_ROOT = MEDIA_GENERATION_ARTIFACT_ROOT
 FF_CURATED_MEMORY_ENABLED = _get_bool_env("FF_CURATED_MEMORY_ENABLED", True)
 FF_CURATED_MEMORY_VECTOR_INDEXING = _get_bool_env("FF_CURATED_MEMORY_VECTOR_INDEXING", True)
 FF_OS_SHELL = _get_bool_env("FF_OS_SHELL", True)

@@ -54,7 +54,7 @@ describe("ProtectedRoute", () => {
         </ProtectedRoute>,
       );
 
-      expect(screen.getByText("Loading workspace...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Loading workspace" })).toBeInTheDocument();
       expect(screen.queryByText("Protected Content")).not.toBeInTheDocument();
     });
 
@@ -113,7 +113,7 @@ describe("ProtectedRoute", () => {
         </ProtectedRoute>,
       );
 
-      expect(screen.getByText("Redirecting to sign in...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Redirecting to sign in" })).toBeInTheDocument();
       expect(screen.queryByText("Protected Content")).not.toBeInTheDocument();
     });
 
@@ -170,8 +170,8 @@ describe("ProtectedRoute", () => {
         </ProtectedRoute>,
       );
 
-      expect(screen.queryByText("Loading workspace...")).not.toBeInTheDocument();
-      expect(screen.queryByText("Redirecting to sign in...")).not.toBeInTheDocument();
+      expect(screen.queryByText("Loading workspace")).not.toBeInTheDocument();
+      expect(screen.queryByText("Redirecting to sign in")).not.toBeInTheDocument();
     });
 
     it("should render complex children", () => {
@@ -211,7 +211,7 @@ describe("ProtectedRoute", () => {
         </ProtectedRoute>,
       );
 
-      expect(screen.getByText("Loading workspace...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Loading workspace" })).toBeInTheDocument();
 
       // Transition to authenticated
       mockUseAuth.mockReturnValue({
@@ -233,7 +233,7 @@ describe("ProtectedRoute", () => {
       );
 
       expect(screen.getByText("Protected Content")).toBeInTheDocument();
-      expect(screen.queryByText("Loading workspace...")).not.toBeInTheDocument();
+      expect(screen.queryByText("Loading workspace")).not.toBeInTheDocument();
     });
 
     it("should handle transition from loading to unauthenticated", async () => {
@@ -255,7 +255,7 @@ describe("ProtectedRoute", () => {
         </ProtectedRoute>,
       );
 
-      expect(screen.getByText("Loading workspace...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Loading workspace" })).toBeInTheDocument();
 
       // Transition to unauthenticated
       mockUseAuth.mockReturnValue({
@@ -280,7 +280,7 @@ describe("ProtectedRoute", () => {
         expect(mockPush).toHaveBeenCalledWith("/login");
       });
 
-      expect(screen.getByText("Redirecting to sign in...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Redirecting to sign in" })).toBeInTheDocument();
     });
   });
 
@@ -301,7 +301,7 @@ describe("ProtectedRoute", () => {
       render(<ProtectedRoute>{null}</ProtectedRoute>);
 
       // Should not crash
-      expect(screen.queryByText("Loading workspace...")).not.toBeInTheDocument();
+      expect(screen.queryByText("Loading workspace")).not.toBeInTheDocument();
     });
 
     it("should handle multiple children", () => {
@@ -352,7 +352,7 @@ describe("ProtectedRoute", () => {
       );
 
       // Loading message should be visible and accessible
-      expect(screen.getByText("Loading workspace...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Loading workspace" })).toBeInTheDocument();
     });
 
     it("should have accessible redirecting state", () => {
@@ -375,7 +375,7 @@ describe("ProtectedRoute", () => {
       );
 
       // Redirecting message should be visible and accessible
-      expect(screen.getByText("Redirecting to sign in...")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Redirecting to sign in" })).toBeInTheDocument();
     });
   });
 });

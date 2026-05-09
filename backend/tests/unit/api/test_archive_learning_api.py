@@ -13,8 +13,19 @@ from application.services.company_learning import (
     PolicyCandidateService,
     PreferenceEventService,
 )
+from application.services.gemini_media import GeminiMediaBytes
 from application.services.tenancy import ensure_default_organization
-from infrastructure.orm.models import ApprovalTask, Graph, GraphVersion, Organization, Run, User
+from infrastructure.crypto.encryption import encrypt_api_key
+from infrastructure.orm.models import (
+    APIKey,
+    ApprovalTask,
+    Graph,
+    GraphVersion,
+    MediaGenerationJob,
+    Organization,
+    Run,
+    User,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -58,6 +69,18 @@ def _create_run(user, company: Graph, *, output_json: dict[str, Any] | None = No
     )
 
 
+def _google_credential(user: User) -> APIKey:
+    organization = user.default_organization
+    assert organization is not None
+    return APIKey.objects.create(
+        organization=organization,
+        user=user,
+        provider="google",
+        name="Legacy Gemini BYOK",
+        encrypted_key=encrypt_api_key("gemini-test-key"),
+    )
+
+
 def test_archive_assets_api_lists_company_assets(authenticated_client, user):
     company = _create_company(user)
     run = _create_run(user, company, output_json={"deliverable": "Reusable launch plan"})
@@ -84,6 +107,80 @@ def test_archive_asset_versions_api_returns_versions(authenticated_client, user)
     assert response.status_code == 200
     versions = response.json()["data"]["versions"]
     assert versions[0]["content_uri"].startswith("forgegraph://runs/")
+
+
+def test_media_generation_api_creates_image_and_downloads_content(
+    authenticated_client,
+    monkeypatch,
+    settings,
+    tmp_path,
+    user,
+):
+    settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
+    company = _create_company(user)
+    credential = _google_credential(user)
+
+    def fake_generate_image(self, **kwargs):
+        return GeminiMediaBytes(
+            content=b"api-png",
+            mime_type="image/png",
+            response_json={"ok": True},
+        )
+
+    monkeypatch.setattr(
+        "application.services.gemini_media.GoogleMediaClient.generate_image",
+        fake_generate_image,
+    )
+
+    response = authenticated_client.post(
+        "/api/archive/media-generations",
+        data={
+            "company_id": str(company.id),
+            "credential_id": str(credential.id),
+            "modality": "image",
+            "prompt": "Legacy product image draft for buyer@example.com",
+            "idempotency_key": "api-image",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    job = response.json()["data"]["media_generation"]
+    assert job["status"] == "succeeded"
+    assert job["provider"] == "google"
+    assert "buyer@example.com" not in job["prompt"]
+    content_response = authenticated_client.get(
+        f"/api/archive/assets/{job['output_asset_id']}/versions/"
+        f"{job['output_asset_version_id']}/content"
+    )
+    assert content_response.status_code == 200
+    assert content_response.content == b"api-png"
+    assert content_response["Content-Type"] == "image/png"
+
+
+def test_media_generation_api_hides_other_organization_job(authenticated_client, user):
+    other_user = User.objects.create_user(email="media-other@example.com", password="password123")
+    ensure_default_organization(other_user)
+    other_company = _create_company(other_user, name="Other Org Company")
+    credential = _google_credential(other_user)
+    organization = other_company.organization
+    assert organization is not None
+    job = MediaGenerationJob.objects.create(
+        organization=organization,
+        company=other_company,
+        requested_by=other_user,
+        credential=credential,
+        modality="image",
+        provider="google",
+        model="imagen-4.0-generate-001",
+        prompt="Legacy image draft",
+        prompt_hash="hash",
+        status="pending",
+    )
+
+    response = authenticated_client.get(f"/api/archive/media-generations/{job.id}")
+
+    assert response.status_code == 404
 
 
 def test_archive_api_does_not_cross_company_scope(authenticated_client, user):
