@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import NextImage from "next/image";
 import {
   AlertTriangle,
   Brain,
@@ -6,6 +7,7 @@ import {
   CreditCard,
   ExternalLink,
   FileCheck2,
+  Image as ImageIcon,
   Megaphone,
   PackageCheck,
   PackageOpen,
@@ -14,6 +16,7 @@ import {
   RotateCcw,
   ShoppingBag,
   Truck,
+  Video,
 } from "lucide-react";
 
 import { Panel, SectionHeader, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
@@ -22,6 +25,7 @@ import {
   AlertDescription,
   Button,
   Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -31,18 +35,21 @@ import {
   Textarea,
 } from "@/components/ui";
 import type {
+  ArchiveAsset,
   CommerceOperationsOverview,
   CommerceOrder,
   CompanyOperationObjective,
   CompanyOpsOverview,
   CompanySignal,
+  Credential,
   InventoryOverview,
   InventoryProduct,
   InventoryReservation,
+  MediaGenerationJob,
   ProcurementDraft,
   PublicationDraft,
 } from "@/lib/api";
-import { commerceApi, companyOpsApi, inventoryApi } from "@/lib/api";
+import { archiveApi, commerceApi, companyOpsApi, credentialsApi, inventoryApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { showError, showSuccess } from "@/lib/toast";
 
@@ -58,6 +65,15 @@ const currency = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 0,
 });
 
+const defaultMediaPrompt =
+  "Create a premium product-campaign image draft for the company: limited designer optical frames on a clean editorial surface, high-end retail lighting, no text, no logos, no people, no private customer data.";
+
+const defaultVideoPrompt =
+  "Create a short premium product video draft for the company: slow cinematic movement across limited designer optical frames, clean editorial setting, no text, no logos, no people, no private customer data.";
+
+const defaultGeminiImageModel = "gemini-3.1-flash-image-preview";
+const defaultOpenRouterImageModel = "black-forest-labs/flux.2-klein-4b";
+
 export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProps) {
   const [overview, setOverview] = useState<InventoryOverview | null>(null);
   const [commerceOverview, setCommerceOverview] = useState<CommerceOperationsOverview | null>(null);
@@ -71,6 +87,15 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
   const [channel, setChannel] = useState<(typeof channels)[number]>("manual");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [mediaAssets, setMediaAssets] = useState<ArchiveAsset[]>([]);
+  const [mediaPreviewUrls, setMediaPreviewUrls] = useState<Record<string, string>>({});
+  const [mediaJobs, setMediaJobs] = useState<MediaGenerationJob[]>([]);
+  const [mediaPrompt, setMediaPrompt] = useState(defaultMediaPrompt);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaActionLoading, setMediaActionLoading] = useState<"image" | "video" | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const mediaPreviewUrlRef = useRef<Record<string, string>>({});
 
   const products = useMemo(() => overview?.products ?? [], [overview?.products]);
   const operationalReservations = useMemo(
@@ -81,6 +106,60 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
     [overview?.reservations],
   );
   const stockStateSummary = overview?.stock_state_summary ?? companyOpsOverview?.stock_state_summary;
+  const mediaCredential = useMemo(
+    () =>
+      credentials.find((credential) => credential.provider === "openrouter") ??
+      credentials.find((credential) => credential.provider === "google"),
+    [credentials],
+  );
+  const publicationDraftByAssetId = useMemo(() => {
+    const drafts = new Map<string, PublicationDraft>();
+    for (const draft of companyOpsOverview?.publication_drafts ?? []) {
+      if (draft.asset_id && !drafts.has(draft.asset_id)) {
+        drafts.set(draft.asset_id, draft);
+      }
+    }
+    return drafts;
+  }, [companyOpsOverview?.publication_drafts]);
+
+  const replaceMediaPreviewUrls = useCallback((nextUrls: Record<string, string>) => {
+    for (const url of Object.values(mediaPreviewUrlRef.current)) {
+      URL.revokeObjectURL(url);
+    }
+    mediaPreviewUrlRef.current = nextUrls;
+    setMediaPreviewUrls(nextUrls);
+  }, []);
+
+  const loadMediaDrafts = useCallback(async () => {
+    setMediaLoading(true);
+    setMediaError(null);
+    try {
+      const [nextCredentials, imageAssets, videoAssets] = await Promise.all([
+        credentialsApi.list(),
+        archiveApi.listAssets(companyId, { asset_type: "image", status: "active" }),
+        archiveApi.listAssets(companyId, { asset_type: "video", status: "active" }),
+      ]);
+      const nextAssets = [...imageAssets.assets, ...videoAssets.assets].sort((left, right) =>
+        right.created_at.localeCompare(left.created_at),
+      );
+      const nextPreviewUrls: Record<string, string> = {};
+      for (const asset of nextAssets.filter((item) => item.asset_type === "image" && item.latest_version_id)) {
+        try {
+          const blob = await archiveApi.getAssetVersionContent(asset.id, asset.latest_version_id as string);
+          nextPreviewUrls[asset.id] = URL.createObjectURL(blob);
+        } catch {
+          // A broken preview should not hide the backend-owned asset record.
+        }
+      }
+      setCredentials(nextCredentials);
+      setMediaAssets(nextAssets);
+      replaceMediaPreviewUrls(nextPreviewUrls);
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : "Media drafts could not be loaded.");
+    } finally {
+      setMediaLoading(false);
+    }
+  }, [companyId, replaceMediaPreviewUrls]);
 
   const loadInventory = async () => {
     setLoading(true);
@@ -111,6 +190,19 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
     void loadInventory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
+
+  useEffect(() => {
+    void loadMediaDrafts();
+  }, [loadMediaDrafts]);
+
+  useEffect(
+    () => () => {
+      for (const url of Object.values(mediaPreviewUrlRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [],
+  );
 
   const createHold = async () => {
     if (!selectedProductId) {
@@ -272,6 +364,102 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
     }
   };
 
+  const generateMediaDraft = async (modality: "image" | "video") => {
+    if (!mediaCredential) {
+      showError("Connect an OpenRouter or Google credential before generating media drafts.");
+      return;
+    }
+    if (modality === "video" && mediaCredential.provider !== "google") {
+      showError("Video drafts still require a Google Gemini/Veo credential.");
+      return;
+    }
+    const prompt =
+      modality === "video"
+        ? mediaPrompt.trim() && mediaPrompt !== defaultMediaPrompt
+          ? mediaPrompt
+          : defaultVideoPrompt
+        : mediaPrompt || defaultMediaPrompt;
+    setMediaActionLoading(modality);
+    setMediaError(null);
+    try {
+      let job = await archiveApi.createMediaGeneration({
+        company_id: companyId,
+        credential_id: mediaCredential.id,
+        modality,
+        prompt,
+        model:
+          modality === "image"
+            ? mediaCredential.provider === "openrouter"
+              ? defaultOpenRouterImageModel
+              : defaultGeminiImageModel
+            : undefined,
+        idempotency_key: `media-draft-${modality}:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+      });
+      setMediaJobs((current) => [job, ...current.filter((item) => item.id !== job.id)].slice(0, 4));
+      if (modality === "video") {
+        for (let attempt = 0; attempt < 20 && job.status === "running"; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1000 : 20_000));
+          job = await archiveApi.pollMediaGeneration(job.id);
+          setMediaJobs((current) => [job, ...current.filter((item) => item.id !== job.id)].slice(0, 4));
+        }
+      }
+      if (job.status === "failed") {
+        throw new Error(job.error_message || `${modality} draft generation failed.`);
+      }
+      if (modality === "video" && job.status === "running") {
+        showSuccess("Video draft is still processing. Refresh media drafts to check progress.");
+      } else {
+        showSuccess(`${modality === "image" ? "Image" : "Video"} draft generated.`);
+      }
+      await loadMediaDrafts();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `${modality} draft could not be generated.`;
+      setMediaError(message);
+      showError(message);
+    } finally {
+      setMediaActionLoading(null);
+    }
+  };
+
+  const createSocialPostDraft = async (asset: ArchiveAsset) => {
+    const existingDraft = publicationDraftByAssetId.get(asset.id);
+    const actionKey = `social-post:${asset.id}`;
+    setActionLoading(actionKey);
+    try {
+      const draft =
+        existingDraft ??
+        (await companyOpsApi.createPublicationDraft(
+          {
+            company_id: companyId,
+            title: "Instagram/Facebook campaign post: product image draft",
+            channel: "instagram,facebook",
+            audience: "Design-conscious buyers considering limited designer optical frames.",
+            body: socialCaptionForAsset(asset),
+            call_to_action: "DM the company to reserve the frame before it sells.",
+            asset_id: asset.id,
+            asset_version_id: asset.latest_version_id,
+            media_job_id: stringMetadata(asset.metadata, "media_generation_job_id"),
+          },
+          { idempotencyKey: `media-social-post:${asset.id}:${asset.latest_version_id ?? "no-version"}` },
+        ));
+
+      if (draft.status === "draft") {
+        await companyOpsApi.requestPublicationApproval(
+          draft.id,
+          { note: "Review Instagram/Facebook post package before any external publication." },
+          { idempotencyKey: `media-social-post-approval:${draft.id}` },
+        );
+      }
+
+      await loadInventory();
+      showSuccess("Approval-gated social post draft created.");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Social post draft could not be created.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const selectedProduct = products.find((product) => product.id === selectedProductId);
   const recentOrders = orders.slice(0, 8);
   const recommendedOperations = companyOpsOverview?.recommended_operations ?? [];
@@ -348,6 +536,138 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
             label="Sold out"
             value={stockStateSummary?.sold_out_count ?? overview?.summary.sold_out_products ?? 0}
           />
+        </div>
+      </Panel>
+
+      <Panel
+        title="Media Drafts"
+        description="Turn generated media into approval-gated Instagram/Facebook post packages without publishing externally."
+        action={
+          <Button variant="outline" size="sm" onClick={loadMediaDrafts} disabled={mediaLoading}>
+            {mediaLoading ? <Spinner size="sm" /> : <RotateCcw className="h-4 w-4" />}
+            Refresh
+          </Button>
+        }
+      >
+        <div className="grid gap-4 2xl:grid-cols-[0.8fr_1.2fr]" data-testid="media-drafts-panel">
+          <div className="space-y-3 rounded-xl border border-slate-900/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
+            <div>
+              <Label htmlFor="media-prompt" className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                Sanitized media prompt
+              </Label>
+              <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                Product and styling context only. Customer, payment, and address details stay out.
+              </p>
+            </div>
+            <Textarea
+              id="media-prompt"
+              data-testid="media-prompt"
+              value={mediaPrompt}
+              onChange={(event) => setMediaPrompt(event.target.value)}
+              rows={5}
+              className="text-sm leading-6"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => void generateMediaDraft("image")}
+                disabled={!mediaCredential || mediaActionLoading !== null}
+                data-testid="generate-media-image-draft"
+              >
+                {mediaActionLoading === "image" ? <Spinner size="sm" /> : <ImageIcon className="h-4 w-4" />}
+                Generate image draft
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void generateMediaDraft("video")}
+                disabled={!mediaCredential || mediaCredential.provider !== "google" || mediaActionLoading !== null}
+              >
+                {mediaActionLoading === "video" ? <Spinner size="sm" /> : <Video className="h-4 w-4" />}
+                Generate video draft
+              </Button>
+              <StatusBadge
+                status={mediaCredential ? "active" : "paused"}
+                label={
+                  mediaCredential
+                    ? `${mediaCredential.provider === "openrouter" ? "OpenRouter" : "Google"} ready`
+                    : "OpenRouter or Google credential required"
+                }
+              />
+            </div>
+            {mediaJobs.length ? (
+              <div className="grid gap-2">
+                {mediaJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 text-sm dark:border-white/8"
+                  >
+                    <span className="font-medium text-slate-950 dark:text-slate-50">
+                      {job.modality} draft {job.id.slice(0, 8)}
+                    </span>
+                    <StatusBadge status={job.status} label={job.status.replaceAll("_", " ")} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {mediaError ? (
+              <Alert variant="destructive" data-testid="media-error">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{mediaError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div
+              className="rounded-xl border border-slate-900/10 bg-slate-950 p-4 text-white dark:border-white/10 lg:col-span-2"
+              data-testid="social-post-package-card"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Commercial handoff</p>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">
+                    Generated image drafts become social post packages with caption, channel, CTA, and human approval
+                    before Instagram or Facebook publication.
+                  </p>
+                </div>
+                <StatusBadge status="approval_gated" label="approval gated" />
+              </div>
+              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
+                <div className="rounded-lg bg-white/10 p-3">
+                  <p className="font-semibold text-white">1. Creative</p>
+                  <p className="mt-1 text-slate-300">Use the archive image as the campaign asset.</p>
+                </div>
+                <div className="rounded-lg bg-white/10 p-3">
+                  <p className="font-semibold text-white">2. Caption</p>
+                  <p className="mt-1 text-slate-300">Package Instagram/Facebook copy and reservation CTA.</p>
+                </div>
+                <div className="rounded-lg bg-white/10 p-3">
+                  <p className="font-semibold text-white">3. Approval</p>
+                  <p className="mt-1 text-slate-300">Queue review before any public post.</p>
+                </div>
+              </div>
+            </div>
+            {mediaLoading ? (
+              <div className="flex min-h-[16rem] items-center justify-center rounded-xl border border-slate-900/10 bg-white/75 dark:border-white/10 dark:bg-white/5 lg:col-span-2">
+                <Spinner />
+              </div>
+            ) : null}
+            {!mediaLoading && mediaAssets.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 dark:border-white/15 dark:text-slate-400 lg:col-span-2">
+                No media drafts have been generated yet.
+              </div>
+            ) : null}
+            {mediaAssets.slice(0, 6).map((asset) => (
+              <MediaDraftCard
+                key={asset.id}
+                asset={asset}
+                previewUrl={mediaPreviewUrls[asset.id]}
+                publicationDraft={publicationDraftByAssetId.get(asset.id)}
+                actionLoading={actionLoading}
+                onCreateSocialPost={createSocialPostDraft}
+                onRequestApproval={(draft) => requestDraftApproval(draft, "publication")}
+              />
+            ))}
+          </div>
         </div>
       </Panel>
 
@@ -1137,6 +1457,133 @@ function DraftColumn({
       </div>
     </div>
   );
+}
+
+function MediaDraftCard({
+  asset,
+  previewUrl,
+  publicationDraft,
+  actionLoading,
+  onCreateSocialPost,
+  onRequestApproval,
+}: {
+  asset: ArchiveAsset;
+  previewUrl?: string;
+  publicationDraft?: PublicationDraft;
+  actionLoading: string | null;
+  onCreateSocialPost: (asset: ArchiveAsset) => void;
+  onRequestApproval: (draft: PublicationDraft) => void;
+}) {
+  const reviewStatus = String(asset.metadata?.review_status ?? "draft");
+  const isImage = asset.asset_type === "image";
+  const socialActionKey = `social-post:${asset.id}`;
+  const socialStatus = publicationDraft?.status.replaceAll("_", " ");
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-900/10 bg-white/80 dark:border-white/10 dark:bg-white/5">
+      <div className="relative flex aspect-[4/3] items-center justify-center bg-slate-100 dark:bg-slate-900/70">
+        {isImage && previewUrl ? (
+          <NextImage
+            src={previewUrl}
+            alt={asset.title}
+            fill
+            sizes="(min-width: 1536px) 24rem, (min-width: 1024px) 50vw, 100vw"
+            unoptimized
+            className="object-cover"
+            data-testid="media-draft-preview-image"
+          />
+        ) : (
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-slate-900/10 bg-white/75 text-slate-500 dark:border-white/10 dark:bg-white/10 dark:text-slate-300">
+            {isImage ? <ImageIcon className="h-7 w-7" /> : <Video className="h-7 w-7" />}
+          </div>
+        )}
+      </div>
+      <div className="space-y-3 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">{asset.title}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(asset.created_at)}</p>
+          </div>
+          <StatusBadge status={reviewStatus} label={reviewStatus.replaceAll("_", " ")} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <StatusBadge status={asset.asset_type} label={asset.asset_type} />
+          <span>{asset.latest_version_id ? `Version ${asset.latest_version_id.slice(0, 8)}` : "No version"}</span>
+        </div>
+        {isImage ? (
+          <div className="rounded-lg border border-slate-900/10 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Social post package
+                </p>
+                <p
+                  className="mt-1 line-clamp-2 text-sm leading-5 text-slate-700 dark:text-slate-200"
+                  data-testid="social-post-caption-preview"
+                >
+                  {publicationDraft?.body || socialCaptionForAsset(asset)}
+                </p>
+              </div>
+              {publicationDraft ? (
+                <span data-testid="social-post-draft-status">
+                  <StatusBadge status={publicationDraft.status} label={socialStatus || publicationDraft.status} />
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {publicationDraft ? (
+                publicationDraft.status === "draft" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onRequestApproval(publicationDraft)}
+                    disabled={actionLoading === `approval:publication:${publicationDraft.id}`}
+                  >
+                    {actionLoading === `approval:publication:${publicationDraft.id}` ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <FileCheck2 className="h-4 w-4" />
+                    )}
+                    Request review
+                  </Button>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Linked to the publication approval queue.
+                  </p>
+                )
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onCreateSocialPost(asset)}
+                  disabled={actionLoading === socialActionKey}
+                  data-testid="create-social-post-draft"
+                >
+                  {actionLoading === socialActionKey ? <Spinner size="sm" /> : <Megaphone className="h-4 w-4" />}
+                  Create IG/FB post draft
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function socialCaptionForAsset(asset: ArchiveAsset) {
+  const versionLabel = asset.latest_version_id ? asset.latest_version_id.slice(0, 8).toUpperCase() : "DRAFT";
+  return [
+    "Limited editorial product draft.",
+    "A clean product-forward visual for design-conscious buyers watching the next frame drop.",
+    `Creative ref ${versionLabel}.`,
+    "DM to reserve before this piece leaves inventory.",
+  ].join(" ");
+}
+
+function stringMetadata(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function idempotencyKey(scope: string) {

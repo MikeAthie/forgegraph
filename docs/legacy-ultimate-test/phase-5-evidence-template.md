@@ -38,7 +38,7 @@ Environment:
 - Success score:
 - Miss analysis:
 - Next decision:
-- Six departments represented: yes/no
+- Routing Department plus operating departments represented: yes/no
 - Integrity gates passed:
 
 ### Sanitized Context

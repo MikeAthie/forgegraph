@@ -5627,6 +5627,7 @@ class APIKey(models.Model):
         ("openai", "OpenAI"),
         ("anthropic", "Anthropic"),
         ("google", "Google AI"),
+        ("openrouter", "OpenRouter"),
         ("gmail", "Gmail"),
         ("google_calendar", "Google Calendar"),
         ("google_tasks", "Google Tasks"),

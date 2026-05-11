@@ -266,7 +266,9 @@ def test_company_operation_launch_records_objective_contract(user):
 
     assert objective.run_type == "rehearsal"
     assert "sell-through operating brief" in objective.run_goal
-    assert len(objective.action_plan_json) == 6
+    assert len(objective.action_plan_json) == 7
+    assert objective.action_plan_json[0]["department"] == "Routing Department"
+    assert "without executing" in objective.action_plan_json[0]["responsibility"]
     assert "stock_drift" in objective.integrity_gates_json
     assert run.input_json["company_ops_objective_id"] == str(objective.id)
     assert context_pack.scope_json["objective_contract"]["run_goal"] == objective.run_goal

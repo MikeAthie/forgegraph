@@ -303,7 +303,7 @@ export function RunMemoryActivityPanel({ summary, getNodeLabel, onSelectNode }: 
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Saved</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{summary.saved_observation_count}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {summary.save_node_count} node{summary.save_node_count === 1 ? "" : "s"}
+              {summary.save_node_count} department step{summary.save_node_count === 1 ? "" : "s"}
             </p>
           </div>
           <div className="rounded-lg border border-border/50 bg-background/70 p-3">
@@ -317,7 +317,7 @@ export function RunMemoryActivityPanel({ summary, getNodeLabel, onSelectNode }: 
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Influenced</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{summary.influenced_observation_count}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {summary.influenced_node_count} node{summary.influenced_node_count === 1 ? "" : "s"}
+              {summary.influenced_node_count} department step{summary.influenced_node_count === 1 ? "" : "s"}
             </p>
           </div>
           <div className="rounded-lg border border-border/50 bg-background/70 p-3">
@@ -332,7 +332,7 @@ export function RunMemoryActivityPanel({ summary, getNodeLabel, onSelectNode }: 
             <Separator />
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Run memory timeline
+                Operation memory timeline
               </p>
               <div className="space-y-3">
                 {operations.map((operation) => {
@@ -398,7 +398,7 @@ export function NodeMemoryActivityPanel({ activity }: { activity: NodeMemoryActi
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-foreground">Curated memory activity</p>
-          <p className="mt-1 text-xs text-muted-foreground">This node recorded explicit curated-memory behavior.</p>
+          <p className="mt-1 text-xs text-muted-foreground">This activity recorded explicit curated-memory behavior.</p>
         </div>
         <Badge variant="outline" className={getCategoryBadgeClass(activity.category)}>
           {getOperationLabel(activity)}

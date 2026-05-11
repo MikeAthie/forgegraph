@@ -123,6 +123,7 @@ const REQUIRED_SECTIONS: Array<keyof StrategyBaseline> = [
 ];
 
 const EXPECTED_DEPARTMENTS = [
+  "Routing Department",
   "Operating System",
   "Content Studio",
   "Social Desk",
@@ -386,7 +387,7 @@ function judgeLegacyStrategyBaseline(
       name: "department_roles_complete",
       passed: Boolean(baseline && hasAllDepartmentRoles(baseline)),
       points: 10,
-      reason: "All six Legacy departments need an explicit planning role.",
+      reason: "The Routing Department and every Legacy operating department need an explicit planning role.",
     },
     {
       name: "inventory_grounded",

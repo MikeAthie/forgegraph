@@ -51,6 +51,29 @@ These terms are internal implementation language. They must not appear in primar
 
 Internal terms may remain in backend entities, API contracts, storage, migrations, engine code, logs, and advanced/internal tooling.
 
+## Primary UX Forbidden Terms
+
+Primary company surfaces must not use these terms in visible copy, user-facing errors, tutorial scripts, SEO copy, or persona-facing assertions:
+
+- graph
+- node
+- run
+- execution
+- workflow
+- agent
+- output JSON
+- LLM mode
+- dead-letter
+- projection
+- runtime
+
+Allowed exceptions:
+
+- advanced/internal tooling, especially the advanced operating model editor
+- backend, engine, migration, and stress-test implementation docs
+- support-only identifiers inside clearly labeled technical details
+- compatibility route names and API contracts that are translated before display
+
 ## Boundary Rule
 
 Frontend product surfaces must not consume raw internal DTOs directly.

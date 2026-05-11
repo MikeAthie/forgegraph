@@ -16,10 +16,17 @@ const advancedPathPatterns = [
   /^frontend\/pages\/analytics\//,
   /^frontend\/pages\/executions\//,
   /^frontend\/pages\/graphs(?:\.tsx|\/)/,
+  /^frontend\/pages\/ops(?:\.tsx|\/)/,
   /^frontend\/pages\/workflows\//,
   /^frontend\/components\/graph-editor\//,
+  /^frontend\/components\/ops\//,
   /^frontend\/components\/runs\//,
 ];
+
+const primaryCopyAdvancedPathPatterns = advancedPathPatterns.filter(
+  (pattern) =>
+    !pattern.test("frontend/components/runs/MemoryActivityPanel.tsx"),
+);
 
 const routeLiteralPatterns = [
   /\/runs(?=\/|\?|["'`}]|$)/g,
@@ -67,6 +74,30 @@ const runtimeCopyForbiddenPatterns = [
   /\bsource of truth\b/i,
 ];
 
+const productCopyForbiddenPatterns = [
+  /\bcompany operating graph\b/i,
+  /\boperating graph\b/i,
+  /\bcommercial media workflow\b/i,
+  /\bworkflow proof\b/i,
+  /\bagent-style\b/i,
+  /\bdepartment agent\b/i,
+  /\bActive Agents\b/i,
+  /\bAgent steps\b/i,
+  /\bAgent events\b/i,
+  /\bcontinue this run\b/i,
+  /\bFinal output\b/i,
+  /\bRun memory timeline\b/i,
+  /\bThis node recorded\b/i,
+  /\bDead-lettered\b/i,
+  /\bDead Letters\b/i,
+  /\bProjection Lag\b/i,
+  /\bRuntime Intent Lag\b/i,
+  /\bCanonical state\b/i,
+  /\bLifecycle ID\b/i,
+  /\bRejected lifecycle events\b/i,
+  /\bStale \/ late events\b/i,
+];
+
 const runtimeCopyAllowlist = [
   {
     path: /^frontend\/components\/company\/CompanyBuilderForm\.tsx$/,
@@ -94,8 +125,20 @@ function shouldScanRuntimeCopyFile(filePath) {
   return /\.(tsx?|jsx?)$/.test(toRepoPath(filePath));
 }
 
+function shouldScanProductCopyFile(filePath) {
+  const repoPath = toRepoPath(filePath);
+  if (!/\.(tsx?|jsx?)$/.test(repoPath)) {
+    return false;
+  }
+  return !primaryCopyAdvancedPathPatterns.some((pattern) =>
+    pattern.test(repoPath),
+  );
+}
+
 function isRuntimeCopyAllowed(repoPath, line) {
-  return runtimeCopyAllowlist.some((entry) => entry.path.test(repoPath) && entry.line.test(line));
+  return runtimeCopyAllowlist.some(
+    (entry) => entry.path.test(repoPath) && entry.line.test(line),
+  );
 }
 
 function collectFiles(root) {
@@ -155,6 +198,32 @@ const runtimeCopyFiles = scanRoots
   })
   .filter((file, index, allFiles) => allFiles.indexOf(file) === index);
 
+const productCopyFiles = scanRoots
+  .flatMap((root) => {
+    const absoluteRoot = path.join(repoRoot, root);
+    if (!fs.existsSync(absoluteRoot)) {
+      return [];
+    }
+
+    const pending = [absoluteRoot];
+    const collected = [];
+
+    while (pending.length > 0) {
+      const current = pending.pop();
+      const stat = fs.statSync(current);
+      if (stat.isDirectory()) {
+        for (const child of fs.readdirSync(current)) {
+          pending.push(path.join(current, child));
+        }
+      } else if (shouldScanProductCopyFile(current)) {
+        collected.push(current);
+      }
+    }
+
+    return collected;
+  })
+  .filter((file, index, allFiles) => allFiles.indexOf(file) === index);
+
 const violations = [];
 
 for (const file of files) {
@@ -184,7 +253,23 @@ for (const file of runtimeCopyFiles) {
       return;
     }
 
-    const match = runtimeCopyForbiddenPatterns.find((pattern) => pattern.test(line));
+    const match = runtimeCopyForbiddenPatterns.find((pattern) =>
+      pattern.test(line),
+    );
+    if (match) {
+      violations.push(`${repoPath}:${index + 1}: ${line.trim()}`);
+    }
+  });
+}
+
+for (const file of productCopyFiles) {
+  const repoPath = toRepoPath(file);
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+
+  lines.forEach((line, index) => {
+    const match = productCopyForbiddenPatterns.find((pattern) =>
+      pattern.test(line),
+    );
     if (match) {
       violations.push(`${repoPath}:${index + 1}: ${line.trim()}`);
     }

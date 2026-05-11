@@ -114,7 +114,7 @@ async function launchDemoOperation(
   return ((await response.json()) as { data: { operation: { id: string; status: string } } }).data.operation;
 }
 
-test("video 1 - create a company operating graph", async ({ page, request }, testInfo) => {
+test("video 1 - create a company operating workspace", async ({ page, request }, testInfo) => {
   const user = createTestUser(testInfo, "demo-create-company");
   await ensureUserRegistered(request, user);
 

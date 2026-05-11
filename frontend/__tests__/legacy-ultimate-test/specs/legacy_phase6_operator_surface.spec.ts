@@ -18,6 +18,9 @@ const DOC_DIR = path.join(REPO_ROOT, "docs", "legacy-ultimate-test");
 const LEGACY_EMAIL = process.env.PLAYWRIGHT_LEGACY_EMAIL ?? "legacy.glasswear.test@example.com";
 const LEGACY_PASSWORD = process.env.PLAYWRIGHT_LEGACY_PASSWORD ?? process.env.LEGACY_TEST_PASSWORD ?? "";
 const LEGACY_GEMINI_ENV_VAR = process.env.PLAYWRIGHT_LEGACY_GEMINI_ENV_VAR ?? "GEMINI_LEGACY";
+const MOCK_PROVIDER_RESPONSE =
+  process.env.PLAYWRIGHT_LEGACY_MOCK_PROVIDER_RESPONSE === "true" ||
+  process.env.PLAYWRIGHT_LEGACY_MOCK_PHASE6_OBJECTIVE === "true";
 const REQUIRED_MODELS = ["GAGA", "HENDRIX", "WINEHOUSE", "WATSON", "MAVERICK"] as const;
 const JUDGE_CRITERIA = [
   "operator_surface_verified",
@@ -111,6 +114,19 @@ type CompanyOpsOverview = {
   publication_drafts: Array<{ id: string; title: string; status: string; approval_task_id: string | null }>;
   procurement_drafts: Array<{ id: string; title: string; status: string; approval_task_id: string | null }>;
   objective_contracts: Array<{ id: string; operation_id: string; status: string; success_score: number | null }>;
+};
+
+type MockObjectiveSeed = {
+  schema: string;
+  company_id: string;
+  run_id: string;
+  graph_id: string;
+  graph_version_id: string;
+  node_run_id: string;
+  task_id: string;
+  objective_contract_id: string;
+  mock_provider_response: boolean;
+  visual_asset_brief_count: number;
 };
 
 type RunDetail = {
@@ -299,6 +315,34 @@ function importLegacyGeminiCredential(): GeminiCredentialImport {
     throw new Error("Legacy Gemini credential import did not return a usable Google credential id.");
   }
   return credential;
+}
+
+function seedMockVisualBriefObjective(companyId: string): MockObjectiveSeed {
+  const raw = execFileSync(
+    "uv",
+    [
+      "run",
+      "python",
+      "manage.py",
+      "seed_legacy_phase6_mock_objective",
+      "--email",
+      LEGACY_EMAIL,
+      "--company-id",
+      companyId,
+      "--json",
+    ],
+    {
+      cwd: BACKEND_DIR,
+      env: { ...process.env, LEGACY_TEST_PASSWORD: LEGACY_PASSWORD },
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    },
+  );
+  const seed = JSON.parse(raw) as MockObjectiveSeed;
+  if (seed.schema !== "legacy_phase6_mock_objective_seed.v1" || !seed.mock_provider_response) {
+    throw new Error("Legacy Phase 6 mock objective seed did not return a mock-provider run.");
+  }
+  return seed;
 }
 
 function buildVisualAssetBriefGraph(credentialId: string) {
@@ -725,7 +769,7 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
   const user: TestUser = { email: LEGACY_EMAIL, password: LEGACY_PASSWORD };
   const bootstrap = runBootstrapCommand();
   expect(bootstrap.verification_result.passed).toBe(true);
-  const geminiCredential = importLegacyGeminiCredential();
+  const geminiCredential = MOCK_PROVIDER_RESPONSE ? null : importLegacyGeminiCredential();
 
   const accessToken = await getAccessToken(request, user);
   const companyId = bootstrap.observed_data.company_id;
@@ -774,7 +818,14 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
       })),
   };
 
-  const visualRun = await createVisualBriefRun(request, accessToken, phase6Context, geminiCredential.credential_id);
+  let mockObjectiveSeed: MockObjectiveSeed | null = null;
+  const visualRun = MOCK_PROVIDER_RESPONSE
+    ? await (async () => {
+        const seed = seedMockVisualBriefObjective(companyId);
+        mockObjectiveSeed = seed;
+        return apiGet<RunDetail>(request, accessToken, `/api/runs/${seed.run_id}`);
+      })()
+    : await createVisualBriefRun(request, accessToken, phase6Context, geminiCredential!.credential_id);
   expect(visualRun.status).toBe("succeeded");
   const objectiveOutput = extractObjectiveOutput(visualRun);
   assertNoPrivateDataMarkers(objectiveOutput);
@@ -867,8 +918,14 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
     generated_at: new Date().toISOString(),
     commands: [
       ...bootstrap.commands,
-      `uv run python manage.py import_legacy_gemini_credential --env-var ${LEGACY_GEMINI_ENV_VAR} --json`,
-      "PLAYWRIGHT_LEGACY_PHASE6_TEST=true npx playwright test frontend/__tests__/legacy-ultimate-test/specs/legacy_phase6_operator_surface.spec.ts",
+      ...(MOCK_PROVIDER_RESPONSE
+        ? [
+            "uv run python manage.py seed_legacy_phase6_mock_objective " +
+              `--email ${LEGACY_EMAIL} --company-id ${companyId} --json`,
+          ]
+        : [`uv run python manage.py import_legacy_gemini_credential --env-var ${LEGACY_GEMINI_ENV_VAR} --json`]),
+      `${MOCK_PROVIDER_RESPONSE ? "PLAYWRIGHT_LEGACY_MOCK_PROVIDER_RESPONSE=true " : ""}` +
+        "PLAYWRIGHT_LEGACY_PHASE6_TEST=true npx playwright test frontend/__tests__/legacy-ultimate-test/specs/legacy_phase6_operator_surface.spec.ts",
     ],
     observed_data: {
       company_id: companyId,
@@ -880,7 +937,9 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
       products_imported: bootstrap.observed_data.products_imported,
       active_units_imported: bootstrap.observed_data.active_units_imported,
       stock_semantics_report: inventoryAfterReservation.stock_state_summary,
-      gemini_credential_id: geminiCredential.credential_id,
+      gemini_credential_id: geminiCredential?.credential_id ?? null,
+      mock_provider_response: MOCK_PROVIDER_RESPONSE,
+      mock_objective_seed: mockObjectiveSeed,
       visual_asset_briefs: requiredBriefs,
       next_run_plan: nextRunPlan,
       publication_drafts: drafts.publication_drafts,

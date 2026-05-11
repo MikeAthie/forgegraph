@@ -1,8 +1,8 @@
 {
   "slug": "03-create-first-agent",
-  "captured_at": "2026-05-08T20:35:36.707Z",
+  "captured_at": "2026-05-09T00:52:53.189Z",
   "test_id": "ed0f6c24c2601712c977-836719d608f1ecd32174",
   "video": "03-create-first-agent.webm",
   "sensitive_data_policy": "Tutorial-only generated users and sanitized demo state. No payment data, private customer data, API keys, or raw logs.",
-  "step": "Select the first department-style agent and create the company."
+  "step": "Select the first department and create the company."
 }

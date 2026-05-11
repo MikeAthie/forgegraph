@@ -30,7 +30,7 @@ const formatUsageLabel = (usage: AgentTrace["usage"]): string | null => {
 
 const getEventLabel = (event: AgentEventItem): string => {
   if (typeof event.event !== "string" || !event.event.trim()) {
-    return "agent event";
+    return "department event";
   }
   return event.event.replace(/^agent\./, "").replace(/\./g, " ");
 };
@@ -121,22 +121,22 @@ export function AgentTracePanel({ trace, compact = false, showApprovalHint = fal
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-900 dark:text-amber-100">
           <p className="font-medium">Approval required</p>
           <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">
-            The agent stopped before executing a gated tool.
-            {showApprovalHint ? " Review the approval panel to continue this run." : ""}
+            The department stopped before executing a gated tool.
+            {showApprovalHint ? " Review the approval panel to continue this operation." : ""}
           </p>
         </div>
       ) : null}
 
       {trace.final_output ? (
         <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-          <p className="text-[11px] font-medium uppercase text-emerald-700 dark:text-emerald-300">Final output</p>
+          <p className="text-[11px] font-medium uppercase text-emerald-700 dark:text-emerald-300">Final deliverable</p>
           <p className="mt-1 text-sm whitespace-pre-wrap text-foreground">{trace.final_output}</p>
         </div>
       ) : null}
 
       {steps.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">Agent steps</p>
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Department trace</p>
           <div className="space-y-2">
             {steps.map((step, index) => (
               <div
@@ -162,7 +162,7 @@ export function AgentTracePanel({ trace, compact = false, showApprovalHint = fal
           <Separator />
           <details>
             <summary className="cursor-pointer text-xs font-semibold uppercase text-muted-foreground">
-              Agent events
+              Department events
             </summary>
             <div className="mt-2 space-y-2">
               {events.map((event, index) => (

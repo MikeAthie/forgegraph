@@ -142,13 +142,14 @@ describe("Header", () => {
     it("should display navigation links when authenticated", () => {
       render(<Header />);
 
-      expect(screen.getByRole("link", { name: /^overview$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^companies$/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^command center$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^approvals$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^departments$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^activity$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^knowledge$/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^operations$/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /^advanced operating models$/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^advanced operating models$/i })).toBeInTheDocument();
     });
 
     it("should not display Sign in/Get started buttons when authenticated", () => {
@@ -174,13 +175,13 @@ describe("Header", () => {
     it("should have correct hrefs for navigation links", () => {
       render(<Header />);
 
-      expect(screen.getByRole("link", { name: /^overview$/i })).toHaveAttribute("href", "/overview");
+      expect(screen.getByRole("link", { name: /^companies$/i })).toHaveAttribute("href", "/companies");
+      expect(screen.getByRole("link", { name: /^command center$/i })).toHaveAttribute("href", "/overview");
       expect(screen.getByRole("link", { name: /^approvals$/i })).toHaveAttribute("href", "/approvals");
       expect(screen.getByRole("link", { name: /^departments$/i })).toHaveAttribute("href", "/departments");
       expect(screen.getByRole("link", { name: /^activity$/i })).toHaveAttribute("href", "/tasks");
       expect(screen.getByRole("link", { name: /^knowledge$/i })).toHaveAttribute("href", "/memory");
       expect(screen.getByRole("link", { name: /^operations$/i })).toHaveAttribute("href", "/runs");
-      expect(screen.getByRole("link", { name: /^advanced operating models$/i })).toHaveAttribute("href", "/workflows");
     });
   });
 

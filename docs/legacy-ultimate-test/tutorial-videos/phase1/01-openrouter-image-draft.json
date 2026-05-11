@@ -1,0 +1,27 @@
+{
+  "slug": "01-openrouter-image-draft",
+  "captured_at": "2026-05-09T03:47:28.225Z",
+  "test_id": "4a5c9205544ed5f8e27e-196c73c57b3aff0615f0",
+  "video": "01-openrouter-image-draft.webm",
+  "sensitive_data_policy": "Sanitized product and styling context only. No customer data, payment data, addresses, API keys, raw logs, or private messages.",
+  "company_id": "1b99ce06-d01d-46a4-9dad-bbd14396fb40",
+  "credential_id": "2881a7a5-242f-4fc7-8b3a-632984857de0",
+  "image_model": "black-forest-labs/flux.2-klein-4b",
+  "existing_image_reused": true,
+  "image_assets_visible": 1,
+  "latest_image_asset_id": "d20d62fb-11b8-4174-ad2a-dabe3a7b491c",
+  "latest_image_version_id": "a0d5d443-b60c-4c5b-be9b-a2e355cf5e89",
+  "image_metrics": {
+    "naturalWidth": 1024,
+    "naturalHeight": 768,
+    "renderedWidth": 427,
+    "renderedHeight": 320.25
+  },
+  "social_publication_draft_id": "a88ec512-29f9-4ce3-8185-176363b81982",
+  "social_publication_channel": "instagram,facebook",
+  "social_publication_status": "approval_requested",
+  "social_publication_approval_task_id": "6c710435-0853-45f1-bf6c-bc35f3b6eee5",
+  "commercial_package_visible": true,
+  "approval_gated": true,
+  "final_result_visible": true
+}

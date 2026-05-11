@@ -121,6 +121,12 @@ def test_create_reservation_locks_oldest_available_units(user):
         model="Model 1",
         price_mxn=100,
         cost_mxn=50,
+        photo_url="https://legacy.example/catalog/model-1.webp",
+        metadata_json={
+            "visual_reference_source": "legacy_public_catalog",
+            "visual_description": "Black rectangular acetate frame.",
+            "visual_traits": ["black frame", "rectangular lens shape"],
+        },
     )
     for unit_number in range(1, 4):
         InventoryStockUnit.objects.create(
@@ -160,6 +166,12 @@ def test_duplicate_reservation_reuses_same_hold(user):
         model="Model 1",
         price_mxn=100,
         cost_mxn=50,
+        photo_url="https://legacy.example/catalog/model-1.webp",
+        metadata_json={
+            "visual_reference_source": "legacy_public_catalog",
+            "visual_description": "Black rectangular acetate frame.",
+            "visual_traits": ["black frame", "rectangular lens shape"],
+        },
     )
     InventoryStockUnit.objects.create(
         organization=_organization(company),
@@ -366,6 +378,12 @@ def test_inventory_overview_computes_counts_from_units(user):
         model="Model 1",
         price_mxn=100,
         cost_mxn=50,
+        photo_url="https://legacy.example/catalog/model-1.webp",
+        metadata_json={
+            "visual_reference_source": "legacy_public_catalog",
+            "visual_description": "Black rectangular acetate frame.",
+            "visual_traits": ["black frame", "rectangular lens shape"],
+        },
     )
     InventoryStockUnit.objects.create(
         organization=_organization(company),
@@ -388,3 +406,7 @@ def test_inventory_overview_computes_counts_from_units(user):
     assert payload["summary"]["available_units"] == 1
     assert payload["summary"]["sold_units"] == 1
     assert payload["products"][0]["sku"] == "SKU-1"
+    assert payload["products"][0]["photo_url"] == "https://legacy.example/catalog/model-1.webp"
+    assert payload["products"][0]["visual_description"] == "Black rectangular acetate frame."
+    assert payload["products"][0]["visual_traits"] == ["black frame", "rectangular lens shape"]
+    assert payload["products"][0]["visual_reference_source"] == "legacy_public_catalog"

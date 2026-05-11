@@ -40,6 +40,12 @@ def test_import_legacy_inventory_phase2_uses_cost_analysis_csv():
             flat=True,
         )
     ) == {"TAYLOR", "ROBBIE", "VICE", "HUNT", "WATSON", "MAVERICK"}
+    depp = InventoryProduct.objects.get(company=company, sku="ZD-8809T")
+    assert depp.photo_url == "https://legacy-five-beta.vercel.app/catalog/depp/gallery-1.webp"
+    assert depp.metadata_json["visual_reference_source"] == "legacy_public_catalog"
+    assert "%2Fcatalog%2Fdepp%2Fgallery-1.webp" in depp.metadata_json["visual_reference_source_url"]
+    assert "octagonal" in depp.metadata_json["visual_description"].lower()
+    assert payload["catalog_references_applied"] == 1
 
 
 @pytest.mark.django_db

@@ -72,6 +72,13 @@ DEFAULT_INTEGRITY_GATES: dict[str, dict[str, str | int]] = {
 
 DEPARTMENT_OBJECTIVE_ACTION_PLAN: list[dict[str, str]] = [
     {
+        "department": "Routing Department",
+        "responsibility": (
+            "Triage the request, decide which operation should happen next, and route "
+            "participating departments without executing the operation."
+        ),
+    },
+    {
         "department": "Operating System",
         "responsibility": "Frame the run goal, score success, explain misses, and choose the next decision.",
     },

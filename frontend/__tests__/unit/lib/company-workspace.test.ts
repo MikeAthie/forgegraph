@@ -2,6 +2,7 @@ import {
   buildCompanyGraphJson,
   buildOperationInput,
   buildCompanyProfile,
+  companyPresets,
   getCompanyProfileFromGraph,
   getCurrentDepartmentLabel,
   getDepartmentProgress,
@@ -11,6 +12,16 @@ import {
 } from "@/lib/company-workspace";
 
 describe("company-workspace helpers", () => {
+  it("includes a routing department in every default company preset", () => {
+    expect(companyPresets.length).toBeGreaterThan(0);
+    for (const preset of companyPresets) {
+      expect(preset.departments[0]).toMatchObject({
+        id: "routing-department",
+        label: "Routing Department",
+      });
+    }
+  });
+
   it("builds a company operating model with department steps and a final deliverable", () => {
     const profile = buildCompanyProfile({
       companyName: "Northstar Growth Co.",
@@ -23,6 +34,8 @@ describe("company-workspace helpers", () => {
     expect(graphJson.metadata?.company_profile).toEqual(profile);
     expect(graphJson.nodes.some((node) => node.type === "output")).toBe(true);
     expect(graphJson.nodes.filter((node) => node.type === "agent")).toHaveLength(profile.departments.length);
+    expect(graphJson.nodes[0]).toMatchObject({ name: "Routing Department" });
+    expect(String(graphJson.nodes[0]?.config?.instructions)).toContain("operations execute");
     expect(graphJson.edges.some((edge) => edge.from === "START")).toBe(true);
   });
 

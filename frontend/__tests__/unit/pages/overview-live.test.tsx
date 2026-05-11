@@ -264,7 +264,7 @@ describe("Overview live state feed", () => {
         await flushPromises();
       });
 
-      expect(await screen.findByText(new RegExp(`Projection ${status}`, "i"))).toBeInTheDocument();
+      expect(await screen.findByText(new RegExp(`Freshness ${status}`, "i"))).toBeInTheDocument();
     },
   );
 });

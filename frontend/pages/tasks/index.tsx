@@ -245,11 +245,11 @@ export default function TasksPage() {
           ),
         },
         {
-          title: "Lifecycle",
+          title: "Task state",
           content: (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span>Canonical state</span>
+                <span>Current state</span>
                 <StatusBadge status={selectedTask.status} />
               </div>
               <div className="flex items-center justify-between">
@@ -257,7 +257,7 @@ export default function TasksPage() {
                 <span>{selectedTask.attemptCount ?? selectedTask.attempt ?? 1}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Lifecycle ID</span>
+                <span>Support ID</span>
                 <span className="truncate pl-4">{selectedTask.lifecycleTaskId?.slice(0, 8) ?? "Unavailable"}</span>
               </div>
             </div>
@@ -398,7 +398,7 @@ export default function TasksPage() {
                       },
                       { label: "Attempts", value: selectedTask.attemptCount ?? selectedTask.attempt ?? 1 },
                       {
-                        label: "Stale / late events",
+                        label: "Ignored updates",
                         value: `${selectedTask.staleEventCount ?? 0} / ${selectedTask.lateEventCount ?? 0}`,
                       },
                       { label: "Started", value: formatDateTime(selectedTask.startedAt) },
@@ -425,9 +425,9 @@ export default function TasksPage() {
                   ) : null}
                   {selectedTask.deadLetter ? (
                     <div className="mt-4 rounded-[1.2rem] border border-rose-900/15 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
-                      <p className="text-[11px] uppercase tracking-[0.18em]">Dead-lettered</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em]">Needs recovery</p>
                       <p className="mt-2 text-sm leading-7">
-                        {selectedTask.deadLetter.reason || "Task was moved to dead letter."}
+                        {selectedTask.deadLetter.reason || "Task needs operator recovery."}
                         {selectedTask.deadLetter.last_error ? ` Last error: ${selectedTask.deadLetter.last_error}` : ""}
                       </p>
                       {selectedTask.deadLetter.recovery_options?.length ? (
@@ -438,11 +438,11 @@ export default function TasksPage() {
                   {(selectedTask.staleEventCount ?? 0) > 0 || (selectedTask.lateEventCount ?? 0) > 0 ? (
                     <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Rejected lifecycle events
+                        Ignored stale updates
                       </p>
                       <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-                        Stale: {selectedTask.staleEventCount ?? 0} · Late: {selectedTask.lateEventCount ?? 0}. The
-                        backend preserved these events without mutating current task state.
+                        Stale: {selectedTask.staleEventCount ?? 0} · Late: {selectedTask.lateEventCount ?? 0}. The saved
+                        task state was not changed.
                       </p>
                     </div>
                   ) : null}

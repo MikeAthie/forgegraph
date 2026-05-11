@@ -87,6 +87,12 @@ func (c *MultiProviderClient) Complete(ctx context.Context, request *executor.LL
 		}
 		client := NewGeminiClientWithKey(apiKey)
 		return client.Complete(ctx, request)
+	case "openrouter":
+		if apiKey == "" {
+			return nil, fmt.Errorf("openrouter api key missing")
+		}
+		client := NewOpenRouterClientWithKey(apiKey)
+		return client.Complete(ctx, request)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", provider)
 	}
@@ -162,6 +168,12 @@ func (c *MultiProviderClient) StreamComplete(
 			return nil, fmt.Errorf("google api key missing")
 		}
 		client := NewGeminiClientWithKey(apiKey)
+		return client.StreamComplete(ctx, request, onChunk)
+	case "openrouter":
+		if apiKey == "" {
+			return nil, fmt.Errorf("openrouter api key missing")
+		}
+		client := NewOpenRouterClientWithKey(apiKey)
 		return client.StreamComplete(ctx, request, onChunk)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", provider)

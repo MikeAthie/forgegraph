@@ -38,6 +38,7 @@ ALLOWED_RUNTIME_WRITERS = {
 
 ALLOWED_FIXTURE_WRITERS = {
     Path("backend/infrastructure/orm/management/commands/seed_frontend_control_plane_fixture.py"),
+    Path("backend/infrastructure/orm/management/commands/seed_legacy_phase6_mock_objective.py"),
     Path("backend/infrastructure/orm/management/commands/seed_run_trace.py"),
     Path("backend/infrastructure/orm/management/commands/seed_strategy_report_fixture.py"),
     Path("backend/infrastructure/orm/management/commands/seed_testsprite_frontend_fixture.py"),

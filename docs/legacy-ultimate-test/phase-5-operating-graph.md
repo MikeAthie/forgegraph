@@ -1,4 +1,4 @@
-# Phase 5: Generic Company Operating Graph
+# Phase 5: Generic Company Operating Loop
 
 Phase 5 exercises the generic ForgeGraph company operating-loop module through the Legacy Glasswear test company. Legacy is only the fixture; the feature surface is reusable for any company.
 
@@ -12,7 +12,8 @@ Prove that commerce, inventory, media, archive, approvals, decisions, and operat
 2. Qualify the signal into an opportunity.
 3. Launch a daily operating brief operation from the Company Operating Loop panel.
 4. Verify the operation has an objective contract with run goal, hypothesis,
-   target signal, six-department action plan, and integrity gates.
+   target signal, Routing Department plus operating-departments action plan, and
+   integrity gates.
 5. Launch at least one context-specific operation:
    - paid-order follow-up
    - fulfillment exception review
@@ -34,7 +35,7 @@ Prove that commerce, inventory, media, archive, approvals, decisions, and operat
 ## No-Go Conditions
 
 - Duplicate source signals create duplicate operations or decisions.
-- A run has no objective contract or miss analysis after review.
+- An operation has no objective contract or miss analysis after review.
 - Gemini context includes payment details, addresses, private buyer data, private notes, Stripe IDs, or checkout URLs.
 - A publication or procurement draft becomes externally actionable without human approval.
 - The operator needs raw logs or ad hoc DB inspection to explain the company state.

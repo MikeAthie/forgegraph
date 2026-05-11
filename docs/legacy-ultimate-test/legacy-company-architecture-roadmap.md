@@ -174,7 +174,7 @@ Each run records:
 - run goal
 - hypothesis
 - target signal
-- six-department action plan
+- routing-plus-operating-departments action plan
 - integrity gates
 - success score
 - miss analysis
@@ -192,7 +192,7 @@ The canonical rules live in `docs/ops/demo-capture-evidence.md`.
 
 Standard capture moments:
 
-- Video 1: create the company operating graph from a clean user.
+- Video 1: create the company operating workspace from a clean user.
 - Video 2: supervise signals, active work, approvals, drafts, and next actions.
 - Video 3: show a bug-fix or duplicate-trigger regression recovering to one
   durable product state.
@@ -202,10 +202,13 @@ Standard capture moments:
 Raw recordings stay under `logs/demo-captures/` and are not committed. Evidence
 packets may reference sanitized capture metadata when it helps project memory.
 
-### Legacy Operating Graph
+### Legacy Operating Model
 
 The company should start with a compact operating model:
 
+- Routing Department: request triage, operation recommendation, and department
+  routing. It decides what work should happen next; operations execute that
+  work.
 - Operating System: goals, policies, approvals, priorities, and daily brief.
 - Content Studio: product narratives, captions, creative variants, and drop
   plans, including Gemini image drafts and video briefs.
@@ -464,18 +467,18 @@ Exit criteria:
 
 ## Regression Test Matrix
 
-| Area | Required regression |
-| --- | --- |
-| Gemini | Provider routing, credential resolution, response parsing, quota/error handling, media request validation, generated image asset persistence, video operation polling and asset persistence |
-| Credentials | Google credential can be stored, used, revoked, and rejected when mismatched |
-| Storefront | Product list, unavailable SKU behavior, checkout-session validation |
-| Reservations | Expiry, duplicate request handling, concurrent no-oversell |
-| Stripe | Signature verification, completed event, expired event, duplicate events, out-of-order events |
-| Orders | State transitions, payment commit, fulfillment state, cancellation/refund policy |
-| Cash | One ledger entry per paid order, no duplicate accounting, reorder fund allocation |
-| Tenant isolation | Legacy commerce objects cannot leak across organizations |
-| Operator UI | Order/stock/cash/stuck-work visibility without logs |
-| Workflows | Paid order and reorder workflows are idempotent and human-gated where required |
+| Area             | Required regression                                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gemini           | Provider routing, credential resolution, response parsing, quota/error handling, media request validation, generated image asset persistence, video operation polling and asset persistence |
+| Credentials      | Google credential can be stored, used, revoked, and rejected when mismatched                                                                                                                |
+| Storefront       | Product list, unavailable SKU behavior, checkout-session validation                                                                                                                         |
+| Reservations     | Expiry, duplicate request handling, concurrent no-oversell                                                                                                                                  |
+| Stripe           | Signature verification, completed event, expired event, duplicate events, out-of-order events                                                                                               |
+| Orders           | State transitions, payment commit, fulfillment state, cancellation/refund policy                                                                                                            |
+| Cash             | One ledger entry per paid order, no duplicate accounting, reorder fund allocation                                                                                                           |
+| Tenant isolation | Legacy commerce objects cannot leak across organizations                                                                                                                                    |
+| Operator UI      | Order/stock/cash/stuck-work visibility without logs                                                                                                                                         |
+| Workflows        | Paid order and reorder workflows are idempotent and human-gated where required                                                                                                              |
 
 ## Evidence Packet Template
 
@@ -485,24 +488,31 @@ Each iteration should produce a short evidence packet:
 # Legacy Evidence Packet: <date> <loop>
 
 ## Change
+
 - What changed?
 
 ## Hypothesis
+
 - What did we expect to learn or improve?
 
 ## Test
+
 - Command, walkthrough, or live scenario used.
 
 ## Observed Data
+
 - Metrics, IDs, screenshots, or notes.
 
 ## Result
+
 - Pass, fail, partial, or blocked.
 
 ## Bugs Or Gaps
+
 - What broke or remained unclear?
 
 ## Decision
+
 - Ship, rollback, fix next, or gather more data.
 ```
 
