@@ -50,7 +50,7 @@ Recommended flow:
 
 1. Choose company type
 2. Define business objective
-3. Choose departments or agents
+3. Choose departments
 4. Choose skills or tools
 5. Choose autonomy level
 6. Choose AI access mode
@@ -75,7 +75,7 @@ Recommended flow:
 
 1. Select company
 2. See active operations
-3. Inspect departments or agents
+3. Inspect departments
 4. Review latest deliverables
 5. Approve, retry, or adjust the company setup
 6. Launch next operation
@@ -101,7 +101,7 @@ The command surface should expose:
 - objectives
 - deliverables
 - budget and usage
-- AI access mode (current LLM mode)
+- AI access mode
 - approvals
 - controls
 

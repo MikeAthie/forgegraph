@@ -139,10 +139,10 @@ class MediaGenerationCreateView(APIView):
         credential = APIKey.objects.filter(
             id=serializer.validated_data["credential_id"],
             organization_id=company.organization_id,
-            provider="google",
+            provider__in=["google", "openrouter"],
         ).first()
         if credential is None:
-            return _not_found("Google credential was not found for this company.")
+            return _not_found("Media generation credential was not found for this company.")
 
         try:
             job = MediaGenerationService().create_job(

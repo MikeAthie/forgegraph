@@ -24,13 +24,13 @@ durable source of truth.
 
 ## Standard Videos
 
-| Video | Purpose | Product path |
-| --- | --- | --- |
-| 1. Create the company | Show a clean user turning an objective into a company operating graph. | Login, create company, review suggested departments, launch the first operation. |
-| 2. Supervise work | Show the operator watching active work, signals, drafts, approvals, and next actions. | Company workspace, Commerce tab, Operating Loop, approvals, archive/deliverables. |
-| 3. Test after a fix | Show the loop of bug or duplicate trigger, regression proof, and recovered product state. | Trigger safe duplicate/retry case, inspect one durable result, show evidence packet. |
-| 4. Commerce checkout | Show stock, reservation, Stripe test checkout, webhook result, cash ledger, fulfillment. | Storefront and Commerce control tower. |
-| 5. Media proof | Show Gemini draft generation becoming backend-owned archive assets. | Media generation API/product surface, archive asset review, draft-only status. |
+| Video                 | Purpose                                                                                   | Product path                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1. Create the company | Show a clean user turning an objective into a company operating workspace.                | Login, create company, review suggested departments, launch the first operation.     |
+| 2. Supervise work     | Show the operator watching active work, signals, drafts, approvals, and next actions.     | Company workspace, Commerce tab, Operating Loop, approvals, archive/deliverables.    |
+| 3. Test after a fix   | Show the loop of bug or duplicate trigger, regression proof, and recovered product state. | Trigger safe duplicate/retry case, inspect one durable result, show evidence packet. |
+| 4. Commerce checkout  | Show stock, reservation, Stripe test checkout, webhook result, cash ledger, fulfillment.  | Storefront and Commerce control tower.                                               |
+| 5. Media proof        | Show Gemini draft generation becoming backend-owned archive assets.                       | Media generation API/product surface, archive asset review, draft-only status.       |
 
 ## Running Captures
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import mimetypes
 import re
 from dataclasses import dataclass
@@ -61,6 +62,27 @@ class GeminiVideoPollResult:
     response_json: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class MediaGenerationFallbackResult:
+    primary_job: MediaGenerationJob
+    fallback_job: MediaGenerationJob | None
+    selected_job: MediaGenerationJob
+    fallback_used: bool
+    fallback_reason: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "primary_job_id": str(self.primary_job.id),
+            "fallback_job_id": str(self.fallback_job.id) if self.fallback_job else None,
+            "selected_job_id": str(self.selected_job.id),
+            "fallback_used": self.fallback_used,
+            "fallback_reason": self.fallback_reason,
+            "primary_provider": self.primary_job.provider,
+            "selected_provider": self.selected_job.provider,
+            "selected_status": self.selected_job.status,
+        }
+
+
 def sanitize_media_prompt(prompt: str) -> str:
     """Remove obvious PII before storing or sending media context to Gemini."""
 
@@ -72,6 +94,24 @@ def sanitize_media_prompt(prompt: str) -> str:
 
 def prompt_hash(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
+def is_media_provider_limit_error(error_or_job: GeminiMediaError | MediaGenerationJob) -> bool:
+    if isinstance(error_or_job, GeminiMediaError):
+        if error_or_job.status_code == 429:
+            return True
+        text = _limit_error_text(
+            code=error_or_job.code,
+            message=error_or_job.message,
+            response_json=error_or_job.response_json,
+        )
+    else:
+        text = _limit_error_text(
+            code=error_or_job.error_code,
+            message=error_or_job.error_message,
+            response_json=error_or_job.response_json,
+        )
+    return any(signature in text for signature in _LIMIT_ERROR_SIGNATURES)
 
 
 def media_generation_job_payload(job: MediaGenerationJob) -> dict[str, Any]:
@@ -120,6 +160,24 @@ class GoogleMediaClient:
         prompt: str,
         aspect_ratio: str = "1:1",
     ) -> GeminiMediaBytes:
+        if _is_imagen_model(model):
+            return self._generate_imagen_image(
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                aspect_ratio=aspect_ratio,
+            )
+
+        return self._generate_gemini_image(api_key=api_key, model=model, prompt=prompt)
+
+    def _generate_imagen_image(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        prompt: str,
+        aspect_ratio: str,
+    ) -> GeminiMediaBytes:
         payload = {
             "instances": [{"prompt": prompt}],
             "parameters": {
@@ -131,6 +189,25 @@ class GoogleMediaClient:
         }
         response_json = self._post_json(
             f"/models/{_model_path(model)}:predict",
+            api_key=api_key,
+            payload=payload,
+            timeout=180,
+        )
+        return _image_bytes_from_response(response_json)
+
+    def _generate_gemini_image(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        prompt: str,
+    ) -> GeminiMediaBytes:
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+        }
+        response_json = self._post_json(
+            f"/models/{_model_path(model)}:generateContent",
             api_key=api_key,
             payload=payload,
             timeout=180,
@@ -268,11 +345,65 @@ class GoogleMediaClient:
         )
 
 
+class OpenRouterMediaClient:
+    """OpenRouter media client using its OpenAI-compatible chat completions API."""
+
+    def __init__(
+        self, *, api_base_url: str | None = None, session: requests.Session | None = None
+    ) -> None:
+        self.api_base_url = (api_base_url or settings.OPENROUTER_API_BASE_URL).rstrip("/")
+        self.session = session or requests.Session()
+
+    def generate_image(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        prompt: str,
+        aspect_ratio: str = "1:1",
+    ) -> GeminiMediaBytes:
+        model_name = model.strip() or settings.OPENROUTER_IMAGE_MODEL
+        payload = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+        if _openrouter_model_outputs_text(model_name):
+            payload["modalities"] = ["image", "text"]
+            payload["image_config"] = {"aspect_ratio": aspect_ratio, "image_size": "0.5K"}
+        else:
+            payload["modalities"] = ["image"]
+        response_json = self._post_json(
+            "/chat/completions",
+            api_key=api_key,
+            payload=payload,
+            timeout=300,
+        )
+        return _openrouter_image_bytes_from_response(response_json)
+
+    def _post_json(
+        self,
+        path: str,
+        *,
+        api_key: str,
+        payload: dict[str, Any],
+        timeout: int,
+    ) -> dict[str, Any]:
+        response = self.session.post(
+            f"{self.api_base_url}{path}",
+            headers=_openrouter_headers(api_key),
+            json=payload,
+            timeout=timeout,
+        )
+        return _json_or_provider_error(response, provider_label="OpenRouter")
+
+
 class MediaGenerationService:
     """Create and poll backend-owned media jobs for a company."""
 
-    def __init__(self, *, client: Any | None = None) -> None:
+    def __init__(self, *, client: Any | None = None, openrouter_client: Any | None = None) -> None:
         self.client = client or GoogleMediaClient()
+        self.openrouter_client = openrouter_client or OpenRouterMediaClient()
 
     def create_job(
         self,
@@ -293,6 +424,12 @@ class MediaGenerationService:
         modality = modality.strip().lower()
         if modality not in {"image", "video"}:
             raise GeminiMediaError("invalid_modality", "Media modality must be image or video.")
+        provider = str(credential.provider or "").strip().lower()
+        if provider == "openrouter" and modality == "video":
+            raise GeminiMediaError(
+                "unsupported_modality",
+                "Video media generation is currently supported only for Google Gemini/Veo credentials.",
+            )
 
         idempotency_key = idempotency_key.strip()
         if idempotency_key:
@@ -306,7 +443,7 @@ class MediaGenerationService:
         sanitized_prompt = sanitize_media_prompt(prompt)
         if not sanitized_prompt:
             raise GeminiMediaError("empty_prompt", "Media prompt is required.")
-        selected_model = model.strip() or _default_model(modality)
+        selected_model = model.strip() or _default_model(modality, provider=provider)
 
         try:
             job = MediaGenerationJob.objects.create(
@@ -315,14 +452,14 @@ class MediaGenerationService:
                 requested_by=user,
                 credential=credential,
                 modality=modality,
-                provider="google",
+                provider=provider,
                 model=selected_model,
                 prompt=sanitized_prompt,
                 prompt_hash=prompt_hash(sanitized_prompt),
                 idempotency_key=idempotency_key,
                 status="pending",
                 request_json={
-                    "provider": "google",
+                    "provider": provider,
                     "model": selected_model,
                     "modality": modality,
                     "prompt_sanitized": True,
@@ -341,6 +478,87 @@ class MediaGenerationService:
         if modality == "image":
             return self._run_image_job(job)
         return self._start_video_job(job)
+
+    def create_image_job_with_provider_fallback(
+        self,
+        *,
+        user: User,
+        company: Graph,
+        primary_credential: APIKey,
+        fallback_credential: APIKey,
+        prompt: str,
+        idempotency_key: str,
+        primary_model: str = "",
+        fallback_model: str = "",
+    ) -> MediaGenerationFallbackResult:
+        """Create a draft image with Google first and OpenRouter on quota/token limits.
+
+        This helper is intentionally media-only and backend-owned. It records each
+        provider attempt as a normal MediaGenerationJob so retries are observable
+        without making the engine or test harness authoritative for durable media
+        state.
+        """
+
+        base_key = idempotency_key.strip()
+        if not base_key:
+            raise GeminiMediaError(
+                "idempotency_key_required",
+                "Provider fallback media generation requires an idempotency key.",
+            )
+        if str(primary_credential.provider or "").strip().lower() != "google":
+            raise GeminiMediaError(
+                "provider_mismatch",
+                "Provider fallback media generation requires a Google primary credential.",
+            )
+        if str(fallback_credential.provider or "").strip().lower() != "openrouter":
+            raise GeminiMediaError(
+                "provider_mismatch",
+                "Provider fallback media generation requires an OpenRouter fallback credential.",
+            )
+
+        primary_job = self.create_job(
+            user=user,
+            company=company,
+            credential=primary_credential,
+            modality="image",
+            prompt=prompt,
+            idempotency_key=_scoped_idempotency_key(base_key, "google"),
+            model=primary_model,
+        )
+        if primary_job.status == "succeeded":
+            return MediaGenerationFallbackResult(
+                primary_job=primary_job,
+                fallback_job=None,
+                selected_job=primary_job,
+                fallback_used=False,
+                fallback_reason="",
+            )
+
+        if not is_media_provider_limit_error(primary_job):
+            return MediaGenerationFallbackResult(
+                primary_job=primary_job,
+                fallback_job=None,
+                selected_job=primary_job,
+                fallback_used=False,
+                fallback_reason=primary_job.error_code or "primary_failed",
+            )
+
+        fallback_job = self.create_job(
+            user=user,
+            company=company,
+            credential=fallback_credential,
+            modality="image",
+            prompt=prompt,
+            idempotency_key=_scoped_idempotency_key(base_key, "openrouter"),
+            model=fallback_model,
+        )
+        return MediaGenerationFallbackResult(
+            primary_job=primary_job,
+            fallback_job=fallback_job,
+            selected_job=fallback_job,
+            fallback_used=True,
+            fallback_reason=_media_provider_limit_reason(primary_job),
+        )
 
     def poll_video_job(self, *, job: MediaGenerationJob) -> MediaGenerationJob:
         if job.modality != "video":
@@ -381,11 +599,20 @@ class MediaGenerationService:
                 response_json=exc.response_json,
             )
             return job
+        except OSError as exc:
+            self._mark_failed(
+                job,
+                code="artifact_write_failed",
+                message="Media artifact storage is unavailable.",
+                response_json={"error": exc.__class__.__name__},
+            )
+            return job
 
     def _run_image_job(self, job: MediaGenerationJob) -> MediaGenerationJob:
         try:
             api_key = self._decrypt_credential(job.credential)
-            media = self.client.generate_image(
+            media_client = self._media_client_for_job(job)
+            media = media_client.generate_image(
                 api_key=api_key,
                 model=job.model,
                 prompt=job.prompt,
@@ -399,9 +626,22 @@ class MediaGenerationService:
                 response_json=exc.response_json,
             )
             return job
+        except OSError as exc:
+            self._mark_failed(
+                job,
+                code="artifact_write_failed",
+                message="Media artifact storage is unavailable.",
+                response_json={"error": exc.__class__.__name__},
+            )
+            return job
 
     def _start_video_job(self, job: MediaGenerationJob) -> MediaGenerationJob:
         try:
+            if job.provider != "google":
+                raise GeminiMediaError(
+                    "unsupported_modality",
+                    "Video media generation is currently supported only for Google Gemini/Veo credentials.",
+                )
             api_key = self._decrypt_credential(job.credential)
             operation_name, response_json = self.client.start_video(
                 api_key=api_key,
@@ -440,7 +680,7 @@ class MediaGenerationService:
         )
         asset = ArchiveService().create_asset(
             company=job.company,
-            title=f"Gemini {job.modality} draft",
+            title=f"{_provider_display_name(job.provider)} {job.modality} draft",
             asset_type=job.modality,
             source_key=f"media-generation:{job.id}",
             created_by_type="system",
@@ -524,14 +764,21 @@ class MediaGenerationService:
         if credential.organization_id != company.organization_id:
             raise GeminiMediaError(
                 "credential_not_found",
-                "Gemini credential was not found for this company organization.",
+                "Media generation credential was not found for this company organization.",
             )
-        if str(credential.provider).strip().lower() != "google":
+        if str(credential.provider).strip().lower() not in {"google", "openrouter"}:
             raise GeminiMediaError(
-                "provider_mismatch", "Media generation requires a Google credential."
+                "provider_mismatch", "Media generation requires a Google or OpenRouter credential."
             )
         if is_credential_revoked(credential.token_metadata):
-            raise GeminiMediaError("credential_revoked", "Gemini credential has been revoked.")
+            raise GeminiMediaError(
+                "credential_revoked", "Media generation credential has been revoked."
+            )
+
+    def _media_client_for_job(self, job: MediaGenerationJob) -> Any:
+        if job.provider == "openrouter":
+            return self.openrouter_client
+        return self.client
 
     def _decrypt_credential(self, credential: APIKey | None) -> str:
         if credential is None:
@@ -591,10 +838,70 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return False
 
 
-def _default_model(modality: str) -> str:
+def _default_model(modality: str, *, provider: str = "google") -> str:
+    if provider == "openrouter":
+        return str(settings.OPENROUTER_IMAGE_MODEL)
     if modality == "image":
         return str(settings.GEMINI_IMAGEN_MODEL)
     return str(settings.GEMINI_VEO_MODEL)
+
+
+_LIMIT_ERROR_SIGNATURES = (
+    "429",
+    "too many requests",
+    "resource_exhausted",
+    "rate limit",
+    "rate_limited",
+    "quota",
+    "token limit",
+    "max token",
+    "max_tokens",
+    "max output",
+    "context limit",
+    "context_length",
+    "context window",
+    "finishreason=max_tokens",
+    '"finishreason": "max_tokens"',
+    '"finish_reason": "max_tokens"',
+    "only available on paid plans",
+    "upgrade your account",
+)
+
+
+def _limit_error_text(
+    *,
+    code: str = "",
+    message: str = "",
+    response_json: dict[str, Any] | None = None,
+) -> str:
+    try:
+        response_text = json.dumps(response_json or {}, sort_keys=True)
+    except TypeError:
+        response_text = str(response_json or {})
+    return f"{code} {message} {response_text}".lower()
+
+
+def _media_provider_limit_reason(job: MediaGenerationJob) -> str:
+    text = _limit_error_text(
+        code=job.error_code,
+        message=job.error_message,
+        response_json=job.response_json,
+    )
+    for signature in _LIMIT_ERROR_SIGNATURES:
+        if signature in text:
+            return signature.strip('"').replace(" ", "_")
+    return job.error_code or "provider_limit"
+
+
+def _scoped_idempotency_key(base_key: str, provider: str) -> str:
+    suffix = f":{provider}"
+    max_base = max(1, 128 - len(suffix))
+    return f"{base_key[:max_base]}{suffix}"
+
+
+def _openrouter_model_outputs_text(model: str) -> bool:
+    normalized = model.strip().lower()
+    return normalized.startswith("google/gemini") or normalized.startswith("openai/")
 
 
 def _headers(api_key: str) -> dict[str, str]:
@@ -604,8 +911,33 @@ def _headers(api_key: str) -> dict[str, str]:
     }
 
 
+def _openrouter_headers(api_key: str) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    if referer := str(settings.OPENROUTER_HTTP_REFERER or "").strip():
+        headers["HTTP-Referer"] = referer
+    if title := str(settings.OPENROUTER_APP_TITLE or "").strip():
+        headers["X-Title"] = title
+    return headers
+
+
+def _provider_display_name(provider: str) -> str:
+    if provider == "openrouter":
+        return "OpenRouter"
+    if provider == "google":
+        return "Gemini"
+    return provider.title() or "Media"
+
+
 def _model_path(model: str) -> str:
     return model.strip().removeprefix("models/")
+
+
+def _is_imagen_model(model: str) -> bool:
+    normalized = _model_path(model).lower()
+    return normalized.startswith("imagen-") or normalized.startswith("imagegeneration@")
 
 
 def _operation_path(operation_name: str) -> str:
@@ -616,7 +948,9 @@ def _operation_path(operation_name: str) -> str:
     return "/" + value.lstrip("/")
 
 
-def _json_or_provider_error(response: requests.Response) -> dict[str, Any]:
+def _json_or_provider_error(
+    response: requests.Response, *, provider_label: str = "Gemini"
+) -> dict[str, Any]:
     try:
         payload = response.json()
     except ValueError:
@@ -628,7 +962,7 @@ def _json_or_provider_error(response: requests.Response) -> dict[str, Any]:
         message = str(
             error_payload.get("message")
             or response.reason
-            or f"Gemini request failed with HTTP {response.status_code}."
+            or f"{provider_label} request failed with HTTP {response.status_code}."
         )
         raise GeminiMediaError(
             "provider_http_error",
@@ -655,6 +989,9 @@ def _image_bytes_from_response(response_json: dict[str, Any]) -> GeminiMediaByte
             ("candidates", 0, "content", "parts", 0, "inline_data", "data"),
         ],
     )
+    inline_image = _first_inline_image_part(response_json)
+    if not encoded and inline_image is not None:
+        encoded = inline_image.get("data", "")
     mime_type = (
         _first_string(
             response_json,
@@ -666,6 +1003,8 @@ def _image_bytes_from_response(response_json: dict[str, Any]) -> GeminiMediaByte
                 ("candidates", 0, "content", "parts", 0, "inline_data", "mimeType"),
             ],
         )
+        or (inline_image.get("mimeType") if inline_image is not None else "")
+        or (inline_image.get("mime_type") if inline_image is not None else "")
         or "image/png"
     )
     if not encoded:
@@ -685,6 +1024,68 @@ def _image_bytes_from_response(response_json: dict[str, Any]) -> GeminiMediaByte
         mime_type=mime_type,
         response_json=_without_large_payloads(response_json),
     )
+
+
+def _openrouter_image_bytes_from_response(response_json: dict[str, Any]) -> GeminiMediaBytes:
+    image_url = _first_string(
+        response_json,
+        [
+            ("choices", 0, "message", "images", 0, "image_url", "url"),
+            ("choices", 0, "message", "images", 0, "imageUrl", "url"),
+        ],
+    )
+    if not image_url:
+        raise GeminiMediaError(
+            "missing_image_bytes",
+            "OpenRouter image response did not include image bytes.",
+            response_json=_without_large_payloads(response_json),
+        )
+    content, mime_type = _decode_data_url(image_url)
+    return GeminiMediaBytes(
+        content=content,
+        mime_type=mime_type,
+        response_json=_without_large_payloads(response_json),
+    )
+
+
+def _decode_data_url(value: str) -> tuple[bytes, str]:
+    prefix, separator, encoded = value.partition(",")
+    if not separator or ";base64" not in prefix:
+        raise GeminiMediaError(
+            "invalid_image_url", "OpenRouter image URL was not a base64 data URL."
+        )
+    mime_type = prefix.removeprefix("data:").split(";", 1)[0] or "image/png"
+    try:
+        return base64.b64decode(encoded), mime_type
+    except ValueError as exc:
+        raise GeminiMediaError(
+            "invalid_image_bytes", "OpenRouter image bytes were not base64."
+        ) from exc
+
+
+def _first_inline_image_part(response_json: dict[str, Any]) -> dict[str, Any] | None:
+    candidates = response_json.get("candidates")
+    if not isinstance(candidates, list):
+        return None
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content")
+        if not isinstance(content, dict):
+            continue
+        parts = content.get("parts")
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            inline_data = part.get("inlineData") or part.get("inline_data")
+            if not isinstance(inline_data, dict):
+                continue
+            encoded = inline_data.get("data")
+            if isinstance(encoded, str) and encoded.strip():
+                return inline_data
+    return None
 
 
 def _inline_video_from_response(response_json: dict[str, Any]) -> GeminiMediaBytes | None:

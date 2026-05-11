@@ -21,9 +21,11 @@ import (
 
 // OpenAIClient implements LLMClient using the OpenAI Chat Completions API.
 type OpenAIClient struct {
-	apiKey     string
-	baseURL    string
-	httpClient *http.Client
+	apiKey      string
+	baseURL     string
+	provider    string
+	extraHeader map[string]string
+	httpClient  *http.Client
 }
 
 // OpenAI API request/response structures
@@ -126,7 +128,7 @@ type openAIStreamResponse struct {
 type openAIError struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
-	Code    string `json:"code"`
+	Code    any    `json:"code"`
 }
 
 func resolveOpenAIBaseURL() string {
@@ -139,6 +141,26 @@ func resolveOpenAIBaseURL() string {
 	return "https://api.openai.com/v1"
 }
 
+func resolveOpenRouterBaseURL() string {
+	for _, key := range []string{"OPENROUTER_API_BASE_URL", "OPENROUTER_BASE_URL"} {
+		value := strings.TrimSpace(os.Getenv(key))
+		if value != "" {
+			return strings.TrimRight(value, "/")
+		}
+	}
+	return "https://openrouter.ai/api/v1"
+}
+
+func resolveOpenRouterModel() string {
+	for _, key := range []string{"OPENROUTER_MODEL", "OPENROUTER_TEXT_MODEL"} {
+		value := strings.TrimSpace(os.Getenv(key))
+		if value != "" {
+			return value
+		}
+	}
+	return "google/gemini-2.5-flash"
+}
+
 // NewOpenAIClient creates a new OpenAI client.
 // It reads the API key from the OPENAI_API_KEY environment variable.
 func NewOpenAIClient() (*OpenAIClient, error) {
@@ -148,8 +170,9 @@ func NewOpenAIClient() (*OpenAIClient, error) {
 	}
 
 	return &OpenAIClient{
-		apiKey:  apiKey,
-		baseURL: resolveOpenAIBaseURL(),
+		apiKey:   apiKey,
+		baseURL:  resolveOpenAIBaseURL(),
+		provider: "openai",
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second, // LLM calls can be slow
 		},
@@ -159,16 +182,70 @@ func NewOpenAIClient() (*OpenAIClient, error) {
 // NewOpenAIClientWithKey creates a new OpenAI client with a specific API key.
 func NewOpenAIClientWithKey(apiKey string) *OpenAIClient {
 	return &OpenAIClient{
-		apiKey:  apiKey,
-		baseURL: resolveOpenAIBaseURL(),
+		apiKey:   apiKey,
+		baseURL:  resolveOpenAIBaseURL(),
+		provider: "openai",
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
 	}
 }
 
+// NewOpenRouterClientWithKey creates an OpenRouter client using its
+// OpenAI-compatible Chat Completions endpoint.
+func NewOpenRouterClientWithKey(apiKey string) *OpenAIClient {
+	extraHeader := map[string]string{}
+	if referer := strings.TrimSpace(os.Getenv("OPENROUTER_HTTP_REFERER")); referer != "" {
+		extraHeader["HTTP-Referer"] = referer
+	}
+	if title := strings.TrimSpace(os.Getenv("OPENROUTER_APP_TITLE")); title != "" {
+		extraHeader["X-Title"] = title
+	}
+	return &OpenAIClient{
+		apiKey:      apiKey,
+		baseURL:     resolveOpenRouterBaseURL(),
+		provider:    "openrouter",
+		extraHeader: extraHeader,
+		httpClient: &http.Client{
+			Timeout: 120 * time.Second,
+		},
+	}
+}
+
+func (c *OpenAIClient) providerName() string {
+	if c == nil || strings.TrimSpace(c.provider) == "" {
+		return "openai"
+	}
+	return strings.ToLower(strings.TrimSpace(c.provider))
+}
+
+func (c *OpenAIClient) defaultModel() string {
+	if c.providerName() == "openrouter" {
+		return resolveOpenRouterModel()
+	}
+	return "gpt-4"
+}
+
+func (c *OpenAIClient) applyHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	for key, value := range c.extraHeader {
+		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+			req.Header.Set(key, value)
+		}
+	}
+}
+
+func (c *OpenAIClient) apiLabel() string {
+	if c.providerName() == "openrouter" {
+		return "OpenRouter"
+	}
+	return "OpenAI"
+}
+
 // Complete sends a prompt to the OpenAI API and returns the response.
 func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMRequest) (*executor.LLMResponse, error) {
+	provider := c.providerName()
 	// Build messages array
 	messages := make([]openAIMessage, 0, 2)
 
@@ -200,7 +277,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 	// Build API request
 	model := request.Model
 	if model == "" {
-		model = "gpt-4"
+		model = c.defaultModel()
 	}
 
 	apiReq := openAIRequest{
@@ -245,8 +322,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	c.applyHeaders(httpReq)
 
 	// Execute request
 	resp, err := c.httpClient.Do(httpReq)
@@ -256,7 +332,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			"request failed",
 			"network_error",
 			0,
-			map[string]any{"provider": "openai"},
+			map[string]any{"provider": provider},
 		)
 	}
 	defer resp.Body.Close()
@@ -269,7 +345,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 			"failed to read response",
 			"read_error",
 			0,
-			map[string]any{"provider": "openai"},
+			map[string]any{"provider": provider},
 		)
 	}
 
@@ -281,12 +357,13 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 
 	// Check for API errors
 	if apiResp.Error != nil {
-		errMsg := fmt.Sprintf("OpenAI API error: %s (type: %s, code: %s)",
-			apiResp.Error.Message, apiResp.Error.Type, apiResp.Error.Code)
+		errorCode := openAIErrorCodeString(apiResp.Error.Code)
+		errMsg := fmt.Sprintf("%s API error: %s (type: %s, code: %s)",
+			c.apiLabel(), apiResp.Error.Message, apiResp.Error.Type, errorCode)
 
 		// Rate limit and server errors are retryable
 		if resp.StatusCode == http.StatusTooManyRequests {
-			if isOpenAIQuotaExhausted(apiResp.Error.Code, apiResp.Error.Message) {
+			if isOpenAIQuotaExhausted(errorCode, apiResp.Error.Message) {
 				return nil, fmt.Errorf("%s. Increase OpenAI quota/billing and retry", errMsg)
 			}
 			retryAfterMs := parseRetryAfterMs(resp.Header.Get("Retry-After"), time.Now())
@@ -296,7 +373,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 				"rate_limited",
 				retryAfterMs,
 				map[string]any{
-					"provider":        "openai",
+					"provider":        provider,
 					"status_code":     resp.StatusCode,
 					"retry_after_ms":  retryAfterMs,
 					"rate_limit_type": "throttled",
@@ -310,7 +387,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 				"transient_http_5xx",
 				0,
 				map[string]any{
-					"provider":    "openai",
+					"provider":    provider,
 					"status_code": resp.StatusCode,
 				},
 			)
@@ -335,7 +412,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 				"rate_limited",
 				retryAfterMs,
 				map[string]any{
-					"provider":        "openai",
+					"provider":        provider,
 					"status_code":     resp.StatusCode,
 					"retry_after_ms":  retryAfterMs,
 					"rate_limit_type": "throttled",
@@ -349,7 +426,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 				"transient_http_5xx",
 				0,
 				map[string]any{
-					"provider":    "openai",
+					"provider":    provider,
 					"status_code": resp.StatusCode,
 				},
 			)
@@ -368,7 +445,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 	return &executor.LLMResponse{
 		Content:          choice.Message.Content,
 		Model:            apiResp.Model,
-		Provider:         "openai",
+		Provider:         provider,
 		LLMMode:          request.LLMMode,
 		CredentialSource: request.CredentialSource,
 		Usage: &executor.LLMUsage{
@@ -391,6 +468,7 @@ func (c *OpenAIClient) StreamComplete(
 	request *executor.LLMRequest,
 	onChunk func(string),
 ) (*executor.LLMResponse, error) {
+	provider := c.providerName()
 	messages := make([]openAIMessage, 0, 2)
 	if request.SystemPrompt != "" {
 		messages = append(messages, openAIMessage{
@@ -414,7 +492,7 @@ func (c *OpenAIClient) StreamComplete(
 
 	model := request.Model
 	if model == "" {
-		model = "gpt-4"
+		model = c.defaultModel()
 	}
 
 	apiReq := openAIRequest{
@@ -447,8 +525,7 @@ func (c *OpenAIClient) StreamComplete(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	c.applyHeaders(httpReq)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -457,7 +534,7 @@ func (c *OpenAIClient) StreamComplete(
 			"request failed",
 			"network_error",
 			0,
-			map[string]any{"provider": "openai"},
+			map[string]any{"provider": provider},
 		)
 	}
 	defer resp.Body.Close()
@@ -476,7 +553,7 @@ func (c *OpenAIClient) StreamComplete(
 				"rate_limited",
 				retryAfterMs,
 				map[string]any{
-					"provider":        "openai",
+					"provider":        provider,
 					"status_code":     resp.StatusCode,
 					"retry_after_ms":  retryAfterMs,
 					"rate_limit_type": "throttled",
@@ -490,7 +567,7 @@ func (c *OpenAIClient) StreamComplete(
 				"transient_http_5xx",
 				0,
 				map[string]any{
-					"provider":    "openai",
+					"provider":    provider,
 					"status_code": resp.StatusCode,
 				},
 			)
@@ -526,7 +603,8 @@ func (c *OpenAIClient) StreamComplete(
 		}
 		if chunk.Error != nil {
 			return nil, fmt.Errorf(
-				"OpenAI API error: %s (type: %s, code: %s)",
+				"%s API error: %s (type: %s, code: %s)",
+				c.apiLabel(),
 				chunk.Error.Message,
 				chunk.Error.Type,
 				chunk.Error.Code,
@@ -570,7 +648,7 @@ func (c *OpenAIClient) StreamComplete(
 	return &executor.LLMResponse{
 		Content:          content.String(),
 		Model:            responseModel,
-		Provider:         "openai",
+		Provider:         provider,
 		LLMMode:          request.LLMMode,
 		CredentialSource: request.CredentialSource,
 		Usage:            usage,
@@ -630,6 +708,26 @@ func parseStructuredResponse(content string, requested bool) any {
 		return nil
 	}
 	return parsed
+}
+
+func openAIErrorCodeString(code any) string {
+	switch value := code.(type) {
+	case nil:
+		return ""
+	case string:
+		return value
+	case float64:
+		if value == float64(int64(value)) {
+			return strconv.FormatInt(int64(value), 10)
+		}
+		return strconv.FormatFloat(value, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(value)
+	case int64:
+		return strconv.FormatInt(value, 10)
+	default:
+		return fmt.Sprint(value)
+	}
 }
 
 func parseRetryAfterMs(headerValue string, now time.Time) int {

@@ -35,7 +35,8 @@ LEGACY_TEST_PASSWORD="<redacted>" \
 
 - `/api/orgs/me` shows exactly one organization named `Legacy Glasswear`.
 - `/api/graphs/` shows exactly one company named `Legacy Glasswear`.
-- Latest graph version contains the six Legacy departments.
+- Latest graph version contains the Routing Department plus Legacy operating
+  departments.
 - Latest graph version uses provider `google` and model `gemini-2.5-flash`.
 - Latest graph version records Gemini image/video generation as planned,
   draft-only, and backend-owned.

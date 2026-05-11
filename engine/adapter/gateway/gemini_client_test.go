@@ -126,6 +126,37 @@ func TestMultiProviderRoutesGoogle(t *testing.T) {
 	}
 }
 
+func TestMultiProviderRoutesOpenRouter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer resolved-openrouter-key" {
+			t.Fatalf("missing resolved openrouter key")
+		}
+		_, _ = w.Write([]byte(`{
+			"choices": [{"message": {"content": "routed"}}],
+			"model": "google/gemini-2.5-flash"
+		}`))
+	}))
+	defer server.Close()
+	t.Setenv("OPENROUTER_API_BASE_URL", server.URL)
+
+	resolver := &staticCredentialResolver{provider: "openrouter", apiKey: "resolved-openrouter-key"}
+	client := NewMultiProviderClient(resolver, "")
+	response, err := client.Complete(context.Background(), &executor.LLMRequest{
+		Provider:     "openrouter",
+		CredentialID: "credential-1",
+		TenantID:     "tenant-1",
+		Model:        "google/gemini-2.5-flash",
+		Prompt:       "hello",
+	})
+
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if response.Provider != "openrouter" || strings.TrimSpace(response.Content) != "routed" {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 type staticCredentialResolver struct {
 	provider string
 	apiKey   string

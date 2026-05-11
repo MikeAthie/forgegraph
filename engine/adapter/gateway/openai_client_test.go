@@ -1,6 +1,14 @@
 package gateway
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/forgegraph/engine/adapter/executor"
+)
 
 func TestResolveOpenAIBaseURLDefaultsToOpenAI(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", "")
@@ -17,5 +25,99 @@ func TestResolveOpenAIBaseURLUsesOverride(t *testing.T) {
 
 	if got := resolveOpenAIBaseURL(); got != "http://127.0.0.1:8011/v1" {
 		t.Fatalf("expected env override, got %q", got)
+	}
+}
+
+func TestOpenRouterClientUsesOpenAICompatibleChatCompletions(t *testing.T) {
+	var gotPath string
+	var gotAuth string
+	var gotReferer string
+	var gotTitle string
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		gotReferer = r.Header.Get("HTTP-Referer")
+		gotTitle = r.Header.Get("X-Title")
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices": [{
+				"message": {"content": "OpenRouter response"},
+				"finish_reason": "stop"
+			}],
+			"model": "google/gemini-2.5-flash",
+			"usage": {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7}
+		}`))
+	}))
+	defer server.Close()
+	t.Setenv("OPENROUTER_API_BASE_URL", server.URL)
+	t.Setenv("OPENROUTER_HTTP_REFERER", "https://forgegraph.test")
+	t.Setenv("OPENROUTER_APP_TITLE", "ForgeGraph Test")
+
+	response, err := NewOpenRouterClientWithKey("openrouter-key").Complete(
+		context.Background(),
+		&executor.LLMRequest{
+			Provider: "openrouter",
+			Prompt:   "hello",
+			Model:    "google/gemini-2.5-flash",
+			LLMMode:  "byok",
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if gotPath != "/chat/completions" {
+		t.Fatalf("path = %q", gotPath)
+	}
+	if gotAuth != "Bearer openrouter-key" {
+		t.Fatalf("authorization = %q", gotAuth)
+	}
+	if gotReferer != "https://forgegraph.test" || gotTitle != "ForgeGraph Test" {
+		t.Fatalf("OpenRouter headers referer=%q title=%q", gotReferer, gotTitle)
+	}
+	if gotPayload["model"] != "google/gemini-2.5-flash" {
+		t.Fatalf("model = %#v", gotPayload["model"])
+	}
+	if response.Provider != "openrouter" || response.Content != "OpenRouter response" {
+		t.Fatalf("response = %#v", response)
+	}
+	if response.Usage == nil || response.Usage.TotalTokens != 7 {
+		t.Fatalf("usage = %#v", response.Usage)
+	}
+}
+
+func TestOpenRouterClientReportsNumericErrorCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{
+			"error": {
+				"message": "Insufficient credits.",
+				"code": 402
+			}
+		}`))
+	}))
+	defer server.Close()
+	t.Setenv("OPENROUTER_API_BASE_URL", server.URL)
+
+	_, err := NewOpenRouterClientWithKey("openrouter-key").Complete(
+		context.Background(),
+		&executor.LLMRequest{
+			Provider: "openrouter",
+			Prompt:   "hello",
+			Model:    "google/gemini-2.5-flash",
+			LLMMode:  "byok",
+		},
+	)
+
+	if err == nil {
+		t.Fatal("Complete() error = nil")
+	}
+	if got := err.Error(); got != "OpenRouter API error: Insufficient credits. (type: , code: 402)" {
+		t.Fatalf("error = %q", got)
 	}
 }

@@ -504,7 +504,9 @@ RUN_EVENT_STREAM_SUMMARY_MAX_ACTIVE_STREAMS_PER_RUN = int(
 RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN = _get_bool_env("RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN", False)
 ALLOWED_LLM_PROVIDERS = [
     provider.strip().lower()
-    for provider in os.environ.get("ALLOWED_LLM_PROVIDERS", "openai,anthropic,google").split(",")
+    for provider in os.environ.get(
+        "ALLOWED_LLM_PROVIDERS", "openai,anthropic,google,openrouter"
+    ).split(",")
     if provider.strip()
 ]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -514,11 +516,25 @@ GEMINI_API_BASE_URL = os.environ.get(
 ).rstrip("/")
 GEMINI_IMAGEN_MODEL = os.environ.get("GEMINI_IMAGEN_MODEL", "imagen-4.0-generate-001")
 GEMINI_VEO_MODEL = os.environ.get("GEMINI_VEO_MODEL", "veo-3.1-generate-preview")
+OPENROUTER_API_BASE_URL = os.environ.get(
+    "OPENROUTER_API_BASE_URL",
+    "https://openrouter.ai/api/v1",
+).rstrip("/")
+OPENROUTER_IMAGE_MODEL = os.environ.get(
+    "OPENROUTER_IMAGE_MODEL",
+    "black-forest-labs/flux.2-klein-4b",
+)
+OPENROUTER_HTTP_REFERER = os.environ.get("OPENROUTER_HTTP_REFERER", FRONTEND_URL)
+OPENROUTER_APP_TITLE = os.environ.get("OPENROUTER_APP_TITLE", "ForgeGraph")
+_MEDIA_GENERATION_DEFAULT_BASE = (
+    BASE_DIR if BASE_DIR.parent == BASE_DIR.parent.parent else BASE_DIR.parent
+)
 MEDIA_GENERATION_ARTIFACT_ROOT = Path(
     os.environ.get(
         "MEDIA_GENERATION_ARTIFACT_ROOT",
         os.environ.get(
-            "LEGACY_MEDIA_ARTIFACT_ROOT", str(BASE_DIR.parent / "logs" / "media-generations")
+            "LEGACY_MEDIA_ARTIFACT_ROOT",
+            str(_MEDIA_GENERATION_DEFAULT_BASE / "logs" / "media-generations"),
         ),
     )
 )

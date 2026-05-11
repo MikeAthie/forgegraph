@@ -206,7 +206,7 @@ const pageMeta = (pathname: string) => {
   if (pathname.startsWith("/ops")) {
     return {
       title: "Operator Recovery",
-      description: "Inspect dead letters, projection lag, event spool health, and backend recovery actions.",
+      description: "Inspect recovery queues, freshness delay, event spool health, and backend recovery actions.",
     };
   }
   if (pathname.startsWith("/library") || pathname.startsWith("/prompts")) {

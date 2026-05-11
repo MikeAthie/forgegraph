@@ -207,7 +207,7 @@ describe("Overview accounting metrics", () => {
     expect(screen.getAllByText("Revenue").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Profit").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Not yet instrumented").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(/backend_ledger/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Backend ledger/i).length).toBeGreaterThan(0);
   });
 
   it("does not render unavailable cost as a real value", async () => {
@@ -235,7 +235,7 @@ describe("Overview accounting metrics", () => {
     expect((await screen.findAllByText("Not yet instrumented")).length).toBeGreaterThanOrEqual(3);
   });
 
-  it("renders backend projection status and lag", async () => {
+  it("renders backend freshness status and delay", async () => {
     await renderOverview(
       makeOverview({
         projection: {
@@ -250,7 +250,7 @@ describe("Overview accounting metrics", () => {
       }),
     );
 
-    expect(await screen.findByText(/Projection degraded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Freshness degraded/i)).toBeInTheDocument();
     expect(screen.getByText(/12s lag/i)).toBeInTheDocument();
   });
 
@@ -311,20 +311,20 @@ describe("Overview accounting metrics", () => {
     );
 
     for (const label of [
-      "Active Agents",
+      "Active Departments",
       "Running Tasks",
       "Blocked Decisions",
       "Cost Today",
       "Memory Writes",
-      "Dead Letters",
-      "Projection Lag",
-      "Runtime Intent Lag",
+      "Recovery Items",
+      "Freshness",
+      "Processing Delay",
     ]) {
       expect(await screen.findByText(label)).toBeInTheDocument();
     }
-    expect(screen.getAllByText(/backend_projection · fresh/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/backend_memory · fresh/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/backend_ops · degraded/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Backend freshness · fresh/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Backend knowledge · fresh/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Backend operations · degraded/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/freshness/i).length).toBeGreaterThan(0);
   });
 

@@ -188,16 +188,25 @@ export function toTaskVMFromRecord(record: TaskRecord): TaskVM {
 }
 
 export function toDeliverableVM(
-  operation: Pick<RunDetail, "id" | "status" | "ended_at" | "output_json" | "node_runs">,
+  operation: Pick<RunDetail, "id" | "status" | "ended_at" | "input_json" | "output_json" | "node_runs">,
 ): DeliverableVM {
   const ready = toOperationStatusVM(String(operation.status)) === "completed";
   const preview = summarizeDeliverable(operation);
   const lastCompletedTask = [...operation.node_runs].reverse().find((item) => item.output_json);
+  const outputTitle =
+    operation.output_json && typeof operation.output_json.title === "string" ? operation.output_json.title.trim() : "";
+  const briefTitle =
+    typeof operation.input_json?.operation_brief === "string"
+      ? operation.input_json.operation_brief.trim()
+      : typeof operation.input_json?.objective === "string"
+        ? operation.input_json.objective.trim()
+        : "";
+  const readyTitle = outputTitle || (briefTitle ? `Deliverable: ${truncate(briefTitle, 72)}` : "Operation deliverable");
 
   return {
     id: `${operation.id}:deliverable`,
     operationId: operation.id,
-    title: ready ? `Deliverable from operation ${operation.id.slice(0, 8)}` : "Deliverable pending",
+    title: ready ? readyTitle : "Deliverable pending",
     preview,
     content: ready ? preview : null,
     ready,

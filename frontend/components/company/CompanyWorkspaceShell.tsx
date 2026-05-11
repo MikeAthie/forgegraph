@@ -566,6 +566,7 @@ export function CompanyWorkspaceShell({
         .slice(0, 3)
         .map((operation) => ({
           id: operation.id,
+          title: operation.deliverable.title,
           preview: operation.deliverable.preview,
         })),
     [operations],
@@ -1541,9 +1542,7 @@ Examples:
                               className="rounded-[1.2rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5"
                             >
                               <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                                  Deliverable from operation {item.id.slice(0, 8)}
-                                </p>
+                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.title}</p>
                                 <Button asChild size="sm" variant="outline" className="rounded-full">
                                   <Link href={`/runs/${item.id}`}>Open</Link>
                                 </Button>

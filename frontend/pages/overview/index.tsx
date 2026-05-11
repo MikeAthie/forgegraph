@@ -76,11 +76,23 @@ function stateFeedMessageType(message: StateFeedMessage) {
   return message.type || message.event_type || message.event?.type || message.event?.event_type || "";
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  backend_projection: "Backend freshness",
+  backend_memory: "Backend knowledge",
+  backend_ops: "Backend operations",
+  backend_accounting: "Backend accounting",
+  backend_ledger: "Backend ledger",
+};
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source.replace(/_/g, " ");
+}
+
 function metricProvenanceLine(metric: MetricProvenanceVM): string {
   const computedAt = metric.computedAt ? `Computed ${formatDateTime(metric.computedAt)}` : "computed_at unavailable";
   const freshness = typeof metric.freshnessMs === "number" ? ` · freshness ${Math.round(metric.freshnessMs)}ms` : "";
 
-  return `${metric.source} · ${computedAt}${freshness}`;
+  return `${sourceLabel(metric.source)} · ${computedAt}${freshness}`;
 }
 
 function financialMetricLabel(metric: MetricProvenanceVM): string {
@@ -93,7 +105,7 @@ function financialMetricLabel(metric: MetricProvenanceVM): string {
 
 function projectionStatusLabel(projection: OrganizationOverviewVM["projection"]): string {
   if (!projection) {
-    return "Projection unavailable";
+    return "Freshness unavailable";
   }
   const status = projection.status ?? "fresh";
   const lag =
@@ -102,7 +114,7 @@ function projectionStatusLabel(projection: OrganizationOverviewVM["projection"])
       : "";
   const sequence =
     typeof projection.last_sequence === "number" ? ` · seq ${projection.last_sequence.toLocaleString()}` : "";
-  return `Projection ${status}${lag}${sequence}`;
+  return `Freshness ${status}${lag}${sequence}`;
 }
 
 type CardMetadata = Pick<
@@ -113,7 +125,7 @@ type CardMetadata = Pick<
 function overviewCardDetail(section: CardMetadata): string {
   const freshness =
     typeof section.freshnessMs === "number" ? ` · freshness ${formatDuration(section.freshnessMs)}` : "";
-  return `${section.source} · ${section.status} · Updated ${formatDateTime(section.lastUpdatedAt)}${freshness}`;
+  return `${sourceLabel(section.source)} · ${section.status} · Updated ${formatDateTime(section.lastUpdatedAt)}${freshness}`;
 }
 
 function overviewCardTone(
@@ -180,7 +192,7 @@ export default function OverviewPage() {
             {
               id: "operator-recovery",
               title: "Operator recovery needs attention",
-              detail: `${overview.operations.deadLetterCount} backend failure record${overview.operations.deadLetterCount === 1 ? "" : "s"} require review. Projection state is ${overview.operations.projectionStatus}.`,
+              detail: `${overview.operations.deadLetterCount} recovery item${overview.operations.deadLetterCount === 1 ? "" : "s"} require review. Freshness is ${overview.operations.projectionStatus}.`,
               owner: "Recovery",
               tone: "rose" as const,
               href: "/ops",
@@ -223,7 +235,7 @@ export default function OverviewPage() {
         label: "Control plane",
         value: recoveryNeeded || attentionItems.some((item) => item.tone === "rose") ? "Degraded" : "Responsive",
         detail: recoveryNeeded
-          ? "Operator-visible recovery records or projection lag require attention."
+          ? "Operator-visible recovery records or freshness delay require attention."
           : attentionItems.some((item) => item.tone === "rose")
             ? "There is at least one failed operation in the visible window."
             : "No critical failures are currently projected.",
@@ -391,8 +403,8 @@ export default function OverviewPage() {
     ? [
         {
           href: "#active-departments",
-          ariaLabel: "Jump to active agents",
-          eyebrow: "Active Agents",
+          ariaLabel: "Jump to active departments",
+          eyebrow: "Active Departments",
           value: formatCompactNumber(overview.running.activeAgentCount),
           section: overview.running,
           tone: overviewCardTone(overview.running),
@@ -436,8 +448,8 @@ export default function OverviewPage() {
         },
         {
           href: "/ops",
-          ariaLabel: "Open dead letter recovery",
-          eyebrow: "Dead Letters",
+          ariaLabel: "Open recovery items",
+          eyebrow: "Recovery Items",
           value: formatCompactNumber(overview.failures.deadLetterCount),
           section: overview.failures,
           tone: overviewCardTone(overview.failures, overview.failures.deadLetterCount > 0),
@@ -445,8 +457,8 @@ export default function OverviewPage() {
         },
         {
           href: "#system-health",
-          ariaLabel: "Jump to projection lag",
-          eyebrow: "Projection Lag",
+          ariaLabel: "Jump to freshness",
+          eyebrow: "Freshness",
           value:
             typeof overview.projection?.lag_seconds === "number"
               ? formatDuration(overview.projection.lag_seconds * 1000)
@@ -457,8 +469,8 @@ export default function OverviewPage() {
         },
         {
           href: "/ops",
-          ariaLabel: "Open runtime intent lag",
-          eyebrow: "Runtime Intent Lag",
+          ariaLabel: "Open processing diagnostics",
+          eyebrow: "Processing Delay",
           value: formatDuration(overview.failures.runtimeIntentLagSeconds * 1000),
           section: overview.failures,
           tone: overviewCardTone(overview.failures, overview.failures.runtimeIntentLagSeconds > 0),
@@ -701,7 +713,7 @@ export default function OverviewPage() {
                     ) : (
                       <EmptyBlock
                         title="No blocked tasks"
-                        description="Waiting and failed task projections are clear in the current window."
+                        description="Waiting and failed task items are clear in the current window."
                       />
                     )}
                   </Panel>

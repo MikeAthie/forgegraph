@@ -78,7 +78,8 @@ Create a dated evidence packet from
 - login result for the dedicated user
 - `/api/orgs/me` result showing one organization named `Legacy Glasswear`
 - `/api/graphs/` result showing one company named `Legacy Glasswear`
-- latest graph version metadata showing the six-department operating model
+- latest graph version metadata showing the routing department plus operating
+  departments model
 - latest graph version metadata showing Gemini media generation as planned,
   draft-only, and backend-owned
 - missing data, missing photos, and missing secrets

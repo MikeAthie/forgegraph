@@ -111,7 +111,7 @@ test.describe("Failure retry dead-letter live flow", () => {
       expect(runDeadLetter?.recovery_options).toContain("force_fail_run");
 
       await page.goto("/tasks");
-      await expect(page.getByText(/Dead-lettered/i).first()).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Needs recovery/i).first()).toBeVisible({ timeout: 30_000 });
       await expect(page.getByText(/Recovery:.*replay_intent/i).first()).toBeVisible();
 
       await page.goto(`/runs/${runId}`);

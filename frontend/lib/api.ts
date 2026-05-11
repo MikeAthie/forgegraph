@@ -195,6 +195,15 @@ const API_PATHS = {
     count: "/api/approvals/count",
     detail: (approvalId: string) => `/api/approvals/${approvalId}`,
   },
+  archive: {
+    assets: "/api/archive/assets",
+    assetVersions: (assetId: string) => `/api/archive/assets/${assetId}/versions`,
+    assetVersionContent: (assetId: string, versionId: string) =>
+      `/api/archive/assets/${assetId}/versions/${versionId}/content`,
+    mediaGenerations: "/api/archive/media-generations",
+    mediaGeneration: (jobId: string) => `/api/archive/media-generations/${jobId}`,
+    mediaGenerationPoll: (jobId: string) => `/api/archive/media-generations/${jobId}/poll`,
+  },
   workflows: {
     listCreate: "/api/workflows/",
     detail: (workflowId: string) => `/api/workflows/${workflowId}`,
@@ -1290,6 +1299,20 @@ export type PublicationDraft = {
   updated_at: string;
 };
 
+export type CreatePublicationDraftInput = {
+  company_id: string;
+  title: string;
+  channel?: string;
+  audience?: string;
+  body?: string;
+  call_to_action?: string;
+  signal_id?: string | null;
+  opportunity_id?: string | null;
+  asset_id?: string | null;
+  asset_version_id?: string | null;
+  media_job_id?: string | null;
+};
+
 export type ProcurementDraft = {
   id: string;
   company_id: string;
@@ -1314,6 +1337,63 @@ export type ProcurementDraft = {
   }>;
   created_at: string;
   updated_at: string;
+};
+
+export type ArchiveAsset = {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  title: string;
+  asset_type: string;
+  source_key: string;
+  origin_operation_id: string | null;
+  origin_task_id: string | null;
+  origin_node_run_id: string | null;
+  origin_deliverable_id: string | null;
+  created_by_type: string;
+  created_by_id: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  latest_version_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ArchiveAssetVersion = {
+  id: string;
+  asset_id: string;
+  version_number: number;
+  content_uri: string;
+  content_hash: string | null;
+  mime_type: string | null;
+  size_bytes: number;
+  provenance: Record<string, unknown>;
+  created_at: string;
+};
+
+export type MediaGenerationJob = {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  requested_by_id: string | null;
+  credential_id: string | null;
+  modality: "image" | "video" | string;
+  provider: string;
+  model: string;
+  prompt: string;
+  prompt_hash: string;
+  idempotency_key: string;
+  status: string;
+  provider_operation_name: string | null;
+  output_asset_id: string | null;
+  output_asset_version_id: string | null;
+  output_mime_type: string | null;
+  output_size_bytes: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  completed_at: string | null;
 };
 
 export type CompanyOpsOperation = {
@@ -1595,6 +1675,18 @@ export const companyOpsApi = {
     return response.data.data.opportunity;
   },
 
+  createPublicationDraft: async (
+    input: CreatePublicationDraftInput,
+    options: IdempotencyOptions,
+  ): Promise<PublicationDraft> => {
+    const response = await api.post<ApiSuccessResponse<{ publication_draft: PublicationDraft }>>(
+      API_PATHS.companyOps.publicationDrafts,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.publication_draft;
+  },
+
   requestPublicationApproval: async (
     draftId: string,
     input: { note?: string },
@@ -1658,6 +1750,70 @@ export const companyOpsApi = {
       idempotencyConfig(options),
     );
     return response.data.data.objective_contract;
+  },
+};
+
+export const archiveApi = {
+  listAssets: async (
+    companyId: string,
+    params?: { asset_type?: string; status?: string; operation_id?: string },
+  ): Promise<{ assets: ArchiveAsset[] }> => {
+    const response = await api.get<ApiSuccessResponse<{ assets: ArchiveAsset[] }>>(API_PATHS.archive.assets, {
+      params: {
+        company_id: companyId,
+        ...(params?.asset_type ? { asset_type: params.asset_type } : {}),
+        ...(params?.status ? { status: params.status } : {}),
+        ...(params?.operation_id ? { operation_id: params.operation_id } : {}),
+      },
+    });
+    return response.data.data;
+  },
+
+  listAssetVersions: async (assetId: string): Promise<{ versions: ArchiveAssetVersion[] }> => {
+    const response = await api.get<ApiSuccessResponse<{ versions: ArchiveAssetVersion[] }>>(
+      API_PATHS.archive.assetVersions(assetId),
+    );
+    return response.data.data;
+  },
+
+  getAssetVersionContent: async (assetId: string, versionId: string): Promise<Blob> => {
+    const response = await api.get<Blob>(API_PATHS.archive.assetVersionContent(assetId, versionId), {
+      responseType: "blob",
+    });
+    return response.data;
+  },
+
+  createMediaGeneration: async (
+    input: {
+      company_id: string;
+      credential_id: string;
+      modality: "image" | "video";
+      prompt: string;
+      idempotency_key?: string;
+      model?: string;
+    },
+    options?: IdempotencyOptions,
+  ): Promise<MediaGenerationJob> => {
+    const response = await api.post<ApiSuccessResponse<{ media_generation: MediaGenerationJob }>>(
+      API_PATHS.archive.mediaGenerations,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.media_generation;
+  },
+
+  getMediaGeneration: async (jobId: string): Promise<MediaGenerationJob> => {
+    const response = await api.get<ApiSuccessResponse<{ media_generation: MediaGenerationJob }>>(
+      API_PATHS.archive.mediaGeneration(jobId),
+    );
+    return response.data.data.media_generation;
+  },
+
+  pollMediaGeneration: async (jobId: string): Promise<MediaGenerationJob> => {
+    const response = await api.post<ApiSuccessResponse<{ media_generation: MediaGenerationJob }>>(
+      API_PATHS.archive.mediaGenerationPoll(jobId),
+    );
+    return response.data.data.media_generation;
   },
 };
 

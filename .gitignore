@@ -18,6 +18,9 @@ pnpm-debug.log*
 /logs/legacy-media/
 /logs/demo-captures/
 /logs/demo-captures-*/
+/logs/legacy-tutorial-playwright-output/
+/logs/legacy-phase1-media-playwright-output/
+/backend/logs/media-generations/
 /logs/*.sqlite3
 /logs/*.db
 

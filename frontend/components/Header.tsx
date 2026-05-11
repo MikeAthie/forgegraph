@@ -25,13 +25,13 @@ export default function Header() {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
 
   const navItems = [
-    { href: "/overview", label: "Overview" },
+    { href: "/companies", label: "Companies" },
+    { href: "/overview", label: "Command Center" },
     { href: "/approvals", label: "Approvals" },
     { href: "/departments", label: "Departments" },
     { href: "/tasks", label: "Activity" },
     { href: "/memory", label: "Knowledge" },
     { href: "/runs", label: "Operations" },
-    { href: "/workflows", label: "Advanced operating models" },
   ] as const;
 
   const canManageOrg = user?.organization_role === "owner" || user?.organization_role === "admin";
@@ -39,12 +39,12 @@ export default function Header() {
 
   const activeHref = (() => {
     if (router.pathname.startsWith("/overview")) return "/overview";
+    if (router.pathname.startsWith("/companies")) return "/companies";
     if (router.pathname.startsWith("/inbox") || router.pathname.startsWith("/approvals")) return "/approvals";
     if (router.pathname.startsWith("/agents") || router.pathname.startsWith("/departments")) return "/departments";
     if (router.pathname.startsWith("/tasks")) return "/tasks";
     if (router.pathname.startsWith("/memory")) return "/memory";
     if (router.pathname.startsWith("/runs") || router.pathname.startsWith("/executions")) return "/runs";
-    if (router.pathname.startsWith("/workflows") || router.pathname.startsWith("/graphs")) return "/workflows";
     return null;
   })();
 
@@ -214,6 +214,15 @@ export default function Header() {
                     className="cursor-pointer"
                   >
                     Settings & Governance
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      void router.push("/workflows");
+                    }}
+                    className="cursor-pointer"
+                  >
+                    Advanced operating models
                   </DropdownMenuItem>
                   {canManageOrg && (
                     <DropdownMenuItem

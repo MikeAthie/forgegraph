@@ -2,7 +2,13 @@ import { expect, test, type APIRequestContext, type Page, type TestInfo } from "
 import fs from "fs/promises";
 import path from "path";
 
-import { createHumanGateRunViaApi, ensureUserRegistered, getAccessToken, type TestUser } from "../e2e/helpers";
+import {
+  createHumanGateRunViaApi,
+  ensureUserRegistered,
+  getAccessToken,
+  openBackendAuthenticatedPage,
+  type TestUser,
+} from "../e2e/helpers";
 
 const API_BASE_URL = (
   process.env.PLAYWRIGHT_API_URL ??
@@ -97,27 +103,11 @@ async function saveTutorialVideo(
   await testInfo.attach(`${slug}.json`, { path: metadataPath, contentType: "application/json" });
 }
 
-async function openTutorialPage(page: Page, targetPath: string) {
+async function openTutorialPage(page: Page, request: APIRequestContext, targetPath: string) {
   if (!tutorialUser) {
     throw new Error("Tutorial user was not created by the registration step.");
   }
-  await page.context().clearCookies();
-  await page.goto("/login");
-  await page.getByRole("textbox", { name: /email address/i }).fill(tutorialUser.email);
-  await page.getByRole("textbox", { name: /password/i }).fill(tutorialUser.password);
-  const loginResponsePromise = page.waitForResponse(
-    (response) => response.url().includes("/api/auth/login") && response.request().method() === "POST",
-    { timeout: 30_000 },
-  );
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  const loginResponse = await loginResponsePromise;
-  expect(loginResponse.ok()).toBeTruthy();
-  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
-  if (targetPath !== "/companies") {
-    await page.goto(targetPath);
-    await page.waitForLoadState("networkidle");
-  }
+  await openBackendAuthenticatedPage(page, request, tutorialUser, targetPath);
 }
 
 async function completeObjectiveStep(page: Page, companyName: string) {
@@ -182,8 +172,8 @@ test("01 - registration", async ({ page }, testInfo) => {
   });
 });
 
-test("02 - company objective and suggested setup", async ({ page }, testInfo) => {
-  await openTutorialPage(page, "/companies/new");
+test("02 - company objective and suggested setup", async ({ page, request }, testInfo) => {
+  await openTutorialPage(page, request, "/companies/new");
   await expect(page.getByTestId("quest-guide-overlay")).toHaveCount(0);
   await pauseForVideo(page);
 
@@ -195,8 +185,8 @@ test("02 - company objective and suggested setup", async ({ page }, testInfo) =>
   });
 });
 
-test("03 - create first department agent", async ({ page }, testInfo) => {
-  await openTutorialPage(page, "/companies/new");
+test("03 - create first department", async ({ page, request }, testInfo) => {
+  await openTutorialPage(page, request, "/companies/new");
   await expect(page.getByTestId("quest-guide-overlay")).toHaveCount(0);
   await completeObjectiveStep(page, "Legacy Tutorial Team");
 
@@ -219,7 +209,7 @@ test("03 - create first department agent", async ({ page }, testInfo) => {
   await pauseForVideo(page, 1200);
 
   await saveTutorialVideo(page, testInfo, "03-create-first-agent", {
-    step: "Select the first department-style agent and create the company.",
+    step: "Select the first department and create the company.",
   });
 });
 
@@ -238,7 +228,7 @@ test("04 - create first judge", async ({ page, request }, testInfo) => {
   const task = await waitForOperationTask(request, accessToken, run.runId);
   judgeTaskId = task.id;
 
-  await openTutorialPage(page, `/tasks?task=${task.id}`);
+  await openTutorialPage(page, request, `/tasks?task=${task.id}`);
   await expect(page.getByRole("heading", { name: "Department Activity", exact: true })).toBeVisible();
   await pauseForVideo(page);
 
@@ -259,16 +249,16 @@ test("04 - create first judge", async ({ page, request }, testInfo) => {
   });
 });
 
-test("05 - run first judge", async ({ page, request }, testInfo) => {
+test("05 - evaluate first judge", async ({ page, request }, testInfo) => {
   if (!tutorialUser || !judgeTaskId) {
     throw new Error("Judge creation step did not produce a task id.");
   }
 
-  await openTutorialPage(page, `/tasks?task=${judgeTaskId}`);
+  await openTutorialPage(page, request, `/tasks?task=${judgeTaskId}`);
   await expect(page.getByRole("heading", { name: "Department Activity", exact: true })).toBeVisible();
   await pauseForVideo(page);
 
-  const runJudgeButton = page.getByRole("button", { name: /^run judge$/i });
+  const runJudgeButton = page.getByRole("button", { name: /^evaluate task$/i });
   await runJudgeButton.scrollIntoViewIfNeeded();
   await pauseForVideo(page, 500);
   await runJudgeButton.click();
@@ -276,7 +266,7 @@ test("05 - run first judge", async ({ page, request }, testInfo) => {
   await pauseForVideo(page, 1500);
 
   await saveTutorialVideo(page, testInfo, "05-run-first-judge", {
-    step: "Run the task judge and show the resulting grade.",
+    step: "Evaluate the task judge and show the resulting grade.",
     task_id: judgeTaskId,
   });
 });

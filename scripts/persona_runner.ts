@@ -65,12 +65,17 @@ type CompanyState = {
 };
 
 const ROOT_DIR = process.cwd();
-const { chromium } = require(path.join(ROOT_DIR, "frontend", "node_modules", "playwright"));
+const { chromium } = require(
+  path.join(ROOT_DIR, "frontend", "node_modules", "playwright"),
+);
 const OUTPUT_DIR = path.join(ROOT_DIR, "logs", "persona");
 const OUTPUT_PATH = path.join(OUTPUT_DIR, "carlos.json");
 const GOAL = "Create a company and launch useful work as quickly as possible";
 const PERSONA = "Carlos" as const;
-const DEFAULT_FRONTEND_URLS = ["http://127.0.0.1:3001", "http://127.0.0.1:3000"];
+const DEFAULT_FRONTEND_URLS = [
+  "http://127.0.0.1:3001",
+  "http://127.0.0.1:3000",
+];
 const DEFAULT_LLM_BASE_URL = "http://127.0.0.1:12434/v1";
 const OPERATION_COMPLETED_DELIVERABLE =
   "Deliverable: weekly business summary, priorities for the next cycle, and owner assignments Carlos can act on immediately.";
@@ -145,24 +150,38 @@ function createCompanyState(): CompanyState {
   };
 }
 
-function getDepartmentNodes(graphJson: Record<string, any> | null): Array<Record<string, any>> {
+function getDepartmentNodes(
+  graphJson: Record<string, any> | null,
+): Array<Record<string, any>> {
   if (!graphJson || !Array.isArray(graphJson.nodes)) {
     return [];
   }
 
-  return graphJson.nodes.filter((node: Record<string, any>) => node.type !== "output");
+  return graphJson.nodes.filter(
+    (node: Record<string, any>) => node.type !== "output",
+  );
 }
 
-function findNodeLabel(graphJson: Record<string, any> | null, nodeId: string | null | undefined): string {
+function findNodeLabel(
+  graphJson: Record<string, any> | null,
+  nodeId: string | null | undefined,
+): string {
   if (!nodeId) {
     return "Department";
   }
 
-  const node = graphJson?.nodes?.find?.((candidate: Record<string, any>) => candidate.id === nodeId);
-  return typeof node?.name === "string" && node.name.trim() ? node.name.trim() : "Department";
+  const node = graphJson?.nodes?.find?.(
+    (candidate: Record<string, any>) => candidate.id === nodeId,
+  );
+  return typeof node?.name === "string" && node.name.trim()
+    ? node.name.trim()
+    : "Department";
 }
 
-function buildNodeRuns(operation: MockOperation, graphJson: Record<string, any> | null): Array<Record<string, any>> {
+function buildNodeRuns(
+  operation: MockOperation,
+  graphJson: Record<string, any> | null,
+): Array<Record<string, any>> {
   const nodes = getDepartmentNodes(graphJson);
   const currentNodeId = operation.currentNodeId ?? nodes[0]?.id ?? null;
   const failedNodeId = operation.failedNodeId ?? currentNodeId;
@@ -242,7 +261,7 @@ function buildNodeRuns(operation: MockOperation, graphJson: Record<string, any> 
         output_json: {
           deliverable:
             index === nodes.length - 1
-              ? operation.deliverable ?? "Deliverable ready for review."
+              ? (operation.deliverable ?? "Deliverable ready for review.")
               : `${node.name ?? "Department"} completed its work.`,
         },
       },
@@ -250,7 +269,10 @@ function buildNodeRuns(operation: MockOperation, graphJson: Record<string, any> 
   });
 }
 
-function buildRunDetail(company: CompanyState, operation: MockOperation): Record<string, any> {
+function buildRunDetail(
+  company: CompanyState,
+  operation: MockOperation,
+): Record<string, any> {
   return {
     id: operation.id,
     owner_id: "persona-runner",
@@ -280,7 +302,8 @@ function buildRunDetail(company: CompanyState, operation: MockOperation): Record
     output_json:
       operation.status === "succeeded"
         ? {
-            deliverable: operation.deliverable ?? "Deliverable ready for review.",
+            deliverable:
+              operation.deliverable ?? "Deliverable ready for review.",
           }
         : null,
     error_message: operation.errorMessage ?? "",
@@ -299,7 +322,10 @@ function buildRunDetail(company: CompanyState, operation: MockOperation): Record
   };
 }
 
-function buildRunListItem(company: CompanyState, operation: MockOperation): Record<string, any> {
+function buildRunListItem(
+  company: CompanyState,
+  operation: MockOperation,
+): Record<string, any> {
   return {
     id: operation.id,
     graph_id: company.id,
@@ -370,7 +396,9 @@ async function maybeText(locator: any): Promise<string | null> {
   }
 }
 
-async function joinSeen(parts: Array<Promise<string | null> | string | null>): Promise<string> {
+async function joinSeen(
+  parts: Array<Promise<string | null> | string | null>,
+): Promise<string> {
   const resolved = [];
   for (const part of parts) {
     const value = typeof part === "string" || part === null ? part : await part;
@@ -396,8 +424,13 @@ function normalizeJsonResponse(raw: string): string {
 }
 
 async function callLocalLlmJson<T>(prompt: string): Promise<T> {
-  const baseUrl = (process.env.OPENAI_BASE_URL ?? process.env.LOCAL_LLM_BASE_URL ?? DEFAULT_LLM_BASE_URL).replace(/\/$/, "");
-  const model = process.env.PERSONA_LLM_MODEL ?? (await resolveLocalModelId(baseUrl));
+  const baseUrl = (
+    process.env.OPENAI_BASE_URL ??
+    process.env.LOCAL_LLM_BASE_URL ??
+    DEFAULT_LLM_BASE_URL
+  ).replace(/\/$/, "");
+  const model =
+    process.env.PERSONA_LLM_MODEL ?? (await resolveLocalModelId(baseUrl));
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -439,7 +472,9 @@ function extractLineAfterLabel(text: string, label: string): string | null {
 async function resolveLocalModelId(baseUrl: string): Promise<string> {
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/models`);
   if (!response.ok) {
-    throw new Error(`Local LLM model discovery failed with status ${response.status}.`);
+    throw new Error(
+      `Local LLM model discovery failed with status ${response.status}.`,
+    );
   }
   const body = (await response.json()) as { data?: Array<{ id?: string }> };
   const modelId = body.data?.[0]?.id;
@@ -480,7 +515,10 @@ Return only valid JSON:
 }`);
 }
 
-async function enrichInteractionLog(expectation: PersonaExpectation, interactionLog: InteractionLog): Promise<InteractionLog> {
+async function enrichInteractionLog(
+  expectation: PersonaExpectation,
+  interactionLog: InteractionLog,
+): Promise<InteractionLog> {
   const prompt = `You are Carlos, an entrepreneur using ForgeGraph.
 
 Goal:
@@ -537,18 +575,27 @@ Return only valid JSON:
         ...step,
         thought: annotation?.thought?.trim() || step.thought,
         confidence:
-          annotation?.confidence === "high" || annotation?.confidence === "medium" || annotation?.confidence === "low"
+          annotation?.confidence === "high" ||
+          annotation?.confidence === "medium" ||
+          annotation?.confidence === "low"
             ? annotation.confidence
             : step.confidence,
-        expected_next_action: annotation?.expected_next_action?.trim() || step.expected_next_action,
-        ui_enabled_next_action: annotation?.ui_enabled_next_action?.trim() || step.ui_enabled_next_action,
-        expectation_gap: annotation?.expectation_gap?.trim() || step.expectation_gap,
+        expected_next_action:
+          annotation?.expected_next_action?.trim() || step.expected_next_action,
+        ui_enabled_next_action:
+          annotation?.ui_enabled_next_action?.trim() ||
+          step.ui_enabled_next_action,
+        expectation_gap:
+          annotation?.expectation_gap?.trim() || step.expectation_gap,
       };
     }),
   };
 }
 
-async function evaluatePersona(expectation: PersonaExpectation, interactionLog: InteractionLog): Promise<PersonaFeedback> {
+async function evaluatePersona(
+  expectation: PersonaExpectation,
+  interactionLog: InteractionLog,
+): Promise<PersonaFeedback> {
   const prompt = `You are Carlos, an entrepreneur using ForgeGraph.
 
 Before using ForgeGraph, you expected:
@@ -634,13 +681,25 @@ Return only valid JSON with this exact shape:
     persona: PERSONA,
     goal: GOAL,
     success: Boolean(parsed.success),
-    expectation: typeof parsed.expectation === "string" ? parsed.expectation : expectation.expectation,
-    expectation_match: typeof parsed.expectation_match === "string" ? parsed.expectation_match : "",
-    confusion_score: Number.isFinite(parsed.confusion_score) ? Math.max(0, Math.min(10, Number(parsed.confusion_score))) : 0,
-    clarity_score: Number.isFinite(parsed.clarity_score) ? Math.max(0, Math.min(10, Number(parsed.clarity_score))) : 0,
+    expectation:
+      typeof parsed.expectation === "string"
+        ? parsed.expectation
+        : expectation.expectation,
+    expectation_match:
+      typeof parsed.expectation_match === "string"
+        ? parsed.expectation_match
+        : "",
+    confusion_score: Number.isFinite(parsed.confusion_score)
+      ? Math.max(0, Math.min(10, Number(parsed.confusion_score)))
+      : 0,
+    clarity_score: Number.isFinite(parsed.clarity_score)
+      ? Math.max(0, Math.min(10, Number(parsed.clarity_score)))
+      : 0,
     yays: Array.isArray(parsed.yays) ? parsed.yays.map(String) : [],
     nays: Array.isArray(parsed.nays) ? parsed.nays.map(String) : [],
-    friction_points: Array.isArray(parsed.friction_points) ? parsed.friction_points.map(String) : [],
+    friction_points: Array.isArray(parsed.friction_points)
+      ? parsed.friction_points.map(String)
+      : [],
     trust: typeof parsed.trust === "string" ? parsed.trust : "",
     would_use_again: Boolean(parsed.would_use_again),
   };
@@ -774,81 +833,96 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
     await route.fallback();
   });
 
-  await context.route(new RegExp(`/api/graphs/${company.id}/versions(?:\\?.*)?$`), async (route: any) => {
-    if (route.request().method() !== "POST") {
-      await route.fallback();
-      return;
-    }
+  await context.route(
+    new RegExp(`/api/graphs/${company.id}/versions(?:\\?.*)?$`),
+    async (route: any) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
 
-    const payload = route.request().postDataJSON() as Record<string, any>;
-    company.graphJson = payload?.graph_json ?? null;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        apiSuccess({
-          id: company.versionId,
-          version: company.version,
-          graph_json: company.graphJson,
-        }),
-      ),
-    });
-  });
+      const payload = route.request().postDataJSON() as Record<string, any>;
+      company.graphJson = payload?.graph_json ?? null;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          apiSuccess({
+            id: company.versionId,
+            version: company.version,
+            graph_json: company.graphJson,
+          }),
+        ),
+      });
+    },
+  );
 
-  await context.route(new RegExp(`/api/graphs/${company.id}/versions/latest(?:\\?.*)?$`), async (route: any) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        apiSuccess({
-          id: company.versionId,
-          version: company.version,
-          graph_json: company.graphJson,
-        }),
-      ),
-    });
-  });
+  await context.route(
+    new RegExp(`/api/graphs/${company.id}/versions/latest(?:\\?.*)?$`),
+    async (route: any) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          apiSuccess({
+            id: company.versionId,
+            version: company.version,
+            graph_json: company.graphJson,
+          }),
+        ),
+      });
+    },
+  );
 
-  await context.route(new RegExp(`/api/graphs/${company.id}(?:\\?.*)?$`), async (route: any) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        apiSuccess({
-          id: company.id,
-          owner_id: "persona-carlos-user",
-          name: company.name,
-          description: company.description,
-          created_at: "2026-04-26T12:00:00.000Z",
-          updated_at: "2026-04-26T12:00:00.000Z",
-          versions: [
-            {
-              id: company.versionId,
-              version: company.version,
-              checksum: `checksum-${company.versionId}`,
-              created_at: "2026-04-26T12:00:00.000Z",
-            },
-          ],
-        }),
-      ),
-    });
-  });
+  await context.route(
+    new RegExp(`/api/graphs/${company.id}(?:\\?.*)?$`),
+    async (route: any) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          apiSuccess({
+            id: company.id,
+            owner_id: "persona-carlos-user",
+            name: company.name,
+            description: company.description,
+            created_at: "2026-04-26T12:00:00.000Z",
+            updated_at: "2026-04-26T12:00:00.000Z",
+            versions: [
+              {
+                id: company.versionId,
+                version: company.version,
+                checksum: `checksum-${company.versionId}`,
+                created_at: "2026-04-26T12:00:00.000Z",
+              },
+            ],
+          }),
+        ),
+      });
+    },
+  );
 
-  await context.route(/\/api\/approvals\/count(?:\?.*)?$/, async (route: any) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(apiSuccess({ count: 0 })),
-    });
-  });
+  await context.route(
+    /\/api\/approvals\/count(?:\?.*)?$/,
+    async (route: any) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiSuccess({ count: 0 })),
+      });
+    },
+  );
 
-  await context.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: any) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(apiSuccess({ count: 0 })),
-    });
-  });
+  await context.route(
+    /\/api\/decisions\/count(?:\?.*)?$/,
+    async (route: any) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiSuccess({ count: 0 })),
+      });
+    },
+  );
 
   await context.route(/\/api\/approvals\/?(?:\?.*)?$/, async (route: any) => {
     await route.fulfill({
@@ -859,7 +933,8 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
   });
 
   await context.route(/\/api\/runs\/start(?:\?.*)?$/, async (route: any) => {
-    const payload = (route.request().postDataJSON() as Record<string, any>) ?? {};
+    const payload =
+      (route.request().postDataJSON() as Record<string, any>) ?? {};
     const departments = getDepartmentNodes(company.graphJson);
     const currentNodeId = departments[1]?.id ?? departments[0]?.id ?? null;
     const operation: MockOperation = {
@@ -867,8 +942,10 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
       status: "running",
       startedAt: "2026-04-26T12:01:00.000Z",
       operationBrief:
-        String((payload?.input_json as Record<string, any> | undefined)?.operation_brief ?? "") ||
-        "Run the next company operation.",
+        String(
+          (payload?.input_json as Record<string, any> | undefined)
+            ?.operation_brief ?? "",
+        ) || "Run the next company operation.",
       currentNodeId,
       llmMode: payload?.llm_mode === "byok" ? "byok" : "managed",
     };
@@ -889,41 +966,55 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(apiSuccess(company.operations.map((operation) => buildRunListItem(company, operation)))),
+      body: JSON.stringify(
+        apiSuccess(
+          company.operations.map((operation) =>
+            buildRunListItem(company, operation),
+          ),
+        ),
+      ),
     });
   });
 
-  await context.route(/\/api\/runs\/(?!start(?:\?|$))[^/]+(?:\?.*)?$/, async (route: any) => {
-    const runId = route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
-    const operation = company.operations.find((candidate) => candidate.id === runId);
-    if (!operation) {
+  await context.route(
+    /\/api\/runs\/(?!start(?:\?|$))[^/]+(?:\?.*)?$/,
+    async (route: any) => {
+      const runId =
+        route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
+      const operation = company.operations.find(
+        (candidate) => candidate.id === runId,
+      );
+      if (!operation) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "NOT_FOUND",
+              message: "Operation not found.",
+            },
+            meta: {
+              requestId: "persona-runner-not-found",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        });
+        return;
+      }
+
       await route.fulfill({
-        status: 404,
+        status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          error: {
-            code: "NOT_FOUND",
-            message: "Operation not found.",
-          },
-          meta: {
-            requestId: "persona-runner-not-found",
-            timestamp: new Date().toISOString(),
-          },
-        }),
+        body: JSON.stringify(apiSuccess(buildRunDetail(company, operation))),
       });
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(apiSuccess(buildRunDetail(company, operation))),
-    });
-  });
+    },
+  );
 
   await context.addInitScript((seedToken: string) => {
     window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", seedToken);
-    (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = seedToken;
+    (
+      window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }
+    ).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = seedToken;
   }, accessToken);
 
   try {
@@ -932,17 +1023,22 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
     logStep({
       step: "Open the company builder",
       ui_seen: await joinSeen([
-        maybeText(page.getByRole("heading", { name: /define the objective first/i })),
+        maybeText(
+          page.getByRole("heading", { name: /define the objective first/i }),
+        ),
         maybeText(page.getByText(/what should this company accomplish\?/i)),
         maybeText(page.getByText(/launch a marketing campaign/i)),
       ]),
       action: "Open the builder to create a company.",
-      result: "The objective-first wizard loads and explains the first decision clearly.",
+      result:
+        "The objective-first wizard loads and explains the first decision clearly.",
       thought: "I just want to get something useful running fast.",
       confidence: "medium",
       expected_next_action: "Name the company and describe the result I want.",
-      ui_enabled_next_action: "Enter a company name and business objective, then continue.",
-      expectation_gap: "No major gap yet. The entry point looks business-oriented, not technical.",
+      ui_enabled_next_action:
+        "Enter a company name and business objective, then continue.",
+      expectation_gap:
+        "No major gap yet. The entry point looks business-oriented, not technical.",
     });
 
     await page.getByTestId("company-name-input").fill("Operadora Horizonte");
@@ -950,16 +1046,21 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
     logStep({
       step: "Define the company objective",
       ui_seen: await joinSeen([
-        maybeText(page.getByRole("heading", { name: /define the objective first/i })),
+        maybeText(
+          page.getByRole("heading", { name: /define the objective first/i }),
+        ),
         maybeText(page.getByTestId("company-objective-input")),
       ]),
       action: "Name the company and describe the work it should accomplish.",
       result: `Carlos defines an outcome-driven objective: "${objective}"`,
-      thought: "This is vague, but that's how I'd probably describe it in real life.",
+      thought:
+        "This is vague, but that's how I'd probably describe it in real life.",
       confidence: "medium",
-      expected_next_action: "See if the product can turn that vague goal into a sensible setup.",
+      expected_next_action:
+        "See if the product can turn that vague goal into a sensible setup.",
       ui_enabled_next_action: "Continue to the suggested setup.",
-      expectation_gap: "The UI accepts ambiguous input, which is good, but I still don't know how much guidance I'll get.",
+      expectation_gap:
+        "The UI accepts ambiguous input, which is good, but I still don't know how much guidance I'll get.",
     });
     await page.getByRole("button", { name: /continue/i }).click();
 
@@ -969,37 +1070,58 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
       ui_seen: await joinSeen([
         maybeText(page.getByText(/review the suggested structure/i)),
         maybeText(page.getByText(/suggested category/i)),
-        maybeText(page.getByText(/general company|operations & delivery|research & advisory|professional services/i)),
+        maybeText(
+          page.getByText(
+            /general company|operations & delivery|research & advisory|professional services/i,
+          ),
+        ),
         maybeText(page.getByText(/because your goal is/i)),
         maybeText(page.getByText(/this company will/i)),
       ]),
-      action: "Review the company category and starting team suggested from the objective.",
-      result: "ForgeGraph suggests a broad company setup instead of forcing Carlos to categorize the company first.",
-      thought: "I think this makes sense, but I want to know why it picked this structure.",
+      action:
+        "Review the company category and starting team suggested from the objective.",
+      result:
+        "ForgeGraph suggests a broad company setup instead of forcing Carlos to categorize the company first.",
+      thought:
+        "I think this makes sense, but I want to know why it picked this structure.",
       confidence: "medium",
-      expected_next_action: "Decide whether to keep the suggestion or adjust it.",
-      ui_enabled_next_action: "Review the suggested category, change it if needed, then continue.",
-      expectation_gap: "The UI shows the suggestion, but not much reasoning behind it.",
+      expected_next_action:
+        "Decide whether to keep the suggestion or adjust it.",
+      ui_enabled_next_action:
+        "Review the suggested category, change it if needed, then continue.",
+      expectation_gap:
+        "The UI shows the suggestion, but not much reasoning behind it.",
     });
     await page.getByRole("button", { name: /continue/i }).click();
 
     await page.waitForLoadState("networkidle");
-    const visibleDepartment = await maybeText(page.locator('[data-testid^="department-chip-"]').first());
+    const visibleDepartment = await maybeText(
+      page.locator('[data-testid^="department-chip-"]').first(),
+    );
     logStep({
       step: "Adjust the team",
       ui_seen: await joinSeen([
         maybeText(page.getByText(/adjust the team/i)),
         maybeText(page.getByText(/this team will work together to:/i)),
         visibleDepartment,
-        maybeText(page.getByText(/helps you decide what to do|produce usable output|tell you what to do next/i)),
+        maybeText(
+          page.getByText(
+            /helps you decide what to do|produce usable output|tell you what to do next/i,
+          ),
+        ),
       ]),
-      action: "Scan the suggested departments and keep the default team to move quickly.",
+      action:
+        "Scan the suggested departments and keep the default team to move quickly.",
       result: `Carlos sees a department-first team model${visibleDepartment ? `, starting with ${visibleDepartment}` : ""}.`,
-      thought: "I could tweak this, but I mostly want to move on unless something looks obviously wrong.",
+      thought:
+        "I could tweak this, but I mostly want to move on unless something looks obviously wrong.",
       confidence: "medium",
-      expected_next_action: "Either accept the default team or make one obvious adjustment.",
-      ui_enabled_next_action: "Modify departments and skills or continue with the default team.",
-      expectation_gap: "The step is usable, but the value of each department is not explained enough for a quick decision.",
+      expected_next_action:
+        "Either accept the default team or make one obvious adjustment.",
+      ui_enabled_next_action:
+        "Modify departments and skills or continue with the default team.",
+      expectation_gap:
+        "The step is usable, but the value of each department is not explained enough for a quick decision.",
     });
     await page.getByRole("button", { name: /continue/i }).click();
 
@@ -1008,21 +1130,35 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
       step: "Choose operating rules",
       ui_seen: await joinSeen([
         maybeText(page.getByText(/choose operating rules/i)),
-        maybeText(page.getByText(/assisted starts work automatically and pauses only when a decision is worth your time/i)),
-        maybeText(page.getByText(/managed uses forgegraph's ai access so you can launch immediately/i)),
+        maybeText(
+          page.getByText(
+            /assisted starts work automatically and pauses only when a decision is worth your time/i,
+          ),
+        ),
+        maybeText(
+          page.getByText(
+            /managed uses forgegraph's ai access so you can launch immediately/i,
+          ),
+        ),
       ]),
       action: "Keep the default Assisted autonomy mode and Managed AI mode.",
-      result: "The default policy makes it obvious what happens after launch and avoids configuration overhead.",
-      thought: "I’ll keep the defaults, but I’m trusting the wording more than I fully understand the implications.",
+      result:
+        "The default policy makes it obvious what happens after launch and avoids configuration overhead.",
+      thought:
+        "I’ll keep the defaults, but I’m trusting the wording more than I fully understand the implications.",
       confidence: "medium",
-      expected_next_action: "Confirm the safest default path and move to launch.",
+      expected_next_action:
+        "Confirm the safest default path and move to launch.",
       ui_enabled_next_action: "Choose autonomy and AI mode, then continue.",
-      expectation_gap: "The defaults are clear enough to accept, but not yet clear enough to feel fully informed.",
+      expectation_gap:
+        "The defaults are clear enough to accept, but not yet clear enough to feel fully informed.",
     });
     await page.getByRole("button", { name: /continue/i }).click();
 
     await page.waitForLoadState("networkidle");
-    await page.getByTestId("company-operation-brief-input").fill(operationBrief);
+    await page
+      .getByTestId("company-operation-brief-input")
+      .fill(operationBrief);
     logStep({
       step: "Launch the first operation",
       ui_seen: await joinSeen([
@@ -1034,15 +1170,20 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
       ]),
       action: "Add a concrete first operation brief and launch the company.",
       result: `Carlos launches useful work immediately with: "${operationBrief}"`,
-      thought: "This is the moment of truth. If I click launch, I expect visible work, not more setup.",
+      thought:
+        "This is the moment of truth. If I click launch, I expect visible work, not more setup.",
       confidence: "high",
-      expected_next_action: "Launch and see the company actually do something useful.",
-      ui_enabled_next_action: "Create the company and launch the first operation immediately.",
+      expected_next_action:
+        "Launch and see the company actually do something useful.",
+      ui_enabled_next_action:
+        "Create the company and launch the first operation immediately.",
       expectation_gap: "The UI supports the right next move cleanly here.",
     });
     await page.getByTestId("company-create-submit").click();
 
-    await page.waitForURL(new RegExp(`/companies/${company.id}$`), { timeout: 20000 });
+    await page.waitForURL(new RegExp(`/companies/${company.id}$`), {
+      timeout: 20000,
+    });
     await page.waitForLoadState("networkidle");
     const runningOperation = company.operations[0];
     const workspaceText = await page.locator("main").innerText();
@@ -1056,13 +1197,18 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
         maybeText(page.getByRole("heading", { name: /^operations$/i })),
         currentDepartment,
       ]),
-      action: "Review the running operation and see which department is acting now.",
+      action:
+        "Review the running operation and see which department is acting now.",
       result: `The workspace shows live progress through departments, with ${currentDepartment} currently working.`,
-      thought: "Good, something is happening. I want to know if this will end in a usable output fast.",
+      thought:
+        "Good, something is happening. I want to know if this will end in a usable output fast.",
       confidence: "high",
-      expected_next_action: "Watch progress briefly and check whether a deliverable appears.",
-      ui_enabled_next_action: "Inspect the running operation, departments, and command controls.",
-      expectation_gap: "The workspace feels alive, but I still need clearer proof of what I'll get at the end.",
+      expected_next_action:
+        "Watch progress briefly and check whether a deliverable appears.",
+      ui_enabled_next_action:
+        "Inspect the running operation, departments, and command controls.",
+      expectation_gap:
+        "The workspace feels alive, but I still need clearer proof of what I'll get at the end.",
     });
 
     company.operations[0] = {
@@ -1077,7 +1223,7 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
     const completedWorkspaceText = await page.locator("main").innerText();
     const deliverablePreview =
       extractLineAfterLabel(completedWorkspaceText, "Latest outputs") ??
-      extractLineAfterLabel(completedWorkspaceText, "Deliverable from operation") ??
+      extractLineAfterLabel(completedWorkspaceText, "Operation deliverable") ??
       "Deliverable preview visible";
     logStep({
       step: "Review the deliverable",
@@ -1087,12 +1233,16 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
         deliverablePreview,
       ]),
       action: "Review the completed operation and its output.",
-      result: "Carlos receives a readable deliverable in plain language instead of raw system output.",
+      result:
+        "Carlos receives a readable deliverable in plain language instead of raw system output.",
       thought: "This is what I wanted: something I can read and act on.",
       confidence: "high",
-      expected_next_action: "Decide whether to run another operation or change the objective.",
-      ui_enabled_next_action: "Review the deliverable and choose a next action from the workspace.",
-      expectation_gap: "The result matches the promise better here than in the middle steps.",
+      expected_next_action:
+        "Decide whether to run another operation or change the objective.",
+      ui_enabled_next_action:
+        "Review the deliverable and choose a next action from the workspace.",
+      expectation_gap:
+        "The result matches the promise better here than in the middle steps.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1105,7 +1255,8 @@ async function runPersonaFlow(frontendUrl: string): Promise<InteractionLog> {
       confidence: "low",
       expected_next_action: "Recover quickly or leave.",
       ui_enabled_next_action: "Unknown because the flow failed.",
-      expectation_gap: "The product did not support a smooth path to first success.",
+      expectation_gap:
+        "The product did not support a smooth path to first success.",
       error: message,
     });
     throw error;
@@ -1123,7 +1274,10 @@ async function main(): Promise<void> {
   const frontendUrl = await resolveFrontendUrl();
   const expectation = await buildPersonaExpectation();
   const interactionLog = await runPersonaFlow(frontendUrl);
-  const enrichedInteractionLog = await enrichInteractionLog(expectation, interactionLog);
+  const enrichedInteractionLog = await enrichInteractionLog(
+    expectation,
+    interactionLog,
+  );
   const feedback = await evaluatePersona(expectation, enrichedInteractionLog);
 
   const output = {
@@ -1142,7 +1296,11 @@ async function main(): Promise<void> {
     interaction_log: enrichedInteractionLog,
     metadata: {
       frontend_url: frontendUrl,
-      llm_base_url: (process.env.OPENAI_BASE_URL ?? process.env.LOCAL_LLM_BASE_URL ?? DEFAULT_LLM_BASE_URL).replace(/\/$/, ""),
+      llm_base_url: (
+        process.env.OPENAI_BASE_URL ??
+        process.env.LOCAL_LLM_BASE_URL ??
+        DEFAULT_LLM_BASE_URL
+      ).replace(/\/$/, ""),
       generated_at: new Date().toISOString(),
     },
   };
@@ -1152,7 +1310,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  const message =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });

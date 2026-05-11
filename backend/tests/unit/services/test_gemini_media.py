@@ -10,7 +10,9 @@ from application.services.gemini_media import (
     GeminiMediaBytes,
     GeminiMediaError,
     GeminiVideoPollResult,
+    GoogleMediaClient,
     MediaGenerationService,
+    OpenRouterMediaClient,
     read_media_asset_version_content,
     sanitize_media_prompt,
 )
@@ -51,6 +53,18 @@ def _google_credential(user: User) -> APIKey:
         provider="google",
         name="Legacy Gemini BYOK",
         encrypted_key=encrypt_api_key("gemini-test-key"),
+    )
+
+
+def _openrouter_credential(user: User) -> APIKey:
+    organization = user.default_organization
+    assert organization is not None
+    return APIKey.objects.create(
+        organization=organization,
+        user=user,
+        provider="openrouter",
+        name="Legacy OpenRouter BYOK",
+        encrypted_key=encrypt_api_key("openrouter-test-key"),
     )
 
 
@@ -95,6 +109,42 @@ class _FailingImageClient(_FakeMediaClient):
         )
 
 
+class _PaidPlanImageClient(_FakeMediaClient):
+    def generate_image(self, **kwargs: Any) -> GeminiMediaBytes:
+        raise GeminiMediaError(
+            "provider_http_error",
+            "Imagen 3 is only available on paid plans. Please upgrade your account.",
+            status_code=400,
+            retryable=False,
+            response_json={
+                "error": {
+                    "message": "Imagen 3 is only available on paid plans. Please upgrade your account."
+                }
+            },
+        )
+
+
+class _FakeResponse:
+    status_code = 200
+    reason = "OK"
+
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+class _RecordingSession:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        self.posts: list[dict[str, Any]] = []
+
+    def post(self, url: str, **kwargs: Any) -> _FakeResponse:
+        self.posts.append({"url": url, **kwargs})
+        return _FakeResponse(self.payload)
+
+
 def test_sanitize_media_prompt_redacts_obvious_pii():
     prompt = "Send frame copy to buyer@example.com and card 4111 1111 1111 1111."
 
@@ -131,6 +181,133 @@ def test_image_job_creates_backend_owned_draft_asset(settings, tmp_path, user):
     assert content == b"fake-png"
     assert mime_type == "image/png"
     assert filename.endswith(".png")
+
+
+def test_openrouter_image_job_creates_backend_owned_draft_asset(settings, tmp_path, user):
+    settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
+    company = _create_company(user)
+    credential = _openrouter_credential(user)
+
+    job = MediaGenerationService(openrouter_client=_FakeMediaClient()).create_job(
+        user=user,
+        company=company,
+        credential=credential,
+        modality="image",
+        prompt="Legacy OpenRouter frame editorial draft",
+        model="google/gemini-3.1-flash-image-preview",
+        idempotency_key="phase-1-openrouter-image",
+    )
+
+    assert job.status == "succeeded"
+    assert job.provider == "openrouter"
+    assert job.output_asset is not None
+    assert job.output_asset.asset_type == "image"
+    assert job.output_asset.metadata_json["provider"] == "openrouter"
+    assert job.output_asset.metadata_json["review_status"] == "draft"
+    assert job.output_asset_version is not None
+    content, mime_type, filename = read_media_asset_version_content(job.output_asset_version)
+    assert content == b"fake-png"
+    assert mime_type == "image/png"
+    assert filename.endswith(".png")
+
+
+def test_image_job_falls_back_to_openrouter_on_google_limit_error(settings, tmp_path, user):
+    settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
+    company = _create_company(user)
+    google_credential = _google_credential(user)
+    openrouter_credential = _openrouter_credential(user)
+    google_client = _FailingImageClient()
+    openrouter_client = _FakeMediaClient()
+    service = MediaGenerationService(
+        client=google_client,
+        openrouter_client=openrouter_client,
+    )
+
+    result = service.create_image_job_with_provider_fallback(
+        user=user,
+        company=company,
+        primary_credential=google_credential,
+        fallback_credential=openrouter_credential,
+        prompt="Legacy Phase 7 campaign image draft",
+        idempotency_key="phase-7-provider-fallback",
+        primary_model="imagen-4.0-generate-001",
+        fallback_model="google/gemini-3.1-flash-image-preview",
+    )
+    repeated = service.create_image_job_with_provider_fallback(
+        user=user,
+        company=company,
+        primary_credential=google_credential,
+        fallback_credential=openrouter_credential,
+        prompt="A changed prompt must not create duplicate jobs",
+        idempotency_key="phase-7-provider-fallback",
+        primary_model="imagen-4.0-generate-001",
+        fallback_model="google/gemini-3.1-flash-image-preview",
+    )
+
+    assert result.fallback_used is True
+    assert result.primary_job.status == "failed"
+    assert result.primary_job.provider == "google"
+    assert result.fallback_job is not None
+    assert result.fallback_job.status == "succeeded"
+    assert result.selected_job.id == result.fallback_job.id
+    assert result.selected_job.provider == "openrouter"
+    assert result.selected_job.output_asset is not None
+    assert result.selected_job.output_asset.metadata_json["review_status"] == "draft"
+    assert (
+        result.selected_job.output_asset.metadata_json["approval_required_before_publish"] is True
+    )
+    assert repeated.selected_job.id == result.selected_job.id
+    assert google_client.image_calls == 0
+    assert openrouter_client.image_calls == 1
+    assert MediaGenerationJob.objects.count() == 2
+
+
+def test_image_job_falls_back_to_openrouter_on_google_paid_plan_limit(settings, tmp_path, user):
+    settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
+    company = _create_company(user)
+    google_credential = _google_credential(user)
+    openrouter_credential = _openrouter_credential(user)
+    service = MediaGenerationService(
+        client=_PaidPlanImageClient(),
+        openrouter_client=_FakeMediaClient(),
+    )
+
+    result = service.create_image_job_with_provider_fallback(
+        user=user,
+        company=company,
+        primary_credential=google_credential,
+        fallback_credential=openrouter_credential,
+        prompt="Legacy Phase 7 campaign image draft",
+        idempotency_key="phase-7-provider-plan-fallback",
+        primary_model="imagen-4.0-generate-001",
+        fallback_model="google/gemini-3.1-flash-image-preview",
+    )
+
+    assert result.fallback_used is True
+    assert result.primary_job.status == "failed"
+    assert result.fallback_job is not None
+    assert result.fallback_reason == "only_available_on_paid_plans"
+    assert result.selected_job.provider == "openrouter"
+    assert result.selected_job.output_asset is not None
+    assert result.selected_job.output_asset.metadata_json["review_status"] == "draft"
+    assert MediaGenerationJob.objects.count() == 2
+
+
+def test_openrouter_video_job_is_rejected_before_provider_call(user):
+    company = _create_company(user)
+    credential = _openrouter_credential(user)
+
+    with pytest.raises(GeminiMediaError, match="Video media generation"):
+        MediaGenerationService(openrouter_client=_FakeMediaClient()).create_job(
+            user=user,
+            company=company,
+            credential=credential,
+            modality="video",
+            prompt="Legacy video draft",
+            idempotency_key="phase-1-openrouter-video",
+        )
+
+    assert MediaGenerationJob.objects.count() == 0
 
 
 def test_media_job_idempotency_reuses_existing_job(settings, tmp_path, user):
@@ -222,7 +399,7 @@ def test_credential_provider_mismatch_is_rejected(user):
         encrypted_key=encrypt_api_key("openai-test-key"),
     )
 
-    with pytest.raises(GeminiMediaError, match="Google credential"):
+    with pytest.raises(GeminiMediaError, match="Google or OpenRouter credential"):
         MediaGenerationService(client=_FakeMediaClient()).create_job(
             user=user,
             company=company,
@@ -241,3 +418,148 @@ def test_google_media_client_parses_image_bytes():
 
     assert result.content == b"image-bytes"
     assert result.mime_type == "image/png"
+
+
+def test_google_media_client_parses_gemini_native_image_part_after_text():
+    encoded = base64.b64encode(b"native-image-bytes").decode()
+
+    result = gemini_media._image_bytes_from_response(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Draft ready."},
+                            {"inlineData": {"data": encoded, "mimeType": "image/webp"}},
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+
+    assert result.content == b"native-image-bytes"
+    assert result.mime_type == "image/webp"
+
+
+def test_google_media_client_uses_generate_content_for_gemini_image_model():
+    encoded = base64.b64encode(b"native-image-bytes").decode()
+    session = _RecordingSession(
+        {
+            "candidates": [
+                {"content": {"parts": [{"inlineData": {"data": encoded, "mimeType": "image/png"}}]}}
+            ]
+        }
+    )
+    client = GoogleMediaClient(
+        api_base_url="https://gemini.test/v1beta", session=cast(Any, session)
+    )
+
+    result = client.generate_image(
+        api_key="gemini-test-key",
+        model="gemini-3.1-flash-image-preview",
+        prompt="Legacy image draft",
+    )
+
+    assert result.content == b"native-image-bytes"
+    assert session.posts[0]["url"].endswith(
+        "/models/gemini-3.1-flash-image-preview:generateContent"
+    )
+    assert session.posts[0]["json"]["generationConfig"]["responseModalities"] == [
+        "TEXT",
+        "IMAGE",
+    ]
+
+
+def test_google_media_client_uses_imagen_predict_for_imagen_model():
+    encoded = base64.b64encode(b"imagen-bytes").decode()
+    session = _RecordingSession(
+        {"predictions": [{"bytesBase64Encoded": encoded, "mimeType": "image/png"}]}
+    )
+    client = GoogleMediaClient(
+        api_base_url="https://gemini.test/v1beta", session=cast(Any, session)
+    )
+
+    result = client.generate_image(
+        api_key="gemini-test-key",
+        model="imagen-4.0-generate-001",
+        prompt="Legacy image draft",
+    )
+
+    assert result.content == b"imagen-bytes"
+    assert session.posts[0]["url"].endswith("/models/imagen-4.0-generate-001:predict")
+
+
+def test_openrouter_media_client_parses_image_data_url():
+    encoded = base64.b64encode(b"openrouter-image").decode()
+    session = _RecordingSession(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": "Draft ready.",
+                        "images": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+    )
+    client = OpenRouterMediaClient(
+        api_base_url="https://openrouter.test/api/v1", session=cast(Any, session)
+    )
+
+    result = client.generate_image(
+        api_key="openrouter-test-key",
+        model="black-forest-labs/flux.2-klein-4b",
+        prompt="Legacy image draft",
+    )
+
+    assert result.content == b"openrouter-image"
+    assert result.mime_type == "image/png"
+    assert session.posts[0]["url"].endswith("/chat/completions")
+    assert session.posts[0]["headers"]["Authorization"] == "Bearer openrouter-test-key"
+    assert session.posts[0]["json"]["modalities"] == ["image"]
+    assert "max_tokens" not in session.posts[0]["json"]
+    assert "image_config" not in session.posts[0]["json"]
+
+
+def test_openrouter_media_client_uses_gemini_image_config():
+    encoded = base64.b64encode(b"openrouter-gemini-image").decode()
+    session = _RecordingSession(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "images": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+    )
+    client = OpenRouterMediaClient(
+        api_base_url="https://openrouter.test/api/v1", session=cast(Any, session)
+    )
+
+    result = client.generate_image(
+        api_key="openrouter-test-key",
+        model="google/gemini-3.1-flash-image-preview",
+        prompt="Legacy image draft",
+    )
+
+    assert result.content == b"openrouter-gemini-image"
+    assert session.posts[0]["json"]["modalities"] == ["image", "text"]
+    assert "max_tokens" not in session.posts[0]["json"]
+    assert session.posts[0]["json"]["image_config"] == {
+        "aspect_ratio": "1:1",
+        "image_size": "0.5K",
+    }

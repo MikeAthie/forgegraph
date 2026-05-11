@@ -213,6 +213,7 @@ def test_seed_legacy_glasswear_phase0_graph_metadata_contains_legacy_profile():
     assert profile["geminiMediaGeneration"]["provider"] == "google"
     assert profile["geminiMediaGeneration"]["durable_artifact_owner"] == "backend"
     assert [department["label"] for department in departments] == [
+        "Routing Department",
         "Operating System",
         "Content Studio",
         "Social Desk",
@@ -234,6 +235,10 @@ def test_seed_legacy_glasswear_phase0_graph_metadata_contains_legacy_profile():
     assert media_generation["approval_required_before_publish"] is True
     assert metadata["runtime_contract"]["durable_source_of_truth"] == "backend"
     assert metadata["runtime_contract"]["engine_owns_durable_state"] is False
+    routing_department = next(
+        department for department in departments if department["id"] == "routing-department"
+    )
+    assert "operation_recommendation" in routing_department["tools"]
     content_studio = next(
         department for department in departments if department["id"] == "content-studio"
     )

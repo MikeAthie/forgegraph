@@ -535,6 +535,8 @@ def inventory_overview_payload(company: Graph) -> dict[str, Any]:
 
 
 def inventory_product_payload(product: InventoryProduct) -> dict[str, Any]:
+    metadata = product.metadata_json if isinstance(product.metadata_json, dict) else {}
+    visual_traits = metadata.get("visual_traits")
     return {
         "id": str(product.id),
         "company_id": str(product.company_id),
@@ -555,6 +557,9 @@ def inventory_product_payload(product: InventoryProduct) -> dict[str, Any]:
         "anchor_model": product.anchor_model,
         "scarcity_tag": product.scarcity_tag,
         "status": product.status,
+        "visual_description": str(metadata.get("visual_description") or "").strip(),
+        "visual_traits": visual_traits if isinstance(visual_traits, list) else [],
+        "visual_reference_source": str(metadata.get("visual_reference_source") or "").strip(),
         "total_units": int(getattr(product, "total_units", 0) or 0),
         "available_units": int(getattr(product, "available_units", 0) or 0),
         "held_units": int(getattr(product, "held_units", 0) or 0),

@@ -49,11 +49,33 @@ run_uv() {
 
 run_python() {
   if command -v python >/dev/null 2>&1; then
-    python "$@"
+    local python_args=("$@")
+    if [[ "$(type -t python 2>/dev/null || true)" == "function" ]]; then
+      local index
+      for index in "${!python_args[@]}"; do
+        if [[ "${python_args[$index]}" =~ ^/mnt/([A-Za-z])/(.*)$ ]]; then
+          local drive="${BASH_REMATCH[1]^^}:"
+          local tail="${BASH_REMATCH[2]//\//\\}"
+          python_args[$index]="${drive}\\${tail}"
+        fi
+      done
+    fi
+    python "${python_args[@]}"
     return
   fi
   if command -v python3 >/dev/null 2>&1; then
-    python3 "$@"
+    local python3_args=("$@")
+    if [[ "$(type -t python3 2>/dev/null || true)" == "function" ]]; then
+      local index
+      for index in "${!python3_args[@]}"; do
+        if [[ "${python3_args[$index]}" =~ ^/mnt/([A-Za-z])/(.*)$ ]]; then
+          local drive="${BASH_REMATCH[1]^^}:"
+          local tail="${BASH_REMATCH[2]//\//\\}"
+          python3_args[$index]="${drive}\\${tail}"
+        fi
+      done
+    fi
+    python3 "${python3_args[@]}"
     return
   fi
   if command -v py >/dev/null 2>&1; then

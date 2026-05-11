@@ -45,6 +45,14 @@ export type CompanyFailure = {
 
 const departmentCatalog: CompanyDepartment[] = [
   {
+    id: "routing-department",
+    label: "Routing Department",
+    responsibility:
+      "Reads the company request, decides which operation should happen next, and routes work to the right departments without executing the operation itself.",
+    tools: ["Request triage", "Operation routing"],
+    category: "department",
+  },
+  {
     id: "strategy-department",
     label: "Strategy Department",
     responsibility: "Shapes goals, priorities, and the operating plan for the company.",
@@ -123,7 +131,13 @@ export const companyPresets: CompanyPreset[] = [
     description:
       "A broad starting point for almost any business. Use this if you want flexibility or you are not sure which category fits yet.",
     starterObjective: "Set up a reliable operating rhythm and deliver a clear first result for the business.",
-    departments: [departmentCatalog[0], departmentCatalog[1], departmentCatalog[2], departmentCatalog[3]],
+    departments: [
+      departmentCatalog[0],
+      departmentCatalog[1],
+      departmentCatalog[2],
+      departmentCatalog[3],
+      departmentCatalog[4],
+    ],
     skills: ["Planning", "Coordination", "Reporting", "Quality assurance"],
   },
   {
@@ -134,10 +148,11 @@ export const companyPresets: CompanyPreset[] = [
     starterObjective: "Run client delivery smoothly and produce decision-ready work with clear follow-through.",
     departments: [
       departmentCatalog[0],
-      departmentCatalog[2],
+      departmentCatalog[1],
       departmentCatalog[3],
       departmentCatalog[4],
-      departmentCatalog[7],
+      departmentCatalog[5],
+      departmentCatalog[8],
     ],
     skills: ["Research synthesis", "Document drafting", "Client communication", "Quality assurance"],
   },
@@ -149,10 +164,11 @@ export const companyPresets: CompanyPreset[] = [
     starterObjective: "Plan, produce, and improve a repeatable growth motion with visible outcomes.",
     departments: [
       departmentCatalog[0],
-      departmentCatalog[4],
+      departmentCatalog[1],
       departmentCatalog[5],
-      departmentCatalog[8],
+      departmentCatalog[6],
       departmentCatalog[9],
+      departmentCatalog[10],
     ],
     skills: ["Campaign planning", "Messaging", "Creative review", "Performance analysis"],
   },
@@ -163,11 +179,12 @@ export const companyPresets: CompanyPreset[] = [
       "A strong starting point for construction managers, field operations, project delivery teams, and execution-heavy businesses.",
     starterObjective: "Coordinate delivery, reduce delays, and keep work moving with fewer handoff gaps.",
     departments: [
-      departmentCatalog[1],
+      departmentCatalog[0],
       departmentCatalog[2],
       departmentCatalog[3],
-      departmentCatalog[6],
+      departmentCatalog[4],
       departmentCatalog[7],
+      departmentCatalog[8],
     ],
     skills: ["Scheduling", "Estimation", "Quality assurance", "Reporting"],
   },
@@ -176,7 +193,13 @@ export const companyPresets: CompanyPreset[] = [
     label: "Research & Advisory",
     description: "A useful pattern for strategy teams, internal research groups, analysts, and advisory organizations.",
     starterObjective: "Investigate the right questions and produce recommendations the business can act on.",
-    departments: [departmentCatalog[0], departmentCatalog[4], departmentCatalog[7], departmentCatalog[8]],
+    departments: [
+      departmentCatalog[0],
+      departmentCatalog[1],
+      departmentCatalog[5],
+      departmentCatalog[8],
+      departmentCatalog[9],
+    ],
     skills: ["Research synthesis", "Recommendation writing", "Stakeholder briefing", "Document review"],
   },
 ];
@@ -212,6 +235,7 @@ const skillExplanations: Record<string, string> = {
 };
 
 const defaultPreset = companyPresets[0];
+const routingDepartmentId = "routing-department";
 const presetInferenceSignals: Record<string, string[]> = {
   "professional-services": [
     "consult",
@@ -355,7 +379,11 @@ export function buildSuggestedSetupReasons(
     );
   }
 
-  if (departments.length >= 2) {
+  if (departments[0]?.id === routingDepartmentId && departments.length >= 2) {
+    reasons.push(
+      `${departments[0].label} turns the request into an operation recommendation before ${departments[1].label} shapes the plan.`,
+    );
+  } else if (departments.length >= 2) {
     reasons.push(`${departments[0].label} sets direction while ${departments[1].label} keeps the work moving.`);
   }
 
@@ -380,6 +408,9 @@ export function buildTeamCompositionReasons(departments: CompanyDepartment[]): s
   }
 
   const reasons = departments.slice(0, 3).map((department, index) => {
+    if (department.id === routingDepartmentId) {
+      return `${department.label}: decides which operation should happen next and who needs to participate, without executing the work itself.`;
+    }
     if (index === 0) {
       return `${department.label}: turns the business goal into a workable direction for the rest of the company.`;
     }
@@ -503,9 +534,11 @@ export function getCompanyProfileFromGraph(
 
 function buildDepartmentInstructions(profile: CompanyProfile, department: CompanyDepartment, index: number): string {
   const previousContext =
-    index === 0
-      ? "Start from the company objective and the current operation brief."
-      : "Build on the work produced by the previous department and improve it before handing it forward.";
+    department.id === routingDepartmentId
+      ? "Start from the company objective and produce an operation recommendation, routing rationale, and participating departments."
+      : index === 0
+        ? "Start from the company objective and the current operation brief."
+        : "Build on the work produced by the previous department and improve it before handing it forward.";
 
   const skills = department.tools.length ? `Useful capabilities: ${department.tools.join(", ")}.` : "";
 
@@ -514,6 +547,9 @@ function buildDepartmentInstructions(profile: CompanyProfile, department: Compan
     `Company objective: ${profile.objective}`,
     `Your responsibility: ${department.responsibility}`,
     previousContext,
+    department.id === routingDepartmentId
+      ? "Departments think and propose; operations execute. Do not execute downstream work or pretend to call tools directly."
+      : "",
     "Return concrete work product, not commentary about the workflow.",
     "Make the output operationally useful for the next department.",
     skills,

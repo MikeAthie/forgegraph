@@ -70,6 +70,15 @@ GEMINI_MEDIA_GENERATION_CONTRACT: dict[str, Any] = {
 
 DEPARTMENTS: list[dict[str, Any]] = [
     {
+        "id": "routing-department",
+        "label": "Routing Department",
+        "responsibility": (
+            "Reads operator requests, decides which operation should happen next, and routes "
+            "work to the right departments without executing the operation itself."
+        ),
+        "tools": ["request_triage", "operation_recommendation", "department_routing"],
+    },
+    {
         "id": "operating-system",
         "label": "Operating System",
         "responsibility": "Sets goals, policies, approvals, priorities, and daily operating rhythm.",
@@ -143,8 +152,12 @@ def _department_node(department: dict[str, Any], index: int) -> dict[str, Any]:
     label = str(department["label"])
     responsibility = str(department["responsibility"])
     tools = list(department["tools"])
+    is_routing_department = str(department["id"]) == "routing-department"
     previous_context = (
-        "Start from the company objective and current Legacy operating brief."
+        "Start from the company objective and current Legacy operating brief. "
+        "Return an operation recommendation, routing rationale, and participating departments."
+        if is_routing_department
+        else "Start from the company objective and current Legacy operating brief."
         if index == 0
         else "Build on the previous department output and keep the work operational."
     )
@@ -161,6 +174,12 @@ def _department_node(department: dict[str, Any], index: int) -> dict[str, Any]:
                     f"Company objective: {COMPANY_OBJECTIVE}",
                     f"Your responsibility: {responsibility}",
                     previous_context,
+                    (
+                        "Departments think and propose; operations execute. Do not execute "
+                        "downstream work or pretend to call tools directly."
+                        if is_routing_department
+                        else ""
+                    ),
                     "Return concrete business work, not commentary about the workflow.",
                     "Do not include private customer data or payment details in model prompts.",
                     "Treat generated image and video concepts as drafts until a backend asset "

@@ -96,16 +96,29 @@ const builderSteps = [
 
 type BuilderStepId = (typeof builderSteps)[number]["id"];
 
-function ToggleChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+const ROUTING_DEPARTMENT_ID = "routing-department";
+
+function ToggleChip({
+  active,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={`rounded-full border px-3 py-2 text-sm transition-colors ${
         active
           ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
           : "border-slate-900/10 bg-white/80 text-slate-700 hover:border-slate-950 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:border-white/30"
-      }`}
+      } ${disabled ? "cursor-default opacity-90" : ""}`}
     >
       {children}
     </button>
@@ -178,6 +191,9 @@ function getUniqueDepartments(presets: CompanyPreset[]) {
 }
 
 function getDepartmentStageSummary(department: CompanyDepartment, index: number, total: number): string {
+  if (department.id === ROUTING_DEPARTMENT_ID) {
+    return "Shows up first to recommend the operation and identify which departments should participate.";
+  }
   if (index === 0) {
     return "Shows up early to set direction from the objective.";
   }
@@ -189,6 +205,8 @@ function getDepartmentStageSummary(department: CompanyDepartment, index: number,
 
 function getDepartmentBenefitSummary(department: CompanyDepartment): string {
   switch (department.id) {
+    case ROUTING_DEPARTMENT_ID:
+      return "Turns the request into an operation recommendation without executing the work itself.";
     case "strategy-department":
       return "Helps you decide what to do and where the company should focus next.";
     case "operations-desk":
@@ -504,6 +522,9 @@ export function CompanyBuilderForm() {
   };
 
   const toggleDepartment = (department: CompanyDepartment) => {
+    if (department.id === ROUTING_DEPARTMENT_ID) {
+      return;
+    }
     setSelectedDepartmentIds((current) =>
       current.includes(department.id)
         ? current.filter((departmentId) => departmentId !== department.id)
@@ -843,18 +864,25 @@ export function CompanyBuilderForm() {
                     Departments
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {availableDepartments.map((department) => (
-                      <ToggleChip
-                        key={department.id}
-                        active={selectedDepartmentIds.includes(department.id)}
-                        onClick={() => toggleDepartment(department)}
-                      >
-                        <span data-testid={`department-chip-${department.id}`}>{department.label}</span>
-                      </ToggleChip>
-                    ))}
+                    {availableDepartments.map((department) => {
+                      const isRoutingDepartment = department.id === ROUTING_DEPARTMENT_ID;
+                      return (
+                        <ToggleChip
+                          key={department.id}
+                          active={selectedDepartmentIds.includes(department.id)}
+                          disabled={isRoutingDepartment}
+                          onClick={() => toggleDepartment(department)}
+                        >
+                          <span data-testid={`department-chip-${department.id}`}>
+                            {department.label}
+                            {isRoutingDepartment ? " (default)" : ""}
+                          </span>
+                        </ToggleChip>
+                      );
+                    })}
                   </div>
                   <MicroExplanation className="mt-3">
-                    Departments are the actors that take the work from goal to deliverable.
+                    Routing is included in every company. Departments think and propose; operations execute the work.
                   </MicroExplanation>
                 </div>
 
