@@ -1,0 +1,445 @@
+artifact_schemas:
+  - id: intake_summary
+    label: Intake Summary
+  - id: research_brief
+    label: Research Brief
+  - id: brand_strategy
+    label: Brand Strategy
+  - id: content_strategy
+    label: Content Strategy
+  - id: channel_strategy
+    label: Channel Strategy
+  - id: campaign_plan
+    label: Campaign Plan
+  - id: creative_brief
+    label: Creative Brief
+  - id: email_sequence
+    label: Email Sequence
+  - id: ad_plan
+    label: Ad Plan
+  - id: social_plan
+    label: Social Plan
+  - id: crm_sync_plan
+    label: CRM Sync Plan
+  - id: report
+    label: Report
+  - id: qa_evidence_bundle
+    label: QA Evidence Bundle
+  - id: campaign_architecture
+    label: Campaign Architecture
+  - id: kpi_tree
+    label: KPI Tree
+  - id: content_pillars
+    label: Content Pillars
+  - id: asset_inventory
+    label: Asset Inventory
+  - id: approval_chain
+    label: Approval Chain
+  - id: operating_checklist
+    label: Operating Checklist
+  - id: growth_plan
+    label: Growth Plan
+  - id: yearly_planner
+    label: Yearly Planner
+  - id: quarterly_roadmap
+    label: Quarterly Roadmap
+  - id: campaign_calendar
+    label: Campaign Calendar
+  - id: strategic_priority_map
+    label: Strategic Priority Map
+  - id: search_strategy
+    label: Search Strategy
+  - id: paid_platform_strategy
+    label: Paid Platform Strategy
+  - id: organic_social_strategy
+    label: Organic Social Strategy
+  - id: influencer_strategy
+    label: Influencer Strategy
+  - id: marketplace_strategy
+    label: Marketplace Strategy
+  - id: crm_strategy
+    label: CRM Strategy
+  - id: content_pr_strategy
+    label: Content / PR Strategy
+  - id: web_strategy
+    label: Web Strategy
+  - id: measurement_strategy
+    label: Measurement Strategy
+  - id: ad_copy
+    label: Ad Copy
+  - id: social_post_copy
+    label: Social Post Copy
+  - id: email_copy
+    label: Email Copy
+  - id: landing_page_copy
+    label: Landing Page Copy
+  - id: headline_set
+    label: Headline Set
+  - id: cta_set
+    label: CTA Set
+  - id: campaign_message_set
+    label: Campaign Message Set
+  - id: visual_asset_brief
+    label: Visual Asset Brief
+  - id: creative_instruction
+    label: Creative Instruction
+  - id: video_brief
+    label: Video Brief
+  - id: image_brief
+    label: Image Brief
+  - id: design_constraints
+    label: Design Constraints
+  - id: quarterly_brief
+    label: Quarterly Brief
+  - id: ad_hoc_brief
+    label: Ad-hoc Brief
+  - id: performance_insight
+    label: Performance Insight
+  - id: operating_signal_summary
+    label: Operating Signal Summary
+  - id: product_feedback_brief
+    label: Product/Offering Feedback Brief
+  - id: next_operation_recommendation
+    label: Next Operation Recommendation
+  - id: brand_audit
+    label: Auditoría de marca actual
+    description: Current brand audit covering positioning, assets, channels, risks, and opportunities.
+    produced_by_operations:
+      - atlas.brand_audit
+    required_inputs:
+      - intake_summary
+    optional_inputs:
+      - brand_strategy
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.full_check
+    state_projection_behavior: canonical_pointer
+    display_hints:
+      group: ATLAS Service Model
+      exportable: true
+  - id: current_communication_analysis
+    label: Análisis de comunicación actual
+    description: Review of current messaging, channel consistency, and communication gaps.
+    produced_by_operations:
+      - atlas.current_communication_analysis
+    required_inputs:
+      - intake_summary
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.structure_check
+    state_projection_behavior: canonical_pointer
+  - id: competitor_benchmark
+    label: Benchmark de competencia
+    description: Competitor positioning, channel, offer, message, and funnel benchmark.
+    produced_by_operations:
+      - atlas.competitor_benchmark
+    required_inputs:
+      - research_brief
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.claims_check
+    state_projection_behavior: canonical_pointer
+  - id: strengths_weaknesses_map
+    label: Mapa de fortalezas y debilidades
+    description: Structured map of current strengths, weaknesses, gaps, and risks.
+    produced_by_operations:
+      - atlas.strengths_weaknesses_mapping
+    required_inputs:
+      - brand_audit
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: communication_objectives
+    label: Objetivos de comunicación
+    description: Communication objectives tied to audience, channel, and business outcomes.
+    produced_by_operations:
+      - atlas.communication_objectives
+    required_inputs:
+      - current_communication_analysis
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: buyer_persona
+    label: Buyer Persona
+    description: Practical buyer persona with needs, objections, triggers, and decision context.
+    produced_by_operations:
+      - atlas.buyer_persona_definition
+    required_inputs:
+      - research_brief
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: ideal_customer_profile
+    label: Perfil de cliente ideal
+    description: Ideal customer profile for offer fit, targeting, and qualification.
+    produced_by_operations:
+      - atlas.buyer_persona_definition
+    required_inputs:
+      - research_brief
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: customer_journey_basic
+    label: Customer journey básico
+    description: Basic journey map from awareness to conversion, retention, and referral.
+    produced_by_operations:
+      - atlas.customer_journey_mapping
+    required_inputs:
+      - buyer_persona
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: priority_channel_map
+    label: Mapa de canales prioritarios
+    description: Priority channel map with rationale, audience fit, and constraints.
+    produced_by_operations:
+      - atlas.priority_channel_mapping
+    required_inputs:
+      - communication_objectives
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: digital_diagnosis
+    label: Diagnóstico digital
+    description: Digital diagnosis across social, web, SEO, paid media, WhatsApp, and CRM.
+    produced_by_operations:
+      - atlas.digital_diagnosis
+    required_inputs:
+      - brand_audit
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.full_check
+    state_projection_behavior: canonical_pointer
+  - id: opportunity_map
+    label: Mapa de oportunidades
+    description: Opportunity map for priority improvements, campaigns, and experiments.
+    produced_by_operations:
+      - atlas.opportunity_mapping
+    required_inputs:
+      - digital_diagnosis
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: brand_identity
+    label: Identidad de marca
+    description: Mission, vision, values, value proposition, differentiators, storytelling, and personality.
+    produced_by_operations:
+      - atlas.brand_identity_definition
+    required_inputs:
+      - brand_strategy
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.full_check
+    state_projection_behavior: canonical_pointer
+  - id: visual_identity
+    label: Identidad visual
+    description: Logo notes, color palette, typography, moodboard, and graphic style.
+    produced_by_operations:
+      - atlas.visual_identity_direction
+    required_inputs:
+      - brand_identity
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: basic_brand_manual
+    label: Manual de marca básico
+    description: Basic brand manual with logo usage, colors, typography, visual tone, and examples.
+    produced_by_operations:
+      - atlas.basic_brand_manual
+    required_inputs:
+      - brand_identity
+      - visual_identity
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.structure_check
+    state_projection_behavior: canonical_pointer
+  - id: tone_of_voice_guide
+    label: Guía de tono de voz
+    description: Tone of voice, allowed and forbidden words, message style, and voice rules.
+    produced_by_operations:
+      - atlas.tone_voice_guide
+    required_inputs:
+      - brand_identity
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.full_check
+    state_projection_behavior: canonical_pointer
+  - id: copywriting_guide
+    label: Guía de copywriting
+    description: Copywriting guidance for channel messages, hooks, CTAs, and brand-consistent language.
+    produced_by_operations:
+      - atlas.tone_voice_guide
+      - atlas.post_copy_production
+    required_inputs:
+      - tone_of_voice_guide
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: communication_strategy
+    label: Estrategia de comunicación
+    description: Communication strategy with key messages, content categories, channel objectives, trust, authority, and retention.
+    produced_by_operations:
+      - atlas.communication_strategy
+    required_inputs:
+      - communication_objectives
+      - buyer_persona
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.full_check
+    state_projection_behavior: canonical_pointer
+  - id: key_messages
+    label: Mensajes clave
+    description: Key messages by audience, channel, objection, and campaign use case.
+    produced_by_operations:
+      - atlas.key_messages
+    required_inputs:
+      - communication_strategy
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: content_categories
+    label: Categorías de contenido
+    description: Content categories and recurring themes for calendar planning.
+    produced_by_operations:
+      - atlas.content_pillar_review
+    required_inputs:
+      - communication_strategy
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: organic_strategy
+    label: Estrategia orgánica
+    description: Organic content and distribution strategy.
+    produced_by_operations:
+      - atlas.organic_strategy
+    required_inputs:
+      - communication_strategy
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: paid_strategy
+    label: Estrategia de pauta
+    description: Paid strategy for budget, message testing, audience, and creative direction.
+    produced_by_operations:
+      - atlas.paid_strategy_review
+    required_inputs:
+      - communication_strategy
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.compliance_check
+    state_projection_behavior: canonical_pointer
+  - id: retention_strategy
+    label: Estrategia de retención
+    description: Retention strategy for lifecycle, CRM, email, WhatsApp, and customer expansion.
+    produced_by_operations:
+      - atlas.retention_strategy
+    required_inputs:
+      - customer_journey_basic
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: authority_strategy
+    label: Estrategia de autoridad
+    description: Authority strategy for proof, PR, expert content, and reputation signals.
+    produced_by_operations:
+      - atlas.authority_strategy
+    required_inputs:
+      - communication_strategy
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: social_trust_strategy
+    label: Estrategia de confianza social
+    description: Social trust strategy using reviews, proof, testimonials, and reputation assets.
+    produced_by_operations:
+      - atlas.social_trust_strategy
+    required_inputs:
+      - authority_strategy
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: digital_reputation_plan
+    label: Plan de reputación digital
+    description: Digital reputation plan for monitoring, response, and improvement loops.
+    produced_by_operations:
+      - atlas.digital_reputation_plan
+    required_inputs:
+      - social_trust_strategy
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.compliance_check
+    state_projection_behavior: canonical_pointer
+  - id: communication_calendar
+    label: Calendario de comunicaciones
+    description: Calendar with date, format, channel, topic, objective, CTA, and deliverable status.
+    produced_by_operations:
+      - atlas.communication_calendar
+    required_inputs:
+      - communication_strategy
+    optional_inputs:
+      - campaign_calendar
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.structure_check
+    state_projection_behavior: canonical_pointer
+    display_hints:
+      group: ATLAS Calendar
+      table_view: true
+  - id: monthly_report
+    label: Reporte mensual
+    description: Monthly report with learnings, weak content, recommendations, audience insights, and next actions.
+    produced_by_operations:
+      - atlas.monthly_reporting_and_optimization
+    required_inputs:
+      - monthly_kpi_scorecard
+    optional_inputs:
+      - execution_receipt
+      - performance_insight
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - dmp.full_check
+    state_projection_behavior: client_service_history
+    display_hints:
+      group: ATLAS Service History
+      exportable: true
+  - id: monthly_kpi_scorecard
+    label: Autoevaluación KPI mensual
+    description: Monthly KPI scorecard output from the generic Judge evaluation profile.
+    produced_by_operations:
+      - atlas.monthly_reporting_and_optimization
+    required_inputs:
+      - performance_snapshot
+    revision_policy: preserve_all_revisions
+    evaluation_profiles:
+      - atlas_monthly_kpi_scorecard.v1
+    state_projection_behavior: client_service_history
+  - id: audience_insights
+    label: Insights de audiencia
+    description: Audience insights from monthly performance and stakeholder notes.
+    produced_by_operations:
+      - atlas.monthly_reporting_and_optimization
+    required_inputs:
+      - monthly_kpi_scorecard
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: optimization_recommendations
+    label: Recomendaciones de optimización
+    description: Recommended monthly optimization actions and next operations.
+    produced_by_operations:
+      - atlas.monthly_reporting_and_optimization
+    required_inputs:
+      - monthly_kpi_scorecard
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: canonical_pointer
+  - id: client_service_history_entry
+    label: Entrada de historial del servicio
+    description: Service history entry referencing reports, deliverables, files, decisions, receipts, risks, and next actions.
+    produced_by_operations:
+      - atlas.monthly_reporting_and_optimization
+    required_inputs:
+      - monthly_report
+      - monthly_kpi_scorecard
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: client_service_history
+  - id: client_file_record
+    label: Expediente del cliente
+    description: Client file record preserving client files and deliverable references as service history.
+    produced_by_operations:
+      - atlas.monthly_reporting_and_optimization
+    required_inputs:
+      - monthly_report
+    revision_policy: preserve_all_revisions
+    state_projection_behavior: client_service_history
+  - id: other
+    label: Other
+revision_model:
+  preserve_all_revisions: true
+  canonical_pointer: true
+  views:
+    v1: Unbiased market view
+    v2: Client-validated operating view

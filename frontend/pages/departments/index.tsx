@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { Blocks, BrainCircuit, Lightbulb, MessageSquareWarning, Waypoints } from "lucide-react";
@@ -48,9 +48,9 @@ function operationStage(operation: OperationRefVM): string {
 
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-[1.1rem] border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-3 dark:border-white/8">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-950 dark:text-slate-50">{value}</p>
+    <div className="rounded-[1.1rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-3 dark:border-white/8">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{value}</p>
     </div>
   );
 }
@@ -70,10 +70,10 @@ function RosterItem({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-[1.25rem] border px-4 py-4 text-left transition-colors ${
+      className={`w-full rounded-[1.25rem] border p-4 text-left transition-colors ${
         selected
-          ? "border-slate-950 bg-slate-950 text-white shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-          : "border-slate-900/8 bg-white hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/5 dark:hover:bg-white/8"
+          ? "border-zinc-950 bg-zinc-950 text-white shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+          : "border-zinc-900/8 bg-white hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/5 dark:hover:bg-white/8"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -82,13 +82,11 @@ function RosterItem({
             <p className="text-sm font-semibold">{departmentName(department)}</p>
             <StatusBadge status={department.activityStatus ?? "idle"} label={activityLabel(department)} />
           </div>
-          <p
-            className={`mt-2 text-xs font-medium ${selected ? "text-white/75 dark:text-slate-700" : "text-slate-500"}`}
-          >
+          <p className={`mt-2 text-xs font-medium ${selected ? "text-white/75 dark:text-zinc-700" : "text-zinc-500"}`}>
             {department.role ?? "Company thinking department"}
           </p>
           <p
-            className={`mt-2 text-sm leading-6 ${selected ? "text-white/78 dark:text-slate-700" : "text-slate-600 dark:text-slate-300"}`}
+            className={`mt-2 text-sm leading-6 ${selected ? "text-white/78 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"}`}
           >
             {department.currentFocus ?? activity.focus.objective}
           </p>
@@ -98,8 +96,8 @@ function RosterItem({
         <span
           className={`rounded-full border px-2.5 py-1 ${
             selected
-              ? "border-white/20 text-white/80 dark:border-slate-950/15 dark:text-slate-700"
-              : "border-slate-900/10 text-slate-500 dark:border-white/10"
+              ? "border-white/20 text-white/80 dark:border-zinc-950/15 dark:text-zinc-700"
+              : "border-zinc-900/10 text-zinc-500 dark:border-white/10"
           }`}
         >
           {department.activeTaskCount ?? activity.tasks.length} active tasks
@@ -107,8 +105,8 @@ function RosterItem({
         <span
           className={`rounded-full border px-2.5 py-1 ${
             selected
-              ? "border-white/20 text-white/80 dark:border-slate-950/15 dark:text-slate-700"
-              : "border-slate-900/10 text-slate-500 dark:border-white/10"
+              ? "border-white/20 text-white/80 dark:border-zinc-950/15 dark:text-zinc-700"
+              : "border-zinc-900/10 text-zinc-500 dark:border-white/10"
           }`}
         >
           {department.pendingDecisionCount ?? activity.approvals.length} pending approvals
@@ -126,21 +124,51 @@ function OperationLink({ operation }: { operation: OperationRefVM }) {
   );
 }
 
+type DepartmentsState = {
+  activities: DepartmentActivityVM[];
+  loading: boolean;
+  error: string | null;
+};
+
+type DepartmentsAction =
+  | { type: "load-start" }
+  | { type: "load-success"; activities: DepartmentActivityVM[] }
+  | { type: "load-error"; error: string };
+
+const initialDepartmentsState: DepartmentsState = {
+  activities: [],
+  loading: true,
+  error: null,
+};
+
+function departmentsReducer(state: DepartmentsState, action: DepartmentsAction): DepartmentsState {
+  switch (action.type) {
+    case "load-start":
+      return { ...state, loading: true, error: null };
+    case "load-success":
+      return { activities: action.activities, loading: false, error: null };
+    case "load-error":
+      return { ...state, loading: false, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export default function DepartmentsPage() {
   const router = useRouter();
-  const [activities, setActivities] = useState<DepartmentActivityVM[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { replace } = router;
+  const [{ activities, loading, error }, dispatchDepartments] = useReducer(
+    departmentsReducer,
+    initialDepartmentsState,
+  );
 
   const loadDepartments = useCallback(async () => {
-    setError(null);
+    dispatchDepartments({ type: "load-start" });
     try {
       const data = await departmentRepository.listActivity();
-      setActivities(data);
+      dispatchDepartments({ type: "load-success", activities: data });
     } catch (err: unknown) {
-      setError(translateProductError(err, "department"));
-    } finally {
-      setLoading(false);
+      dispatchDepartments({ type: "load-error", error: translateProductError(err, "department") });
     }
   }, []);
 
@@ -151,15 +179,11 @@ export default function DepartmentsPage() {
       try {
         const data = await departmentRepository.listActivity();
         if (!cancelled) {
-          setActivities(data);
+          dispatchDepartments({ type: "load-success", activities: data });
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(translateProductError(err, "department"));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          dispatchDepartments({ type: "load-error", error: translateProductError(err, "department") });
         }
       }
     };
@@ -208,7 +232,7 @@ export default function DepartmentsPage() {
           ) : null}
 
           {loading ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
+            <div className="flex min-h-[360px] items-center justify-center rounded-[1.75rem] border border-zinc-900/10 bg-white/70 dark:border-white/10 dark:bg-zinc-950/50">
               <Spinner size="lg" />
             </div>
           ) : activities.length === 0 ? (
@@ -233,7 +257,7 @@ export default function DepartmentsPage() {
                       activity={activity}
                       selected={activity.department.id === selectedActivity?.department.id}
                       onSelect={() => {
-                        void router.replace(
+                        void replace(
                           { pathname: "/departments", query: { department: activity.department.id } },
                           undefined,
                           { shallow: true },
@@ -274,14 +298,14 @@ function DepartmentDetail({ activity }: { activity: DepartmentActivityVM }) {
       </Panel>
 
       <Panel title="Current focus" description="What this department is trying to understand or decide right now.">
-        <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-5 py-5 dark:border-white/8">
+        <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-5 dark:border-white/8">
           <div className="flex items-start gap-3">
-            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-800/15 bg-cyan-50 text-cyan-800 dark:border-cyan-200/20 dark:bg-cyan-500/10 dark:text-cyan-100">
-              <BrainCircuit className="h-5 w-5" />
+            <div className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-800/15 bg-cyan-50 text-cyan-800 dark:border-cyan-200/20 dark:bg-cyan-500/10 dark:text-cyan-100">
+              <BrainCircuit className="size-5" />
             </div>
             <div>
-              <p className="text-base font-semibold leading-7 text-slate-950 dark:text-slate-50">{focus.objective}</p>
-              <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{focus.reasoning}</p>
+              <p className="text-base font-semibold leading-7 text-zinc-950 dark:text-zinc-50">{focus.objective}</p>
+              <p className="mt-2 text-sm leading-7 text-zinc-600 dark:text-zinc-300">{focus.reasoning}</p>
             </div>
           </div>
         </div>
@@ -296,19 +320,19 @@ function DepartmentDetail({ activity }: { activity: DepartmentActivityVM }) {
             {proposals.map((proposal) => (
               <div
                 key={proposal.id}
-                className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Lightbulb className="h-4 w-4 text-amber-500" />
+                      <Lightbulb className="size-4 text-amber-500" />
                       <StatusBadge
                         status={proposal.status === "awaiting approval" ? "waiting" : proposal.status}
                         label={proposal.status}
                       />
                     </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-200">{proposal.description}</p>
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mt-3 text-sm leading-7 text-zinc-700 dark:text-zinc-200">{proposal.description}</p>
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                       Proposed {formatDateTime(proposal.createdAt)}
                     </p>
                   </div>
@@ -334,16 +358,16 @@ function DepartmentDetail({ activity }: { activity: DepartmentActivityVM }) {
             {visibleTasks.map((task) => (
               <div
                 key={task.id}
-                className="rounded-[1.25rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/3"
+                className="rounded-[1.25rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/3"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Waypoints className="h-4 w-4 text-slate-500" />
-                      <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{task.title}</p>
+                      <Waypoints className="size-4 text-zinc-500" />
+                      <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{task.title}</p>
                       <StatusBadge status={task.status} label={taskStatusLabel(task)} />
                     </div>
-                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{task.summary}</p>
+                    <p className="mt-2 text-sm leading-7 text-zinc-600 dark:text-zinc-300">{task.summary}</p>
                   </div>
                   {task.operationId ? (
                     <Button asChild size="sm" variant="outline" className="rounded-full">
@@ -368,17 +392,17 @@ function DepartmentDetail({ activity }: { activity: DepartmentActivityVM }) {
             {operations.map((operation) => (
               <div
                 key={operation.id}
-                className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Blocks className="h-4 w-4 text-cyan-600" />
-                      <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{operation.name}</p>
+                      <Blocks className="size-4 text-cyan-600" />
+                      <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{operation.name}</p>
                       <StatusBadge status={operation.status} />
                     </div>
-                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{operation.role}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mt-2 text-sm leading-7 text-zinc-600 dark:text-zinc-300">{operation.role}</p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                       Current stage: {operationStage(operation)}
                     </p>
                   </div>
@@ -404,15 +428,15 @@ function DepartmentDetail({ activity }: { activity: DepartmentActivityVM }) {
             {blockers.map((blocker) => (
               <div
                 key={blocker.id}
-                className="rounded-[1.25rem] border border-amber-800/15 bg-amber-50/70 px-4 py-4 dark:border-amber-200/20 dark:bg-amber-500/10"
+                className="rounded-[1.25rem] border border-amber-800/15 bg-amber-50/70 p-4 dark:border-amber-200/20 dark:bg-amber-500/10"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <MessageSquareWarning className="h-4 w-4 text-amber-600" />
+                      <MessageSquareWarning className="size-4 text-amber-600" />
                       <StatusBadge status={blocker.status} />
                     </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-200">{blocker.description}</p>
+                    <p className="mt-3 text-sm leading-7 text-zinc-700 dark:text-zinc-200">{blocker.description}</p>
                   </div>
                   {blocker.operation ? <OperationLink operation={blocker.operation} /> : null}
                 </div>

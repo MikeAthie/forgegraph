@@ -1,0 +1,181 @@
+source:
+  organization: Intuition Labs
+  label: ATLAS Marketing Agency
+  source_date: "2026-05-11"
+  service_history_requirement: Guardar reportes, entregables y expedientes del cliente como historial del servicio.
+service_sections:
+  - id: atlas_brand_strategy_diagnosis
+    label: Diagnóstico de marca y estrategia
+    description: Diagnóstico práctico de marca, comunicación, canales y oportunidades antes de la ejecución.
+    stage_ids:
+      - stage_01_client_inputs
+      - stage_02_external_research
+      - stage_03_v1_synthesis
+    operation_template_ids:
+      - atlas.brand_audit
+      - atlas.current_communication_analysis
+      - atlas.competitor_benchmark
+      - atlas.strengths_weaknesses_mapping
+      - atlas.communication_objectives
+      - atlas.buyer_persona_definition
+      - atlas.customer_journey_mapping
+      - atlas.priority_channel_mapping
+      - atlas.digital_diagnosis
+      - atlas.opportunity_mapping
+    artifact_schema_ids:
+      - brand_audit
+      - current_communication_analysis
+      - competitor_benchmark
+      - strengths_weaknesses_map
+      - communication_objectives
+      - buyer_persona
+      - ideal_customer_profile
+      - customer_journey_basic
+      - priority_channel_map
+      - digital_diagnosis
+      - opportunity_map
+    operations:
+      - Auditoría de marca actual
+      - Análisis de comunicación actual
+      - Benchmark de competencia
+      - Identificación de fortalezas y debilidades
+      - Definición de objetivos de comunicación
+      - Buyer persona / perfil de cliente ideal
+      - Customer journey básico
+      - Identificación de canales prioritarios
+      - Diagnóstico digital de redes, web, SEO, pauta, WhatsApp y CRM
+      - Mapa de oportunidades
+  - id: atlas_branding_positioning
+    label: Branding y posicionamiento
+    description: Identidad estratégica, visual, manual básico, tono de voz y reglas de comunicación.
+    stage_ids:
+      - stage_03_v1_synthesis
+      - stage_07_preparation
+      - stage_11_ai_creative_instructions
+    operation_template_ids:
+      - atlas.brand_identity_definition
+      - atlas.visual_identity_direction
+      - atlas.basic_brand_manual
+      - atlas.tone_voice_guide
+    artifact_schema_ids:
+      - brand_identity
+      - visual_identity
+      - basic_brand_manual
+      - tone_of_voice_guide
+      - copywriting_guide
+    submodules:
+      - id: brand_identity
+        label: Identidad de marca
+        items:
+          - Misión
+          - Visión
+          - Valores
+          - Propuesta de valor
+          - Diferenciadores
+          - Storytelling de marca
+          - Personalidad de marca
+      - id: visual_identity
+        label: Identidad visual
+        items:
+          - Logo, si aplica
+          - Variantes de logo
+          - Paleta de colores
+          - Tipografías
+          - Moodboard visual
+          - Estilo gráfico
+      - id: basic_brand_manual
+        label: Manual de marca básico
+        items:
+          - Uso correcto del logo
+          - Colores
+          - Tipografías
+          - Tono visual
+          - Ejemplos de aplicación
+      - id: tone_and_communication
+        label: Tono y comunicación
+        items:
+          - Tone of voice
+          - Palabras permitidas/prohibidas
+          - Estilo de mensajes
+          - Guía de copywriting
+  - id: atlas_communication_strategy
+    label: Estrategia de comunicación
+    description: Mensajes, pilares, canales, reputación, confianza social y retención.
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_09_channel_strategy
+    operation_template_ids:
+      - atlas.communication_strategy
+      - atlas.key_messages
+      - atlas.content_pillar_review
+      - atlas.organic_strategy
+      - atlas.paid_strategy_review
+      - atlas.retention_strategy
+      - atlas.authority_strategy
+      - atlas.social_trust_strategy
+      - atlas.digital_reputation_plan
+    artifact_schema_ids:
+      - communication_strategy
+      - key_messages
+      - content_pillars
+      - content_categories
+      - organic_strategy
+      - paid_strategy
+      - retention_strategy
+      - authority_strategy
+      - social_trust_strategy
+      - digital_reputation_plan
+  - id: atlas_communication_calendar
+    label: Calendario de comunicaciones
+    description: Calendario por fecha, formato, canal, tema, objetivo, CTA y piezas listas para revisión.
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_10_execution_artifacts
+    operation_template_ids:
+      - atlas.communication_calendar
+      - atlas.post_copy_production
+      - atlas.hook_creation
+    artifact_schema_ids:
+      - communication_calendar
+      - social_post_copy
+      - email_copy
+      - headline_set
+      - cta_set
+    calendar_fields:
+      - Fecha de publicación
+      - Formato
+      - Canal
+      - Tema
+      - Objetivo
+      - CTA
+      - Reels
+      - Stories
+      - TikToks
+      - LinkedIn
+      - Facebook
+      - Email
+      - Blog
+      - Copies de posts
+      - Hooks
+      - Templates
+      - Thumbnails
+      - Mockups
+  - id: atlas_monthly_reporting_optimization
+    label: Reportes y optimización mensual
+    description: Reportes mensuales, aprendizajes, recomendaciones, próximos pasos y autoevaluación KPI.
+    stage_ids:
+      - stage_12_continuous_improvement
+    operation_template_ids:
+      - atlas.monthly_reporting_and_optimization
+    artifact_schema_ids:
+      - monthly_report
+      - monthly_kpi_scorecard
+      - audience_insights
+      - optimization_recommendations
+      - client_service_history_entry
+      - client_file_record
+    evaluation_profile_ids:
+      - atlas_monthly_kpi_scorecard.v1
+    projection_types:
+      - client_service_history
+      - currently_true_state

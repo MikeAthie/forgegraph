@@ -9,6 +9,10 @@ import {
 } from "./helpers";
 
 type ResolutionStatus = "approved" | "rejected";
+const DECISION_REVIEW_BUTTON_NAMES = {
+  approved: /^approved$/i,
+  rejected: /^rejected$/i,
+} as const;
 
 function apiSuccess<T>(data: T) {
   return {
@@ -524,8 +528,8 @@ test.describe("Frontend Control Surface", () => {
 
       await expect(page.getByText(/inbox is clear/i)).toBeVisible();
 
-      await page.getByRole("button", { name: new RegExp(`^${resolution}$`, "i") }).click();
-      await expect(page.getByRole("button", { name: new RegExp(fixture.approval.graphName, "i") })).toBeVisible();
+      await page.getByRole("button", { name: DECISION_REVIEW_BUTTON_NAMES[resolution] }).click();
+      await expect(page.getByRole("button", { name: fixture.approval.graphName })).toBeVisible();
       await expect(page.getByText(/read only/i)).toBeVisible();
     });
   }

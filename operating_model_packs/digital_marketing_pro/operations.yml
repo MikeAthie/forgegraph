@@ -1,0 +1,928 @@
+operation_templates:
+  - id: dmp.brand_intake
+    department_id: strategy_research
+    label: Brand Intake
+    description: Collect company, brand, audience, competitor, constraint, and existing asset inputs.
+    outputs:
+      - brand_intake_summary
+      - stakeholder_questions
+      - initial_context_pack
+    tool_ids:
+      - assertion_register_tool
+      - context_pack_builder
+  - id: dmp.stone_vs_opinion_mapping
+    department_id: strategy_research
+    label: Stone vs Opinion Mapping
+    description: Classify intake claims into validated facts, opinions, assumptions, questions, and research gaps.
+    outputs:
+      - validated_fact_register
+      - assumption_register
+      - research_question_register
+    tool_ids:
+      - assertion_register_tool
+  - id: dmp.market_research
+    department_id: strategy_research
+    label: Market Research
+    description: Research industry dynamics, customer segments, market trends, category norms, and growth opportunities.
+    outputs:
+      - market_research_brief
+      - customer_segment_summary
+      - opportunity_map
+    tool_ids:
+      - web_research_tool
+      - customer_research_tool
+  - id: dmp.competitor_research
+    department_id: strategy_research
+    label: Competitor Research
+    description: Analyze competitor positioning, messaging, offers, funnels, channels, and differentiators.
+    outputs:
+      - competitor_analysis
+      - positioning_gaps
+      - differentiation_recommendations
+    tool_ids:
+      - competitor_analysis_tool
+  - id: dmp.strategy_synthesis
+    department_id: strategy_research
+    label: Strategy Synthesis
+    description: Convert intake and research into a recommended operating strategy.
+    outputs:
+      - strategic_brief
+      - campaign_hypotheses
+      - recommended_operating_priorities
+    tool_ids:
+      - context_pack_builder
+  - id: dmp.brand_guidelines
+    department_id: brand_content
+    label: Brand Guidelines Creation
+    description: Create or refine voice, tone, positioning, messaging pillars, and creative rules.
+    outputs:
+      - brand_guidelines
+      - voice_rules
+      - messaging_framework
+    tool_ids:
+      - brand_profile_tool
+      - artifact_ledger_tool
+  - id: dmp.content_strategy
+    department_id: brand_content
+    label: Content Strategy
+    description: Create content pillars, editorial themes, channel narratives, and production priorities.
+    outputs:
+      - content_strategy
+      - editorial_pillars
+      - content_roadmap
+    tool_ids:
+      - content_template_library
+  - id: dmp.campaign_concepting
+    department_id: brand_content
+    label: Campaign Concepting
+    description: Generate campaign concepts, creative angles, audience hooks, and testable messaging hypotheses.
+    outputs:
+      - campaign_concepts
+      - creative_angles
+      - message_testing_plan
+    tool_ids:
+      - copy_generation_tool
+  - id: dmp.creative_brief_creation
+    department_id: brand_content
+    label: Creative Brief Creation
+    description: Turn approved strategy into creative briefs for copy, design, email, ads, social, landing pages, and other channels.
+    outputs:
+      - creative_brief
+      - asset_requirements
+      - channel_copy_requirements
+    tool_ids:
+      - artifact_ledger_tool
+      - content_template_library
+  - id: dmp.content_draft_production
+    department_id: brand_content
+    label: Content Draft Production
+    description: Produce first-draft and revised content artifacts for selected channels.
+    outputs:
+      - content_drafts
+      - artifact_revisions
+      - canonical_content_view
+    tool_ids:
+      - copy_generation_tool
+      - revision_lineage_tool
+  - id: dmp.channel_strategy
+    department_id: channel_execution
+    label: Channel Strategy
+    description: Translate campaign strategy into channel-specific execution plans.
+    outputs:
+      - channel_strategy
+      - channel_priority_map
+      - execution_requirements
+    tool_ids:
+      - artifact_ledger_tool
+  - id: dmp.cms_draft_preparation
+    department_id: channel_execution
+    label: CMS Draft Preparation
+    description: Prepare website, blog, landing-page, or CMS drafts for review and publishing.
+    outputs:
+      - cms_draft
+      - seo_metadata
+      - publishing_checklist
+    tool_ids:
+      - cms_connector
+  - id: dmp.email_campaign_preparation
+    department_id: channel_execution
+    label: Email Campaign Preparation
+    description: Prepare email sequences, subject lines, segmentation notes, and send plans.
+    outputs:
+      - email_sequence
+      - send_plan
+      - segment_requirements
+    tool_ids:
+      - email_service_connector
+  - id: dmp.paid_media_launch_plan
+    department_id: channel_execution
+    label: Paid Media Launch Plan
+    description: Prepare ad copy, targeting, budget assumptions, launch constraints, and performance checkpoints.
+    outputs:
+      - ad_plan
+      - budget_guardrails
+      - launch_approval_request
+    tool_ids:
+      - ads_platform_connector
+  - id: dmp.social_scheduling
+    department_id: channel_execution
+    label: Social Scheduling
+    description: Prepare social posts, captions, creative requirements, calendar slots, and scheduling requests.
+    outputs:
+      - social_calendar
+      - scheduled_post_drafts
+      - approval_request
+    tool_ids:
+      - social_scheduler_connector
+  - id: dmp.execution_receipt_capture
+    department_id: channel_execution
+    label: Execution Receipt Capture
+    description: Capture final receipts after publishing, sending, launching, syncing, exporting, or scheduling.
+    outputs:
+      - execution_receipt
+      - audit_event
+      - performance_tracking_stub
+    tool_ids:
+      - execution_receipt_tool
+  - id: dmp.audience_segmentation
+    department_id: crm_lifecycle
+    label: Audience Segmentation
+    description: Define target segments, lifecycle stages, audience rules, and campaign eligibility.
+    outputs:
+      - audience_segments
+      - eligibility_rules
+      - personalization_notes
+    tool_ids:
+      - audience_builder_tool
+  - id: dmp.crm_mapping
+    department_id: crm_lifecycle
+    label: CRM Mapping
+    description: Map campaigns, contacts, leads, deals, lifecycle stages, and CRM fields.
+    outputs:
+      - crm_field_map
+      - sync_plan
+      - deduplication_rules
+    tool_ids:
+      - crm_connector
+      - deduplication_tool
+  - id: dmp.lifecycle_campaign_design
+    department_id: crm_lifecycle
+    label: Lifecycle Campaign Design
+    description: Design nurture, onboarding, reactivation, upsell, or retention journeys.
+    outputs:
+      - lifecycle_journey
+      - trigger_map
+      - message_sequence
+    tool_ids:
+      - lifecycle_journey_mapper
+  - id: dmp.crm_sync_request
+    department_id: crm_lifecycle
+    label: CRM Sync Request
+    description: Prepare a governed CRM sync request with payload summary, risks, approval requirements, and rollback notes.
+    outputs:
+      - crm_sync_request
+      - policy_evaluation
+      - approval_request
+    tool_ids:
+      - crm_connector
+      - pii_policy_checker
+  - id: dmp.crm_sync_reconciliation
+    department_id: crm_lifecycle
+    label: CRM Sync Reconciliation
+    description: Verify sync results, detect mismatches, and produce a reconciliation report.
+    outputs:
+      - sync_receipt
+      - reconciliation_report
+      - follow_up_tasks
+    tool_ids:
+      - crm_connector
+      - deduplication_tool
+  - id: dmp.performance_baseline
+    department_id: analytics_performance
+    label: Performance Baseline
+    description: Create a baseline of current performance, available metrics, conversion points, and reporting gaps.
+    outputs:
+      - performance_baseline
+      - metric_inventory
+      - tracking_gap_report
+    tool_ids:
+      - analytics_connector
+      - report_builder
+  - id: dmp.metrics_ingestion
+    department_id: analytics_performance
+    label: Metrics Ingestion
+    description: Ingest analytics, CRM, email, ad, social, and web performance data.
+    outputs:
+      - performance_snapshot
+      - metric_ingest_log
+      - data_quality_notes
+    tool_ids:
+      - analytics_connector
+      - ads_reporting_connector
+      - email_reporting_connector
+      - crm_reporting_connector
+  - id: dmp.signal_detection
+    department_id: analytics_performance
+    label: Signal Detection
+    description: Detect anomalies, opportunities, drop-offs, creative fatigue, funnel issues, and growth signals.
+    outputs:
+      - company_signals
+      - opportunity_candidates
+      - risk_alerts
+    tool_ids:
+      - signal_detection_tool
+  - id: dmp.campaign_performance_review
+    department_id: analytics_performance
+    label: Campaign Performance Review
+    description: Analyze results against goals, hypotheses, budget, and channel expectations.
+    outputs:
+      - campaign_performance_report
+      - hypothesis_evaluation
+      - recommended_next_actions
+    tool_ids:
+      - report_builder
+      - analytics_connector
+  - id: dmp.continuous_improvement_planning
+    department_id: analytics_performance
+    label: Continuous Improvement Planning
+    description: Convert insights and missed targets into new operations, experiments, or rework recommendations.
+    outputs:
+      - improvement_plan
+      - experiment_backlog
+      - next_operation_recommendations
+    tool_ids:
+      - signal_detection_tool
+      - report_builder
+  - id: dmp.artifact_quality_review
+    department_id: qa_compliance
+    label: Artifact Quality Review
+    description: Review artifacts for completeness, clarity, structure, brand fit, and strategic alignment.
+    outputs:
+      - quality_scorecard
+      - qa_findings
+      - revision_recommendations
+    tool_ids:
+      - qa_evaluator
+      - brand_consistency_checker
+  - id: dmp.claims_and_evidence_check
+    department_id: qa_compliance
+    label: Claims and Evidence Check
+    description: Check factual claims, regulated claims, unsupported claims, and evidence references.
+    outputs:
+      - claim_review
+      - evidence_gap_list
+      - blocked_claims
+    tool_ids:
+      - claims_checker
+  - id: dmp.compliance_review
+    department_id: qa_compliance
+    label: Compliance Review
+    description: Evaluate artifacts and execution requests against industry, jurisdiction, privacy, and channel rules.
+    outputs:
+      - compliance_scorecard
+      - policy_evaluation
+      - approval_requirements
+    tool_ids:
+      - policy_engine
+      - approval_router
+  - id: dmp.pre_execution_gate
+    department_id: qa_compliance
+    label: Pre-Execution Gate
+    description: Run final QA and policy checks before publish, send, launch, sync, schedule, or export actions.
+    outputs:
+      - pass_warn_block_decision
+      - execution_blockers
+      - approval_request
+    tool_ids:
+      - qa_evaluator
+      - policy_engine
+  - id: dmp.incident_logging
+    department_id: qa_compliance
+    label: Incident Logging
+    description: Record violations, blockers, rejected claims, QA regressions, and policy incidents.
+    outputs:
+      - compliance_incident
+      - audit_event
+      - remediation_task
+    tool_ids:
+      - audit_log_tool
+  - id: dmp.client_review_packet
+    department_id: client_approval_ops
+    label: Client Review Packet
+    description: Prepare review materials with artifacts, decisions needed, risks, and recommended choices.
+    outputs:
+      - client_review_packet
+      - decision_summary
+      - approval_request
+    tool_ids:
+      - decision_tracker
+      - client_report_builder
+  - id: dmp.feedback_validation
+    department_id: client_approval_ops
+    label: Feedback Validation
+    description: Classify stakeholder feedback into accept, reject, edit, defer, or needs-research decisions.
+    outputs:
+      - validation_decisions
+      - feedback_summary
+      - decision_audit
+    tool_ids:
+      - decision_tracker
+  - id: dmp.rerun_plan_creation
+    department_id: client_approval_ops
+    label: Rerun Plan Creation
+    description: Create a downstream impact and rerun plan from validation decisions.
+    outputs:
+      - rerun_plan
+      - impacted_artifacts
+      - estimated_effort
+    tool_ids:
+      - rerun_planner
+  - id: dmp.currently_true_projection_update
+    department_id: client_approval_ops
+    label: Currently True Projection Update
+    description: Update the current operating truth after approvals, feedback, reruns, or new evidence.
+    outputs:
+      - currently_true_state
+      - living_instruction_summary
+      - open_questions
+    tool_ids:
+      - state_projection_tool
+  - id: dmp.portfolio_health_review
+    department_id: client_approval_ops
+    label: Portfolio Health Review
+    description: Review active programs, approvals, blockers, workload, ownership, and upcoming decisions.
+    outputs:
+      - portfolio_health_snapshot
+      - capacity_alerts
+      - approval_queue_summary
+    tool_ids:
+      - portfolio_health_tool
+      - capacity_planner
+  - id: dmp.client_reporting
+    department_id: client_approval_ops
+    label: Client Reporting
+    description: Generate monthly, quarterly, campaign, or program-level reports for stakeholders.
+    outputs:
+      - client_report
+      - performance_summary
+      - next_steps
+    tool_ids:
+      - client_report_builder
+  - id: dmp.preparation_document_set
+    department_id: client_approval_ops
+    label: Preparation Document Set
+    description: Create the campaign architecture, KPI tree, content pillars, asset inventory, approval chain, and operating checklist.
+    outputs:
+      - campaign_architecture
+      - kpi_tree
+      - content_pillars
+      - asset_inventory
+      - approval_chain
+      - operating_checklist
+    tool_ids:
+      - artifact_ledger_tool
+      - state_projection_tool
+    stage_ids:
+      - stage_07_preparation
+    module_ids:
+      - campaign_orchestrator
+      - analytics_insights
+      - content_engine
+  - id: dmp.growth_plan_generation
+    department_id: analytics_performance
+    label: Growth Plan Generation
+    description: Generate the flagship growth plan from validated assertions, canonical strategy artifacts, validation decisions, and preparation documents.
+    outputs:
+      - growth_plan
+      - strategic_priority_map
+    tool_ids:
+      - report_builder
+      - context_pack_builder
+      - state_projection_tool
+    stage_ids:
+      - stage_08_growth_plan
+    module_ids:
+      - growth_engineering
+      - campaign_orchestrator
+      - analytics_insights
+  - id: dmp.yearly_planner_generation
+    department_id: analytics_performance
+    label: Yearly Planner Generation
+    description: Create a 12-month operating calendar with campaign waves, channel priorities, measurement checkpoints, approval milestones, and quarterly review windows.
+    outputs:
+      - yearly_planner
+      - quarterly_roadmap
+      - campaign_calendar
+    tool_ids:
+      - report_builder
+      - capacity_planner
+    stage_ids:
+      - stage_08_growth_plan
+    module_ids:
+      - campaign_orchestrator
+      - growth_engineering
+  - id: dmp.channel_strategy_fanout
+    department_id: channel_execution
+    label: Channel Strategy Fan-out
+    description: Fan out the approved growth plan into selected channel family strategy artifacts.
+    outputs:
+      - search_strategy
+      - paid_platform_strategy
+      - organic_social_strategy
+      - influencer_strategy
+      - marketplace_strategy
+      - crm_strategy
+      - content_pr_strategy
+      - web_strategy
+      - measurement_strategy
+    tool_ids:
+      - artifact_ledger_tool
+      - signal_detection_tool
+    stage_ids:
+      - stage_09_channel_strategy
+    module_ids:
+      - aeo_geo_intelligence
+      - paid_advertising
+      - content_engine
+      - influencer_creator
+      - marketing_automation
+      - cro
+      - analytics_insights
+  - id: dmp.execution_artifact_generation
+    department_id: channel_execution
+    label: Execution Artifact Generation
+    description: Create channel-ready copy, message sets, headlines, CTAs, and launch communications from approved channel strategies.
+    outputs:
+      - ad_copy
+      - social_post_copy
+      - email_copy
+      - landing_page_copy
+      - headline_set
+      - cta_set
+      - campaign_message_set
+    tool_ids:
+      - copy_generation_tool
+      - qa_evaluator
+      - policy_engine
+    stage_ids:
+      - stage_10_execution_artifacts
+    module_ids:
+      - content_engine
+      - paid_advertising
+      - marketing_automation
+      - cro
+  - id: dmp.creative_instruction_generation
+    department_id: brand_content
+    label: Creative Instruction Generation
+    description: Create visual and creative generation instructions with brand constraints, channel notes, forbidden elements, localization, and approval requirements.
+    outputs:
+      - visual_asset_brief
+      - creative_instruction
+      - video_brief
+      - image_brief
+      - design_constraints
+    tool_ids:
+      - brand_profile_tool
+      - content_template_library
+      - qa_evaluator
+    stage_ids:
+      - stage_11_ai_creative_instructions
+    module_ids:
+      - content_engine
+      - campaign_orchestrator
+      - emerging_channels
+  - id: dmp.continuous_improvement_briefing
+    department_id: analytics_performance
+    label: Continuous Improvement Briefing
+    description: Convert performance snapshots, findings, receipts, stakeholder feedback, and observations into signals, briefs, offering feedback, and next operation recommendations.
+    outputs:
+      - quarterly_brief
+      - ad_hoc_brief
+      - performance_insight
+      - operating_signal_summary
+      - product_feedback_brief
+      - next_operation_recommendation
+    tool_ids:
+      - analytics_connector
+      - signal_detection_tool
+      - report_builder
+      - client_report_builder
+    stage_ids:
+      - stage_12_continuous_improvement
+    module_ids:
+      - analytics_insights
+      - growth_engineering
+      - reputation_management
+  - id: atlas.brand_audit
+    department_id: strategy_research
+    label: Auditoría de marca actual
+    description: Evaluar la marca actual, activos, posicionamiento, comunicación, canales y riesgos.
+    outputs:
+      - brand_audit
+    tool_ids:
+      - brand_profile_tool
+      - context_pack_builder
+    stage_ids:
+      - stage_01_client_inputs
+      - stage_03_v1_synthesis
+    module_ids:
+      - audience_intelligence
+      - campaign_orchestrator
+  - id: atlas.current_communication_analysis
+    department_id: strategy_research
+    label: Análisis de comunicación actual
+    description: Revisar mensajes, consistencia, canales actuales, brechas y oportunidades de comunicación.
+    outputs:
+      - current_communication_analysis
+    tool_ids:
+      - content_template_library
+      - qa_evaluator
+    stage_ids:
+      - stage_01_client_inputs
+      - stage_03_v1_synthesis
+    module_ids:
+      - content_engine
+      - audience_intelligence
+  - id: atlas.competitor_benchmark
+    department_id: strategy_research
+    label: Benchmark de competencia
+    description: Comparar competidores por posicionamiento, mensajes, ofertas, canales y diferenciadores.
+    outputs:
+      - competitor_benchmark
+    tool_ids:
+      - competitor_analysis_tool
+      - web_research_tool
+    stage_ids:
+      - stage_02_external_research
+    module_ids:
+      - aeo_geo_intelligence
+      - digital_pr_authority
+  - id: atlas.strengths_weaknesses_mapping
+    department_id: strategy_research
+    label: Identificación de fortalezas y debilidades
+    description: Mapear fortalezas, debilidades, riesgos, gaps y prioridades de investigación.
+    outputs:
+      - strengths_weaknesses_map
+    tool_ids:
+      - assertion_register_tool
+      - context_pack_builder
+    stage_ids:
+      - stage_03_v1_synthesis
+    module_ids:
+      - analytics_insights
+  - id: atlas.communication_objectives
+    department_id: strategy_research
+    label: Definición de objetivos de comunicación
+    description: Definir objetivos de comunicación por audiencia, canal, resultado y restricción.
+    outputs:
+      - communication_objectives
+    tool_ids:
+      - context_pack_builder
+    stage_ids:
+      - stage_03_v1_synthesis
+      - stage_08_growth_plan
+    module_ids:
+      - campaign_orchestrator
+  - id: atlas.buyer_persona_definition
+    department_id: strategy_research
+    label: Buyer persona / perfil de cliente ideal
+    description: Crear buyer persona y perfil de cliente ideal con necesidades, objeciones y disparadores.
+    outputs:
+      - buyer_persona
+      - ideal_customer_profile
+    tool_ids:
+      - customer_research_tool
+    stage_ids:
+      - stage_02_external_research
+      - stage_03_v1_synthesis
+    module_ids:
+      - audience_intelligence
+  - id: atlas.customer_journey_mapping
+    department_id: strategy_research
+    label: Customer journey básico
+    description: Mapear el recorrido básico desde descubrimiento hasta conversión, retención y recompra.
+    outputs:
+      - customer_journey_basic
+    tool_ids:
+      - lifecycle_journey_mapper
+    stage_ids:
+      - stage_03_v1_synthesis
+      - stage_08_growth_plan
+    module_ids:
+      - funnel_architect
+      - marketing_automation
+  - id: atlas.priority_channel_mapping
+    department_id: channel_execution
+    label: Identificación de canales prioritarios
+    description: Priorizar canales por audiencia, objetivo, capacidad, costo y restricciones.
+    outputs:
+      - priority_channel_map
+    tool_ids:
+      - signal_detection_tool
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_09_channel_strategy
+    module_ids:
+      - campaign_orchestrator
+      - analytics_insights
+  - id: atlas.digital_diagnosis
+    department_id: analytics_performance
+    label: Diagnóstico digital
+    description: Diagnosticar redes, web, SEO, pauta, WhatsApp y CRM con hallazgos y riesgos.
+    outputs:
+      - digital_diagnosis
+    tool_ids:
+      - analytics_connector
+      - ads_reporting_connector
+      - crm_reporting_connector
+    stage_ids:
+      - stage_02_external_research
+      - stage_12_continuous_improvement
+    module_ids:
+      - analytics_insights
+      - technical_seo
+      - marketing_automation
+  - id: atlas.opportunity_mapping
+    department_id: analytics_performance
+    label: Mapa de oportunidades
+    description: Convertir diagnóstico e investigación en oportunidades, experimentos y próximos movimientos.
+    outputs:
+      - opportunity_map
+    tool_ids:
+      - signal_detection_tool
+      - report_builder
+    stage_ids:
+      - stage_03_v1_synthesis
+      - stage_12_continuous_improvement
+    module_ids:
+      - growth_engineering
+      - analytics_insights
+  - id: atlas.brand_identity_definition
+    department_id: brand_content
+    label: Identidad de marca
+    description: Definir misión, visión, valores, propuesta de valor, diferenciadores, storytelling y personalidad.
+    outputs:
+      - brand_identity
+    tool_ids:
+      - brand_profile_tool
+    stage_ids:
+      - stage_03_v1_synthesis
+      - stage_07_preparation
+    module_ids:
+      - content_engine
+      - campaign_orchestrator
+  - id: atlas.visual_identity_direction
+    department_id: brand_content
+    label: Identidad visual
+    description: Definir dirección visual, variantes de logo, color, tipografía, moodboard y estilo gráfico.
+    outputs:
+      - visual_identity
+    tool_ids:
+      - brand_profile_tool
+      - content_template_library
+    stage_ids:
+      - stage_07_preparation
+      - stage_11_ai_creative_instructions
+    module_ids:
+      - content_engine
+  - id: atlas.basic_brand_manual
+    department_id: brand_content
+    label: Manual de marca básico
+    description: Crear manual básico de uso de logo, colores, tipografías, tono visual y ejemplos.
+    outputs:
+      - basic_brand_manual
+    tool_ids:
+      - artifact_ledger_tool
+      - brand_consistency_checker
+    stage_ids:
+      - stage_07_preparation
+    module_ids:
+      - content_engine
+  - id: atlas.tone_voice_guide
+    department_id: brand_content
+    label: Tono y comunicación
+    description: Crear tono de voz, palabras permitidas/prohibidas, estilo de mensajes y guía de copywriting.
+    outputs:
+      - tone_of_voice_guide
+      - copywriting_guide
+    tool_ids:
+      - copy_generation_tool
+      - brand_consistency_checker
+    stage_ids:
+      - stage_07_preparation
+      - stage_10_execution_artifacts
+    module_ids:
+      - content_engine
+  - id: atlas.communication_strategy
+    department_id: brand_content
+    label: Estrategia de comunicación
+    description: Crear mensajes clave, pilares, categorías, objetivos por canal, reputación, autoridad y confianza social.
+    outputs:
+      - communication_strategy
+      - key_messages
+      - content_categories
+    tool_ids:
+      - context_pack_builder
+      - content_template_library
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_09_channel_strategy
+    module_ids:
+      - campaign_orchestrator
+      - content_engine
+  - id: atlas.key_messages
+    department_id: brand_content
+    label: Mensajes clave
+    description: Definir mensajes clave por audiencia, canal, objeción, prueba y contexto de campaña.
+    outputs:
+      - key_messages
+    tool_ids:
+      - copy_generation_tool
+      - brand_consistency_checker
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_10_execution_artifacts
+    module_ids:
+      - content_engine
+      - cro
+  - id: atlas.content_pillar_review
+    department_id: brand_content
+    label: Pilares y categorías de contenido
+    description: Revisar pilares de contenido, temas principales y categorías para planificación.
+    outputs:
+      - content_pillars
+      - content_categories
+    tool_ids:
+      - content_template_library
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_12_continuous_improvement
+    module_ids:
+      - content_engine
+  - id: atlas.organic_strategy
+    department_id: channel_execution
+    label: Estrategia orgánica
+    description: Definir estrategia orgánica por canal, formato, frecuencia, audiencia y objetivo.
+    outputs:
+      - organic_strategy
+    tool_ids:
+      - social_scheduler_connector
+    stage_ids:
+      - stage_09_channel_strategy
+    module_ids:
+      - content_engine
+      - influencer_creator
+  - id: atlas.paid_strategy_review
+    department_id: channel_execution
+    label: Estrategia de pauta
+    description: Revisar pauta, audiencias, presupuesto, mensajes, creatividad y restricciones de lanzamiento.
+    outputs:
+      - paid_strategy
+    tool_ids:
+      - ads_platform_connector
+      - policy_engine
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_12_continuous_improvement
+    module_ids:
+      - paid_advertising
+      - analytics_insights
+  - id: atlas.retention_strategy
+    department_id: crm_lifecycle
+    label: Estrategia de retención
+    description: Diseñar retención, recompra, seguimiento, CRM, email y WhatsApp lifecycle.
+    outputs:
+      - retention_strategy
+    tool_ids:
+      - crm_connector
+      - lifecycle_journey_mapper
+    stage_ids:
+      - stage_09_channel_strategy
+    module_ids:
+      - marketing_automation
+  - id: atlas.authority_strategy
+    department_id: brand_content
+    label: Estrategia de autoridad
+    description: Diseñar autoridad, contenido experto, PR digital y prueba de confianza.
+    outputs:
+      - authority_strategy
+    tool_ids:
+      - web_research_tool
+    stage_ids:
+      - stage_09_channel_strategy
+    module_ids:
+      - digital_pr_authority
+  - id: atlas.social_trust_strategy
+    department_id: brand_content
+    label: Estrategia de confianza social
+    description: Planear prueba social, reseñas, casos, reputación y elementos de confianza.
+    outputs:
+      - social_trust_strategy
+    tool_ids:
+      - brand_profile_tool
+    stage_ids:
+      - stage_09_channel_strategy
+    module_ids:
+      - reputation_management
+  - id: atlas.digital_reputation_plan
+    department_id: qa_compliance
+    label: Plan de reputación digital
+    description: Crear plan de reputación digital, monitoreo, respuesta, evidencia y acciones correctivas.
+    outputs:
+      - digital_reputation_plan
+    tool_ids:
+      - policy_engine
+      - audit_log_tool
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_12_continuous_improvement
+    module_ids:
+      - reputation_management
+  - id: atlas.communication_calendar
+    department_id: brand_content
+    label: Calendario de comunicaciones
+    description: Crear calendario con fechas, formato, canal, tema, objetivo, CTA y estado de piezas.
+    outputs:
+      - communication_calendar
+    tool_ids:
+      - content_template_library
+      - artifact_ledger_tool
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_10_execution_artifacts
+    module_ids:
+      - campaign_orchestrator
+      - content_engine
+  - id: atlas.hook_creation
+    department_id: brand_content
+    label: Hooks y titulares
+    description: Crear hooks, headlines, CTAs y estructuras de piezas para calendario y campañas.
+    outputs:
+      - headline_set
+      - cta_set
+    tool_ids:
+      - copy_generation_tool
+    stage_ids:
+      - stage_10_execution_artifacts
+      - stage_12_continuous_improvement
+    module_ids:
+      - content_engine
+      - cro
+  - id: atlas.post_copy_production
+    department_id: brand_content
+    label: Copies, templates y piezas de comunicación
+    description: Crear copies para posts, emails, blog, LinkedIn, Facebook, Reels, Stories, TikToks, templates, thumbnails y mockups.
+    outputs:
+      - social_post_copy
+      - email_copy
+      - landing_page_copy
+      - campaign_message_set
+    tool_ids:
+      - copy_generation_tool
+      - qa_evaluator
+    stage_ids:
+      - stage_10_execution_artifacts
+    module_ids:
+      - content_engine
+      - emerging_channels
+  - id: atlas.monthly_reporting_and_optimization
+    department_id: analytics_performance
+    label: Reporte y optimización mensual
+    description: Reunir métricas, ejecutar autoevaluación KPI, crear reporte mensual, generar señales y actualizar historial del servicio.
+    outputs:
+      - monthly_report
+      - monthly_kpi_scorecard
+      - audience_insights
+      - optimization_recommendations
+      - client_service_history_entry
+    tool_ids:
+      - analytics_connector
+      - signal_detection_tool
+      - report_builder
+      - state_projection_tool
+    stage_ids:
+      - stage_12_continuous_improvement
+    module_ids:
+      - analytics_insights
+      - growth_engineering
+      - campaign_orchestrator

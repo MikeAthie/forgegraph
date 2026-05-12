@@ -72,8 +72,8 @@ function KeyValueEditor({
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground italic">No entries</p>
       ) : (
-        entries.map(([key, val], index) => (
-          <div key={`${key}-${index}`} className="flex items-center gap-2">
+        entries.map(([key, val]) => (
+          <div key={key} className="flex items-center gap-2">
             <Input
               value={key}
               onChange={(e) => handleKeyChange(key, e.target.value)}
@@ -96,13 +96,13 @@ function KeyValueEditor({
               disabled={disabled}
               className="shrink-0 text-muted-foreground hover:text-destructive"
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </Button>
           </div>
         ))
       )}
       <Button type="button" variant="outline" size="sm" onClick={handleAdd} disabled={disabled} className="w-full">
-        <Plus className="h-4 w-4 mr-1" />
+        <Plus className="size-4 mr-1" />
         Add {keyPlaceholder.toLowerCase()}
       </Button>
     </div>
@@ -110,4 +110,3 @@ function KeyValueEditor({
 }
 
 export { KeyValueEditor };
-export type { KeyValueEditorProps };

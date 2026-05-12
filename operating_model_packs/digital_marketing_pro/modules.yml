@@ -1,0 +1,473 @@
+modules:
+  - id: aeo_geo_intelligence
+    label: AEO/GEO Intelligence
+    description: Optimize answer-engine and generative-engine visibility through research, content structure, authority, and measurement.
+    department_id: strategy_research
+    capabilities:
+      - query intent mapping
+      - answer surface analysis
+      - sourceability planning
+      - content gap detection
+    operation_template_ids:
+      - dmp.market_research
+      - dmp.channel_strategy_fanout
+    artifact_schema_ids:
+      - research_brief
+      - search_strategy
+      - content_pr_strategy
+    required_tool_ids:
+      - web_research_tool
+    optional_tool_ids:
+      - report_builder
+    evaluation_profile_ids:
+      - dmp.claims_check
+      - dmp.structure_check
+    policy_requirements:
+      - regulated_claims
+    stage_ids:
+      - stage_02_external_research
+      - stage_09_channel_strategy
+  - id: funnel_architect
+    label: Funnel Architect
+    description: Design conversion paths, handoffs, offers, measurement points, and activation sequences.
+    department_id: strategy_research
+    capabilities:
+      - funnel mapping
+      - offer sequencing
+      - conversion path design
+      - handoff planning
+    operation_template_ids:
+      - dmp.strategy_synthesis
+      - dmp.growth_plan_generation
+      - dmp.execution_artifact_generation
+    artifact_schema_ids:
+      - campaign_architecture
+      - growth_plan
+      - landing_page_copy
+    required_tool_ids:
+      - context_pack_builder
+    optional_tool_ids:
+      - analytics_connector
+    evaluation_profile_ids:
+      - dmp.full_check
+    policy_requirements:
+      - publish
+    stage_ids:
+      - stage_04_market_analysis
+      - stage_08_growth_plan
+      - stage_10_execution_artifacts
+  - id: campaign_orchestrator
+    label: Campaign Orchestrator
+    description: Coordinate campaign architecture, yearly planning, fan-out, approvals, launch readiness, and improvement loops.
+    department_id: client_approval_ops
+    capabilities:
+      - campaign architecture
+      - milestone planning
+      - approval routing
+      - operating cadence design
+    operation_template_ids:
+      - dmp.preparation_document_set
+      - dmp.growth_plan_generation
+      - dmp.yearly_planner_generation
+      - dmp.creative_instruction_generation
+    artifact_schema_ids:
+      - campaign_architecture
+      - yearly_planner
+      - campaign_calendar
+      - operating_checklist
+    required_tool_ids:
+      - decision_tracker
+      - state_projection_tool
+    optional_tool_ids:
+      - capacity_planner
+    evaluation_profile_ids:
+      - dmp.structure_check
+    policy_requirements:
+      - approval_chain
+    stage_ids:
+      - stage_07_preparation
+      - stage_08_growth_plan
+      - stage_11_ai_creative_instructions
+  - id: audience_intelligence
+    label: Audience Intelligence
+    description: Turn customer, market, CRM, and channel context into segmentation and message hypotheses.
+    department_id: crm_lifecycle
+    capabilities:
+      - audience segmentation
+      - lifecycle mapping
+      - personalization constraints
+      - research question framing
+    operation_template_ids:
+      - dmp.audience_segmentation
+      - dmp.lifecycle_campaign_design
+    artifact_schema_ids:
+      - crm_strategy
+      - email_copy
+      - campaign_message_set
+    required_tool_ids:
+      - audience_builder_tool
+    optional_tool_ids:
+      - crm_reporting_connector
+    evaluation_profile_ids:
+      - dmp.quick_check
+    policy_requirements:
+      - personal_data_exposure
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts
+  - id: content_engine
+    label: Content Engine
+    description: Produce content systems, copy, message sets, briefs, channel drafts, and structured artifacts.
+    department_id: brand_content
+    capabilities:
+      - content pillars
+      - editorial systems
+      - copy production
+      - creative brief creation
+    operation_template_ids:
+      - dmp.content_strategy
+      - dmp.preparation_document_set
+      - dmp.channel_strategy_fanout
+      - dmp.execution_artifact_generation
+      - dmp.creative_instruction_generation
+    artifact_schema_ids:
+      - content_strategy
+      - content_pillars
+      - content_pr_strategy
+      - social_post_copy
+      - creative_instruction
+    required_tool_ids:
+      - copy_generation_tool
+      - content_template_library
+    optional_tool_ids:
+      - qa_evaluator
+    evaluation_profile_ids:
+      - dmp.quick_check
+      - dmp.structure_check
+    policy_requirements:
+      - claims_check
+    stage_ids:
+      - stage_03_four_core_documents
+      - stage_07_preparation
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts
+      - stage_11_ai_creative_instructions
+  - id: digital_pr_authority
+    label: Digital PR & Authority
+    description: Plan authority-building content, public relations angles, evidence, and reputation-safe outreach narratives.
+    department_id: brand_content
+    capabilities:
+      - authority mapping
+      - evidence sourcing
+      - PR angle development
+      - reputation-safe messaging
+    operation_template_ids:
+      - dmp.competitor_research
+      - dmp.channel_strategy_fanout
+    artifact_schema_ids:
+      - content_pr_strategy
+      - research_brief
+      - campaign_message_set
+    required_tool_ids:
+      - web_research_tool
+      - claims_checker
+    optional_tool_ids:
+      - client_report_builder
+    evaluation_profile_ids:
+      - dmp.claims_check
+      - dmp.compliance_check
+    policy_requirements:
+      - regulated_claims
+    stage_ids:
+      - stage_02_external_research
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts
+  - id: analytics_insights
+    label: Analytics & Insights
+    description: Convert performance data into baselines, KPIs, signals, insights, and next recommended operations.
+    department_id: analytics_performance
+    capabilities:
+      - KPI modeling
+      - performance snapshots
+      - insight synthesis
+      - signal generation
+    operation_template_ids:
+      - dmp.performance_baseline
+      - dmp.preparation_document_set
+      - dmp.growth_plan_generation
+      - dmp.channel_strategy_fanout
+      - dmp.continuous_improvement_briefing
+    artifact_schema_ids:
+      - kpi_tree
+      - measurement_strategy
+      - performance_insight
+      - quarterly_brief
+    required_tool_ids:
+      - analytics_connector
+      - report_builder
+    optional_tool_ids:
+      - signal_detection_tool
+    evaluation_profile_ids:
+      - dmp.full_check
+    policy_requirements:
+      - export_report
+    stage_ids:
+      - stage_07_preparation
+      - stage_08_growth_plan
+      - stage_09_channel_strategy
+      - stage_12_continuous_improvement
+  - id: paid_advertising
+    label: Paid Advertising
+    description: Plan paid media strategy, ad copy, budget guardrails, launch readiness, and governed activation.
+    department_id: channel_execution
+    capabilities:
+      - paid media planning
+      - budget guardrails
+      - ad copy creation
+      - launch readiness
+    operation_template_ids:
+      - dmp.paid_media_launch_plan
+      - dmp.channel_strategy_fanout
+      - dmp.execution_artifact_generation
+    artifact_schema_ids:
+      - paid_platform_strategy
+      - ad_copy
+      - headline_set
+      - cta_set
+    required_tool_ids:
+      - ads_platform_connector
+      - policy_engine
+    optional_tool_ids:
+      - ads_reporting_connector
+    evaluation_profile_ids:
+      - dmp.claims_check
+      - dmp.compliance_check
+    policy_requirements:
+      - launch_ads
+      - budget_thresholds
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts
+  - id: cro
+    label: CRO
+    description: Improve conversion through page strategy, message testing, CTAs, friction analysis, and measurement feedback.
+    department_id: channel_execution
+    capabilities:
+      - landing page messaging
+      - CTA testing
+      - conversion hypothesis design
+      - friction analysis
+    operation_template_ids:
+      - dmp.channel_strategy_fanout
+      - dmp.execution_artifact_generation
+    artifact_schema_ids:
+      - web_strategy
+      - landing_page_copy
+      - cta_set
+    required_tool_ids:
+      - report_builder
+    optional_tool_ids:
+      - analytics_connector
+    evaluation_profile_ids:
+      - dmp.structure_check
+    policy_requirements:
+      - publish
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts
+  - id: growth_engineering
+    label: Growth Engineering
+    description: Structure experiments, automation hooks, operating loops, and improvement backlogs.
+    department_id: analytics_performance
+    capabilities:
+      - experiment design
+      - growth planning
+      - automation specification
+      - continuous improvement
+    operation_template_ids:
+      - dmp.growth_plan_generation
+      - dmp.yearly_planner_generation
+      - dmp.continuous_improvement_briefing
+    artifact_schema_ids:
+      - growth_plan
+      - strategic_priority_map
+      - next_operation_recommendation
+    required_tool_ids:
+      - signal_detection_tool
+      - state_projection_tool
+    optional_tool_ids:
+      - analytics_connector
+    evaluation_profile_ids:
+      - dmp.full_check
+    policy_requirements:
+      - approval_chain
+    stage_ids:
+      - stage_08_growth_plan
+      - stage_12_continuous_improvement
+  - id: influencer_creator
+    label: Influencer & Creator
+    description: Plan creator channels, collaboration briefs, organic concepts, approval needs, and content requirements.
+    department_id: brand_content
+    capabilities:
+      - creator fit analysis
+      - collaboration brief design
+      - organic content planning
+      - creator approval notes
+    operation_template_ids:
+      - dmp.channel_strategy_fanout
+      - dmp.creative_instruction_generation
+    artifact_schema_ids:
+      - influencer_strategy
+      - social_post_copy
+      - visual_asset_brief
+    required_tool_ids:
+      - content_template_library
+    optional_tool_ids:
+      - social_scheduler_connector
+    evaluation_profile_ids:
+      - dmp.quick_check
+      - dmp.compliance_check
+    policy_requirements:
+      - schedule
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_11_ai_creative_instructions
+  - id: reputation_management
+    label: Reputation Management
+    description: Monitor reputation-sensitive themes, stakeholder issues, feedback, and response recommendations.
+    department_id: client_approval_ops
+    capabilities:
+      - issue framing
+      - feedback synthesis
+      - response planning
+      - risk escalation
+    operation_template_ids:
+      - dmp.client_reporting
+      - dmp.continuous_improvement_briefing
+    artifact_schema_ids:
+      - ad_hoc_brief
+      - product_feedback_brief
+      - operating_signal_summary
+    required_tool_ids:
+      - decision_tracker
+    optional_tool_ids:
+      - client_report_builder
+    evaluation_profile_ids:
+      - dmp.compliance_check
+    policy_requirements:
+      - approval_chain
+    stage_ids:
+      - stage_12_continuous_improvement
+  - id: emerging_channels
+    label: Emerging Channels
+    description: Evaluate and brief new distribution formats, creative constraints, and channel-specific experiments.
+    department_id: strategy_research
+    capabilities:
+      - channel scanning
+      - creative format briefing
+      - experiment constraints
+      - risk notes
+    operation_template_ids:
+      - dmp.market_research
+      - dmp.creative_instruction_generation
+    artifact_schema_ids:
+      - research_brief
+      - creative_instruction
+      - video_brief
+    required_tool_ids:
+      - web_research_tool
+    optional_tool_ids:
+      - qa_evaluator
+    evaluation_profile_ids:
+      - dmp.hallucination_risk_check
+    policy_requirements:
+      - schedule
+    stage_ids:
+      - stage_02_external_research
+      - stage_11_ai_creative_instructions
+  - id: technical_seo
+    label: Technical SEO
+    description: Plan search architecture, web requirements, metadata, measurement needs, and publish readiness.
+    department_id: channel_execution
+    capabilities:
+      - technical search planning
+      - metadata requirements
+      - web publishing readiness
+      - measurement setup
+    operation_template_ids:
+      - dmp.cms_draft_preparation
+      - dmp.channel_strategy_fanout
+    artifact_schema_ids:
+      - search_strategy
+      - web_strategy
+      - measurement_strategy
+    required_tool_ids:
+      - cms_connector
+    optional_tool_ids:
+      - analytics_connector
+    evaluation_profile_ids:
+      - dmp.structure_check
+    policy_requirements:
+      - publish
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts
+  - id: local_seo
+    label: Local SEO
+    description: Plan local discovery, regional content priorities, reputation signals, and localized web requirements.
+    department_id: strategy_research
+    capabilities:
+      - local intent research
+      - regional messaging
+      - location-aware channel planning
+      - review signal synthesis
+    operation_template_ids:
+      - dmp.market_research
+      - dmp.channel_strategy_fanout
+    artifact_schema_ids:
+      - search_strategy
+      - content_pr_strategy
+      - web_strategy
+    required_tool_ids:
+      - web_research_tool
+    optional_tool_ids:
+      - report_builder
+    evaluation_profile_ids:
+      - dmp.claims_check
+    policy_requirements:
+      - jurisdiction_rules
+    stage_ids:
+      - stage_02_external_research
+      - stage_09_channel_strategy
+  - id: marketing_automation
+    label: Marketing Automation
+    description: Design lifecycle journeys, CRM mappings, triggered messages, sync safety, and governed automations.
+    department_id: crm_lifecycle
+    capabilities:
+      - lifecycle journey mapping
+      - CRM field mapping
+      - email automation planning
+      - sync governance
+    operation_template_ids:
+      - dmp.crm_mapping
+      - dmp.lifecycle_campaign_design
+      - dmp.channel_strategy_fanout
+      - dmp.execution_artifact_generation
+    artifact_schema_ids:
+      - crm_strategy
+      - email_copy
+      - crm_sync_plan
+      - campaign_message_set
+    required_tool_ids:
+      - crm_connector
+      - pii_policy_checker
+    optional_tool_ids:
+      - email_service_connector
+    evaluation_profile_ids:
+      - dmp.compliance_check
+    policy_requirements:
+      - sync_crm
+      - personal_data_exposure
+    stage_ids:
+      - stage_09_channel_strategy
+      - stage_10_execution_artifacts

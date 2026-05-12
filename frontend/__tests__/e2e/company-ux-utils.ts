@@ -268,7 +268,12 @@ export async function mockCompanyRuntimeApis(
     onRetryFailedOperation?: () => void;
   },
 ): Promise<void> {
-  await page.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
+  const routePromises: Array<ReturnType<Page["route"]>> = [];
+  const route = (...args: Parameters<Page["route"]>) => {
+    routePromises.push(page.route(...args));
+  };
+
+  route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -276,7 +281,7 @@ export async function mockCompanyRuntimeApis(
     });
   });
 
-  await page.route(/\/api\/approvals\/?(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/approvals\/?(?:\?.*)?$/, async (route: Route) => {
     const approvals = Array.from({ length: state.pendingApprovals ?? 0 }).map((_, index) => ({
       id: `approval-${index + 1}`,
       run_id:
@@ -305,7 +310,7 @@ export async function mockCompanyRuntimeApis(
     });
   });
 
-  await page.route(/\/api\/runs\/start(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/start(?:\?.*)?$/, async (route: Route) => {
     hooks?.onLaunchOperation?.();
     const latestOperation = state.operations[0];
     await route.fulfill({
@@ -315,7 +320,7 @@ export async function mockCompanyRuntimeApis(
     });
   });
 
-  await page.route(/\/api\/runs\/[^/]+\/replay(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/[^/]+\/replay(?:\?.*)?$/, async (route: Route) => {
     hooks?.onRetryFailedOperation?.();
     const retryTarget = state.operations.find((operation) => operation.status === "failed") ?? state.operations[0];
     await route.fulfill({
@@ -325,7 +330,7 @@ export async function mockCompanyRuntimeApis(
     });
   });
 
-  await page.route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -335,7 +340,7 @@ export async function mockCompanyRuntimeApis(
     });
   });
 
-  await page.route(/\/api\/runs\/[^/]+(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/[^/]+(?:\?.*)?$/, async (route: Route) => {
     const runId = route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
     const operation = state.operations.find((item) => item.id === runId);
     expect(operation).toBeTruthy();
@@ -345,10 +350,11 @@ export async function mockCompanyRuntimeApis(
       body: JSON.stringify(apiSuccess(buildOperationDetail(state, operation!))),
     });
   });
+  await Promise.all(routePromises);
 }
 
 export function operationLabelsFromGraph(graphJson: GraphJson): string[] {
-  return graphJson.nodes.filter((node) => node.type !== "output").map((node) => node.name);
+  return graphJson.nodes.flatMap((node) => (node.type !== "output" ? [node.name] : []));
 }
 
 export function userFacingStatusLabel(status: MockOperationStatus): string {

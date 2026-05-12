@@ -63,8 +63,7 @@ export default function OpsPage() {
     queryFn: () => opsApi.getDeadLetter(selected?.id ?? ""),
     enabled: enabled && Boolean(selected?.id),
   });
-
-  const invalidateOps = () => {
+  const refreshOpsQueries = () => {
     void queryClient.invalidateQueries({ queryKey: OPS_QUERY_ROOT });
   };
 
@@ -76,7 +75,7 @@ export default function OpsPage() {
     onSuccess: () => {
       setActionError(null);
       setReason("");
-      invalidateOps();
+      void queryClient.invalidateQueries({ queryKey: OPS_QUERY_ROOT });
     },
     onError: (error) => {
       setActionError(getApiErrorMessage(error, "Replay was not accepted by the backend."));
@@ -91,7 +90,7 @@ export default function OpsPage() {
     onSuccess: () => {
       setActionError(null);
       setReason("");
-      invalidateOps();
+      void queryClient.invalidateQueries({ queryKey: OPS_QUERY_ROOT });
     },
     onError: (error) => {
       setActionError(getApiErrorMessage(error, "Resolve was not accepted by the backend."));
@@ -139,7 +138,7 @@ export default function OpsPage() {
                 <span>Kind</span>
                 <span className="capitalize">{selectedDetailQuery.data.kind.replace(/_/g, " ")}</span>
               </div>
-              <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{selectedDetailQuery.data.reason}</p>
+              <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{selectedDetailQuery.data.reason}</p>
             </div>
           ) : (
             "Select a dead letter to inspect recovery options."
@@ -150,12 +149,12 @@ export default function OpsPage() {
           content: selectedDetailQuery.data?.operator_actions.length ? (
             <div className="space-y-3">
               {selectedDetailQuery.data.operator_actions.slice(0, 5).map((action) => (
-                <div key={action.id} className="rounded-xl border border-slate-900/8 px-3 py-3 dark:border-white/8">
+                <div key={action.id} className="rounded-xl border border-zinc-900/8 p-3 dark:border-white/8">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-medium">{action.action}</span>
                     <StatusBadge status={action.status} />
                   </div>
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(action.created_at)}</p>
+                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(action.created_at)}</p>
                 </div>
               ))}
             </div>
@@ -173,7 +172,7 @@ export default function OpsPage() {
         <div className="space-y-6">
           {!enabled ? (
             <Alert variant="destructive">
-              <ShieldAlert className="h-4 w-4" />
+              <ShieldAlert className="size-4" />
               <AlertDescription>Operator recovery is limited to organization owners and admins.</AlertDescription>
             </Alert>
           ) : null}
@@ -184,8 +183,8 @@ export default function OpsPage() {
             action={
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge status={degraded ? "degraded" : "fresh"} label={degraded ? "Needs attention" : "Clear"} />
-                <Button type="button" variant="outline" onClick={invalidateOps} disabled={!enabled}>
-                  <RefreshCw className="h-4 w-4" />
+                <Button type="button" variant="outline" onClick={refreshOpsQueries} disabled={!enabled}>
+                  <RefreshCw className="size-4" />
                   Refresh
                 </Button>
               </div>
@@ -197,21 +196,21 @@ export default function OpsPage() {
                 value={activeCount.toLocaleString()}
                 delta="Unified task, event, and runtime dead letters"
                 tone={activeCount > 0 ? "rose" : "emerald"}
-                icon={<AlertTriangle className="h-4 w-4" />}
+                icon={<AlertTriangle className="size-4" />}
               />
               <MetricCard
                 eyebrow="Projection"
                 value={projectionStatus}
                 delta={`seq ${(projectionLagQuery.data?.projection.last_sequence ?? 0).toLocaleString()}`}
                 tone={projectionStatus === "fresh" ? "emerald" : "amber"}
-                icon={<CheckCircle2 className="h-4 w-4" />}
+                icon={<CheckCircle2 className="size-4" />}
               />
               <MetricCard
                 eyebrow="Runtime backlog"
                 value={(runtimeLagQuery.data?.backlog ?? 0).toLocaleString()}
                 delta={`${runtimeLagQuery.data?.pending ?? 0} pending · ${runtimeLagQuery.data?.lag ?? 0} lag`}
                 tone={(runtimeLagQuery.data?.backlog ?? 0) > 0 ? "amber" : "slate"}
-                icon={<RotateCcw className="h-4 w-4" />}
+                icon={<RotateCcw className="size-4" />}
               />
               <MetricCard
                 eyebrow="Event spool"

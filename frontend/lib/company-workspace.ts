@@ -33,6 +33,7 @@ export type CompanyPreset = {
   starterObjective: string;
   departments: CompanyDepartment[];
   skills: string[];
+  operatingModelPackId?: string;
 };
 
 export type CompanyFailure = {
@@ -171,6 +172,7 @@ export const companyPresets: CompanyPreset[] = [
       departmentCatalog[10],
     ],
     skills: ["Campaign planning", "Messaging", "Creative review", "Performance analysis"],
+    operatingModelPackId: "digital_marketing_pro.v1",
   },
   {
     id: "operations-delivery",
@@ -309,7 +311,7 @@ export function inferCompanyPresetFromObjective(objective: string): CompanyPrese
 
   for (const preset of companyPresets.slice(1)) {
     const signals = presetInferenceSignals[preset.id] ?? [];
-    const score = signals.reduce((total, signal) => (normalized.includes(signal) ? total + 1 : total), 0);
+    const score = signals.reduce((total, signal) => (normalized.split(signal).length > 1 ? total + 1 : total), 0);
     if (score > bestScore) {
       bestPreset = preset;
       bestScore = score;
@@ -513,16 +515,19 @@ export function getCompanyProfileFromGraph(
   }
 
   const inferredDepartments =
-    graphJson?.nodes
-      .filter((node) => node.type !== NODE_TYPES.OUTPUT)
-      .map((node, index) => {
-        const catalogMatch = getDepartmentCatalogMatch(node.name);
-        return {
+    graphJson?.nodes.flatMap((node, index) => {
+      if (node.type === NODE_TYPES.OUTPUT) {
+        return [];
+      }
+      const catalogMatch = getDepartmentCatalogMatch(node.name);
+      return [
+        {
           ...(catalogMatch ?? nodeTypeToDepartment(node.type)),
           id: `${slugify(node.name || `department-${index + 1}`)}-${index + 1}`,
           label: node.name || nodeTypeToDepartment(node.type).label,
-        };
-      }) ?? [];
+        },
+      ];
+    }) ?? [];
 
   return buildCompanyProfile({
     companyName: graph.name,
@@ -672,7 +677,7 @@ export function translateRunStatus(status: string): "queued" | "running" | "comp
   return "running";
 }
 
-export function getCompanyStatus(runs: Array<RunListItem | RunDetail>, pendingApprovals: number): string {
+function getCompanyStatus(runs: Array<RunListItem | RunDetail>, pendingApprovals: number): string {
   if (pendingApprovals > 0) {
     return "Awaiting approval";
   }
@@ -795,15 +800,20 @@ export function getDepartmentProgress(
   graphJson: GraphJson | null,
 ): Array<{ label: string; status: "pending" | "running" | "completed" | "failed" }> {
   const plannedDepartments =
-    graphJson?.nodes
-      .filter((node) => node.type !== NODE_TYPES.OUTPUT)
-      .map((node) => ({
-        nodeId: node.id,
-        label: node.name,
-      })) ?? [];
+    graphJson?.nodes.flatMap((node) =>
+      node.type !== NODE_TYPES.OUTPUT
+        ? [
+            {
+              nodeId: node.id,
+              label: node.name,
+            },
+          ]
+        : [],
+    ) ?? [];
+  const nodeRunByNodeId = new Map(run.node_runs.map((nodeRun) => [nodeRun.node_id, nodeRun]));
 
   return plannedDepartments.map((department) => {
-    const matchingNodeRun = run.node_runs.find((nodeRun) => nodeRun.node_id === department.nodeId);
+    const matchingNodeRun = nodeRunByNodeId.get(department.nodeId);
     if (!matchingNodeRun) {
       return { label: department.label, status: "pending" as const };
     }

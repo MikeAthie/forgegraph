@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/router";
 
 import { authApi, clearTokens, getAccessToken, type User } from "../lib/api";
@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  const { push } = router;
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -76,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await authApi.login(email, password);
         const userData = await authApi.getMe();
         setUser(userData);
-        router.push("/companies");
+        push("/companies");
         return { success: true };
       } catch (err: unknown) {
         const message =
@@ -87,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: message };
       }
     },
-    [router],
+    [push],
   );
 
   const register = useCallback(
@@ -95,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       try {
         await authApi.register(email, password);
-        router.push("/login?registered=true");
+        push("/login?registered=true");
         return { success: true };
       } catch (err: unknown) {
         const message =
@@ -108,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: message };
       }
     },
-    [router],
+    [push],
   );
 
   const logout = useCallback(async () => {
@@ -118,9 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Logout error:", err);
     } finally {
       setUser(null);
-      router.push("/login");
+      push("/login");
     }
-  }, [router]);
+  }, [push]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -141,11 +142,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
+  const context = use(AuthContext);
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
-
-export default AuthContext;

@@ -87,7 +87,11 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Memory */}
-      <AgentFields config={memoryConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
+      <AgentFields
+        config={memoryConfig}
+        onChange={handleAgentChange}
+        visibleSections={{ role: false, examples: false }}
+      />
 
       <Separator />
 
@@ -235,5 +239,3 @@ export function MemoryNodeForm({ config, onChange }: NodeFormProps) {
     </div>
   );
 }
-
-export default MemoryNodeForm;

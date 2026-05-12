@@ -1,0 +1,29 @@
+panels:
+  - id: dmp.overview
+    label: Marketing Overview
+  - id: dmp.engagement_center
+    label: Engagement Center
+  - id: dmp.assertions
+    label: Stone / Opinion Register
+  - id: dmp.artifact_ledger
+    label: Artifact Ledger
+  - id: dmp.currently_true
+    label: Currently True
+  - id: dmp.qa
+    label: QA
+  - id: dmp.policy
+    label: Policy
+  - id: dmp.execution
+    label: Execution Hub
+  - id: dmp.portfolio
+    label: Portfolio
+  - id: atlas.service_model
+    label: Modelo de servicio
+  - id: atlas.monthly_scorecard
+    label: Autoevaluación KPI mensual
+  - id: atlas.recommended_operations
+    label: Próximas operaciones recomendadas
+  - id: atlas.monthly_report
+    label: Reporte mensual
+  - id: atlas.client_service_history
+    label: Historial del servicio / expediente

@@ -101,13 +101,13 @@ describe("ToolNodeForm", () => {
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
-      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+      const recordConfigChange = (nextConfig: NodeFormProps["config"]) => {
         setConfig(nextConfig);
         mockOnChange(nextConfig);
       };
 
       return (
-        <ToolNodeForm config={config} onChange={handleChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
+        <ToolNodeForm config={config} onChange={recordConfigChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
       );
     };
 

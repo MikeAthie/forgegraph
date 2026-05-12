@@ -66,7 +66,7 @@ export function useEdgeTypes(
 /**
  * Get type information for a specific edge
  */
-export function getEdgeTypeInfo(edge: Edge, nodes: Node[]): { sourceType: DataType; targetType: DataType } {
+function getEdgeTypeInfo(edge: Edge, nodes: Node[]): { sourceType: DataType; targetType: DataType } {
   const sourceNode = nodes.find((n) => n.id === edge.source);
   const targetNode = nodes.find((n) => n.id === edge.target);
 
@@ -85,5 +85,3 @@ export function getEdgeTypeInfo(edge: Edge, nodes: Node[]): { sourceType: DataTy
 
   return { sourceType, targetType };
 }
-
-export default useEdgeTypes;

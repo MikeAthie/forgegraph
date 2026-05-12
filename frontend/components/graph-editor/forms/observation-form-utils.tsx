@@ -40,7 +40,7 @@ const MODE_OPTIONS: Array<{
   { value: "template", label: "Template" },
 ];
 
-export const OBSERVATION_SCOPE_OPTIONS: Array<{
+const OBSERVATION_SCOPE_OPTIONS: Array<{
   value: ObservationScope;
   label: string;
   description: string;
@@ -72,7 +72,7 @@ function hasValue(value: unknown): boolean {
   return true;
 }
 
-export function selectObservationSourceMode(
+function selectObservationSourceMode(
   config: Record<string, unknown>,
   keys: ObservationSourceKeys,
 ): ObservationSourceMode {
@@ -88,7 +88,7 @@ export function selectObservationSourceMode(
   return "value";
 }
 
-export function updateObservationSourceMode(
+function updateObservationSourceMode(
   config: Record<string, unknown>,
   keys: ObservationSourceKeys,
   mode: ObservationSourceMode,
@@ -110,7 +110,7 @@ export function updateObservationSourceMode(
   return next;
 }
 
-export function updateObservationSourceValue(
+function updateObservationSourceValue(
   config: Record<string, unknown>,
   keys: ObservationSourceKeys,
   mode: ObservationSourceMode,
@@ -263,16 +263,17 @@ export function ObservationSourceField({
             }
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
-            {MODE_OPTIONS.filter(
-              (option) =>
-                option.value === "value" ||
-                (option.value === "path" && keys.path) ||
-                (option.value === "template" && keys.template),
-            ).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+            {MODE_OPTIONS.flatMap((option) =>
+              option.value === "value" ||
+              (option.value === "path" && keys.path) ||
+              (option.value === "template" && keys.template)
+                ? [
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>,
+                  ]
+                : [],
+            )}
           </select>
         </FormField>
 

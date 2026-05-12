@@ -21,9 +21,17 @@ jest.mock("@xyflow/react", () => {
     ReactFlow: ({ nodes = [], edges = [], onConnect, onNodeClick, onEdgeClick, onPaneClick, children }: any) => (
       <div
         data-testid="reactflow"
+        role="button"
+        tabIndex={0}
         onClick={() => {
           lastOnConnect = onConnect;
           onPaneClick?.();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            lastOnConnect = onConnect;
+            onPaneClick?.();
+          }
         }}
       >
         <div data-testid="reactflow-nodes">
@@ -210,8 +218,10 @@ describe("GraphEditor", () => {
   const getCanvasNodeIds = () =>
     screen
       .getAllByTestId(/node-/)
-      .map((element) => element.getAttribute("data-testid")?.replace(/^node-/, "") ?? "")
-      .filter(Boolean);
+      .flatMap((element) => {
+        const nodeId = element.getAttribute("data-testid")?.replace(/^node-/, "") ?? "";
+        return nodeId ? [nodeId] : [];
+      });
 
   it("should quick-add an edge when adding a node with a selection", async () => {
     const user = userEvent.setup();
@@ -626,6 +636,6 @@ describe("GraphEditor", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: /add template http tool action/i })).not.toBeInTheDocument();
     });
-    expect(screen.getByText(/no runtime-ready tool actions yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no runtime-ready tool actions yet/i)).toBeInTheDocument();
   });
 });

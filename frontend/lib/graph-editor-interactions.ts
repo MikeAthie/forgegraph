@@ -88,7 +88,7 @@ export function buildEdgeRouteLanes(edges: Pick<Edge, "id" | "source" | "target"
   const lanesByEdgeId = new Map<string, number>();
 
   for (const group of groupedByPair.values()) {
-    const sorted = [...group].sort((a, b) => {
+    const sorted = group.toSorted((a, b) => {
       const aKey = `${a.source}->${a.target}:${a.id}`;
       const bKey = `${b.source}->${b.target}:${b.id}`;
       return aKey.localeCompare(bKey);

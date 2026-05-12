@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import { Building2, CircleDollarSign, CircleOff, ReceiptText, Wallet } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
@@ -40,11 +40,35 @@ function financialMetricLabel(metric: MetricProvenanceVM): string {
   return notInstrumentedLabel;
 }
 
+type AccountingState = {
+  overview: AccountingOverviewVM | null;
+  ledger: AccountingLedgerEntryVM[];
+  loading: boolean;
+  error: string | null;
+};
+
+type AccountingAction =
+  | { type: "loaded"; overview: AccountingOverviewVM; ledger: AccountingLedgerEntryVM[] }
+  | { type: "failed"; error: string };
+
+function accountingReducer(state: AccountingState, action: AccountingAction): AccountingState {
+  switch (action.type) {
+    case "loaded":
+      return { ...state, overview: action.overview, ledger: action.ledger, loading: false, error: null };
+    case "failed":
+      return { ...state, loading: false, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export default function AccountingPage() {
-  const [overview, setOverview] = useState<AccountingOverviewVM | null>(null);
-  const [ledger, setLedger] = useState<AccountingLedgerEntryVM[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [{ overview, ledger, loading, error }, dispatch] = useReducer(accountingReducer, {
+    overview: null,
+    ledger: [],
+    loading: true,
+    error: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -56,16 +80,11 @@ export default function AccountingPage() {
           accountingRepository.listLedger(),
         ]);
         if (!cancelled) {
-          setOverview(overviewData);
-          setLedger(ledgerData.slice(0, 12));
+          dispatch({ type: "loaded", overview: overviewData, ledger: ledgerData.slice(0, 12) });
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(translateProductError(err, "accounting"));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          dispatch({ type: "failed", error: translateProductError(err, "accounting") });
         }
       }
     };
@@ -111,7 +130,7 @@ export default function AccountingPage() {
                   <span>Profit</span>
                   <span>{notInstrumentedLabel}</span>
                 </div>
-                <p className="pt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                <p className="pt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
                   {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                 </p>
               </div>
@@ -153,7 +172,7 @@ export default function AccountingPage() {
           ) : null}
 
           {loading || !overview || !accountingState ? (
-            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
+            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-zinc-900/10 bg-white/70 dark:border-white/10 dark:bg-zinc-950/50">
               <Spinner size="lg" />
             </div>
           ) : (
@@ -164,33 +183,33 @@ export default function AccountingPage() {
                   value={financialMetricLabel(overview.metricProvenance.totalCostUsd)}
                   delta={metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                   tone="rose"
-                  icon={<Wallet className="h-4 w-4" />}
+                  icon={<Wallet className="size-4" />}
                 />
                 <MetricCard
                   eyebrow="Cost sources"
                   value={overview.costByType.length.toLocaleString()}
                   delta="Backend ledger cost types"
-                  icon={<ReceiptText className="h-4 w-4" />}
+                  icon={<ReceiptText className="size-4" />}
                 />
                 <MetricCard
                   eyebrow="Departments"
                   value={overview.topDepartments.length.toLocaleString()}
                   delta="Backend departments with spend"
-                  icon={<Building2 className="h-4 w-4" />}
+                  icon={<Building2 className="size-4" />}
                 />
                 <MetricCard
                   eyebrow="Revenue"
                   value={notInstrumentedLabel}
                   delta={metricProvenanceLine(overview.metricProvenance.revenue)}
                   tone="slate"
-                  icon={<CircleDollarSign className="h-4 w-4" />}
+                  icon={<CircleDollarSign className="size-4" />}
                 />
                 <MetricCard
                   eyebrow="Profit / loss"
                   value={notInstrumentedLabel}
                   delta={metricProvenanceLine(overview.metricProvenance.profit)}
                   tone="slate"
-                  icon={<CircleOff className="h-4 w-4" />}
+                  icon={<CircleOff className="size-4" />}
                 />
               </div>
 
@@ -201,16 +220,16 @@ export default function AccountingPage() {
                       overview.costByType.map((entry) => (
                         <div
                           key={entry.id}
-                          className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{entry.label}</p>
-                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{entry.label}</p>
+                              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                                 {entry.entryCount} ledger entries
                               </p>
                             </div>
-                            <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                               {formatCurrency(entry.totalCostUsd)}
                             </p>
                           </div>
@@ -238,16 +257,16 @@ export default function AccountingPage() {
                       overview.topDepartments.map((department) => (
                         <div
                           key={department.id}
-                          className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                                 {department.displayName}
                               </p>
-                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{department.status}</p>
+                              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{department.status}</p>
                             </div>
-                            <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                               {formatCurrency(department.totalCostUsd)}
                             </p>
                           </div>
@@ -272,10 +291,10 @@ export default function AccountingPage() {
 
               <Panel title="Ledger" description="Atomic accounting records kept close to the backend-governed ledger.">
                 {ledger.length ? (
-                  <div className="overflow-hidden rounded-[1.4rem] border border-slate-900/8 dark:border-white/8">
-                    <table className="min-w-full divide-y divide-slate-900/8 dark:divide-white/8">
+                  <div className="overflow-hidden rounded-[1.4rem] border border-zinc-900/8 dark:border-white/8">
+                    <table className="min-w-full divide-y divide-zinc-900/8 dark:divide-white/8">
                       <thead className="bg-[var(--panel-muted)]">
-                        <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           <th className="px-4 py-3 font-medium">Source</th>
                           <th className="px-4 py-3 font-medium">Usage</th>
                           <th className="px-4 py-3 font-medium">Cost</th>
@@ -283,30 +302,30 @@ export default function AccountingPage() {
                           <th className="px-4 py-3 font-medium">Occurred</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-900/8 dark:divide-white/8">
+                      <tbody className="divide-y divide-zinc-900/8 dark:divide-white/8">
                         {ledger.map((entry) => (
                           <tr key={entry.id} className="bg-white/70 dark:bg-white/3">
-                            <td className="px-4 py-4 text-sm">
+                            <td className="p-4 text-sm">
                               <div>
-                                <p className="font-medium text-slate-950 dark:text-slate-50">{entry.sourceLabel}</p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                <p className="font-medium text-zinc-950 dark:text-zinc-50">{entry.sourceLabel}</p>
+                                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                                   {entry.provider} · {entry.model}
                                 </p>
                               </div>
                             </td>
-                            <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">
+                            <td className="p-4 text-sm text-zinc-600 dark:text-zinc-300">
                               {entry.quantity.toLocaleString()} {entry.usageLabel}
                             </td>
-                            <td className="px-4 py-4 text-sm font-medium text-slate-950 dark:text-slate-50">
+                            <td className="p-4 text-sm font-medium text-zinc-950 dark:text-zinc-50">
                               {formatCurrency(entry.totalCostUsd)}
                             </td>
-                            <td className="px-4 py-4 text-sm">
+                            <td className="p-4 text-sm">
                               <StatusBadge
                                 status={entry.totalCostUsd > 1 ? "paused" : "active"}
                                 label={entry.totalCostUsd > 1 ? "Up" : "Flat"}
                               />
                             </td>
-                            <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">
+                            <td className="p-4 text-sm text-zinc-500 dark:text-zinc-400">
                               {formatDateTime(entry.occurredAt)}
                             </td>
                           </tr>

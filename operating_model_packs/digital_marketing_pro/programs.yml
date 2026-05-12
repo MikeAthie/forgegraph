@@ -1,0 +1,10 @@
+program_templates:
+  - id: dmp.engagement
+    display_label: Engagement
+    title_template: "{{ company_name }} Growth Engagement"
+    objective_template: Run the 12-stage Digital Marketing Pro operating methodology.
+    stages_file: stages.yml
+    default_current_stage_id: stage_01_client_inputs
+    metadata:
+      methodology: dmp_12_stage
+      currently_true_projection_type: currently_true_state

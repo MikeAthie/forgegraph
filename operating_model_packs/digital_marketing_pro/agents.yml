@@ -1,0 +1,76 @@
+capabilities:
+  - id: market_research_strategist
+    label: Market Research Strategist
+    department_id: strategy_research
+  - id: customer_intelligence_analyst
+    label: Customer Intelligence Analyst
+    department_id: strategy_research
+  - id: competitor_intelligence_analyst
+    label: Competitor Intelligence Analyst
+    department_id: strategy_research
+  - id: positioning_strategist
+    label: Positioning Strategist
+    department_id: strategy_research
+  - id: brand_strategy_lead
+    label: Brand Strategy Lead
+    department_id: brand_content
+  - id: content_strategy_lead
+    label: Content Strategy Lead
+    department_id: brand_content
+  - id: copy_lead
+    label: Copy Lead
+    department_id: brand_content
+  - id: creative_brief_lead
+    label: Creative Brief Lead
+    department_id: brand_content
+  - id: seo_lead
+    label: SEO Lead
+    department_id: channel_execution
+  - id: paid_search_lead
+    label: Paid Search Lead
+    department_id: channel_execution
+  - id: paid_social_lead
+    label: Paid Social Lead
+    department_id: channel_execution
+  - id: social_content_lead
+    label: Social Content Lead
+    department_id: channel_execution
+  - id: web_conversion_lead
+    label: Web Conversion Lead
+    department_id: channel_execution
+  - id: email_lifecycle_lead
+    label: Email Lifecycle Lead
+    department_id: crm_lifecycle
+  - id: crm_ops_lead
+    label: CRM Ops Lead
+    department_id: crm_lifecycle
+  - id: retention_strategist
+    label: Retention Strategist
+    department_id: crm_lifecycle
+  - id: analytics_lead
+    label: Analytics Lead
+    department_id: analytics_performance
+  - id: performance_marketer
+    label: Performance Marketer
+    department_id: analytics_performance
+  - id: reporting_lead
+    label: Reporting Lead
+    department_id: analytics_performance
+  - id: qa_reviewer
+    label: QA Reviewer
+    department_id: qa_compliance
+  - id: claims_reviewer
+    label: Claims Reviewer
+    department_id: qa_compliance
+  - id: compliance_reviewer
+    label: Compliance Reviewer
+    department_id: qa_compliance
+  - id: engagement_manager
+    label: Engagement Manager
+    department_id: client_approval_ops
+  - id: approval_coordinator
+    label: Approval Coordinator
+    department_id: client_approval_ops
+  - id: portfolio_operator
+    label: Portfolio Operator
+    department_id: client_approval_ops

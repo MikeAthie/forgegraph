@@ -1,0 +1,275 @@
+status_transitions:
+  not_started:
+    - not_started
+    - in_progress
+    - blocked
+  in_progress:
+    - in_progress
+    - blocked
+    - awaiting_validation
+    - completed
+  blocked:
+    - blocked
+    - in_progress
+    - awaiting_validation
+    - rerun_required
+  awaiting_validation:
+    - awaiting_validation
+    - in_progress
+    - completed
+    - rerun_required
+    - blocked
+  completed:
+    - completed
+    - rerun_required
+  rerun_required:
+    - rerun_required
+    - in_progress
+    - blocked
+    - completed
+stages:
+  - id: stage_01_client_inputs
+    sequence: 1
+    label: Client Inputs
+    output_schema: dmp.stone_opinion_intake
+    operation_template_ids:
+      - dmp.brand_intake
+      - dmp.stone_vs_opinion_mapping
+  - id: stage_02_external_research
+    sequence: 2
+    label: External Research
+    output_schema: dmp.research_brief
+    operation_template_ids:
+      - dmp.market_research
+      - dmp.competitor_research
+  - id: stage_03_four_core_documents
+    sequence: 3
+    label: Four Core Documents
+    output_schema: dmp.core_strategy_documents
+    operation_template_ids:
+      - dmp.brand_guidelines
+      - dmp.content_strategy
+  - id: stage_04_market_analysis
+    sequence: 4
+    label: Competitive + Customer + Market Analysis
+    output_schema: dmp.market_analysis
+    operation_template_ids:
+      - dmp.strategy_synthesis
+      - dmp.campaign_concepting
+  - id: stage_05_client_validation
+    sequence: 5
+    label: Client Validation
+    output_schema: dmp.validation_document
+    operation_template_ids:
+      - dmp.client_review_packet
+      - dmp.feedback_validation
+  - id: stage_06_selective_v2_reruns
+    sequence: 6
+    label: Selective v2 Re-runs
+    output_schema: dmp.rework_plan
+    operation_template_ids:
+      - dmp.rerun_plan_creation
+      - dmp.currently_true_projection_update
+  - id: stage_07_preparation
+    sequence: 7
+    label: Preparation Documents
+    output_schema: dmp.preparation_documents
+    operation_template_ids:
+      - dmp.preparation_document_set
+      - dmp.creative_brief_creation
+      - dmp.content_draft_production
+    expected_artifact_schema_ids:
+      - campaign_architecture
+      - kpi_tree
+      - content_pillars
+      - asset_inventory
+      - approval_chain
+      - operating_checklist
+    evaluation_profile_ids:
+      - dmp.structure_check
+  - id: stage_08_growth_plan
+    sequence: 8
+    label: Growth Plan + Yearly Planner
+    output_schema: dmp.growth_plan
+    operation_template_ids:
+      - dmp.growth_plan_generation
+      - dmp.yearly_planner_generation
+      - dmp.performance_baseline
+      - dmp.continuous_improvement_planning
+    expected_artifact_schema_ids:
+      - growth_plan
+      - yearly_planner
+      - quarterly_roadmap
+      - campaign_calendar
+      - strategic_priority_map
+    required_source_artifact_schema_ids:
+      - campaign_architecture
+      - kpi_tree
+      - content_pillars
+      - approval_chain
+    evaluation_profile_ids:
+      - dmp.full_check
+  - id: stage_09_channel_strategy
+    sequence: 9
+    label: Channel Strategy Fan-out
+    output_schema: dmp.channel_strategy
+    operation_template_ids:
+      - dmp.channel_strategy_fanout
+      - dmp.channel_strategy
+      - dmp.audience_segmentation
+      - dmp.lifecycle_campaign_design
+    required_source_artifact_schema_ids:
+      - growth_plan
+      - yearly_planner
+    channel_families:
+      - id: search_campaign
+        label: Search & Campaign
+        artifact_schema_ids:
+          - search_strategy
+        service_keywords:
+          - search
+          - seo
+          - campaign
+      - id: paid_platforms
+        label: Paid Platforms
+        artifact_schema_ids:
+          - paid_platform_strategy
+        service_keywords:
+          - paid
+          - ads
+          - media
+      - id: organic_influencer
+        label: Organic & Influencer
+        artifact_schema_ids:
+          - organic_social_strategy
+          - influencer_strategy
+        service_keywords:
+          - social
+          - organic
+          - influencer
+      - id: marketplace_crm
+        label: Marketplace & CRM
+        artifact_schema_ids:
+          - marketplace_strategy
+          - crm_strategy
+        service_keywords:
+          - marketplace
+          - crm
+          - lifecycle
+      - id: content_pr
+        label: Content / ATL / BTL / PR
+        artifact_schema_ids:
+          - content_pr_strategy
+        service_keywords:
+          - content
+          - pr
+          - authority
+      - id: web
+        label: Web
+        artifact_schema_ids:
+          - web_strategy
+        service_keywords:
+          - web
+          - landing
+          - cro
+      - id: measurement
+        label: Measurement
+        artifact_schema_ids:
+          - measurement_strategy
+        service_keywords:
+          - analytics
+          - measurement
+          - reporting
+    evaluation_profile_ids:
+      - dmp.quick_check
+  - id: stage_10_execution_artifacts
+    sequence: 10
+    label: Execution Artifacts
+    output_schema: dmp.execution_artifacts
+    operation_template_ids:
+      - dmp.execution_artifact_generation
+      - dmp.cms_draft_preparation
+      - dmp.email_campaign_preparation
+      - dmp.paid_media_launch_plan
+      - dmp.social_scheduling
+      - dmp.crm_sync_request
+    expected_artifact_schema_ids:
+      - ad_copy
+      - social_post_copy
+      - email_copy
+      - landing_page_copy
+      - headline_set
+      - cta_set
+      - campaign_message_set
+    required_source_artifact_schema_ids:
+      - search_strategy
+      - paid_platform_strategy
+      - organic_social_strategy
+      - crm_strategy
+      - content_pr_strategy
+      - web_strategy
+    source_requirement_mode: any
+    evaluation_profile_ids:
+      - dmp.quick_check
+      - dmp.claims_check
+  - id: stage_11_ai_creative_instructions
+    sequence: 11
+    label: AI Creative Instructions
+    output_schema: dmp.creative_instructions
+    operation_template_ids:
+      - dmp.creative_instruction_generation
+      - dmp.artifact_quality_review
+      - dmp.claims_and_evidence_check
+      - dmp.compliance_review
+      - dmp.pre_execution_gate
+    expected_artifact_schema_ids:
+      - visual_asset_brief
+      - creative_instruction
+      - video_brief
+      - image_brief
+      - design_constraints
+    required_source_artifact_schema_ids:
+      - ad_copy
+      - social_post_copy
+      - email_copy
+      - landing_page_copy
+      - campaign_message_set
+    source_requirement_mode: any
+    evaluation_profile_ids:
+      - dmp.structure_check
+      - dmp.hallucination_risk_check
+  - id: stage_12_continuous_improvement
+    sequence: 12
+    label: Continuous Improvement Loop
+    output_schema: dmp.performance_loop
+    operation_template_ids:
+      - dmp.continuous_improvement_briefing
+      - dmp.metrics_ingestion
+      - dmp.signal_detection
+      - dmp.campaign_performance_review
+      - dmp.execution_receipt_capture
+      - dmp.client_reporting
+      - atlas.monthly_reporting_and_optimization
+    expected_artifact_schema_ids:
+      - quarterly_brief
+      - ad_hoc_brief
+      - performance_insight
+      - operating_signal_summary
+      - product_feedback_brief
+      - next_operation_recommendation
+      - monthly_report
+      - monthly_kpi_scorecard
+      - audience_insights
+      - optimization_recommendations
+      - client_service_history_entry
+    signal_taxonomy_id: dmp.performance_signals
+    scorecard_profile_id: atlas_monthly_kpi_scorecard.v1
+    service_history_projection_type: client_service_history
+    service_history_projection_label: Historial del servicio
+    recommended_operation_template_ids:
+      - dmp.signal_detection
+      - dmp.campaign_performance_review
+      - dmp.continuous_improvement_planning
+      - atlas.monthly_reporting_and_optimization
+    evaluation_profile_ids:
+      - dmp.full_check

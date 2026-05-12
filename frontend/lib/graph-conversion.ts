@@ -52,30 +52,38 @@ export function graphJsonToReactFlow(graphJson: GraphJson): {
     },
   }));
 
-  const noteNodes: Node[] = (noteState as NoteEditorNode[])
-    .filter((note) => typeof note?.id === "string" && note.id.length > 0)
-    .map((note, index) => ({
-      id: note.id,
-      type: NOTE_NODE_TYPE,
-      position: positions[note.id] ?? { x: 450, y: 100 + index * 160 },
-      data: {
-        label: note.label ?? "Note",
-        text: note.text ?? "",
-      },
-      connectable: false,
-    }));
+  const noteNodes: Node[] = (noteState as NoteEditorNode[]).flatMap((note, index) =>
+    typeof note?.id === "string" && note.id.length > 0
+      ? [
+          {
+            id: note.id,
+            type: NOTE_NODE_TYPE,
+            position: positions[note.id] ?? { x: 450, y: 100 + index * 160 },
+            data: {
+              label: note.label ?? "Note",
+              text: note.text ?? "",
+            },
+            connectable: false,
+          },
+        ]
+      : [],
+  );
 
-  const edges: Edge[] = (graphJson.edges ?? [])
-    .filter((edge) => edge.from !== START_NODE_ID && edge.to !== END_NODE_ID)
-    .map((edge) => ({
-      id: edge.id,
-      source: edge.from,
-      target: edge.to,
-      label: edge.label,
-      data: {
-        condition: edge.condition,
-      },
-    }));
+  const edges: Edge[] = (graphJson.edges ?? []).flatMap((edge) =>
+    edge.from !== START_NODE_ID && edge.to !== END_NODE_ID
+      ? [
+          {
+            id: edge.id,
+            source: edge.from,
+            target: edge.to,
+            label: edge.label,
+            data: {
+              condition: edge.condition,
+            },
+          },
+        ]
+      : [],
+  );
 
   return { nodes: [...nodes, ...noteNodes], edges };
 }
@@ -115,15 +123,19 @@ export function reactFlowToGraphJson(
   });
 
   const executableNodeIds = new Set(executableNodes.map((node) => node.id));
-  const graphEdges: GraphEdge[] = edges
-    .filter((edge) => executableNodeIds.has(edge.source) && executableNodeIds.has(edge.target))
-    .map((edge) => ({
-      id: edge.id,
-      from: edge.source,
-      to: edge.target,
-      label: edge.label as string | undefined,
-      condition: edge.data?.condition as string | undefined,
-    }));
+  const graphEdges: GraphEdge[] = edges.flatMap((edge) =>
+    executableNodeIds.has(edge.source) && executableNodeIds.has(edge.target)
+      ? [
+          {
+            id: edge.id,
+            from: edge.source,
+            to: edge.target,
+            label: edge.label as string | undefined,
+            condition: edge.data?.condition as string | undefined,
+          },
+        ]
+      : [],
+  );
 
   const startEndEdges: GraphEdge[] = [];
 

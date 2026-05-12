@@ -44,15 +44,15 @@ export function ConfirmButton({
   className,
 }: ConfirmButtonProps) {
   const [open, setOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const handleConfirm = async () => {
-    setIsLoading(true);
+    setIsConfirming(true);
     try {
       await onConfirm();
       setOpen(false);
     } finally {
-      setIsLoading(false);
+      setIsConfirming(false);
     }
   };
 
@@ -74,15 +74,15 @@ export function ConfirmButton({
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={handleCancel} disabled={isLoading}>
+          <AlertDialogCancel onClick={handleCancel} disabled={isConfirming}>
             {cancelText}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleConfirm}
-            disabled={isLoading}
+            disabled={isConfirming}
             className={cn(variant === "destructive" && buttonVariants({ variant: "destructive" }))}
           >
-            {isLoading ? (
+            {isConfirming ? (
               <>
                 <Spinner size="xs" className="mr-2" />
                 {confirmText}…

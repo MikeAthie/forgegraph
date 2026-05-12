@@ -27,15 +27,15 @@ export function getMarketplaceReasonLabel(reason?: string | null): string {
   return DELIVERY_REASON_LABELS[reason] ?? reason.replace(/_/g, " ");
 }
 
-export function isMarketplacePackageInstalled(pkg: MarketplacePackage): boolean {
+function isMarketplacePackageInstalled(pkg: MarketplacePackage): boolean {
   return Boolean(pkg.installed_release);
 }
 
-export function isMarketplacePackageRuntimeReady(pkg: MarketplacePackage): boolean {
+function isMarketplacePackageRuntimeReady(pkg: MarketplacePackage): boolean {
   return isMarketplacePackageInstalled(pkg) && pkg.runtime_delivery?.state === "ready";
 }
 
-export function isMarketplacePackageTemplateOnly(pkg: MarketplacePackage): boolean {
+function isMarketplacePackageTemplateOnly(pkg: MarketplacePackage): boolean {
   return pkg.runtime_delivery?.state === "template";
 }
 

@@ -49,12 +49,12 @@ WRITE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "Run ORM write",
         re.compile(
-            r"""Run\.objects\.(?:create|get_or_create|update_or_create|bulk_create|bulk_update)""",
+            r"""\bRun\.objects\.(?:create|get_or_create|update_or_create|bulk_create|bulk_update)""",
         ),
     ),
     (
         "Run ORM update",
-        re.compile(r"""Run\.objects\.filter\([^)]*\)\.update\("""),
+        re.compile(r"""\bRun\.objects\.filter\([^)]*\)\.update\("""),
     ),
     (
         "Run state mutation",

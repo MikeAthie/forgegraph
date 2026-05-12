@@ -257,7 +257,7 @@ function inferDriverScores(state: ConsultingExecutionState): Map<ConsultingDrive
   for (const entry of weightedTexts) {
     const normalizedText = normalizeText(entry.text);
     for (const rule of DRIVER_KEYWORDS) {
-      if (rule.keywords.some((keyword) => normalizedText.includes(keyword))) {
+      if (rule.keywords.some((keyword) => normalizedText.split(keyword).length > 1)) {
         scores.set(rule.driver, (scores.get(rule.driver) ?? 0) + entry.weight);
       }
     }
@@ -268,7 +268,7 @@ function inferDriverScores(state: ConsultingExecutionState): Map<ConsultingDrive
 
 function inferPrimaryCandidate(state: ConsultingExecutionState): ConsultingDriver | null {
   const scores = inferDriverScores(state);
-  const ordered = [...scores.entries()].sort((left, right) => right[1] - left[1]);
+  const ordered = Array.from(scores.entries()).toSorted((left, right) => right[1] - left[1]);
   const [winner, winnerScore] = ordered[0] ?? [null, 0];
   const secondScore = ordered[1]?.[1] ?? 0;
 

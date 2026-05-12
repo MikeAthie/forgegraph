@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer } from "react";
+import Image from "next/image";
 import { useRouter } from "next/router";
 import { AlertCircle, ArrowLeft, Loader2, Lock, ShoppingBag } from "lucide-react";
 
@@ -13,17 +14,73 @@ const currency = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 0,
 });
 
+type StorefrontState = {
+  products: StorefrontProduct[];
+  storefrontName: string;
+  orderStatus: string | null;
+  loading: boolean;
+  checkoutLoading: string | null;
+  buyerAlias: string;
+  error: string | null;
+};
+
+type StorefrontAction =
+  | { type: "loadStarted" }
+  | { type: "productsLoaded"; products: StorefrontProduct[]; storefrontName: string }
+  | { type: "loadFailed"; error: string }
+  | { type: "orderCleared" }
+  | { type: "orderLoaded"; orderStatus: string; storefrontName?: string }
+  | { type: "orderFailed"; orderStatus: string }
+  | { type: "checkoutStarted"; productId: string }
+  | { type: "checkoutFailed"; error: string }
+  | { type: "buyerAliasChanged"; value: string };
+
+function storefrontReducer(state: StorefrontState, action: StorefrontAction): StorefrontState {
+  switch (action.type) {
+    case "loadStarted":
+      return { ...state, loading: true, error: null };
+    case "productsLoaded":
+      return { ...state, products: action.products, storefrontName: action.storefrontName, loading: false };
+    case "loadFailed":
+      return { ...state, loading: false, error: action.error };
+    case "orderCleared":
+      return { ...state, orderStatus: null };
+    case "orderLoaded":
+      return {
+        ...state,
+        orderStatus: action.orderStatus,
+        storefrontName: action.storefrontName ?? state.storefrontName,
+      };
+    case "orderFailed":
+      return { ...state, orderStatus: action.orderStatus };
+    case "checkoutStarted":
+      return { ...state, checkoutLoading: action.productId, error: null };
+    case "checkoutFailed":
+      return { ...state, checkoutLoading: null, error: action.error };
+    case "buyerAliasChanged":
+      return { ...state, buyerAlias: action.value };
+    default:
+      return state;
+  }
+}
+
 export default function StorefrontPage() {
   const router = useRouter();
+  const { back } = router;
   const companySlug = typeof router.query.companySlug === "string" ? router.query.companySlug : "";
   const orderToken = typeof router.query.order === "string" ? router.query.order : "";
-  const [products, setProducts] = useState<StorefrontProduct[]>([]);
-  const [storefrontName, setStorefrontName] = useState("Storefront");
-  const [orderStatus, setOrderStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [buyerAlias, setBuyerAlias] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [{ products, storefrontName, orderStatus, loading, checkoutLoading, buyerAlias, error }, dispatch] = useReducer(
+    storefrontReducer,
+    {
+      products: [],
+      storefrontName: "Storefront",
+      orderStatus: null,
+      loading: true,
+      checkoutLoading: null,
+      buyerAlias: "",
+      error: null,
+    },
+  );
 
   const visibleProducts = useMemo(() => products.filter((product) => product.model), [products]);
   const availableCount = visibleProducts.filter((product) => !product.sold_out).length;
@@ -37,21 +94,19 @@ export default function StorefrontPage() {
     }
     let cancelled = false;
     const loadProducts = async () => {
-      setLoading(true);
-      setError(null);
+      dispatch({ type: "loadStarted" });
       try {
         const response = await storefrontApi.listProducts(companySlug);
         if (!cancelled) {
-          setProducts(response.products);
-          setStorefrontName(response.storefront_display_name || response.company_slug || "Storefront");
+          dispatch({
+            type: "productsLoaded",
+            products: response.products,
+            storefrontName: response.storefront_display_name || response.company_slug || "Storefront",
+          });
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Storefront could not be loaded.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          dispatch({ type: "loadFailed", error: err instanceof Error ? err.message : "Storefront could not be loaded." });
         }
       }
     };
@@ -63,7 +118,7 @@ export default function StorefrontPage() {
 
   useEffect(() => {
     if (!router.isReady || !companySlug || !orderToken) {
-      setOrderStatus(null);
+      dispatch({ type: "orderCleared" });
       return;
     }
     let cancelled = false;
@@ -71,16 +126,15 @@ export default function StorefrontPage() {
       try {
         const response = await storefrontApi.getOrderStatus(companySlug, orderToken);
         if (!cancelled) {
-          setOrderStatus(
-            `${response.order.reference}: payment ${response.order.payment_status.replaceAll("_", " ")}, fulfillment ${response.order.fulfillment_status.replaceAll("_", " ")}`,
-          );
-          if (response.storefront?.display_name) {
-            setStorefrontName(response.storefront.display_name);
-          }
+          dispatch({
+            type: "orderLoaded",
+            orderStatus: `${response.order.reference}: payment ${response.order.payment_status.replaceAll("_", " ")}, fulfillment ${response.order.fulfillment_status.replaceAll("_", " ")}`,
+            storefrontName: response.storefront?.display_name,
+          });
         }
       } catch {
         if (!cancelled) {
-          setOrderStatus("Order status is not available yet.");
+          dispatch({ type: "orderFailed", orderStatus: "Order status is not available yet." });
         }
       }
     };
@@ -94,8 +148,7 @@ export default function StorefrontPage() {
     if (product.sold_out) {
       return;
     }
-    setCheckoutLoading(product.id);
-    setError(null);
+    dispatch({ type: "checkoutStarted", productId: product.id });
     try {
       const result = await storefrontApi.createCheckoutSession(
         companySlug,
@@ -108,25 +161,24 @@ export default function StorefrontPage() {
       );
       window.location.href = result.checkout_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout could not be started.");
-      setCheckoutLoading(null);
+      dispatch({ type: "checkoutFailed", error: err instanceof Error ? err.message : "Checkout could not be started." });
     }
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f4ef] text-slate-950">
+    <main className="min-h-screen bg-[#f7f4ef] text-zinc-950">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-900/10 pb-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-900/10 pb-4">
           <button
             type="button"
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-950"
+            onClick={() => back()}
+            className="inline-flex items-center gap-2 text-sm font-medium text-zinc-600 transition hover:text-zinc-950"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             Back
           </button>
-          <div className="flex items-center gap-2 text-sm text-slate-600">
-            <Lock className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-sm text-zinc-600">
+            <Lock className="size-4" />
             Secure Stripe checkout
           </div>
         </header>
@@ -134,15 +186,15 @@ export default function StorefrontPage() {
         <section className="grid gap-6 py-6 lg:grid-cols-[20rem_1fr]">
           <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{storefrontName}</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Available Products</h1>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{storefrontName}</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">Available Products</h1>
+              <p className="mt-3 text-sm leading-6 text-zinc-600">
                 One-piece reservations are held for 30 minutes while Stripe Checkout is open.
               </p>
             </div>
             {orderStatus ? (
               <Alert>
-                <ShoppingBag className="h-4 w-4" />
+                <ShoppingBag className="size-4" />
                 <AlertDescription>{orderStatus}</AlertDescription>
               </Alert>
             ) : null}
@@ -150,18 +202,19 @@ export default function StorefrontPage() {
               <Metric label="Available SKUs" value={availableCount} />
               <Metric label="Loaded SKUs" value={visibleProducts.length} />
             </div>
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-700">Buyer alias</span>
+            <label htmlFor="pages-storefront-companyslug-153" className="block space-y-2">
+              <span className="text-sm font-medium text-zinc-700">Buyer alias</span>
               <Input
+                id="pages-storefront-companyslug-153"
                 value={buyerAlias}
-                onChange={(event) => setBuyerAlias(event.target.value)}
+                onChange={(event) => dispatch({ type: "buyerAliasChanged", value: event.target.value })}
                 placeholder="Instagram handle or first name"
                 className="bg-white"
               />
             </label>
             {error ? (
               <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="size-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
@@ -174,7 +227,7 @@ export default function StorefrontPage() {
               </div>
             ) : null}
             {!loading && visibleProducts.length === 0 ? (
-              <div className="border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-600">
+              <div className="border border-dashed border-zinc-300 bg-white p-8 text-sm text-zinc-600">
                 No products are available yet.
               </div>
             ) : null}
@@ -197,9 +250,9 @@ export default function StorefrontPage() {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="border border-slate-900/10 bg-white p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
+    <div className="border border-zinc-900/10 bg-white p-3">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-zinc-950">{value}</p>
     </div>
   );
 }
@@ -214,22 +267,28 @@ function ProductTile({
   onCheckout: () => void;
 }) {
   return (
-    <article className="overflow-hidden border border-slate-900/10 bg-white">
-      <div className="aspect-[4/3] bg-slate-100">
+    <article className="overflow-hidden border border-zinc-900/10 bg-white">
+      <div className="relative aspect-[4/3] bg-zinc-100">
         {product.photo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.photo_url} alt={product.name || product.model} className="h-full w-full object-cover" />
+          <Image
+            src={product.photo_url}
+            alt={product.name || product.model}
+            fill
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover"
+            unoptimized
+          />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-slate-100 px-6 text-center">
-            <span className="text-lg font-semibold tracking-wide text-slate-700">{product.model}</span>
+          <div className="flex size-full items-center justify-center bg-zinc-100 px-6 text-center">
+            <span className="text-lg font-semibold tracking-wide text-zinc-700">{product.model}</span>
           </div>
         )}
       </div>
       <div className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-slate-950">{product.name || product.model}</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="truncate text-base font-semibold text-zinc-950">{product.name || product.model}</h2>
+            <p className="mt-1 text-sm text-zinc-500">
               {product.color || "Frame"} · {product.sku}
             </p>
           </div>
@@ -237,18 +296,16 @@ function ProductTile({
             variant="outline"
             className={cn(
               "shrink-0",
-              product.sold_out ? "border-slate-300 text-slate-500" : "border-emerald-700/25 text-emerald-700",
+              product.sold_out ? "border-zinc-300 text-zinc-500" : "border-emerald-700/25 text-emerald-700",
             )}
           >
             {product.sold_out ? "Sold out" : `${product.available_units} left`}
           </Badge>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-lg font-semibold text-slate-950">
-            {currency.format(Number(product.price_mxn || 0))}
-          </span>
+          <span className="text-lg font-semibold text-zinc-950">{currency.format(Number(product.price_mxn || 0))}</span>
           <Button type="button" onClick={onCheckout} disabled={product.sold_out || loading} className="min-w-28">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <ShoppingBag className="size-4" />}
             Checkout
           </Button>
         </div>

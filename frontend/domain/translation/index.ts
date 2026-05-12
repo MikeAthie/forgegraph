@@ -56,7 +56,7 @@ export function toOperationStatusVM(status: string): OperationStatusVM {
   return translateRunStatus(status);
 }
 
-export function toTaskStatusVM(status: string): TaskStatusVM {
+function toTaskStatusVM(status: string): TaskStatusVM {
   const normalized = status.toLowerCase();
   if (normalized === "succeeded" || normalized === "success" || normalized === "completed") {
     return "completed";
@@ -103,7 +103,7 @@ function getDepartmentName(departmentId: string | null | undefined, setupJson: G
   return department?.name || "Department";
 }
 
-export function toDepartmentVMs(setupJson: GraphJson | null | undefined): DepartmentVM[] {
+function toDepartmentVMs(setupJson: GraphJson | null | undefined): DepartmentVM[] {
   return getDepartmentNodes(setupJson).map((department, index) => ({
     id: department.id || `department-${index + 1}`,
     label: department.name || "Department",
@@ -113,7 +113,7 @@ export function toDepartmentVMs(setupJson: GraphJson | null | undefined): Depart
   }));
 }
 
-export function toTaskVMFromDepartmentActivity(activity: NodeRunItem, setupJson: GraphJson | null | undefined): TaskVM {
+function toTaskVMFromDepartmentActivity(activity: NodeRunItem, setupJson: GraphJson | null | undefined): TaskVM {
   const departmentName = getDepartmentTaskLabel(activity, setupJson ?? null);
   const resultPreview = stringifyPreview(activity.output_json);
   const issuePreview = stringifyPreview(activity.error_json);
@@ -187,7 +187,7 @@ export function toTaskVMFromRecord(record: TaskRecord): TaskVM {
   };
 }
 
-export function toDeliverableVM(
+function toDeliverableVM(
   operation: Pick<RunDetail, "id" | "status" | "ended_at" | "input_json" | "output_json" | "node_runs">,
 ): DeliverableVM {
   const ready = toOperationStatusVM(String(operation.status)) === "completed";
@@ -215,7 +215,7 @@ export function toDeliverableVM(
   };
 }
 
-export function toOperationFailureVM(
+function toOperationFailureVM(
   operation: Pick<RunDetail, "error_message" | "node_runs" | "status">,
   setupJson: GraphJson | null | undefined,
 ): OperationFailureVM | null {
@@ -414,7 +414,7 @@ export function toApprovalVMFromDecision(decision: DecisionRecord): ApprovalVM {
   };
 }
 
-export function getDepartmentProgressVM(
+function getDepartmentProgressVM(
   operation: OperationVM,
   setupJson: GraphJson | null | undefined,
 ): DepartmentVM[] {

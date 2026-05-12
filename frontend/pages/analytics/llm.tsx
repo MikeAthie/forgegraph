@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -43,18 +43,21 @@ const PERIOD_OPTIONS = [
 const isPeriodOption = (value: unknown): value is string =>
   typeof value === "string" && PERIOD_OPTIONS.some((option) => option.value === value);
 
+const NUMBER_FORMATTER = new Intl.NumberFormat();
+const USD_FORMATTER = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
 const formatNumber = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat().format(value);
+  return NUMBER_FORMATTER.format(value);
 };
 
 const formatCurrency = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return USD_FORMATTER.format(value);
 };
 
 const formatPercent = (value: number | null | undefined) => {
@@ -118,23 +121,187 @@ const downloadBlob = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+function LLMAnalyticsHeader({
+  period,
+  loading,
+  onPeriodChange,
+  onRefresh,
+  onExport,
+}: {
+  period: string;
+  loading: boolean;
+  onPeriodChange: (period: string) => void;
+  onRefresh: () => void;
+  onExport: (dataset: "usage" | "costs", format: "json" | "csv") => void;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card/70 p-6 shadow-lg backdrop-blur-sm">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at top left, rgba(15, 118, 110, 0.15), transparent 55%), radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.12), transparent 50%), linear-gradient(120deg, rgba(15, 23, 42, 0.04), rgba(255, 255, 255, 0))",
+        }}
+      />
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Badge variant="outline" className="mb-3 border-emerald-400/40 text-emerald-700 dark:text-emerald-200">
+            LLM Analytics
+          </Badge>
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">Cost control, visible.</h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Track spend, usage, and provider mix in real time. Budget alerts fire before you blow the month.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={period} onValueChange={onPeriodChange}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={onRefresh} disabled={loading}>
+            {loading ? <Spinner size="xs" /> : "Refresh"}
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/analytics/memory">Memory Analytics</Link>
+          </Button>
+          <Button variant="outline" onClick={() => onExport("usage", "csv")}>
+            Export usage CSV
+          </Button>
+          <Button variant="outline" onClick={() => onExport("costs", "json")}>
+            Export cost JSON
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LLMBudgetAlert({ budget }: { budget: LLMBudgetStatus | null }) {
+  if (budget?.over_budget) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          Monthly LLM budget exceeded. Operations will be blocked until the next cycle or budget update.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (budget?.warning) {
+    return (
+      <Alert>
+        <AlertDescription>
+          Budget warning: usage has crossed {formatCurrency(budget.warning_threshold_usd)} this month.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return null;
+}
+
+function AnalyticsErrorAlert({ error }: { error: string | null }) {
+  return error ? (
+    <Alert variant="destructive">
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  ) : null;
+}
+
+type LLMAnalyticsState = {
+  usage: LLMAnalyticsUsage | null;
+  costs: LLMAnalyticsCosts | null;
+  budget: LLMBudgetStatus | null;
+  quota: LLMQuotaStatus | null;
+  loading: boolean;
+  error: string | null;
+  budgetLimit: string;
+  budgetThreshold: string;
+  isSavingBudget: boolean;
+};
+
+type LLMAnalyticsAction =
+  | {
+      type: "load-success";
+      usage: LLMAnalyticsUsage;
+      costs: LLMAnalyticsCosts;
+      budget: LLMBudgetStatus;
+      quota: LLMQuotaStatus;
+    }
+  | { type: "load-start" }
+  | { type: "load-error"; error: string }
+  | { type: "budget-field"; field: "budgetLimit" | "budgetThreshold"; value: string }
+  | { type: "budget-save-start" }
+  | { type: "budget-save-success"; budget: LLMBudgetStatus }
+  | { type: "budget-save-end" };
+
+const initialLLMAnalyticsState: LLMAnalyticsState = {
+  usage: null,
+  costs: null,
+  budget: null,
+  quota: null,
+  loading: true,
+  error: null,
+  budgetLimit: "",
+  budgetThreshold: "80",
+  isSavingBudget: false,
+};
+
+function budgetInputsFrom(budget: LLMBudgetStatus): Pick<LLMAnalyticsState, "budgetLimit" | "budgetThreshold"> {
+  return {
+    budgetLimit: budget.budget?.monthly_limit_usd != null ? String(budget.budget.monthly_limit_usd) : "",
+    budgetThreshold:
+      budget.budget?.warning_threshold_pct != null ? String(Math.round(budget.budget.warning_threshold_pct * 100)) : "80",
+  };
+}
+
+function llmAnalyticsReducer(state: LLMAnalyticsState, action: LLMAnalyticsAction): LLMAnalyticsState {
+  switch (action.type) {
+    case "load-start":
+      return { ...state, loading: true, error: null };
+    case "load-success":
+      return {
+        ...state,
+        usage: action.usage,
+        costs: action.costs,
+        budget: action.budget,
+        quota: action.quota,
+        loading: false,
+        error: null,
+        ...budgetInputsFrom(action.budget),
+      };
+    case "load-error":
+      return { ...state, loading: false, error: action.error };
+    case "budget-field":
+      return { ...state, [action.field]: action.value };
+    case "budget-save-start":
+      return { ...state, isSavingBudget: true };
+    case "budget-save-success":
+      return { ...state, budget: action.budget, isSavingBudget: false, ...budgetInputsFrom(action.budget) };
+    case "budget-save-end":
+      return { ...state, isSavingBudget: false };
+    default:
+      return state;
+  }
+}
+
 export default function LLMAnalyticsPage() {
   const router = useRouter();
-  const [period, setPeriod] = useState("30d");
-  const [usage, setUsage] = useState<LLMAnalyticsUsage | null>(null);
-  const [costs, setCosts] = useState<LLMAnalyticsCosts | null>(null);
-  const [budget, setBudget] = useState<LLMBudgetStatus | null>(null);
-  const [quota, setQuota] = useState<LLMQuotaStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [budgetLimit, setBudgetLimit] = useState("");
-  const [budgetThreshold, setBudgetThreshold] = useState("80");
-  const [isSavingBudget, setIsSavingBudget] = useState(false);
+  const { replace } = router;
+  const [{ usage, costs, budget, quota, loading, error, budgetLimit, budgetThreshold, isSavingBudget }, dispatchPage] =
+    useReducer(llmAnalyticsReducer, initialLLMAnalyticsState);
+  const period = isPeriodOption(router.query.period) ? router.query.period : "30d";
 
   const fetchAnalytics = useCallback(async (periodValue: string) => {
-    setLoading(true);
-    setError(null);
+    dispatchPage({ type: "load-start" });
 
     try {
       const [usageData, costsData, budgetData, quotaData] = await Promise.all([
@@ -144,14 +311,15 @@ export default function LLMAnalyticsPage() {
         analyticsApi.getLLMQuota(),
       ]);
 
-      setUsage(usageData);
-      setCosts(costsData);
-      setBudget(budgetData);
-      setQuota(quotaData);
+      dispatchPage({
+        type: "load-success",
+        usage: usageData,
+        costs: costsData,
+        budget: budgetData,
+        quota: quotaData,
+      });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load LLM analytics."));
-    } finally {
-      setLoading(false);
+      dispatchPage({ type: "load-error", error: getApiErrorMessage(err, "Failed to load LLM analytics.") });
     }
   }, []);
 
@@ -159,21 +327,11 @@ export default function LLMAnalyticsPage() {
     void fetchAnalytics(period);
   }, [fetchAnalytics, period]);
 
-  useEffect(() => {
-    if (!router.isReady) {
-      return;
-    }
-    if (isPeriodOption(router.query.period)) {
-      setPeriod(router.query.period);
-    }
-  }, [router.isReady, router.query.period]);
-
   const handlePeriodChange = (nextPeriod: string) => {
-    setPeriod(nextPeriod);
     if (!router.isReady) {
       return;
     }
-    void router.replace(
+    void replace(
       {
         pathname: router.pathname,
         query: { ...router.query, period: nextPeriod },
@@ -182,15 +340,6 @@ export default function LLMAnalyticsPage() {
       { shallow: true, scroll: false },
     );
   };
-
-  useEffect(() => {
-    if (budget?.budget?.monthly_limit_usd != null) {
-      setBudgetLimit(String(budget.budget.monthly_limit_usd));
-    }
-    if (budget?.budget?.warning_threshold_pct != null) {
-      setBudgetThreshold(String(Math.round(budget.budget.warning_threshold_pct * 100)));
-    }
-  }, [budget]);
 
   const costSparklineValues = useMemo(() => costs?.series.map((entry) => entry.cost_usd ?? 0) ?? [], [costs]);
 
@@ -206,18 +355,17 @@ export default function LLMAnalyticsPage() {
 
   const saveBudget = async () => {
     if (!budgetLimit) return;
-    setIsSavingBudget(true);
+    dispatchPage({ type: "budget-save-start" });
     try {
       const updated = await analyticsApi.setLLMBudget({
         monthly_limit_usd: Number(budgetLimit),
         warning_threshold_pct: Number(budgetThreshold),
       });
-      setBudget(updated);
+      dispatchPage({ type: "budget-save-success", budget: updated });
       showSuccess("Budget updated");
     } catch (err: unknown) {
       showError("Budget update failed", getApiErrorMessage(err, ERROR_FALLBACKS.analytics.update));
-    } finally {
-      setIsSavingBudget(false);
+      dispatchPage({ type: "budget-save-end" });
     }
   };
 
@@ -237,68 +385,19 @@ export default function LLMAnalyticsPage() {
     <ProtectedRoute>
       <DashboardLayout>
         <div className="flex flex-col gap-6">
-          <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card/70 p-6 shadow-lg backdrop-blur-sm">
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at top left, rgba(15, 118, 110, 0.15), transparent 55%), radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.12), transparent 50%), linear-gradient(120deg, rgba(15, 23, 42, 0.04), rgba(255, 255, 255, 0))",
-              }}
-            />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <Badge variant="outline" className="mb-3 border-emerald-400/40 text-emerald-700 dark:text-emerald-200">
-                  LLM Analytics
-                </Badge>
-                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-                  Cost control, visible.
-                </h1>
-                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  Track spend, usage, and provider mix in real time. Budget alerts fire before you blow the month.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={period} onValueChange={handlePeriodChange}>
-                  <SelectTrigger className="w-[170px]">
-                    <SelectValue placeholder="Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PERIOD_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={() => void fetchAnalytics(period)} disabled={loading}>
-                  {loading ? <Spinner size="xs" /> : "Refresh"}
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/analytics/memory">Memory Analytics</Link>
-                </Button>
-                <Button variant="outline" onClick={() => void handleExport("usage", "csv")}>
-                  Export usage CSV
-                </Button>
-                <Button variant="outline" onClick={() => void handleExport("costs", "json")}>
-                  Export cost JSON
-                </Button>
-              </div>
-            </div>
-          </div>
+          <LLMAnalyticsHeader
+            period={period}
+            loading={loading}
+            onPeriodChange={handlePeriodChange}
+            onRefresh={() => {
+              void fetchAnalytics(period);
+            }}
+            onExport={(dataset, format) => {
+              void handleExport(dataset, format);
+            }}
+          />
 
-          {budget?.over_budget ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Monthly LLM budget exceeded. Operations will be blocked until the next cycle or budget update.
-              </AlertDescription>
-            </Alert>
-          ) : budget?.warning ? (
-            <Alert>
-              <AlertDescription>
-                Budget warning: usage has crossed {formatCurrency(budget.warning_threshold_usd)} this month.
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <LLMBudgetAlert budget={budget} />
 
           {loading ? (
             <div className="flex items-center justify-center gap-3 rounded-2xl border border-border/40 bg-card/50 py-12">
@@ -412,7 +511,9 @@ export default function LLMAnalyticsPage() {
                           step="0.01"
                           autoComplete="off"
                           value={budgetLimit}
-                          onChange={(e) => setBudgetLimit(e.target.value)}
+                          onChange={(e) =>
+                            dispatchPage({ type: "budget-field", field: "budgetLimit", value: e.target.value })
+                          }
                           placeholder="200"
                         />
                       </FormField>
@@ -425,7 +526,9 @@ export default function LLMAnalyticsPage() {
                           min={1}
                           max={100}
                           value={budgetThreshold}
-                          onChange={(e) => setBudgetThreshold(e.target.value)}
+                          onChange={(e) =>
+                            dispatchPage({ type: "budget-field", field: "budgetThreshold", value: e.target.value })
+                          }
                           placeholder="80"
                         />
                       </FormField>
@@ -454,7 +557,7 @@ export default function LLMAnalyticsPage() {
                       <span className="text-muted-foreground">Total tokens</span>
                       <span className="font-semibold">{formatNumber(usage?.totals.total_tokens)}</span>
                     </div>
-                    <div className="mt-4 rounded-xl border border-border/40 bg-muted/30 px-3 py-3">
+                    <div className="mt-4 rounded-xl border border-border/40 bg-muted/30 p-3">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Monthly token quota</span>
                         <span className="font-semibold">
@@ -482,11 +585,7 @@ export default function LLMAnalyticsPage() {
             </>
           )}
 
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          <AnalyticsErrorAlert error={error} />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

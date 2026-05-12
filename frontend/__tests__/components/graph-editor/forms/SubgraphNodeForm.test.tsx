@@ -49,12 +49,12 @@ describe("SubgraphNodeForm", () => {
   const renderWithConfig = (initialConfig: NodeFormProps["config"] = {}) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
-      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+      const recordConfigChange = (nextConfig: NodeFormProps["config"]) => {
         setConfig(nextConfig);
         mockOnChange(nextConfig);
       };
 
-      return <SubgraphNodeForm config={config} onChange={handleChange} errors={{}} setErrors={mockSetErrors} />;
+      return <SubgraphNodeForm config={config} onChange={recordConfigChange} errors={{}} setErrors={mockSetErrors} />;
     };
 
     return render(<Wrapper />);

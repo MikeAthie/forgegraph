@@ -1,0 +1,382 @@
+profiles:
+  - id: dmp.quick_check
+    label: Quick Check
+    mode: quick
+    weights:
+      hallucination: 0.4
+      content_quality: 0.35
+      readability: 0.25
+  - id: dmp.full_check
+    label: Full Check
+    mode: full
+    weights:
+      content_quality: 0.25
+      brand_voice: 0.2
+      hallucination: 0.2
+      claim_verification: 0.15
+      structure: 0.1
+      readability: 0.1
+  - id: dmp.compliance_check
+    label: Compliance Check
+    mode: compliance
+    weights:
+      hallucination: 0.35
+      claim_verification: 0.3
+      brand_voice: 0.2
+      structure: 0.15
+  - id: dmp.claims_check
+    label: Claims Check
+    mode: claims
+  - id: dmp.structure_check
+    label: Structure Check
+    mode: structure
+  - id: dmp.hallucination_risk_check
+    label: Hallucination Risk Check
+    mode: hallucination_risk
+  - id: dmp.regression_check
+    label: Regression Check
+    mode: regression
+  - id: atlas_monthly_kpi_scorecard.v1
+    label: ATLAS Monthly KPI Scorecard
+    mode: performance_judge
+    thresholds:
+      block_on_bad_or_risky: false
+    rubric:
+      engine: threshold_scorecard_v1
+      judge_type: performance_judge
+      cadence: monthly
+      block_on_bad_or_risky: false
+      scope:
+        - company
+        - company_program
+        - operation_objective
+        - performance_snapshot
+      outputs:
+        - evaluation_run
+        - scorecard
+        - evaluation_findings
+        - company_signals
+        - recommended_operations
+        - monthly_report_section
+        - state_projection_update
+      result_levels:
+        bad_or_risky:
+          label: Malo / Riesgoso
+          severity: high
+        acceptable:
+          label: Aceptable
+          severity: medium
+        good:
+          label: Buen Resultado
+          severity: low
+      metrics:
+        - id: social_engagement_rate
+          label: Engagement Rate redes sociales
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 1
+            good_gte: 3
+          levels: &atlas_kpi_levels
+            bad_or_risky:
+              label: Malo / Riesgoso
+            acceptable:
+              label: Aceptable
+            good:
+              label: Buen Resultado
+          recommended_operation_template_ids:
+            - dmp.campaign_performance_review
+            - atlas.hook_creation
+            - atlas.content_pillar_review
+          signal_mapping:
+            signal_type: social_engagement_risk
+            severity: high
+        - id: meta_tiktok_ctr
+          label: CTR anuncios Meta/TikTok
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 0.8
+            good_gte: 1.5
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.paid_strategy_review
+            - dmp.execution_artifact_generation
+            - dmp.creative_instruction_generation
+          signal_mapping:
+            signal_type: paid_performance_risk
+            severity: high
+        - id: google_search_ctr
+          label: CTR Google Search
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 2
+            good_gte: 5
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.channel_strategy_fanout
+            - atlas.digital_diagnosis
+            - atlas.key_messages
+          signal_mapping:
+            signal_type: search_performance_risk
+            severity: high
+        - id: landing_page_conversion
+          label: Conversión landing page
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 5
+            good_gte: 15
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.execution_artifact_generation
+            - atlas.hook_creation
+            - dmp.channel_strategy_fanout
+          signal_mapping:
+            signal_type: conversion_rate_risk
+            severity: high
+        - id: lead_to_sale_conversion
+          label: Conversión lead → venta
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 5
+            good_gte: 15
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.crm_mapping
+            - dmp.lifecycle_campaign_design
+            - atlas.retention_strategy
+          signal_mapping:
+            signal_type: sales_conversion_risk
+            severity: high
+        - id: lead_response_time
+          label: Tiempo de respuesta a leads
+          unit: minutes
+          direction: lower_is_better
+          thresholds:
+            bad_gt: 120
+            good_lt: 15
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.crm_mapping
+            - dmp.lifecycle_campaign_design
+            - dmp.crm_sync_reconciliation
+          signal_mapping:
+            signal_type: lead_response_risk
+            severity: high
+        - id: cost_per_lead_services
+          label: Costo por lead servicios
+          unit: currency_or_ratio
+          direction: lower_is_better
+          mode: contextual
+          contextual_formula: cost_per_outcome_profitability
+          required_context_inputs:
+            - cost_per_lead
+            - average_ticket
+            - gross_margin
+            - lead_to_sale_conversion_rate
+            - target_profit_margin
+          thresholds:
+            bad_gt: 1
+            good_lte: 0.7
+          levels:
+            bad_or_risky:
+              label: Muy alto vs ticket
+            acceptable:
+              label: Sostenible
+            good:
+              label: Muy rentable
+          recommended_operation_template_ids:
+            - atlas.paid_strategy_review
+            - dmp.campaign_performance_review
+          signal_mapping:
+            signal_type: lead_cost_risk
+            severity: high
+        - id: email_open_rate
+          label: Apertura de emails
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 15
+            good_gte: 25
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.audience_segmentation
+            - dmp.lifecycle_campaign_design
+            - dmp.execution_artifact_generation
+        - id: email_click_rate
+          label: Click en emails
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 1
+            good_gte: 3
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.execution_artifact_generation
+            - atlas.hook_creation
+            - dmp.audience_segmentation
+        - id: customer_retention_rate
+          label: Retención clientes
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 50
+            good_gte: 75
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.retention_strategy
+            - dmp.lifecycle_campaign_design
+        - id: roas
+          label: ROAS
+          unit: ratio
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 1.5
+            good_gte: 3
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.paid_strategy_review
+            - dmp.campaign_performance_review
+            - dmp.continuous_improvement_planning
+          signal_mapping:
+            signal_type: paid_efficiency_risk
+            severity: high
+        - id: cac_vs_profit
+          label: CAC vs utilidad
+          unit: ratio
+          direction: lower_is_better
+          mode: contextual
+          contextual_formula: cost_vs_profit_ratio
+          required_context_inputs:
+            - customer_acquisition_cost
+            - gross_profit_per_customer
+          thresholds:
+            bad_gt: 1
+            good_lte: 0.5
+          levels:
+            bad_or_risky:
+              label: CAC consume utilidad
+            acceptable:
+              label: CAC sostenible
+            good:
+              label: CAC muy rentable
+          recommended_operation_template_ids:
+            - atlas.paid_strategy_review
+            - dmp.campaign_performance_review
+          signal_mapping:
+            signal_type: acquisition_cost_risk
+            severity: high
+        - id: publishing_frequency
+          label: Frecuencia de publicación
+          unit: posts_or_publications
+          direction: higher_is_better
+          mode: threshold_or_manual
+          thresholds:
+            bad_lt: 4
+            good_gte: 16
+          levels:
+            bad_or_risky:
+              label: Menos de 4 posts/mes
+            acceptable:
+              label: 1–3 posts/semana
+            good:
+              label: Publicación constante multiformato
+          recommended_operation_template_ids:
+            - atlas.communication_calendar
+            - atlas.post_copy_production
+          signal_mapping:
+            signal_type: publishing_cadence_risk
+            severity: high
+        - id: monthly_community_growth
+          label: Crecimiento mensual comunidad
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 1
+            good_gte: 5
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.organic_strategy
+            - atlas.communication_calendar
+        - id: qualified_leads_ratio
+          label: Leads calificados
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 30
+            good_gte: 60
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.buyer_persona_definition
+            - dmp.crm_mapping
+        - id: website_bounce_rate
+          label: Rebote web
+          unit: percentage
+          direction: lower_is_better
+          thresholds:
+            bad_gte: 70
+            good_lt: 40
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.channel_strategy_fanout
+            - dmp.execution_artifact_generation
+            - atlas.digital_diagnosis
+          signal_mapping:
+            signal_type: web_experience_risk
+            severity: high
+        - id: average_time_on_site
+          label: Tiempo promedio en web
+          unit: seconds
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 30
+            good_gt: 120
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - dmp.channel_strategy_fanout
+            - atlas.post_copy_production
+        - id: whatsapp_conversion
+          label: Conversión WhatsApp
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 10
+            good_gte: 25
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.retention_strategy
+            - dmp.lifecycle_campaign_design
+            - dmp.crm_mapping
+          signal_mapping:
+            signal_type: whatsapp_conversion_risk
+            severity: high
+        - id: repeat_purchase_rate
+          label: Recompra
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 10
+            good_gte: 30
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.retention_strategy
+            - dmp.lifecycle_campaign_design
+        - id: commercial_close_rate
+          label: Tasa de cierre comercial
+          unit: percentage
+          direction: higher_is_better
+          thresholds:
+            bad_lt: 10
+            good_gte: 25
+          levels: *atlas_kpi_levels
+          recommended_operation_template_ids:
+            - atlas.buyer_persona_definition
+            - dmp.crm_mapping
+            - atlas.retention_strategy
+thresholds:
+  pass_min_score: 80
+  warn_min_score: 40
+  block_on_critical: true

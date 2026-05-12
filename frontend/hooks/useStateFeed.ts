@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 
 import { authApi } from "@/lib/api";
 
@@ -95,7 +95,10 @@ function targetPath(options: StateFeedOptions) {
 }
 
 export function useStateFeed(options: StateFeedOptions) {
-  const [status, setStatus] = useState<StateFeedStatus>("idle");
+  const [status, dispatchStatus] = useReducer(
+    (_: StateFeedStatus, nextStatus: StateFeedStatus) => nextStatus,
+    "idle",
+  );
   const eventTypesKey = useMemo(() => (options.eventTypes ?? []).join(","), [options.eventTypes]);
   const onEventRef = useRef(options.onEvent);
   const onFullResyncRef = useRef(options.onFullResync);
@@ -108,7 +111,7 @@ export function useStateFeed(options: StateFeedOptions) {
   useEffect(() => {
     const path = targetPath(options);
     if (!path || options.enabled === false || typeof window === "undefined") {
-      setStatus("idle");
+      dispatchStatus("idle");
       return;
     }
 
@@ -121,11 +124,13 @@ export function useStateFeed(options: StateFeedOptions) {
     };
     const eventTypes = eventTypesKey
       .split(",")
-      .map((eventType) => eventType.trim())
-      .filter(Boolean);
+      .flatMap((eventType) => {
+        const trimmed = eventType.trim();
+        return trimmed ? [trimmed] : [];
+      });
 
     const connect = async () => {
-      setStatus("connecting");
+      dispatchStatus("connecting");
       try {
         const ticket = await authApi.issueWsTicket();
         if (closed) {
@@ -150,7 +155,7 @@ export function useStateFeed(options: StateFeedOptions) {
 
         socket = new WebSocket(`${websocketBaseUrl()}${path}?${params.toString()}`);
         socket.onopen = () => {
-          setStatus("connected");
+          dispatchStatus("connected");
           if (lastStateVersionRef.current > 0) {
             socket?.send(
               JSON.stringify({
@@ -203,13 +208,13 @@ export function useStateFeed(options: StateFeedOptions) {
         };
         socket.onclose = () => {
           if (!closed) {
-            setStatus("unavailable");
+            dispatchStatus("unavailable");
             reconnectTimer = window.setTimeout(() => void connect(), 2000);
           }
         };
       } catch {
         if (!closed) {
-          setStatus("unavailable");
+          dispatchStatus("unavailable");
           reconnectTimer = window.setTimeout(() => void connect(), 2000);
         }
       }
@@ -237,7 +242,7 @@ export function useStateFeed(options: StateFeedOptions) {
   return { status };
 }
 
-export const stateFeedInternalsForTest = {
+const stateFeedInternalsForTest = {
   messageType,
   numericStateVersion,
   websocketBaseUrl,

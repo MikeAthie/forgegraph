@@ -10,6 +10,8 @@ const SCOPE_OPTIONS = [
   { value: "session", label: "Session" },
 ] as const;
 
+const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
 const formatRelativeTime = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -18,19 +20,18 @@ const formatRelativeTime = (value: string) => {
 
   const deltaMs = date.getTime() - Date.now();
   const minutes = Math.round(deltaMs / 60_000);
-  const formatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
   if (Math.abs(minutes) < 60) {
-    return formatter.format(minutes, "minute");
+    return RELATIVE_TIME_FORMATTER.format(minutes, "minute");
   }
 
   const hours = Math.round(minutes / 60);
   if (Math.abs(hours) < 24) {
-    return formatter.format(hours, "hour");
+    return RELATIVE_TIME_FORMATTER.format(hours, "hour");
   }
 
   const days = Math.round(hours / 24);
-  return formatter.format(days, "day");
+  return RELATIVE_TIME_FORMATTER.format(days, "day");
 };
 
 const toLabelCase = (value: string) => {
@@ -39,8 +40,7 @@ const toLabelCase = (value: string) => {
   }
   return value
     .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .flatMap((segment) => (segment ? [segment.charAt(0).toUpperCase() + segment.slice(1)] : []))
     .join(" ");
 };
 
@@ -90,9 +90,9 @@ export function MemoryObservationList({
     <div className="space-y-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{modeLabel}</p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">Observation ledger</h3>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">{modeLabel}</p>
+          <h3 className="mt-2 text-lg font-semibold text-zinc-950 dark:text-zinc-50">Observation ledger</h3>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
             Search explicit memory records, skim recency, and pivot across company, operation, or session scopes.
           </p>
         </div>
@@ -153,9 +153,9 @@ export function MemoryObservationList({
       ) : null}
 
       {loading ? (
-        <div className="flex min-h-72 items-center justify-center gap-3 rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] dark:border-white/8">
+        <div className="flex min-h-72 items-center justify-center gap-3 rounded-[1.4rem] border border-zinc-900/8 bg-[var(--panel-muted)] dark:border-white/8">
           <Spinner size="md" />
-          <span className="text-sm text-slate-500 dark:text-slate-400">Loading knowledge records</span>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">Loading knowledge records</span>
         </div>
       ) : null}
 
@@ -176,10 +176,10 @@ export function MemoryObservationList({
                 type="button"
                 onClick={() => onSelectObservation(observation)}
                 className={cn(
-                  "w-full rounded-[1.25rem] border px-4 py-4 text-left transition-colors",
+                  "w-full rounded-[1.25rem] border p-4 text-left transition-colors",
                   isActive
-                    ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                    : "border-slate-900/8 bg-white hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/8",
+                    ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                    : "border-zinc-900/8 bg-white hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/8",
                 )}
               >
                 <div className="flex flex-col gap-3">
@@ -196,7 +196,7 @@ export function MemoryObservationList({
                       <p
                         className={cn(
                           "mt-2 text-sm leading-6",
-                          isActive ? "text-white/80 dark:text-slate-700" : "text-slate-600 dark:text-slate-300",
+                          isActive ? "text-white/80 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300",
                         )}
                       >
                         {summarizeContent(observation.content)}
@@ -205,7 +205,7 @@ export function MemoryObservationList({
                     <p
                       className={cn(
                         "text-xs",
-                        isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400",
+                        isActive ? "text-white/70 dark:text-zinc-600" : "text-zinc-500 dark:text-zinc-400",
                       )}
                     >
                       {formatRelativeTime(observation.lastSeenAt)}
@@ -215,7 +215,7 @@ export function MemoryObservationList({
                   <div
                     className={cn(
                       "flex flex-wrap gap-2 text-xs",
-                      isActive ? "text-white/70 dark:text-slate-600" : "text-slate-500 dark:text-slate-400",
+                      isActive ? "text-white/70 dark:text-zinc-600" : "text-zinc-500 dark:text-zinc-400",
                     )}
                   >
                     {observation.topic ? <span>Topic {observation.topic}</span> : null}

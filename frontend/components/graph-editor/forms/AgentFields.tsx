@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 /**
  * Example input/output pair for agent training
  */
-export interface AgentExample {
+interface AgentExample {
   input: string;
   output: string;
 }
@@ -29,12 +29,17 @@ export interface AgentConfig {
 export interface AgentFieldsProps {
   config: AgentConfig;
   onChange: (config: AgentConfig) => void;
-  showRole?: boolean;
-  showJobDescription?: boolean;
-  showExamples?: boolean;
-  showNotes?: boolean;
+  visibleSections?: Partial<Record<AgentFieldSection, boolean>>;
   className?: string;
 }
+
+type AgentFieldSection = "role" | "jobDescription" | "examples" | "notes";
+const DEFAULT_VISIBLE_SECTIONS: Record<AgentFieldSection, boolean> = {
+  role: true,
+  jobDescription: true,
+  examples: true,
+  notes: true,
+};
 
 /**
  * Reusable component for agent-related configuration fields.
@@ -43,12 +48,10 @@ export interface AgentFieldsProps {
 export function AgentFields({
   config,
   onChange,
-  showRole = true,
-  showJobDescription = true,
-  showExamples = true,
-  showNotes = true,
+  visibleSections,
   className,
 }: AgentFieldsProps) {
+  const sections = { ...DEFAULT_VISIBLE_SECTIONS, ...visibleSections };
   const handleChange = useCallback(
     <K extends keyof AgentConfig>(field: K, value: AgentConfig[K]) => {
       onChange({ ...config, [field]: value });
@@ -89,11 +92,11 @@ export function AgentFields({
       {/* Agent Context Header */}
       <div className="flex items-center gap-2 pb-2 border-b">
         <span className="text-sm font-medium text-muted-foreground">Agent Context</span>
-        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
+        <HelpCircle className="size-3.5 text-muted-foreground" />
       </div>
 
       {/* Role Field */}
-      {showRole && (
+      {sections.role && (
         <FormField
           label="Role / Persona"
           htmlFor="agent-role"
@@ -110,7 +113,7 @@ export function AgentFields({
       )}
 
       {/* Job Description Field */}
-      {showJobDescription && (
+      {sections.jobDescription && (
         <FormField
           label="Primary Objective"
           htmlFor="agent-job"
@@ -131,13 +134,13 @@ export function AgentFields({
       )}
 
       {/* Examples Field */}
-      {showExamples && (
+      {sections.examples && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">
+            <span className="text-sm font-medium">
               Examples
               <span className="text-muted-foreground font-normal ml-1">(optional)</span>
-            </label>
+            </span>
             <span className="text-xs text-muted-foreground">{(config.examples || []).length} example(s)</span>
           </div>
           <p className="text-xs text-muted-foreground -mt-1">
@@ -147,7 +150,7 @@ export function AgentFields({
           {/* Example List */}
           <div className="space-y-3">
             {(config.examples || []).map((example, index) => (
-              <div key={index} className="relative p-3 border rounded-lg bg-muted/30 space-y-2">
+              <div key={`${example.input}\u0000${example.output}`} className="relative p-3 border rounded-lg bg-muted/30 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">Example {index + 1}</span>
                   <Button
@@ -157,13 +160,19 @@ export function AgentFields({
                     onClick={() => handleRemoveExample(index)}
                     className="text-muted-foreground hover:text-destructive"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="size-3.5" />
                   </Button>
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <label className="text-xs text-muted-foreground">Input</label>
+                    <label
+                      htmlFor="components-graph-editor-forms-agentfields-165"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Input
+                    </label>
                     <Textarea
+                      id="components-graph-editor-forms-agentfields-165"
                       value={example.input}
                       onChange={(e) => handleExampleChange(index, "input", e.target.value)}
                       placeholder="Example input or user message"
@@ -172,8 +181,14 @@ export function AgentFields({
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">Expected Output</label>
+                    <label
+                      htmlFor="components-graph-editor-forms-agentfields-175"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Expected Output
+                    </label>
                     <Textarea
+                      id="components-graph-editor-forms-agentfields-175"
                       value={example.output}
                       onChange={(e) => handleExampleChange(index, "output", e.target.value)}
                       placeholder="Expected agent response"
@@ -187,14 +202,14 @@ export function AgentFields({
           </div>
 
           <Button type="button" variant="outline" size="sm" onClick={handleAddExample} className="w-full">
-            <Plus className="w-4 h-4 mr-1" />
+            <Plus className="size-4 mr-1" />
             Add Example
           </Button>
         </div>
       )}
 
       {/* Notes Field */}
-      {showNotes && (
+      {sections.notes && (
         <FormField
           label="Additional Notes"
           htmlFor="agent-notes"
@@ -213,5 +228,3 @@ export function AgentFields({
     </div>
   );
 }
-
-export default AgentFields;

@@ -146,7 +146,7 @@ export function absoluteUrl(path = "/"): string {
   return `${SITE_URL}${normalizedPath}`;
 }
 
-export function pathWithoutQuery(asPath?: string): string {
+function pathWithoutQuery(asPath?: string): string {
   const path = (asPath || "/").split("#")[0]?.split("?")[0] || "/";
   return path.startsWith("/") ? path : "/";
 }

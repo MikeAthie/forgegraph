@@ -31,7 +31,7 @@ export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, clas
         )}
       >
         <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-emerald-500" />
+          <CheckCircle className="size-4 text-emerald-500" />
           <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Operating Model Ready</span>
         </div>
       </div>
@@ -58,14 +58,14 @@ export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, clas
         <div className="flex items-center gap-3">
           {errors.length > 0 ? (
             <>
-              <AlertCircle className="w-4 h-4 text-destructive" />
+              <AlertCircle className="size-4 text-destructive" />
               <span className="text-sm font-medium text-destructive">
                 {errors.length} error{errors.length !== 1 ? "s" : ""}
               </span>
             </>
           ) : (
             <>
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <AlertTriangle className="size-4 text-amber-500" />
               <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
                 {warnings.length} warning{warnings.length !== 1 ? "s" : ""}
               </span>
@@ -80,9 +80,9 @@ export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, clas
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{isStatusBarExpanded ? "Hide" : "Show"} details</span>
           {isStatusBarExpanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            <ChevronDown className="size-4 text-muted-foreground" />
           ) : (
-            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            <ChevronUp className="size-4 text-muted-foreground" />
           )}
         </div>
       </button>
@@ -93,7 +93,7 @@ export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, clas
           {/* Errors first */}
           {errors.map((error, index) => (
             <ValidationErrorItem
-              key={`error-${index}`}
+              key={`error-${error.code}-${error.nodeId ?? error.edgeId ?? error.message}`}
               error={error}
               onFocusNode={onFocusNode}
               onFocusEdge={onFocusEdge}
@@ -103,7 +103,7 @@ export function ValidationStatusBar({ onFocusNode, onFocusEdge, onQuickFix, clas
           {/* Then warnings */}
           {warnings.map((warning, index) => (
             <ValidationErrorItem
-              key={`warning-${index}`}
+              key={`warning-${warning.code}-${warning.nodeId ?? warning.edgeId ?? warning.message}`}
               error={warning}
               onFocusNode={onFocusNode}
               onFocusEdge={onFocusEdge}
@@ -138,9 +138,9 @@ function ValidationErrorItem({ error, onFocusNode, onFocusEdge, onQuickFix }: Va
   return (
     <div className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
       {isError ? (
-        <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+        <AlertCircle className="size-4 text-destructive mt-0.5 shrink-0" />
       ) : (
-        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+        <AlertTriangle className="size-4 text-amber-500 mt-0.5 shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <p className={cn("text-sm font-medium", isError ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
@@ -151,7 +151,7 @@ function ValidationErrorItem({ error, onFocusNode, onFocusEdge, onQuickFix }: Va
       <div className="flex items-center gap-2 shrink-0">
         {(error.nodeId || error.edgeId) && (
           <Button variant="ghost" size="sm" onClick={handleGoTo} className="px-2 text-xs md:min-h-8">
-            <ExternalLink className="w-3 h-3 mr-1" />
+            <ExternalLink className="size-3 mr-1" />
             Go to
           </Button>
         )}
@@ -171,5 +171,3 @@ function ValidationErrorItem({ error, onFocusNode, onFocusEdge, onQuickFix }: Va
     </div>
   );
 }
-
-export default ValidationStatusBar;

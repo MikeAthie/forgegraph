@@ -30,21 +30,21 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
     <div className={cn("pointer-events-none absolute inset-0 z-10", className)}>
       {/* Missing Start Node Indicator */}
       {showStartIndicator && (
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-auto">
+        <div className="absolute left-4 top-1/2 -tranzinc-y-1/2 pointer-events-auto">
           <button
             type="button"
             onClick={onAddStartNode}
             className="group flex min-h-11 flex-col items-center gap-2 rounded-xl border-2 border-dashed border-amber-500/50 bg-amber-500/10 p-4 transition-[color,background-color,border-color,box-shadow] hover:border-amber-500 hover:bg-amber-500/20 motion-reduce:transition-none"
           >
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-amber-500/20 group-hover:bg-amber-500/30 transition-colors">
-              <AlertCircle className="w-6 h-6 text-amber-500" />
+            <div className="flex items-center justify-center size-12 rounded-full bg-amber-500/20 group-hover:bg-amber-500/30 transition-colors">
+              <AlertCircle className="size-6 text-amber-500" />
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Add Entry Step</p>
               <p className="text-xs text-muted-foreground mt-0.5">Click to add the operating entry point</p>
             </div>
-            <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-amber-500/50 group-hover:border-amber-500 transition-colors">
-              <Plus className="w-4 h-4 text-amber-500" />
+            <div className="flex items-center justify-center size-8 rounded-full border-2 border-dashed border-amber-500/50 group-hover:border-amber-500 transition-colors">
+              <Plus className="size-4 text-amber-500" />
             </div>
           </button>
         </div>
@@ -52,21 +52,21 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
 
       {/* Missing Output Node Indicator */}
       {showOutputIndicator && (
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-auto">
+        <div className="absolute right-4 top-1/2 -tranzinc-y-1/2 pointer-events-auto">
           <button
             type="button"
             onClick={onAddOutputNode}
             className="group flex min-h-11 flex-col items-center gap-2 rounded-xl border-2 border-dashed border-rose-500/50 bg-rose-500/10 p-4 transition-[color,background-color,border-color,box-shadow] hover:border-rose-500 hover:bg-rose-500/20 motion-reduce:transition-none"
           >
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-rose-500/20 group-hover:bg-rose-500/30 transition-colors">
-              <AlertCircle className="w-6 h-6 text-rose-500" />
+            <div className="flex items-center justify-center size-12 rounded-full bg-rose-500/20 group-hover:bg-rose-500/30 transition-colors">
+              <AlertCircle className="size-6 text-rose-500" />
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-rose-600 dark:text-rose-400">Add Deliverable Step</p>
               <p className="text-xs text-muted-foreground mt-0.5">Click to define the final deliverable</p>
             </div>
-            <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-rose-500/50 group-hover:border-rose-500 transition-colors">
-              <Plus className="w-4 h-4 text-rose-500" />
+            <div className="flex items-center justify-center size-8 rounded-full border-2 border-dashed border-rose-500/50 group-hover:border-rose-500 transition-colors">
+              <Plus className="size-4 text-rose-500" />
             </div>
           </button>
         </div>
@@ -74,5 +74,3 @@ export function ValidationOverlay({ onAddStartNode, onAddOutputNode, className }
     </div>
   );
 }
-
-export default ValidationOverlay;

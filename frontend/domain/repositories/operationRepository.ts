@@ -122,7 +122,7 @@ export const operationRepository = {
     ),
 };
 
-export type OperationRepository = typeof operationRepository;
+type OperationRepository = typeof operationRepository;
 
 export function getOperationAiAccess(profile: CompanyProfile) {
   return {

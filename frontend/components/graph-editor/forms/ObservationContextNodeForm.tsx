@@ -94,5 +94,3 @@ export function ObservationContextNodeForm({ config, onChange, errors, setErrors
     </div>
   );
 }
-
-export default ObservationContextNodeForm;

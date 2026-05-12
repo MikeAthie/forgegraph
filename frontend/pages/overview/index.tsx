@@ -51,10 +51,10 @@ type AttentionItem = {
 };
 
 const metricLinkClass =
-  "group block h-full rounded-[1.75rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950";
+  "group block h-full rounded-[1.75rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-zinc-100 dark:focus-visible:ring-offset-zinc-950";
 
 const metricCardLinkClass =
-  "h-full transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out motion-reduce:transition-none motion-reduce:transform-none group-hover:-translate-y-0.5 group-hover:border-slate-900/20 group-hover:bg-white group-hover:shadow-[0_30px_70px_-48px_rgba(15,23,42,0.7)] dark:group-hover:border-white/20 dark:group-hover:bg-white/[0.07]";
+  "h-full transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out motion-reduce:transition-none motion-reduce:transform-none group-hover:-tranzinc-y-0.5 group-hover:border-zinc-900/20 group-hover:bg-white group-hover:shadow-[0_30px_70px_-48px_rgba(15,23,42,0.7)] dark:group-hover:border-white/20 dark:group-hover:bg-white/[0.07]";
 
 const OVERVIEW_FEED_EVENT_TYPES = [
   "overview.updated",
@@ -380,7 +380,7 @@ export default function OverviewPage() {
                   <span>Profit</span>
                   <span>{notInstrumentedLabel}</span>
                 </div>
-                <p className="pt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                <p className="pt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
                   {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                 </p>
               </div>
@@ -408,7 +408,7 @@ export default function OverviewPage() {
           value: formatCompactNumber(overview.running.activeAgentCount),
           section: overview.running,
           tone: overviewCardTone(overview.running),
-          icon: <BrainCircuit className="h-4 w-4" />,
+          icon: <BrainCircuit className="size-4" />,
         },
         {
           href: "#blocked-tasks",
@@ -417,7 +417,7 @@ export default function OverviewPage() {
           value: formatCompactNumber(overview.running.runningTaskCount),
           section: overview.running,
           tone: overviewCardTone(overview.running),
-          icon: <Activity className="h-4 w-4" />,
+          icon: <Activity className="size-4" />,
         },
         {
           href: "#pending-approvals",
@@ -426,7 +426,7 @@ export default function OverviewPage() {
           value: formatCompactNumber(overview.decisions.pendingDecisionCount),
           section: overview.decisions,
           tone: overviewCardTone(overview.decisions, overview.decisions.pendingDecisionCount > 0),
-          icon: <BellRing className="h-4 w-4" />,
+          icon: <BellRing className="size-4" />,
         },
         {
           href: "#usage-budget",
@@ -435,7 +435,7 @@ export default function OverviewPage() {
           value: financialMetricLabel(overview.metricProvenance.totalCostUsd),
           section: overview.costs,
           tone: overviewCardTone(overview.costs),
-          icon: <HandCoins className="h-4 w-4" />,
+          icon: <HandCoins className="size-4" />,
         },
         {
           href: "#memory",
@@ -444,7 +444,7 @@ export default function OverviewPage() {
           value: formatCompactNumber(overview.memory.writeCount24h),
           section: overview.memory.section,
           tone: overviewCardTone(overview.memory.section),
-          icon: <Database className="h-4 w-4" />,
+          icon: <Database className="size-4" />,
         },
         {
           href: "/ops",
@@ -453,7 +453,7 @@ export default function OverviewPage() {
           value: formatCompactNumber(overview.failures.deadLetterCount),
           section: overview.failures,
           tone: overviewCardTone(overview.failures, overview.failures.deadLetterCount > 0),
-          icon: <Siren className="h-4 w-4" />,
+          icon: <Siren className="size-4" />,
         },
         {
           href: "#system-health",
@@ -465,7 +465,7 @@ export default function OverviewPage() {
               : "Pending",
           section: projectionCardMetadata,
           tone: overviewCardTone(projectionCardMetadata),
-          icon: <Waypoints className="h-4 w-4" />,
+          icon: <Waypoints className="size-4" />,
         },
         {
           href: "/ops",
@@ -474,7 +474,7 @@ export default function OverviewPage() {
           value: formatDuration(overview.failures.runtimeIntentLagSeconds * 1000),
           section: overview.failures,
           tone: overviewCardTone(overview.failures, overview.failures.runtimeIntentLagSeconds > 0),
-          icon: <TimerReset className="h-4 w-4" />,
+          icon: <TimerReset className="size-4" />,
         },
       ]
     : [];
@@ -530,7 +530,7 @@ export default function OverviewPage() {
           ) : null}
 
           {loading || !overview || !derived ? (
-            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
+            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-zinc-900/10 bg-white/70 dark:border-white/10 dark:bg-zinc-950/50">
               <Spinner size="lg" />
             </div>
           ) : (
@@ -552,19 +552,19 @@ export default function OverviewPage() {
                         {derived.attentionItems.map((item) => (
                           <div
                             key={item.id}
-                            className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                            className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-3">
-                                  <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-900/10 bg-white dark:border-white/10 dark:bg-white/5">
+                                  <span className="flex size-9 items-center justify-center rounded-2xl border border-zinc-900/10 bg-white dark:border-white/10 dark:bg-white/5">
                                     {item.tone === "rose" ? overviewIcons.attention : overviewIcons.paused}
                                   </span>
                                   <div className="min-w-0">
-                                    <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                    <p className="truncate text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                                       {item.title}
                                     </p>
-                                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                    <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                                       {item.detail}
                                     </p>
                                   </div>
@@ -575,7 +575,7 @@ export default function OverviewPage() {
                                 <Button asChild size="sm" className="rounded-full">
                                   <Link href={item.href}>
                                     {item.action}
-                                    <ArrowRight className="h-4 w-4" />
+                                    <ArrowRight className="size-4" />
                                   </Link>
                                 </Button>
                               </div>
@@ -601,15 +601,15 @@ export default function OverviewPage() {
                       {derived.systemHealth.map((item) => (
                         <div
                           key={item.id}
-                          className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                          className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.label}</p>
-                              <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.detail}</p>
+                              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.label}</p>
+                              <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.detail}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.value}</p>
+                              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.value}</p>
                               <div className="mt-2">
                                 <StatusBadge status={item.status} />
                               </div>
@@ -631,7 +631,7 @@ export default function OverviewPage() {
                       <Button asChild variant="outline" className="rounded-full">
                         <Link href="/departments">
                           Open departments
-                          <ArrowRight className="h-4 w-4" />
+                          <ArrowRight className="size-4" />
                         </Link>
                       </Button>
                     }
@@ -642,19 +642,19 @@ export default function OverviewPage() {
                           <Link
                             key={department.id}
                             href={`/departments?department=${department.id}`}
-                            className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
+                            className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 transition-colors hover:bg-zinc-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-zinc-950"
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
                                 <p className="truncate text-sm font-semibold">{department.name}</p>
                                 <StatusBadge status={department.status} />
                               </div>
-                              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                                 {derived.departmentTaskMap.get(department.id) ?? "Awaiting the next available task."}
                               </p>
                             </div>
                             <div className="shrink-0 text-right">
-                              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
                                 Cost
                               </p>
                               <p className="mt-2 text-sm font-semibold">{formatCurrency(department.totalCostUsd)}</p>
@@ -679,7 +679,7 @@ export default function OverviewPage() {
                       <Button asChild variant="outline" className="rounded-full">
                         <Link href="/tasks">
                           Open activity
-                          <ArrowRight className="h-4 w-4" />
+                          <ArrowRight className="size-4" />
                         </Link>
                       </Button>
                     }
@@ -690,7 +690,7 @@ export default function OverviewPage() {
                           <Link
                             key={task.id}
                             href={task.operationId ? `/runs/${task.operationId}` : "/tasks"}
-                            className="block rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 transition-colors hover:bg-slate-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-slate-950"
+                            className="block rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 transition-colors hover:bg-zinc-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-zinc-950"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -698,11 +698,11 @@ export default function OverviewPage() {
                                   <p className="truncate text-sm font-semibold">{task.title}</p>
                                   <StatusBadge status={task.status} />
                                 </div>
-                                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                                   {task.summary}
                                 </p>
                               </div>
-                              <div className="shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
+                              <div className="shrink-0 text-right text-xs text-zinc-500 dark:text-zinc-400">
                                 <p>{task.priority} priority</p>
                                 <p className="mt-2">{formatDateTime(task.updatedAt)}</p>
                               </div>
@@ -729,7 +729,7 @@ export default function OverviewPage() {
                       <Button asChild variant="outline" className="rounded-full">
                         <Link href="/approvals">
                           Open approvals
-                          <ArrowRight className="h-4 w-4" />
+                          <ArrowRight className="size-4" />
                         </Link>
                       </Button>
                     }
@@ -739,17 +739,17 @@ export default function OverviewPage() {
                         {overview.pendingApprovals.slice(0, 5).map((approval) => (
                           <div
                             key={approval.id}
-                            className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                            className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-3">
-                                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                  <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                                     {approval.label}
                                   </p>
                                   <StatusBadge status={approval.status} />
                                 </div>
-                                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                                   {approval.promptMessage}
                                 </p>
                               </div>
@@ -775,36 +775,36 @@ export default function OverviewPage() {
                     description="Backend-owned spend and metric provenance for the current operating window."
                   >
                     <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Tracked cost
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {financialMetricLabel(overview.metricProvenance.totalCostUsd)}
                         </p>
-                        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
                           {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
                         </p>
                       </div>
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Revenue
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {notInstrumentedLabel}
                         </p>
-                        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
                           {metricProvenanceLine(overview.metricProvenance.revenue)}
                         </p>
                       </div>
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Profit
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {notInstrumentedLabel}
                         </p>
-                        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
                           {metricProvenanceLine(overview.metricProvenance.profit)}
                         </p>
                       </div>
@@ -813,12 +813,10 @@ export default function OverviewPage() {
                       {overview.costByType.map((row) => (
                         <div key={row.type} className="space-y-2">
                           <div className="flex items-center justify-between gap-3 text-sm">
-                            <span className="font-medium text-slate-900 capitalize dark:text-slate-100">
+                            <span className="font-medium text-zinc-900 capitalize dark:text-zinc-100">
                               {row.type.replace(/_/g, " ")}
                             </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {formatCurrency(row.totalCostUsd)}
-                            </span>
+                            <span className="text-zinc-600 dark:text-zinc-300">{formatCurrency(row.totalCostUsd)}</span>
                           </div>
                           <TrendBar
                             value={row.totalCostUsd}

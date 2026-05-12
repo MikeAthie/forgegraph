@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, useEffect, useRef, type ReactNode } from "react";
+import { createContext, use, useCallback, useMemo, useState, useEffect, useRef, type ReactNode } from "react";
 import type { Node, Edge } from "@xyflow/react";
-import { validateGraph, type ValidationResult, type ValidationError, ValidationErrorCode } from "@/lib/graph-validator";
+import { validateGraph, type ValidationResult, type ValidationError } from "@/lib/graph-validator";
 
 /**
  * Validation context state
@@ -107,7 +107,7 @@ export function ValidationProvider({ children, debounceMs = 300 }: ValidationPro
 }
 
 export function useValidation(): ValidationContextValue {
-  const context = useContext(ValidationContext);
+  const context = use(ValidationContext);
   if (!context) {
     throw new Error("useValidation must be used within a ValidationProvider");
   }
@@ -137,29 +137,3 @@ export function useNodeValidation(nodeId: string): {
     };
   }, [errors, warnings, nodeId]);
 }
-
-/**
- * Hook to get validation state for a specific edge
- */
-export function useEdgeValidation(edgeId: string): {
-  hasError: boolean;
-  hasWarning: boolean;
-  errors: ValidationError[];
-  warnings: ValidationError[];
-} {
-  const { errors, warnings } = useValidation();
-
-  return useMemo(() => {
-    const edgeErrors = errors.filter((e) => e.edgeId === edgeId);
-    const edgeWarnings = warnings.filter((w) => w.edgeId === edgeId);
-
-    return {
-      hasError: edgeErrors.length > 0,
-      hasWarning: edgeWarnings.length > 0,
-      errors: edgeErrors,
-      warnings: edgeWarnings,
-    };
-  }, [errors, warnings, edgeId]);
-}
-
-export default ValidationContext;

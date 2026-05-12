@@ -72,8 +72,13 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
         </FormField>
       </div>
 
-      <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 text-sm">
+      <label
+        htmlFor="components-graph-editor-forms-observationtimelinenodeform-75"
+        aria-label="Include deleted observations"
+        className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 text-sm"
+      >
         <input
+          id="components-graph-editor-forms-observationtimelinenodeform-75"
           type="checkbox"
           checked={Boolean(timelineConfig.include_deleted)}
           onChange={(event) =>
@@ -94,5 +99,3 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
     </div>
   );
 }
-
-export default ObservationTimelineNodeForm;

@@ -187,11 +187,9 @@ export function SeoHead({
       <meta key="twitter-image" name="twitter:image" content={twitterImageUrl} />
       <meta key="twitter-image-alt" name="twitter:image:alt" content={imageAlt} />
 
-      <script
-        key="forgegraph-jsonld"
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <script key="forgegraph-jsonld" type="application/ld+json">
+        {JSON.stringify(jsonLd)}
+      </script>
     </Head>
   );
 }

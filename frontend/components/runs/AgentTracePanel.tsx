@@ -35,7 +35,7 @@ const getEventLabel = (event: AgentEventItem): string => {
   return event.event.replace(/^agent\./, "").replace(/\./g, " ");
 };
 
-const renderStepBody = (step: AgentTraceStep) => {
+function AgentTraceStepBody({ step }: { step: AgentTraceStep }) {
   if (step.action === "tool_call") {
     return (
       <div className="space-y-2">
@@ -81,7 +81,7 @@ const renderStepBody = (step: AgentTraceStep) => {
       ) : null}
     </div>
   );
-};
+}
 
 type AgentTracePanelProps = {
   trace: AgentTrace;
@@ -118,7 +118,7 @@ export function AgentTracePanel({ trace, compact = false, showApprovalHint = fal
       </div>
 
       {trace.approval_pending || trace.stop_reason === "approval_required" ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-900 dark:text-amber-100">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100">
           <p className="font-medium">Approval required</p>
           <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">
             The department stopped before executing a gated tool.
@@ -150,7 +150,9 @@ export function AgentTracePanel({ trace, compact = false, showApprovalHint = fal
                     <span className="text-xs text-muted-foreground">{step.response_model}</span>
                   ) : null}
                 </div>
-                <div className="mt-3">{renderStepBody(step)}</div>
+                <div className="mt-3">
+                  <AgentTraceStepBody step={step} />
+                </div>
               </div>
             ))}
           </div>

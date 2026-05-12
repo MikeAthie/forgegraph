@@ -45,7 +45,7 @@ export default function AdminHelpPage() {
           <section className="rounded-[2rem] border border-border/50 bg-card/80 p-6 shadow-lg backdrop-blur-sm sm:p-8">
             <div className="flex flex-col gap-4">
               <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 px-3 py-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                <BookOpenText className="h-4 w-4" aria-hidden="true" />
+                <BookOpenText className="size-4" aria-hidden="true" />
                 Operator Help
               </div>
               <div className="max-w-3xl">
@@ -58,7 +58,7 @@ export default function AdminHelpPage() {
                 </p>
               </div>
               <Alert className="max-w-3xl border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-100">
-                <ShieldCheck className="h-4 w-4" />
+                <ShieldCheck className="size-4" />
                 <AlertDescription>
                   The deeper written references live in the repo docs under <code>docs/ops</code>. This page is the
                   product-facing version of those notes.
@@ -89,19 +89,19 @@ export default function AdminHelpPage() {
               <Button asChild variant="outline">
                 <Link href="/admin/operations">
                   Policies and retention
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                  <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/admin/billing">
                   Billing and entitlements
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                  <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/admin/audit-logs">
                   Audit trail
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                  <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                 </Link>
               </Button>
             </CardContent>

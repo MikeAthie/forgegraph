@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState, type ComponentType } from "react";
 import { useWizard } from "@/contexts/WizardContext";
 import { cn } from "@/lib/utils";
 import { WizardProgress } from "./WizardProgress";
@@ -44,6 +44,37 @@ type WizardOutputData = {
   outputKey?: string;
 };
 
+type WizardCompletionState = {
+  selectedPresetId?: string;
+  preset?: AgentWizardPreset;
+  roleData: WizardRoleData;
+  toolsData: WizardToolsData;
+  memoryData: WizardMemoryData;
+  outputData: WizardOutputData;
+  tools: string[];
+  approvalTools: string[];
+  invalidApproval: string[];
+  isValid: boolean;
+};
+
+type RoleStepState = {
+  agentLabel: string;
+  instructions: string;
+  systemPrompt: string;
+  provider: string;
+  model: string;
+  role: string;
+  jobDescription: string;
+  notes: string;
+  temperature: number;
+};
+
+type RoleStepAction = { type: "patch"; patch: Partial<RoleStepState> };
+
+function roleStepReducer(state: RoleStepState, action: RoleStepAction): RoleStepState {
+  return { ...state, ...action.patch };
+}
+
 export interface AgentWizardCompletePayload {
   runTest?: boolean;
   blueprint: AgentWizardBlueprint;
@@ -52,8 +83,10 @@ export interface AgentWizardCompletePayload {
 function parseListInput(value: string): string[] {
   return value
     .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+    .flatMap((item) => {
+      const trimmed = item.trim();
+      return trimmed ? [trimmed] : [];
+    });
 }
 
 function formatListInput(items?: string[]): string {
@@ -106,14 +139,41 @@ function buildBlueprintFromState(stepData: Record<string, unknown>): AgentWizard
   return buildAgentWizardBlueprint(seed);
 }
 
-function StartNodeStep() {
-  const { setCanProceed, setStepData, state } = useWizard();
-  const selectedPresetId = (state.stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
+function getWizardCompletionState(stepData: Record<string, unknown>): WizardCompletionState {
+  const selectedPresetId = (stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
+  const preset = selectedPresetId ? getAgentWizardPreset(selectedPresetId) : undefined;
+  const roleData = (stepData.role as WizardRoleData | undefined) ?? {};
+  const toolsData = (stepData.tools as WizardToolsData | undefined) ?? {};
+  const memoryData = (stepData.memory as WizardMemoryData | undefined) ?? {};
+  const outputData = (stepData.output as WizardOutputData | undefined) ?? {};
+  const tools = toolsData.tools ?? [];
+  const approvalTools = toolsData.approvalRequiredTools ?? [];
+  const invalidApproval = approvalTools.filter((tool) => !tools.includes(tool));
+  const isValid =
+    Boolean(roleData.agentLabel?.trim()) &&
+    Boolean(roleData.instructions?.trim()) &&
+    Boolean(roleData.model?.trim()) &&
+    tools.length > 0 &&
+    invalidApproval.length === 0 &&
+    Boolean(outputData.outputKey?.trim());
 
-  useEffect(() => {
-    setCanProceed(true);
-    setStepData("start", { selectedPresetId });
-  }, [selectedPresetId, setCanProceed, setStepData]);
+  return {
+    selectedPresetId,
+    preset,
+    roleData,
+    toolsData,
+    memoryData,
+    outputData,
+    tools,
+    approvalTools,
+    invalidApproval,
+    isValid,
+  };
+}
+
+function StartNodeStep() {
+  const { setStepData, state } = useWizard();
+  const selectedPresetId = (state.stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
 
   return (
     <div className="space-y-4">
@@ -144,7 +204,7 @@ function StartNodeStep() {
       >
         {selectedPresetId ? (
           <>
-            <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+            <CheckCircle className="size-5 text-emerald-500 shrink-0" />
             <div>
               <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Preset applied</p>
               <p className="text-xs text-muted-foreground">
@@ -154,7 +214,7 @@ function StartNodeStep() {
           </>
         ) : (
           <>
-            <Bot className="w-5 h-5 text-muted-foreground shrink-0" />
+            <Bot className="size-5 text-muted-foreground shrink-0" />
             <div>
               <p className="text-sm font-medium">Blank AI worker setup</p>
               <p className="text-xs text-muted-foreground">
@@ -189,7 +249,7 @@ function PresetButton({
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <p className="text-sm font-medium flex items-center gap-1.5">
-            <Bot className="h-4 w-4 text-primary" />
+            <Bot className="size-4 text-primary" />
             {preset.name}
           </p>
           <p className="text-xs text-muted-foreground">{preset.description}</p>
@@ -207,15 +267,29 @@ function PresetButton({
 function RoleStep() {
   const { setCanProceed, state, setStepData } = useWizard();
   const initial = (state.stepData.role as WizardRoleData | undefined) ?? {};
-  const [agentLabel, setAgentLabel] = useState(initial.agentLabel || "AI Worker Step");
-  const [instructions, setInstructions] = useState(initial.instructions || "");
-  const [systemPrompt, setSystemPrompt] = useState(initial.systemPrompt || "");
-  const [provider, setProvider] = useState(initial.provider || "openai");
-  const [model, setModel] = useState(initial.model || "gpt-4.1-mini");
-  const [temperature, setTemperature] = useState(initial.temperature ?? 0.3);
-  const [role, setRole] = useState(initial.role || "");
-  const [jobDescription, setJobDescription] = useState(initial.jobDescription || "");
-  const [notes, setNotes] = useState(initial.notes || "");
+  const [roleState, dispatchRoleState] = useReducer(roleStepReducer, {
+    agentLabel: initial.agentLabel || "AI Worker Step",
+    instructions: initial.instructions || "",
+    systemPrompt: initial.systemPrompt || "",
+    provider: initial.provider || "openai",
+    model: initial.model || "gpt-4.1-mini",
+    temperature: initial.temperature ?? 0.3,
+    role: initial.role || "",
+    jobDescription: initial.jobDescription || "",
+    notes: initial.notes || "",
+  });
+  const {
+    agentLabel,
+    instructions,
+    systemPrompt,
+    provider,
+    model,
+    temperature,
+    role,
+    jobDescription,
+    notes,
+  } = roleState;
+  const updateRoleState = (patch: Partial<RoleStepState>) => dispatchRoleState({ type: "patch", patch });
 
   useEffect(() => {
     const isValid = Boolean(agentLabel.trim()) && Boolean(instructions.trim()) && Boolean(model.trim());
@@ -262,7 +336,7 @@ function RoleStep() {
             type="text"
             placeholder="Customer Success Department"
             value={agentLabel}
-            onChange={(event) => setAgentLabel(event.target.value)}
+            onChange={(event) => updateRoleState({ agentLabel: event.target.value })}
             className="mt-1"
           />
         </div>
@@ -275,7 +349,7 @@ function RoleStep() {
             id="agent-instructions"
             placeholder="Resolve the user's request using the allowed tools, then return a final answer."
             value={instructions}
-            onChange={(event) => setInstructions(event.target.value)}
+            onChange={(event) => updateRoleState({ instructions: event.target.value })}
             rows={4}
             className="mt-1 resize-none"
           />
@@ -289,7 +363,7 @@ function RoleStep() {
             id="agent-system-prompt"
             placeholder="You are a reliable operations assistant. Verify before acting."
             value={systemPrompt}
-            onChange={(event) => setSystemPrompt(event.target.value)}
+            onChange={(event) => updateRoleState({ systemPrompt: event.target.value })}
             rows={3}
             className="mt-1 resize-none"
           />
@@ -303,7 +377,7 @@ function RoleStep() {
             <select
               id="agent-provider"
               value={provider}
-              onChange={(event) => setProvider(event.target.value)}
+              onChange={(event) => updateRoleState({ provider: event.target.value })}
               className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             >
               <option value="openai">OpenAI</option>
@@ -319,7 +393,7 @@ function RoleStep() {
             <select
               id="agent-model"
               value={model}
-              onChange={(event) => setModel(event.target.value)}
+              onChange={(event) => updateRoleState({ model: event.target.value })}
               className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             >
               <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
@@ -343,7 +417,7 @@ function RoleStep() {
               max={2}
               step={0.1}
               value={temperature}
-              onChange={(event) => setTemperature(parseFloat(event.target.value))}
+              onChange={(event) => updateRoleState({ temperature: parseFloat(event.target.value) })}
               className="flex-1"
             />
             <span className="w-10 text-right text-sm text-muted-foreground">{temperature}</span>
@@ -359,7 +433,7 @@ function RoleStep() {
             type="text"
             placeholder="Customer Support Agent"
             value={role}
-            onChange={(event) => setRole(event.target.value)}
+            onChange={(event) => updateRoleState({ role: event.target.value })}
             className="mt-1"
           />
         </div>
@@ -372,7 +446,7 @@ function RoleStep() {
             id="agent-objective"
             placeholder="Help customers resolve account and billing issues."
             value={jobDescription}
-            onChange={(event) => setJobDescription(event.target.value)}
+            onChange={(event) => updateRoleState({ jobDescription: event.target.value })}
             rows={3}
             className="mt-1 resize-none"
           />
@@ -386,7 +460,7 @@ function RoleStep() {
             id="agent-notes"
             placeholder="Optional constraints or response style notes."
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) => updateRoleState({ notes: event.target.value })}
             rows={2}
             className="mt-1 resize-none"
           />
@@ -399,8 +473,8 @@ function RoleStep() {
 function ToolsStep() {
   const { setCanProceed, state, setStepData } = useWizard();
   const initial = (state.stepData.tools as WizardToolsData | undefined) ?? {};
-  const [toolsText, setToolsText] = useState(formatListInput(initial.tools));
-  const [approvalText, setApprovalText] = useState(formatListInput(initial.approvalRequiredTools));
+  const [toolsText, setToolsText] = useState(() => formatListInput(initial.tools));
+  const [approvalText, setApprovalText] = useState(() => formatListInput(initial.approvalRequiredTools));
 
   const tools = useMemo(() => parseListInput(toolsText), [toolsText]);
   const approvalTools = useMemo(() => parseListInput(approvalText), [approvalText]);
@@ -463,15 +537,15 @@ function ToolsStep() {
 }
 
 function MemoryStep() {
-  const { setCanProceed, setStepData, state } = useWizard();
+  const { setStepData, state } = useWizard();
   const [selectedMemory, setSelectedMemory] = useState<AgentMemoryMode>(
     ((state.stepData.memory as WizardMemoryData | undefined)?.type as AgentMemoryMode | undefined) || "none",
   );
 
-  useEffect(() => {
-    setCanProceed(true);
-    setStepData("memory", { type: selectedMemory } satisfies WizardMemoryData);
-  }, [selectedMemory, setCanProceed, setStepData]);
+  const selectMemory = (memoryMode: AgentMemoryMode) => {
+    setSelectedMemory(memoryMode);
+    setStepData("memory", { type: memoryMode } satisfies WizardMemoryData);
+  };
 
   const memoryOptions = [
     {
@@ -508,7 +582,7 @@ function MemoryStep() {
             <button
               key={option.id}
               type="button"
-              onClick={() => setSelectedMemory(option.id)}
+              onClick={() => selectMemory(option.id)}
               className={cn(
                 "w-full p-3 border rounded-lg text-left transition-colors flex items-start gap-3",
                 selectedMemory === option.id ? "border-primary bg-primary/5" : "hover:bg-muted/50",
@@ -516,7 +590,7 @@ function MemoryStep() {
             >
               <Icon
                 className={cn(
-                  "w-5 h-5 mt-0.5 shrink-0",
+                  "size-5 mt-0.5 shrink-0",
                   selectedMemory === option.id ? "text-primary" : "text-muted-foreground",
                 )}
               />
@@ -552,7 +626,7 @@ function OutputStep() {
       </p>
 
       <div className="p-4 border rounded-lg flex items-center gap-3 border-emerald-500/50 bg-emerald-500/10">
-        <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+        <CheckCircle className="size-5 text-emerald-500 shrink-0" />
         <div>
           <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
             Deliverable step will be created automatically
@@ -581,28 +655,10 @@ function OutputStep() {
 }
 
 function ReviewStep() {
-  const { setCanProceed, state } = useWizard();
-  const selectedPresetId = (state.stepData.start as { selectedPresetId?: string } | undefined)?.selectedPresetId;
-  const preset = selectedPresetId ? getAgentWizardPreset(selectedPresetId) : undefined;
-  const roleData = (state.stepData.role as WizardRoleData | undefined) ?? {};
-  const toolsData = (state.stepData.tools as WizardToolsData | undefined) ?? {};
-  const memoryData = (state.stepData.memory as WizardMemoryData | undefined) ?? {};
-  const outputData = (state.stepData.output as WizardOutputData | undefined) ?? {};
-
-  const tools = toolsData.tools ?? [];
-  const approvalTools = toolsData.approvalRequiredTools ?? [];
-  const invalidApproval = approvalTools.filter((tool) => !tools.includes(tool));
-  const isValid =
-    Boolean(roleData.agentLabel?.trim()) &&
-    Boolean(roleData.instructions?.trim()) &&
-    Boolean(roleData.model?.trim()) &&
-    tools.length > 0 &&
-    invalidApproval.length === 0 &&
-    Boolean(outputData.outputKey?.trim());
-
-  useEffect(() => {
-    setCanProceed(isValid);
-  }, [isValid, setCanProceed]);
+  const { state } = useWizard();
+  const { preset, roleData, tools, invalidApproval, memoryData, outputData, isValid } = getWizardCompletionState(
+    state.stepData,
+  );
 
   return (
     <div className="space-y-4">
@@ -653,7 +709,7 @@ function ReviewStep() {
 
       {isValid && (
         <div className="flex items-center gap-2 p-3 border border-emerald-500/50 bg-emerald-500/10 rounded-lg">
-          <Sparkles className="w-5 h-5 text-emerald-500" />
+          <Sparkles className="size-5 text-emerald-500" />
           <div>
             <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">AI worker flow ready</p>
             <p className="text-xs text-muted-foreground">Finish to add a real AI worker flow to the canvas.</p>
@@ -683,6 +739,13 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
   const { state, currentStepConfig, exitWizard } = useWizard();
 
   const blueprint = useMemo(() => buildBlueprintFromState(state.stepData), [state.stepData]);
+  const completionState = useMemo(() => getWizardCompletionState(state.stepData), [state.stepData]);
+  const canProceedOverride =
+    currentStepConfig?.id === "review"
+      ? completionState.isValid
+      : currentStepConfig?.id === "start" || currentStepConfig?.id === "memory"
+        ? true
+        : undefined;
 
   const handleComplete = useCallback(
     (options?: { runTest?: boolean }) => {
@@ -724,7 +787,12 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
       aria-label="Operating Model Wizard"
       className={cn("fixed inset-0 z-50 flex items-center justify-center", className)}
     >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleExit} />
+      <button
+        type="button"
+        aria-label="Close operating model wizard"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={handleExit}
+      />
 
       <div className="relative z-10 w-full max-w-lg mx-4 bg-background border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         <WizardProgress />
@@ -737,10 +805,11 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
           )}
         </div>
 
-        <WizardNavigation onComplete={handleComplete} />
+        <WizardNavigation
+          onComplete={handleComplete}
+          canProceedOverride={canProceedOverride}
+        />
       </div>
     </div>
   );
 }
-
-export default AgentWizard;

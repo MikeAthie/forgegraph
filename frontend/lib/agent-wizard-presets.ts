@@ -2,7 +2,7 @@ import { NODE_TYPES, type AgentNodeConfig, type NodeConfig, type NodeType } from
 
 export type AgentMemoryMode = "none" | "session" | "persistent";
 
-export interface AgentWizardBlueprintNode {
+interface AgentWizardBlueprintNode {
   nodeType: NodeType;
   label: string;
   config: NodeConfig;

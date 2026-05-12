@@ -4590,6 +4590,52 @@ routes:
     oversized_request: 413
   rate_limit_scope: provider_webhook
   request_size_limit: api_default
+- id: company-blueprints-compile
+  names:
+  - company-blueprints-compile
+  paths:
+  - /api/company-blueprints/compile
+  - /api/v1/company-blueprints/compile
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: &company_blueprints_jwt_read_expected
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: skip
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-from-blueprint
+  names:
+  - companies-from-blueprint
+  paths:
+  - /api/companies/from-blueprint
+  - /api/v1/companies/from-blueprint
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: &company_blueprints_jwt_write_expected
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413
+  rate_limit_scope: default
+  request_size_limit: api_default
 - id: company-ops-overview
   names:
   - company-ops-overview
@@ -4802,6 +4848,446 @@ routes:
   required_role: member
   org_scope: tenant
   expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operating-model-packs
+  names:
+  - operating-model-pack-list
+  paths:
+  - /api/operating-model-packs
+  - /api/v1/operating-model-packs
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operating-model-packs-pack-id
+  names:
+  - operating-model-pack-detail
+  paths:
+  - /api/operating-model-packs/<str:pack_id>
+  - /api/v1/operating-model-packs/<str:pack_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: operating-model-packs-pack-id-compile
+  names:
+  - operating-model-pack-compile
+  paths:
+  - /api/operating-model-packs/<str:pack_id>/compile
+  - /api/v1/operating-model-packs/<str:pack_id>/compile
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-operating-model
+  names:
+  - company-operating-model
+  paths:
+  - /api/companies/<uuid:company_id>/operating-model
+  - /api/v1/companies/<uuid:company_id>/operating-model
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-operating-model-packs-pack-id-install
+  names:
+  - company-operating-model-pack-install
+  paths:
+  - /api/companies/<uuid:company_id>/operating-model/packs/<str:pack_id>/install
+  - /api/v1/companies/<uuid:company_id>/operating-model/packs/<str:pack_id>/install
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-operating-model-packs-pack-id-upgrade
+  names:
+  - company-operating-model-pack-upgrade
+  paths:
+  - /api/companies/<uuid:company_id>/operating-model/packs/<str:pack_id>/upgrade
+  - /api/v1/companies/<uuid:company_id>/operating-model/packs/<str:pack_id>/upgrade
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-operating-model-packs-pack-id
+  names:
+  - company-operating-model-pack-remove
+  paths:
+  - /api/companies/<uuid:company_id>/operating-model/packs/<str:pack_id>
+  - /api/v1/companies/<uuid:company_id>/operating-model/packs/<str:pack_id>
+  methods:
+  - DELETE
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-programs
+  names:
+  - company-program-list-create
+  paths:
+  - /api/companies/<uuid:company_id>/programs
+  - /api/v1/companies/<uuid:company_id>/programs
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: programs-program-id
+  names:
+  - program-detail
+  paths:
+  - /api/programs/<uuid:program_id>
+  - /api/v1/programs/<uuid:program_id>
+  methods:
+  - GET
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: programs-program-id-stages-stage-id-advance
+  names:
+  - program-stage-advance
+  paths:
+  - /api/programs/<uuid:program_id>/stages/<str:stage_id>/advance
+  - /api/v1/programs/<uuid:program_id>/stages/<str:stage_id>/advance
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: programs-program-id-stages-stage-id-operations-launch
+  names:
+  - program-stage-operation-launch
+  paths:
+  - /api/programs/<uuid:program_id>/stages/<str:stage_id>/operations/launch
+  - /api/v1/programs/<uuid:program_id>/stages/<str:stage_id>/operations/launch
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: programs-program-id-stages-stage-id-outputs-generate
+  names:
+  - program-stage-output-generate
+  paths:
+  - /api/programs/<uuid:program_id>/stages/<str:stage_id>/outputs/generate
+  - /api/v1/programs/<uuid:program_id>/stages/<str:stage_id>/outputs/generate
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: programs-program-id-validation-packet
+  names:
+  - program-validation-packet
+  paths:
+  - /api/programs/<uuid:program_id>/validation-packet
+  - /api/v1/programs/<uuid:program_id>/validation-packet
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: assertions
+  names:
+  - assertion-list-create
+  paths:
+  - /api/assertions
+  - /api/v1/assertions
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: validation-decisions
+  names:
+  - validation-decision-create
+  paths:
+  - /api/validation-decisions
+  - /api/v1/validation-decisions
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: work-artifacts
+  names:
+  - work-artifact-list-create
+  paths:
+  - /api/work-artifacts
+  - /api/v1/work-artifacts
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: work-artifacts-artifact-id
+  names:
+  - work-artifact-detail
+  paths:
+  - /api/work-artifacts/<uuid:artifact_id>
+  - /api/v1/work-artifacts/<uuid:artifact_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: work-artifacts-artifact-id-revisions
+  names:
+  - work-artifact-revision-create
+  paths:
+  - /api/work-artifacts/<uuid:artifact_id>/revisions
+  - /api/v1/work-artifacts/<uuid:artifact_id>/revisions
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: work-artifacts-artifact-id-lineage
+  names:
+  - work-artifact-lineage
+  paths:
+  - /api/work-artifacts/<uuid:artifact_id>/lineage
+  - /api/v1/work-artifacts/<uuid:artifact_id>/lineage
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: work-artifacts-artifact-id-canonical-revision
+  names:
+  - work-artifact-canonical-revision
+  paths:
+  - /api/work-artifacts/<uuid:artifact_id>/canonical-revision
+  - /api/v1/work-artifacts/<uuid:artifact_id>/canonical-revision
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: evaluations-run
+  names:
+  - evaluation-run
+  paths:
+  - /api/evaluations/run
+  - /api/v1/evaluations/run
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: evaluations-evaluation-id
+  names:
+  - evaluation-detail
+  paths:
+  - /api/evaluations/<uuid:evaluation_id>
+  - /api/v1/evaluations/<uuid:evaluation_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: periodic-reviews
+  names:
+  - periodic-review-list-create
+  paths:
+  - /api/periodic-reviews
+  - /api/v1/periodic-reviews
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: periodic-reviews-review-id-run
+  names:
+  - periodic-review-run
+  paths:
+  - /api/periodic-reviews/<uuid:review_id>/run
+  - /api/v1/periodic-reviews/<uuid:review_id>/run
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: metric-snapshots
+  names:
+  - metric-snapshot-list-create
+  paths:
+  - /api/metric-snapshots
+  - /api/v1/metric-snapshots
+  methods:
+  - GET
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: report-runs
+  names:
+  - report-run-list
+  paths:
+  - /api/report-runs
+  - /api/v1/report-runs
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: policy-evaluations
+  names:
+  - policy-evaluation-create
+  paths:
+  - /api/policy-evaluations
+  - /api/v1/policy-evaluations
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: tool-executions
+  names:
+  - pack-tool-execution-create
+  paths:
+  - /api/tool-executions
+  - /api/v1/tool-executions
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: rework-plans
+  names:
+  - rework-plan-create
+  paths:
+  - /api/rework-plans
+  - /api/v1/rework-plans
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: rework-plans-plan-id-execute
+  names:
+  - rework-plan-execute
+  paths:
+  - /api/rework-plans/<uuid:plan_id>/execute
+  - /api/v1/rework-plans/<uuid:plan_id>/execute
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: state-projections
+  names:
+  - state-projection-list
+  paths:
+  - /api/state-projections
+  - /api/v1/state-projections
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  expected: *company_ops_jwt_read_expected
   rate_limit_scope: default
   request_size_limit: api_default
 - id: ws-ticket

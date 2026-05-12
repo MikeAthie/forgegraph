@@ -1,4 +1,4 @@
-import { credentialsApi, graphsApi, runsApi, approvalsApi } from "@/lib/api";
+import { companyBlueprintsApi, credentialsApi, graphsApi, runsApi, approvalsApi } from "@/lib/api";
 import {
   buildCompanyGraphJson,
   buildCompanyProfile,
@@ -18,7 +18,7 @@ import {
 import { operationRepository } from "./operationRepository";
 
 function sortOperations<T extends { startedAt: string | null }>(operations: T[]): T[] {
-  return [...operations].sort((left, right) => (right.startedAt ?? "").localeCompare(left.startedAt ?? ""));
+  return operations.toSorted((left, right) => (right.startedAt ?? "").localeCompare(left.startedAt ?? ""));
 }
 
 export const companyRepository = {
@@ -32,8 +32,8 @@ export const companyRepository = {
 
     return companies.map((company, index) => {
       const companyOperations = operations
-        .filter((operation) => operation.graph_id === company.id)
-        .sort((left, right) => (right.started_at ?? "").localeCompare(left.started_at ?? ""))
+        .flatMap((operation) => (operation.graph_id === company.id ? [operation] : []))
+        .toSorted((left, right) => (right.started_at ?? "").localeCompare(left.started_at ?? ""))
         .map(toOperationListVM);
       const operationIds = new Set(companyOperations.map((operation) => operation.id));
       const pendingApprovalCount = approvals.filter((approval) => operationIds.has(approval.run_id)).length;
@@ -53,14 +53,16 @@ export const companyRepository = {
       .filter((operation) => operation.graph_id === companyId)
       .sort((left, right) => (right.started_at ?? "").localeCompare(left.started_at ?? ""));
     const operationIds = new Set(companyOperationList.map((operation) => operation.id));
-    const detailedOperationIds = companyOperationList
-      .filter(
-        (operation, index) =>
-          index < 4 ||
-          String(operation.status).toLowerCase() === "running" ||
-          String(operation.status).toLowerCase() === "failed",
-      )
-      .map((operation) => operation.id);
+    const detailedOperationIds: string[] = [];
+    companyOperationList.forEach((operation, index) => {
+      if (
+        index < 4 ||
+        String(operation.status).toLowerCase() === "running" ||
+        String(operation.status).toLowerCase() === "failed"
+      ) {
+        detailedOperationIds.push(operation.id);
+      }
+    });
     const detailedOperations = await Promise.all(detailedOperationIds.map((operationId) => runsApi.get(operationId)));
     const detailById = new Map(
       detailedOperations.map((operation) => [operation.id, toOperationVM(operation, setupVersion?.graph_json ?? null)]),
@@ -92,6 +94,33 @@ export const companyRepository = {
       ...input.profile,
       byokCredentialId: credentialId,
     });
+    if (input.operatingModelPackId) {
+      const created = await companyBlueprintsApi.createCompany(
+        {
+          company_name: profile.companyName,
+          objective: profile.objective,
+          blueprint_id: input.operatingModelPackId,
+          services: profile.skills,
+          regions: [],
+          autonomy_mode: profile.autonomyMode,
+          ai_access_mode: profile.aiAccessMode,
+          intelligence_provider: profile.intelligenceProvider,
+          launch_first_operation: input.launchFirstOperation,
+          operation_brief: input.operationBrief,
+          credential_id: credentialId,
+        },
+        { idempotencyKey: makeClientIdempotencyKey("company-from-blueprint") },
+      );
+      if (!created.first_operation_id) {
+        return { companyId: created.company_id, firstOperation: null };
+      }
+      const operation = await runsApi.get(created.first_operation_id);
+      return {
+        companyId: created.company_id,
+        firstOperation: toOperationVM(operation, created.graph_json),
+      };
+    }
+
     const company = await graphsApi.create({
       name: profile.companyName,
       description: profile.objective,
@@ -99,6 +128,9 @@ export const companyRepository = {
     const setup = await graphsApi.createVersion(company.id, {
       graph_json: buildCompanyGraphJson(profile),
     });
+    if (!setup.id) {
+      throw new Error("Graph version creation did not return an id.");
+    }
 
     if (!input.launchFirstOperation) {
       return { companyId: company.id, firstOperation: null };
@@ -141,4 +173,12 @@ export const companyRepository = {
   retryOperation: operationRepository.retry,
 };
 
-export type CompanyRepository = typeof companyRepository;
+function makeClientIdempotencyKey(prefix: string): string {
+  const randomId =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}:${randomId}`;
+}
+
+type CompanyRepository = typeof companyRepository;

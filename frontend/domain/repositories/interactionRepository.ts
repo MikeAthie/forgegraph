@@ -18,4 +18,4 @@ export const interactionRepository = {
     }),
 };
 
-export type InteractionRepository = typeof interactionRepository;
+type InteractionRepository = typeof interactionRepository;

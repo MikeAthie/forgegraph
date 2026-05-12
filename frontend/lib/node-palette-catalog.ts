@@ -45,7 +45,7 @@ export type PaletteCatalogItem =
       package: MarketplacePackage;
     };
 
-export const CATEGORY_ORDER = [
+const CATEGORY_ORDER = [
   "Recommended",
   "Recently used",
   "AI",
@@ -56,6 +56,7 @@ export const CATEGORY_ORDER = [
   "I/O",
   "Annotations",
 ] as const;
+const CATEGORY_RANK = new Map(CATEGORY_ORDER.map((category, index) => [category, index]));
 
 const NODE_CATEGORIES: Record<NodeType | "note", string> = {
   agent: "AI",
@@ -121,8 +122,14 @@ function tokenize(value: string): string[] {
   return value
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+    .flatMap((part) => {
+      const trimmed = part.trim();
+      return trimmed ? [trimmed] : [];
+    });
+}
+
+function containsText(value: string, needle: string): boolean {
+  return value.split(needle).length > 1;
 }
 
 function scoreItemForQuery(item: PaletteCatalogItem, query: string): number {
@@ -135,21 +142,30 @@ function scoreItemForQuery(item: PaletteCatalogItem, query: string): number {
   const description = item.description.toLowerCase();
   const category = item.category.toLowerCase();
   const tags = item.tags.map((tag) => tag.toLowerCase());
+  const tagSet = new Set(tags);
 
   let score = 0;
 
   for (const token of tokens) {
     if (label === token) score += 100;
     else if (label.startsWith(token)) score += 70;
-    else if (label.includes(token)) score += 45;
+    else if (containsText(label, token)) score += 45;
 
     if (type === token) score += 80;
-    else if (type.includes(token)) score += 35;
+    else if (containsText(type, token)) score += 35;
 
-    if (category.includes(token)) score += 18;
-    if (description.includes(token)) score += 12;
-    if (tags.some((tag) => tag === token)) score += 40;
-    else if (tags.some((tag) => tag.includes(token))) score += 24;
+    if (containsText(category, token)) score += 18;
+    if (containsText(description, token)) score += 12;
+    if (tagSet.has(token)) {
+      score += 40;
+    } else {
+      for (const tag of tags) {
+        if (containsText(tag, token)) {
+          score += 24;
+          break;
+        }
+      }
+    }
   }
 
   if (item.enabled) score += 6;
@@ -206,13 +222,16 @@ export function searchNodePaletteCatalog(items: PaletteCatalogItem[], query: str
     return items;
   }
 
-  return items
-    .map((item) => ({
-      item,
-      score: scoreItemForQuery(item, trimmed),
-    }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => {
+  const scoredItems: Array<{ item: PaletteCatalogItem; score: number }> = [];
+  for (const item of items) {
+    const score = scoreItemForQuery(item, trimmed);
+    if (score > 0) {
+      scoredItems.push({ item, score });
+    }
+  }
+
+  return scoredItems
+    .toSorted((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return a.item.label.localeCompare(b.item.label);
     })
@@ -227,25 +246,27 @@ export function groupPaletteItems(items: PaletteCatalogItem[]): Array<[string, P
     groups.set(item.category, existing);
   }
 
-  return Array.from(groups.entries())
-    .map(
-      ([category, groupedItems]) =>
-        [category, [...groupedItems].sort((a, b) => a.label.localeCompare(b.label))] as [string, PaletteCatalogItem[]],
-    )
-    .sort(([a], [b]) => {
-      const aIndex = CATEGORY_ORDER.indexOf(a as (typeof CATEGORY_ORDER)[number]);
-      const bIndex = CATEGORY_ORDER.indexOf(b as (typeof CATEGORY_ORDER)[number]);
-      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
+  const sortedGroups: Array<[string, PaletteCatalogItem[]]> = [];
+  for (const [category, groupedItems] of groups.entries()) {
+    sortedGroups.push([category, groupedItems.toSorted((a, b) => a.label.localeCompare(b.label))]);
+  }
+
+  return sortedGroups.toSorted(([a], [b]) => {
+    const aIndex = CATEGORY_RANK.get(a as (typeof CATEGORY_ORDER)[number]);
+    const bIndex = CATEGORY_RANK.get(b as (typeof CATEGORY_ORDER)[number]);
+    if (aIndex === undefined && bIndex === undefined) return a.localeCompare(b);
+    if (aIndex === undefined) return 1;
+    if (bIndex === undefined) return -1;
+    return aIndex - bIndex;
+  });
 }
 
 export function getRecommendedPaletteItems(items: PaletteCatalogItem[], limit = 6): PaletteCatalogItem[] {
-  return RECOMMENDED_ITEM_IDS.map((id) => items.find((item) => item.id === id))
-    .filter((item): item is PaletteCatalogItem => Boolean(item && item.enabled))
-    .slice(0, limit);
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  return RECOMMENDED_ITEM_IDS.flatMap((id) => {
+    const item = itemById.get(id);
+    return item?.enabled ? [item] : [];
+  }).slice(0, limit);
 }
 
 export function getRecentPaletteItems(
@@ -254,10 +275,10 @@ export function getRecentPaletteItems(
   limit = 6,
 ): PaletteCatalogItem[] {
   const itemById = new Map(items.map((item) => [item.id, item]));
-  return recentIds
-    .map((id) => itemById.get(id))
-    .filter((item): item is PaletteCatalogItem => Boolean(item && item.enabled))
-    .slice(0, limit);
+  return recentIds.flatMap((id) => {
+    const item = itemById.get(id);
+    return item?.enabled ? [item] : [];
+  }).slice(0, limit);
 }
 
 export function updateRecentPaletteIds(currentIds: string[], selectedId: string, limit = 8): string[] {

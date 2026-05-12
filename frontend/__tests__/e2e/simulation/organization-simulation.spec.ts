@@ -57,6 +57,7 @@ const RESOURCE_CONSTRAINTS = {
   channelLimit: 3,
   allowedChannels: ["private appointments", "Meta retargeting", "stylist and concierge partnerships"],
 } as const;
+const ACTIVE_TASK_STATUSES = new Set(["running", "waiting", "failed"]);
 
 const REQUIRED_SKILLS = [
   "copywriter.generate_ad_copy",
@@ -611,12 +612,11 @@ function normalizeDirectorOutput(
   }
 
   const hiddenConstraints = Array.isArray(parsed.hidden_constraints)
-    ? parsed.hidden_constraints
-        .map((item, index) => {
+    ? parsed.hidden_constraints.flatMap((item, index) => {
           const source = item as Record<string, unknown>;
           const type =
             source.type === "legal" || source.type === "budget" || source.type === "channel" ? source.type : "budget";
-          return {
+      const constraint = {
             id: String(source.id ?? `llm-hidden-${index}`),
             type,
             injectedAfterOperation: afterOperationId,
@@ -624,68 +624,64 @@ function normalizeDirectorOutput(
             impact: String(source.impact ?? ""),
             response: String(source.response ?? ""),
           };
+      return constraint.description && constraint.impact && constraint.response ? [constraint] : [];
         })
-        .filter((item) => item.description && item.impact && item.response)
     : [];
 
   const contradictorySignals = Array.isArray(parsed.contradictory_signals)
-    ? parsed.contradictory_signals
-        .map((item, index) => {
+    ? parsed.contradictory_signals.flatMap((item, index) => {
           const source = item as Record<string, unknown>;
-          return {
+      const signal = {
             id: String(source.id ?? `llm-signal-${index}`),
             signalA: String(source.signal_a ?? ""),
             signalB: String(source.signal_b ?? ""),
             choice: String(source.choice ?? ""),
             rationale: String(source.rationale ?? ""),
           };
+      return signal.signalA && signal.signalB && signal.choice && signal.rationale ? [signal] : [];
         })
-        .filter((item) => item.signalA && item.signalB && item.choice && item.rationale)
     : [];
 
   const delayedConsequences = Array.isArray(parsed.delayed_consequences)
-    ? parsed.delayed_consequences
-        .map((item, index) => {
+    ? parsed.delayed_consequences.flatMap((item, index) => {
           const source = item as Record<string, unknown>;
-          return {
+      const consequence = {
             id: String(source.id ?? `llm-consequence-${index}`),
             earlyDecision: String(source.early_decision ?? ""),
             consequence: String(source.consequence ?? ""),
             effect: source.effect === "negative" ? ("negative" as const) : ("positive" as const),
           };
+      return consequence.earlyDecision && consequence.consequence ? [consequence] : [];
         })
-        .filter((item) => item.earlyDecision && item.consequence)
     : [];
 
   const memoryMisuseRecoveries = Array.isArray(parsed.memory_misuse)
-    ? parsed.memory_misuse
-        .map((item) => {
+    ? parsed.memory_misuse.flatMap((item) => {
           const source = item as Record<string, unknown>;
-          return {
+      const recovery = {
             misleadingMemoryId: String(source.misleading_memory_id ?? "memory-misleading-discount-scale"),
             detectedBy: String(source.detected_by ?? "Memory / Learning"),
             issue: String(source.issue ?? ""),
             recovery: String(source.recovery ?? ""),
           };
+      return recovery.issue && recovery.recovery ? [recovery] : [];
         })
-        .filter((item) => item.issue && item.recovery)
     : [];
 
   const departmentChallenges = Array.isArray(parsed.department_challenges)
-    ? parsed.department_challenges
-        .map((item) => {
+    ? parsed.department_challenges.flatMap((item) => {
           const source = item as Record<string, unknown>;
           const response =
             source.response === "override" || source.response === "careful integration" ? source.response : "constrain";
-          return {
+      const challenge = {
             department: String(source.department ?? "Performance Marketing"),
             proposal: String(source.proposal ?? ""),
             risk: String(source.risk ?? ""),
             response,
             rationale: String(source.rationale ?? ""),
           };
+      return challenge.proposal && challenge.risk && challenge.rationale ? [challenge] : [];
         })
-        .filter((item) => item.proposal && item.risk && item.rationale)
     : [];
 
   const active = (parsed.active_constraints ?? {}) as Record<string, unknown>;
@@ -696,11 +692,9 @@ function normalizeDirectorOutput(
     budgetCapMxn: Number.isFinite(budgetCapMxn) && budgetCapMxn > 0 ? budgetCapMxn : Number.NaN,
     contentCapacityPerWeek: Number.isFinite(contentCapacityPerWeek) ? contentCapacityPerWeek : Number.NaN,
     channelLimit: Number.isFinite(channelLimit) ? channelLimit : Number.NaN,
-    allowedChannels: Array.isArray(active.allowed_channels) ? active.allowed_channels.map(String).filter(Boolean) : [],
-    failedChannels: Array.isArray(active.failed_channels) ? active.failed_channels.map(String).filter(Boolean) : [],
-    restrictedClaims: Array.isArray(active.restricted_claims)
-      ? active.restricted_claims.map(String).filter(Boolean)
-      : [],
+    allowedChannels: normalizeStringArray(active.allowed_channels),
+    failedChannels: normalizeStringArray(active.failed_channels),
+    restrictedClaims: normalizeStringArray(active.restricted_claims),
   };
 
   const validationFailures = [
@@ -714,7 +708,7 @@ function normalizeDirectorOutput(
     !Number.isFinite(activeConstraints.contentCapacityPerWeek) ? "content capacity" : "",
     !Number.isFinite(activeConstraints.channelLimit) ? "channel limit" : "",
     activeConstraints.allowedChannels.length < 1 ? "allowed channels" : "",
-  ].filter(Boolean);
+  ].flatMap((field) => (field ? [field] : []));
 
   if (validationFailures.length > 0) {
     throw new Error(`Local LLM director output is incomplete: ${validationFailures.join(", ")}`);
@@ -748,10 +742,11 @@ async function generateSimulationDirectorOutput(
     existing_constraints: state.activeConstraints,
     misleading_memory: state.memory.find((memory) => memory.id === "memory-misleading-discount-scale"),
   };
-  let previousContent = "";
-  let previousError = "";
-  let lastParsed: Record<string, unknown> | null = null;
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  const requestDirectorAttempt = async (
+    attempt: number,
+    previousContent = "",
+    previousError = "",
+  ): Promise<SimulationDirectorOutput> => {
     const { content, parsed } = await requireLocalLlmJson(
       request,
       SIMULATION_DIRECTOR_PROMPT,
@@ -767,42 +762,49 @@ async function generateSimulationDirectorOutput(
       { temperature: attempt === 1 ? 0.4 : 0, timeout: 60_000 },
     );
     state.llmResponses.push({ kind: "director", label: `adversarial simulation director attempt ${attempt}`, content });
-    lastParsed = parsed;
     try {
       return normalizeDirectorOutput(parsed, afterOperationId);
     } catch (error) {
-      previousContent = content;
-      previousError = error instanceof Error ? error.message : String(error);
+      const nextError = error instanceof Error ? error.message : String(error);
+      if (attempt < 5) {
+        return requestDirectorAttempt(attempt + 1, content, nextError);
+      }
+      if (parsed && /department challenge/i.test(nextError)) {
+        const { content: repairContent, parsed: repairParsed } = await requireLocalLlmJson(
+          request,
+          [
+            "You are repairing one missing field in an adversarial organizational simulation.",
+            "Return JSON only with this exact shape:",
+            '{"department_challenges":[{"department":"string","proposal":"string","risk":"string","response":"override|constrain|careful integration","rationale":"string"}]}',
+            "The department challenge must be suboptimal, plausible, and specific to Legacy's Mexico City luxury eyewear launch.",
+          ].join("\n"),
+          {
+            company: COMPANY_NAME,
+            client: CLIENT,
+            operations_so_far: payload.operations_so_far,
+            constraints: parsed.active_constraints ?? state.activeConstraints,
+            previous_director_response: parsed,
+          },
+          { temperature: 0, timeout: 60_000, maxTokens: 800 },
+        );
+        state.llmResponses.push({
+          kind: "director",
+          label: "adversarial simulation director targeted repair",
+          content: repairContent,
+        });
+        return normalizeDirectorOutput(
+          {
+            ...parsed,
+            department_challenges: repairParsed.department_challenges,
+          },
+          afterOperationId,
+        );
+      }
+      throw new Error(`Local LLM director output is incomplete after repair: ${nextError}`);
     }
-  }
-  if (lastParsed && /department challenge/i.test(previousError)) {
-    const { content, parsed } = await requireLocalLlmJson(
-      request,
-      [
-        "You are repairing one missing field in an adversarial organizational simulation.",
-        "Return JSON only with this exact shape:",
-        '{"department_challenges":[{"department":"string","proposal":"string","risk":"string","response":"override|constrain|careful integration","rationale":"string"}]}',
-        "The department challenge must be suboptimal, plausible, and specific to Legacy's Mexico City luxury eyewear launch.",
-      ].join("\n"),
-      {
-        company: COMPANY_NAME,
-        client: CLIENT,
-        operations_so_far: payload.operations_so_far,
-        constraints: lastParsed.active_constraints ?? state.activeConstraints,
-        previous_director_response: lastParsed,
-      },
-      { temperature: 0, timeout: 60_000, maxTokens: 800 },
-    );
-    state.llmResponses.push({ kind: "director", label: "adversarial simulation director targeted repair", content });
-    return normalizeDirectorOutput(
-      {
-        ...lastParsed,
-        department_challenges: parsed.department_challenges,
-      },
-      afterOperationId,
-    );
-  }
-  throw new Error(`Local LLM director output is incomplete after repair: ${previousError}`);
+  };
+
+  return requestDirectorAttempt(1);
 }
 
 function departmentDefinitions(): AgencyDepartment[] {
@@ -1482,7 +1484,7 @@ function departmentIdsByNameFromSetup(setupJson: {
   nodes: Array<{ id: string; type: string; name?: string }>;
 }): Record<string, string> {
   return Object.fromEntries(
-    setupJson.nodes.filter((item) => item.type !== "output" && item.name).map((item) => [item.name as string, item.id]),
+    setupJson.nodes.flatMap((item) => (item.type !== "output" && item.name ? [[item.name, item.id]] : [])),
   );
 }
 
@@ -1568,7 +1570,10 @@ async function createCompanyThroughUi(page: Page): Promise<string> {
         "Company creation diagnostics:",
         ...createDiagnostics,
         "Visible alerts:",
-        ...alerts.map((alert) => alert.trim()).filter(Boolean),
+        ...alerts.flatMap((alert) => {
+          const trimmed = alert.trim();
+          return trimmed ? [trimmed] : [];
+        }),
       ].join("\n"),
     );
   }
@@ -1704,7 +1709,7 @@ function missingOperationDeliverableRequirements(
       );
     }
   }
-  return requiredPatterns.filter((pattern) => !pattern.test(content)).map(String);
+  return requiredPatterns.flatMap((pattern) => (!pattern.test(content) ? [String(pattern)] : []));
 }
 
 function stateHasTraceabilityRecords(state: SimulationState): boolean {
@@ -1751,9 +1756,11 @@ async function generateOperationDeliverable(
     },
   };
 
-  let previousContent = "";
-  let missing: string[] = [];
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  const requestDeliverableAttempt = async (
+    attempt: number,
+    previousContent = "",
+    missing: string[] = [],
+  ): Promise<string> => {
     const content = await requireLocalLlmContent(
       request,
       OPERATION_DELIVERABLE_PROMPT,
@@ -1770,14 +1777,18 @@ async function generateOperationDeliverable(
       { temperature: attempt === 1 ? 0.25 : 0, timeout: 35_000, maxTokens: 2_400 },
     );
     state.llmResponses.push({ kind: "deliverable", label: `${template.name} attempt ${attempt}`, content });
-    missing = missingOperationDeliverableRequirements(content, template, state);
-    if (missing.length === 0) {
+    const nextMissing = missingOperationDeliverableRequirements(content, template, state);
+    if (nextMissing.length === 0) {
       return content;
     }
-    previousContent = content;
-  }
+    if (attempt < 5) {
+      return requestDeliverableAttempt(attempt + 1, content, nextMissing);
+    }
 
-  throw new Error(`Local LLM deliverable for ${template.name} missed required content: ${missing.join(", ")}`);
+    throw new Error(`Local LLM deliverable for ${template.name} missed required content: ${nextMissing.join(", ")}`);
+  };
+
+  return requestDeliverableAttempt(1);
 }
 
 function applyOperationSideEffects(
@@ -2043,7 +2054,7 @@ async function resolveOperationApproval(
 }
 
 function sortOperations(operations: SimulationOperation[]): SimulationOperation[] {
-  return [...operations].sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  return operations.toSorted((left, right) => right.startedAt.localeCompare(left.startedAt));
 }
 
 function buildOperationListItem(operation: SimulationOperation, state: SimulationState) {
@@ -2228,51 +2239,61 @@ function buildTaskRecords(operation: SimulationOperation, state: SimulationState
 }
 
 function buildApprovalRecords(state: SimulationState, statusFilter: string | null) {
-  return state.operations
-    .flatMap((operation) => operation.approvalHistory.map((approval) => ({ operation, approval })))
-    .filter(({ approval }) => !statusFilter || statusFilter === "all" || approval.status === statusFilter)
-    .map(({ operation, approval }) => ({
-      id: approval.id,
-      run_id: approval.operationId,
-      run_name: operation.name,
-      graph_name: COMPANY_NAME,
-      node_id: approval.departmentId,
-      node_name: approval.departmentName,
-      status: approval.status,
-      prompt_message: approval.promptMessage,
-      payload: {
-        prompt_message: approval.promptMessage,
-        required_fields: ["approval_notes", "client_context"],
-      },
-      result: approval.result,
-      created_at: approval.createdAt,
-      resolved_at: approval.resolvedAt,
-    }));
+  return state.operations.flatMap((operation) =>
+    operation.approvalHistory.flatMap((approval) =>
+      !statusFilter || statusFilter === "all" || approval.status === statusFilter
+        ? [
+            {
+              id: approval.id,
+              run_id: approval.operationId,
+              run_name: operation.name,
+              graph_name: COMPANY_NAME,
+              node_id: approval.departmentId,
+              node_name: approval.departmentName,
+              status: approval.status,
+              prompt_message: approval.promptMessage,
+              payload: {
+                prompt_message: approval.promptMessage,
+                required_fields: ["approval_notes", "client_context"],
+              },
+              result: approval.result,
+              created_at: approval.createdAt,
+              resolved_at: approval.resolvedAt,
+            },
+          ]
+        : [],
+    ),
+  );
 }
 
 function buildDecisionRecords(state: SimulationState, includeResolved = true) {
-  return state.operations
-    .flatMap((operation) => operation.approvalHistory.map((approval) => ({ operation, approval })))
-    .filter(({ approval }) => includeResolved || approval.status === "pending")
-    .map(({ approval }) => ({
-      id: `decision-${approval.id}`,
-      organization_id: state.organizationId,
-      execution_id: approval.operationId,
-      task_id: `${approval.operationId}-campaign-approval`,
-      agent_id: approval.departmentId,
-      decision_type: "human_approval",
-      status: approval.status,
-      source_approval_task_id: approval.id,
-      context_json: {
-        summary: approval.promptMessage,
-        client: CLIENT,
-      },
-      resolution_json: approval.result ?? {},
-      requested_at: approval.createdAt,
-      resolved_at: approval.resolvedAt,
-      created_at: approval.createdAt,
-      updated_at: approval.resolvedAt ?? approval.createdAt,
-    }));
+  return state.operations.flatMap((operation) =>
+    operation.approvalHistory.flatMap((approval) =>
+      includeResolved || approval.status === "pending"
+        ? [
+            {
+              id: `decision-${approval.id}`,
+              organization_id: state.organizationId,
+              execution_id: approval.operationId,
+              task_id: `${approval.operationId}-campaign-approval`,
+              agent_id: approval.departmentId,
+              decision_type: "human_approval",
+              status: approval.status,
+              source_approval_task_id: approval.id,
+              context_json: {
+                summary: approval.promptMessage,
+                client: CLIENT,
+              },
+              resolution_json: approval.result ?? {},
+              requested_at: approval.createdAt,
+              resolved_at: approval.resolvedAt,
+              created_at: approval.createdAt,
+              updated_at: approval.resolvedAt ?? approval.createdAt,
+            },
+          ]
+        : [],
+    ),
+  );
 }
 
 function buildMemoryObservation(memory: SimulationMemory, state: SimulationState) {
@@ -2303,11 +2324,13 @@ function buildMemoryObservation(memory: SimulationMemory, state: SimulationState
 function buildDepartmentProjection(department: AgencyDepartment, state: SimulationState) {
   const departmentIdValue = departmentId(state, department.label);
   const departmentTasks = state.operations.flatMap((operation) =>
-    operation.tasks.filter((task) => task.departmentId === departmentIdValue),
+    operation.tasks.flatMap((task) => (task.departmentId === departmentIdValue ? [task] : [])),
   );
-  const pendingDecisions = state.operations
-    .flatMap((operation) => operation.approvalHistory)
-    .filter((approval) => approval.departmentId === departmentIdValue && approval.status === "pending").length;
+  const pendingDecisions = state.operations.flatMap((operation) =>
+    operation.approvalHistory.flatMap((approval) =>
+      approval.departmentId === departmentIdValue && approval.status === "pending" ? [approval] : [],
+    ),
+  ).length;
   const failedTasks = departmentTasks.filter((task) => task.status === "failed").length;
   const lastOperation = sortOperations(state.operations).find((operation) =>
     operation.tasks.some((task) => task.departmentId === departmentIdValue),
@@ -2345,9 +2368,14 @@ function buildDepartmentProjection(department: AgencyDepartment, state: Simulati
 }
 
 function buildSystemOverview(state: SimulationState) {
-  const activeTasks = sortOperations(state.operations)
-    .flatMap((operation) => buildTaskRecords(operation, state))
-    .filter((task) => ["running", "waiting", "failed"].includes(task.status));
+  const activeTasks: ReturnType<typeof buildTaskRecords> = [];
+  for (const operation of sortOperations(state.operations)) {
+    for (const task of buildTaskRecords(operation, state)) {
+      if (ACTIVE_TASK_STATUSES.has(task.status)) {
+        activeTasks.push(task);
+      }
+    }
+  }
   const activeDepartments = departmentDefinitions().map((department) => buildDepartmentProjection(department, state));
   const pendingDecisions = buildDecisionRecords(state, false);
   const recentOperations = sortOperations(state.operations).map((operation) => ({
@@ -2551,9 +2579,9 @@ async function installSimulationProductApis(
   await page.route(/\/api\/memory\/observations\/timeline(?:\?.*)?$/, async (route: Route) => {
     const url = new URL(route.request().url());
     const agentId = url.searchParams.get("agent_id");
-    const observations = state.memory
-      .filter((memory) => !agentId || memory.departmentId === agentId)
-      .map((memory) => buildMemoryObservation(memory, state));
+    const observations = state.memory.flatMap((memory) =>
+      !agentId || memory.departmentId === agentId ? [buildMemoryObservation(memory, state)] : [],
+    );
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -2564,9 +2592,10 @@ async function installSimulationProductApis(
   await page.route(/\/api\/memory\/observations\/search(?:\?.*)?$/, async (route: Route) => {
     const url = new URL(route.request().url());
     const query = (url.searchParams.get("query") ?? "").toLowerCase();
-    const observations = state.memory
-      .filter((memory) => !query || `${memory.title} ${memory.content} ${memory.topic}`.toLowerCase().includes(query))
-      .map((memory) => buildMemoryObservation(memory, state));
+    const observations = state.memory.flatMap((memory) => {
+      const searchableText = `${memory.title} ${memory.content} ${memory.topic}`.toLowerCase();
+      return !query || searchableText.split(query).length > 1 ? [buildMemoryObservation(memory, state)] : [];
+    });
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -2628,10 +2657,10 @@ function coverageReport(state: SimulationState) {
     memoryAttributions: state.memoryAttributions,
     approvalImpacts: state.approvalImpacts,
     iterationDeltas: state.iterationDeltas,
-    deliverables: state.operations.filter((operation) => operation.deliverableText).map((operation) => operation.name),
-    deliverableTexts: state.operations
-      .filter((operation) => operation.deliverableText)
-      .map((operation) => operation.deliverableText),
+    deliverables: state.operations.flatMap((operation) => (operation.deliverableText ? [operation.name] : [])),
+    deliverableTexts: state.operations.flatMap((operation) =>
+      operation.deliverableText ? [operation.deliverableText] : [],
+    ),
     improvementEvents: state.improvementEvents,
     reportBuilderArtifact: state.reportBuilderArtifact
       ? {
@@ -2704,10 +2733,10 @@ async function judgeScenario(request: APIRequestContext, state: SimulationState)
     Number.isFinite(result.marketing_quality_score) ? "" : "marketing_quality_score",
     result.reasoning ? "" : "reasoning",
     result.ambiguous_feedback ? "" : "ambiguous_feedback",
-    ...Object.entries(result.criteria)
-      .filter(([, value]) => !Number.isFinite(value))
-      .map(([key]) => `criteria.${key}`),
-  ].filter(Boolean);
+    ...Object.entries(result.criteria).flatMap(([key, value]) =>
+      !Number.isFinite(value) ? [`criteria.${key}`] : [],
+    ),
+  ].flatMap((field) => (field ? [field] : []));
   if (invalidFields.length > 0) {
     throw new Error(`Local LLM judge output is incomplete: ${invalidFields.join(", ")}`);
   }
@@ -2809,10 +2838,10 @@ async function interpretAmbiguousJudgeFeedback(request: APIRequestContext, state
 
 function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value)
-    ? value
-        .map(String)
-        .map((item) => item.trim())
-        .filter(Boolean)
+    ? value.flatMap((item) => {
+        const trimmed = String(item).trim();
+        return trimmed ? [trimmed] : [];
+      })
     : [];
 }
 
@@ -3515,9 +3544,9 @@ test.describe("Organization simulation", () => {
     await page.goto(`/departments?department=${departmentId(state, "Account Management")}`);
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { name: /how the company thinks/i })).toBeVisible();
-    for (const department of departmentDefinitions()) {
-      await expect(page.getByText(new RegExp(escapeRegExp(department.label), "i")).first()).toBeVisible();
-    }
+    await Promise.all(
+      departmentDefinitions().map((department) => expect(page.getByText(department.label).first()).toBeVisible()),
+    );
     await expect(page.getByRole("heading", { name: /active proposals/i }).first()).toBeVisible();
     await expect(page.getByText(/tasks from operations/i).first()).toBeVisible();
     await expect(page.getByText(/revised approval required for Legacy/i).first()).toBeVisible();

@@ -1012,7 +1012,7 @@ describe("NodeConfigDialog", () => {
       expect(screen.getByTestId("dialog-title")).toHaveTextContent("Configure unknown_type Step");
 
       // Should use fallback icon and color
-      const badge = container.querySelector(".bg-gray-500");
+      const badge = container.querySelector(".bg-neutral-500");
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent("?");
     });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type FormEvent, type SetStateAction } from "react";
 import { useRouter } from "next/router";
 import { Plus, RefreshCw } from "lucide-react";
 
@@ -50,6 +50,13 @@ type PromptFormState = {
   title: string;
   description: string;
   category: PromptCategory;
+  content: string;
+  variablesSchemaText: string;
+};
+
+type PromptEditFormState = {
+  title: string;
+  description: string;
   content: string;
   variablesSchemaText: string;
 };
@@ -107,50 +114,140 @@ const parseVariablesSchema = (
   }
 };
 
+const emptyPromptForm: PromptFormState = {
+  title: "",
+  description: "",
+  category: "other",
+  content: "",
+  variablesSchemaText: "",
+};
+
+const emptyPromptEditForm: PromptEditFormState = {
+  title: "",
+  description: "",
+  content: "",
+  variablesSchemaText: "",
+};
+
+type PromptsPageState = {
+  ownership: PromptOwnershipFilter;
+  category: string;
+  searchDraft: string;
+  searchQuery: string;
+  prompts: PromptListItem[];
+  loading: boolean;
+  error: string | null;
+  isCreateOpen: boolean;
+  isCreating: boolean;
+  createError: string | null;
+  createForm: PromptFormState;
+  selectedPromptId: string | null;
+  selectedPrompt: PromptDetail | null;
+  detailLoading: boolean;
+  detailError: string | null;
+  isCloning: boolean;
+  isEditing: boolean;
+  isSaving: boolean;
+  editError: string | null;
+  editForm: PromptEditFormState;
+  isPublishing: boolean;
+};
+
+type PromptsPageAction = {
+  patch: Partial<PromptsPageState> | ((state: PromptsPageState) => Partial<PromptsPageState>);
+};
+
+const initialPromptsPageState: PromptsPageState = {
+  ownership: "all",
+  category: "",
+  searchDraft: "",
+  searchQuery: "",
+  prompts: [],
+  loading: true,
+  error: null,
+  isCreateOpen: false,
+  isCreating: false,
+  createError: null,
+  createForm: emptyPromptForm,
+  selectedPromptId: null,
+  selectedPrompt: null,
+  detailLoading: false,
+  detailError: null,
+  isCloning: false,
+  isEditing: false,
+  isSaving: false,
+  editError: null,
+  editForm: emptyPromptEditForm,
+  isPublishing: false,
+};
+
+function promptsPageReducer(state: PromptsPageState, action: PromptsPageAction): PromptsPageState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 export default function PromptsPage() {
   const router = useRouter();
+  const { replace } = router;
   const { user } = useAuth();
 
-  const [ownership, setOwnership] = useState<PromptOwnershipFilter>("all");
-  const [category, setCategory] = useState<string>("");
-  const [searchDraft, setSearchDraft] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const [prompts, setPrompts] = useState<PromptListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState<PromptFormState>({
-    title: "",
-    description: "",
-    category: "other",
-    content: "",
-    variablesSchemaText: "",
-  });
-
-  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
-  const [selectedPrompt, setSelectedPrompt] = useState<PromptDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [isCloning, setIsCloning] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{
-    title: string;
-    description: string;
-    content: string;
-    variablesSchemaText: string;
-  }>({
-    title: "",
-    description: "",
-    content: "",
-    variablesSchemaText: "",
-  });
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [pageState, dispatchPageState] = useReducer(promptsPageReducer, initialPromptsPageState);
+  const {
+    ownership,
+    category,
+    searchDraft,
+    searchQuery,
+    prompts,
+    loading,
+    error,
+    isCreateOpen,
+    isCreating,
+    createError,
+    createForm,
+    selectedPromptId,
+    selectedPrompt,
+    detailLoading,
+    detailError,
+    isCloning,
+    isEditing,
+    isSaving,
+    editError,
+    editForm,
+    isPublishing,
+  } = pageState;
+  const setPageField = useCallback(
+    <K extends keyof PromptsPageState>(key: K, value: SetStateAction<PromptsPageState[K]>) => {
+      dispatchPageState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<PromptsPageState>,
+      });
+    },
+    [],
+  );
+  const setOwnership = useCallback((value: SetStateAction<PromptOwnershipFilter>) => setPageField("ownership", value), [setPageField]);
+  const setCategory = useCallback((value: SetStateAction<string>) => setPageField("category", value), [setPageField]);
+  const setSearchDraft = useCallback((value: SetStateAction<string>) => setPageField("searchDraft", value), [setPageField]);
+  const setSearchQuery = useCallback((value: SetStateAction<string>) => setPageField("searchQuery", value), [setPageField]);
+  const setPrompts = useCallback((value: SetStateAction<PromptListItem[]>) => setPageField("prompts", value), [setPageField]);
+  const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
+  const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
+  const setIsCreateOpen = useCallback((value: SetStateAction<boolean>) => setPageField("isCreateOpen", value), [setPageField]);
+  const setIsCreating = useCallback((value: SetStateAction<boolean>) => setPageField("isCreating", value), [setPageField]);
+  const setCreateError = useCallback((value: SetStateAction<string | null>) => setPageField("createError", value), [setPageField]);
+  const setCreateForm = useCallback((value: SetStateAction<PromptFormState>) => setPageField("createForm", value), [setPageField]);
+  const setSelectedPromptId = useCallback((value: SetStateAction<string | null>) => setPageField("selectedPromptId", value), [setPageField]);
+  const setSelectedPrompt = useCallback((value: SetStateAction<PromptDetail | null>) => setPageField("selectedPrompt", value), [setPageField]);
+  const setDetailLoading = useCallback((value: SetStateAction<boolean>) => setPageField("detailLoading", value), [setPageField]);
+  const setDetailError = useCallback((value: SetStateAction<string | null>) => setPageField("detailError", value), [setPageField]);
+  const setIsCloning = useCallback((value: SetStateAction<boolean>) => setPageField("isCloning", value), [setPageField]);
+  const setIsEditing = useCallback((value: SetStateAction<boolean>) => setPageField("isEditing", value), [setPageField]);
+  const setIsSaving = useCallback((value: SetStateAction<boolean>) => setPageField("isSaving", value), [setPageField]);
+  const setEditError = useCallback((value: SetStateAction<string | null>) => setPageField("editError", value), [setPageField]);
+  const setEditForm = useCallback((value: SetStateAction<PromptEditFormState>) => setPageField("editForm", value), [setPageField]);
+  const setIsPublishing = useCallback((value: SetStateAction<boolean>) => setPageField("isPublishing", value), [setPageField]);
 
   const filters = useMemo(
     () => ({
@@ -170,10 +267,14 @@ export default function PromptsPage() {
     const nextCategory = isPromptCategory(router.query.category) ? router.query.category : "";
     const nextSearch = typeof router.query.q === "string" ? router.query.q : "";
 
-    setOwnership(nextOwnership);
-    setCategory(nextCategory);
-    setSearchDraft(nextSearch);
-    setSearchQuery(nextSearch.trim());
+    dispatchPageState({
+      patch: {
+        ownership: nextOwnership,
+        category: nextCategory,
+        searchDraft: nextSearch,
+        searchQuery: nextSearch.trim(),
+      },
+    });
   }, [router.isReady, router.query.category, router.query.ownership, router.query.q]);
 
   const replacePromptQuery = useCallback(
@@ -203,12 +304,12 @@ export default function PromptsPage() {
         queryParams.prompt = nextPrompt;
       }
 
-      void router.replace({ pathname: router.pathname, query: queryParams }, undefined, {
+      void replace({ pathname: router.pathname, query: queryParams }, undefined, {
         shallow: true,
         scroll: false,
       });
     },
-    [category, ownership, router, searchQuery, selectedPromptId],
+    [category, ownership, replace, router, searchQuery, selectedPromptId],
   );
 
   const updateOwnership = (value: PromptOwnershipFilter) => {
@@ -229,33 +330,26 @@ export default function PromptsPage() {
   };
 
   const refreshPrompts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    dispatchPageState({ patch: { loading: true, error: null } });
     try {
       const data = await promptsApi.list(filters);
-      setPrompts(data);
+      dispatchPageState({ patch: { prompts: data, loading: false, error: null } });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load prompts."));
-    } finally {
-      setLoading(false);
+      dispatchPageState({ patch: { error: getApiErrorMessage(err, "Failed to load prompts."), loading: false } });
     }
   }, [filters]);
 
   useEffect(() => {
     let isActive = true;
     const loadPrompts = async () => {
-      setLoading(true);
-      setError(null);
+      dispatchPageState({ patch: { loading: true, error: null } });
       try {
         const data = await promptsApi.list(filters);
         if (!isActive) return;
-        setPrompts(data);
+        dispatchPageState({ patch: { prompts: data, loading: false, error: null } });
       } catch (err: unknown) {
         if (!isActive) return;
-        setError(getApiErrorMessage(err, "Failed to load prompts."));
-      } finally {
-        if (!isActive) return;
-        setLoading(false);
+        dispatchPageState({ patch: { error: getApiErrorMessage(err, "Failed to load prompts."), loading: false } });
       }
     };
 
@@ -533,7 +627,7 @@ export default function PromptsPage() {
             <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
             <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
+                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
                   Prompts
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">

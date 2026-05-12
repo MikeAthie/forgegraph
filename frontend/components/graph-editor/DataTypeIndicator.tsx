@@ -42,15 +42,15 @@ export function DataTypeIndicator({
   const IconComponent = TYPE_ICONS[type] || Asterisk;
 
   const sizeClasses = {
-    sm: "h-4 w-4 text-[10px]",
-    md: "h-5 w-5 text-xs",
-    lg: "h-6 w-6 text-sm",
+    sm: "size-4 text-[10px]",
+    md: "size-5 text-xs",
+    lg: "size-6 text-sm",
   };
 
   const iconSizeClasses = {
-    sm: "h-2.5 w-2.5",
-    md: "h-3 w-3",
-    lg: "h-4 w-4",
+    sm: "size-2.5",
+    md: "size-3",
+    lg: "size-4",
   };
 
   const tooltipText = `${typeInfo.label}: ${typeInfo.description}${isInferred ? " (inferred)" : ""}`;
@@ -68,7 +68,7 @@ export function DataTypeIndicator({
     >
       <IconComponent className={cn(typeInfo.color, iconSizeClasses[size])} />
       {showLabel && <span className={cn("font-medium", typeInfo.color)}>{typeInfo.label}</span>}
-      {isInferred && <span className="text-gray-400 text-[8px]">?</span>}
+      {isInferred && <span className="text-neutral-400 text-[8px]">?</span>}
     </div>
   );
 }
@@ -106,7 +106,7 @@ interface TypeMismatchWarningProps {
 /**
  * Warning indicator for type mismatches
  */
-export function TypeMismatchWarning({ sourceType, targetType, suggestion, className }: TypeMismatchWarningProps) {
+function TypeMismatchWarning({ sourceType, targetType, suggestion, className }: TypeMismatchWarningProps) {
   const sourceInfo = getDataTypeInfo(sourceType);
   const targetInfo = getDataTypeInfo(targetType);
 
@@ -122,7 +122,7 @@ export function TypeMismatchWarning({ sourceType, targetType, suggestion, classN
       )}
       title={tooltipText}
     >
-      <AlertCircle className="h-3 w-3" />
+      <AlertCircle className="size-3" />
       <span className="text-xs font-medium">Type Mismatch</span>
     </div>
   );
@@ -139,7 +139,7 @@ interface PortTypeIndicatorProps {
 /**
  * Type indicator for node ports (input/output handles)
  */
-export function PortTypeIndicator({
+function PortTypeIndicator({
   type,
   isInput = true,
   isRequired = false,
@@ -152,7 +152,7 @@ export function PortTypeIndicator({
   return (
     <div
       className={cn(
-        "w-2.5 h-2.5 rounded-full border-2 cursor-help",
+        "size-2.5 rounded-full border-2 cursor-help",
         typeInfo.bgColor,
         isRequired ? "border-current" : "border-transparent",
         typeInfo.color,
@@ -162,5 +162,3 @@ export function PortTypeIndicator({
     />
   );
 }
-
-export default DataTypeIndicator;

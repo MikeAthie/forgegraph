@@ -25,19 +25,20 @@ test.describe("Command retry idempotency", () => {
       "Idempotency-Key": commandId,
     };
 
-    const first = await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
+    const { first, second } = await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
       headers,
       data: {},
-    });
-    const second = await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
-      headers,
-      data: {},
-    });
+    }).then(async (first) => ({
+      first,
+      second: await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
+        headers,
+        data: {},
+      }),
+    }));
 
     expect(first.ok()).toBeTruthy();
     expect(second.ok()).toBeTruthy();
-    const firstBody = await first.json();
-    const secondBody = await second.json();
+    const [firstBody, secondBody] = await Promise.all([first.json(), second.json()]);
     expect(firstBody.data.idempotency.status).toBe("applied");
     expect(secondBody.data.idempotency.status).toBe("already_applied");
     expect(secondBody.data.duplicate).toBe(true);

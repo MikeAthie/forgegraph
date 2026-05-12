@@ -1,0 +1,64 @@
+departments:
+  - id: strategy_research
+    label: Strategy & Research
+    responsibility: Build unbiased market understanding and strategic direction.
+    responsibilities:
+      - Run brand, market, customer, competitor, and positioning research.
+      - Separate validated facts from assumptions, opinions, and open questions.
+      - Create research briefs, opportunity maps, campaign hypotheses, and strategic recommendations.
+      - Maintain current strategic context for downstream departments.
+      - Identify risks, gaps, and validation needs before execution begins.
+  - id: brand_content
+    label: Brand & Content
+    responsibility: Convert strategy into brand, content, and creative deliverables.
+    responsibilities:
+      - Define brand voice, messaging, creative direction, and content strategy.
+      - Create reusable brand guidelines, messaging frameworks, and content systems.
+      - Produce campaign concepts, creative briefs, editorial plans, and channel-ready drafts.
+      - Maintain artifact versions and preserve lineage when feedback changes direction.
+      - Ensure content reflects validated strategy and current company truth.
+  - id: channel_execution
+    label: Channel Execution
+    responsibility: Prepare governed execution across search, paid, social, web, and content channels.
+    responsibilities:
+      - Prepare channel-specific plans and execution-ready assets.
+      - Coordinate publishing, scheduling, sending, launching, and campaign activation.
+      - Run channel actions only after QA, policy evaluation, and approvals where required.
+      - Create receipts and audit trails for all external side effects.
+      - Operate CMS, email, ads, social, and landing-page workflows through governed tools.
+  - id: crm_lifecycle
+    label: CRM & Lifecycle
+    responsibility: Plan lifecycle, email, CRM, and retention work.
+    responsibilities:
+      - Manage lead, contact, audience, lifecycle, and CRM-related campaign workflows.
+      - Design audience segmentation, nurture journeys, lifecycle campaigns, and handoff logic.
+      - Coordinate CRM sync operations with approval and audit controls.
+      - Prevent unsafe handling of personal data or customer records.
+      - Connect campaigns to funnel, pipeline, and customer lifecycle outcomes.
+  - id: analytics_performance
+    label: Analytics & Performance
+    responsibility: Convert metrics into signals, objectives, and improvement loops.
+    responsibilities:
+      - Track campaign, channel, funnel, and business performance.
+      - Turn metrics into company signals, opportunities, and next recommended operations.
+      - Evaluate campaign hypotheses against actual outcomes.
+      - Create reports, insights, performance snapshots, and improvement recommendations.
+      - Maintain continuous improvement loops across strategy, content, execution, and CRM.
+  - id: qa_compliance
+    label: QA & Compliance
+    responsibility: Evaluate quality, claims, risk, and approval needs.
+    responsibilities:
+      - Evaluate drafts, artifacts, claims, plans, and execution requests before external use.
+      - Run quality, structure, hallucination-risk, evidence, compliance, and brand-fit checks.
+      - Block risky actions when critical issues are detected.
+      - Maintain policy packs, evaluation profiles, findings, and compliance incidents.
+      - Ensure external side effects meet brand, legal, channel, and approval requirements.
+  - id: client_approval_ops
+    label: Client/Approval Operations
+    responsibility: Coordinate validation, decisions, approvals, handoffs, and stakeholder state.
+    responsibilities:
+      - Coordinate stakeholder validation, feedback, approvals, and change requests.
+      - Translate decisions into accepted changes, rejected changes, edits, deferrals, and rerun plans.
+      - Maintain current-truth projections for downstream departments.
+      - Manage portfolio health, ownership, workload, and approval routing.
+      - Create stakeholder-facing reports, review packets, and decision summaries.

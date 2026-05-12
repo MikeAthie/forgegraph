@@ -13,7 +13,7 @@ import {
   type TaskVM,
 } from "@/domain/translation";
 
-export type OverviewDepartmentVM = {
+type OverviewDepartmentVM = {
   id: string;
   name: string;
   status: string;
@@ -21,7 +21,7 @@ export type OverviewDepartmentVM = {
   totalCostUsd: number;
 };
 
-export type OverviewApprovalVM = {
+type OverviewApprovalVM = {
   id: string;
   operationId: string | null;
   taskId: string | null;
@@ -32,7 +32,7 @@ export type OverviewApprovalVM = {
   requestedAt: string;
 };
 
-export type OverviewOperationVM = {
+type OverviewOperationVM = {
   id: string;
   companyId: string;
   companyName: string;
@@ -43,7 +43,7 @@ export type OverviewOperationVM = {
   durationMs: number | null;
 };
 
-export type OverviewCostRowVM = {
+type OverviewCostRowVM = {
   type: string;
   totalCostUsd: number;
   entryCount: number;
@@ -377,4 +377,4 @@ export const overviewRepository = {
   },
 };
 
-export type OverviewRepository = typeof overviewRepository;
+type OverviewRepository = typeof overviewRepository;

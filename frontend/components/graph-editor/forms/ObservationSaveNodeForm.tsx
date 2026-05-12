@@ -202,8 +202,13 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
       />
 
       <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 md:grid-cols-2">
-        <label className="flex items-start gap-3 text-sm">
+        <label
+          htmlFor="components-graph-editor-forms-observationsavenodeform-205"
+          aria-label="Deduplicate"
+          className="flex items-start gap-3 text-sm"
+        >
           <input
+            id="components-graph-editor-forms-observationsavenodeform-205"
             type="checkbox"
             checked={Boolean(saveConfig.dedupe)}
             onChange={(event) => handleFieldChange("dedupe", event.target.checked)}
@@ -217,8 +222,13 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
           </span>
         </label>
 
-        <label className="flex items-start gap-3 text-sm">
+        <label
+          htmlFor="components-graph-editor-forms-observationsavenodeform-220"
+          aria-label="Update topic"
+          className="flex items-start gap-3 text-sm"
+        >
           <input
+            id="components-graph-editor-forms-observationsavenodeform-220"
             type="checkbox"
             checked={Boolean(saveConfig.update_topic)}
             onChange={(event) => handleFieldChange("update_topic", event.target.checked)}
@@ -235,5 +245,3 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
     </div>
   );
 }
-
-export default ObservationSaveNodeForm;

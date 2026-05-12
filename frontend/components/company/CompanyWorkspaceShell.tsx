@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -15,6 +15,7 @@ import {
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { CommerceInventoryPanel } from "@/components/company/CommerceInventoryPanel";
+import { OperatingModelWorkspace } from "@/components/company/OperatingModelWorkspace";
 import { QuestGuide } from "@/components/company/QuestGuide";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import {
@@ -59,15 +60,15 @@ function getProgressTone(status: TaskStatusVM | undefined) {
     case "completed":
       return { dot: "bg-emerald-500", line: "bg-emerald-300/70 dark:bg-emerald-500/30", title: "Handed off" };
     case "running":
-      return { dot: "bg-sky-500 ring-4 ring-sky-500/15", line: "bg-slate-300 dark:bg-white/15", title: "Working now" };
+      return { dot: "bg-sky-500 ring-4 ring-sky-500/15", line: "bg-zinc-300 dark:bg-white/15", title: "Working now" };
     case "failed":
       return {
         dot: "bg-rose-500 ring-4 ring-rose-500/15",
-        line: "bg-slate-300 dark:bg-white/15",
+        line: "bg-zinc-300 dark:bg-white/15",
         title: "Needs attention",
       };
     default:
-      return { dot: "bg-slate-300 dark:bg-white/15", line: "bg-slate-300 dark:bg-white/15", title: "Queued next" };
+      return { dot: "bg-zinc-300 dark:bg-white/15", line: "bg-zinc-300 dark:bg-white/15", title: "Queued next" };
   }
 }
 
@@ -135,25 +136,25 @@ function OperationsList({ operations, departments }: { operations: OperationVM[]
         return (
           <div
             key={operation.id}
-            className="rounded-[1.4rem] border border-slate-900/8 bg-[var(--panel-muted)] px-5 py-5 dark:border-white/8"
+            className="rounded-[1.4rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-5 dark:border-white/8"
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                  <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                     Operation {operation.id.slice(0, 8)}
                   </p>
                   <StatusBadge status={userStatus} label={userStatus} />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
                     Started {formatDateTime(operation.startedAt)}
                   </p>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                   Current department:{" "}
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{currentDepartment}</span>
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">{currentDepartment}</span>
                 </p>
                 <MicroExplanation className="mt-2">{currentDepartmentExplanation}</MicroExplanation>
-                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{momentum}</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{momentum}</p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button asChild size="sm" className="rounded-full">
@@ -163,7 +164,7 @@ function OperationsList({ operations, departments }: { operations: OperationVM[]
             </div>
 
             <div className="mt-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                 Progress through departments
               </p>
               <div className="mt-4 space-y-3">
@@ -173,13 +174,13 @@ function OperationsList({ operations, departments }: { operations: OperationVM[]
                     return (
                       <div key={`${operation.id}-${step.label}`} className="grid grid-cols-[1rem_1fr] gap-3">
                         <div className="flex flex-col items-center pt-1">
-                          <span className={`h-3 w-3 rounded-full ${tone.dot}`} />
+                          <span className={`size-3 rounded-full ${tone.dot}`} />
                           {index < progress.length - 1 ? <span className={`mt-2 h-full w-px ${tone.line}`} /> : null}
                         </div>
-                        <div className="rounded-[1rem] border border-slate-900/8 bg-white/70 px-3 py-3 dark:border-white/8 dark:bg-white/5">
+                        <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{step.label}</p>
-                            <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{step.label}</p>
+                            <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
                               {tone.title}
                             </p>
                           </div>
@@ -194,11 +195,11 @@ function OperationsList({ operations, departments }: { operations: OperationVM[]
               </div>
             </div>
 
-            <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            <div className="mt-4 rounded-[1.2rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                 Latest deliverable preview
               </p>
-              <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{deliverablePreview}</p>
+              <p className="mt-3 text-sm leading-6 text-zinc-700 dark:text-zinc-200">{deliverablePreview}</p>
             </div>
           </div>
         );
@@ -209,11 +210,11 @@ function OperationsList({ operations, departments }: { operations: OperationVM[]
 
 function FailureCard({ failure, onRetry }: { failure: OperationFailureVM; onRetry: () => Promise<void> }) {
   return (
-    <div className="rounded-[1.3rem] border border-rose-800/12 bg-rose-50/80 px-4 py-4 dark:border-rose-200/15 dark:bg-rose-500/10">
+    <div className="rounded-[1.3rem] border border-rose-800/12 bg-rose-50/80 p-4 dark:border-rose-200/15 dark:bg-rose-500/10">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-300" />
+            <AlertTriangle className="size-4 text-rose-600 dark:text-rose-300" />
             <p className="text-sm font-semibold text-rose-900 dark:text-rose-100">{failure.title}</p>
           </div>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700/80 dark:text-rose-100/70">
@@ -269,19 +270,19 @@ function formatAssumptionValue(value: unknown) {
 function BriefList({ label, items, emptyLabel }: { label: string; items: string[]; emptyLabel: string }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{label}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {items.length ? (
           items.map((item) => (
             <span
               key={`${label}-${item}`}
-              className="rounded-full border border-slate-900/10 bg-white/80 px-3 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-white/6 dark:text-slate-200"
+              className="rounded-full border border-zinc-900/10 bg-white/80 px-3 py-1 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
             >
               {item}
             </span>
           ))
         ) : (
-          <span className="text-sm text-slate-500 dark:text-slate-400">{emptyLabel}</span>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">{emptyLabel}</span>
         )}
       </div>
     </div>
@@ -301,13 +302,13 @@ function PriorityFrameView({ brief }: { brief: OperatingBrief | null }) {
     <div className="grid gap-3 sm:grid-cols-2">
       {items.map((item) => (
         <div key={item.label}>
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
             <span>{item.label}</span>
             <span>{Math.round(item.value * 100)}%</span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div
-              className="h-full rounded-full bg-slate-950 dark:bg-slate-100"
+              className="h-full rounded-full bg-zinc-950 dark:bg-zinc-100"
               style={{ width: `${Math.max(0, Math.min(item.value, 1)) * 100}%` }}
             />
           </div>
@@ -384,18 +385,18 @@ function ProjectManagerResponseCard({ response }: { response: InteractionEventRe
   return (
     <div
       data-testid="command-ops-response-card"
-      className="mt-4 rounded-[1.2rem] border border-slate-900/10 bg-white/85 px-4 py-4 dark:border-white/10 dark:bg-slate-950/35"
+      className="mt-4 rounded-[1.2rem] border border-zinc-900/10 bg-white/85 p-4 dark:border-white/10 dark:bg-zinc-950/35"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-slate-950">
-            <Bot className="h-4 w-4" />
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+            <Bot className="size-4" />
           </span>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
               Project Manager
             </p>
-            <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+            <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
               I understand the objective as: {response.brief.objective ?? "Not set yet"}
             </p>
           </div>
@@ -404,25 +405,25 @@ function ProjectManagerResponseCard({ response }: { response: InteractionEventRe
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-[1rem] border border-slate-900/8 bg-slate-50 px-3 py-3 dark:border-white/8 dark:bg-white/5">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Interpreted As</p>
-          <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">
+        <div className="rounded-[1rem] border border-zinc-900/8 bg-zinc-50 p-3 dark:border-white/8 dark:bg-white/5">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Interpreted As</p>
+          <p className="mt-2 text-sm text-zinc-800 dark:text-zinc-200">
             {formatInteractionLabel(response.interpretation.intent_classification)} - {confidence}%
           </p>
         </div>
-        <div className="rounded-[1rem] border border-slate-900/8 bg-slate-50 px-3 py-3 dark:border-white/8 dark:bg-white/5">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Deliverable</p>
-          <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">
+        <div className="rounded-[1rem] border border-zinc-900/8 bg-zinc-50 p-3 dark:border-white/8 dark:bg-white/5">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Deliverable</p>
+          <p className="mt-2 text-sm text-zinc-800 dark:text-zinc-200">
             {response.brief.deliverable ?? "Needs definition"}
           </p>
         </div>
-        <div className="rounded-[1rem] border border-slate-900/8 bg-slate-50 px-3 py-3 dark:border-white/8 dark:bg-white/5">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Changed</p>
-          <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">{affectedFields}</p>
+        <div className="rounded-[1rem] border border-zinc-900/8 bg-zinc-50 p-3 dark:border-white/8 dark:bg-white/5">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Changed</p>
+          <p className="mt-2 text-sm text-zinc-800 dark:text-zinc-200">{affectedFields}</p>
         </div>
       </div>
 
-      <div className="mt-4 rounded-[1rem] border border-amber-800/12 bg-amber-50/75 px-3 py-3 dark:border-amber-200/15 dark:bg-amber-500/10">
+      <div className="mt-4 rounded-[1rem] border border-amber-800/12 bg-amber-50/75 p-3 dark:border-amber-200/15 dark:bg-amber-500/10">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-900/80 dark:text-amber-100/80">
           Before I Proceed
         </p>
@@ -439,7 +440,7 @@ function ProjectManagerResponseCard({ response }: { response: InteractionEventRe
         )}
       </div>
 
-      <div className="mt-4 rounded-[1rem] border border-emerald-800/12 bg-emerald-50/75 px-3 py-3 dark:border-emerald-200/15 dark:bg-emerald-500/10">
+      <div className="mt-4 rounded-[1rem] border border-emerald-800/12 bg-emerald-50/75 p-3 dark:border-emerald-200/15 dark:bg-emerald-500/10">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-900/80 dark:text-emerald-100/80">
           Next Step
         </p>
@@ -451,7 +452,7 @@ function ProjectManagerResponseCard({ response }: { response: InteractionEventRe
         </p>
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">{response.plan_implications.summary}</p>
+      <p className="mt-4 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{response.plan_implications.summary}</p>
     </div>
   );
 }
@@ -470,6 +471,40 @@ function focusOperatingBriefInput() {
   return true;
 }
 
+type CompanyWorkspaceState = {
+  launching: boolean;
+  retrying: boolean;
+  savingObjective: boolean;
+  savingCompanyState: boolean;
+  companyPaused: boolean;
+  operationBrief: string;
+  editableObjective: string;
+  editableAutonomyMode: CompanyAutonomyMode;
+  editableAIAccessMode: CompanyAIAccessMode;
+  operatingBrief: OperatingBrief | null;
+  operatingBriefInput: string;
+  operatingBriefLoading: boolean;
+  operatingBriefSubmitting: boolean;
+  operatingBriefError: string | null;
+  latestPmAction: string | null;
+  latestInteractionResponse: InteractionEventResponse | null;
+  questMilestoneComplete: boolean;
+  questPhase: "workspace" | "deliverable" | "done";
+};
+
+type CompanyWorkspaceAction = {
+  patch: Partial<CompanyWorkspaceState> | ((state: CompanyWorkspaceState) => Partial<CompanyWorkspaceState>);
+};
+
+function companyWorkspaceReducer(state: CompanyWorkspaceState, action: CompanyWorkspaceAction): CompanyWorkspaceState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 export function CompanyWorkspaceShell({
   companyId,
   company,
@@ -481,40 +516,90 @@ export function CompanyWorkspaceShell({
   questMode = false,
 }: CompanyWorkspaceShellProps) {
   const router = useRouter();
+  const { replace } = router;
   const profile = useMemo(() => company?.profile ?? buildCompanyProfile({ companyName: "Company" }), [company]);
-  const [launching, setLaunching] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const [savingObjective, setSavingObjective] = useState(false);
-  const [savingCompanyState, setSavingCompanyState] = useState(false);
-  const [companyPaused, setCompanyPaused] = useState(profile.companyStatus === "Paused by operator");
-  const [operationBrief, setOperationBrief] = useState(
-    "Start the next operating cycle and produce a useful deliverable.",
-  );
   const companyStatus = company?.status ?? "Ready to launch";
-  const [editableObjective, setEditableObjective] = useState(profile.objective);
-  const [editableAutonomyMode, setEditableAutonomyMode] = useState<CompanyAutonomyMode>(profile.autonomyMode);
-  const [editableAIAccessMode, setEditableAIAccessMode] = useState<CompanyAIAccessMode>(profile.aiAccessMode);
-  const [operatingBrief, setOperatingBrief] = useState<OperatingBrief | null>(null);
-  const [operatingBriefInput, setOperatingBriefInput] = useState("");
-  const [operatingBriefLoading, setOperatingBriefLoading] = useState(false);
-  const [operatingBriefSubmitting, setOperatingBriefSubmitting] = useState(false);
-  const [operatingBriefError, setOperatingBriefError] = useState<string | null>(null);
-  const [latestPmAction, setLatestPmAction] = useState<string | null>(null);
-  const [latestInteractionResponse, setLatestInteractionResponse] = useState<InteractionEventResponse | null>(null);
-  const [questMilestoneComplete, setQuestMilestoneComplete] = useState(false);
-  const [questPhase, setQuestPhase] = useState<"workspace" | "deliverable" | "done">("workspace");
+  const [workspaceState, dispatchWorkspaceState] = useReducer(companyWorkspaceReducer, {
+    launching: false,
+    retrying: false,
+    savingObjective: false,
+    savingCompanyState: false,
+    companyPaused: profile.companyStatus === "Paused by operator",
+    operationBrief: "Start the next operating cycle and produce a useful deliverable.",
+    editableObjective: profile.objective,
+    editableAutonomyMode: profile.autonomyMode,
+    editableAIAccessMode: profile.aiAccessMode,
+    operatingBrief: null,
+    operatingBriefInput: "",
+    operatingBriefLoading: false,
+    operatingBriefSubmitting: false,
+    operatingBriefError: null,
+    latestPmAction: null,
+    latestInteractionResponse: null,
+    questMilestoneComplete: false,
+    questPhase: "workspace",
+  } satisfies CompanyWorkspaceState);
+  const {
+    launching,
+    retrying,
+    savingObjective,
+    savingCompanyState,
+    companyPaused,
+    operationBrief,
+    editableObjective,
+    editableAutonomyMode,
+    editableAIAccessMode,
+    operatingBrief,
+    operatingBriefInput,
+    operatingBriefLoading,
+    operatingBriefSubmitting,
+    operatingBriefError,
+    latestPmAction,
+    latestInteractionResponse,
+    questMilestoneComplete,
+    questPhase,
+  } = workspaceState;
+  const setWorkspaceField = useCallback(
+    <K extends keyof CompanyWorkspaceState>(key: K, value: SetStateAction<CompanyWorkspaceState[K]>) => {
+      dispatchWorkspaceState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<CompanyWorkspaceState>,
+      });
+    },
+    [],
+  );
+  const setLaunching = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("launching", value), [setWorkspaceField]);
+  const setRetrying = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("retrying", value), [setWorkspaceField]);
+  const setSavingObjective = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("savingObjective", value), [setWorkspaceField]);
+  const setSavingCompanyState = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("savingCompanyState", value), [setWorkspaceField]);
+  const setCompanyPaused = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("companyPaused", value), [setWorkspaceField]);
+  const setOperationBrief = useCallback((value: SetStateAction<string>) => setWorkspaceField("operationBrief", value), [setWorkspaceField]);
+  const setEditableObjective = useCallback((value: SetStateAction<string>) => setWorkspaceField("editableObjective", value), [setWorkspaceField]);
+  const setEditableAutonomyMode = useCallback((value: SetStateAction<CompanyAutonomyMode>) => setWorkspaceField("editableAutonomyMode", value), [setWorkspaceField]);
+  const setEditableAIAccessMode = useCallback((value: SetStateAction<CompanyAIAccessMode>) => setWorkspaceField("editableAIAccessMode", value), [setWorkspaceField]);
+  const setOperatingBrief = useCallback((value: SetStateAction<OperatingBrief | null>) => setWorkspaceField("operatingBrief", value), [setWorkspaceField]);
+  const setOperatingBriefInput = useCallback((value: SetStateAction<string>) => setWorkspaceField("operatingBriefInput", value), [setWorkspaceField]);
+  const setOperatingBriefLoading = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("operatingBriefLoading", value), [setWorkspaceField]);
+  const setOperatingBriefSubmitting = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("operatingBriefSubmitting", value), [setWorkspaceField]);
+  const setOperatingBriefError = useCallback((value: SetStateAction<string | null>) => setWorkspaceField("operatingBriefError", value), [setWorkspaceField]);
+  const setLatestPmAction = useCallback((value: SetStateAction<string | null>) => setWorkspaceField("latestPmAction", value), [setWorkspaceField]);
+  const setLatestInteractionResponse = useCallback((value: SetStateAction<InteractionEventResponse | null>) => setWorkspaceField("latestInteractionResponse", value), [setWorkspaceField]);
+  const setQuestMilestoneComplete = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("questMilestoneComplete", value), [setWorkspaceField]);
+  const setQuestPhase = useCallback((value: SetStateAction<"workspace" | "deliverable" | "done">) => setWorkspaceField("questPhase", value), [setWorkspaceField]);
 
   useEffect(() => {
-    setEditableObjective(profile.objective);
-    setEditableAutonomyMode(profile.autonomyMode);
-    setEditableAIAccessMode(profile.aiAccessMode);
-    setCompanyPaused(profile.companyStatus === "Paused by operator");
+    dispatchWorkspaceState({
+      patch: {
+        editableObjective: profile.objective,
+        editableAutonomyMode: profile.autonomyMode,
+        editableAIAccessMode: profile.aiAccessMode,
+        companyPaused: profile.companyStatus === "Paused by operator",
+      },
+    });
   }, [profile.aiAccessMode, profile.autonomyMode, profile.companyStatus, profile.objective]);
 
   useEffect(() => {
     if (!questMode) {
-      setQuestMilestoneComplete(true);
-      setQuestPhase("done");
+      dispatchWorkspaceState({ patch: { questMilestoneComplete: true, questPhase: "done" } });
       return;
     }
 
@@ -527,23 +612,23 @@ export function CompanyWorkspaceShell({
         }
         const guideMilestone = milestones.find((item) => item.key === "company_first_run_explained");
         const completed = Boolean(guideMilestone?.completed);
-        setQuestMilestoneComplete(completed);
         if (completed) {
-          setQuestPhase("done");
+          dispatchWorkspaceState({ patch: { questMilestoneComplete: true, questPhase: "done" } });
           return;
         }
 
+        let nextQuestPhase: CompanyWorkspaceState["questPhase"] = "workspace";
         if (typeof window !== "undefined") {
           const storedPhase = window.sessionStorage.getItem(`forgegraph:first-operation-quest:${companyId}`);
           if (storedPhase === "deliverable" || storedPhase === "done") {
-            setQuestPhase(storedPhase);
+            nextQuestPhase = storedPhase;
           }
         }
+        dispatchWorkspaceState({ patch: { questMilestoneComplete: false, questPhase: nextQuestPhase } });
       })
       .catch(() => {
         if (mounted) {
-          setQuestMilestoneComplete(true);
-          setQuestPhase("done");
+          dispatchWorkspaceState({ patch: { questMilestoneComplete: true, questPhase: "done" } });
         }
       });
 
@@ -627,33 +712,37 @@ export function CompanyWorkspaceShell({
 
   useEffect(() => {
     if (!company?.id) {
-      setOperatingBrief(null);
+      dispatchWorkspaceState({ patch: { operatingBrief: null } });
       return;
     }
 
     let mounted = true;
-    setOperatingBriefLoading(true);
-    setOperatingBriefError(null);
+    dispatchWorkspaceState({ patch: { operatingBriefLoading: true, operatingBriefError: null } });
     void interactionRepository
       .getCurrentBrief(company.id, activeBriefOperation?.id ?? null)
       .then((brief) => {
         if (!mounted) {
           return;
         }
-        setOperatingBrief(brief);
-        setLatestPmAction(null);
-        setLatestInteractionResponse(null);
+        dispatchWorkspaceState({
+          patch: {
+            operatingBrief: brief,
+            latestPmAction: null,
+            latestInteractionResponse: null,
+            operatingBriefLoading: false,
+          },
+        });
       })
       .catch((briefError: unknown) => {
         if (!mounted) {
           return;
         }
-        setOperatingBriefError(translateProductError(briefError, "company"));
-      })
-      .finally(() => {
-        if (mounted) {
-          setOperatingBriefLoading(false);
-        }
+        dispatchWorkspaceState({
+          patch: {
+            operatingBriefError: translateProductError(briefError, "company"),
+            operatingBriefLoading: false,
+          },
+        });
       });
 
     return () => {
@@ -720,7 +809,7 @@ export function CompanyWorkspaceShell({
       // Ignore guide persistence errors to keep the workspace responsive.
     }
     if (router.query.quest) {
-      void router.replace({ pathname: `/companies/${companyId}` }, undefined, { shallow: true });
+      void replace({ pathname: `/companies/${companyId}` }, undefined, { shallow: true });
     }
   };
 
@@ -954,7 +1043,7 @@ export function CompanyWorkspaceShell({
                 <Button asChild className="rounded-full">
                   <Link href="/companies/new">
                     Create another company
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="size-4" />
                   </Link>
                 </Button>
               </div>
@@ -968,7 +1057,7 @@ export function CompanyWorkspaceShell({
           ) : null}
 
           {loading || !company ? (
-            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
+            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-zinc-900/10 bg-white/70 dark:border-white/10 dark:bg-zinc-950/50">
               <Spinner size="lg" />
             </div>
           ) : (
@@ -998,45 +1087,41 @@ export function CompanyWorkspaceShell({
                       />
                     </div>
                     <p
-                      className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50"
+                      className="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50"
                       style={{ fontFamily: "var(--font-serif)" }}
                     >
                       {profile.companyName}
                     </p>
-                    <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{profile.objective}</p>
+                    <p className="mt-3 text-sm leading-7 text-zinc-600 dark:text-zinc-300">{profile.objective}</p>
                     <MicroExplanation className="mt-3">
                       The objective is the company-wide result ForgeGraph is trying to produce right now.
                     </MicroExplanation>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                         Company Category
                       </p>
-                      <p className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {profile.companyType}
-                      </p>
+                      <p className="mt-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">{profile.companyType}</p>
                       <MicroExplanation className="mt-2">
                         A starting shape that tells ForgeGraph how to organize the first team.
                       </MicroExplanation>
                     </div>
-                    <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Status
-                      </p>
-                      <p className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Status</p>
+                      <p className="mt-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {displayedCompanyStatus}
                       </p>
                       <MicroExplanation className="mt-2">
                         Tells you whether the company is working, waiting, paused, or needs attention.
                       </MicroExplanation>
                     </div>
-                    <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                         Autonomy Mode
                       </p>
-                      <p className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <p className="mt-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {editableAutonomyMode}
                       </p>
                       <MicroExplanation className="mt-2">
@@ -1047,11 +1132,11 @@ export function CompanyWorkspaceShell({
                             : "Assisted keeps the company moving and pauses only when a decision matters."}
                       </MicroExplanation>
                     </div>
-                    <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                         AI Access Mode
                       </p>
-                      <p className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <p className="mt-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {editableAIAccessMode === "managed" ? "Managed" : "BYOK"}
                       </p>
                       <MicroExplanation className="mt-2">
@@ -1063,6 +1148,8 @@ export function CompanyWorkspaceShell({
                   </div>
                 </div>
               </Panel>
+
+              <OperatingModelWorkspace companyId={companyId} companyName={profile.companyName} />
 
               <div className="grid gap-6 2xl:grid-cols-[1.06fr_0.94fr]">
                 <div data-guide-id="company-operations-panel">
@@ -1088,7 +1175,7 @@ export function CompanyWorkspaceShell({
                     className="command-ops-panel"
                   >
                     <div
-                      className={`rounded-[1.35rem] border px-4 py-4 ${
+                      className={`rounded-[1.35rem] border p-4 ${
                         nextAction.tone === "rose"
                           ? "border-rose-800/12 bg-rose-50/80 dark:border-rose-200/15 dark:bg-rose-500/10"
                           : nextAction.tone === "amber"
@@ -1098,13 +1185,13 @@ export function CompanyWorkspaceShell({
                               : "border-emerald-800/12 bg-emerald-50/80 dark:border-emerald-200/15 dark:bg-emerald-500/10"
                       }`}
                     >
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-300">
                         Next best action
                       </p>
                       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{nextAction.title}</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">{nextAction.body}</p>
+                          <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{nextAction.title}</p>
+                          <p className="mt-2 text-sm leading-6 text-zinc-700 dark:text-zinc-200">{nextAction.body}</p>
                         </div>
                         <div className="flex shrink-0 flex-wrap gap-2">
                           {failure ? (
@@ -1139,11 +1226,11 @@ export function CompanyWorkspaceShell({
 
                     <div
                       data-testid="command-ops-system-message"
-                      className="mt-4 rounded-[1.2rem] border border-sky-800/12 bg-sky-50/85 px-4 py-4 dark:border-sky-200/15 dark:bg-sky-500/10"
+                      className="mt-4 rounded-[1.2rem] border border-sky-800/12 bg-sky-50/85 p-4 dark:border-sky-200/15 dark:bg-sky-500/10"
                     >
                       <div className="flex items-start gap-3">
-                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
-                          <Bot className="h-4 w-4" />
+                        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+                          <Bot className="size-4" />
                         </span>
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-900/70 dark:text-sky-100/75">
@@ -1159,15 +1246,15 @@ export function CompanyWorkspaceShell({
 
                     <div
                       data-testid="operating-brief-panel"
-                      className="mt-5 rounded-[1.5rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                      className="mt-5 rounded-[1.5rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-slate-950 dark:text-slate-50">
-                            <FileText className="h-4 w-4" />
+                          <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+                            <FileText className="size-4" />
                             <p className="text-sm font-semibold">Operating Brief</p>
                           </div>
-                          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                          <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                             {activeBriefOperation
                               ? `Scoped to operation ${activeBriefOperation.id.slice(0, 8)}`
                               : "Scoped to the next company operation"}
@@ -1189,19 +1276,19 @@ export function CompanyWorkspaceShell({
                       ) : null}
 
                       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                        <div className="rounded-[1.1rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        <div className="rounded-[1.1rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                             Objective
                           </p>
-                          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-200">
+                          <p className="mt-2 text-sm leading-6 text-zinc-800 dark:text-zinc-200">
                             {operatingBrief?.objective ?? "Not set"}
                           </p>
                         </div>
-                        <div className="rounded-[1.1rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        <div className="rounded-[1.1rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                             Deliverable
                           </p>
-                          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-200">
+                          <p className="mt-2 text-sm leading-6 text-zinc-800 dark:text-zinc-200">
                             {operatingBrief?.deliverable ?? "Not set"}
                           </p>
                         </div>
@@ -1230,8 +1317,8 @@ export function CompanyWorkspaceShell({
                         />
                       </div>
 
-                      <div className="mt-4 rounded-[1.1rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="mt-4 rounded-[1.1rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Priority Frame
                         </p>
                         <div className="mt-3">
@@ -1240,33 +1327,33 @@ export function CompanyWorkspaceShell({
                       </div>
 
                       {operatingBrief?.clarifications.some((item) => item.blocking) ? (
-                        <div className="mt-4 rounded-[1.1rem] border border-amber-800/15 bg-amber-50/80 px-4 py-4 dark:border-amber-200/20 dark:bg-amber-500/10">
+                        <div className="mt-4 rounded-[1.1rem] border border-amber-800/15 bg-amber-50/80 p-4 dark:border-amber-200/20 dark:bg-amber-500/10">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100/80">
                             Blocking Clarifications
                           </p>
                           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-950 dark:text-amber-100">
-                            {operatingBrief.clarifications
-                              .filter((item) => item.blocking)
-                              .map((item) => (
-                                <li key={`${item.related_field}-${item.question}`}>{item.question}</li>
-                              ))}
+                            {operatingBrief.clarifications.flatMap((item) =>
+                              item.blocking
+                                ? [<li key={`${item.related_field}-${item.question}`}>{item.question}</li>]
+                                : [],
+                            )}
                           </ul>
                         </div>
                       ) : null}
 
                       {operatingBrief?.assumptions.length ? (
                         <div className="mt-4">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                             Assumptions
                           </p>
                           <div className="mt-2 space-y-2">
                             {operatingBrief.assumptions.slice(-3).map((item) => (
                               <div
                                 key={`${item.field}-${item.created_at}`}
-                                className="rounded-[1rem] border border-slate-900/8 bg-white/70 px-3 py-3 text-sm dark:border-white/8 dark:bg-white/5"
+                                className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 text-sm dark:border-white/8 dark:bg-white/5"
                               >
-                                <span className="font-medium text-slate-900 dark:text-slate-100">{item.field}: </span>
-                                <span className="text-slate-600 dark:text-slate-300">
+                                <span className="font-medium text-zinc-900 dark:text-zinc-100">{item.field}: </span>
+                                <span className="text-zinc-600 dark:text-zinc-300">
                                   {formatAssumptionValue(item.value)}
                                 </span>
                               </div>
@@ -1276,10 +1363,14 @@ export function CompanyWorkspaceShell({
                       ) : null}
 
                       <div className="mt-4">
-                        <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        <label
+                          htmlFor="components-company-companyworkspaceshell-1282"
+                          className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+                        >
                           Update Brief
                         </label>
                         <Textarea
+                          id="components-company-companyworkspaceshell-1282"
                           data-testid="operating-brief-input"
                           className="mt-2"
                           rows={3}
@@ -1302,7 +1393,7 @@ Examples:
                           {operatingBriefSubmitting ? (
                             <Spinner size="xs" className="mr-2" />
                           ) : (
-                            <Send className="h-4 w-4" />
+                            <Send className="size-4" />
                           )}
                           Update brief
                         </Button>
@@ -1314,38 +1405,38 @@ Examples:
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Active operations
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {formatCompactNumber(operations.filter((operation) => operation.status === "running").length)}
                         </p>
                       </div>
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Failed operations
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {formatCompactNumber(operations.filter((operation) => operation.status === "failed").length)}
                         </p>
                       </div>
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           Pending approvals
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {formatCompactNumber(pendingApprovalCount)}
                         </p>
                       </div>
-                      <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                           AI mode and usage
                         </p>
-                        <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                        <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                           {editableAIAccessMode === "managed" ? "Managed" : "BYOK"}
                         </p>
-                        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
                           {operations.length} total operation{operations.length === 1 ? "" : "s"} recorded in this
                           company workspace.
                         </p>
@@ -1386,19 +1477,23 @@ Examples:
 
                     <div
                       id="company-controls"
-                      className="mt-5 rounded-[1.5rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                      className="mt-5 rounded-[1.5rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                     >
-                      <div className="flex items-center gap-2 text-slate-950 dark:text-slate-50">
-                        <Settings2 className="h-4 w-4" />
+                      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+                        <Settings2 className="size-4" />
                         <p className="text-sm font-semibold">Controls</p>
                       </div>
 
                       <div className="mt-4 space-y-4">
                         <div>
-                          <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          <label
+                            htmlFor="components-company-companyworkspaceshell-1401"
+                            className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+                          >
                             Objective
                           </label>
                           <Textarea
+                            id="components-company-companyworkspaceshell-1401"
                             className="mt-2"
                             rows={4}
                             value={editableObjective}
@@ -1408,26 +1503,30 @@ Examples:
 
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            <label
+                              htmlFor="components-company-companyworkspaceshell-1414"
+                              className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+                            >
                               Autonomy mode
                             </label>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {(["manual", "assisted", "autonomous"] as CompanyAutonomyMode[]).map((mode) => (
                                 <button
+                                  id="components-company-companyworkspaceshell-1414"
                                   key={mode}
                                   type="button"
                                   onClick={() => setEditableAutonomyMode(mode)}
                                   className={`rounded-full border px-3 py-2 text-sm transition-colors ${
                                     editableAutonomyMode === mode
-                                      ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                                      : "border-slate-900/10 bg-white/80 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                                      ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                                      : "border-zinc-900/10 bg-white/80 text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
                                   }`}
                                 >
                                   {mode}
                                 </button>
                               ))}
                             </div>
-                            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
                               {editableAutonomyMode === "manual"
                                 ? "Nothing meaningful moves forward without you."
                                 : editableAutonomyMode === "autonomous"
@@ -1437,26 +1536,30 @@ Examples:
                           </div>
 
                           <div>
-                            <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            <label
+                              htmlFor="components-company-companyworkspaceshell-1443"
+                              className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+                            >
                               AI access mode
                             </label>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {(["managed", "byok"] as CompanyAIAccessMode[]).map((mode) => (
                                 <button
+                                  id="components-company-companyworkspaceshell-1443"
                                   key={mode}
                                   type="button"
                                   onClick={() => setEditableAIAccessMode(mode)}
                                   className={`rounded-full border px-3 py-2 text-sm transition-colors ${
                                     editableAIAccessMode === mode
-                                      ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                                      : "border-slate-900/10 bg-white/80 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                                      ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                                      : "border-zinc-900/10 bg-white/80 text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
                                   }`}
                                 >
                                   {mode === "managed" ? "Managed" : "BYOK"}
                                 </button>
                               ))}
                             </div>
-                            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
                               {editableAIAccessMode === "managed"
                                 ? "Managed uses ForgeGraph's AI access so you can keep operating immediately."
                                 : "BYOK uses your own API key and is best when you want the company to operate on your AI access."}
@@ -1465,17 +1568,21 @@ Examples:
                         </div>
 
                         <div>
-                          <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          <label
+                            htmlFor="components-company-companyworkspaceshell-1471"
+                            className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+                          >
                             Launch operation
                           </label>
                           <Input
+                            id="components-company-companyworkspaceshell-1471"
                             data-testid="company-launch-operation-input"
                             className="mt-2"
                             value={operationBrief}
                             onChange={(event) => setOperationBrief(event.target.value)}
                             placeholder="Start the next company operation"
                           />
-                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
                             Use one clear instruction. The company will turn it into work across the selected
                             departments.
                           </p>
@@ -1487,7 +1594,7 @@ Examples:
                             onClick={() => void handleLaunchOperation()}
                             disabled={launching || companyPaused}
                           >
-                            {launching ? <Spinner size="xs" className="mr-2" /> : <PlayCircle className="h-4 w-4" />}
+                            {launching ? <Spinner size="xs" className="mr-2" /> : <PlayCircle className="size-4" />}
                             Launch operation
                           </Button>
                           <Button
@@ -1496,7 +1603,7 @@ Examples:
                             onClick={() => void handleRetryFailedOperation()}
                             disabled={retrying || !latestFailedOperation}
                           >
-                            {retrying ? <Spinner size="xs" className="mr-2" /> : <RotateCcw className="h-4 w-4" />}
+                            {retrying ? <Spinner size="xs" className="mr-2" /> : <RotateCcw className="size-4" />}
                             Retry failed operation
                           </Button>
                           <Button
@@ -1505,7 +1612,7 @@ Examples:
                             onClick={() => void handleSaveObjective()}
                             disabled={savingObjective}
                           >
-                            {savingObjective ? <Spinner size="xs" className="mr-2" /> : <Bot className="h-4 w-4" />}
+                            {savingObjective ? <Spinner size="xs" className="mr-2" /> : <Bot className="size-4" />}
                             Update objective
                           </Button>
                           <Button
@@ -1516,9 +1623,9 @@ Examples:
                             {savingCompanyState ? (
                               <Spinner size="xs" className="mr-2" />
                             ) : companyPaused ? (
-                              <PlayCircle className="h-4 w-4" />
+                              <PlayCircle className="size-4" />
                             ) : (
-                              <PauseCircle className="h-4 w-4" />
+                              <PauseCircle className="size-4" />
                             )}
                             {companyPaused ? "Resume company" : "Pause company"}
                           </Button>
@@ -1527,7 +1634,7 @@ Examples:
                     </div>
 
                     <div data-guide-id="company-latest-outputs" className="mt-5">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                         Latest outputs
                       </p>
                       <MicroExplanation className="mt-2">
@@ -1539,17 +1646,15 @@ Examples:
                           latestCompletedOutputs.map((item) => (
                             <div
                               key={item.id}
-                              className="rounded-[1.2rem] border border-slate-900/8 bg-white/70 px-4 py-4 dark:border-white/8 dark:bg-white/5"
+                              className="rounded-[1.2rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5"
                             >
                               <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{item.title}</p>
+                                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.title}</p>
                                 <Button asChild size="sm" variant="outline" className="rounded-full">
                                   <Link href={`/runs/${item.id}`}>Open</Link>
                                 </Button>
                               </div>
-                              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                {item.preview}
-                              </p>
+                              <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.preview}</p>
                             </div>
                           ))
                         ) : (

@@ -37,8 +37,8 @@ const INTEGRATION_ICONS: Record<string, { icon: ComponentType<{ className?: stri
   Hash: { icon: Hash, color: "bg-violet-500", dot: "text-violet-500" },
   MessageCircle: {
     icon: MessageCircle,
-    color: "bg-indigo-500",
-    dot: "text-indigo-500",
+    color: "bg-sky-500",
+    dot: "text-sky-500",
   },
   Sparkles: {
     icon: Sparkles,
@@ -75,6 +75,7 @@ const FEATURED_PACKAGE_ORDER = [
   "gmail-send-email",
   "telegram-send-message",
 ];
+const FEATURED_PACKAGE_RANK = new Map(FEATURED_PACKAGE_ORDER.map((slug, index) => [slug, index]));
 
 const ICON_BY_KEY: Record<string, keyof typeof INTEGRATION_ICONS> = {
   slack: "Hash",
@@ -92,14 +93,18 @@ const ICON_BY_KEY: Record<string, keyof typeof INTEGRATION_ICONS> = {
   github: "Github",
   salesforce: "Database",
 };
+const ICON_KEY_MATCHERS = Object.entries(ICON_BY_KEY).map(([needle, key]) => ({
+  matcher: new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  key,
+}));
 
 const pickIconKey = (pkg: MarketplacePackage): keyof typeof INTEGRATION_ICONS => {
   const icon = String(pkg.icon || "")
     .toLowerCase()
     .trim();
   const slug = pkg.slug.toLowerCase();
-  for (const [needle, key] of Object.entries(ICON_BY_KEY)) {
-    if (icon.includes(needle) || slug.includes(needle)) {
+  for (const { matcher, key } of ICON_KEY_MATCHERS) {
+    if (matcher.test(icon) || matcher.test(slug)) {
       return key;
     }
   }
@@ -107,8 +112,7 @@ const pickIconKey = (pkg: MarketplacePackage): keyof typeof INTEGRATION_ICONS =>
 };
 
 const packageRank = (pkg: MarketplacePackage): number => {
-  const index = FEATURED_PACKAGE_ORDER.indexOf(pkg.slug);
-  return index === -1 ? FEATURED_PACKAGE_ORDER.length + 1 : index;
+  return FEATURED_PACKAGE_RANK.get(pkg.slug) ?? FEATURED_PACKAGE_ORDER.length + 1;
 };
 
 /**
@@ -127,7 +131,7 @@ export function QuickToolBar({
     [marketplaceNodes],
   );
   const integrations = useMemo(() => {
-    return [...runtimeReadyPackages].sort((a, b) => {
+    return runtimeReadyPackages.toSorted((a, b) => {
       const rankDiff = packageRank(a) - packageRank(b);
       if (rankDiff !== 0) return rankDiff;
       return a.name.localeCompare(b.name);
@@ -165,8 +169,8 @@ export function QuickToolBar({
         )}
       >
         <div className="hidden md:flex items-center gap-2 pr-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70 text-foreground">
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <div className="flex size-7 items-center justify-center rounded-lg bg-muted/70 text-foreground">
+            <Sparkles className="size-4" aria-hidden="true" />
           </div>
           <div className="leading-none">
             <p className="text-xs font-semibold text-foreground">Quick Actions</p>
@@ -201,15 +205,13 @@ export function QuickToolBar({
                 title={`Add ${pkg.name}`}
                 aria-label={`Add ${pkg.name} tool action`}
                 data-testid={`quick-tool-${pkg.slug}`}
-                className="group flex shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-transparent bg-background/70 px-2 py-1.5 text-xs font-medium text-foreground transition-colors transition-transform transition-shadow hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 motion-reduce:transform-none motion-reduce:transition-none"
+                className="group flex shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-transparent bg-background/70 px-2 py-1.5 text-xs font-medium text-foreground transition-colors transition-transform transition-shadow hover:-tranzinc-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 motion-reduce:transform-none motion-reduce:transition-none"
               >
-                <span
-                  className={cn("flex h-5 w-5 items-center justify-center rounded-md text-white", iconConfig.color)}
-                >
-                  <IconComponent className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className={cn("flex size-5 items-center justify-center rounded-md text-white", iconConfig.color)}>
+                  <IconComponent className="size-3.5" aria-hidden="true" />
                 </span>
                 <span className="hidden sm:inline">{pkg.name}</span>
-                {hasSelectedNode && <Link2 className={cn("h-3 w-3", iconConfig.dot)} aria-hidden="true" />}
+                {hasSelectedNode && <Link2 className={cn("size-3", iconConfig.dot)} aria-hidden="true" />}
               </button>
             );
           })}
@@ -222,7 +224,7 @@ export function QuickToolBar({
           data-testid="quick-tool-browse"
           className="flex shrink-0 touch-manipulation items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1"
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <Plus className="size-3.5" aria-hidden="true" />
           <span className="hidden sm:inline">Browse</span>
           {extraCount > 0 && (
             <span className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -242,7 +244,7 @@ export function QuickToolBar({
           </DialogHeader>
           <div className="space-y-3">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
               <Input
                 type="text"
                 name="integration-search"
@@ -259,7 +261,7 @@ export function QuickToolBar({
               {filtered.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                    <AlertCircle className="size-4" aria-hidden="true" />
                     {integrations.length === 0
                       ? "No integration packages are installed yet."
                       : "No matching integration found."}
@@ -283,11 +285,11 @@ export function QuickToolBar({
                     >
                       <span
                         className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-md text-white",
+                          "flex size-8 items-center justify-center rounded-md text-white",
                           iconConfig.color,
                         )}
                       >
-                        <IconComponent className="h-4 w-4" aria-hidden="true" />
+                        <IconComponent className="size-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -308,7 +310,7 @@ export function QuickToolBar({
                           {getMarketplacePackageDescription(pkg)}
                         </p>
                       </div>
-                      <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500" aria-hidden="true" />
+                      <CheckCircle2 className="mt-1 size-4 text-emerald-500" aria-hidden="true" />
                     </button>
                   );
                 })
@@ -326,5 +328,3 @@ export function QuickToolBar({
     </>
   );
 }
-
-export default QuickToolBar;

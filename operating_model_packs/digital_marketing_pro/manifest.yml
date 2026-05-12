@@ -1,0 +1,32 @@
+pack_id: digital_marketing_pro.v1
+base_pack_id: digital_marketing_pro
+version: "1.0.0"
+display_name: Digital Marketing Pro
+description: Company operating model pack for DMP-style agency operations.
+company_type_label: Digital Marketing Agency
+checksum: auto
+compatibility:
+  forgegraph_min: "0.1.0"
+  schema: operating_model_pack.v1
+files:
+  departments: departments.yml
+  agents: agents.yml
+  service_model: atlas_service_model.yml
+  modules: modules.yml
+  operations: operations.yml
+  programs: programs.yml
+  stages: stages.yml
+  artifacts: artifacts.yml
+  assertions: assertions.yml
+  evaluations: evaluations.yml
+  policies: policies.yml
+  tools: tools.yml
+  signals: signals.yml
+  dashboards: dashboards.yml
+  reports: reports.yml
+install:
+  default_program_template: dmp.engagement
+  default_projection_type: currently_true_state
+  default_projection_label: Living Instruction File
+  create_graph_version: true
+  create_operation_templates: true

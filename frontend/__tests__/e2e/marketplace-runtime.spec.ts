@@ -10,6 +10,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 const packageName = process.env.PLAYWRIGHT_RUNTIME_PACKAGE_NAME ?? "Playwright Runtime Health Check";
 const toolName = process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME ?? "playwright_runtime_health_check";
+const TERMINAL_RUN_STATUSES = new Set(["succeeded", "failed", "canceled"]);
 
 const GRAPH_URL_PATTERN = /\/graphs\/[a-f0-9-]+/;
 
@@ -33,21 +34,28 @@ async function getAccessToken(request: APIRequestContext) {
 }
 
 async function waitForRunTerminal(request: APIRequestContext, accessToken: string, runId: string) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    expect(response.ok()).toBeTruthy();
-    const body = (await response.json()) as {
-      data: { status: string; error_message?: string | null };
-    };
-    if (["succeeded", "failed", "canceled"].includes(body.data.status)) {
-      return body.data;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  let terminalRun: { status: string; error_message?: string | null } | null = null;
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        expect(response.ok()).toBeTruthy();
+        const body = (await response.json()) as {
+          data: { status: string; error_message?: string | null };
+        };
+        terminalRun = body.data;
+        return TERMINAL_RUN_STATUSES.has(body.data.status);
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+
+  if (!terminalRun) {
+    throw new Error(`Timed out waiting for run ${runId} to reach a terminal state.`);
   }
-  throw new Error(`Timed out waiting for run ${runId} to reach a terminal state.`);
+  return terminalRun;
 }
 
 async function addOutputNode(page: Page) {

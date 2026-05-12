@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { AgentFields, type AgentConfig } from "./AgentFields";
 import { AdvancedSettings, type AdvancedConfig } from "./AdvancedSettings";
 import { validateJson } from "@/lib/form-validation";
-import { credentialsApi, getApiErrorMessage, type Credential } from "@/lib/api";
+import { useCredentialOptions } from "./useCredentialOptions";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
 /**
@@ -55,9 +55,7 @@ const PROVIDERS = [
 
 export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const toolConfig = config as ToolConfig;
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [credentialsLoading, setCredentialsLoading] = useState(false);
-  const [credentialsError, setCredentialsError] = useState<string | null>(null);
+  const { credentials, loading: credentialsLoading, error: credentialsError } = useCredentialOptions();
   const configuredCredential = useMemo(
     () => credentials.find((item) => item.id === toolConfig.credential_id),
     [credentials, toolConfig.credential_id],
@@ -104,32 +102,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     [onChange, provider, toolConfig],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchCredentials = async () => {
-      setCredentialsLoading(true);
-      setCredentialsError(null);
-      try {
-        const data = await credentialsApi.list();
-        if (!cancelled) {
-          setCredentials(data);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setCredentialsError(getApiErrorMessage(err, "Failed to load credentials."));
-        }
-      } finally {
-        if (!cancelled) {
-          setCredentialsLoading(false);
-        }
-      }
-    };
-
-    void fetchCredentials();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const reportErrors = useEffectEvent((nextErrors: Record<string, string>) => setErrors(nextErrors));
 
   // Validate input schema on change
   useEffect(() => {
@@ -142,15 +115,15 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
       }
     }
 
-    setErrors(newErrors);
-  }, [toolConfig.input_schema, setErrors]);
+    reportErrors(newErrors);
+  }, [toolConfig.input_schema]);
 
   const isCustomTool = !toolConfig.tool_name || toolConfig.tool_name === "custom";
 
   return (
     <div className="space-y-6">
       {/* Agent Context */}
-      <AgentFields config={toolConfig} onChange={handleAgentChange} showExamples={true} />
+      <AgentFields config={toolConfig} onChange={handleAgentChange} />
 
       <Separator />
 
@@ -236,8 +209,8 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
             </select>
             {credentialsLoading && (
               <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <Spinner className="h-3 w-3" />
-                Loading credentials...
+                <Spinner className="size-3" />
+                Loading credentials…
               </div>
             )}
             {!credentialsLoading && credentialsError && (
@@ -329,5 +302,3 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     </div>
   );
 }
-
-export default ToolNodeForm;

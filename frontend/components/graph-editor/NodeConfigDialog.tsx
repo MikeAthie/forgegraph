@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  type SetStateAction,
+} from "react";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +45,7 @@ const NODE_TYPE_INFO: Record<string, { label: string; color: string; icon: strin
   [NODE_TYPES.BRANCH]: { label: "Branch", color: "bg-orange-500", icon: "B" },
   [NODE_TYPES.MERGE]: { label: "Merge", color: "bg-cyan-500", icon: "M" },
   [NODE_TYPES.HUMAN_GATE]: { label: "Approval Gate", color: "bg-rose-500", icon: "G" },
-  [NODE_TYPES.MEMORY]: { label: "Memory", color: "bg-indigo-500", icon: "M" },
+  [NODE_TYPES.MEMORY]: { label: "Memory", color: "bg-sky-500", icon: "M" },
   [NODE_TYPES.OBSERVATION_SAVE]: {
     label: "Observation Save",
     color: "bg-teal-700",
@@ -72,6 +80,30 @@ export interface NodeConfigDialogProps {
   FormComponent?: React.ComponentType<NodeFormProps>;
 }
 
+type NodeConfigDialogState = {
+  config: NodeConfig;
+  errors: Record<string, string>;
+  label: string;
+  isDirty: boolean;
+  showCloseConfirm: boolean;
+};
+
+type NodeConfigDialogAction = {
+  patch: Partial<NodeConfigDialogState> | ((state: NodeConfigDialogState) => Partial<NodeConfigDialogState>);
+};
+
+function nodeConfigDialogReducer(
+  state: NodeConfigDialogState,
+  action: NodeConfigDialogAction,
+): NodeConfigDialogState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveDialogStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 /**
  * Default placeholder form for nodes without a specific form
  */
@@ -97,26 +129,51 @@ export function NodeConfigDialog({
 }: NodeConfigDialogProps) {
   const fallbackConfigRef = useRef<NodeConfig>({});
   const resolvedInitialConfig = initialConfig ?? fallbackConfigRef.current;
-  const [config, setConfig] = useState<NodeConfig>(resolvedInitialConfig);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [label, setLabel] = useState("");
-  const [isDirty, setIsDirty] = useState(false);
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [dialogState, dispatchDialogState] = useReducer(nodeConfigDialogReducer, {
+    config: resolvedInitialConfig,
+    errors: {},
+    label: "",
+    isDirty: false,
+    showCloseConfirm: false,
+  });
+  const { config, errors, label, isDirty, showCloseConfirm } = dialogState;
+  const setDialogField = useCallback(
+    <K extends keyof NodeConfigDialogState>(key: K, value: SetStateAction<NodeConfigDialogState[K]>) => {
+      dispatchDialogState({
+        patch: (current) =>
+          ({
+            [key]: resolveDialogStateAction(value, current[key]),
+          }) as Partial<NodeConfigDialogState>,
+      });
+    },
+    [],
+  );
+  const setErrors = useCallback(
+    (value: SetStateAction<Record<string, string>>) => setDialogField("errors", value),
+    [setDialogField],
+  );
+  const setShowCloseConfirm = useCallback(
+    (value: SetStateAction<boolean>) => setDialogField("showCloseConfirm", value),
+    [setDialogField],
+  );
 
   // Reset state when dialog opens with new node type
   useLayoutEffect(() => {
     if (isOpen && nodeType) {
-      setConfig(resolvedInitialConfig);
-      setErrors({});
-      setLabel(initialLabel?.trim() || NODE_TYPE_INFO[nodeType]?.label || nodeType);
-      setIsDirty(false);
-      setShowCloseConfirm(false);
+      dispatchDialogState({
+        patch: {
+          config: resolvedInitialConfig,
+          errors: {},
+          label: initialLabel?.trim() || NODE_TYPE_INFO[nodeType]?.label || nodeType,
+          isDirty: false,
+          showCloseConfirm: false,
+        },
+      });
     }
   }, [initialLabel, isOpen, nodeType, resolvedInitialConfig]);
 
   const handleConfigChange = useCallback((newConfig: NodeConfig) => {
-    setConfig(newConfig);
-    setIsDirty(true);
+    dispatchDialogState({ patch: { config: newConfig, isDirty: true } });
   }, []);
 
   const handleClose = useCallback(() => {
@@ -146,24 +203,26 @@ export function NodeConfigDialog({
     onClose();
   }, [config, errors, label, nodeType, onClose, onSave]);
 
+  const handleEscapeClose = useEffectEvent(handleClose);
+
   // Handle escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         e.preventDefault();
-        handleClose();
+        handleEscapeClose();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, handleClose]);
+  }, [isOpen]);
 
   if (!nodeType) {
     return null;
   }
 
-  const typeInfo = NODE_TYPE_INFO[nodeType] || { label: nodeType, color: "bg-gray-500", icon: "?" };
+  const typeInfo = NODE_TYPE_INFO[nodeType] || { label: nodeType, color: "bg-neutral-500", icon: "?" };
   const hasErrors = Object.keys(errors).length > 0;
   const Form = FormComponent || DefaultNodeForm;
 
@@ -175,7 +234,7 @@ export function NodeConfigDialog({
             <div className="flex items-center gap-3">
               <div
                 className={cn(
-                  "w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm",
+                  "size-8 rounded-md flex items-center justify-center text-white font-bold text-sm",
                   typeInfo.color,
                 )}
               >
@@ -201,8 +260,7 @@ export function NodeConfigDialog({
               autoComplete="off"
               value={label}
               onChange={(e) => {
-                setLabel(e.target.value);
-                setIsDirty(true);
+                dispatchDialogState({ patch: { label: e.target.value, isDirty: true } });
               }}
               placeholder={typeInfo.label}
               className="w-full mt-1 px-3 py-2 border rounded-md bg-background text-sm"
@@ -217,7 +275,7 @@ export function NodeConfigDialog({
           {/* Error Summary */}
           {hasErrors && (
             <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-md mx-1">
-              <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+              <AlertCircle className="size-4 text-destructive mt-0.5 shrink-0" />
               <div>
                 <p className="text-sm font-medium text-destructive">Please fix the following errors:</p>
                 <ul className="text-xs text-destructive mt-1 list-disc list-inside">
@@ -262,5 +320,3 @@ export function NodeConfigDialog({
     </>
   );
 }
-
-export default NodeConfigDialog;

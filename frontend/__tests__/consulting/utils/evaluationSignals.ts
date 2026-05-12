@@ -177,18 +177,18 @@ function collectArtifactText(state: ConsultingExecutionState): string {
 
 function inferMissingDrivers(state: ConsultingExecutionState): string[] {
   const artifactText = collectArtifactText(state);
-  const coveredDrivers = DRIVER_RULES.filter((rule) => textIncludesAny(artifactText, rule.keywords)).map(
-    (rule) => rule.key,
+  const coveredDrivers = new Set(
+    DRIVER_RULES.flatMap((rule) => (textIncludesAny(artifactText, rule.keywords) ? [rule.key] : [])),
   );
   const missingDrivers: string[] = [];
 
-  if (!coveredDrivers.includes("onboarding")) {
+  if (!coveredDrivers.has("onboarding")) {
     missingDrivers.push("Customer onboarding or time-to-value is not evaluated as a churn driver.");
   }
-  if (!coveredDrivers.includes("competition")) {
+  if (!coveredDrivers.has("competition")) {
     missingDrivers.push("Competitive alternatives are not evaluated as a reason customers may churn.");
   }
-  if (!coveredDrivers.includes("segmentation")) {
+  if (!coveredDrivers.has("segmentation")) {
     missingDrivers.push("The artifact does not test whether different SMB segments churn for different reasons.");
   }
 
@@ -312,7 +312,12 @@ export function analyzeArtifact(state: ConsultingExecutionState): ArtifactSignal
   const hedgedEvidenceCount = evidenceLog.filter((evidence) => HEDGING_PATTERN.test(evidence)).length;
   const genericEvidenceCount = evidenceLog.filter((evidence) => !SPECIFIC_EVIDENCE_PATTERN.test(evidence)).length;
   const actionableStepCount = executionPlan.filter((item) => ACTIONABLE_STEP_PATTERN.test(item.step ?? "")).length;
-  const distinctOwnerCount = new Set(executionPlan.map((item) => normalizeText(item.owner)).filter(Boolean)).size;
+  const distinctOwnerCount = new Set(
+    executionPlan.flatMap((item) => {
+      const owner = normalizeText(item.owner);
+      return owner ? [owner] : [];
+    }),
+  ).size;
   const missingDrivers = inferMissingDrivers(state);
   const weakAssumptions = inferWeakAssumptions(state);
   const unsupportedClaims = inferUnsupportedClaims(state);

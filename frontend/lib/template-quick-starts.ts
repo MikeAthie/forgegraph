@@ -1,6 +1,6 @@
 import type { Credential, GraphTemplate } from "./api";
 
-export interface TemplateCredentialStatus {
+interface TemplateCredentialStatus {
   provider: string;
   label: string;
   connected: boolean;
@@ -136,15 +136,17 @@ export function inferTemplateProviders(template: GraphTemplate): string[] {
 
 export function getTemplatePlaceholders(template: GraphTemplate): string[] {
   const sample = template.sample_input ?? {};
-  return Object.keys(sample)
-    .map((key) => key.trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b))
+  const keys = Object.keys(sample).flatMap((key) => {
+    const trimmed = key.trim();
+    return trimmed ? [trimmed] : [];
+  });
+  return keys
+    .toSorted((a, b) => a.localeCompare(b))
     .slice(0, 8)
     .map((key) => `{{input.${key}}}`);
 }
 
-export function getTemplateExpectedOutput(template: GraphTemplate, quickStartTitle?: string): string {
+function getTemplateExpectedOutput(template: GraphTemplate, quickStartTitle?: string): string {
   const matchedQuickStart = quickStartTitle
     ? QUICK_START_DEFINITIONS.find((definition) => definition.title === quickStartTitle)
     : undefined;
@@ -177,10 +179,14 @@ export function buildTemplateQuickStarts(templates: GraphTemplate[]): TemplateQu
   const quickStarts: TemplateQuickStart[] = [];
 
   for (const definition of QUICK_START_DEFINITIONS) {
-    const template = templates.find((candidate) => {
+    let template: GraphTemplate | undefined;
+    for (const candidate of templates) {
       const text = normalizeText(candidate);
-      return definition.matchers.some((matcher) => matcher.test(text));
-    });
+      if (definition.matchers.some((matcher) => matcher.test(text))) {
+        template = candidate;
+        break;
+      }
+    }
 
     if (!template) continue;
     matchedTemplateIds.add(template.id);
@@ -199,9 +205,9 @@ export function buildTemplateQuickStarts(templates: GraphTemplate[]): TemplateQu
 
   // Fill remaining slots with top templates so quick-start UX is never empty.
   if (quickStarts.length < 3) {
-    const fallbackTemplates = [...templates]
-      .filter((template) => !matchedTemplateIds.has(template.id))
-      .sort((a, b) => {
+    const fallbackTemplates = templates
+      .flatMap((template) => (matchedTemplateIds.has(template.id) ? [] : [template]))
+      .toSorted((a, b) => {
         const aScore = (a.usage_count ?? 0) + (a.rating_count ?? 0);
         const bScore = (b.usage_count ?? 0) + (b.rating_count ?? 0);
         if (bScore !== aScore) return bScore - aScore;

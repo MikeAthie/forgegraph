@@ -48,7 +48,7 @@ describe("BranchNodeForm", () => {
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
-      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+      const recordConfigChange = (nextConfig: NodeFormProps["config"]) => {
         setConfig(nextConfig);
         mockOnChange(nextConfig);
       };
@@ -56,7 +56,7 @@ describe("BranchNodeForm", () => {
       return (
         <BranchNodeForm
           config={config}
-          onChange={handleChange}
+          onChange={recordConfigChange}
           errors={options.errors ?? {}}
           setErrors={mockSetErrors}
         />
@@ -231,8 +231,10 @@ describe("BranchNodeForm", () => {
       // Get all condition cards
       const conditionCards = screen
         .getAllByText(/condition \d/i)
-        .map((el) => el.closest("div")?.parentElement)
-        .filter(Boolean);
+        .flatMap((el) => {
+          const card = el.closest("div")?.parentElement;
+          return card ? [card] : [];
+        });
 
       // Find delete button in the second condition card
       expect(conditionCards.length).toBeGreaterThan(1);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,13 +12,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { AgentFields, type AgentConfig } from "./AgentFields";
 import { AdvancedSettings, type AdvancedConfig } from "./AdvancedSettings";
 import { validateUrl, validateJson } from "@/lib/form-validation";
-import {
-  credentialsApi,
-  getApiErrorMessage,
-  integrationsApi,
-  type Credential,
-  type HttpNodeTestResult,
-} from "@/lib/api";
+import { getApiErrorMessage, integrationsApi, type Credential, type HttpNodeTestResult } from "@/lib/api";
+import { useCredentialOptions } from "./useCredentialOptions";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
 /**
@@ -53,15 +48,221 @@ const PROVIDERS = [
   { value: "twilio", label: "Twilio" },
 ];
 
+type HttpFormState = {
+  isRunningTest: boolean;
+  testResult: HttpNodeTestResult | null;
+  testError: string | null;
+  twilioAccountSid: string;
+};
+
+type HttpFormAction =
+  | { type: "twilio-account-sid"; value: string }
+  | { type: "test-start" }
+  | { type: "test-success"; result: HttpNodeTestResult }
+  | { type: "test-error"; error: string };
+
+const initialHttpFormState: HttpFormState = {
+  isRunningTest: false,
+  testResult: null,
+  testError: null,
+  twilioAccountSid: "",
+};
+
+function httpFormReducer(state: HttpFormState, action: HttpFormAction): HttpFormState {
+  switch (action.type) {
+    case "twilio-account-sid":
+      return { ...state, twilioAccountSid: action.value };
+    case "test-start":
+      return { ...state, isRunningTest: true, testResult: null, testError: null };
+    case "test-success":
+      return { ...state, isRunningTest: false, testResult: action.result, testError: null };
+    case "test-error":
+      return { ...state, isRunningTest: false, testResult: null, testError: action.error };
+    default:
+      return state;
+  }
+}
+
+function HttpTestPanel({
+  provider,
+  providerHint,
+  providerDocsUrl,
+  isRunningTest,
+  testError,
+  testResult,
+  twilioAccountSid,
+  onRunTest,
+  onTwilioAccountSidChange,
+}: {
+  provider: string;
+  providerHint: string;
+  providerDocsUrl: string | null;
+  isRunningTest: boolean;
+  testError: string | null;
+  testResult: HttpNodeTestResult | null;
+  twilioAccountSid: string;
+  onRunTest: () => void;
+  onTwilioAccountSidChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Run test</p>
+          <p className="text-xs text-muted-foreground">{providerHint}</p>
+          {providerDocsUrl ? (
+            <a href={providerDocsUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2">
+              Provider docs
+            </a>
+          ) : null}
+        </div>
+        <Button type="button" variant="outline" onClick={onRunTest} disabled={isRunningTest}>
+          {isRunningTest ? (
+            <>
+              <Spinner className="mr-2 size-3.5" />
+              Testing…
+            </>
+          ) : (
+            "Run test"
+          )}
+        </Button>
+      </div>
+
+      {provider === "twilio" ? (
+        <FormField
+          label="Twilio Account SID (test)"
+          htmlFor="twilio-account-sid"
+          description="Required when testing Twilio endpoints so auth can be generated."
+        >
+          <Input
+            id="twilio-account-sid"
+            value={twilioAccountSid}
+            onChange={(event) => onTwilioAccountSidChange(event.target.value)}
+            placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            className="text-sm font-mono"
+          />
+        </FormField>
+      ) : null}
+
+      {testError ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {testError}
+        </div>
+      ) : null}
+
+      {testResult ? (
+        <div className="space-y-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs">
+          <p className="font-medium text-emerald-700 dark:text-emerald-300">
+            Test result: {testResult.status_code} {testResult.ok ? "(ok)" : "(failed)"}
+          </p>
+          <pre className="max-h-44 overflow-auto rounded border border-border bg-background/80 p-2 font-mono text-[11px]">
+            {JSON.stringify(testResult.body, null, 2)}
+          </pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function HttpCredentialSection({
+  provider,
+  filteredCredentials,
+  selectedCredential,
+  credentialsLoading,
+  credentialsError,
+  onProviderChange,
+  onCredentialChange,
+}: {
+  provider: string;
+  filteredCredentials: Credential[];
+  selectedCredential: Credential | undefined;
+  credentialsLoading: boolean;
+  credentialsError: string | null;
+  onProviderChange: (provider: string) => void;
+  onCredentialChange: (credentialId: string | undefined) => void;
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-4">
+        <FormField label="Credential Provider" htmlFor="provider">
+          <select
+            id="provider"
+            value={provider}
+            onChange={(event) => onProviderChange(event.target.value)}
+            className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+          >
+            {PROVIDERS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </FormField>
+
+        <FormField label="Credential" htmlFor="credential-id" description="Optional stored secret for this integration.">
+          <select
+            id="credential-id"
+            value={selectedCredential?.id || ""}
+            onChange={(event) => onCredentialChange(event.target.value || undefined)}
+            className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+          >
+            <option value="">Use manual/env auth</option>
+            {filteredCredentials.map((cred) => (
+              <option key={cred.id} value={cred.id}>
+                {cred.name} ({cred.key_hint})
+              </option>
+            ))}
+          </select>
+          {credentialsLoading ? (
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <Spinner className="size-3" />
+              Loading credentials…
+            </div>
+          ) : null}
+          {!credentialsLoading && credentialsError ? (
+            <div className="mt-2 text-xs text-destructive">{credentialsError}</div>
+          ) : null}
+          {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 ? (
+            <div className="mt-2 text-xs text-muted-foreground">
+              No credentials found for this provider. Add one in the Credentials page.{" "}
+              <Link href={`/credentials?provider=${encodeURIComponent(provider)}`} className="underline underline-offset-2">
+                Open credentials
+              </Link>
+            </div>
+          ) : null}
+        </FormField>
+      </div>
+
+      {selectedCredential && selectedCredential.health_status !== "healthy" ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <p className="font-medium">
+            {selectedCredential.health_status === "expired"
+              ? "Selected credential is expired."
+              : "Selected credential is expiring soon."}
+          </p>
+          {selectedCredential.health_message ? <p className="mt-1">{selectedCredential.health_message}</p> : null}
+          {selectedCredential.requires_reauth ? (
+            <Link
+              href={`/credentials?provider=${encodeURIComponent(provider)}`}
+              className="mt-1 inline-block underline underline-offset-2"
+            >
+              Reconnect this credential in Credentials
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const httpConfig = config as HttpConfig;
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [credentialsLoading, setCredentialsLoading] = useState(false);
-  const [credentialsError, setCredentialsError] = useState<string | null>(null);
-  const [isRunningTest, setIsRunningTest] = useState(false);
-  const [testResult, setTestResult] = useState<HttpNodeTestResult | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
-  const [twilioAccountSid, setTwilioAccountSid] = useState("");
+  const { credentials, loading: credentialsLoading, error: credentialsError } = useCredentialOptions();
+  const [{ isRunningTest, testResult, testError, twilioAccountSid }, dispatchHttpForm] = useReducer(
+    httpFormReducer,
+    initialHttpFormState,
+  );
+  const reportErrors = useEffectEvent((nextErrors: Record<string, string>) => setErrors(nextErrors));
   const effectiveMethod = httpConfig.method ?? "GET";
   const configuredCredential = useMemo(
     () => credentials.find((item) => item.id === httpConfig.credential_id),
@@ -118,34 +319,6 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   );
 
   useEffect(() => {
-    let cancelled = false;
-    const fetchCredentials = async () => {
-      setCredentialsLoading(true);
-      setCredentialsError(null);
-      try {
-        const data = await credentialsApi.list();
-        if (!cancelled) {
-          setCredentials(data);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setCredentialsError(getApiErrorMessage(err, "Failed to load credentials."));
-        }
-      } finally {
-        if (!cancelled) {
-          setCredentialsLoading(false);
-        }
-      }
-    };
-
-    void fetchCredentials();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Validate URL and body on change
-  useEffect(() => {
     const newErrors: Record<string, string> = {};
 
     const urlError = validateUrl(httpConfig.url || "", "URL");
@@ -160,15 +333,15 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
       }
     }
 
-    setErrors(newErrors);
-  }, [httpConfig.url, httpConfig.body, shouldValidateJsonBody, setErrors]);
+    reportErrors(newErrors);
+  }, [httpConfig.url, httpConfig.body, shouldValidateJsonBody]);
 
   useEffect(() => {
     if (provider !== "twilio") return;
     if (twilioAccountSid.trim()) return;
     const match = (httpConfig.url || "").match(/Accounts\/([^/]+)/i);
     if (match?.[1]) {
-      setTwilioAccountSid(decodeURIComponent(match[1]));
+      dispatchHttpForm({ type: "twilio-account-sid", value: decodeURIComponent(match[1]) });
     }
   }, [httpConfig.url, provider, twilioAccountSid]);
 
@@ -209,30 +382,25 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   const handleRunTest = useCallback(async () => {
     const trimmedUrl = (httpConfig.url || "").trim();
     if (!trimmedUrl) {
-      setTestError("URL is required before running a test.");
-      setTestResult(null);
+      dispatchHttpForm({ type: "test-error", error: "URL is required before running a test." });
       return;
     }
 
     const urlError = validateUrl(trimmedUrl, "URL");
     if (urlError) {
-      setTestError(urlError.message);
-      setTestResult(null);
+      dispatchHttpForm({ type: "test-error", error: urlError.message });
       return;
     }
 
     if (httpConfig.body && shouldValidateJsonBody) {
       const bodyError = validateJson(httpConfig.body, "Body");
       if (bodyError) {
-        setTestError(bodyError.message);
-        setTestResult(null);
+        dispatchHttpForm({ type: "test-error", error: bodyError.message });
         return;
       }
     }
 
-    setIsRunningTest(true);
-    setTestError(null);
-    setTestResult(null);
+    dispatchHttpForm({ type: "test-start" });
     try {
       const result = await integrationsApi.runHttpNodeTest({
         method: effectiveMethod,
@@ -243,11 +411,9 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
         credential_id: httpConfig.credential_id,
         account_sid: provider === "twilio" ? twilioAccountSid.trim() || undefined : undefined,
       });
-      setTestResult(result);
+      dispatchHttpForm({ type: "test-success", result });
     } catch (err: unknown) {
-      setTestError(getApiErrorMessage(err, "HTTP test failed."));
-    } finally {
-      setIsRunningTest(false);
+      dispatchHttpForm({ type: "test-error", error: getApiErrorMessage(err, "HTTP test failed.") });
     }
   }, [
     effectiveMethod,
@@ -265,7 +431,11 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for HTTP */}
-      <AgentFields config={httpConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
+      <AgentFields
+        config={httpConfig}
+        onChange={handleAgentChange}
+        visibleSections={{ role: false, examples: false }}
+      />
 
       <Separator />
 
@@ -309,81 +479,15 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Credential Provider" htmlFor="provider">
-            <select
-              id="provider"
-              value={provider}
-              onChange={(e) => handleProviderChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm"
-            >
-              {PROVIDERS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField
-            label="Credential"
-            htmlFor="credential-id"
-            description="Optional stored secret for this integration."
-          >
-            <select
-              id="credential-id"
-              value={httpConfig.credential_id || ""}
-              onChange={(e) => handleChange("credential_id", e.target.value || undefined)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm"
-            >
-              <option value="">Use manual/env auth</option>
-              {filteredCredentials.map((cred) => (
-                <option key={cred.id} value={cred.id}>
-                  {cred.name} ({cred.key_hint})
-                </option>
-              ))}
-            </select>
-            {credentialsLoading && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <Spinner className="h-3 w-3" />
-                Loading credentials...
-              </div>
-            )}
-            {!credentialsLoading && credentialsError && (
-              <div className="mt-2 text-xs text-destructive">{credentialsError}</div>
-            )}
-            {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 && (
-              <div className="mt-2 text-xs text-muted-foreground">
-                No credentials found for this provider. Add one in the Credentials page.{" "}
-                <Link
-                  href={`/credentials?provider=${encodeURIComponent(provider)}`}
-                  className="underline underline-offset-2"
-                >
-                  Open credentials
-                </Link>
-              </div>
-            )}
-          </FormField>
-        </div>
-
-        {selectedCredential && selectedCredential.health_status !== "healthy" && (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            <p className="font-medium">
-              {selectedCredential.health_status === "expired"
-                ? "Selected credential is expired."
-                : "Selected credential is expiring soon."}
-            </p>
-            {selectedCredential.health_message && <p className="mt-1">{selectedCredential.health_message}</p>}
-            {selectedCredential.requires_reauth && (
-              <Link
-                href={`/credentials?provider=${encodeURIComponent(provider)}`}
-                className="mt-1 inline-block underline underline-offset-2"
-              >
-                Reconnect this credential in Credentials
-              </Link>
-            )}
-          </div>
-        )}
+        <HttpCredentialSection
+          provider={provider}
+          filteredCredentials={filteredCredentials}
+          selectedCredential={selectedCredential}
+          credentialsLoading={credentialsLoading}
+          credentialsError={credentialsError}
+          onProviderChange={handleProviderChange}
+          onCredentialChange={(credentialId) => handleChange("credential_id", credentialId)}
+        />
 
         {showBody && (
           <FormField
@@ -417,67 +521,17 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
           />
         </FormField>
 
-        <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium">Run test</p>
-              <p className="text-xs text-muted-foreground">{providerHint}</p>
-              {providerDocsUrl && (
-                <a
-                  href={providerDocsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs underline underline-offset-2"
-                >
-                  Provider docs
-                </a>
-              )}
-            </div>
-            <Button type="button" variant="outline" onClick={() => void handleRunTest()} disabled={isRunningTest}>
-              {isRunningTest ? (
-                <>
-                  <Spinner className="mr-2 h-3.5 w-3.5" />
-                  Testing...
-                </>
-              ) : (
-                "Run test"
-              )}
-            </Button>
-          </div>
-
-          {provider === "twilio" && (
-            <FormField
-              label="Twilio Account SID (test)"
-              htmlFor="twilio-account-sid"
-              description="Required when testing Twilio endpoints so auth can be generated."
-            >
-              <Input
-                id="twilio-account-sid"
-                value={twilioAccountSid}
-                onChange={(event) => setTwilioAccountSid(event.target.value)}
-                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                className="text-sm font-mono"
-              />
-            </FormField>
-          )}
-
-          {testError && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {testError}
-            </div>
-          )}
-
-          {testResult && (
-            <div className="space-y-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs">
-              <p className="font-medium text-emerald-700 dark:text-emerald-300">
-                Test result: {testResult.status_code} {testResult.ok ? "(ok)" : "(failed)"}
-              </p>
-              <pre className="max-h-44 overflow-auto rounded border border-border bg-background/80 p-2 font-mono text-[11px]">
-                {JSON.stringify(testResult.body, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
+        <HttpTestPanel
+          provider={provider}
+          providerHint={providerHint}
+          providerDocsUrl={providerDocsUrl}
+          isRunningTest={isRunningTest}
+          testError={testError}
+          testResult={testResult}
+          twilioAccountSid={twilioAccountSid}
+          onRunTest={() => void handleRunTest()}
+          onTwilioAccountSidChange={(value) => dispatchHttpForm({ type: "twilio-account-sid", value })}
+        />
       </div>
 
       <Separator />
@@ -487,5 +541,3 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     </div>
   );
 }
-
-export default HttpNodeForm;
