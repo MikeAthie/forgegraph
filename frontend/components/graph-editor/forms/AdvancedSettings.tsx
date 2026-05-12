@@ -28,7 +28,7 @@ export interface AdvancedConfig {
 export interface AdvancedSettingsProps {
   config: AdvancedConfig;
   onChange: (config: AdvancedConfig) => void;
-  defaultExpanded?: boolean;
+  initialExpanded?: boolean;
   className?: string;
 }
 
@@ -36,8 +36,8 @@ export interface AdvancedSettingsProps {
  * Collapsible advanced settings section for node configuration.
  * Includes caching, timeout, and retry policy settings.
  */
-export function AdvancedSettings({ config, onChange, defaultExpanded = false, className }: AdvancedSettingsProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+export function AdvancedSettings({ config, onChange, initialExpanded = false, className }: AdvancedSettingsProps) {
+  const [isExpanded, setIsExpanded] = useState(() => initialExpanded);
 
   const handleChange = <K extends keyof AdvancedConfig>(field: K, value: AdvancedConfig[K]) => {
     onChange({ ...config, [field]: value });
@@ -59,7 +59,7 @@ export function AdvancedSettings({ config, onChange, defaultExpanded = false, cl
         className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors rounded-lg"
       >
         <span>Advanced Settings</span>
-        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
       </button>
 
       {/* Content */}
@@ -121,7 +121,7 @@ export function AdvancedSettings({ config, onChange, defaultExpanded = false, cl
 
             {/* Retry Policy */}
             <div className="space-y-3">
-              <label className="text-sm font-medium">Retry Policy</label>
+              <span className="text-sm font-medium">Retry Policy</span>
 
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Max Attempts" htmlFor="retry-max">
@@ -172,5 +172,3 @@ export function AdvancedSettings({ config, onChange, defaultExpanded = false, cl
     </div>
   );
 }
-
-export default AdvancedSettings;

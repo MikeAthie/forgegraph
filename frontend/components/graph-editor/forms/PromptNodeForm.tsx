@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
 import { KeyValueEditor } from "@/components/ui/key-value-editor";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { credentialsApi, getApiErrorMessage, type Credential } from "@/lib/api";
 import { AgentFields, type AgentConfig } from "./AgentFields";
 import { AdvancedSettings, type AdvancedConfig } from "./AdvancedSettings";
+import { useCredentialOptions } from "./useCredentialOptions";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
 /**
@@ -44,9 +44,7 @@ const PROVIDERS = [
 
 export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
   const promptConfig = config as PromptConfig;
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [credentialsLoading, setCredentialsLoading] = useState(false);
-  const [credentialsError, setCredentialsError] = useState<string | null>(null);
+  const { credentials, loading: credentialsLoading, error: credentialsError } = useCredentialOptions();
 
   const handleChange = useCallback(
     <K extends keyof PromptConfig>(field: K, value: PromptConfig[K]) => {
@@ -69,33 +67,6 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
     [config, onChange],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchCredentials = async () => {
-      setCredentialsLoading(true);
-      setCredentialsError(null);
-      try {
-        const data = await credentialsApi.list();
-        if (!cancelled) {
-          setCredentials(data);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setCredentialsError(getApiErrorMessage(err, "Failed to load credentials."));
-        }
-      } finally {
-        if (!cancelled) {
-          setCredentialsLoading(false);
-        }
-      }
-    };
-
-    void fetchCredentials();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const provider = promptConfig.provider || "openai";
   const filteredCredentials = useMemo(
     () => credentials.filter((item) => item.provider === provider),
@@ -110,7 +81,7 @@ export function PromptNodeForm({ config, onChange, errors }: NodeFormProps) {
   return (
     <div className="space-y-6">
       {/* Agent Context */}
-      <AgentFields config={promptConfig} onChange={handleAgentChange} showExamples={true} />
+      <AgentFields config={promptConfig} onChange={handleAgentChange} />
 
       <Separator />
 
@@ -174,8 +145,10 @@ Please {{task}}"
                 "observation_context_paths",
                 event.target.value
                   .split(/[\n,]/)
-                  .map((item) => item.trim())
-                  .filter(Boolean),
+                  .flatMap((item) => {
+                    const trimmed = item.trim();
+                    return trimmed ? [trimmed] : [];
+                  }),
               )
             }
             placeholder={"node.recall_jackie_context.output"}
@@ -227,8 +200,8 @@ Please {{task}}"
             </select>
             {credentialsLoading && (
               <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <Spinner className="h-3 w-3" />
-                Loading credentials...
+                <Spinner className="size-3" />
+                Loading credentials…
               </div>
             )}
             {!credentialsLoading && credentialsError && (
@@ -294,5 +267,3 @@ Please {{task}}"
     </div>
   );
 }
-
-export default PromptNodeForm;

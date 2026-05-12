@@ -34,8 +34,8 @@ const nodeTypeStyles: Record<string, { strip: string; pill: string }> = {
     pill: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   },
   [NODE_TYPES.OUTPUT]: {
-    strip: "bg-indigo-500",
-    pill: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
+    strip: "bg-sky-500",
+    pill: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
   },
   [NODE_TYPES.HUMAN_GATE]: {
     strip: "bg-orange-500",
@@ -193,12 +193,12 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
       {(hasError || hasWarning) && (
         <div
           className={cn(
-            "absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center z-30",
+            "absolute -top-2 -right-2 size-5 rounded-full flex items-center justify-center z-30",
             hasError ? "bg-destructive" : "bg-amber-500",
           )}
           title={validationMessages}
         >
-          {hasError ? <AlertCircle className="w-3 h-3 text-white" /> : <AlertTriangle className="w-3 h-3 text-white" />}
+          {hasError ? <AlertCircle className="size-3 text-white" /> : <AlertTriangle className="size-3 text-white" />}
         </div>
       )}
 
@@ -210,7 +210,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
           className="absolute top-2 right-2 z-20 flex size-11 items-center justify-center rounded-full bg-destructive text-white shadow-md transition-colors hover:bg-destructive/90 motion-reduce:transition-none md:size-6"
           aria-label="Delete step"
         >
-          <X className="w-3 h-3" />
+          <X className="size-3" />
         </button>
       )}
 
@@ -244,7 +244,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
           )}
           {executionDotClass && (
             <span
-              className={`ml-auto h-2.5 w-2.5 rounded-full ${executionDotClass}`}
+              className={`ml-auto size-2.5 rounded-full ${executionDotClass}`}
               title={`Execution: ${executionStatus}`}
               aria-hidden="true"
             />
@@ -328,7 +328,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
       {nodeType === NODE_TYPES.BRANCH ? (
         // Branch node: two outputs (True/False)
         <>
-          <div className="absolute -bottom-5 left-[30%] transform -translate-x-1/2 text-[10px] text-emerald-600 dark:text-emerald-300 font-medium">
+          <div className="absolute -bottom-5 left-[30%] transform -tranzinc-x-1/2 text-[10px] text-emerald-600 dark:text-emerald-300 font-medium">
             True
           </div>
           <Handle
@@ -339,7 +339,7 @@ function GraphNodeComponent({ id, data, selected, type }: NodeProps) {
             className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-card !z-10"
             style={{ left: "30%" }}
           />
-          <div className="absolute -bottom-5 left-[70%] transform -translate-x-1/2 text-[10px] text-rose-600 dark:text-rose-300 font-medium">
+          <div className="absolute -bottom-5 left-[70%] transform -tranzinc-x-1/2 text-[10px] text-rose-600 dark:text-rose-300 font-medium">
             False
           </div>
           <Handle

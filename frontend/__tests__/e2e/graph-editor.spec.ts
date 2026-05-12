@@ -69,8 +69,7 @@ async function connectNodes(page: Page, sourceLabel: string, targetLabel: string
   await expect(targetHandle).toBeVisible();
   await expect(targetHandle).toHaveClass(/connectionindicator/);
 
-  const from = await getCenter(sourceHandle);
-  const to = await getCenter(targetHandle);
+  const [from, to] = await Promise.all([getCenter(sourceHandle), getCenter(targetHandle)]);
 
   try {
     await sourceHandle.click();
@@ -221,14 +220,15 @@ test.describe("Graph Editor", () => {
     const searchInput = page.getByRole("textbox", { name: /search nodes/i });
 
     // Keyboard-only focus path: tab until palette search is focused.
-    for (let attempt = 0; attempt < 25; attempt += 1) {
-      if (await searchInput.evaluate((element) => element === document.activeElement)) {
-        break;
-      }
-      await page.keyboard.press("Tab");
-    }
-
-    await expect(searchInput).toBeFocused();
+    await expect
+      .poll(async () => {
+        const isFocused = await searchInput.evaluate((element) => element === document.activeElement);
+        if (!isFocused) {
+          await page.keyboard.press("Tab");
+        }
+        return isFocused;
+      })
+      .toBe(true);
 
     await page.keyboard.type("memory");
     await page.keyboard.press("Enter");

@@ -54,9 +54,7 @@ export function MergeNodeForm({ config, onChange }: NodeFormProps) {
       <AgentFields
         config={mergeConfig}
         onChange={handleAgentChange}
-        showRole={false}
-        showJobDescription={false}
-        showExamples={false}
+        visibleSections={{ role: false, jobDescription: false, examples: false }}
       />
 
       <Separator />
@@ -77,12 +75,15 @@ export function MergeNodeForm({ config, onChange }: NodeFormProps) {
           <div className="space-y-2">
             {MERGE_STRATEGIES.map((strategy) => (
               <label
+                htmlFor={`merge-strategy-${strategy.value}`}
+                aria-label={strategy.label}
                 key={strategy.value}
                 className={`flex items-start gap-3 p-3 border rounded-md cursor-pointer transition-colors ${
                   mergeConfig.merge_strategy === strategy.value ? "border-primary bg-primary/5" : "hover:bg-muted/50"
                 }`}
               >
                 <input
+                  id={`merge-strategy-${strategy.value}`}
                   type="radio"
                   name="merge-strategy"
                   value={strategy.value}
@@ -135,5 +136,3 @@ export function MergeNodeForm({ config, onChange }: NodeFormProps) {
     </div>
   );
 }
-
-export default MergeNodeForm;

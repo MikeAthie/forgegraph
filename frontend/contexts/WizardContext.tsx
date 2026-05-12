@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
+import { createContext, use, useCallback, useMemo, useReducer, type ReactNode } from "react";
 
 /**
  * Wizard step configuration
@@ -16,7 +16,7 @@ export interface WizardStepConfig {
 /**
  * Wizard state
  */
-export interface WizardState {
+interface WizardState {
   isActive: boolean;
   currentStep: number;
   totalSteps: number;
@@ -332,11 +332,9 @@ export function WizardProvider({ children }: { children: ReactNode }) {
 }
 
 export function useWizard(): WizardContextValue {
-  const context = useContext(WizardContext);
+  const context = use(WizardContext);
   if (!context) {
     throw new Error("useWizard must be used within a WizardProvider");
   }
   return context;
 }
-
-export default WizardContext;

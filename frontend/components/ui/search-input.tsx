@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
@@ -25,36 +25,47 @@ export function SearchInput({
   ...props
 }: SearchInputProps) {
   const isControlled = controlledValue !== undefined;
-  const [internalValue, setInternalValue] = useState(controlledValue ?? "");
+  const [internalValue, setInternalValue] = useState("");
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchValue = controlledValue ?? internalValue;
 
-  // Sync internal value with controlled value
   useEffect(() => {
-    if (isControlled) {
-      setInternalValue(controlledValue);
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleSearch = (nextValue: string) => {
+    if (!onSearch) {
+      return;
     }
-  }, [controlledValue, isControlled]);
 
-  // Debounce the search callback
-  useEffect(() => {
-    if (!onSearch) return;
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
 
-    const timer = setTimeout(() => {
-      onSearch(internalValue);
+    searchTimerRef.current = setTimeout(() => {
+      onSearch(nextValue);
     }, debounceMs);
-
-    return () => clearTimeout(timer);
-  }, [internalValue, onSearch, debounceMs]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setInternalValue(newValue);
-    onChange?.(newValue);
   };
 
-  const handleClear = () => {
-    setInternalValue("");
+  const updateSearchValue = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    if (!isControlled) {
+      setInternalValue(newValue);
+    }
+    onChange?.(newValue);
+    scheduleSearch(newValue);
+  };
+
+  const clearSearchValue = () => {
+    if (!isControlled) {
+      setInternalValue("");
+    }
     onChange?.("");
-    onSearch?.("");
+    scheduleSearch("");
   };
 
   return (
@@ -63,7 +74,7 @@ export function SearchInput({
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 20 20"
         fill="currentColor"
-        className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
+        className="absolute left-3 top-1/2 -tranzinc-y-1/2 size-4 text-muted-foreground pointer-events-none"
         aria-hidden="true"
       >
         <path
@@ -74,20 +85,20 @@ export function SearchInput({
       </svg>
       <Input
         type="search"
-        value={internalValue}
-        onChange={handleChange}
+        value={searchValue}
+        onChange={updateSearchValue}
         placeholder={placeholder}
         className="pl-9 pr-11"
         {...props}
       />
-      {internalValue && (
+      {searchValue && (
         <button
           type="button"
-          onClick={handleClear}
-          className="absolute right-0 top-1/2 flex size-11 -translate-y-1/2 touch-manipulation items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+          onClick={clearSearchValue}
+          className="absolute right-0 top-1/2 flex size-11 -tranzinc-y-1/2 touch-manipulation items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
           aria-label="Clear search"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
           </svg>
         </button>

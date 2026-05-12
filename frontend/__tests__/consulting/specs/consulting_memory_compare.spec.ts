@@ -224,15 +224,16 @@ function summarizeMemoryUsage(run: ConsultingRunDetail): VariantResult["memory_u
   let curatedObservationsCount = 0;
 
   for (const nodeRun of promptLikeNodeRuns) {
+    const nodeRunOutput = nodeRun.output_json?.output;
     const outputPayload =
-      nodeRun.output_json && typeof nodeRun.output_json.output === "object" && nodeRun.output_json.output
-        ? (nodeRun.output_json.output as Record<string, unknown>)
+      nodeRunOutput && typeof nodeRunOutput === "object"
+        ? (nodeRunOutput as Record<string, unknown>)
         : (nodeRun.output_json ?? {});
     const rawPrompt = typeof outputPayload.prompt === "string" ? outputPayload.prompt : "";
-    const hasRecentMessages = rawPrompt.includes("Recent messages:");
-    const hasRelevantMemories = rawPrompt.includes("Relevant memories:");
-    const hasSummary = rawPrompt.includes("Summary of earlier conversation:");
-    const hasCuratedObservations = rawPrompt.includes("Curated observations:");
+    const hasRecentMessages = rawPrompt.split("Recent messages:").length > 1;
+    const hasRelevantMemories = rawPrompt.split("Relevant memories:").length > 1;
+    const hasSummary = rawPrompt.split("Summary of earlier conversation:").length > 1;
+    const hasCuratedObservations = rawPrompt.split("Curated observations:").length > 1;
 
     if (hasRecentMessages || hasRelevantMemories || hasSummary || hasCuratedObservations) {
       promptNodesWithAugmentedPrompt.push(nodeRun.node_id);
@@ -322,18 +323,20 @@ async function executeVariant(
     unrelated: [],
   };
 
-  for (const seed of seedObservations) {
-    const memoryId = await createMemoryObservation(request, accessToken, graphId, seed);
-    seededMemoryIds[seed.kind].push(memoryId);
-  }
+  const createdMemories = await Promise.all(
+    seedObservations.map(async (seed) => ({
+      kind: seed.kind,
+      id: await createMemoryObservation(request, accessToken, graphId, seed),
+    })),
+  );
+  createdMemories.forEach((memory) => seededMemoryIds[memory.kind].push(memory.id));
 
   const runId = await createRun(request, accessToken, graphVersionId, consultingInput);
   const run = await pollRunDetail(request, accessToken, runId);
 
   const state = (run.output_json ?? {}) as ConsultingExecutionState;
   const structure = evaluateStructure(state);
-  const score = await evaluateReasoning(state);
-  const weaknesses = await evaluateWeaknesses(state);
+  const [score, weaknesses] = await Promise.all([evaluateReasoning(state), evaluateWeaknesses(state)]);
   const memoryUsage = summarizeMemoryUsage(run);
 
   return {
@@ -403,30 +406,31 @@ test.describe("Consulting Memory Comparison", () => {
       },
     };
 
-    const enabled = await executeVariant(
-      request,
-      accessToken,
-      "memory-enabled",
-      {
-        buffer_enabled: true,
-        auto_prepend: true,
-        vector_enabled: true,
-      },
-      buildConsultingGraph({ memoryWorkflow: true }),
-      [relevantSeedObservation, unrelatedSeedObservation],
-    );
-
-    const disabled = await executeVariant(
-      request,
-      accessToken,
-      "memory-disabled",
-      {
-        buffer_enabled: false,
-        auto_prepend: false,
-        vector_enabled: false,
-      },
-      buildConsultingGraph({ memoryWorkflow: false }),
-    );
+    const [enabled, disabled] = await Promise.all([
+      executeVariant(
+        request,
+        accessToken,
+        "memory-enabled",
+        {
+          buffer_enabled: true,
+          auto_prepend: true,
+          vector_enabled: true,
+        },
+        buildConsultingGraph({ memoryWorkflow: true }),
+        [relevantSeedObservation, unrelatedSeedObservation],
+      ),
+      executeVariant(
+        request,
+        accessToken,
+        "memory-disabled",
+        {
+          buffer_enabled: false,
+          auto_prepend: false,
+          vector_enabled: false,
+        },
+        buildConsultingGraph({ memoryWorkflow: false }),
+      ),
+    ]);
 
     expect(enabled.status).toBe("succeeded");
     expect(disabled.status).toBe("succeeded");

@@ -260,17 +260,19 @@ test.describe("Consulting SaaS Experiment", () => {
     await ensureUserRegistered(request, user);
     const accessToken = await getAccessToken(request, user);
 
-    const results: CaseEvaluationRecord[] = [];
-    const allRunIds: string[] = [];
-
-    for (const consultingCase of CONSULTING_CASE_PACK_V2) {
+    const caseResults = await Promise.all(
+      CONSULTING_CASE_PACK_V2.map(async (consultingCase) => {
       const executionInput = buildConsultingExecutionInput(consultingCase);
       const graphId = await createGraph(request, accessToken, consultingCase);
       const graphVersion = await createGraphVersion(request, accessToken, graphId);
       const graphVersionId = graphVersion.id;
+      const baselineStatePromise = runBaseline(executionInput);
       const runId = await createRun(request, accessToken, graphVersionId, executionInput);
-      const run = await pollRunDetail(request, accessToken, runId);
-      const persistedGraphVersion = await fetchGraphVersion(request, accessToken, graphId, graphVersionId);
+      const [run, persistedGraphVersion, baselineState] = await Promise.all([
+        pollRunDetail(request, accessToken, runId),
+        fetchGraphVersion(request, accessToken, graphId, graphVersionId),
+        baselineStatePromise,
+      ]);
 
       if (run.status !== "succeeded") {
         console.error(
@@ -294,7 +296,6 @@ test.describe("Consulting SaaS Experiment", () => {
       const forgegraphStructure = evaluateStructure(forgegraphState);
       const forgegraphEvaluation = evaluateReadiness(forgegraphState, consultingCase.hidden_benchmark);
 
-      const baselineState = await runBaseline(executionInput);
       const baselineStructure = evaluateStructure(baselineState);
       const baselineEvaluation = evaluateReadiness(baselineState, consultingCase.hidden_benchmark);
 
@@ -310,32 +311,36 @@ test.describe("Consulting SaaS Experiment", () => {
       expect(run.status_history.at(-1)).toBe("succeeded");
       expect(persistedGraphVersion.graph_json).toEqual(graphVersion.graphJson);
 
-      results.push({
-        case_id: consultingCase.case_id,
-        forgegraph: {
-          run_id: run.id,
-          graph_id: graphId,
-          graph_version_id: graphVersionId,
-          status: run.status,
-          output: forgegraphState,
-          structure: forgegraphStructure,
-          evaluation: forgegraphEvaluation,
-        },
-        baseline: {
-          output: baselineState,
-          structure: baselineStructure,
-          evaluation: baselineEvaluation,
-        },
-        evaluation: {
-          forgegraph: forgegraphEvaluation,
-          baseline: baselineEvaluation,
-          pairwise,
-        },
-        winner: pairwise.winner,
-      });
-
-      allRunIds.push(run.id);
-    }
+        return {
+          runId: run.id,
+          result: {
+            case_id: consultingCase.case_id,
+            forgegraph: {
+              run_id: run.id,
+              graph_id: graphId,
+              graph_version_id: graphVersionId,
+              status: run.status,
+              output: forgegraphState,
+              structure: forgegraphStructure,
+              evaluation: forgegraphEvaluation,
+            },
+            baseline: {
+              output: baselineState,
+              structure: baselineStructure,
+              evaluation: baselineEvaluation,
+            },
+            evaluation: {
+              forgegraph: forgegraphEvaluation,
+              baseline: baselineEvaluation,
+              pairwise,
+            },
+            winner: pairwise.winner,
+          } satisfies CaseEvaluationRecord,
+        };
+      }),
+    );
+    const results = caseResults.map((caseResult) => caseResult.result);
+    const allRunIds = caseResults.map((caseResult) => caseResult.runId);
 
     const forgegraphCorrectDirectionCount = results.filter((result) =>
       hasCorrectDirection(result.evaluation.forgegraph),

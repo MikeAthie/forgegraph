@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import dynamic from "next/dynamic";
@@ -20,36 +20,93 @@ const GraphEditor = dynamic(() => import("../../components/graph-editor/GraphEdi
   ),
 });
 
+type GraphDetailState = {
+  graph: GraphDetail | null;
+  activeVersion: GraphVersion | null;
+  loading: boolean;
+  error: string | null;
+  saving: boolean;
+  loadingVersion: boolean;
+};
+
+type GraphDetailAction =
+  | { type: "load-start" }
+  | { type: "load-missing" }
+  | { type: "load-success"; graph: GraphDetail; activeVersion: GraphVersion | null }
+  | { type: "load-error"; error: string }
+  | { type: "save-start" }
+  | { type: "save-success"; version: GraphVersion; graph: GraphDetail }
+  | { type: "save-end" }
+  | { type: "version-load-start" }
+  | { type: "version-load-success"; version: GraphVersion }
+  | { type: "version-load-end" }
+  | { type: "metadata-success"; name: string; description: string };
+
+const initialGraphDetailState: GraphDetailState = {
+  graph: null,
+  activeVersion: null,
+  loading: true,
+  error: null,
+  saving: false,
+  loadingVersion: false,
+};
+
+function graphDetailReducer(state: GraphDetailState, action: GraphDetailAction): GraphDetailState {
+  switch (action.type) {
+    case "load-start":
+      return { ...state, loading: true, error: null };
+    case "load-missing":
+      return { ...state, graph: null, activeVersion: null, loading: false, error: "Missing operating model id." };
+    case "load-success":
+      return { ...state, graph: action.graph, activeVersion: action.activeVersion, loading: false, error: null };
+    case "load-error":
+      return { ...state, loading: false, error: action.error };
+    case "save-start":
+      return { ...state, saving: true };
+    case "save-success":
+      return { ...state, graph: action.graph, activeVersion: action.version };
+    case "save-end":
+      return { ...state, saving: false };
+    case "version-load-start":
+      return { ...state, loadingVersion: true };
+    case "version-load-success":
+      return { ...state, activeVersion: action.version };
+    case "version-load-end":
+      return { ...state, loadingVersion: false };
+    case "metadata-success":
+      return state.graph
+        ? { ...state, graph: { ...state.graph, name: action.name, description: action.description } }
+        : state;
+    default:
+      return state;
+  }
+}
+
 export default function GraphDetailPage() {
   const router = useRouter();
   const graphIdParam = router.query.graphId ?? router.query.workflowId;
   const graphId = Array.isArray(graphIdParam) ? graphIdParam[0] : graphIdParam;
 
-  const [graph, setGraph] = useState<GraphDetail | null>(null);
-  const [activeVersion, setActiveVersion] = useState<GraphVersion | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [loadingVersion, setLoadingVersion] = useState(false);
+  const [{ graph, activeVersion, loading, error, saving, loadingVersion }, dispatchGraph] = useReducer(
+    graphDetailReducer,
+    initialGraphDetailState,
+  );
 
   const loadGraph = useCallback(async () => {
     if (!graphId) {
-      setGraph(null);
-      setError("Missing operating model id.");
-      setLoading(false);
+      dispatchGraph({ type: "load-missing" });
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    dispatchGraph({ type: "load-start" });
     try {
       const [graphData, versionData] = await Promise.all([graphsApi.get(graphId), graphsApi.getLatestVersion(graphId)]);
-      setGraph(graphData);
-      setActiveVersion(versionData);
+      dispatchGraph({ type: "load-success", graph: graphData, activeVersion: versionData });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load the advanced operating model."));
-    } finally {
-      setLoading(false);
+      dispatchGraph({
+        type: "load-error",
+        error: getApiErrorMessage(err, "Failed to load the advanced operating model."),
+      });
     }
   }, [graphId]);
 
@@ -64,38 +121,19 @@ export default function GraphDetailPage() {
     async (graphJson: GraphJson) => {
       if (!graphId) return;
 
-      setSaving(true);
+      dispatchGraph({ type: "save-start" });
       try {
         const newVersion = await graphsApi.createVersion(graphId, {
           graph_json: graphJson,
         });
-        setActiveVersion(newVersion);
-        setGraph((prev) => {
-          if (!prev) return prev;
-          const exists = prev.versions.some((v) => v.id === newVersion.id);
-          if (exists) return prev;
-          return {
-            ...prev,
-            versions: [
-              ...prev.versions,
-              {
-                id: newVersion.id,
-                version: newVersion.version,
-                checksum: newVersion.checksum,
-                created_at: newVersion.created_at,
-              },
-            ],
-          };
-        });
         showSuccess(`Saved as version ${newVersion.version}`);
-        // Refresh graph data to update version list
         const updatedGraph = await graphsApi.get(graphId);
-        setGraph(updatedGraph);
+        dispatchGraph({ type: "save-success", version: newVersion, graph: updatedGraph });
       } catch (err: unknown) {
         showError("Save failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
         throw err;
       } finally {
-        setSaving(false);
+        dispatchGraph({ type: "save-end" });
       }
     },
     [graphId],
@@ -105,15 +143,15 @@ export default function GraphDetailPage() {
     async (versionId: string) => {
       if (!graphId) return;
 
-      setLoadingVersion(true);
+      dispatchGraph({ type: "version-load-start" });
       try {
         const version = await graphsApi.getVersion(graphId, versionId);
-        setActiveVersion(version);
+        dispatchGraph({ type: "version-load-success", version });
       } catch (err: unknown) {
         showError("Load failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.load));
         throw err;
       } finally {
-        setLoadingVersion(false);
+        dispatchGraph({ type: "version-load-end" });
       }
     },
     [graphId],
@@ -125,7 +163,7 @@ export default function GraphDetailPage() {
 
       try {
         const updated = await graphsApi.update(graphId, { name, description });
-        setGraph((prev) => (prev ? { ...prev, name: updated.name, description: updated.description } : null));
+        dispatchGraph({ type: "metadata-success", name: updated.name, description: updated.description });
         showSuccess("Operating model info updated");
       } catch (err: unknown) {
         showError("Update failed", getApiErrorMessage(err, ERROR_FALLBACKS.graph.update));
@@ -140,7 +178,7 @@ export default function GraphDetailPage() {
       <ProtectedRoute>
         <div className="h-screen flex flex-col bg-background">
           <div className="flex-1 flex items-center justify-center">
-            <div className="flex items-center space-x-3 text-muted-foreground">
+            <div className="flex items-center gap-x-3 text-muted-foreground">
               <Spinner size="md" />
               <span className="text-sm">Loading advanced operating model</span>
             </div>

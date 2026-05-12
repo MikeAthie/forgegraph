@@ -677,6 +677,13 @@ def _load_content_value(asset_version: AssetVersion) -> Any:
         node_run = NodeRun.objects.get(id=node_match.group(1), run__graph_version__graph=company)
         payload = node_run.output_json if isinstance(node_run.output_json, dict) else {}
         return payload.get(node_match.group(2))
+    inline_match = re.fullmatch(r"forgegraph://assets/([^/]+)/inline", uri)
+    if inline_match and str(asset_version.id) == inline_match.group(1):
+        provenance = (
+            asset_version.provenance_json if isinstance(asset_version.provenance_json, dict) else {}
+        )
+        if "inline_content" in provenance:
+            return provenance["inline_content"]
     return None
 
 

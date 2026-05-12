@@ -26,6 +26,7 @@ const FORCE_GEMINI_TEXT_LIMIT = process.env.PLAYWRIGHT_LEGACY_FORCE_GEMINI_TEXT_
 const AUTONOMY_TEXT_MAX_TOKENS = Number(process.env.PLAYWRIGHT_LEGACY_AUTONOMY_TEXT_MAX_TOKENS ?? 8192);
 const JUDGE_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LEGACY_JUDGE_TIMEOUT_MS ?? 120_000);
 const JUDGE_MAX_TOKENS = Number(process.env.PLAYWRIGHT_LEGACY_JUDGE_MAX_TOKENS ?? 1800);
+const PUBLICATION_CHANNELS = new Set(["instagram", "facebook"]);
 
 const LIMIT_SIGNATURES = [
   "429",
@@ -234,7 +235,12 @@ function normalizeText(value: unknown): string {
 }
 
 function stringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const trimmed = String(item ?? "").trim();
+      return trimmed ? [trimmed] : [];
+    });
+  }
   if (typeof value === "string" && value.trim()) return [value.trim()];
   return [];
 }
@@ -253,16 +259,14 @@ function buildProductVisualContext(product: InventoryOverview["products"][number
   const priceMxn = String(product.price_mxn ?? "").trim();
   const priceLabel = mxnPriceLabel(priceMxn);
   const visualDescription = String(product.visual_description ?? "").trim();
-  const visualTraits = Array.isArray(product.visual_traits)
-    ? product.visual_traits.map((item) => String(item ?? "").trim()).filter(Boolean)
-    : [];
+  const visualTraits = stringArray(product.visual_traits);
   const knownVisualTraits = [
     color ? `frame color from inventory: ${color}` : "frame color is not available",
     photoUrl ? `product reference image: ${photoUrl}` : "no product photo_url or reference image is available",
     visualDescription ? `catalog visual description: ${visualDescription}` : "",
     ...visualTraits.map((trait) => `catalog visual trait: ${trait}`),
     "commercial model names and SKUs are labels, not visual descriptions of frame geometry",
-  ].filter(Boolean);
+  ].flatMap((item) => (item ? [item] : []));
 
   return {
     sku: product.sku,
@@ -319,10 +323,9 @@ function parsePossiblyFencedJson(value: unknown): Record<string, unknown> | null
       }
       return null;
     } catch {
-      const firstBrace = text.indexOf("{");
-      const lastBrace = text.lastIndexOf("}");
-      if (firstBrace < 0 || lastBrace <= firstBrace) return null;
-      text = text.slice(firstBrace, lastBrace + 1);
+      const objectMatch = text.match(/\{[\s\S]*\}/);
+      if (!objectMatch) return null;
+      text = objectMatch[0];
     }
   }
   return null;
@@ -1004,7 +1007,6 @@ async function createPublicationDrafts(
   idempotencyScope: string,
 ): Promise<PublicationDraft[]> {
   const packages = Array.isArray(output.contentPlan.post_packages) ? output.contentPlan.post_packages : [];
-  const drafts: PublicationDraft[] = [];
   const fallbackChannels = selectedChannels(output.strategy);
   const packageRecords = packages.filter(isRecord);
   const selectedPackages =
@@ -1019,36 +1021,41 @@ async function createPublicationDrafts(
           approval_required: true,
         }));
 
-  for (const [index, postPackage] of selectedPackages.entries()) {
-    const channel = normalizeText(postPackage.channel);
-    if (!["instagram", "facebook"].includes(channel)) continue;
-    const draft = await apiPost<{ publication_draft: PublicationDraft }>(
-      request,
-      accessToken,
-      "/api/company-ops/publication-drafts",
-      {
-        company_id: companyId,
-        title: `Legacy Phase 7 ${channel} draft ${index + 1}`,
-        channel,
-        audience: String(output.strategy.audience ?? "Legacy Glasswear audience"),
-        body: String(postPackage.caption ?? ""),
-        call_to_action: String(postPackage.cta ?? "Hold for approval before publishing."),
-        asset_id: mediaJob.output_asset_id,
-        asset_version_id: mediaJob.output_asset_version_id,
-        media_job_id: mediaJob.id,
-      },
-      `${idempotencyScope}:publication:${channel}:${index}`,
-    );
-    const approval = await apiPost<{ publication_draft: PublicationDraft }>(
-      request,
-      accessToken,
-      `/api/company-ops/publication-drafts/${draft.publication_draft.id}/request-approval`,
-      { note: "Legacy Phase 7 approval gate: no public posting." },
-      `${idempotencyScope}:publication-approval:${draft.publication_draft.id}`,
-    );
-    drafts.push(approval.publication_draft);
-  }
-  return drafts;
+  return Promise.all(
+    selectedPackages.flatMap((postPackage, index) => {
+      const channel = normalizeText(postPackage.channel);
+      if (!PUBLICATION_CHANNELS.has(channel)) {
+        return [];
+      }
+      return [
+        apiPost<{ publication_draft: PublicationDraft }>(
+          request,
+          accessToken,
+          "/api/company-ops/publication-drafts",
+          {
+            company_id: companyId,
+            title: `Legacy Phase 7 ${channel} draft ${index + 1}`,
+            channel,
+            audience: String(output.strategy.audience ?? "Legacy Glasswear audience"),
+            body: String(postPackage.caption ?? ""),
+            call_to_action: String(postPackage.cta ?? "Hold for approval before publishing."),
+            asset_id: mediaJob.output_asset_id,
+            asset_version_id: mediaJob.output_asset_version_id,
+            media_job_id: mediaJob.id,
+          },
+          `${idempotencyScope}:publication:${channel}:${index}`,
+        ).then((draft) =>
+          apiPost<{ publication_draft: PublicationDraft }>(
+            request,
+            accessToken,
+            `/api/company-ops/publication-drafts/${draft.publication_draft.id}/request-approval`,
+            { note: "Legacy Phase 7 approval gate: no public posting." },
+            `${idempotencyScope}:publication-approval:${draft.publication_draft.id}`,
+          ),
+        ),
+      ];
+    }),
+  ).then((approvals) => approvals.map((approval) => approval.publication_draft));
 }
 
 function assertAutonomyOutput(output: AutonomyOutput): void {

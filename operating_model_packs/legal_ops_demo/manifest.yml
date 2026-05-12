@@ -1,0 +1,11 @@
+pack_id: legal_ops_demo.v1
+base_pack_id: legal_ops_demo
+version: "0.1.0"
+display_name: Legal Ops Demo
+description: Minimal non-marketing fixture pack proving generic pack support.
+company_type_label: Legal Operations
+checksum: auto
+compatibility:
+  forgegraph_min: "0.1.0"
+  schema: operating_model_pack.v1
+files: {}

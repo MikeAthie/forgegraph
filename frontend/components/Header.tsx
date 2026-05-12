@@ -20,6 +20,7 @@ import {
 
 export default function Header() {
   const router = useRouter();
+  const { push } = router;
   const { user, isAuthenticated, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
@@ -106,7 +107,7 @@ export default function Header() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" aria-label="Open navigation">
-                      <Menu aria-hidden="true" className="h-5 w-5" />
+                      <Menu aria-hidden="true" className="size-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-44">
@@ -115,7 +116,7 @@ export default function Header() {
                         key={item.href}
                         onSelect={(event) => {
                           event.preventDefault();
-                          void router.push(item.href);
+                          void push(item.href);
                         }}
                         className={activeHref === item.href ? "bg-accent cursor-pointer" : "cursor-pointer"}
                         aria-current={activeHref === item.href ? "page" : undefined}
@@ -144,7 +145,7 @@ export default function Header() {
             </Link>
 
             {isAuthenticated && (
-              <div className="hidden sm:ml-8 sm:flex sm:space-x-1">
+              <div className="hidden sm:ml-8 sm:flex sm:gap-x-1">
                 {navItems.map((item) => (
                   <Button key={item.href} variant={activeHref === item.href ? "secondary" : "ghost"} asChild>
                     <Link
@@ -197,7 +198,7 @@ export default function Header() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
+                    <div className="flex flex-col gap-y-1">
                       <p className="text-sm font-medium">Account</p>
                       <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                       {user?.organization_role && (
@@ -209,7 +210,7 @@ export default function Header() {
                   <DropdownMenuItem
                     onSelect={(event) => {
                       event.preventDefault();
-                      void router.push("/admin");
+                      void push("/admin");
                     }}
                     className="cursor-pointer"
                   >
@@ -218,7 +219,7 @@ export default function Header() {
                   <DropdownMenuItem
                     onSelect={(event) => {
                       event.preventDefault();
-                      void router.push("/workflows");
+                      void push("/workflows");
                     }}
                     className="cursor-pointer"
                   >
@@ -228,7 +229,7 @@ export default function Header() {
                     <DropdownMenuItem
                       onSelect={(event) => {
                         event.preventDefault();
-                        void router.push("/admin/marketplace");
+                        void push("/admin/marketplace");
                       }}
                       className="cursor-pointer"
                     >
@@ -239,7 +240,7 @@ export default function Header() {
                     <DropdownMenuItem
                       onSelect={(event) => {
                         event.preventDefault();
-                        void router.push("/admin/sso");
+                        void push("/admin/sso");
                       }}
                       className="cursor-pointer"
                     >
@@ -250,7 +251,7 @@ export default function Header() {
                     <DropdownMenuItem
                       onSelect={(event) => {
                         event.preventDefault();
-                        void router.push("/admin/billing");
+                        void push("/admin/billing");
                       }}
                       className="cursor-pointer"
                     >
@@ -261,7 +262,7 @@ export default function Header() {
                     <DropdownMenuItem
                       onSelect={(event) => {
                         event.preventDefault();
-                        void router.push("/admin/audit-logs");
+                        void push("/admin/audit-logs");
                       }}
                       className="cursor-pointer"
                     >
@@ -290,7 +291,7 @@ export default function Header() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Button variant="ghost" asChild>
                   <Link href="/login">Sign in</Link>
                 </Button>

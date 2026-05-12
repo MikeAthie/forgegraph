@@ -31,20 +31,20 @@ export function EventSpoolPanel({ spool, runtime }: EventSpoolPanelProps) {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
-            <RadioTower className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+            <RadioTower className="size-4" />
             Recent domain events
           </div>
           <div className="space-y-2">
             {(spool?.domain_events.recent ?? []).slice(0, 6).map((event) => (
               <div
                 key={event.id}
-                className="rounded-[1.1rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8"
+                className="rounded-[1.1rem] border border-zinc-900/8 bg-[var(--panel-muted)] px-4 py-3 dark:border-white/8"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-950 dark:text-slate-50">{event.event_type}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="truncate text-sm font-medium text-zinc-950 dark:text-zinc-50">{event.event_type}</p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                       seq {event.sequence.toLocaleString()} · {formatDateTime(event.occurred_at)}
                     </p>
                   </div>
@@ -56,7 +56,7 @@ export function EventSpoolPanel({ spool, runtime }: EventSpoolPanelProps) {
         </div>
 
         <div className="space-y-2">
-          <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Runtime intent transport</div>
+          <div className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Runtime intent transport</div>
           <KeyValueGrid
             columns={2}
             items={[

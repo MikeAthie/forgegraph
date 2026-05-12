@@ -37,9 +37,7 @@ export function OutputNodeForm({ config, onChange }: NodeFormProps) {
       <AgentFields
         config={outputConfig}
         onChange={handleAgentChange}
-        showRole={false}
-        showJobDescription={false}
-        showExamples={false}
+        visibleSections={{ role: false, jobDescription: false, examples: false }}
       />
 
       <Separator />
@@ -80,5 +78,3 @@ export function OutputNodeForm({ config, onChange }: NodeFormProps) {
     </div>
   );
 }
-
-export default OutputNodeForm;

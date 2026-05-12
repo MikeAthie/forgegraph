@@ -11,7 +11,7 @@ import { DataType } from "./data-types";
 /**
  * A single input or output port on a node
  */
-export interface NodePort {
+interface NodePort {
   name: string;
   type: DataType;
   required?: boolean;

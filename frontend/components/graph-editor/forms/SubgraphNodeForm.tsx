@@ -47,7 +47,7 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
   return (
     <div className="space-y-6">
       {/* Agent Context */}
-      <AgentFields config={subgraphConfig} onChange={handleAgentChange} showExamples={false} />
+      <AgentFields config={subgraphConfig} onChange={handleAgentChange} visibleSections={{ examples: false }} />
 
       <Separator />
 
@@ -77,7 +77,7 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
                   rel="noopener noreferrer"
                   className="flex items-center justify-center px-3 border rounded-md hover:bg-muted transition-colors"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="size-4" />
                 </a>
               )}
             </div>
@@ -146,5 +146,3 @@ export function SubgraphNodeForm({ config, onChange }: NodeFormProps) {
     </div>
   );
 }
-
-export default SubgraphNodeForm;

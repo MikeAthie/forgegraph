@@ -53,8 +53,10 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
     (value: string) => {
       const emails = value
         .split(",")
-        .map((e) => e.trim())
-        .filter(Boolean);
+        .flatMap((email) => {
+          const trimmed = email.trim();
+          return trimmed ? [trimmed] : [];
+        });
       handleChange("notify_emails", emails);
     },
     [handleChange],
@@ -63,7 +65,11 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Human Gate */}
-      <AgentFields config={gateConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
+      <AgentFields
+        config={gateConfig}
+        onChange={handleAgentChange}
+        visibleSections={{ role: false, examples: false }}
+      />
 
       <Separator />
 
@@ -176,7 +182,7 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
 
         {gateConfig.auto_approve_after_timeout && (
           <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-600 dark:text-amber-400">
-            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="size-4 mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-medium">Auto-approval warning</p>
               <p className="mt-1">
@@ -195,5 +201,3 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
     </div>
   );
 }
-
-export default HumanGateNodeForm;

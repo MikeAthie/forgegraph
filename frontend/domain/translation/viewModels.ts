@@ -102,7 +102,7 @@ export type TaskVM = {
   judge?: TaskJudgeVM | null;
 };
 
-export type TaskJudgeVM = {
+type TaskJudgeVM = {
   id: string;
   title: string;
   criteriaCount: number;
@@ -187,6 +187,7 @@ export type CompanyCreateInputVM = {
   operationBrief: string;
   launchFirstOperation: boolean;
   byokApiKey?: string;
+  operatingModelPackId?: string;
 };
 
 export type CompanyUpdateInputVM = {
@@ -232,7 +233,7 @@ export type DepartmentBlockerVM = {
   operation: OperationRefVM | null;
 };
 
-export type DepartmentFocusVM = {
+type DepartmentFocusVM = {
   objective: string;
   reasoning: string;
 };
@@ -247,14 +248,14 @@ export type DepartmentActivityVM = {
   approvals: ApprovalVM[];
 };
 
-export type CostBreakdownVM = {
+type CostBreakdownVM = {
   id: string;
   label: string;
   totalCostUsd: number;
   entryCount: number;
 };
 
-export type DepartmentCostVM = {
+type DepartmentCostVM = {
   id: string;
   displayName: string;
   status: string;

@@ -21,5 +21,3 @@ export function WizardStep({ title, description, children, className }: WizardSt
     </div>
   );
 }
-
-export default WizardStep;

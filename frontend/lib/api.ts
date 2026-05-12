@@ -22,7 +22,7 @@ export interface WebSocketTicketResponse {
   org_id?: string;
 }
 
-export type ApiMeta = {
+type ApiMeta = {
   requestId: string;
   timestamp: string;
   pagination?: {
@@ -40,13 +40,13 @@ export type ApiSuccessResponse<T> = {
   meta: ApiMeta;
 };
 
-export type ApiErrorDetail = {
+type ApiErrorDetail = {
   field?: string;
   issue?: string;
   [key: string]: unknown;
 };
 
-export type ApiErrorResponse = {
+type ApiErrorResponse = {
   error: {
     code: string;
     message: string;
@@ -175,6 +175,47 @@ const API_PATHS = {
     operations: "/api/company-ops/operations",
     operationObjectiveEvaluation: (operationId: string) =>
       `/api/company-ops/operations/${operationId}/objective-evaluation`,
+  },
+  operatingModels: {
+    packs: "/api/operating-model-packs",
+    pack: (packId: string) => `/api/operating-model-packs/${packId}`,
+    compilePack: (packId: string) => `/api/operating-model-packs/${packId}/compile`,
+    companyOperatingModel: (companyId: string) => `/api/companies/${companyId}/operating-model`,
+    installPack: (companyId: string, packId: string) =>
+      `/api/companies/${companyId}/operating-model/packs/${packId}/install`,
+    upgradePack: (companyId: string, packId: string) =>
+      `/api/companies/${companyId}/operating-model/packs/${packId}/upgrade`,
+    removePack: (companyId: string, packId: string) => `/api/companies/${companyId}/operating-model/packs/${packId}`,
+    programs: (companyId: string) => `/api/companies/${companyId}/programs`,
+    program: (programId: string) => `/api/programs/${programId}`,
+    advanceStage: (programId: string, stageId: string) => `/api/programs/${programId}/stages/${stageId}/advance`,
+    launchStageOperation: (programId: string, stageId: string) =>
+      `/api/programs/${programId}/stages/${stageId}/operations/launch`,
+    generateStageOutputs: (programId: string, stageId: string) =>
+      `/api/programs/${programId}/stages/${stageId}/outputs/generate`,
+    validationPacket: (programId: string) => `/api/programs/${programId}/validation-packet`,
+    assertions: "/api/assertions",
+    validationDecisions: "/api/validation-decisions",
+    workArtifacts: "/api/work-artifacts",
+    workArtifact: (artifactId: string) => `/api/work-artifacts/${artifactId}`,
+    artifactRevisions: (artifactId: string) => `/api/work-artifacts/${artifactId}/revisions`,
+    artifactLineage: (artifactId: string) => `/api/work-artifacts/${artifactId}/lineage`,
+    canonicalRevision: (artifactId: string) => `/api/work-artifacts/${artifactId}/canonical-revision`,
+    runEvaluation: "/api/evaluations/run",
+    evaluation: (evaluationId: string) => `/api/evaluations/${evaluationId}`,
+    periodicReviews: "/api/periodic-reviews",
+    runPeriodicReview: (reviewId: string) => `/api/periodic-reviews/${reviewId}/run`,
+    metricSnapshots: "/api/metric-snapshots",
+    reportRuns: "/api/report-runs",
+    policyEvaluations: "/api/policy-evaluations",
+    toolExecutions: "/api/tool-executions",
+    reworkPlans: "/api/rework-plans",
+    executeReworkPlan: (planId: string) => `/api/rework-plans/${planId}/execute`,
+    stateProjections: "/api/state-projections",
+  },
+  companyBlueprints: {
+    compile: "/api/company-blueprints/compile",
+    createCompany: "/api/companies/from-blueprint",
   },
   storefront: {
     products: (companySlug: string) => `/api/storefront/${companySlug}/products`,
@@ -385,7 +426,7 @@ export const getAccessToken = (): string | null => {
   return accessToken;
 };
 
-export const setAccessToken = (token: string | null): void => {
+const setAccessToken = (token: string | null): void => {
   accessToken = token;
   if (typeof window !== "undefined") {
     (window as Window & { [E2E_ACCESS_TOKEN_KEY]?: string | null })[E2E_ACCESS_TOKEN_KEY] = token;
@@ -796,7 +837,7 @@ export type MetricsSummary = {
   generated_at: string;
 };
 
-export type SreObjective = {
+type SreObjective = {
   id: string;
   title: string;
   target: number;
@@ -810,7 +851,7 @@ export type SreObjective = {
   description?: string;
 };
 
-export type SreDashboardPanel = {
+type SreDashboardPanel = {
   id: string;
   title: string;
   value: unknown;
@@ -818,7 +859,7 @@ export type SreDashboardPanel = {
   missing_data: boolean;
 };
 
-export type SreAlert = {
+type SreAlert = {
   id: string;
   title: string;
   state: "ok" | "active" | "no_data";
@@ -956,7 +997,7 @@ export const graphsApi = {
   },
 };
 
-export type InventorySummary = {
+type InventorySummary = {
   total_units: number;
   available_units: number;
   held_units: number;
@@ -968,7 +1009,7 @@ export type InventorySummary = {
   active_holds: number;
 };
 
-export type StockStateSummary = {
+type StockStateSummary = {
   active_count: number;
   low_stock_count: number;
   last_piece_count: number;
@@ -1021,7 +1062,7 @@ export type InventoryOrderShell = {
   updated_at: string;
 };
 
-export type CommercePayment = {
+type CommercePayment = {
   id: string;
   company_id?: string;
   reservation_id?: string;
@@ -1062,7 +1103,7 @@ export type InventoryReservation = {
   updated_at: string;
 };
 
-export type InventoryEvent = {
+type InventoryEvent = {
   id: string;
   company_id: string;
   product_id: string | null;
@@ -1848,7 +1889,7 @@ export const storefrontApi = {
 
 export type PromptCategory = "research" | "summarization" | "email" | "extraction" | "reasoning" | "other";
 
-export type PromptVisibility = "private" | "public";
+type PromptVisibility = "private" | "public";
 
 export interface PromptListItem {
   id: string;
@@ -1978,7 +2019,7 @@ export type GraphTemplate = {
   run_success_rate?: number | null;
 };
 
-export type TemplateCloneInput = {
+type TemplateCloneInput = {
   name?: string;
   description?: string;
   provider?: string;
@@ -1986,14 +2027,14 @@ export type TemplateCloneInput = {
   credential_id?: string;
 };
 
-export type TemplateCloneResult = {
+type TemplateCloneResult = {
   graph_id: string;
   graph_version_id: string;
   graph_name: string;
   template_id: string;
 };
 
-export type MarketplaceRelease = {
+type MarketplaceRelease = {
   id: string;
   version: string;
   changelog: string;
@@ -2033,7 +2074,7 @@ export type MarketplacePackage = {
   } | null;
 };
 
-export type MarketplaceRuntimeManifestPackage = {
+type MarketplaceRuntimeManifestPackage = {
   package_slug: string;
   package_name: string;
   release_id: string;
@@ -2046,7 +2087,7 @@ export type MarketplaceRuntimeManifestPackage = {
   manifest_checksum: string | null;
 };
 
-export type MarketplaceRuntimeManifestTool = {
+type MarketplaceRuntimeManifestTool = {
   name: string;
   version?: string;
   kind: string;
@@ -2171,7 +2212,7 @@ export interface SsoProviderConfig {
   status: IdentityStatus;
 }
 
-export interface IdentityStatus {
+interface IdentityStatus {
   state: "configured" | "partial" | "unavailable";
   message: string;
 }
@@ -2246,7 +2287,7 @@ export const integrationsApi = {
   },
 };
 
-export const templatesApi = {
+const templatesApi = {
   list: async (): Promise<GraphTemplate[]> => {
     const response = await api.get<ApiSuccessResponse<GraphTemplate[]>>(API_PATHS.templates.list);
     return response.data.data;
@@ -2349,9 +2390,9 @@ export const onboardingApi = {
   },
 };
 
-export type PMAction = "EXECUTE" | "ASK_CLARIFICATION" | "ASSUME_AND_CONTINUE" | "BLOCK";
+type PMAction = "EXECUTE" | "ASK_CLARIFICATION" | "ASSUME_AND_CONTINUE" | "BLOCK";
 
-export type InteractionEventType =
+type InteractionEventType =
   | "CREATE"
   | "MODIFY"
   | "CLARIFY"
@@ -2360,14 +2401,14 @@ export type InteractionEventType =
   | "APPROVE"
   | "OVERRIDE";
 
-export type PriorityFrame = {
+type PriorityFrame = {
   speed: number;
   cost: number;
   quality: number;
   risk: number;
 };
 
-export type OperatingBriefAssumption = {
+type OperatingBriefAssumption = {
   field: string;
   value: unknown;
   confidence: number;
@@ -2399,7 +2440,7 @@ export type OperatingBrief = {
   updated_at: string | null;
 };
 
-export type InteractionEvent = {
+type InteractionEvent = {
   id: string;
   brief_id: string;
   company_id: string;
@@ -2417,7 +2458,7 @@ export type InteractionEvent = {
   created_at: string;
 };
 
-export type InteractionPlanImplications = {
+type InteractionPlanImplications = {
   execution_ready: boolean;
   requires_plan_revision: boolean;
   active_operation_id: string | null;
@@ -2427,14 +2468,14 @@ export type InteractionPlanImplications = {
   summary: string;
 };
 
-export type InteractionInterpretation = {
+type InteractionInterpretation = {
   intent_classification: InteractionEventType;
   affected_fields: string[];
   confidence: number;
   rationale: string;
 };
 
-export type InteractionPMAction = {
+type InteractionPMAction = {
   action: PMAction;
   rationale: string;
 };
@@ -2460,11 +2501,11 @@ export type InteractionEventInput = {
 
 export type RunStatus = "pending" | "running" | "paused" | "succeeded" | "failed" | "canceled" | string;
 
-export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | string;
+type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | string;
 
 export type LLMMode = "managed" | "byok";
 
-export interface LLMAccessPayload {
+interface LLMAccessPayload {
   llm_mode?: LLMMode;
   provider?: string;
   credential_id?: string;
@@ -2496,7 +2537,7 @@ export interface RunListItem {
   llm_access?: RunLLMAccess | null;
 }
 
-export interface MemoryObservationPreview {
+interface MemoryObservationPreview {
   id?: string;
   type?: string;
   title?: string;
@@ -2506,7 +2547,7 @@ export interface MemoryObservationPreview {
   content_preview?: string;
 }
 
-export interface NodeMemoryActivity {
+interface NodeMemoryActivity {
   category?: "save" | "retrieval" | "influence" | string;
   operation?: "save" | "search" | "context" | "timeline" | "context_use" | string;
   scope?: string;
@@ -2522,7 +2563,7 @@ export interface NodeMemoryActivity {
   curated_context_paths?: string[];
 }
 
-export interface RunMemoryOperation extends NodeMemoryActivity {
+interface RunMemoryOperation extends NodeMemoryActivity {
   node_id: string;
   node_type: string;
   status: NodeRunStatus;
@@ -2782,7 +2823,7 @@ export interface AgentRegistryEntry {
   updated_at: string;
 }
 
-export type TaskLifecycleStatus =
+type TaskLifecycleStatus =
   | "created"
   | "queued"
   | "claimed"
@@ -2796,7 +2837,7 @@ export type TaskLifecycleStatus =
   | "cancelled"
   | string;
 
-export interface TaskDeadLetterSummary {
+interface TaskDeadLetterSummary {
   id?: string;
   reason?: string;
   attempt_count?: number;
@@ -2808,7 +2849,7 @@ export interface TaskDeadLetterSummary {
   acknowledged_at?: string | null;
 }
 
-export interface TaskRetrySummary {
+interface TaskRetrySummary {
   id?: string;
   operation_type?: string;
   idempotency_key?: string;
@@ -2851,7 +2892,7 @@ export interface TaskRecord {
   updated_at: string;
 }
 
-export interface TaskJudgeSummary {
+interface TaskJudgeSummary {
   id: string;
   title: string;
   criteria_count: number;
@@ -3037,7 +3078,7 @@ export interface OperatorEventDeadLetter {
   last_seen_at: string;
 }
 
-export type OpsDeadLetterKind = "task" | "event" | "runtime_intent";
+type OpsDeadLetterKind = "task" | "event" | "runtime_intent";
 
 export interface OpsDeadLetter {
   id: string;
@@ -3120,7 +3161,7 @@ export interface OpsProjectionLag {
   active_dead_letters: OpsDeadLetter[];
 }
 
-export interface OpsDomainEventMetadata {
+interface OpsDomainEventMetadata {
   id: string;
   organization_id: string;
   aggregate_type: string;
@@ -3214,7 +3255,7 @@ export interface CostLedgerEntry {
   occurred_at: string;
 }
 
-export interface CostAggregate {
+interface CostAggregate {
   id: string;
   grain: "hourly" | "daily" | string;
   period_start: string;
@@ -3276,24 +3317,24 @@ export type OverviewSectionMetadata = {
   degraded: boolean;
 };
 
-export type RunningOverviewSection = OverviewSectionMetadata & {
+type RunningOverviewSection = OverviewSectionMetadata & {
   active_agent_count: number;
   running_task_count: number;
   operation_count_24h: number;
   items: TaskRecord[];
 };
 
-export type BlockedOverviewSection = OverviewSectionMetadata & {
+type BlockedOverviewSection = OverviewSectionMetadata & {
   blocked_task_count: number;
   items: TaskRecord[];
 };
 
-export type DecisionsOverviewSection = OverviewSectionMetadata & {
+type DecisionsOverviewSection = OverviewSectionMetadata & {
   pending_decision_count: number;
   items: DecisionRecord[];
 };
 
-export type CostsOverviewSection = OverviewSectionMetadata & {
+type CostsOverviewSection = OverviewSectionMetadata & {
   total_cost_usd: number;
   currency: string;
   metric?: AccountingMetric;
@@ -3304,7 +3345,7 @@ export type CostsOverviewSection = OverviewSectionMetadata & {
   }>;
 };
 
-export type FailuresOverviewSection = OverviewSectionMetadata & {
+type FailuresOverviewSection = OverviewSectionMetadata & {
   dead_letter_count: number;
   task_dead_letter_count: number;
   event_dead_letter_count: number;
@@ -4148,6 +4189,689 @@ export type LLMQuotaStatus = {
   };
 };
 
+export type OperatingModelPack = {
+  pack_id: string;
+  base_pack_id: string;
+  version: string;
+  display_name: string;
+  description: string;
+  company_type_label: string;
+  checksum: string;
+  manifest: Record<string, unknown>;
+  files: Record<string, unknown>;
+};
+
+export type OperatingModelInstallation = {
+  id: string;
+  company_id: string;
+  pack_id: string;
+  status: string;
+  display_name: string;
+  version: string;
+  checksum: string;
+  company_type_label?: string | null;
+  config: Record<string, unknown>;
+  dashboard: Record<string, unknown>;
+  installed_at: string;
+  updated_at: string;
+};
+
+export type CompanyProgramDTO = {
+  id: string;
+  company_id: string;
+  pack_id: string;
+  template_id: string;
+  display_label: string;
+  title: string;
+  objective: string;
+  status: string;
+  current_stage_id: string;
+  metadata: Record<string, unknown>;
+  stages?: ProgramStageDTO[];
+  created_at: string;
+  updated_at: string;
+};
+
+type ProgramStageDTO = {
+  id: string;
+  program_id: string;
+  stage_id: string;
+  label: string;
+  sequence: number;
+  status: string;
+  state: Record<string, unknown>;
+  operation_template_ids?: string[];
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+};
+
+export type ProgramOperationDTO = {
+  id: string;
+  company_id: string;
+  status: string;
+  operation_type: string;
+  operation_label: string;
+  operation_brief: string;
+  program_id: string | null;
+  stage_id: string | null;
+  started_at: string | null;
+  created_at: string | null;
+};
+
+export type AssertionRecordDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  kind: "FACT" | "OPINION" | "ASSUMPTION" | "QUESTION" | string;
+  pack_label: string;
+  category: string;
+  statement: string;
+  source: string;
+  confidence: number;
+  validation_status: string;
+  evidence_refs: unknown[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkArtifactDTO = {
+  id: string;
+  company_id: string;
+  title: string;
+  artifact_type: string;
+  program_id?: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  canonical_revision_id: string | null;
+  revisions?: ArtifactRevisionDTO[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ArtifactRevisionDTO = {
+  id: string;
+  asset_id: string;
+  version_number: number;
+  label: string;
+  content_uri: string;
+  content_hash: string;
+  mime_type: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ArtifactLineageDTO = {
+  artifact: WorkArtifactDTO;
+  dependencies: Array<{
+    id: string;
+    source_asset_id: string;
+    source_revision_id: string | null;
+    target_asset_id: string;
+    target_revision_id: string | null;
+    dependency_type: string;
+    reason: string;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }>;
+};
+
+export type ValidationDecisionDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  assertion_id: string | null;
+  asset_id: string | null;
+  asset_version_id: string | null;
+  decision: "ACCEPT" | "REJECT" | "EDIT" | "DEFER" | "NEEDS_RESEARCH" | string;
+  category: string;
+  rationale: string;
+  proposed_change: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ValidationPacketDTO = {
+  company_id: string;
+  program_id: string;
+  program_label: string;
+  current_stage_id: string;
+  assertions: AssertionRecordDTO[];
+  artifacts: WorkArtifactDTO[];
+  findings: Array<{
+    id: string;
+    evaluation_id: string;
+    severity: string;
+    issue_type: string;
+    message: string;
+    suggested_fix: string;
+    blocking: boolean;
+    evidence_refs: unknown[];
+  }>;
+  decision_options: string[];
+};
+
+export type EvaluationRunDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  asset_id: string | null;
+  asset_version_id: string | null;
+  profile_id: string;
+  status: "PASS" | "WARN" | "BLOCK" | "RUNNING" | "FAILED" | string;
+  score: number | null;
+  grade: string;
+  input_refs: unknown[];
+  result: Record<string, unknown>;
+  findings: Array<{
+    id: string;
+    severity: string;
+    issue_type: string;
+    message: string;
+    evidence_refs: unknown[];
+    suggested_fix: string;
+    blocking: boolean;
+    created_at: string;
+  }>;
+  scorecard: {
+    dimensions: Record<string, unknown>;
+    composite_score: number;
+    grade: string;
+  } | null;
+  created_at: string;
+  evaluated_at: string | null;
+};
+
+export type PeriodicReviewDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  pack_id: string;
+  template_id: string;
+  display_name: string;
+  cadence: string;
+  timezone: string;
+  evaluation_profile_id: string;
+  report_template_id: string;
+  history_projection_type: string;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MetricSnapshotDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  review_definition_id: string | null;
+  period_start: string;
+  period_end: string;
+  metric_values: Record<string, unknown>;
+  metric_sources: Record<string, unknown>;
+  source_type: string;
+  notes: string;
+  created_at: string;
+};
+
+export type ReportRunDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  review_definition_id: string | null;
+  metric_snapshot_id: string | null;
+  report_template_id: string;
+  period_start: string;
+  period_end: string;
+  evaluation_run_ids: string[];
+  artifact: WorkArtifactDTO | null;
+  artifact_revision_id: string | null;
+  generated_sections: Record<string, unknown>;
+  source_refs: unknown[];
+  created_at: string;
+};
+
+export type PolicyEvaluationDTO = {
+  id: string;
+  company_id: string;
+  policy_pack_id: string | null;
+  action_type: string;
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  status: string;
+  input: Record<string, unknown>;
+  trace: Record<string, unknown>;
+  decision_record_id: string | null;
+  approval_task_id: string | null;
+  created_at: string;
+};
+
+export type ReworkPlanDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  status: string;
+  trigger_summary: string;
+  impact: Record<string, unknown>;
+  required_approvals: unknown[];
+  estimated_effort: Record<string, unknown>;
+  items: unknown[];
+  created_at: string;
+  updated_at: string;
+  executed_at: string | null;
+};
+
+export type ToolExecutionReceiptDTO = {
+  tool_execution_id: string;
+  company_id: string;
+  operation_id: string;
+  tool_id: string;
+  label: string;
+  dry_run: boolean;
+  side_effects: string;
+  status: string;
+  policy_evaluation: PolicyEvaluationDTO | null;
+};
+
+export type StageOutputGenerationDTO = {
+  workflow_id: string;
+  program_id: string;
+  stage_id: string;
+  status: string;
+  created_artifacts: WorkArtifactDTO[];
+  evaluations: EvaluationRunDTO[];
+  created_signals: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    status: string;
+    metadata: Record<string, unknown>;
+  }>;
+  blockers: Array<Record<string, unknown>>;
+  skipped: Array<Record<string, unknown>>;
+  state_projection: StateProjectionDTO;
+};
+
+export type StateProjectionDTO = {
+  id: string;
+  company_id: string;
+  program_id: string | null;
+  projection_type: string;
+  display_label: string;
+  source_refs: unknown[];
+  json_state: Record<string, unknown>;
+  markdown_summary: string;
+  generated_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompanyOperatingModelDTO = {
+  company_id: string;
+  installed_packs: OperatingModelInstallation[];
+  programs: CompanyProgramDTO[];
+  evaluation_profiles?: Array<{
+    profile_id: string;
+    display_name: string;
+    mode: string;
+  }>;
+  policy_packs?: Array<{
+    policy_pack_id: string;
+    display_name: string;
+  }>;
+  signal_taxonomies?: Array<{
+    taxonomy_id: string;
+    display_name: string;
+  }>;
+  periodic_reviews?: Array<{
+    id: string;
+    template_id: string;
+    display_name: string;
+    cadence: string;
+    evaluation_profile_id: string;
+    report_template_id: string;
+    history_projection_type: string;
+    enabled: boolean;
+  }>;
+};
+
+export type CompanyBlueprintInput = {
+  company_name: string;
+  objective: string;
+  blueprint_id?: string;
+  services?: string[];
+  regions?: string[];
+  autonomy_mode: "manual" | "assisted" | "autonomous" | string;
+  ai_access_mode: "managed" | "byok" | string;
+  intelligence_provider?: string;
+};
+
+export type CompanyFromBlueprintInput = CompanyBlueprintInput & {
+  launch_first_operation?: boolean;
+  operation_brief?: string;
+  credential_id?: string | null;
+};
+
+export type CompanyFromBlueprintResult = {
+  company_id: string;
+  graph_version_id: string;
+  graph_json: GraphJson;
+  template_ids: string[];
+  department_groups: Array<Record<string, unknown>>;
+  first_operation_id: string | null;
+  idempotent_replay: boolean;
+};
+
+export const companyBlueprintsApi = {
+  compile: async (input: CompanyBlueprintInput): Promise<Record<string, unknown>> => {
+    const response = await api.post<ApiSuccessResponse<Record<string, unknown>>>(
+      API_PATHS.companyBlueprints.compile,
+      input,
+    );
+    return response.data.data;
+  },
+  createCompany: async (
+    input: CompanyFromBlueprintInput,
+    options?: IdempotencyOptions,
+  ): Promise<CompanyFromBlueprintResult> => {
+    const response = await api.post<ApiSuccessResponse<CompanyFromBlueprintResult>>(
+      API_PATHS.companyBlueprints.createCompany,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+};
+
+export const operatingModelsApi = {
+  listPacks: async (): Promise<OperatingModelPack[]> => {
+    const response = await api.get<ApiSuccessResponse<{ packs: OperatingModelPack[] }>>(
+      API_PATHS.operatingModels.packs,
+    );
+    return response.data.data.packs;
+  },
+  getPack: async (packId: string): Promise<OperatingModelPack> => {
+    const response = await api.get<ApiSuccessResponse<{ pack: OperatingModelPack }>>(
+      API_PATHS.operatingModels.pack(packId),
+    );
+    return response.data.data.pack;
+  },
+  compilePack: async (packId: string, input: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const response = await api.post<ApiSuccessResponse<Record<string, unknown>>>(
+      API_PATHS.operatingModels.compilePack(packId),
+      input,
+    );
+    return response.data.data;
+  },
+  getCompanyOperatingModel: async (companyId: string): Promise<CompanyOperatingModelDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ operating_model: CompanyOperatingModelDTO }>>(
+      API_PATHS.operatingModels.companyOperatingModel(companyId),
+    );
+    return response.data.data.operating_model;
+  },
+  installPack: async (
+    companyId: string,
+    packId: string,
+    input: { config?: Record<string, unknown> },
+    options?: IdempotencyOptions,
+  ): Promise<OperatingModelInstallation> => {
+    const response = await api.post<ApiSuccessResponse<{ installation: OperatingModelInstallation }>>(
+      API_PATHS.operatingModels.installPack(companyId, packId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.installation;
+  },
+  listPrograms: async (companyId: string): Promise<CompanyProgramDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ programs: CompanyProgramDTO[] }>>(
+      API_PATHS.operatingModels.programs(companyId),
+    );
+    return response.data.data.programs;
+  },
+  getProgram: async (programId: string): Promise<CompanyProgramDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ program: CompanyProgramDTO }>>(
+      API_PATHS.operatingModels.program(programId),
+    );
+    return response.data.data.program;
+  },
+  createProgram: async (
+    companyId: string,
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<CompanyProgramDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ program: CompanyProgramDTO }>>(
+      API_PATHS.operatingModels.programs(companyId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.program;
+  },
+  advanceStage: async (
+    programId: string,
+    stageId: string,
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<CompanyProgramDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ program: CompanyProgramDTO }>>(
+      API_PATHS.operatingModels.advanceStage(programId, stageId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.program;
+  },
+  launchStageOperation: async (
+    programId: string,
+    stageId: string,
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<ProgramOperationDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ operation: ProgramOperationDTO }>>(
+      API_PATHS.operatingModels.launchStageOperation(programId, stageId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.operation;
+  },
+  generateStageOutputs: async (
+    programId: string,
+    stageId: string,
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<StageOutputGenerationDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ stage_output: StageOutputGenerationDTO }>>(
+      API_PATHS.operatingModels.generateStageOutputs(programId, stageId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.stage_output;
+  },
+  getValidationPacket: async (programId: string): Promise<ValidationPacketDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ validation_packet: ValidationPacketDTO }>>(
+      API_PATHS.operatingModels.validationPacket(programId),
+    );
+    return response.data.data.validation_packet;
+  },
+  listAssertions: async (params: Record<string, unknown>): Promise<AssertionRecordDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ assertions: AssertionRecordDTO[] }>>(
+      API_PATHS.operatingModels.assertions,
+      { params },
+    );
+    return response.data.data.assertions;
+  },
+  createAssertion: async (
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<AssertionRecordDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ assertion: AssertionRecordDTO }>>(
+      API_PATHS.operatingModels.assertions,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.assertion;
+  },
+  createValidationDecision: async (
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<ValidationDecisionDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ validation_decision: ValidationDecisionDTO }>>(
+      API_PATHS.operatingModels.validationDecisions,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.validation_decision;
+  },
+  listArtifacts: async (params: Record<string, unknown>): Promise<WorkArtifactDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ artifacts: WorkArtifactDTO[] }>>(
+      API_PATHS.operatingModels.workArtifacts,
+      { params },
+    );
+    return response.data.data.artifacts;
+  },
+  createArtifact: async (
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<{ artifact: WorkArtifactDTO; revision: ArtifactRevisionDTO }> => {
+    const response = await api.post<ApiSuccessResponse<{ artifact: WorkArtifactDTO; revision: ArtifactRevisionDTO }>>(
+      API_PATHS.operatingModels.workArtifacts,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+  getArtifact: async (artifactId: string): Promise<WorkArtifactDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ artifact: WorkArtifactDTO }>>(
+      API_PATHS.operatingModels.workArtifact(artifactId),
+    );
+    return response.data.data.artifact;
+  },
+  createArtifactRevision: async (
+    artifactId: string,
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<ArtifactRevisionDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ revision: ArtifactRevisionDTO }>>(
+      API_PATHS.operatingModels.artifactRevisions(artifactId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.revision;
+  },
+  getArtifactLineage: async (artifactId: string): Promise<ArtifactLineageDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ lineage: ArtifactLineageDTO }>>(
+      API_PATHS.operatingModels.artifactLineage(artifactId),
+    );
+    return response.data.data.lineage;
+  },
+  setCanonicalRevision: async (
+    artifactId: string,
+    revisionId: string,
+    options?: IdempotencyOptions,
+  ): Promise<WorkArtifactDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ artifact: WorkArtifactDTO }>>(
+      API_PATHS.operatingModels.canonicalRevision(artifactId),
+      { revision_id: revisionId },
+      idempotencyConfig(options),
+    );
+    return response.data.data.artifact;
+  },
+  runEvaluation: async (input: Record<string, unknown>, options?: IdempotencyOptions): Promise<EvaluationRunDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ evaluation: EvaluationRunDTO }>>(
+      API_PATHS.operatingModels.runEvaluation,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.evaluation;
+  },
+  listPeriodicReviews: async (params: Record<string, unknown>): Promise<PeriodicReviewDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ periodic_reviews: PeriodicReviewDTO[] }>>(
+      API_PATHS.operatingModels.periodicReviews,
+      { params },
+    );
+    return response.data.data.periodic_reviews;
+  },
+  createMetricSnapshot: async (
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<MetricSnapshotDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ metric_snapshot: MetricSnapshotDTO }>>(
+      API_PATHS.operatingModels.metricSnapshots,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.metric_snapshot;
+  },
+  listMetricSnapshots: async (params: Record<string, unknown>): Promise<MetricSnapshotDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ metric_snapshots: MetricSnapshotDTO[] }>>(
+      API_PATHS.operatingModels.metricSnapshots,
+      { params },
+    );
+    return response.data.data.metric_snapshots;
+  },
+  runPeriodicReview: async (
+    reviewId: string,
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<{ evaluation: EvaluationRunDTO; report_run: ReportRunDTO }> => {
+    const response = await api.post<ApiSuccessResponse<{ evaluation: EvaluationRunDTO; report_run: ReportRunDTO }>>(
+      API_PATHS.operatingModels.runPeriodicReview(reviewId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
+  listReportRuns: async (params: Record<string, unknown>): Promise<ReportRunDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ report_runs: ReportRunDTO[] }>>(
+      API_PATHS.operatingModels.reportRuns,
+      { params },
+    );
+    return response.data.data.report_runs;
+  },
+  evaluatePolicy: async (
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<PolicyEvaluationDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ policy_evaluation: PolicyEvaluationDTO }>>(
+      API_PATHS.operatingModels.policyEvaluations,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.policy_evaluation;
+  },
+  executeTool: async (
+    input: Record<string, unknown>,
+    options?: IdempotencyOptions,
+  ): Promise<ToolExecutionReceiptDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ tool_execution: ToolExecutionReceiptDTO }>>(
+      API_PATHS.operatingModels.toolExecutions,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.tool_execution;
+  },
+  createReworkPlan: async (input: Record<string, unknown>, options?: IdempotencyOptions): Promise<ReworkPlanDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ rework_plan: ReworkPlanDTO }>>(
+      API_PATHS.operatingModels.reworkPlans,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.rework_plan;
+  },
+  executeReworkPlan: async (planId: string, options?: IdempotencyOptions): Promise<ReworkPlanDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ rework_plan: ReworkPlanDTO }>>(
+      API_PATHS.operatingModels.executeReworkPlan(planId),
+      {},
+      idempotencyConfig(options),
+    );
+    return response.data.data.rework_plan;
+  },
+  listStateProjections: async (params: Record<string, unknown>): Promise<StateProjectionDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ state_projections: StateProjectionDTO[] }>>(
+      API_PATHS.operatingModels.stateProjections,
+      { params },
+    );
+    return response.data.data.state_projections;
+  },
+};
+
 export const analyticsApi = {
   getMemoryUsage: async (period: string): Promise<MemoryAnalyticsUsage> => {
     const response = await api.get<ApiSuccessResponse<MemoryAnalyticsUsage>>(API_PATHS.analytics.memoryUsage, {
@@ -4216,5 +4940,3 @@ export const analyticsApi = {
     return response.data as Blob;
   },
 };
-
-export default api;

@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 export default function DepartmentsRedirectPage() {
   const router = useRouter();
 
+  const { replace } = router;
   useEffect(() => {
     const selectedDepartment =
       typeof router.query.department === "string"
@@ -12,12 +13,12 @@ export default function DepartmentsRedirectPage() {
           ? router.query.agent
           : null;
 
-    void router.replace(
+    void replace(
       selectedDepartment
         ? { pathname: "/departments", query: { department: selectedDepartment } }
         : { pathname: "/departments" },
     );
-  }, [router]);
+  }, [router, replace]);
 
   return null;
 }

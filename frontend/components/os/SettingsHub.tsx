@@ -143,27 +143,30 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
                 }
               >
                 <div className="space-y-3">
-                  {SETTINGS_AREAS.filter((area) => area.section === section).map((area) => {
+                  {SETTINGS_AREAS.flatMap((area) => {
+                    if (area.section !== section) {
+                      return [];
+                    }
                     const Icon = area.icon;
-                    return (
+                    return [
                       <div
                         key={area.title}
-                        className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                        className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex min-w-0 gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-900/10 bg-white dark:border-white/10 dark:bg-white/5">
-                              <Icon className="h-5 w-5 text-slate-900 dark:text-slate-100" />
+                            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-900/10 bg-white dark:border-white/10 dark:bg-white/5">
+                              <Icon className="size-5 text-zinc-900 dark:text-zinc-100" />
                             </div>
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{area.title}</p>
+                                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{area.title}</p>
                                 <StatusBadge
                                   status={area.accessLabel.includes("admin") ? "paused" : "active"}
                                   label={area.accessLabel}
                                 />
                               </div>
-                              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                                 {area.description}
                               </p>
                             </div>
@@ -172,8 +175,8 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
                             <Link href={area.href}>Open</Link>
                           </Button>
                         </div>
-                      </div>
-                    );
+                      </div>,
+                    ];
                   })}
                 </div>
               </Panel>
@@ -185,21 +188,21 @@ export default function SettingsHub({ mode }: SettingsHubProps) {
             description="The product should not force operators to remember whether a control lives under admin, account, or a legacy support section."
           >
             <div className="grid gap-4 lg:grid-cols-3">
-              <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">One mental model</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">One mental model</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                   The operating shell owns runtime state. Settings owns persistent configuration and governance.
                 </p>
               </div>
-              <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Less route drift</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Less route drift</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                   Legacy admin paths remain valid, but the top-level entry point becomes truthful and predictable.
                 </p>
               </div>
-              <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Operator-safe</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Operator-safe</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                   Access messaging is explicit, so users know what is configurable versus merely inspectable.
                 </p>
               </div>

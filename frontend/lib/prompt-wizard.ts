@@ -48,12 +48,13 @@ export function buildPromptTemplate({
     sections.push(["## Task", taskText].join("\n"));
   }
 
-  const cleanedExamples = (examples ?? [])
-    .map((example) => ({
+  const cleanedExamples = (examples ?? []).flatMap((example) => {
+    const cleanedExample = {
       input: normalizeLines(example.input),
       output: normalizeLines(example.output),
-    }))
-    .filter((example) => example.input || example.output);
+    };
+    return cleanedExample.input || cleanedExample.output ? [cleanedExample] : [];
+  });
 
   if (cleanedExamples.length > 0) {
     const exampleLines: string[] = ["## Examples"];

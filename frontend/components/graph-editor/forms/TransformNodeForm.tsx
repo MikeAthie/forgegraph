@@ -59,7 +59,11 @@ export function TransformNodeForm({ config, onChange, errors, setErrors }: NodeF
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Transform */}
-      <AgentFields config={transformConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
+      <AgentFields
+        config={transformConfig}
+        onChange={handleAgentChange}
+        visibleSections={{ role: false, examples: false }}
+      />
 
       <Separator />
 
@@ -125,5 +129,3 @@ return {
     </div>
   );
 }
-
-export default TransformNodeForm;

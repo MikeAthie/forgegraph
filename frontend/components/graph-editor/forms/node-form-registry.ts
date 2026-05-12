@@ -46,7 +46,7 @@ interface NodeFormEntry {
 /**
  * Registry mapping node types to their form components and metadata
  */
-export const nodeFormRegistry: Record<string, NodeFormEntry> = {
+const nodeFormRegistry: Record<string, NodeFormEntry> = {
   agent: {
     component: AgentNodeForm,
     info: {
@@ -216,22 +216,26 @@ export function getNodeTypeInfo(nodeType: string): NodeTypeInfo | null {
 /**
  * Get all registered node types
  */
-export function getAllNodeTypes(): string[] {
+function getAllNodeTypes(): string[] {
   return Object.keys(nodeFormRegistry);
 }
 
 /**
  * Get node types by category
  */
-export function getNodeTypesByCategory(category: NodeTypeInfo["category"]): string[] {
-  return Object.entries(nodeFormRegistry)
-    .filter(([, entry]) => entry.info.category === category)
-    .map(([type]) => type);
+function getNodeTypesByCategory(category: NodeTypeInfo["category"]): string[] {
+  const nodeTypes: string[] = [];
+  for (const [type, entry] of Object.entries(nodeFormRegistry)) {
+    if (entry.info.category === category) {
+      nodeTypes.push(type);
+    }
+  }
+  return nodeTypes;
 }
 
 /**
  * Check if a node type is registered
  */
-export function isNodeTypeRegistered(nodeType: string): boolean {
+function isNodeTypeRegistered(nodeType: string): boolean {
   return nodeType in nodeFormRegistry;
 }

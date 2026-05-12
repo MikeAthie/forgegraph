@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from "react";
 import { useRouter } from "next/router";
 
 import DashboardLayout from "../../components/DashboardLayout";
@@ -83,6 +83,48 @@ const PACKAGE_KIND_OPTIONS = [
   },
 ] as const;
 
+type MarketplaceAdminState = {
+  catalog: MarketplacePackage[];
+  installed: MarketplacePackage[];
+  releases: MarketplaceReleaseSummary[];
+  runtimePreview: MarketplaceRuntimeManifestPreview | null;
+  loading: boolean;
+  error: string | null;
+  installingSlug: string | null;
+  reviewingReleaseId: string | null;
+  publishing: boolean;
+  releaseForm: ReleaseFormState;
+};
+
+type MarketplaceAdminAction = {
+  patch: Partial<MarketplaceAdminState> | ((state: MarketplaceAdminState) => Partial<MarketplaceAdminState>);
+};
+
+const initialMarketplaceAdminState: MarketplaceAdminState = {
+  catalog: [],
+  installed: [],
+  releases: [],
+  runtimePreview: null,
+  loading: true,
+  error: null,
+  installingSlug: null,
+  reviewingReleaseId: null,
+  publishing: false,
+  releaseForm: DEFAULT_RELEASE_FORM,
+};
+
+function marketplaceAdminReducer(
+  state: MarketplaceAdminState,
+  action: MarketplaceAdminAction,
+): MarketplaceAdminState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 function buildRuntimeManifest(form: ReleaseFormState): Record<string, unknown> | null {
   if (form.package_kind === "runtime_tool") {
     const toolName = form.runtime_tool_name.trim() || form.package_slug.trim().replace(/-/g, "_");
@@ -112,20 +154,42 @@ function buildRuntimeManifest(form: ReleaseFormState): Record<string, unknown> |
 
 export default function MarketplaceAdminPage() {
   const router = useRouter();
+  const { push } = router;
   const { user } = useAuth();
   const canManage = user?.organization_role === "owner" || user?.organization_role === "admin";
   const canReview = user?.organization_role === "owner";
 
-  const [catalog, setCatalog] = useState<MarketplacePackage[]>([]);
-  const [installed, setInstalled] = useState<MarketplacePackage[]>([]);
-  const [releases, setReleases] = useState<MarketplaceReleaseSummary[]>([]);
-  const [runtimePreview, setRuntimePreview] = useState<MarketplaceRuntimeManifestPreview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [installingSlug, setInstallingSlug] = useState<string | null>(null);
-  const [reviewingReleaseId, setReviewingReleaseId] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState(false);
-  const [releaseForm, setReleaseForm] = useState<ReleaseFormState>(DEFAULT_RELEASE_FORM);
+  const [pageState, dispatchPageState] = useReducer(marketplaceAdminReducer, initialMarketplaceAdminState);
+  const {
+    catalog,
+    installed,
+    releases,
+    runtimePreview,
+    loading,
+    error,
+    installingSlug,
+    reviewingReleaseId,
+    publishing,
+    releaseForm,
+  } = pageState;
+  const setPageField = useCallback(
+    <K extends keyof MarketplaceAdminState>(key: K, value: SetStateAction<MarketplaceAdminState[K]>) => {
+      dispatchPageState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<MarketplaceAdminState>,
+      });
+    },
+    [],
+  );
+  const setCatalog = useCallback((value: SetStateAction<MarketplacePackage[]>) => setPageField("catalog", value), [setPageField]);
+  const setInstalled = useCallback((value: SetStateAction<MarketplacePackage[]>) => setPageField("installed", value), [setPageField]);
+  const setReleases = useCallback((value: SetStateAction<MarketplaceReleaseSummary[]>) => setPageField("releases", value), [setPageField]);
+  const setRuntimePreview = useCallback((value: SetStateAction<MarketplaceRuntimeManifestPreview | null>) => setPageField("runtimePreview", value), [setPageField]);
+  const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
+  const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
+  const setInstallingSlug = useCallback((value: SetStateAction<string | null>) => setPageField("installingSlug", value), [setPageField]);
+  const setReviewingReleaseId = useCallback((value: SetStateAction<string | null>) => setPageField("reviewingReleaseId", value), [setPageField]);
+  const setPublishing = useCallback((value: SetStateAction<boolean>) => setPageField("publishing", value), [setPageField]);
+  const setReleaseForm = useCallback((value: SetStateAction<ReleaseFormState>) => setPageField("releaseForm", value), [setPageField]);
 
   const refreshData = useCallback(async () => {
     setLoading(true);
@@ -265,7 +329,7 @@ export default function MarketplaceAdminPage() {
               <CardDescription>Workspace admins can manage marketplace packages.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" onClick={() => void router.push("/admin/organization")}>
+              <Button variant="outline" onClick={() => void push("/admin/organization")}>
                 Back to Workspace Access
               </Button>
             </CardContent>

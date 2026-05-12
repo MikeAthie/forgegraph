@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, BrainCircuit, Download, FileJson, HardDriveDownload } from "lucide-react";
 
@@ -56,6 +56,51 @@ type RecoveryData = {
   wsSubscribers: OperatorWebSocketSubscribers;
 };
 
+type AdminOperationsState = {
+  data: OperationsData | null;
+  loading: boolean;
+  error: string | null;
+  cleanupPreview: RetentionCleanupPreview | null;
+  previewLoading: boolean;
+  exportingKey: string | null;
+  recoveryData: RecoveryData | null;
+  recoveryLoading: boolean;
+  operatorError: string | null;
+  runLookupId: string;
+  inspectedRun: OperatorRunState | null;
+  operatorReason: string;
+  operatorAction: string | null;
+};
+
+type AdminOperationsAction = {
+  patch: Partial<AdminOperationsState> | ((state: AdminOperationsState) => Partial<AdminOperationsState>);
+};
+
+const initialAdminOperationsState: AdminOperationsState = {
+  data: null,
+  loading: true,
+  error: null,
+  cleanupPreview: null,
+  previewLoading: false,
+  exportingKey: null,
+  recoveryData: null,
+  recoveryLoading: false,
+  operatorError: null,
+  runLookupId: "",
+  inspectedRun: null,
+  operatorReason: "",
+  operatorAction: null,
+};
+
+function adminOperationsReducer(state: AdminOperationsState, action: AdminOperationsAction): AdminOperationsState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 type ExportAction = {
   key: string;
   label: string;
@@ -108,6 +153,13 @@ const EXPORT_ACTIONS: ExportAction[] = [
   },
 ];
 
+const USD_FORMATTER = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) {
     return "Not recorded";
@@ -136,9 +188,7 @@ const formatSreValue = (value: unknown, unit: string) => {
         (sum, item) => sum + Number((item as { total_cost_usd?: number }).total_cost_usd ?? 0),
         0,
       );
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(
-        total,
-      );
+      return USD_FORMATTER.format(total);
     }
     return `${value.length} rows`;
   }
@@ -166,11 +216,9 @@ const formatSreValue = (value: unknown, unit: string) => {
       return `${Math.round(value * 10) / 10}/min`;
     }
     if (unit === "usd") {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(
-        value,
-      );
+      return USD_FORMATTER.format(value);
     }
-    return new Intl.NumberFormat("en-US").format(value);
+    return NUMBER_FORMATTER.format(value);
   }
   return String(value);
 };
@@ -188,19 +236,43 @@ export default function AdminOperationsPage() {
   const { user } = useAuth();
   const canManage = user?.organization_role === "owner" || user?.organization_role === "admin";
 
-  const [data, setData] = useState<OperationsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [cleanupPreview, setCleanupPreview] = useState<RetentionCleanupPreview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [exportingKey, setExportingKey] = useState<string | null>(null);
-  const [recoveryData, setRecoveryData] = useState<RecoveryData | null>(null);
-  const [recoveryLoading, setRecoveryLoading] = useState(false);
-  const [operatorError, setOperatorError] = useState<string | null>(null);
-  const [runLookupId, setRunLookupId] = useState("");
-  const [inspectedRun, setInspectedRun] = useState<OperatorRunState | null>(null);
-  const [operatorReason, setOperatorReason] = useState("");
-  const [operatorAction, setOperatorAction] = useState<string | null>(null);
+  const [pageState, dispatchPageState] = useReducer(adminOperationsReducer, initialAdminOperationsState);
+  const {
+    data,
+    loading,
+    error,
+    cleanupPreview,
+    previewLoading,
+    exportingKey,
+    recoveryData,
+    recoveryLoading,
+    operatorError,
+    runLookupId,
+    inspectedRun,
+    operatorReason,
+    operatorAction,
+  } = pageState;
+  const setPageField = useCallback(
+    <K extends keyof AdminOperationsState>(key: K, value: SetStateAction<AdminOperationsState[K]>) => {
+      dispatchPageState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<AdminOperationsState>,
+      });
+    },
+    [],
+  );
+  const setData = useCallback((value: SetStateAction<OperationsData | null>) => setPageField("data", value), [setPageField]);
+  const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
+  const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
+  const setCleanupPreview = useCallback((value: SetStateAction<RetentionCleanupPreview | null>) => setPageField("cleanupPreview", value), [setPageField]);
+  const setPreviewLoading = useCallback((value: SetStateAction<boolean>) => setPageField("previewLoading", value), [setPageField]);
+  const setExportingKey = useCallback((value: SetStateAction<string | null>) => setPageField("exportingKey", value), [setPageField]);
+  const setRecoveryData = useCallback((value: SetStateAction<RecoveryData | null>) => setPageField("recoveryData", value), [setPageField]);
+  const setRecoveryLoading = useCallback((value: SetStateAction<boolean>) => setPageField("recoveryLoading", value), [setPageField]);
+  const setOperatorError = useCallback((value: SetStateAction<string | null>) => setPageField("operatorError", value), [setPageField]);
+  const setRunLookupId = useCallback((value: SetStateAction<string>) => setPageField("runLookupId", value), [setPageField]);
+  const setInspectedRun = useCallback((value: SetStateAction<OperatorRunState | null>) => setPageField("inspectedRun", value), [setPageField]);
+  const setOperatorReason = useCallback((value: SetStateAction<string>) => setPageField("operatorReason", value), [setPageField]);
+  const setOperatorAction = useCallback((value: SetStateAction<string | null>) => setPageField("operatorAction", value), [setPageField]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -516,25 +588,25 @@ export default function AdminOperationsPage() {
                   <Button asChild variant="outline">
                     <Link href="/admin/help">
                       Operator help
-                      <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                      <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline">
                     <Link href="/admin/audit-logs">
                       Audit trail
-                      <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                      <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline">
                     <Link href="/analytics/memory">
                       Memory analytics
-                      <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                      <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline">
                     <Link href="/memory">
                       Memory browser
-                      <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                      <ArrowRight className="ml-2 size-4" aria-hidden="true" />
                     </Link>
                   </Button>
                 </div>
@@ -561,14 +633,14 @@ export default function AdminOperationsPage() {
 
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner className="h-5 w-5" />
+              <Spinner className="size-5" />
               Loading operator controls…
             </div>
           ) : data ? (
             <>
               {riskNotices.length > 0 && (
                 <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100">
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="size-4" />
                   <AlertDescription className="space-y-2">
                     {riskNotices.map((notice) => (
                       <p key={notice}>{notice}</p>
@@ -663,26 +735,28 @@ export default function AdminOperationsPage() {
                       <div className="rounded-xl border border-border/50 bg-background/70 p-4">
                         <p className="font-medium text-foreground">Active alert state</p>
                         <div className="mt-4 space-y-3">
-                          {sreSummary.alerts.items
-                            .filter((alert) => alert.state !== "ok")
-                            .map((alert) => (
-                              <div key={alert.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <p className="text-sm font-medium">{alert.title}</p>
-                                  <Badge
-                                    variant="outline"
-                                    className={
-                                      alert.state === "active"
-                                        ? "border-destructive/30 text-destructive"
-                                        : "border-amber-500/30 text-amber-800 dark:text-amber-200"
-                                    }
-                                  >
-                                    {alert.state.replace(/_/g, " ")}
-                                  </Badge>
-                                </div>
-                                <p className="mt-2 text-xs text-muted-foreground">{alert.runbook}</p>
-                              </div>
-                            ))}
+                          {sreSummary.alerts.items.flatMap((alert) =>
+                            alert.state !== "ok"
+                              ? [
+                                  <div key={alert.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-medium">{alert.title}</p>
+                                      <Badge
+                                        variant="outline"
+                                        className={
+                                          alert.state === "active"
+                                            ? "border-destructive/30 text-destructive"
+                                            : "border-amber-500/30 text-amber-800 dark:text-amber-200"
+                                        }
+                                      >
+                                        {alert.state.replace(/_/g, " ")}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-2 text-xs text-muted-foreground">{alert.runbook}</p>
+                                  </div>,
+                                ]
+                              : [],
+                          )}
                           {sreSummary.alerts.items.every((alert) => alert.state === "ok") ? (
                             <p className="rounded-lg border border-border/50 bg-card/70 p-4 text-sm text-muted-foreground">
                               No SRE alerts are active in the current window.
@@ -1048,7 +1122,7 @@ export default function AdminOperationsPage() {
                     </div>
 
                     <Alert className="border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-100">
-                      <BrainCircuit className="h-4 w-4" />
+                      <BrainCircuit className="size-4" />
                       <AlertDescription>{data.memoryUsage.retention.summary}</AlertDescription>
                     </Alert>
 
@@ -1117,7 +1191,7 @@ export default function AdminOperationsPage() {
                             <p className="font-medium text-foreground">{action.label}</p>
                             <p className="mt-1 text-sm text-muted-foreground">{action.description}</p>
                           </div>
-                          <FileJson className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                          <FileJson className="size-5 text-muted-foreground" aria-hidden="true" />
                         </div>
                         <Button
                           variant="outline"
@@ -1131,12 +1205,12 @@ export default function AdminOperationsPage() {
                                 <Spinner size="xs" className="mr-2" />
                                 Exporting…
                               </span>
-                              <HardDriveDownload className="h-4 w-4" aria-hidden="true" />
+                              <HardDriveDownload className="size-4" aria-hidden="true" />
                             </>
                           ) : (
                             <>
                               <span>Download JSON</span>
-                              <Download className="h-4 w-4" aria-hidden="true" />
+                              <Download className="size-4" aria-hidden="true" />
                             </>
                           )}
                         </Button>

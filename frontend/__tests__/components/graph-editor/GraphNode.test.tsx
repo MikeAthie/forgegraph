@@ -124,11 +124,11 @@ describe("GraphNode", () => {
       expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-blue-500");
     });
 
-    it("should apply indigo accent styling for Output nodes", () => {
+    it("should apply sky accent styling for Output nodes", () => {
       const props = createNodeProps(NODE_TYPES.OUTPUT, "Output");
       render(<GraphNode {...props} />);
 
-      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-indigo-500");
+      expect(screen.getByTestId("node-accent-strip")).toHaveClass("bg-sky-500");
     });
 
     it("should apply rose accent styling for Branch nodes", () => {

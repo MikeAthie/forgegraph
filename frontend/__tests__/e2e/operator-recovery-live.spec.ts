@@ -16,15 +16,17 @@ test.describe("Operator recovery live flow", () => {
     await expect(page.getByRole("heading", { name: /^projection lag$/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^event spool$/i })).toBeVisible();
 
-    const deadLetters = await request.get(`${API_BASE_URL}/api/ops/dead-letters`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const projectionLag = await request.get(`${API_BASE_URL}/api/ops/projection-lag`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const eventSpool = await request.get(`${API_BASE_URL}/api/ops/event-spool`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const [deadLetters, projectionLag, eventSpool] = await Promise.all([
+      request.get(`${API_BASE_URL}/api/ops/dead-letters`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+      request.get(`${API_BASE_URL}/api/ops/projection-lag`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+      request.get(`${API_BASE_URL}/api/ops/event-spool`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+    ]);
 
     expect(deadLetters.ok()).toBeTruthy();
     expect(projectionLag.ok()).toBeTruthy();
@@ -33,8 +35,6 @@ test.describe("Operator recovery live flow", () => {
     const deadLetterBody = (await deadLetters.json()) as {
       data?: { items?: Array<{ id: string; actions: string[] }> };
     };
-    for (const item of deadLetterBody.data?.items ?? []) {
-      await expect(page.getByText(item.id)).toBeVisible();
-    }
+    await Promise.all((deadLetterBody.data?.items ?? []).map((item) => expect(page.getByText(item.id)).toBeVisible()));
   });
 });

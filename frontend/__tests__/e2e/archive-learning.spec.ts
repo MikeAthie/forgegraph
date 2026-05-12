@@ -210,20 +210,22 @@ test.describe("Company archive and learning APIs", () => {
     const user = createTestUser(testInfo, "archive-learning");
     await ensureUserRegistered(request, user);
     const accessToken = await getAccessToken(request, user);
-    const company = await createCompanyViaApi(request, accessToken, {
-      name: "Playwright Archive Learning Co",
-      companyType: "Growth Operating Company",
-      objective: "Launch enterprise lead generation and reuse prior operating knowledge.",
-      autonomyMode: "assisted",
-      aiAccessMode: "managed",
-    });
-    const otherCompany = await createCompanyViaApi(request, accessToken, {
-      name: "Playwright Empty Archive Co",
-      companyType: "Research Company",
-      objective: "Keep archive scope separate.",
-      autonomyMode: "assisted",
-      aiAccessMode: "managed",
-    });
+    const [company, otherCompany] = await Promise.all([
+      createCompanyViaApi(request, accessToken, {
+        name: "Playwright Archive Learning Co",
+        companyType: "Growth Operating Company",
+        objective: "Launch enterprise lead generation and reuse prior operating knowledge.",
+        autonomyMode: "assisted",
+        aiAccessMode: "managed",
+      }),
+      createCompanyViaApi(request, accessToken, {
+        name: "Playwright Empty Archive Co",
+        companyType: "Research Company",
+        objective: "Keep archive scope separate.",
+        autonomyMode: "assisted",
+        aiAccessMode: "managed",
+      }),
+    ]);
     const seededRun = seedRunningOperation(user.email, company.companyId);
     expect(completeOperationWithRuntimeIntent(company.companyId, seededRun.run_id).result).toBe("processed");
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui";
 import { BookCopy, BrainCircuit, DatabaseZap, ShieldCheck } from "lucide-react";
 
 const RESULT_LIMIT = 24;
+const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 const isMemoryScopeQuery = (value: unknown): value is MemoryScopeVM =>
   value === "all" || value === "company" || value === "operation" || value === "session";
@@ -32,36 +33,386 @@ const formatRelativeDate = (value: string | null) => {
 
   const deltaMs = date.getTime() - Date.now();
   const hours = Math.round(deltaMs / 3_600_000);
-  const formatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
   if (Math.abs(hours) < 24) {
-    return formatter.format(hours, "hour");
+    return RELATIVE_TIME_FORMATTER.format(hours, "hour");
   }
 
   const days = Math.round(hours / 24);
-  return formatter.format(days, "day");
+  return RELATIVE_TIME_FORMATTER.format(days, "day");
 };
+
+type MemoryBrowserState = {
+  queryDraft: string;
+  query: string;
+  scopeFilter: string;
+  typeFilter: string;
+  observations: MemoryObservationVM[];
+  listLoading: boolean;
+  listError: string | null;
+  selectedObservationId: string | null;
+  selectedObservation: MemoryObservationVM | null;
+  detailLoading: boolean;
+  detailError: string | null;
+  governance: { current_role_capabilities: OrganizationRoleCapabilities } | null;
+};
+
+type MemoryBrowserAction =
+  | { type: "list-start" }
+  | { type: "list-success"; observations: MemoryObservationVM[]; requestedObservationId: string | null }
+  | { type: "list-error"; error: string }
+  | { type: "sync-query"; query: string; scopeFilter: string; typeFilter: string; observationId: string | null }
+  | { type: "query-draft"; queryDraft: string }
+  | { type: "query-search"; query: string }
+  | { type: "scope-filter"; scopeFilter: string }
+  | { type: "type-filter"; typeFilter: string }
+  | { type: "select-observation"; observation: MemoryObservationVM }
+  | { type: "detail-empty" }
+  | { type: "detail-start" }
+  | { type: "detail-success"; observation: MemoryObservationVM }
+  | { type: "detail-error"; error: string }
+  | { type: "governance-success"; governance: { current_role_capabilities: OrganizationRoleCapabilities } }
+  | { type: "governance-error" };
+
+const initialMemoryBrowserState: MemoryBrowserState = {
+  queryDraft: "",
+  query: "",
+  scopeFilter: "all",
+  typeFilter: "all",
+  observations: [],
+  listLoading: true,
+  listError: null,
+  selectedObservationId: null,
+  selectedObservation: null,
+  detailLoading: false,
+  detailError: null,
+  governance: null,
+};
+
+function selectObservationFromList(
+  observations: MemoryObservationVM[],
+  currentId: string | null,
+  requestedId: string | null,
+  currentObservation: MemoryObservationVM | null,
+) {
+  const selectedId =
+    currentId && observations.some((observation) => observation.id === currentId)
+      ? currentId
+      : requestedId && observations.some((observation) => observation.id === requestedId)
+        ? requestedId
+        : (observations[0]?.id ?? null);
+
+  const selectedObservation =
+    currentObservation && observations.some((observation) => observation.id === currentObservation.id)
+      ? currentObservation
+      : requestedId
+        ? (observations.find((observation) => observation.id === requestedId) ?? observations[0] ?? null)
+        : (observations[0] ?? null);
+
+  return { selectedId, selectedObservation };
+}
+
+function memoryBrowserReducer(state: MemoryBrowserState, action: MemoryBrowserAction): MemoryBrowserState {
+  switch (action.type) {
+    case "list-start":
+      return { ...state, listLoading: true, listError: null };
+    case "list-success": {
+      const selection = selectObservationFromList(
+        action.observations,
+        state.selectedObservationId,
+        action.requestedObservationId,
+        state.selectedObservation,
+      );
+      return {
+        ...state,
+        observations: action.observations,
+        selectedObservationId: selection.selectedId,
+        selectedObservation: selection.selectedObservation,
+        listLoading: false,
+        listError: null,
+      };
+    }
+    case "list-error":
+      return {
+        ...state,
+        observations: [],
+        selectedObservationId: null,
+        selectedObservation: null,
+        listLoading: false,
+        listError: action.error,
+      };
+    case "sync-query":
+      return {
+        ...state,
+        queryDraft: action.query,
+        query: action.query.trim(),
+        scopeFilter: action.scopeFilter,
+        typeFilter: action.typeFilter,
+        selectedObservationId: action.observationId,
+      };
+    case "query-draft":
+      return { ...state, queryDraft: action.queryDraft };
+    case "query-search":
+      return { ...state, query: action.query };
+    case "scope-filter":
+      return { ...state, scopeFilter: action.scopeFilter };
+    case "type-filter":
+      return { ...state, typeFilter: action.typeFilter };
+    case "select-observation":
+      return {
+        ...state,
+        selectedObservation: action.observation,
+        selectedObservationId: action.observation.id,
+        detailError: null,
+      };
+    case "detail-empty":
+      return { ...state, selectedObservation: null, detailError: null, detailLoading: false };
+    case "detail-start":
+      return { ...state, detailLoading: true, detailError: null };
+    case "detail-success":
+      return { ...state, selectedObservation: action.observation, detailLoading: false, detailError: null };
+    case "detail-error":
+      return { ...state, detailLoading: false, detailError: action.error };
+    case "governance-success":
+      return { ...state, governance: action.governance };
+    case "governance-error":
+      return { ...state, governance: null };
+    default:
+      return state;
+  }
+}
+
+function MemoryPostureInspector({
+  currentRole,
+  canDeleteObservations,
+  canManageRetention,
+  canExportMemoryData,
+}: {
+  currentRole: string;
+  canDeleteObservations: boolean;
+  canManageRetention: boolean;
+  canExportMemoryData: boolean;
+}) {
+  return (
+    <InspectorPanel
+      title="Memory posture"
+      subtitle="Memory is presented as an inspectable knowledge layer, not as hidden retrieval infrastructure."
+      sections={[
+        {
+          title: "Current role",
+          content: currentRole,
+        },
+        {
+          title: "Capabilities",
+          content: (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span>View records</span>
+                <StatusBadge status="active" label="Allowed" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Delete records</span>
+                <StatusBadge
+                  status={canDeleteObservations ? "active" : "pending"}
+                  label={canDeleteObservations ? "Allowed" : "Restricted"}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Retention</span>
+                <StatusBadge
+                  status={canManageRetention ? "active" : "pending"}
+                  label={canManageRetention ? "Manageable" : "Restricted"}
+                />
+              </div>
+            </div>
+          ),
+        },
+        {
+          title: "Export posture",
+          content: canExportMemoryData
+            ? "Memory exports are available from governed surfaces."
+            : "Exports are restricted to owner and admin roles.",
+        },
+      ]}
+    />
+  );
+}
+
+function MemoryMetricsGrid({
+  observationsCount,
+  modeLabel,
+  visibleScopes,
+  freshestSeenAt,
+  currentRole,
+  canManageRetention,
+}: {
+  observationsCount: number;
+  modeLabel: string;
+  visibleScopes: number;
+  freshestSeenAt: string | null;
+  currentRole: string;
+  canManageRetention: boolean;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-4">
+      <MetricCard
+        eyebrow="Visible records"
+        value={String(observationsCount)}
+        delta={`In the current ${modeLabel.toLowerCase()}`}
+        icon={<DatabaseZap className="size-4" />}
+      />
+      <MetricCard
+        eyebrow="Scopes"
+        value={String(visibleScopes)}
+        delta="Company, operation, and session slices"
+        icon={<BookCopy className="size-4" />}
+      />
+      <MetricCard
+        eyebrow="Freshest signal"
+        value={formatRelativeDate(freshestSeenAt)}
+        delta="Based on last-seen timestamps"
+        icon={<BrainCircuit className="size-4" />}
+      />
+      <MetricCard
+        eyebrow="Governance"
+        value={currentRole}
+        delta={canManageRetention ? "Retention and export controls available" : "Review-only on governed controls"}
+        tone={canManageRetention ? "emerald" : "amber"}
+        icon={<ShieldCheck className="size-4" />}
+      />
+    </div>
+  );
+}
+
+function MemoryAccessAlert({
+  currentRole,
+  canDeleteObservations,
+  canManageRetention,
+  canExportMemoryData,
+}: {
+  currentRole: string;
+  canDeleteObservations: boolean;
+  canManageRetention: boolean;
+  canExportMemoryData: boolean;
+}) {
+  return (
+    <Alert className="border-zinc-900/10 bg-white/70 text-zinc-800 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100">
+      <ShieldCheck className="size-4" />
+      <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-sm font-medium capitalize">{currentRole} memory access</p>
+          <p className="text-sm">
+            You can view curated observations.{" "}
+            {canDeleteObservations ? "You can delete observations." : "You cannot delete observations."}{" "}
+            {canManageRetention ? "You can manage retention." : "Retention changes are limited to owner and admin."}{" "}
+            {canExportMemoryData ? "You can export memory reporting." : "Exports are limited to owner and admin."}
+          </p>
+        </div>
+        <Link href="/settings" className="inline-flex items-center gap-1 text-sm font-medium">
+          Open settings
+        </Link>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function MemoryBrowserHeader() {
+  return (
+    <SectionHeader
+      eyebrow="Memory inspection"
+      title="Browse the knowledge layer"
+      description="Move from raw traces to a governed ledger of observations. Search by content, filter by scope, and inspect how memory records evolved over time."
+    />
+  );
+}
+
+function MemoryLedgerPanels({
+  availableTypes,
+  detailError,
+  detailLoading,
+  listLoading,
+  modeLabel,
+  observations,
+  queryDraft,
+  scopeFilter,
+  selectedObservation,
+  selectedObservationId,
+  typeFilter,
+  onQueryDraftChange,
+  onQuerySearch,
+  onRefresh,
+  onScopeChange,
+  onSelectObservation,
+  onTypeChange,
+}: {
+  availableTypes: string[];
+  detailError: string | null;
+  detailLoading: boolean;
+  listLoading: boolean;
+  modeLabel: string;
+  observations: MemoryObservationVM[];
+  queryDraft: string;
+  scopeFilter: string;
+  selectedObservation: MemoryObservationVM | null;
+  selectedObservationId: string | null;
+  typeFilter: string;
+  onQueryDraftChange: (value: string) => void;
+  onQuerySearch: (value: string) => void;
+  onRefresh: () => void;
+  onScopeChange: (value: string) => void;
+  onSelectObservation: (observation: MemoryObservationVM) => void;
+  onTypeChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+      <Panel title="Observation ledger" description="Search and filter the records the system decided to keep.">
+        <MemoryObservationList
+          availableTypes={availableTypes}
+          loading={listLoading}
+          modeLabel={modeLabel}
+          observations={observations}
+          queryDraft={queryDraft}
+          selectedObservationId={selectedObservationId}
+          scopeFilter={scopeFilter}
+          typeFilter={typeFilter}
+          onQueryDraftChange={onQueryDraftChange}
+          onQuerySearch={onQuerySearch}
+          onRefresh={onRefresh}
+          onScopeChange={onScopeChange}
+          onSelectObservation={onSelectObservation}
+          onTypeChange={onTypeChange}
+        />
+      </Panel>
+
+      <Panel title="Observation detail" description="Deep inspection for the selected memory record.">
+        <MemoryObservationDetailPanel error={detailError} loading={detailLoading} observation={selectedObservation} />
+      </Panel>
+    </div>
+  );
+}
 
 export default function MemoryBrowserPage() {
   const router = useRouter();
+  const { replace } = router;
   const { user } = useAuth();
   const requestedObservationIdRef = useRef<string | null>(null);
-  const [queryDraft, setQueryDraft] = useState("");
-  const [query, setQuery] = useState("");
-  const [scopeFilter, setScopeFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-
-  const [observations, setObservations] = useState<MemoryObservationVM[]>([]);
-  const [listLoading, setListLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
-
-  const [selectedObservationId, setSelectedObservationId] = useState<string | null>(null);
-  const [selectedObservation, setSelectedObservation] = useState<MemoryObservationVM | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [governance, setGovernance] = useState<{
-    current_role_capabilities: OrganizationRoleCapabilities;
-  } | null>(null);
+  const [
+    {
+      queryDraft,
+      query,
+      scopeFilter,
+      typeFilter,
+      observations,
+      listLoading,
+      listError,
+      selectedObservationId,
+      selectedObservation,
+      detailLoading,
+      detailError,
+      governance,
+    },
+    dispatchMemory,
+  ] = useReducer(memoryBrowserReducer, initialMemoryBrowserState);
 
   const hasQuery = query.trim().length > 0;
   const hasTypeFilter = typeFilter !== "all";
@@ -70,8 +421,7 @@ export default function MemoryBrowserPage() {
   const isSearchMode = hasQuery || hasTypeFilter;
 
   const refreshObservations = useCallback(async () => {
-    setListLoading(true);
-    setListError(null);
+    dispatchMemory({ type: "list-start" });
 
     try {
       const data = isSearchMode
@@ -86,36 +436,13 @@ export default function MemoryBrowserPage() {
             limit: RESULT_LIMIT,
           });
 
-      setObservations(data);
-      const requestedObservationId = requestedObservationIdRef.current;
-      setSelectedObservationId((currentId) => {
-        if (currentId && data.some((observation) => observation.id === currentId)) {
-          return currentId;
-        }
-        if (requestedObservationId && data.some((observation) => observation.id === requestedObservationId)) {
-          return requestedObservationId;
-        }
-        return data[0]?.id ?? null;
-      });
-      setSelectedObservation((currentObservation) => {
-        if (currentObservation && data.some((observation) => observation.id === currentObservation.id)) {
-          return currentObservation;
-        }
-        if (requestedObservationId) {
-          const requestedObservation = data.find((observation) => observation.id === requestedObservationId);
-          if (requestedObservation) {
-            return requestedObservation;
-          }
-        }
-        return data[0] ?? null;
+      dispatchMemory({
+        type: "list-success",
+        observations: data,
+        requestedObservationId: requestedObservationIdRef.current,
       });
     } catch (err: unknown) {
-      setObservations([]);
-      setSelectedObservationId(null);
-      setSelectedObservation(null);
-      setListError(translateProductError(err, "knowledge"));
-    } finally {
-      setListLoading(false);
+      dispatchMemory({ type: "list-error", error: translateProductError(err, "knowledge") });
     }
   }, [activeScope, activeType, hasQuery, isSearchMode, query]);
 
@@ -135,11 +462,13 @@ export default function MemoryBrowserPage() {
       typeof router.query.observation === "string" && router.query.observation ? router.query.observation : null;
 
     requestedObservationIdRef.current = nextObservation;
-    setQueryDraft(nextQuery);
-    setQuery(nextQuery.trim());
-    setScopeFilter(nextScope);
-    setTypeFilter(nextType);
-    setSelectedObservationId(nextObservation);
+    dispatchMemory({
+      type: "sync-query",
+      query: nextQuery,
+      scopeFilter: nextScope,
+      typeFilter: nextType,
+      observationId: nextObservation,
+    });
   }, [router.isReady, router.query.observation, router.query.q, router.query.scope, router.query.type]);
 
   useEffect(() => {
@@ -149,11 +478,14 @@ export default function MemoryBrowserPage() {
       try {
         const response = await organizationsApi.me();
         if (!cancelled) {
-          setGovernance({ current_role_capabilities: response.governance.current_role_capabilities });
+          dispatchMemory({
+            type: "governance-success",
+            governance: { current_role_capabilities: response.governance.current_role_capabilities },
+          });
         }
       } catch {
         if (!cancelled) {
-          setGovernance(null);
+          dispatchMemory({ type: "governance-error" });
         }
       }
     };
@@ -167,30 +499,23 @@ export default function MemoryBrowserPage() {
 
   useEffect(() => {
     if (!selectedObservationId) {
-      setSelectedObservation(null);
-      setDetailError(null);
-      setDetailLoading(false);
+      dispatchMemory({ type: "detail-empty" });
       return;
     }
 
     let cancelled = false;
 
     const fetchDetail = async () => {
-      setDetailLoading(true);
-      setDetailError(null);
+      dispatchMemory({ type: "detail-start" });
 
       try {
         const detail = await memoryRepository.get(selectedObservationId);
         if (!cancelled) {
-          setSelectedObservation(detail);
+          dispatchMemory({ type: "detail-success", observation: detail });
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setDetailError(translateProductError(err, "knowledge"));
-        }
-      } finally {
-        if (!cancelled) {
-          setDetailLoading(false);
+          dispatchMemory({ type: "detail-error", error: translateProductError(err, "knowledge") });
         }
       }
     };
@@ -212,7 +537,7 @@ export default function MemoryBrowserPage() {
     if (selectedObservation?.type) {
       types.add(selectedObservation.type);
     }
-    return [...types].sort((left, right) => left.localeCompare(right));
+    return Array.from(types).toSorted((left, right) => left.localeCompare(right));
   }, [observations, selectedObservation]);
 
   const visibleScopes = useMemo(
@@ -252,18 +577,18 @@ export default function MemoryBrowserPage() {
         queryParams.observation = nextObservation;
       }
 
-      void router.replace({ pathname: router.pathname, query: queryParams }, undefined, {
+      void replace({ pathname: router.pathname, query: queryParams }, undefined, {
         shallow: true,
         scroll: false,
       });
     },
-    [query, router, scopeFilter, selectedObservationId, typeFilter],
+    [query, replace, router, scopeFilter, selectedObservationId, typeFilter],
   );
 
   const handleQuerySearch = useCallback(
     (value: string) => {
       const normalized = value.trim();
-      setQuery((currentValue) => (currentValue === normalized ? currentValue : normalized));
+      dispatchMemory({ type: "query-search", query: normalized });
       replaceMemoryQuery({ q: normalized });
     },
     [replaceMemoryQuery],
@@ -272,9 +597,7 @@ export default function MemoryBrowserPage() {
   const handleSelectObservation = useCallback(
     (observation: MemoryObservationVM) => {
       requestedObservationIdRef.current = observation.id;
-      setSelectedObservation(observation);
-      setDetailError(null);
-      setSelectedObservationId(observation.id);
+      dispatchMemory({ type: "select-observation", observation });
       replaceMemoryQuery({ observation: observation.id });
     },
     [replaceMemoryQuery],
@@ -282,7 +605,7 @@ export default function MemoryBrowserPage() {
 
   const handleScopeChange = useCallback(
     (value: string) => {
-      setScopeFilter(value);
+      dispatchMemory({ type: "scope-filter", scopeFilter: value });
       replaceMemoryQuery({ scope: value });
     },
     [replaceMemoryQuery],
@@ -290,7 +613,7 @@ export default function MemoryBrowserPage() {
 
   const handleTypeChange = useCallback(
     (value: string) => {
-      setTypeFilter(value);
+      dispatchMemory({ type: "type-filter", typeFilter: value });
       replaceMemoryQuery({ type: value });
     },
     [replaceMemoryQuery],
@@ -310,105 +633,32 @@ export default function MemoryBrowserPage() {
     <ProtectedRoute>
       <DashboardLayout
         inspector={
-          <InspectorPanel
-            title="Memory posture"
-            subtitle="Memory is presented as an inspectable knowledge layer, not as hidden retrieval infrastructure."
-            sections={[
-              {
-                title: "Current role",
-                content: currentRole,
-              },
-              {
-                title: "Capabilities",
-                content: (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span>View records</span>
-                      <StatusBadge status="active" label="Allowed" />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Delete records</span>
-                      <StatusBadge
-                        status={canDeleteObservations ? "active" : "pending"}
-                        label={canDeleteObservations ? "Allowed" : "Restricted"}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Retention</span>
-                      <StatusBadge
-                        status={canManageRetention ? "active" : "pending"}
-                        label={canManageRetention ? "Manageable" : "Restricted"}
-                      />
-                    </div>
-                  </div>
-                ),
-              },
-              {
-                title: "Export posture",
-                content: canExportMemoryData
-                  ? "Memory exports are available from governed surfaces."
-                  : "Exports are restricted to owner and admin roles.",
-              },
-            ]}
+          <MemoryPostureInspector
+            currentRole={currentRole}
+            canDeleteObservations={canDeleteObservations}
+            canManageRetention={canManageRetention}
+            canExportMemoryData={canExportMemoryData}
           />
         }
       >
         <div className="space-y-6">
-          <SectionHeader
-            eyebrow="Memory inspection"
-            title="Browse the knowledge layer"
-            description="Move from raw traces to a governed ledger of observations. Search by content, filter by scope, and inspect how memory records evolved over time."
+          <MemoryBrowserHeader />
+
+          <MemoryMetricsGrid
+            observationsCount={observations.length}
+            modeLabel={modeLabel}
+            visibleScopes={visibleScopes}
+            freshestSeenAt={freshestSeenAt}
+            currentRole={currentRole}
+            canManageRetention={canManageRetention}
           />
 
-          <div className="grid gap-4 xl:grid-cols-4">
-            <MetricCard
-              eyebrow="Visible records"
-              value={String(observations.length)}
-              delta={`In the current ${modeLabel.toLowerCase()}`}
-              icon={<DatabaseZap className="h-4 w-4" />}
-            />
-            <MetricCard
-              eyebrow="Scopes"
-              value={String(visibleScopes)}
-              delta="Company, operation, and session slices"
-              icon={<BookCopy className="h-4 w-4" />}
-            />
-            <MetricCard
-              eyebrow="Freshest signal"
-              value={formatRelativeDate(freshestSeenAt)}
-              delta="Based on last-seen timestamps"
-              icon={<BrainCircuit className="h-4 w-4" />}
-            />
-            <MetricCard
-              eyebrow="Governance"
-              value={currentRole}
-              delta={
-                canManageRetention ? "Retention and export controls available" : "Review-only on governed controls"
-              }
-              tone={canManageRetention ? "emerald" : "amber"}
-              icon={<ShieldCheck className="h-4 w-4" />}
-            />
-          </div>
-
-          <Alert className="border-slate-900/10 bg-white/70 text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-100">
-            <ShieldCheck className="h-4 w-4" />
-            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium capitalize">{currentRole} memory access</p>
-                <p className="text-sm">
-                  You can view curated observations.{" "}
-                  {canDeleteObservations ? "You can delete observations." : "You cannot delete observations."}{" "}
-                  {canManageRetention
-                    ? "You can manage retention."
-                    : "Retention changes are limited to owner and admin."}{" "}
-                  {canExportMemoryData ? "You can export memory reporting." : "Exports are limited to owner and admin."}
-                </p>
-              </div>
-              <Link href="/settings" className="inline-flex items-center gap-1 text-sm font-medium">
-                Open settings
-              </Link>
-            </AlertDescription>
-          </Alert>
+          <MemoryAccessAlert
+            currentRole={currentRole}
+            canDeleteObservations={canDeleteObservations}
+            canManageRetention={canManageRetention}
+            canExportMemoryData={canExportMemoryData}
+          />
 
           {listError ? (
             <Alert variant="destructive">
@@ -416,34 +666,25 @@ export default function MemoryBrowserPage() {
             </Alert>
           ) : null}
 
-          <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-            <Panel title="Observation ledger" description="Search and filter the records the system decided to keep.">
-              <MemoryObservationList
-                availableTypes={availableTypes}
-                loading={listLoading}
-                modeLabel={modeLabel}
-                observations={observations}
-                queryDraft={queryDraft}
-                selectedObservationId={selectedObservationId}
-                scopeFilter={scopeFilter}
-                typeFilter={typeFilter}
-                onQueryDraftChange={setQueryDraft}
-                onQuerySearch={handleQuerySearch}
-                onRefresh={() => void refreshObservations()}
-                onScopeChange={handleScopeChange}
-                onSelectObservation={handleSelectObservation}
-                onTypeChange={handleTypeChange}
-              />
-            </Panel>
-
-            <Panel title="Observation detail" description="Deep inspection for the selected memory record.">
-              <MemoryObservationDetailPanel
-                error={detailError}
-                loading={detailLoading}
-                observation={selectedObservation}
-              />
-            </Panel>
-          </div>
+          <MemoryLedgerPanels
+            availableTypes={availableTypes}
+            detailError={detailError}
+            detailLoading={detailLoading}
+            listLoading={listLoading}
+            modeLabel={modeLabel}
+            observations={observations}
+            queryDraft={queryDraft}
+            scopeFilter={scopeFilter}
+            selectedObservation={selectedObservation}
+            selectedObservationId={selectedObservationId}
+            typeFilter={typeFilter}
+            onQueryDraftChange={(value) => dispatchMemory({ type: "query-draft", queryDraft: value })}
+            onQuerySearch={handleQuerySearch}
+            onRefresh={() => void refreshObservations()}
+            onScopeChange={handleScopeChange}
+            onSelectObservation={handleSelectObservation}
+            onTypeChange={handleTypeChange}
+          />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

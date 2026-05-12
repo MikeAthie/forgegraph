@@ -20,10 +20,14 @@ test.describe("Production launch live OS surfaces", () => {
       ["/settings", /Configure the operating environment|Settings posture/i],
     ];
 
-    for (const [route, expectedText] of surfaces) {
-      await page.goto(route);
-      await expect(page.getByText(expectedText).first()).toBeVisible({ timeout: 30_000 });
-    }
+    await surfaces.reduce<Promise<unknown>>(
+      (chain, [route, expectedText]) =>
+        chain.then(async () => {
+          await page.goto(route);
+          await expect(page.getByText(expectedText).first()).toBeVisible({ timeout: 30_000 });
+        }),
+      Promise.resolve(),
+    );
   });
 
   test("keeps protected OS surfaces behind backend authentication", async ({ browser }) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useReducer, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -18,80 +18,111 @@ import {
   Spinner,
 } from "@/components/ui";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type RegisterFormState = {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  isSubmitting: boolean;
+  formError: string;
+};
+
+type RegisterFormAction =
+  | { type: "field"; field: "email" | "password" | "confirmPassword"; value: string }
+  | { type: "set-error"; error: string }
+  | { type: "submit-start" }
+  | { type: "submit-end"; error?: string };
+
+const initialRegisterFormState: RegisterFormState = {
+  email: "",
+  password: "",
+  confirmPassword: "",
+  isSubmitting: false,
+  formError: "",
+};
+
+function registerFormReducer(state: RegisterFormState, action: RegisterFormAction): RegisterFormState {
+  switch (action.type) {
+    case "field":
+      return { ...state, [action.field]: action.value, formError: "" };
+    case "set-error":
+      return { ...state, formError: action.error };
+    case "submit-start":
+      return { ...state, formError: "", isSubmitting: true };
+    case "submit-end":
+      return { ...state, isSubmitting: false, formError: action.error ?? "" };
+    default:
+      return state;
+  }
+}
+
+function validateRegisterForm(email: string, password: string, confirmPassword: string): string | null {
+  if (!email.trim()) {
+    return "Email is required";
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    return "Please enter a valid email address";
+  }
+  if (!password) {
+    return "Password is required";
+  }
+  if (password.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter";
+  }
+  if (!/[a-z]/.test(password)) {
+    return "Password must contain at least one lowercase letter";
+  }
+  if (!/[0-9]/.test(password)) {
+    return "Password must contain at least one number";
+  }
+  if (password !== confirmPassword) {
+    return "Passwords do not match";
+  }
+  return null;
+}
+
 export default function RegisterPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [{ email, password, confirmPassword, isSubmitting, formError }, dispatchForm] = useReducer(
+    registerFormReducer,
+    initialRegisterFormState,
+  );
 
   const { register, isAuthenticated, loading, error, clearError } = useAuth();
   const router = useRouter();
 
+  const { push } = router;
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push("/companies");
+      push("/companies");
     }
-  }, [loading, isAuthenticated, router]);
-
-  useEffect(() => {
-    setFormError("");
-    clearError();
-  }, [email, password, confirmPassword, clearError]);
-
-  const validateForm = () => {
-    if (!email.trim()) {
-      setFormError("Email is required");
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setFormError("Please enter a valid email address");
-      return false;
-    }
-    if (!password) {
-      setFormError("Password is required");
-      return false;
-    }
-    if (password.length < 8) {
-      setFormError("Password must be at least 8 characters");
-      return false;
-    }
-    if (!/[A-Z]/.test(password)) {
-      setFormError("Password must contain at least one uppercase letter");
-      return false;
-    }
-    if (!/[a-z]/.test(password)) {
-      setFormError("Password must contain at least one lowercase letter");
-      return false;
-    }
-    if (!/[0-9]/.test(password)) {
-      setFormError("Password must contain at least one number");
-      return false;
-    }
-    if (password !== confirmPassword) {
-      setFormError("Passwords do not match");
-      return false;
-    }
-    return true;
-  };
+  }, [loading, isAuthenticated, push]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setFormError("");
 
-    if (!validateForm()) {
+    const validationError = validateRegisterForm(email, password, confirmPassword);
+    if (validationError) {
+      dispatchForm({ type: "set-error", error: validationError });
       return;
     }
 
-    setIsSubmitting(true);
+    dispatchForm({ type: "submit-start" });
+    let submitError: string | undefined;
     try {
       const result = await register(email, password);
-      if (!result.success) {
-        setFormError(result.error);
-      }
+      submitError = result.success ? undefined : result.error;
     } finally {
-      setIsSubmitting(false);
+      dispatchForm({ type: "submit-end", error: submitError });
     }
+  };
+
+  const handleFieldChange = (field: "email" | "password" | "confirmPassword", value: string) => {
+    clearError();
+    dispatchForm({ type: "field", field, value });
   };
 
   if (loading) {
@@ -136,7 +167,7 @@ export default function RegisterPage() {
                   aria-invalid={Boolean(displayError)}
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => handleFieldChange("email", e.target.value)}
                   placeholder="you@example.com"
                   disabled={isSubmitting}
                   className="h-11"
@@ -157,7 +188,7 @@ export default function RegisterPage() {
                   aria-invalid={Boolean(displayError)}
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handleFieldChange("password", e.target.value)}
                   placeholder="Create a password"
                   disabled={isSubmitting}
                   className="h-11"
@@ -173,7 +204,7 @@ export default function RegisterPage() {
                   aria-invalid={Boolean(displayError)}
                   required
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => handleFieldChange("confirmPassword", e.target.value)}
                   placeholder="Confirm your password"
                   disabled={isSubmitting}
                   className="h-11"

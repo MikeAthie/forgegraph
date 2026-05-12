@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type Ref } from "react";
 import { Link } from "lucide-react";
 
 import { type NodeType } from "../../lib/graph-types";
@@ -22,7 +22,7 @@ interface NodePaletteProps {
   onAddMarketplaceNode?: (pkg: MarketplacePackage, connectToSelected?: boolean) => void;
   marketplaceNodes?: MarketplacePackage[];
   hasSelectedNode?: boolean;
-  searchInputRef?: RefObject<HTMLInputElement | null>;
+  searchInputRef?: Ref<HTMLInputElement>;
 }
 
 const nodeTypeIcons: Record<string, string> = {
@@ -49,7 +49,7 @@ const nodeTypeColors: Record<string, string> = {
   prompt: "bg-violet-500",
   http: "bg-amber-500",
   transform: "bg-blue-500",
-  output: "bg-indigo-500",
+  output: "bg-sky-500",
   branch: "bg-rose-500",
   merge: "bg-emerald-500",
   human_gate: "bg-orange-500",
@@ -65,12 +65,43 @@ const nodeTypeColors: Record<string, string> = {
 
 const RECENT_ITEM_LIMIT = 6;
 const RECOMMENDED_ITEM_LIMIT = 6;
+const EMPTY_MARKETPLACE_NODES: MarketplacePackage[] = [];
+
+function PaletteKeyboardShortcuts() {
+  return (
+    <div className="mt-6 pt-4 border-t border-border">
+      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Keyboard Shortcuts</h4>
+      <div className="space-y-1 text-xs text-muted-foreground">
+        {[
+          ["Open wizard", "Ctrl+W"],
+          ["Search steps", "Ctrl+Shift+F"],
+          ["Save", "Ctrl+S"],
+          ["Select all", "Ctrl+A"],
+          ["Undo", "Ctrl+Z"],
+          ["Redo", "Ctrl+Y"],
+          ["Copy", "Ctrl+C"],
+          ["Paste", "Ctrl+V"],
+          ["Duplicate", "Ctrl+D"],
+          ["Delete step", "Delete"],
+          ["Close dialog/wizard", "Esc"],
+        ].map(([label, shortcut]) => (
+          <div key={label} className="flex justify-between">
+            <span>{label}</span>
+            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
+              {shortcut}
+            </kbd>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function NodePalette({
   onAddNode,
   onAddNote,
   onAddMarketplaceNode,
-  marketplaceNodes = [],
+  marketplaceNodes = EMPTY_MARKETPLACE_NODES,
   hasSelectedNode = false,
   searchInputRef,
 }: NodePaletteProps) {
@@ -270,8 +301,8 @@ export function NodePalette({
                 >
                   <div
                     aria-hidden="true"
-                    className={`w-8 h-8 rounded-md flex items-center justify-center text-white text-sm font-bold shadow-xs ${
-                      item.kind === "marketplace" ? "bg-cyan-500" : (nodeTypeColors[item.type] ?? "bg-gray-500")
+                    className={`size-8 rounded-md flex items-center justify-center text-white text-sm font-bold shadow-xs ${
+                      item.kind === "marketplace" ? "bg-cyan-500" : (nodeTypeColors[item.type] ?? "bg-neutral-500")
                     }`}
                   >
                     {item.kind === "marketplace"
@@ -287,7 +318,7 @@ export function NodePalette({
                         </span>
                       )}
                       {item.kind !== "note" && hasSelectedNode && item.enabled && (
-                        <Link className="w-3 h-3 text-primary ml-1" />
+                        <Link className="size-3 text-primary ml-1" />
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-1">{item.description}</div>
@@ -312,75 +343,7 @@ export function NodePalette({
         ))}
       </div>
 
-      <div className="mt-6 pt-4 border-t border-border">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Keyboard Shortcuts</h4>
-        <div className="space-y-1 text-xs text-muted-foreground">
-          <div className="flex justify-between">
-            <span>Open wizard</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+W
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Search steps</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+Shift+F
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Save</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+S
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Select all</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+A
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Undo</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+Z
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Redo</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+Y
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Copy</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+C
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Paste</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+V
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Duplicate</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Ctrl+D
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Delete step</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">
-              Delete
-            </kbd>
-          </div>
-          <div className="flex justify-between">
-            <span>Close dialog/wizard</span>
-            <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted font-mono text-foreground">Esc</kbd>
-          </div>
-        </div>
-      </div>
+      <PaletteKeyboardShortcuts />
     </div>
   );
 }

@@ -149,6 +149,55 @@ export function getPlaywrightRuntimeFixtureUser(): TestUser {
   };
 }
 
+async function installAuthRouteMocks(
+  page: Page,
+  user: TestUser,
+  accessToken: string,
+  options?: {
+    organizationId?: string | null;
+    role?: "owner" | "admin" | "member" | "viewer";
+    userId?: string;
+  },
+): Promise<void> {
+  const createdAt = new Date().toISOString();
+  await Promise.all([
+    page.route("**/api/auth/me", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: options?.userId ?? "00000000-0000-0000-0000-00000000e2e1",
+          email: user.email,
+          created_at: createdAt,
+          is_active: true,
+          default_organization_id: options?.organizationId ?? null,
+          organization_role: options?.role ?? "owner",
+        }),
+      }),
+    ),
+    page.route("**/api/auth/refresh", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ access: accessToken }),
+      }),
+    ),
+    page.addInitScript((token) => {
+      window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
+      (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
+    }, accessToken),
+  ]);
+}
+
+async function gotoAndWaitForNetworkIdle(page: Page, targetPath: string): Promise<void> {
+  await page.goto(targetPath);
+  await page.waitForLoadState("networkidle");
+}
+
+async function runOrderedSteps(steps: Array<() => Promise<unknown>>): Promise<void> {
+  await steps.reduce<Promise<unknown>>((chain, step) => chain.then(() => step()), Promise.resolve());
+}
+
 export async function ensureUserRegistered(request: APIRequestContext, user: TestUser): Promise<void> {
   const response = await request.post(`${API_BASE_URL}/api/auth/register`, {
     data: { email: user.email, password: user.password },
@@ -165,11 +214,6 @@ export async function ensureUserRegistered(request: APIRequestContext, user: Tes
 
 export async function login(page: Page, user: TestUser): Promise<void> {
   await page.context().clearCookies();
-  await page.goto("/");
-  await page.evaluate(() => {
-    window.sessionStorage.removeItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__");
-    delete (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__;
-  });
 
   const response = await page.context().request.post(`${API_BASE_URL}/api/auth/login`, {
     data: {
@@ -188,37 +232,12 @@ export async function login(page: Page, user: TestUser): Promise<void> {
     throw new Error("Login response did not include an access token.");
   }
 
-  await page.route("**/api/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "00000000-0000-0000-0000-00000000e2e1",
-        email: user.email,
-        created_at: new Date().toISOString(),
-        is_active: true,
-        default_organization_id: null,
-        organization_role: "owner",
-      }),
-    });
-  });
-
-  await page.route("**/api/auth/refresh", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ access: body.access }),
-    });
-  });
-
-  await page.evaluate((token) => {
-    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
-    (window as { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
-  }, body.access);
-
-  await page.goto("/companies");
-  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 20_000 });
-  await page.waitForLoadState("networkidle");
+  await installAuthRouteMocks(page, user, body.access);
+  await runOrderedSteps([
+    () => page.goto("/companies"),
+    () => page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 20_000 }),
+    () => page.waitForLoadState("networkidle"),
+  ]);
 }
 
 export async function loginLive(
@@ -227,25 +246,28 @@ export async function loginLive(
   user: TestUser,
   targetPath = "/companies",
 ): Promise<string> {
-  await page.context().clearCookies();
-  await ensureUserRegistered(request, user);
+  await Promise.all([page.context().clearCookies(), ensureUserRegistered(request, user)]);
 
-  await page.goto("/login");
-  await page.getByRole("textbox", { name: /email address/i }).fill(user.email);
-  await page.getByRole("textbox", { name: /password/i }).fill(user.password);
   const loginResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/auth/login") && response.request().method() === "POST",
     { timeout: 30_000 },
   );
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await runOrderedSteps([
+    () => page.goto("/login"),
+    () => page.getByRole("textbox", { name: /email address/i }).fill(user.email),
+    () => page.getByRole("textbox", { name: /password/i }).fill(user.password),
+    () => page.getByRole("button", { name: /^sign in$/i }).click(),
+  ]);
   const loginResponse = await loginResponsePromise;
   if (!loginResponse.ok()) {
     throw new Error(
       `Live login failed (status ${loginResponse.status()}) via ${loginResponse.url()}: ${await loginResponse.text()}`,
     );
   }
-  await page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
+  await runOrderedSteps([
+    () => page.waitForURL(/\/companies(?:\?.*)?$/, { timeout: 30_000 }),
+    () => page.waitForLoadState("networkidle"),
+  ]);
 
   const token = await page.evaluate(() => window.sessionStorage.getItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__"));
   if (!token) {
@@ -269,38 +291,14 @@ export async function openAuthenticatedPage(
   },
 ): Promise<void> {
   await page.context().clearCookies();
-  const fakeToken = "playwright-e2e-access-token";
+  const e2eAccessToken = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-  await page.route("**/api/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "00000000-0000-0000-0000-00000000e2e9",
-        email: user.email,
-        created_at: new Date().toISOString(),
-        is_active: true,
-        default_organization_id: options?.organizationId ?? null,
-        organization_role: options?.role ?? "owner",
-      }),
-    });
+  await installAuthRouteMocks(page, user, e2eAccessToken, {
+    organizationId: options?.organizationId ?? null,
+    role: options?.role ?? "owner",
+    userId: "00000000-0000-0000-0000-00000000e2e9",
   });
-
-  await page.route("**/api/auth/refresh", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ access: fakeToken }),
-    });
-  });
-
-  await page.addInitScript((token) => {
-    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", token);
-    (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = token;
-  }, fakeToken);
-
-  await page.goto(targetPath);
-  await page.waitForLoadState("networkidle");
+  await gotoAndWaitForNetworkIdle(page, targetPath);
 }
 
 export async function openBackendAuthenticatedPage(
@@ -309,40 +307,13 @@ export async function openBackendAuthenticatedPage(
   user: TestUser,
   targetPath: string,
 ): Promise<void> {
-  await page.context().clearCookies();
-  await ensureUserRegistered(request, user);
-  const token = await getAccessToken(request, user);
-
-  await page.route("**/api/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "00000000-0000-0000-0000-00000000e2eb",
-        email: user.email,
-        created_at: new Date().toISOString(),
-        is_active: true,
-        default_organization_id: null,
-        organization_role: "owner",
-      }),
-    });
-  });
-
-  await page.route("**/api/auth/refresh", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ access: token }),
-    });
-  });
-
-  await page.addInitScript((seededToken) => {
-    window.sessionStorage.setItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__", seededToken);
-    (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__ = seededToken;
-  }, token);
-
-  await page.goto(targetPath);
-  await page.waitForLoadState("networkidle");
+  await Promise.all([page.context().clearCookies(), ensureUserRegistered(request, user)])
+    .then(() => getAccessToken(request, user))
+    .then((token) =>
+      installAuthRouteMocks(page, user, token, { userId: "00000000-0000-0000-0000-00000000e2eb" }).then(() =>
+        gotoAndWaitForNetworkIdle(page, targetPath),
+      ),
+    );
 }
 
 export async function proxyBackendApi(
@@ -353,81 +324,71 @@ export async function proxyBackendApi(
 ): Promise<void> {
   const token = await getAccessToken(request, user);
 
-  for (const pattern of patterns) {
-    await page.route(pattern, async (route) => {
-      const requestUrl = new URL(route.request().url());
-      const backendUrl = `${API_BASE_URL}${requestUrl.pathname}${requestUrl.search}`;
-      const response = await request.fetch(backendUrl, {
-        method: route.request().method(),
-        headers: {
-          ...route.request().headers(),
-          Authorization: `Bearer ${token}`,
-        },
-        data: route.request().postDataBuffer() ?? route.request().postData() ?? undefined,
-        failOnStatusCode: false,
-      });
+  await Promise.all(
+    patterns.map((pattern) =>
+      page.route(pattern, async (route) => {
+        const requestUrl = new URL(route.request().url());
+        const backendUrl = `${API_BASE_URL}${requestUrl.pathname}${requestUrl.search}`;
+        const response = await request.fetch(backendUrl, {
+          method: route.request().method(),
+          headers: {
+            ...route.request().headers(),
+            Authorization: `Bearer ${token}`,
+          },
+          data: route.request().postDataBuffer() ?? route.request().postData() ?? undefined,
+          failOnStatusCode: false,
+        });
 
-      await route.fulfill({
-        status: response.status(),
-        headers: response.headers(),
-        body: await response.body(),
-      });
-    });
-  }
+        await route.fulfill({
+          status: response.status(),
+          headers: response.headers(),
+          body: await response.body(),
+        });
+      }),
+    ),
+  );
 }
 
-export async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      await page.goto(url);
-      return;
-    } catch (error) {
-      lastError = error;
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("interrupted by another navigation")) {
-        throw error;
-      }
-      await page.waitForLoadState("domcontentloaded").catch(() => undefined);
+export async function gotoWithRetry(page: Page, url: string, attempts = 3, attempt = 0): Promise<void> {
+  try {
+    await page.goto(url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.split("interrupted by another navigation").length === 1 || attempt >= attempts - 1) {
+      throw error;
     }
+    await page.waitForLoadState("domcontentloaded").catch(() => undefined);
+    await gotoWithRetry(page, url, attempts, attempt + 1);
   }
-
-  throw lastError;
 }
 
 export function createGraphName(prefix: string): string {
   return `${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export async function getAccessToken(request: APIRequestContext, user: TestUser): Promise<string> {
-  let lastBody = "";
+export async function getAccessToken(request: APIRequestContext, user: TestUser, attempt = 0): Promise<string> {
+  const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
+    data: {
+      email: user.email,
+      password: user.password,
+    },
+  });
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
-      data: {
-        email: user.email,
-        password: user.password,
-      },
-    });
-
-    if (response.ok()) {
-      const body = (await response.json()) as { access?: string };
-      expect(body.access).toBeTruthy();
-      return body.access as string;
-    }
-
-    lastBody = await response.text();
-    if (response.status() !== 429 || attempt === 4) {
-      throw new Error(`Failed to login test user (status ${response.status()}): ${lastBody}`);
-    }
-
-    const retryAfterSeconds = Number(response.headers()["retry-after"] ?? "2");
-    const delayMs = Math.max(500, Math.min(5000, retryAfterSeconds * 1000 || 2000));
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  if (response.ok()) {
+    const body = (await response.json()) as { access?: string };
+    expect(body.access).toBeTruthy();
+    return body.access as string;
   }
 
-  throw new Error(`Failed to login test user after retries: ${lastBody}`);
+  const body = await response.text();
+  if (response.status() !== 429 || attempt >= 4) {
+    throw new Error(`Failed to login test user (status ${response.status()}): ${body}`);
+  }
+
+  const retryAfterSeconds = Number(response.headers()["retry-after"] ?? "2");
+  const delayMs = Math.max(500, Math.min(5000, retryAfterSeconds * 1000 || 2000));
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+  return getAccessToken(request, user, attempt + 1);
 }
 
 export async function createCompanyViaApi(
@@ -577,16 +538,17 @@ export function seedFrontendControlPlaneFixture(user: TestUser): FrontendControl
 }
 
 export async function createGraph(page: Page, graphName: string, description?: string): Promise<string> {
-  await gotoWithRetry(page, "/graphs");
-  await page.getByRole("button", { name: /^new operating model$/i }).click();
-  await page.locator("#create-graph-name").fill(graphName);
-  if (description) {
-    await page.locator("#create-graph-description").fill(description);
-  }
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: /^create$/i })
-    .click();
+  await runOrderedSteps([
+    () => gotoWithRetry(page, "/graphs"),
+    () => page.getByRole("button", { name: /^new operating model$/i }).click(),
+    () => page.locator("#create-graph-name").fill(graphName),
+    () => (description ? page.locator("#create-graph-description").fill(description) : Promise.resolve()),
+    () =>
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: /^create$/i })
+        .click(),
+  ]);
   await expectGraphEditorOpen(page);
   return getGraphIdFromUrl(page);
 }
@@ -623,23 +585,25 @@ export async function addNodeFromPalette(
   dialogName: RegExp,
   confirmName: RegExp = /^add node$/i,
 ): Promise<void> {
-  await addPaletteItem(page, itemId);
   const dialog = page.getByRole("dialog", { name: dialogName });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: confirmName }).click();
-  await expect(dialog).toBeHidden();
+  await runOrderedSteps([
+    () => addPaletteItem(page, itemId),
+    () => expect(dialog).toBeVisible(),
+    () => dialog.getByRole("button", { name: confirmName }).click(),
+    () => expect(dialog).toBeHidden(),
+  ]);
 }
 
 export async function addOutputNode(page: Page, label = "Output"): Promise<void> {
-  await addPaletteItem(page, "output");
   const dialog = page.getByRole("dialog", { name: /configure output node/i });
-  await expect(dialog).toBeVisible();
-  if (label !== "Output") {
-    await dialog.locator("#node-label").fill(label);
-  }
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
-  await fitGraphView(page);
+  await runOrderedSteps([
+    () => addPaletteItem(page, "output"),
+    () => expect(dialog).toBeVisible(),
+    () => (label !== "Output" ? dialog.locator("#node-label").fill(label) : Promise.resolve()),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+    () => fitGraphView(page),
+  ]);
   const canvasNode = getGraphNodeByLabel(page, label);
   const inspectorName = page.getByRole("textbox", { name: /node name/i });
   const createdOnCanvas = await canvasNode.isVisible().catch(() => false);
@@ -659,55 +623,49 @@ export async function addHumanGateNode(
   },
 ): Promise<void> {
   const label = options?.label ?? "Human Gate";
-  await addPaletteItem(page, "human_gate");
   const dialog = page.getByRole("dialog", { name: /configure human gate node/i });
-  await expect(dialog).toBeVisible();
-  if (label !== "Human Gate") {
-    await dialog.locator("#node-label").fill(label);
-  }
-  if (options?.instructions) {
-    await dialog.locator("#instructions").fill(options.instructions);
-  }
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
+  await runOrderedSteps([
+    () => addPaletteItem(page, "human_gate"),
+    () => expect(dialog).toBeVisible(),
+    () => (label !== "Human Gate" ? dialog.locator("#node-label").fill(label) : Promise.resolve()),
+    () => (options?.instructions ? dialog.locator("#instructions").fill(options.instructions) : Promise.resolve()),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+  ]);
 
   const node = getGraphNodeByLabel(page, label);
-  await expect(node).toBeVisible();
-  await node.click();
 
   const promptField = page.getByPlaceholder("Please review and approve this step...");
-  await expect(promptField).toBeVisible();
-  await promptField.fill(options?.promptMessage ?? "Approve this execution step before it continues.");
+  await runOrderedSteps([
+    () => expect(node).toBeVisible(),
+    () => node.click(),
+    () => expect(promptField).toBeVisible(),
+    () => promptField.fill(options?.promptMessage ?? "Approve this execution step before it continues."),
+  ]);
 }
 
 export async function addAgentNode(page: Page, options: AgentWorkflowOptions): Promise<void> {
-  await addPaletteItem(page, "agent");
   const dialog = page.getByRole("dialog", { name: /configure agent node/i });
-  await expect(dialog).toBeVisible();
-
-  await dialog.locator("#node-label").fill(options.agentLabel ?? "Jackie");
-  await dialog.locator("#agent-instructions").fill(options.instructions);
-
-  if (options.provider) {
-    await dialog.locator("#agent-provider").selectOption(options.provider);
-  }
-  if (options.model) {
-    await dialog.locator("#agent-model").selectOption(options.model);
-  }
-
-  await dialog.locator("#agent-tools").fill(options.toolNames.join("\n"));
-
-  if (options.observationContextPaths?.length) {
-    await dialog.locator("#agent-observation-context-paths").fill(options.observationContextPaths.join("\n"));
-  }
-
-  if (options.approvalRequiredTools?.length) {
-    await dialog.locator("#agent-approval-tools").fill(options.approvalRequiredTools.join("\n"));
-  }
-
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
-  await expect(getGraphNodeByLabel(page, options.agentLabel ?? "Jackie")).toBeVisible();
+  await runOrderedSteps([
+    () => addPaletteItem(page, "agent"),
+    () => expect(dialog).toBeVisible(),
+    () => dialog.locator("#node-label").fill(options.agentLabel ?? "Jackie"),
+    () => dialog.locator("#agent-instructions").fill(options.instructions),
+    () => (options.provider ? dialog.locator("#agent-provider").selectOption(options.provider) : Promise.resolve()),
+    () => (options.model ? dialog.locator("#agent-model").selectOption(options.model) : Promise.resolve()),
+    () => dialog.locator("#agent-tools").fill(options.toolNames.join("\n")),
+    () =>
+      options.observationContextPaths?.length
+        ? dialog.locator("#agent-observation-context-paths").fill(options.observationContextPaths.join("\n"))
+        : Promise.resolve(),
+    () =>
+      options.approvalRequiredTools?.length
+        ? dialog.locator("#agent-approval-tools").fill(options.approvalRequiredTools.join("\n"))
+        : Promise.resolve(),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+    () => expect(getGraphNodeByLabel(page, options.agentLabel ?? "Jackie")).toBeVisible(),
+  ]);
 }
 
 export async function addObservationContextNode(
@@ -718,23 +676,19 @@ export async function addObservationContextNode(
     limit?: number;
   },
 ): Promise<void> {
-  await addPaletteItem(page, "observation_context");
   const dialog = page.getByRole("dialog", {
     name: /configure observation context node/i,
   });
-  await expect(dialog).toBeVisible();
-  if (label !== "Observation Context") {
-    await dialog.locator("#node-label").fill(label);
-  }
-  if (options?.query) {
-    await dialog.locator("#query-value").fill(options.query);
-  }
-  if (options?.limit) {
-    await dialog.locator("#observation-context-limit").fill(String(options.limit));
-  }
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
-  await expect(getGraphNodeByLabel(page, label)).toBeVisible();
+  await runOrderedSteps([
+    () => addPaletteItem(page, "observation_context"),
+    () => expect(dialog).toBeVisible(),
+    () => (label !== "Observation Context" ? dialog.locator("#node-label").fill(label) : Promise.resolve()),
+    () => (options?.query ? dialog.locator("#query-value").fill(options.query) : Promise.resolve()),
+    () => (options?.limit ? dialog.locator("#observation-context-limit").fill(String(options.limit)) : Promise.resolve()),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+    () => expect(getGraphNodeByLabel(page, label)).toBeVisible(),
+  ]);
 }
 
 export async function addObservationSaveNode(
@@ -748,26 +702,22 @@ export async function addObservationSaveNode(
     topicKey?: string;
   },
 ): Promise<void> {
-  await addPaletteItem(page, "observation_save");
   const dialog = page.getByRole("dialog", {
     name: /configure observation save node/i,
   });
-  await expect(dialog).toBeVisible();
-  if (label !== "Observation Save") {
-    await dialog.locator("#node-label").fill(label);
-  }
-  await dialog.locator("#observation-type").fill(options?.type ?? "customer_memory");
-  await dialog.locator("#observation-scope").selectOption(options?.scope ?? "graph");
-  await dialog.locator("#content-value").fill(options?.content ?? "Jackie prefers concise planning updates.");
-  if (options?.title) {
-    await dialog.locator("#title-value").fill(options.title);
-  }
-  if (options?.topicKey) {
-    await dialog.locator("#topic_key-value").fill(options.topicKey);
-  }
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
-  await fitGraphView(page);
+  await runOrderedSteps([
+    () => addPaletteItem(page, "observation_save"),
+    () => expect(dialog).toBeVisible(),
+    () => (label !== "Observation Save" ? dialog.locator("#node-label").fill(label) : Promise.resolve()),
+    () => dialog.locator("#observation-type").fill(options?.type ?? "customer_memory"),
+    () => dialog.locator("#observation-scope").selectOption(options?.scope ?? "graph"),
+    () => dialog.locator("#content-value").fill(options?.content ?? "Jackie prefers concise planning updates."),
+    () => (options?.title ? dialog.locator("#title-value").fill(options.title) : Promise.resolve()),
+    () => (options?.topicKey ? dialog.locator("#topic_key-value").fill(options.topicKey) : Promise.resolve()),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+    () => fitGraphView(page),
+  ]);
   const canvasNode = getGraphNodeByLabel(page, label);
   const inspectorName = page.getByRole("textbox", { name: /node name/i });
   const createdOnCanvas = await canvasNode.isVisible().catch(() => false);
@@ -779,16 +729,16 @@ export async function addObservationSaveNode(
 }
 
 export async function addMemoryNode(page: Page, label = "Memory", options?: { key?: string }): Promise<void> {
-  await addPaletteItem(page, "memory");
   const dialog = page.getByRole("dialog", { name: /configure memory node/i });
-  await expect(dialog).toBeVisible();
-  if (label !== "Memory") {
-    await dialog.locator("#node-label").fill(label);
-  }
-  await dialog.locator("#memory-key").fill(options?.key ?? "conversation_history");
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
-  await expect(getGraphNodeByLabel(page, label)).toBeVisible();
+  await runOrderedSteps([
+    () => addPaletteItem(page, "memory"),
+    () => expect(dialog).toBeVisible(),
+    () => (label !== "Memory" ? dialog.locator("#node-label").fill(label) : Promise.resolve()),
+    () => dialog.locator("#memory-key").fill(options?.key ?? "conversation_history"),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+    () => expect(getGraphNodeByLabel(page, label)).toBeVisible(),
+  ]);
 }
 
 async function getCenter(locator: Locator): Promise<{ x: number; y: number }> {
@@ -811,30 +761,31 @@ export async function connectGraphNodes(
 
   const sourceNode = getGraphNodeByLabel(page, sourceLabel);
   const targetNode = getGraphNodeByLabel(page, targetLabel);
-  await expect(sourceNode).toBeVisible();
-  await expect(targetNode).toBeVisible();
+  await Promise.all([expect(sourceNode).toBeVisible(), expect(targetNode).toBeVisible()]);
 
   const sourceHandle = sourceNode.getByTestId(sourceHandleId);
   const targetHandle = targetNode.getByTestId(targetHandleId);
-  await expect(sourceHandle).toBeVisible();
-  await expect(targetHandle).toBeVisible();
+  await Promise.all([expect(sourceHandle).toBeVisible(), expect(targetHandle).toBeVisible()]);
 
-  const from = await getCenter(sourceHandle);
-  const to = await getCenter(targetHandle);
+  const [from, to] = await Promise.all([getCenter(sourceHandle), getCenter(targetHandle)]);
 
   try {
-    await sourceHandle.click();
-    await targetHandle.click();
-    await expect(edges).toHaveCount(beforeCount + 1, { timeout: 2_000 });
+    await runOrderedSteps([
+      () => sourceHandle.click(),
+      () => targetHandle.click(),
+      () => expect(edges).toHaveCount(beforeCount + 1, { timeout: 2_000 }),
+    ]);
     return;
   } catch {
     await page.keyboard.press("Escape").catch(() => undefined);
   }
 
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(to.x, to.y, { steps: 20 });
-  await page.mouse.up();
+  await runOrderedSteps([
+    () => page.mouse.move(from.x, from.y),
+    () => page.mouse.down(),
+    () => page.mouse.move(to.x, to.y, { steps: 20 }),
+    () => page.mouse.up(),
+  ]);
 
   await expect(edges).toHaveCount(beforeCount + 1);
 }
@@ -890,22 +841,24 @@ export async function installRuntimePackage(page: Page, packageName: string, too
 }
 
 export async function addMarketplaceToolNode(page: Page, packageSlug: string, nodeLabel: string): Promise<void> {
-  await addPaletteItem(page, `marketplace:${packageSlug}`);
   const dialog = page.getByRole("dialog", { name: /configure tool node/i });
-  await expect(dialog).toBeVisible();
-  if (nodeLabel !== "Tool") {
-    await dialog.locator("#node-label").fill(nodeLabel);
-  }
-  await dialog.getByRole("button", { name: /^add node$/i }).click();
-  await expect(dialog).toBeHidden();
-  await expect(getGraphNodeByLabel(page, nodeLabel)).toBeVisible();
+  await runOrderedSteps([
+    () => addPaletteItem(page, `marketplace:${packageSlug}`),
+    () => expect(dialog).toBeVisible(),
+    () => (nodeLabel !== "Tool" ? dialog.locator("#node-label").fill(nodeLabel) : Promise.resolve()),
+    () => dialog.getByRole("button", { name: /^add node$/i }).click(),
+    () => expect(dialog).toBeHidden(),
+    () => expect(getGraphNodeByLabel(page, nodeLabel)).toBeVisible(),
+  ]);
 }
 
 export async function startRunFromEditor(page: Page): Promise<string> {
   const runButton = page.getByRole("button", { name: /run workflow/i });
-  await expect(runButton).toBeEnabled();
-  await runButton.click();
-  await expect(page).toHaveURL(/\/runs\/[a-f0-9-]+$/, { timeout: 15_000 });
+  await runOrderedSteps([
+    () => expect(runButton).toBeEnabled(),
+    () => runButton.click(),
+    () => expect(page).toHaveURL(/\/runs\/[a-f0-9-]+$/, { timeout: 15_000 }),
+  ]);
   const runId = page.url().match(/\/runs\/([a-f0-9-]+)$/)?.[1];
   if (!runId) {
     throw new Error(`Could not determine run id from URL: ${page.url()}`);
@@ -1000,11 +953,13 @@ export async function authorAgentWorkflow(
   const outputLabel = options.outputLabel ?? "Output";
   const graphId = await createGraph(page, options.graphName);
 
-  await addAgentNode(page, options);
-  await clearGraphSelection(page);
-  await addOutputNode(page, outputLabel);
-  await connectGraphNodes(page, agentLabel, outputLabel);
-  await saveGraph(page);
+  await runOrderedSteps([
+    () => addAgentNode(page, options),
+    () => clearGraphSelection(page),
+    () => addOutputNode(page, outputLabel),
+    () => connectGraphNodes(page, agentLabel, outputLabel),
+    () => saveGraph(page),
+  ]);
 
   return { graphId, agentLabel, outputLabel };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,20 @@ type MemoryConfigFormState = {
   showAdvanced: boolean;
 };
 
+type MemoryConfigDialogState = {
+  loading: boolean;
+  saving: boolean;
+  error: string | null;
+  config: MemoryConfig | null;
+  formState: MemoryConfigFormState;
+};
+
+type MemoryConfigDialogAction = {
+  patch:
+    | Partial<MemoryConfigDialogState>
+    | ((state: MemoryConfigDialogState) => Partial<MemoryConfigDialogState>);
+};
+
 export interface MemoryConfigDialogProps {
   graphId: string | null;
   open: boolean;
@@ -60,213 +74,57 @@ const deriveMemoryDepth = (bufferSize: number): MemoryDepth => {
 const toHours = (seconds: number) => Math.max(1, Math.round(seconds / 3600));
 const toDays = (seconds: number) => Math.max(1, Math.round(seconds / 86400));
 
-export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfigDialogProps) {
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [config, setConfig] = useState<MemoryConfig | null>(null);
-  const [formState, setFormState] = useState<MemoryConfigFormState>({
-    memoryDepth: "medium",
-    customBufferSize: undefined,
-    enablePersistence: false,
-    autoPrepend: true,
-    summaryTtlHours: 24,
-    factsTtlDays: 7,
-    vectorEnabled: false,
-    vectorTopK: 5,
-    vectorThreshold: 0.7,
-    vectorRecencyWeight: 0.2,
-    embeddingModel: "text-embedding-ada-002",
-    summarizationEnabled: false,
-    summarizationThreshold: 30,
-    summarizationKeepRecent: 10,
-    summarizationModel: "gpt-4",
-    showAdvanced: false,
-  });
+const initialMemoryConfigFormState: MemoryConfigFormState = {
+  memoryDepth: "medium",
+  customBufferSize: undefined,
+  enablePersistence: false,
+  autoPrepend: true,
+  summaryTtlHours: 24,
+  factsTtlDays: 7,
+  vectorEnabled: false,
+  vectorTopK: 5,
+  vectorThreshold: 0.7,
+  vectorRecencyWeight: 0.2,
+  embeddingModel: "text-embedding-ada-002",
+  summarizationEnabled: false,
+  summarizationThreshold: 30,
+  summarizationKeepRecent: 10,
+  summarizationModel: "gpt-4",
+  showAdvanced: false,
+};
 
-  const bufferSize = useMemo(() => {
-    const option = MEMORY_DEPTH_OPTIONS.find((entry) => entry.value === formState.memoryDepth);
-    if (!option || option.bufferSize === null) {
-      return formState.customBufferSize ?? config?.buffer_size ?? 20;
-    }
-    return option.bufferSize;
-  }, [config?.buffer_size, formState.customBufferSize, formState.memoryDepth]);
+const initialMemoryConfigDialogState: MemoryConfigDialogState = {
+  loading: false,
+  saving: false,
+  error: null,
+  config: null,
+  formState: initialMemoryConfigFormState,
+};
 
-  const loadConfig = useCallback(async () => {
-    if (!graphId) {
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await graphsApi.getMemoryConfig(graphId);
-      setConfig(data);
-      setFormState((prev) => ({
-        ...prev,
-        memoryDepth: deriveMemoryDepth(data.buffer_size),
-        customBufferSize: deriveMemoryDepth(data.buffer_size) === "custom" ? data.buffer_size : undefined,
-        enablePersistence: data.redis_enabled,
-        autoPrepend: data.auto_prepend,
-        summaryTtlHours: toHours(data.redis_summary_ttl),
-        factsTtlDays: toDays(data.redis_facts_ttl),
-        vectorEnabled: data.vector_enabled,
-        vectorTopK: data.vector_top_k,
-        vectorThreshold: data.vector_threshold,
-        vectorRecencyWeight: data.vector_recency_weight,
-        embeddingModel: data.embedding_model || "text-embedding-ada-002",
-        summarizationEnabled: data.summarization_enabled,
-        summarizationThreshold: data.summarization_threshold,
-        summarizationKeepRecent: data.summarization_keep_recent,
-        summarizationModel: data.summarization_model || "gpt-4",
-      }));
-    } catch (err) {
-      const message = getApiErrorMessage(err, "Failed to load memory settings.");
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [graphId]);
+function memoryConfigDialogReducer(
+  state: MemoryConfigDialogState,
+  action: MemoryConfigDialogAction,
+): MemoryConfigDialogState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    void loadConfig();
-  }, [open, loadConfig]);
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
 
-  const handleSave = useCallback(async () => {
-    if (!graphId) {
-      showError("Select a graph to configure memory.");
-      return;
-    }
-    if (!bufferSize || bufferSize < 1 || bufferSize > 200) {
-      showError("Buffer size must be between 1 and 200.");
-      return;
-    }
-    if (formState.summarizationEnabled && formState.summarizationThreshold < formState.summarizationKeepRecent + 10) {
-      showError("Summarization threshold must be at least keep recent + 10.");
-      return;
-    }
-    if (formState.vectorEnabled && (formState.vectorThreshold < 0.5 || formState.vectorThreshold > 0.99)) {
-      showError("Vector threshold must be between 0.5 and 0.99.");
-      return;
-    }
-    if (formState.vectorEnabled && (formState.vectorRecencyWeight < 0 || formState.vectorRecencyWeight > 1)) {
-      showError("Vector recency weight must be between 0 and 1.");
-      return;
-    }
-    if (formState.vectorEnabled && (formState.vectorTopK < 1 || formState.vectorTopK > 50)) {
-      showError("Vector top-k must be between 1 and 50.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const payload: Partial<MemoryConfig> = {
-        buffer_enabled: config?.buffer_enabled ?? true,
-        buffer_size: bufferSize,
-        auto_prepend: formState.autoPrepend,
-        redis_enabled: formState.enablePersistence,
-        redis_summary_ttl: Math.max(1, formState.summaryTtlHours) * 3600,
-        redis_facts_ttl: Math.max(1, formState.factsTtlDays) * 86400,
-        vector_enabled: formState.vectorEnabled,
-        vector_top_k: Math.max(1, formState.vectorTopK),
-        vector_threshold: formState.vectorThreshold,
-        vector_recency_weight: formState.vectorRecencyWeight,
-        embedding_model: formState.embeddingModel.trim() || "text-embedding-ada-002",
-        summarization_enabled: formState.summarizationEnabled,
-        summarization_threshold: Math.max(1, formState.summarizationThreshold),
-        summarization_keep_recent: Math.max(1, formState.summarizationKeepRecent),
-        summarization_model: formState.summarizationModel.trim() || "gpt-4",
-      };
-      const updated = await graphsApi.updateMemoryConfig(graphId, payload);
-      setConfig(updated);
-      showSuccess("Memory settings saved.");
-      onOpenChange(false);
-    } catch (err) {
-      const message = getApiErrorMessage(err, "Failed to save memory settings.");
-      setError(message);
-      showError(message);
-    } finally {
-      setSaving(false);
-    }
-  }, [bufferSize, config, formState, graphId, onOpenChange]);
-
-  const handleToggleAdvanced = useCallback(() => {
-    setFormState((prev) => ({ ...prev, showAdvanced: !prev.showAdvanced }));
-  }, []);
+function MemoryAdvancedSettings({
+  formState,
+  setFormState,
+}: {
+  formState: MemoryConfigFormState;
+  setFormState: (value: SetStateAction<MemoryConfigFormState>) => void;
+}) {
+  if (!formState.showAdvanced) {
+    return null;
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Memory Settings</DialogTitle>
-          <DialogDescription>Control how much context your agent retains across prompts.</DialogDescription>
-        </DialogHeader>
-
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading memory configuration…</p>
-        ) : (
-          <div className="space-y-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
-
-            <FormField label="Memory Depth" htmlFor="memory-depth">
-              <select
-                id="memory-depth"
-                value={formState.memoryDepth}
-                onChange={(event) =>
-                  setFormState((prev) => ({
-                    ...prev,
-                    memoryDepth: event.target.value as MemoryDepth,
-                  }))
-                }
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm"
-              >
-                {MEMORY_DEPTH_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            {formState.memoryDepth === "custom" && (
-              <FormField label="Custom Buffer Size" htmlFor="custom-buffer-size">
-                <Input
-                  id="custom-buffer-size"
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={formState.customBufferSize ?? ""}
-                  onChange={(event) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      customBufferSize: event.target.value ? Number(event.target.value) : undefined,
-                    }))
-                  }
-                />
-              </FormField>
-            )}
-
-            <FormField label="Enable Persistence" htmlFor="enable-persistence">
-              <Switch
-                id="enable-persistence"
-                checked={formState.enablePersistence}
-                onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, enablePersistence: checked }))}
-              />
-            </FormField>
-
-            <Separator />
-
-            <button
-              type="button"
-              onClick={handleToggleAdvanced}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {formState.showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
-            </button>
-
-            {formState.showAdvanced && (
               <div className="space-y-4">
                 <FormField label="Auto-prepend memory" htmlFor="auto-prepend">
                   <Switch
@@ -486,7 +344,212 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
                   />
                 </FormField>
               </div>
+  );
+}
+export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfigDialogProps) {
+  const [dialogState, dispatchDialogState] = useReducer(memoryConfigDialogReducer, initialMemoryConfigDialogState);
+  const { loading, saving, error, config, formState } = dialogState;
+  const setDialogField = useCallback(
+    <K extends keyof MemoryConfigDialogState>(key: K, value: SetStateAction<MemoryConfigDialogState[K]>) => {
+      dispatchDialogState({
+        patch: (current) =>
+          ({ [key]: resolveStateAction(value, current[key]) }) as Partial<MemoryConfigDialogState>,
+      });
+    },
+    [],
+  );
+  const setLoading = useCallback((value: SetStateAction<boolean>) => setDialogField("loading", value), [setDialogField]);
+  const setSaving = useCallback((value: SetStateAction<boolean>) => setDialogField("saving", value), [setDialogField]);
+  const setError = useCallback((value: SetStateAction<string | null>) => setDialogField("error", value), [setDialogField]);
+  const setConfig = useCallback((value: SetStateAction<MemoryConfig | null>) => setDialogField("config", value), [setDialogField]);
+  const setFormState = useCallback(
+    (value: SetStateAction<MemoryConfigFormState>) => setDialogField("formState", value),
+    [setDialogField],
+  );
+
+  const bufferSize = useMemo(() => {
+    const option = MEMORY_DEPTH_OPTIONS.find((entry) => entry.value === formState.memoryDepth);
+    if (!option || option.bufferSize === null) {
+      return formState.customBufferSize ?? config?.buffer_size ?? 20;
+    }
+    return option.bufferSize;
+  }, [config?.buffer_size, formState.customBufferSize, formState.memoryDepth]);
+
+  const loadConfig = useCallback(async () => {
+    if (!graphId) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await graphsApi.getMemoryConfig(graphId);
+      setConfig(data);
+      setFormState((prev) => ({
+        ...prev,
+        memoryDepth: deriveMemoryDepth(data.buffer_size),
+        customBufferSize: deriveMemoryDepth(data.buffer_size) === "custom" ? data.buffer_size : undefined,
+        enablePersistence: data.redis_enabled,
+        autoPrepend: data.auto_prepend,
+        summaryTtlHours: toHours(data.redis_summary_ttl),
+        factsTtlDays: toDays(data.redis_facts_ttl),
+        vectorEnabled: data.vector_enabled,
+        vectorTopK: data.vector_top_k,
+        vectorThreshold: data.vector_threshold,
+        vectorRecencyWeight: data.vector_recency_weight,
+        embeddingModel: data.embedding_model || "text-embedding-ada-002",
+        summarizationEnabled: data.summarization_enabled,
+        summarizationThreshold: data.summarization_threshold,
+        summarizationKeepRecent: data.summarization_keep_recent,
+        summarizationModel: data.summarization_model || "gpt-4",
+      }));
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Failed to load memory settings.");
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [graphId]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    void loadConfig();
+  }, [open, loadConfig]);
+
+  const handleSave = useCallback(async () => {
+    if (!graphId) {
+      showError("Select a graph to configure memory.");
+      return;
+    }
+    if (!bufferSize || bufferSize < 1 || bufferSize > 200) {
+      showError("Buffer size must be between 1 and 200.");
+      return;
+    }
+    if (formState.summarizationEnabled && formState.summarizationThreshold < formState.summarizationKeepRecent + 10) {
+      showError("Summarization threshold must be at least keep recent + 10.");
+      return;
+    }
+    if (formState.vectorEnabled && (formState.vectorThreshold < 0.5 || formState.vectorThreshold > 0.99)) {
+      showError("Vector threshold must be between 0.5 and 0.99.");
+      return;
+    }
+    if (formState.vectorEnabled && (formState.vectorRecencyWeight < 0 || formState.vectorRecencyWeight > 1)) {
+      showError("Vector recency weight must be between 0 and 1.");
+      return;
+    }
+    if (formState.vectorEnabled && (formState.vectorTopK < 1 || formState.vectorTopK > 50)) {
+      showError("Vector top-k must be between 1 and 50.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload: Partial<MemoryConfig> = {
+        buffer_enabled: config?.buffer_enabled ?? true,
+        buffer_size: bufferSize,
+        auto_prepend: formState.autoPrepend,
+        redis_enabled: formState.enablePersistence,
+        redis_summary_ttl: Math.max(1, formState.summaryTtlHours) * 3600,
+        redis_facts_ttl: Math.max(1, formState.factsTtlDays) * 86400,
+        vector_enabled: formState.vectorEnabled,
+        vector_top_k: Math.max(1, formState.vectorTopK),
+        vector_threshold: formState.vectorThreshold,
+        vector_recency_weight: formState.vectorRecencyWeight,
+        embedding_model: formState.embeddingModel.trim() || "text-embedding-ada-002",
+        summarization_enabled: formState.summarizationEnabled,
+        summarization_threshold: Math.max(1, formState.summarizationThreshold),
+        summarization_keep_recent: Math.max(1, formState.summarizationKeepRecent),
+        summarization_model: formState.summarizationModel.trim() || "gpt-4",
+      };
+      const updated = await graphsApi.updateMemoryConfig(graphId, payload);
+      setConfig(updated);
+      showSuccess("Memory settings saved.");
+      onOpenChange(false);
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Failed to save memory settings.");
+      setError(message);
+      showError(message);
+    } finally {
+      setSaving(false);
+    }
+  }, [bufferSize, config, formState, graphId, onOpenChange]);
+
+  const handleToggleAdvanced = useCallback(() => {
+    setFormState((prev) => ({ ...prev, showAdvanced: !prev.showAdvanced }));
+  }, []);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Memory Settings</DialogTitle>
+          <DialogDescription>Control how much context your agent retains across prompts.</DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading memory configuration…</p>
+        ) : (
+          <div className="space-y-4">
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <FormField label="Memory Depth" htmlFor="memory-depth">
+              <select
+                id="memory-depth"
+                value={formState.memoryDepth}
+                onChange={(event) =>
+                  setFormState((prev) => ({
+                    ...prev,
+                    memoryDepth: event.target.value as MemoryDepth,
+                  }))
+                }
+                className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+              >
+                {MEMORY_DEPTH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            {formState.memoryDepth === "custom" && (
+              <FormField label="Custom Buffer Size" htmlFor="custom-buffer-size">
+                <Input
+                  id="custom-buffer-size"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={formState.customBufferSize ?? ""}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      customBufferSize: event.target.value ? Number(event.target.value) : undefined,
+                    }))
+                  }
+                />
+              </FormField>
             )}
+
+            <FormField label="Enable Persistence" htmlFor="enable-persistence">
+              <Switch
+                id="enable-persistence"
+                checked={formState.enablePersistence}
+                onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, enablePersistence: checked }))}
+              />
+            </FormField>
+
+            <Separator />
+
+            <button
+              type="button"
+              onClick={handleToggleAdvanced}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {formState.showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
+            </button>
+
+            <MemoryAdvancedSettings formState={formState} setFormState={setFormState} />
           </div>
         )}
 
@@ -502,5 +565,3 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
     </Dialog>
   );
 }
-
-export default MemoryConfigDialog;

@@ -327,12 +327,14 @@ test.describe("Marketing Simulation Replay", () => {
     await registerViaUi(page, user.email, user.password);
     await loginViaUi(page, user.email, user.password);
 
-    const accessToken = await getUiAccessToken(page);
-    const graphId = await createGraph(
-      page,
-      createGraphName("Marketing Company Failure Simulation"),
-      "Failure visibility harness.",
-    );
+    const { accessToken, graphId } = await getUiAccessToken(page).then(async (accessToken) => ({
+      accessToken,
+      graphId: await createGraph(
+        page,
+        createGraphName("Marketing Company Failure Simulation"),
+        "Failure visibility harness.",
+      ),
+    }));
     const versionId = await createGraphVersion(request, accessToken, graphId);
 
     const startResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
@@ -358,13 +360,17 @@ test.describe("Marketing Simulation Replay", () => {
           run_id: runId,
           status: run.status,
           error_message: run.error_message,
-          failed_nodes: run.node_runs
-            .filter((nodeRun) => nodeRun.status === "failed")
-            .map((nodeRun) => ({
-              node_id: nodeRun.node_id,
-              attempt: nodeRun.attempt,
-              error_json: nodeRun.error_json,
-            })),
+          failed_nodes: run.node_runs.flatMap((nodeRun) =>
+            nodeRun.status === "failed"
+              ? [
+                  {
+                    node_id: nodeRun.node_id,
+                    attempt: nodeRun.attempt,
+                    error_json: nodeRun.error_json,
+                  },
+                ]
+              : [],
+          ),
         },
         null,
         2,

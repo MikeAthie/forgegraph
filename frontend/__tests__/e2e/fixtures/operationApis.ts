@@ -172,23 +172,24 @@ export async function mockOperationApis(
     [pausedOperationId]: pausedDetail,
   };
 
-  await page.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
+  await Promise.all([
+    page.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(apiSuccess({ count: 0 })),
     });
-  });
+    }),
 
-  await page.route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
+    page.route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(apiSuccess(operations)),
     });
-  });
+    }),
 
-  await page.route(/\/api\/runs\/[^/]+(?:\?.*)?$/, async (route: Route) => {
+    page.route(/\/api\/runs\/[^/]+(?:\?.*)?$/, async (route: Route) => {
     const operationId = route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
     if (options?.missingOperationId && operationId === options.missingOperationId) {
       await route.fulfill({
@@ -223,5 +224,6 @@ export async function mockOperationApis(
             },
       ),
     });
-  });
+    }),
+  ]);
 }

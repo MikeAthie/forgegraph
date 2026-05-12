@@ -19,14 +19,14 @@ function loadRootEnvFile() {
       continue;
     }
 
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex < 1) {
+    const [keyPart, ...valueParts] = line.split("=");
+    const key = keyPart?.trim() ?? "";
+    if (!key || valueParts.length === 0) {
       continue;
     }
 
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line
-      .slice(separatorIndex + 1)
+    const value = valueParts
+      .join("=")
       .trim()
       .replace(/^['"]|['"]$/g, "");
 

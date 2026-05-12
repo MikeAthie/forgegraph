@@ -127,13 +127,13 @@ describe("HttpNodeForm", () => {
   ) => {
     const Wrapper = () => {
       const [config, setConfig] = useState(initialConfig);
-      const handleChange = (nextConfig: NodeFormProps["config"]) => {
+      const recordConfigChange = (nextConfig: NodeFormProps["config"]) => {
         setConfig(nextConfig);
         mockOnChange(nextConfig);
       };
 
       return (
-        <HttpNodeForm config={config} onChange={handleChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
+        <HttpNodeForm config={config} onChange={recordConfigChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
       );
     };
 

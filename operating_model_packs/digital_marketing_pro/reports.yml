@@ -1,0 +1,47 @@
+report_templates:
+  - id: dmp.growth_plan
+    label: Growth Plan
+  - id: dmp.yearly_planner
+    label: Yearly Planner
+  - id: dmp.monthly_performance_report
+    label: Monthly Performance Report
+  - id: atlas_monthly_report.v1
+    display_name: Reporte mensual
+    description: Monthly review report assembled from a metric snapshot, scorecard, findings, signals, deliverables, and next actions.
+    artifact_schema_id: monthly_report
+    sections:
+      - summary
+      - kpi_scorecard
+      - learnings
+      - content_that_worked
+      - weak_content
+      - recommendations
+      - next_actions
+      - audience_insights
+      - strategic_adjustments
+      - service_history_references
+    required_inputs:
+      - metric_snapshot
+      - evaluation_run
+    optional_inputs:
+      - artifacts_created_in_period
+      - execution_receipts
+      - decisions
+      - approvals
+      - audience_insights
+    state_projection_behavior:
+      currently_true_state:
+        reference_report: true
+      client_service_history:
+        append_periodic_entry: true
+
+periodic_review_templates:
+  - id: atlas_monthly_review.v1
+    display_name: Reporte y optimización mensual
+    cadence: monthly
+    timezone: America/Mexico_City
+    evaluation_profile_id: atlas_monthly_kpi_scorecard.v1
+    report_template_id: atlas_monthly_report.v1
+    history_projection_type: client_service_history
+    history_display_label: Historial del servicio
+    enabled: true

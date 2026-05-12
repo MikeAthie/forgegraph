@@ -15,7 +15,7 @@ export interface FieldError {
 /**
  * Validation result
  */
-export interface ValidationResult {
+interface ValidationResult {
   isValid: boolean;
   errors: FieldError[];
 }
@@ -23,7 +23,7 @@ export interface ValidationResult {
 /**
  * Validate that a value is not empty
  */
-export function validateRequired(value: unknown, fieldName: string): FieldError | null {
+function validateRequired(value: unknown, fieldName: string): FieldError | null {
   if (value === undefined || value === null || value === "") {
     return { field: fieldName, message: `${fieldName} is required` };
   }
@@ -82,12 +82,13 @@ export function validateExpression(value: string, fieldName: string): FieldError
 
   // Check for balanced brackets
   const brackets: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
+  const closingBrackets = new Set(Object.values(brackets));
   const stack: string[] = [];
 
   for (const char of value) {
     if (brackets[char]) {
       stack.push(brackets[char]);
-    } else if (Object.values(brackets).includes(char)) {
+    } else if (closingBrackets.has(char)) {
       if (stack.pop() !== char) {
         return { field: fieldName, message: "Unbalanced brackets in expression" };
       }
@@ -104,7 +105,7 @@ export function validateExpression(value: string, fieldName: string): FieldError
 /**
  * Validate number within range
  */
-export function validateNumberRange(
+function validateNumberRange(
   value: number | undefined,
   fieldName: string,
   min?: number,
@@ -132,7 +133,7 @@ export function validateNumberRange(
 /**
  * Validate string length
  */
-export function validateLength(
+function validateLength(
   value: string | undefined,
   fieldName: string,
   minLength?: number,
@@ -156,7 +157,7 @@ export function validateLength(
 /**
  * Combine multiple validation errors
  */
-export function combineValidationErrors(...errors: (FieldError | null)[]): ValidationResult {
+function combineValidationErrors(...errors: (FieldError | null)[]): ValidationResult {
   const validErrors = errors.filter((e): e is FieldError => e !== null);
   return {
     isValid: validErrors.length === 0,
@@ -167,14 +168,14 @@ export function combineValidationErrors(...errors: (FieldError | null)[]): Valid
 /**
  * Get error message for a specific field
  */
-export function getFieldError(errors: FieldError[], fieldName: string): string | undefined {
+function getFieldError(errors: FieldError[], fieldName: string): string | undefined {
   return errors.find((e) => e.field === fieldName)?.message;
 }
 
 /**
  * Form state hook return type
  */
-export interface UseFormValidationReturn<T> {
+interface UseFormValidationReturn<T> {
   values: T;
   errors: FieldError[];
   isValid: boolean;

@@ -27,10 +27,11 @@ test.describe("Tenant isolation live gate", () => {
 
     const tenantA = createTestUser(testInfo, "tenant-a-live");
     const tenantB = createTestUser(testInfo, "tenant-b-live");
-    await ensureUserRegistered(request, tenantA);
-    await ensureUserRegistered(request, tenantB);
-    const tenantAToken = await getAccessToken(request, tenantA);
-    const tenantBToken = await loginLive(page, request, tenantB, "/runs");
+    await Promise.all([ensureUserRegistered(request, tenantA), ensureUserRegistered(request, tenantB)]);
+    const [tenantAToken, tenantBToken] = await Promise.all([
+      getAccessToken(request, tenantA),
+      loginLive(page, request, tenantB, "/runs"),
+    ]);
 
     const graphName = createGraphName("Tenant A Live Isolation");
     const promptMessage = "Tenant A approval should never appear in tenant B.";

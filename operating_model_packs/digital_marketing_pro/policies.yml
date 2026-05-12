@@ -1,0 +1,34 @@
+policy_packs:
+  - id: dmp.side_effect_governance
+    label: Side Effect Governance
+    rules:
+      - id: dmp.publish.requires_policy
+        action_type: publish
+        risk_floor: MEDIUM
+        approval_required_at: HIGH
+      - id: dmp.send_email.requires_policy
+        action_type: send_email
+        risk_floor: MEDIUM
+        approval_required_at: HIGH
+      - id: dmp.launch_ads.requires_policy
+        action_type: launch_ads
+        risk_floor: HIGH
+        approval_required_at: HIGH
+      - id: dmp.sync_crm.requires_policy
+        action_type: sync_crm
+        risk_floor: HIGH
+        approval_required_at: HIGH
+      - id: dmp.export_report.requires_policy
+        action_type: export_report
+        risk_floor: LOW
+        approval_required_at: CRITICAL
+risk_inputs:
+  - action_type
+  - channel
+  - industry
+  - jurisdiction
+  - audience_sensitivity
+  - budget
+  - regulated_claims
+  - personal_data_exposure
+  - external_write_side_effect

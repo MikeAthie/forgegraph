@@ -80,9 +80,9 @@ function TypedEdgeComponent({
       [DataType.NUMBER]: "rgb(245 158 11)", // amber-500
       [DataType.BOOLEAN]: "rgb(244 63 94)", // rose-500
       [DataType.IMAGE]: "rgb(236 72 153)", // pink-500
-      [DataType.FILE]: "rgb(100 116 139)", // slate-500
-      [DataType.ANY]: "rgb(156 163 175)", // gray-400
-      [DataType.VOID]: "rgb(156 163 175)", // gray-400
+      [DataType.FILE]: "rgb(100 116 139)", // zinc-500
+      [DataType.ANY]: "rgb(156 163 175)", // neutral-400
+      [DataType.VOID]: "rgb(156 163 175)", // neutral-400
     };
     return colorMap[sourceType] ?? "var(--muted-foreground)";
   }, [isTypeMismatch, selected, sourceType]);
@@ -142,13 +142,13 @@ function TypedEdgeComponent({
             <div
               className={cn(
                 "flex items-center justify-center cursor-help",
-                "w-5 h-5 rounded-full",
+                "size-5 rounded-full",
                 "bg-amber-500/20 border border-amber-500/50",
                 "text-amber-600 dark:text-amber-400",
               )}
               title={mismatchTooltip}
             >
-              <AlertTriangle className="h-3 w-3" />
+              <AlertTriangle className="size-3" />
             </div>
           )}
 
@@ -193,7 +193,7 @@ function TypedEdgeComponent({
               aria-label="Insert node"
               title="Insert node here"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="size-3.5" />
             </button>
           )}
         </div>
@@ -203,5 +203,3 @@ function TypedEdgeComponent({
 }
 
 export const TypedEdge = memo(TypedEdgeComponent);
-
-export default TypedEdge;

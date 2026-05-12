@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, type FormEvent } from "react";
 import { useRouter } from "next/router";
 import { CheckCircle2, CircleAlert, Copy, ExternalLink, Plus, RefreshCw } from "lucide-react";
 
@@ -155,51 +155,124 @@ const isOAuthProvider = (provider: string): provider is OAuthIntegrationProvider
   return OAUTH_PROVIDER_SET.has(provider);
 };
 
+type CredentialsPageState = {
+  credentials: Credential[];
+  oauthProviders: CredentialOAuthProviderStatus[];
+  loading: boolean;
+  isRefreshing: boolean;
+  error: string | null;
+  isDialogOpen: boolean;
+  isSubmitting: boolean;
+  oauthStartingProvider: OAuthIntegrationProvider | null;
+  formState: CredentialCreateInput;
+};
+
+type CredentialsPageAction =
+  | { type: "fetch-start"; silent: boolean }
+  | { type: "fetch-success"; credentials: Credential[]; oauthProviders: CredentialOAuthProviderStatus[] }
+  | { type: "fetch-error"; error: string }
+  | { type: "dialog"; open: boolean }
+  | { type: "form-field"; field: keyof CredentialCreateInput; value: string }
+  | { type: "form-prefill"; provider: CredentialCreateInput["provider"]; name: string }
+  | { type: "form-reset" }
+  | { type: "create-start" }
+  | { type: "create-success"; credential: Credential }
+  | { type: "create-end" }
+  | { type: "delete-success"; credentialId: string }
+  | { type: "oauth-start"; provider: OAuthIntegrationProvider }
+  | { type: "oauth-end" };
+
+const emptyCredentialForm: CredentialCreateInput = {
+  provider: "openai",
+  name: "",
+  api_key: "",
+};
+
+const initialCredentialsPageState: CredentialsPageState = {
+  credentials: [],
+  oauthProviders: [],
+  loading: true,
+  isRefreshing: false,
+  error: null,
+  isDialogOpen: false,
+  isSubmitting: false,
+  oauthStartingProvider: null,
+  formState: emptyCredentialForm,
+};
+
+function credentialsPageReducer(state: CredentialsPageState, action: CredentialsPageAction): CredentialsPageState {
+  switch (action.type) {
+    case "fetch-start":
+      return { ...state, loading: action.silent ? state.loading : true, isRefreshing: action.silent, error: null };
+    case "fetch-success":
+      return {
+        ...state,
+        credentials: action.credentials,
+        oauthProviders: action.oauthProviders,
+        loading: false,
+        isRefreshing: false,
+        error: null,
+      };
+    case "fetch-error":
+      return { ...state, loading: false, isRefreshing: false, error: action.error };
+    case "dialog":
+      return { ...state, isDialogOpen: action.open };
+    case "form-field":
+      return { ...state, formState: { ...state.formState, [action.field]: action.value } };
+    case "form-prefill":
+      return {
+        ...state,
+        formState: { ...state.formState, provider: action.provider, name: state.formState.name || action.name },
+        isDialogOpen: true,
+      };
+    case "form-reset":
+      return { ...state, formState: emptyCredentialForm };
+    case "create-start":
+      return { ...state, isSubmitting: true };
+    case "create-success":
+      return {
+        ...state,
+        credentials: [action.credential, ...state.credentials],
+        formState: emptyCredentialForm,
+        isDialogOpen: false,
+        isSubmitting: false,
+      };
+    case "create-end":
+      return { ...state, isSubmitting: false };
+    case "delete-success":
+      return { ...state, credentials: state.credentials.filter((item) => item.id !== action.credentialId) };
+    case "oauth-start":
+      return { ...state, oauthStartingProvider: action.provider };
+    case "oauth-end":
+      return { ...state, oauthStartingProvider: null };
+    default:
+      return state;
+  }
+}
+
 export default function CredentialsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const canManageCredentials = user?.organization_role === "owner" || user?.organization_role === "admin";
-
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [oauthProviders, setOauthProviders] = useState<CredentialOAuthProviderStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [oauthStartingProvider, setOauthStartingProvider] = useState<OAuthIntegrationProvider | null>(null);
-  const [providerPrefillApplied, setProviderPrefillApplied] = useState(false);
-
-  const [formState, setFormState] = useState<CredentialCreateInput>({
-    provider: "openai",
-    name: "",
-    api_key: "",
-  });
+  const [
+    { credentials, oauthProviders, loading, isRefreshing, error, isDialogOpen, isSubmitting, oauthStartingProvider, formState },
+    dispatchCredentials,
+  ] = useReducer(credentialsPageReducer, initialCredentialsPageState);
+  const providerPrefillAppliedRef = useRef(false);
 
   const fetchCredentials = useCallback(
     async (opts?: { silent?: boolean }) => {
       const silent = opts?.silent ?? false;
-      if (!silent) {
-        setLoading(true);
-      } else {
-        setIsRefreshing(true);
-      }
-      setError(null);
+      dispatchCredentials({ type: "fetch-start", silent });
 
       try {
         const [credentialsData, oauthProviderData] = await Promise.all([
           credentialsApi.list(),
           canManageCredentials ? credentialsApi.listOAuthProviders() : Promise.resolve([]),
         ]);
-        setCredentials(credentialsData);
-        setOauthProviders(oauthProviderData);
+        dispatchCredentials({ type: "fetch-success", credentials: credentialsData, oauthProviders: oauthProviderData });
       } catch (err: unknown) {
-        setError(getApiErrorMessage(err, "Failed to load credentials."));
-      } finally {
-        if (!silent) {
-          setLoading(false);
-        }
-        setIsRefreshing(false);
+        dispatchCredentials({ type: "fetch-error", error: getApiErrorMessage(err, "Failed to load credentials.") });
       }
     },
     [canManageCredentials],
@@ -210,43 +283,34 @@ export default function CredentialsPage() {
   }, [fetchCredentials]);
 
   useEffect(() => {
-    if (providerPrefillApplied || !router.isReady) return;
+    if (providerPrefillAppliedRef.current || !router.isReady) return;
 
     const providerQuery = router.query.provider;
     const provider = Array.isArray(providerQuery) ? providerQuery[0] : providerQuery;
     if (!provider) {
-      setProviderPrefillApplied(true);
+      providerPrefillAppliedRef.current = true;
       return;
     }
 
     const normalizedProvider = provider.toLowerCase();
     const providerOption = PROVIDERS.find((item) => item.value === normalizedProvider);
     if (!providerOption) {
-      setProviderPrefillApplied(true);
+      providerPrefillAppliedRef.current = true;
       return;
     }
 
-    setProviderPrefillApplied(true);
+    providerPrefillAppliedRef.current = true;
     if (isOAuthProvider(normalizedProvider)) {
       showSuccess(`Select ${providerOption.label} and click Connect account in OAuth integrations.`);
       return;
     }
 
-    setFormState((prev) => ({
-      ...prev,
+    dispatchCredentials({
+      type: "form-prefill",
       provider: providerOption.value,
-      name: prev.name || `${providerOption.label} Credential`,
-    }));
-    setIsDialogOpen(true);
-  }, [providerPrefillApplied, router.isReady, router.query.provider]);
-
-  const resetForm = () => {
-    setFormState({
-      provider: "openai",
-      name: "",
-      api_key: "",
+      name: `${providerOption.label} Credential`,
     });
-  };
+  }, [router.isReady, router.query.provider]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -256,17 +320,14 @@ export default function CredentialsPage() {
       return;
     }
 
-    setIsSubmitting(true);
+    dispatchCredentials({ type: "create-start" });
     try {
       const created = await credentialsApi.create(formState);
-      setCredentials((prev) => [created, ...prev]);
+      dispatchCredentials({ type: "create-success", credential: created });
       showSuccess("Credential saved.");
-      resetForm();
-      setIsDialogOpen(false);
     } catch (err: unknown) {
       showError("Credential failed", getApiErrorMessage(err, ERROR_FALLBACKS.credential.create));
-    } finally {
-      setIsSubmitting(false);
+      dispatchCredentials({ type: "create-end" });
     }
   };
 
@@ -277,7 +338,7 @@ export default function CredentialsPage() {
     }
     try {
       await credentialsApi.delete(credentialId);
-      setCredentials((prev) => prev.filter((item) => item.id !== credentialId));
+      dispatchCredentials({ type: "delete-success", credentialId });
       showSuccess("Credential deleted.");
     } catch (err: unknown) {
       showError("Delete failed", getApiErrorMessage(err, ERROR_FALLBACKS.credential.delete));
@@ -292,14 +353,14 @@ export default function CredentialsPage() {
         showError("Only organization admins can connect OAuth credentials.");
         return;
       }
-      setOauthStartingProvider(provider);
+      dispatchCredentials({ type: "oauth-start", provider });
       try {
         const response = await credentialsApi.startOAuth(provider);
         window.location.href = response.authorize_url;
       } catch (err: unknown) {
         showError(getApiErrorMessage(err, `Failed to start ${provider} OAuth setup.`));
       } finally {
-        setOauthStartingProvider(null);
+        dispatchCredentials({ type: "oauth-end" });
       }
     },
     [canManageCredentials],
@@ -340,12 +401,14 @@ export default function CredentialsPage() {
 
   const latestOauthCredentialByProvider = useMemo(() => {
     const map = new Map<OAuthIntegrationProvider, Credential>();
-    for (const provider of OAUTH_PROVIDERS) {
-      const latest = credentials
-        .filter((credential) => credential.provider === provider && credential.is_oauth_connection)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-      if (latest) {
-        map.set(provider, latest);
+    for (const credential of credentials) {
+      if (!credential.is_oauth_connection || !OAUTH_PROVIDER_SET.has(credential.provider)) {
+        continue;
+      }
+      const provider = credential.provider as OAuthIntegrationProvider;
+      const existing = map.get(provider);
+      if (!existing || new Date(credential.created_at).getTime() > new Date(existing.created_at).getTime()) {
+        map.set(provider, credential);
       }
     }
     return map;
@@ -403,12 +466,15 @@ export default function CredentialsPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => void fetchCredentials({ silent: true })}>
-                {isRefreshing ? <Spinner className="mr-2 h-4 w-4" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                {isRefreshing ? <Spinner className="mr-2 size-4" /> : <RefreshCw className="mr-2 size-4" />}
                 Refresh
               </Button>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <Button onClick={() => setIsDialogOpen(true)} disabled={!canManageCredentials}>
-                  <Plus className="mr-2 h-4 w-4" />
+              <Dialog
+                open={isDialogOpen}
+                onOpenChange={(open) => dispatchCredentials({ type: "dialog", open })}
+              >
+                <Button onClick={() => dispatchCredentials({ type: "dialog", open: true })} disabled={!canManageCredentials}>
+                  <Plus className="mr-2 size-4" />
                   Add credential
                 </Button>
                 <DialogContent>
@@ -424,10 +490,11 @@ export default function CredentialsPage() {
                       <Select
                         value={formState.provider}
                         onValueChange={(value) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            provider: value as CredentialCreateInput["provider"],
-                          }))
+                          dispatchCredentials({
+                            type: "form-field",
+                            field: "provider",
+                            value: value as CredentialCreateInput["provider"],
+                          })
                         }
                       >
                         <SelectTrigger id="provider">
@@ -449,7 +516,9 @@ export default function CredentialsPage() {
                         name="credential_name"
                         autoComplete="off"
                         value={formState.name}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
+                        onChange={(event) =>
+                          dispatchCredentials({ type: "form-field", field: "name", value: event.target.value })
+                        }
                         placeholder="Production OpenAI"
                         required
                       />
@@ -466,18 +535,24 @@ export default function CredentialsPage() {
                         type="password"
                         autoComplete="new-password"
                         value={formState.api_key}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, api_key: event.target.value }))}
+                        onChange={(event) =>
+                          dispatchCredentials({ type: "form-field", field: "api_key", value: event.target.value })
+                        }
                         placeholder="sk-proj-example"
                         required
                       />
                     </FormField>
 
                     <DialogFooter className="gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => dispatchCredentials({ type: "dialog", open: false })}
+                      >
                         Cancel
                       </Button>
                       <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                        {isSubmitting ? <Spinner className="mr-2 size-4" /> : null}
                         Save credential
                       </Button>
                     </DialogFooter>
@@ -536,7 +611,7 @@ export default function CredentialsPage() {
                       className="min-h-11 px-3 text-xs md:min-h-8"
                       onClick={() => void handleCopyText("Redirect URI", oauthChecklist.redirectUri)}
                     >
-                      <Copy className="mr-1 h-3.5 w-3.5" />
+                      <Copy className="mr-1 size-3.5" />
                       Copy
                     </Button>
                   </p>
@@ -560,17 +635,17 @@ export default function CredentialsPage() {
                           <p className="text-sm font-medium">{label}</p>
                           {connectionState === "ready" ? (
                             <Badge variant="outline" className="gap-1 text-emerald-600">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <CheckCircle2 className="size-3.5" />
                               Ready
                             </Badge>
                           ) : connectionState === "needs_reconnect" ? (
                             <Badge variant="outline" className="gap-1 text-amber-600">
-                              <CircleAlert className="h-3.5 w-3.5" />
+                              <CircleAlert className="size-3.5" />
                               Reconnect needed
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="gap-1 text-amber-600">
-                              <CircleAlert className="h-3.5 w-3.5" />
+                              <CircleAlert className="size-3.5" />
                               Not connected
                             </Badge>
                           )}
@@ -584,7 +659,7 @@ export default function CredentialsPage() {
                             className="inline-flex items-center gap-1 text-primary hover:underline"
                           >
                             OAuth docs
-                            <ExternalLink className="h-3 w-3" />
+                            <ExternalLink className="size-3" />
                           </a>
                         </p>
                         {!status ? (
@@ -615,7 +690,7 @@ export default function CredentialsPage() {
                         >
                           {oauthStartingProvider === provider ? (
                             <>
-                              <Spinner className="mr-2 h-4 w-4" />
+                              <Spinner className="mr-2 size-4" />
                               Connecting
                             </>
                           ) : (
@@ -645,7 +720,7 @@ export default function CredentialsPage() {
 
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner className="h-5 w-5" />
+              <Spinner className="size-5" />
               Loading credentials
             </div>
           ) : !hasCredentials ? (
@@ -654,8 +729,8 @@ export default function CredentialsPage() {
               description="Add a provider key to unlock multi-model AI workers."
               action={
                 canManageCredentials ? (
-                  <Button onClick={() => setIsDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
+                  <Button onClick={() => dispatchCredentials({ type: "dialog", open: true })}>
+                    <Plus className="mr-2 size-4" />
                     Add credential
                   </Button>
                 ) : undefined
@@ -716,7 +791,7 @@ export default function CredentialsPage() {
                         >
                           {oauthStartingProvider === oauthProvider ? (
                             <>
-                              <Spinner className="mr-2 h-4 w-4" />
+                              <Spinner className="mr-2 size-4" />
                               Reconnecting
                             </>
                           ) : (

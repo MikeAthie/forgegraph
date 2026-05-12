@@ -62,7 +62,7 @@ export interface NodeOutput {
 /**
  * Base node configuration - common fields for all node types.
  */
-export interface BaseNodeConfig {
+interface BaseNodeConfig {
   [key: string]: unknown;
 }
 
@@ -87,7 +87,7 @@ export interface AgentNodeConfig extends BaseNodeConfig {
 /**
  * Prompt node configuration.
  */
-export interface PromptNodeConfig extends BaseNodeConfig {
+interface PromptNodeConfig extends BaseNodeConfig {
   prompt_id?: string;
   template_id?: string;
   prompt_template?: string;
@@ -103,7 +103,7 @@ export interface PromptNodeConfig extends BaseNodeConfig {
 /**
  * HTTP node configuration.
  */
-export interface HttpNodeConfig extends BaseNodeConfig {
+interface HttpNodeConfig extends BaseNodeConfig {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   url: string;
   headers?: Record<string, string>;
@@ -116,7 +116,7 @@ export interface HttpNodeConfig extends BaseNodeConfig {
 /**
  * Transform node configuration.
  */
-export interface TransformNodeConfig extends BaseNodeConfig {
+interface TransformNodeConfig extends BaseNodeConfig {
   expression: string;
   output_key?: string;
 }
@@ -124,21 +124,21 @@ export interface TransformNodeConfig extends BaseNodeConfig {
 /**
  * Branch node configuration.
  */
-export interface BranchNodeConfig extends BaseNodeConfig {
+interface BranchNodeConfig extends BaseNodeConfig {
   condition?: string;
 }
 
 /**
  * Merge node configuration.
  */
-export interface MergeNodeConfig extends BaseNodeConfig {
+interface MergeNodeConfig extends BaseNodeConfig {
   merge_strategy?: "last_write_wins" | "namespaced";
 }
 
 /**
  * Memory node configuration.
  */
-export interface MemoryNodeConfig extends BaseNodeConfig {
+interface MemoryNodeConfig extends BaseNodeConfig {
   action?: "get" | "set" | "delete";
   key?: string;
   namespace?: string;
@@ -149,7 +149,7 @@ export interface MemoryNodeConfig extends BaseNodeConfig {
   ttl_seconds?: number;
 }
 
-export interface ObservationSaveNodeConfig extends BaseNodeConfig {
+interface ObservationSaveNodeConfig extends BaseNodeConfig {
   observation_id?: string;
   type?: string;
   scope?: "graph" | "run" | "session";
@@ -169,7 +169,7 @@ export interface ObservationSaveNodeConfig extends BaseNodeConfig {
   update_topic?: boolean;
 }
 
-export interface ObservationSearchNodeConfig extends BaseNodeConfig {
+interface ObservationSearchNodeConfig extends BaseNodeConfig {
   scope?: "graph" | "run" | "session";
   query?: string;
   query_path?: string;
@@ -183,7 +183,7 @@ export interface ObservationSearchNodeConfig extends BaseNodeConfig {
   include_deleted?: boolean;
 }
 
-export interface ObservationContextNodeConfig extends BaseNodeConfig {
+interface ObservationContextNodeConfig extends BaseNodeConfig {
   query?: string;
   query_path?: string;
   query_template?: string;
@@ -192,7 +192,7 @@ export interface ObservationContextNodeConfig extends BaseNodeConfig {
   limit?: number;
 }
 
-export interface ObservationTimelineNodeConfig extends BaseNodeConfig {
+interface ObservationTimelineNodeConfig extends BaseNodeConfig {
   scope?: "graph" | "run" | "session";
   agent_id?: string;
   agent_id_path?: string;
@@ -203,7 +203,7 @@ export interface ObservationTimelineNodeConfig extends BaseNodeConfig {
 /**
  * Tool node configuration.
  */
-export interface ToolNodeConfig extends BaseNodeConfig {
+interface ToolNodeConfig extends BaseNodeConfig {
   tool?: string;
   version?: string;
   provider?: string;
@@ -217,7 +217,7 @@ export interface ToolNodeConfig extends BaseNodeConfig {
 /**
  * Subgraph node configuration.
  */
-export interface SubgraphNodeConfig extends BaseNodeConfig {
+interface SubgraphNodeConfig extends BaseNodeConfig {
   graph_json?: GraphJson | string;
   graph_id?: string;
   graph_version_id?: string;
@@ -232,7 +232,7 @@ export interface SubgraphNodeConfig extends BaseNodeConfig {
 /**
  * Human gate node configuration.
  */
-export interface HumanGateNodeConfig extends BaseNodeConfig {
+interface HumanGateNodeConfig extends BaseNodeConfig {
   prompt_message?: string;
   required_fields?: string[];
 }
@@ -240,7 +240,7 @@ export interface HumanGateNodeConfig extends BaseNodeConfig {
 /**
  * Output node configuration.
  */
-export interface OutputNodeConfig extends BaseNodeConfig {
+interface OutputNodeConfig extends BaseNodeConfig {
   output_mapping?: Record<string, string>;
 }
 
@@ -309,7 +309,7 @@ export interface NoteEditorNode {
  * Editor-specific UI state that should be preserved but ignored by the engine.
  * Stored in a dedicated location to keep engine-relevant data clean.
  */
-export interface EditorState {
+interface EditorState {
   /** Node positions for React Flow */
   nodePositions?: Record<string, { x: number; y: number }>;
   /** Viewport state */

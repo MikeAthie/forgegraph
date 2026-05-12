@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { credentialsApi, getApiErrorMessage, type Credential } from "@/lib/api";
 import { AgentFields } from "./AgentFields";
 import { AdvancedSettings, type AdvancedConfig } from "./AdvancedSettings";
+import { useCredentialOptions } from "./useCredentialOptions";
 import type { NodeFormProps } from "../NodeConfigDialog";
 
 interface AgentFormConfig extends AdvancedConfig {
@@ -47,28 +47,143 @@ const PROVIDERS = [
 function parseToolList(value: string): string[] {
   return value
     .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+    .flatMap((item) => {
+      const trimmed = item.trim();
+      return trimmed ? [trimmed] : [];
+    });
 }
 
 function serializeToolList(value?: string[]): string {
   return Array.isArray(value) ? value.join("\n") : "";
 }
 
+function AgentToolPolicySection({
+  toolsText,
+  approvalToolsText,
+  errors,
+  onToolsChange,
+  onApprovalToolsChange,
+}: {
+  toolsText: string;
+  approvalToolsText: string;
+  errors: Record<string, string>;
+  onToolsChange: (tools: string[]) => void;
+  onApprovalToolsChange: (tools: string[]) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-medium">Tool Policy</h3>
+
+      <FormField
+        label="Allowed Tools"
+        htmlFor="agent-tools"
+        description="One tool name per line, or separate with commas."
+        required
+        error={errors.tools}
+      >
+        <Textarea
+          id="agent-tools"
+          value={toolsText}
+          onChange={(event) => onToolsChange(parseToolList(event.target.value))}
+          placeholder={"crm.lookup\nslack.send_message"}
+          rows={4}
+          className="text-sm resize-none font-mono"
+        />
+      </FormField>
+
+      <FormField
+        label="Approval-Required Tools"
+        htmlFor="agent-approval-tools"
+        description="Optional subset of allowed tools that should stop for review."
+        error={errors.approval_required_tools}
+      >
+        <Textarea
+          id="agent-approval-tools"
+          value={approvalToolsText}
+          onChange={(event) => onApprovalToolsChange(parseToolList(event.target.value))}
+          placeholder={"send_email"}
+          rows={3}
+          className="text-sm resize-none font-mono"
+        />
+      </FormField>
+    </div>
+  );
+}
+
+function AgentRuntimeSection({
+  agentConfig,
+  observationContextText,
+  errors,
+  onChange,
+}: {
+  agentConfig: AgentFormConfig;
+  observationContextText: string;
+  errors: Record<string, string>;
+  onChange: <K extends keyof AgentFormConfig>(field: K, value: AgentFormConfig[K]) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-medium">Agent Runtime</h3>
+
+      <FormField
+        label="Task Instructions"
+        htmlFor="agent-instructions"
+        description="The task the internal model-to-tool loop should complete."
+        required
+        error={errors.instructions}
+      >
+        <Textarea
+          id="agent-instructions"
+          value={agentConfig.instructions || ""}
+          onChange={(event) => onChange("instructions", event.target.value)}
+          placeholder="Resolve the user's request using the allowed tools, then return a final answer."
+          rows={4}
+          className="text-sm resize-none"
+        />
+      </FormField>
+
+      <FormField
+        label="System Prompt"
+        htmlFor="agent-system-prompt"
+        description="Optional higher-level behavior guidance applied to the model."
+      >
+        <Textarea
+          id="agent-system-prompt"
+          value={agentConfig.system_prompt || ""}
+          onChange={(event) => onChange("system_prompt", event.target.value)}
+          placeholder="You are a reliable ops assistant. Be concise and verify before acting."
+          rows={3}
+          className="text-sm resize-none font-mono"
+        />
+      </FormField>
+
+      <FormField
+        label="Curated Context Paths"
+        htmlFor="agent-observation-context-paths"
+        description="Optional observation_context output paths to prepend before the agent answers."
+      >
+        <Textarea
+          id="agent-observation-context-paths"
+          value={observationContextText}
+          onChange={(event) => onChange("observation_context_paths", parseToolList(event.target.value))}
+          placeholder={"node.recall_jackie_context.output"}
+          rows={3}
+          className="text-sm resize-none font-mono"
+        />
+      </FormField>
+    </div>
+  );
+}
+
 export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const agentConfig = config as AgentFormConfig;
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [credentialsLoading, setCredentialsLoading] = useState(false);
-  const [credentialsError, setCredentialsError] = useState<string | null>(null);
-  const [toolsText, setToolsText] = useState(() => serializeToolList(agentConfig.tools));
-  const [approvalToolsText, setApprovalToolsText] = useState(() =>
-    serializeToolList(agentConfig.approval_required_tools),
-  );
-  const [observationContextText, setObservationContextText] = useState(() =>
-    serializeToolList(agentConfig.observation_context_paths),
-  );
+  const { credentials, loading: credentialsLoading, error: credentialsError } = useCredentialOptions();
+  const toolsText = serializeToolList(agentConfig.tools);
+  const approvalToolsText = serializeToolList(agentConfig.approval_required_tools);
+  const observationContextText = serializeToolList(agentConfig.observation_context_paths);
+  const reportErrors = useEffectEvent((nextErrors: Record<string, string>) => setErrors(nextErrors));
 
-  const handleChange = useCallback(
+  const updateAgentConfig = useCallback(
     <K extends keyof AgentFormConfig>(field: K, value: AgentFormConfig[K]) => {
       onChange({ ...config, [field]: value });
     },
@@ -127,21 +242,9 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   ]);
 
   useEffect(() => {
-    setToolsText(serializeToolList(agentConfig.tools));
-  }, [agentConfig.tools]);
-
-  useEffect(() => {
-    setApprovalToolsText(serializeToolList(agentConfig.approval_required_tools));
-  }, [agentConfig.approval_required_tools]);
-
-  useEffect(() => {
-    setObservationContextText(serializeToolList(agentConfig.observation_context_paths));
-  }, [agentConfig.observation_context_paths]);
-
-  useEffect(() => {
     const nextErrors: Record<string, string> = {};
-    const tools = parseToolList(toolsText);
-    const approvalTools = parseToolList(approvalToolsText);
+    const tools = agentConfig.tools ?? [];
+    const approvalTools = agentConfig.approval_required_tools ?? [];
 
     if (!String(agentConfig.model || "").trim()) {
       nextErrors.model = "Model is required.";
@@ -167,43 +270,15 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
       nextErrors.approval_required_tools = "Approval-required tools must also appear in the allowed tools list.";
     }
 
-    setErrors(nextErrors);
+    reportErrors(nextErrors);
   }, [
+    agentConfig.approval_required_tools,
     agentConfig.instructions,
     agentConfig.max_steps,
     agentConfig.max_tool_calls,
     agentConfig.model,
-    approvalToolsText,
-    setErrors,
-    toolsText,
+    agentConfig.tools,
   ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetchCredentials = async () => {
-      setCredentialsLoading(true);
-      setCredentialsError(null);
-      try {
-        const data = await credentialsApi.list();
-        if (!cancelled) {
-          setCredentials(data);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setCredentialsError(getApiErrorMessage(err, "Failed to load credentials."));
-        }
-      } finally {
-        if (!cancelled) {
-          setCredentialsLoading(false);
-        }
-      }
-    };
-
-    void fetchCredentials();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const provider = agentConfig.provider || "openai";
   const filteredCredentials = useMemo(
@@ -220,66 +295,17 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
           notes: agentConfig.notes,
         }}
         onChange={handleAgentFieldsChange}
-        showExamples={false}
+        visibleSections={{ examples: false }}
       />
 
       <Separator />
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium">Agent Runtime</h3>
-
-        <FormField
-          label="Task Instructions"
-          htmlFor="agent-instructions"
-          description="The task the internal model-to-tool loop should complete."
-          required
-          error={errors.instructions}
-        >
-          <Textarea
-            id="agent-instructions"
-            value={agentConfig.instructions || ""}
-            onChange={(event) => handleChange("instructions", event.target.value)}
-            placeholder="Resolve the user's request using the allowed tools, then return a final answer."
-            rows={4}
-            className="text-sm resize-none"
-          />
-        </FormField>
-
-        <FormField
-          label="System Prompt"
-          htmlFor="agent-system-prompt"
-          description="Optional higher-level behavior guidance applied to the model."
-        >
-          <Textarea
-            id="agent-system-prompt"
-            value={agentConfig.system_prompt || ""}
-            onChange={(event) => handleChange("system_prompt", event.target.value)}
-            placeholder="You are a reliable ops assistant. Be concise and verify before acting."
-            rows={3}
-            className="text-sm resize-none font-mono"
-          />
-        </FormField>
-
-        <FormField
-          label="Curated Context Paths"
-          htmlFor="agent-observation-context-paths"
-          description="Optional observation_context output paths to prepend before the agent answers."
-        >
-          <Textarea
-            id="agent-observation-context-paths"
-            value={observationContextText}
-            onChange={(event) => {
-              const nextText = event.target.value;
-              setObservationContextText(nextText);
-              handleChange("observation_context_paths", parseToolList(nextText));
-            }}
-            placeholder={"node.recall_jackie_context.output"}
-            rows={3}
-            className="text-sm resize-none font-mono"
-          />
-        </FormField>
-      </div>
-
+      <AgentRuntimeSection
+        agentConfig={agentConfig}
+        observationContextText={observationContextText}
+        errors={errors}
+        onChange={updateAgentConfig}
+      />
       <Separator />
 
       <div className="space-y-4">
@@ -290,7 +316,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
             <select
               id="agent-provider"
               value={provider}
-              onChange={(event) => handleChange("provider", event.target.value)}
+              onChange={(event) => updateAgentConfig("provider", event.target.value)}
               className="w-full px-3 py-2 border rounded-md bg-background text-sm"
             >
               {PROVIDERS.map((item) => (
@@ -309,7 +335,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
             <select
               id="agent-credential-id"
               value={agentConfig.credential_id || ""}
-              onChange={(event) => handleChange("credential_id", event.target.value || undefined)}
+              onChange={(event) => updateAgentConfig("credential_id", event.target.value || undefined)}
               className="w-full px-3 py-2 border rounded-md bg-background text-sm"
             >
               <option value="">Use default (env)</option>
@@ -321,8 +347,8 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
             </select>
             {credentialsLoading && (
               <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <Spinner className="h-3 w-3" />
-                Loading credentials...
+                <Spinner className="size-3" />
+                Loading credentials…
               </div>
             )}
             {!credentialsLoading && credentialsError && (
@@ -334,7 +360,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
             <select
               id="agent-model"
               value={agentConfig.model || "gpt-4.1-mini"}
-              onChange={(event) => handleChange("model", event.target.value)}
+              onChange={(event) => updateAgentConfig("model", event.target.value)}
               className="w-full px-3 py-2 border rounded-md bg-background text-sm"
             >
               {AVAILABLE_MODELS.map((model) => (
@@ -354,7 +380,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
                 max={2}
                 step={0.1}
                 value={agentConfig.temperature ?? 0.2}
-                onChange={(event) => handleChange("temperature", parseFloat(event.target.value))}
+                onChange={(event) => updateAgentConfig("temperature", parseFloat(event.target.value))}
                 className="flex-1"
               />
               <span className="text-sm text-muted-foreground w-8 text-right">{agentConfig.temperature ?? 0.2}</span>
@@ -368,7 +394,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
               min={1}
               value={agentConfig.max_steps || ""}
               onChange={(event) =>
-                handleChange("max_steps", event.target.value ? parseInt(event.target.value, 10) : undefined)
+                updateAgentConfig("max_steps", event.target.value ? parseInt(event.target.value, 10) : undefined)
               }
               placeholder="6"
               className="text-sm"
@@ -382,7 +408,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
               min={1}
               value={agentConfig.max_tool_calls || ""}
               onChange={(event) =>
-                handleChange("max_tool_calls", event.target.value ? parseInt(event.target.value, 10) : undefined)
+                updateAgentConfig("max_tool_calls", event.target.value ? parseInt(event.target.value, 10) : undefined)
               }
               placeholder="4"
               className="text-sm"
@@ -396,7 +422,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
               min={1}
               value={agentConfig.max_tokens || ""}
               onChange={(event) =>
-                handleChange("max_tokens", event.target.value ? parseInt(event.target.value, 10) : undefined)
+                updateAgentConfig("max_tokens", event.target.value ? parseInt(event.target.value, 10) : undefined)
               }
               placeholder="800"
               className="text-sm"
@@ -407,50 +433,13 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
 
       <Separator />
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium">Tool Policy</h3>
-
-        <FormField
-          label="Allowed Tools"
-          htmlFor="agent-tools"
-          description="One tool name per line, or separate with commas."
-          required
-          error={errors.tools}
-        >
-          <Textarea
-            id="agent-tools"
-            value={toolsText}
-            onChange={(event) => {
-              const nextText = event.target.value;
-              setToolsText(nextText);
-              handleChange("tools", parseToolList(nextText));
-            }}
-            placeholder={"crm.lookup\nslack.send_message"}
-            rows={4}
-            className="text-sm resize-none font-mono"
-          />
-        </FormField>
-
-        <FormField
-          label="Approval-Required Tools"
-          htmlFor="agent-approval-tools"
-          description="Optional subset of allowed tools that should stop for review."
-          error={errors.approval_required_tools}
-        >
-          <Textarea
-            id="agent-approval-tools"
-            value={approvalToolsText}
-            onChange={(event) => {
-              const nextText = event.target.value;
-              setApprovalToolsText(nextText);
-              handleChange("approval_required_tools", parseToolList(nextText));
-            }}
-            placeholder={"send_email"}
-            rows={3}
-            className="text-sm resize-none font-mono"
-          />
-        </FormField>
-      </div>
+      <AgentToolPolicySection
+        toolsText={toolsText}
+        approvalToolsText={approvalToolsText}
+        errors={errors}
+        onToolsChange={(tools) => updateAgentConfig("tools", tools)}
+        onApprovalToolsChange={(tools) => updateAgentConfig("approval_required_tools", tools)}
+      />
 
       <Separator />
 
@@ -458,5 +447,3 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
     </div>
   );
 }
-
-export default AgentNodeForm;

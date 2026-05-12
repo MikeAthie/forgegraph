@@ -211,22 +211,24 @@ test("video 3 - duplicate trigger regression stays idempotent", async ({ page, r
   });
   const signal = await createDemoSignal(request, accessToken, company.companyId, `regression-${testInfo.workerIndex}`);
   const idempotencyKey = `demo-duplicate-trigger:${company.companyId}`;
-  const firstOperation = await launchDemoOperation(
+  const { firstOperation, replayedOperation } = await launchDemoOperation(
     request,
     accessToken,
     company.companyId,
     "sold_out_demand_capture",
     idempotencyKey,
     signal.id,
-  );
-  const replayedOperation = await launchDemoOperation(
-    request,
-    accessToken,
-    company.companyId,
-    "sold_out_demand_capture",
-    idempotencyKey,
-    signal.id,
-  );
+  ).then(async (firstOperation) => ({
+    firstOperation,
+    replayedOperation: await launchDemoOperation(
+      request,
+      accessToken,
+      company.companyId,
+      "sold_out_demand_capture",
+      idempotencyKey,
+      signal.id,
+    ),
+  }));
 
   expect(replayedOperation.id).toBe(firstOperation.id);
 

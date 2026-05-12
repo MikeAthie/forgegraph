@@ -63,13 +63,8 @@ async function resolveModel(): Promise<string> {
   }
   if (!resolvedModelPromise) {
     resolvedModelPromise = (async () => {
-      let response: Response | null = null;
-      for (const baseUrl of candidateBaseUrls()) {
-        response = await tryFetchJson(`${baseUrl}/models`);
-        if (response) {
-          break;
-        }
-      }
+      const responses = await Promise.all(candidateBaseUrls().map((baseUrl) => tryFetchJson(`${baseUrl}/models`)));
+      const response = responses.find((candidate): candidate is Response => Boolean(candidate));
 
       if (!response) {
         throw new Error(
@@ -97,20 +92,19 @@ async function resolveChatCompletionsUrl(): Promise<string> {
     resolvedChatCompletionsUrlPromise = (async () => {
       const candidates = candidateBaseUrls().flatMap((baseUrl) => [`${baseUrl}/chat/completions`]);
 
-      for (const url of candidates) {
-        const probeResponse = await fetch(url, {
-          method: "OPTIONS",
-          headers: {
-            Authorization: `Bearer ${LOCAL_LLM_API_KEY}`,
-          },
-        }).catch(() => null);
+      const probeResults = await Promise.all(
+        candidates.map(async (url) => {
+          const probeResponse = await fetch(url, {
+            method: "OPTIONS",
+            headers: {
+              Authorization: `Bearer ${LOCAL_LLM_API_KEY}`,
+            },
+          }).catch(() => null);
+          return probeResponse && probeResponse.status !== 404 ? url : null;
+        }),
+      );
 
-        if (probeResponse && probeResponse.status !== 404) {
-          return url;
-        }
-      }
-
-      return candidates[0] ?? `${LOCAL_LLM_BASE_URL}/chat/completions`;
+      return probeResults.find((url): url is string => Boolean(url)) ?? candidates[0] ?? `${LOCAL_LLM_BASE_URL}/chat/completions`;
     })();
   }
 
@@ -126,8 +120,7 @@ export async function callLocalLlmJson<T>({
   userPrompt: string;
   maxTokens?: number;
 }): Promise<T> {
-  const model = await resolveModel();
-  const chatCompletionsUrl = await resolveChatCompletionsUrl();
+  const [model, chatCompletionsUrl] = await Promise.all([resolveModel(), resolveChatCompletionsUrl()]);
   const response = await fetch(chatCompletionsUrl, {
     method: "POST",
     headers: {

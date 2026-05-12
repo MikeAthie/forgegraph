@@ -30,6 +30,8 @@ urlpatterns = [
     path("integrations/", include("adapters.api.integrations.urls")),
     path("interaction/", include("adapters.api.interaction.urls")),
     path("archive/", include("adapters.api.archive.urls")),
+    path("", include("adapters.api.operating_models.urls")),
+    path("", include("adapters.api.company_blueprints.urls")),
     path("company-ops/", include("adapters.api.company_ops.urls")),
     path("inventory/", include("adapters.api.inventory.urls")),
     path("commerce/", include("adapters.api.commerce.urls")),

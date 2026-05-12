@@ -101,7 +101,11 @@ export function BranchNodeForm({ config, onChange, errors, setErrors }: NodeForm
   return (
     <div className="space-y-6">
       {/* Agent Context - Minimal for Branch */}
-      <AgentFields config={branchConfig} onChange={handleAgentChange} showRole={false} showExamples={false} />
+      <AgentFields
+        config={branchConfig}
+        onChange={handleAgentChange}
+        visibleSections={{ role: false, examples: false }}
+      />
 
       <Separator />
 
@@ -110,7 +114,7 @@ export function BranchNodeForm({ config, onChange, errors, setErrors }: NodeForm
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium">Branch Conditions</h3>
           <Button type="button" variant="outline" size="sm" onClick={addCondition}>
-            <Plus className="h-4 w-4 mr-1" />
+            <Plus className="size-4 mr-1" />
             Add Condition
           </Button>
         </div>
@@ -131,7 +135,7 @@ export function BranchNodeForm({ config, onChange, errors, setErrors }: NodeForm
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Condition {index + 1}</span>
                   <Button type="button" variant="ghost" size="sm" onClick={() => removeCondition(index)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <Trash2 className="size-4 text-destructive" />
                   </Button>
                 </div>
 
@@ -198,5 +202,3 @@ export function BranchNodeForm({ config, onChange, errors, setErrors }: NodeForm
     </div>
   );
 }
-
-export default BranchNodeForm;

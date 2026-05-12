@@ -25,11 +25,13 @@ async function mapWithConcurrency<T, R>(
   let nextIndex = 0;
 
   async function runWorker(): Promise<void> {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    const currentIndex = nextIndex;
+    if (currentIndex >= items.length) {
+      return;
     }
+    nextIndex += 1;
+    results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    await runWorker();
   }
 
   await Promise.all(Array.from({ length: limit }, () => runWorker()));

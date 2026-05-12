@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -20,11 +20,33 @@ import { operationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { OperationVM } from "@/domain/translation";
 
+type RunsState = {
+  operations: OperationVM[];
+  loading: boolean;
+  error: string | null;
+};
+
+type RunsAction = { type: "loaded"; operations: OperationVM[] } | { type: "failed"; error: string };
+
+function runsReducer(state: RunsState, action: RunsAction): RunsState {
+  switch (action.type) {
+    case "loaded":
+      return { ...state, operations: action.operations, loading: false, error: null };
+    case "failed":
+      return { ...state, loading: false, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export default function RunsPage() {
   const router = useRouter();
-  const [operations, setOperations] = useState<OperationVM[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { replace } = router;
+  const [{ operations, loading, error }, dispatch] = useReducer(runsReducer, {
+    operations: [],
+    loading: true,
+    error: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -33,15 +55,11 @@ export default function RunsPage() {
       try {
         const data = await operationRepository.list();
         if (!cancelled) {
-          setOperations(data);
+          dispatch({ type: "loaded", operations: data });
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(translateProductError(err, "operation"));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          dispatch({ type: "failed", error: translateProductError(err, "operation") });
         }
       }
     };
@@ -105,7 +123,7 @@ export default function RunsPage() {
           ) : null}
 
           {loading ? (
-            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
+            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-zinc-900/10 bg-white/70 dark:border-white/10 dark:bg-zinc-950/50">
               <Spinner size="lg" />
             </div>
           ) : !selectedOperation ? (
@@ -120,27 +138,40 @@ export default function RunsPage() {
                   items={operations}
                   selectedId={selectedOperation.id}
                   onSelect={(operation) => {
-                    void router.replace({ pathname: "/runs", query: { operation: operation.id } }, undefined, {
+                    void replace({ pathname: "/runs", query: { operation: operation.id } }, undefined, {
                       shallow: true,
                     });
                   }}
-                  renderTitle={(operation) => (
-                    <div className="flex items-center gap-3">
-                      <span>{operation.companyName}</span>
-                      <StatusBadge status={operation.status} />
-                    </div>
-                  )}
-                  renderBody={(operation) =>
-                    `Saved setup ${operation.setupVersion} · started ${formatDateTime(operation.startedAt)}`
-                  }
-                  renderMeta={(operation) => <span className="text-xs">{formatDuration(operation.durationMs)}</span>}
                   empty={
                     <EmptyBlock
                       title="No operation history"
                       description="Once companies start operating, their operations will appear here."
                     />
                   }
-                />
+                >
+                  {(operation, { selected }) => (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3 text-sm font-semibold">
+                          <span>{operation.companyName}</span>
+                          <StatusBadge status={operation.status} />
+                        </div>
+                        <div
+                          className={
+                            selected
+                              ? "mt-2 text-sm leading-6 text-white/78 dark:text-zinc-700"
+                              : "mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300"
+                          }
+                        >
+                          Saved setup {operation.setupVersion} · started {formatDateTime(operation.startedAt)}
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <span className="text-xs">{formatDuration(operation.durationMs)}</span>
+                      </div>
+                    </div>
+                  )}
+                </SelectionList>
               </Panel>
 
               <div className="space-y-6">

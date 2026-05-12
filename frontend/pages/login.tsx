@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useReducer, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -19,90 +19,129 @@ import {
 } from "@/components/ui";
 import { authApi, getApiErrorMessage } from "../lib/api";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type LoginFormState = {
+  email: string;
+  password: string;
+  isSubmitting: boolean;
+  isSsoLoading: boolean;
+  formError: string;
+};
+
+type LoginFormAction =
+  | { type: "field"; field: "email" | "password"; value: string }
+  | { type: "set-error"; error: string }
+  | { type: "submit-start" }
+  | { type: "submit-end"; error?: string }
+  | { type: "sso-start" }
+  | { type: "sso-end"; error?: string };
+
+const initialLoginFormState: LoginFormState = {
+  email: "",
+  password: "",
+  isSubmitting: false,
+  isSsoLoading: false,
+  formError: "",
+};
+
+function loginFormReducer(state: LoginFormState, action: LoginFormAction): LoginFormState {
+  switch (action.type) {
+    case "field":
+      return { ...state, [action.field]: action.value, formError: "" };
+    case "set-error":
+      return { ...state, formError: action.error };
+    case "submit-start":
+      return { ...state, formError: "", isSubmitting: true };
+    case "submit-end":
+      return { ...state, isSubmitting: false, formError: action.error ?? "" };
+    case "sso-start":
+      return { ...state, formError: "", isSsoLoading: true };
+    case "sso-end":
+      return { ...state, isSsoLoading: false, formError: action.error ?? "" };
+    default:
+      return state;
+  }
+}
+
+function validateLoginForm(email: string, password: string): string | null {
+  if (!email.trim()) {
+    return "Email is required";
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    return "Please enter a valid email address";
+  }
+  if (!password) {
+    return "Password is required";
+  }
+  if (password.length < 6) {
+    return "Password must be at least 6 characters";
+  }
+  return null;
+}
+
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSsoLoading, setIsSsoLoading] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [{ email, password, isSubmitting, isSsoLoading, formError }, dispatchForm] =
+    useReducer(loginFormReducer, initialLoginFormState);
 
   const { login, isAuthenticated, loading, error, clearError } = useAuth();
   const router = useRouter();
 
+  const { push } = router;
   const registeredParam = router.query.registered;
   const registered = Array.isArray(registeredParam) ? registeredParam[0] : registeredParam;
   const showRegisteredMessage = registered === "true" || registered === "1";
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push("/companies");
+      push("/companies");
     }
-  }, [loading, isAuthenticated, router]);
-
-  useEffect(() => {
-    setFormError("");
-    clearError();
-  }, [email, password, clearError]);
-
-  const validateForm = () => {
-    if (!email.trim()) {
-      setFormError("Email is required");
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setFormError("Please enter a valid email address");
-      return false;
-    }
-    if (!password) {
-      setFormError("Password is required");
-      return false;
-    }
-    if (password.length < 6) {
-      setFormError("Password must be at least 6 characters");
-      return false;
-    }
-    return true;
-  };
+  }, [loading, isAuthenticated, push]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setFormError("");
 
-    if (!validateForm()) {
+    const validationError = validateLoginForm(email, password);
+    if (validationError) {
+      dispatchForm({ type: "set-error", error: validationError });
       return;
     }
 
-    setIsSubmitting(true);
+    dispatchForm({ type: "submit-start" });
+    let submitError: string | undefined;
     try {
       const result = await login(email, password);
-      if (!result.success) {
-        setFormError(result.error);
-      }
+      submitError = result.success ? undefined : result.error;
     } finally {
-      setIsSubmitting(false);
+      dispatchForm({ type: "submit-end", error: submitError });
     }
   };
 
   const handleSsoLogin = async () => {
-    setFormError("");
     if (!email.trim()) {
-      setFormError("Enter your work email to continue with SSO.");
+      dispatchForm({ type: "set-error", error: "Enter your work email to continue with SSO." });
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setFormError("Please enter a valid email address.");
+    if (!EMAIL_PATTERN.test(email)) {
+      dispatchForm({ type: "set-error", error: "Please enter a valid email address." });
       return;
     }
 
-    setIsSsoLoading(true);
+    dispatchForm({ type: "sso-start" });
+    let ssoError: string | undefined;
     try {
       const authorizeUrl = await authApi.getSsoAuthorizeUrl(email);
       window.location.href = authorizeUrl;
     } catch (err: unknown) {
-      setFormError(getApiErrorMessage(err, "SSO login failed. Please try again."));
+      ssoError = getApiErrorMessage(err, "SSO login failed. Please try again.");
     } finally {
-      setIsSsoLoading(false);
+      dispatchForm({ type: "sso-end", error: ssoError });
     }
+  };
+
+  const handleFieldChange = (field: "email" | "password", value: string) => {
+    clearError();
+    dispatchForm({ type: "field", field, value });
   };
 
   if (loading) {
@@ -131,7 +170,7 @@ export default function LoginPage() {
           <CardContent className="pt-4">
             {showRegisteredMessage && (
               <Alert className="mb-4 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -158,7 +197,7 @@ export default function LoginPage() {
                   aria-invalid={Boolean(displayError)}
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => handleFieldChange("email", e.target.value)}
                   placeholder="you@example.com"
                   disabled={isSubmitting}
                   className="h-11"
@@ -174,7 +213,7 @@ export default function LoginPage() {
                   aria-invalid={Boolean(displayError)}
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handleFieldChange("password", e.target.value)}
                   placeholder="Enter your password"
                   disabled={isSubmitting}
                   className="h-11"

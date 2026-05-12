@@ -43,12 +43,12 @@ export function WizardProgress() {
             >
               <span
                 className={cn(
-                  "flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold",
+                  "flex items-center justify-center size-5 rounded-full text-[10px] font-bold",
                   isActive && "bg-primary-foreground/20",
                   isCompleted && !isActive && "bg-primary text-primary-foreground",
                 )}
               >
-                {isCompleted ? <CheckIcon className="w-3 h-3" /> : index + 1}
+                {isCompleted ? <CheckIcon className="size-3" /> : index + 1}
               </span>
               <span className="hidden sm:inline">{step.title}</span>
             </button>
@@ -58,5 +58,3 @@ export function WizardProgress() {
     </div>
   );
 }
-
-export default WizardProgress;

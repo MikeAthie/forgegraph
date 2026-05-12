@@ -103,4 +103,4 @@ export const memoryRepository = {
   },
 };
 
-export type MemoryRepository = typeof memoryRepository;
+type MemoryRepository = typeof memoryRepository;

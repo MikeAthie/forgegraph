@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import Link from "next/link";
 
 import DashboardLayout from "../../components/DashboardLayout";
@@ -26,15 +26,72 @@ import {
   Spinner,
 } from "@/components/ui";
 
+function formatUtcDate(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+}
+
+type BillingPageState = {
+  plans: BillingPlan[];
+  subscription: BillingSubscription | null;
+  budget: LLMBudgetStatus | null;
+  quota: LLMQuotaStatus | null;
+  loading: boolean;
+  error: string | null;
+  actionLoading: string | null;
+};
+
+type BillingPageAction =
+  | {
+      type: "load-success";
+      plans: BillingPlan[];
+      subscription: BillingSubscription | null;
+      budget: LLMBudgetStatus | null;
+      quota: LLMQuotaStatus | null;
+    }
+  | { type: "load-error"; error: string }
+  | { type: "action-start"; action: string }
+  | { type: "action-end"; error?: string };
+
+const initialBillingPageState: BillingPageState = {
+  plans: [],
+  subscription: null,
+  budget: null,
+  quota: null,
+  loading: true,
+  error: null,
+  actionLoading: null,
+};
+
+function billingPageReducer(state: BillingPageState, action: BillingPageAction): BillingPageState {
+  switch (action.type) {
+    case "load-success":
+      return {
+        ...state,
+        plans: action.plans,
+        subscription: action.subscription,
+        budget: action.budget,
+        quota: action.quota,
+        loading: false,
+        error: null,
+      };
+    case "load-error":
+      return { ...state, loading: false, error: action.error };
+    case "action-start":
+      return { ...state, error: null, actionLoading: action.action };
+    case "action-end":
+      return { ...state, actionLoading: null, error: action.error ?? null };
+    default:
+      return state;
+  }
+}
+
 export default function AdminBillingPage() {
   const { user } = useAuth();
-  const [plans, setPlans] = useState<BillingPlan[]>([]);
-  const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
-  const [budget, setBudget] = useState<LLMBudgetStatus | null>(null);
-  const [quota, setQuota] = useState<LLMQuotaStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [{ plans, subscription, budget, quota, loading, error, actionLoading }, dispatchPage] = useReducer(
+    billingPageReducer,
+    initialBillingPageState,
+  );
 
   const canManage = user?.organization_role === "owner" || user?.organization_role === "admin";
 
@@ -51,14 +108,15 @@ export default function AdminBillingPage() {
           analyticsApi.getLLMBudget(),
           analyticsApi.getLLMQuota(),
         ]);
-        setPlans(plansResponse);
-        setSubscription(subscriptionResponse);
-        setBudget(budgetResponse);
-        setQuota(quotaResponse);
+        dispatchPage({
+          type: "load-success",
+          plans: plansResponse,
+          subscription: subscriptionResponse,
+          budget: budgetResponse,
+          quota: quotaResponse,
+        });
       } catch (err: any) {
-        setError(getApiErrorMessage(err, "Failed to load billing data."));
-      } finally {
-        setLoading(false);
+        dispatchPage({ type: "load-error", error: getApiErrorMessage(err, "Failed to load billing data.") });
       }
     };
 
@@ -76,28 +134,28 @@ export default function AdminBillingPage() {
       .replace(/\b\w/g, (match) => match.toUpperCase());
 
   const handleCheckout = async (planId: string) => {
-    setError(null);
-    setActionLoading(planId);
+    dispatchPage({ type: "action-start", action: planId });
+    let actionError: string | undefined;
     try {
       const url = await billingApi.createCheckout(planId);
       window.location.href = url;
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Failed to start checkout."));
+      actionError = getApiErrorMessage(err, "Failed to start checkout.");
     } finally {
-      setActionLoading(null);
+      dispatchPage({ type: "action-end", error: actionError });
     }
   };
 
   const handlePortal = async () => {
-    setError(null);
-    setActionLoading("portal");
+    dispatchPage({ type: "action-start", action: "portal" });
+    let actionError: string | undefined;
     try {
       const url = await billingApi.createPortal();
       window.location.href = url;
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Failed to open billing portal."));
+      actionError = getApiErrorMessage(err, "Failed to open billing portal.");
     } finally {
-      setActionLoading(null);
+      dispatchPage({ type: "action-end", error: actionError });
     }
   };
 
@@ -161,7 +219,7 @@ export default function AdminBillingPage() {
                     </Badge>
                     {subscription.current_period_end && (
                       <span className="text-xs text-muted-foreground">
-                        Renews {new Date(subscription.current_period_end).toLocaleDateString()}
+                        Renews {formatUtcDate(subscription.current_period_end)}
                       </span>
                     )}
                   </div>

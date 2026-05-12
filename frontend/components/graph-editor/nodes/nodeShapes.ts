@@ -20,7 +20,7 @@ import {
 
 import { NODE_TYPES } from "../../../lib/graph-types";
 
-export type NodeShape = "pill" | "rectangle" | "diamond";
+type NodeShape = "pill" | "rectangle" | "diamond";
 
 export interface NodeVisualConfig {
   shape: NodeShape;
@@ -30,7 +30,7 @@ export interface NodeVisualConfig {
   textClass: string; // Text color for labels e.g. "text-violet-300"
 }
 
-export const NODE_VISUALS: Record<string, NodeVisualConfig> = {
+const NODE_VISUALS: Record<string, NodeVisualConfig> = {
   [NODE_TYPES.PROMPT]: {
     shape: "rectangle",
     icon: MessageSquare,
@@ -132,7 +132,7 @@ export const NODE_VISUALS: Record<string, NodeVisualConfig> = {
 };
 
 /** Start Trigger visual overrides */
-export const TRIGGER_VISUAL: NodeVisualConfig = {
+const TRIGGER_VISUAL: NodeVisualConfig = {
   shape: "pill",
   icon: Play,
   accentColor: "emerald-500",
@@ -141,7 +141,7 @@ export const TRIGGER_VISUAL: NodeVisualConfig = {
 };
 
 /** End node visual overrides */
-export const END_VISUAL: NodeVisualConfig = {
+const END_VISUAL: NodeVisualConfig = {
   shape: "pill",
   icon: Square,
   accentColor: "rose-500",

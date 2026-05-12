@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  type FormEvent,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -50,6 +59,41 @@ type OsShellProps = {
   children: ReactNode;
   mainClassName?: string;
 };
+
+type OsShellState = {
+  organizations: OrganizationListItem[];
+  organizationsLoading: boolean;
+  organizationActionId: string | null;
+  organizationError: string | null;
+  createOrganizationOpen: boolean;
+  newOrganizationName: string;
+  creatingOrganization: boolean;
+  createOrganizationError: string | null;
+};
+
+type OsShellAction = {
+  patch: Partial<OsShellState> | ((state: OsShellState) => Partial<OsShellState>);
+};
+
+const initialOsShellState: OsShellState = {
+  organizations: [],
+  organizationsLoading: false,
+  organizationActionId: null,
+  organizationError: null,
+  createOrganizationOpen: false,
+  newOrganizationName: "",
+  creatingOrganization: false,
+  createOrganizationError: null,
+};
+
+function osShellReducer(state: OsShellState, action: OsShellAction): OsShellState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
 
 type NavItem = {
   href: string;
@@ -255,15 +299,36 @@ const isActivePath = (pathname: string, href: string) => {
 
 export default function OsShell({ children, mainClassName }: OsShellProps) {
   const router = useRouter();
+  const { replace } = router;
   const { user, isAuthenticated, logout, checkAuth } = useAuth();
-  const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
-  const [organizationsLoading, setOrganizationsLoading] = useState(false);
-  const [organizationActionId, setOrganizationActionId] = useState<string | null>(null);
-  const [organizationError, setOrganizationError] = useState<string | null>(null);
-  const [createOrganizationOpen, setCreateOrganizationOpen] = useState(false);
-  const [newOrganizationName, setNewOrganizationName] = useState("");
-  const [creatingOrganization, setCreatingOrganization] = useState(false);
-  const [createOrganizationError, setCreateOrganizationError] = useState<string | null>(null);
+  const [shellState, dispatchShellState] = useReducer(osShellReducer, initialOsShellState);
+  const {
+    organizations,
+    organizationsLoading,
+    organizationActionId,
+    organizationError,
+    createOrganizationOpen,
+    newOrganizationName,
+    creatingOrganization,
+    createOrganizationError,
+  } = shellState;
+  const setShellField = useCallback(
+    <K extends keyof OsShellState>(key: K, value: SetStateAction<OsShellState[K]>) => {
+      dispatchShellState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<OsShellState>,
+      });
+    },
+    [],
+  );
+  const setOrganizations = useCallback((value: SetStateAction<OrganizationListItem[]>) => setShellField("organizations", value), [setShellField]);
+  const setOrganizationsLoading = useCallback((value: SetStateAction<boolean>) => setShellField("organizationsLoading", value), [setShellField]);
+  const setOrganizationActionId = useCallback((value: SetStateAction<string | null>) => setShellField("organizationActionId", value), [setShellField]);
+  const setOrganizationError = useCallback((value: SetStateAction<string | null>) => setShellField("organizationError", value), [setShellField]);
+  const setCreateOrganizationOpen = useCallback((value: SetStateAction<boolean>) => setShellField("createOrganizationOpen", value), [setShellField]);
+  const setNewOrganizationName = useCallback((value: SetStateAction<string>) => setShellField("newOrganizationName", value), [setShellField]);
+  const setCreatingOrganization = useCallback((value: SetStateAction<boolean>) => setShellField("creatingOrganization", value), [setShellField]);
+  const setCreateOrganizationError = useCallback((value: SetStateAction<string | null>) => setShellField("createOrganizationError", value), [setShellField]);
+  const createOrganizationNameInputRef = useRef<HTMLInputElement>(null);
   const meta = useMemo(() => pageMeta(router.pathname), [router.pathname]);
   const organizationId = user?.default_organization_id ?? null;
   const queryClient = useQueryClient();
@@ -282,6 +347,16 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
     },
     onFullResync: invalidateDecisionCount,
   });
+
+  useEffect(() => {
+    if (!createOrganizationOpen) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      createOrganizationNameInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [createOrganizationOpen]);
   const pendingDecisionQuery = useQuery({
     queryKey: ["decisions", "count", organizationId ?? "current"],
     queryFn: decisionsApi.count,
@@ -293,28 +368,34 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
 
   useEffect(() => {
     if (!isAuthenticated || process.env.NODE_ENV === "test") {
-      setOrganizations([]);
+      dispatchShellState({ patch: { organizations: [] } });
       return;
     }
 
     let cancelled = false;
 
     const loadOrganizations = async () => {
-      setOrganizationsLoading(true);
+      dispatchShellState({ patch: { organizationsLoading: true } });
       try {
         const data = await organizationsApi.list();
         if (!cancelled) {
-          setOrganizations(data);
-          setOrganizationError(null);
+          dispatchShellState({
+            patch: {
+              organizations: data,
+              organizationError: null,
+              organizationsLoading: false,
+            },
+          });
         }
       } catch (error) {
         if (!cancelled) {
-          setOrganizations([]);
-          setOrganizationError(getApiErrorMessage(error, "Could not load organizations."));
-        }
-      } finally {
-        if (!cancelled) {
-          setOrganizationsLoading(false);
+          dispatchShellState({
+            patch: {
+              organizations: [],
+              organizationError: getApiErrorMessage(error, "Could not load organizations."),
+              organizationsLoading: false,
+            },
+          });
         }
       }
     };
@@ -339,9 +420,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
   const refreshOrganizationContext = useCallback(async () => {
     await checkAuth();
     if (router.isReady) {
-      await router.replace(router.asPath, undefined, { scroll: false });
+      await replace(router.asPath, undefined, { scroll: false });
     }
-  }, [checkAuth, router]);
+  }, [checkAuth, replace, router]);
 
   const handleSwitchOrganization = useCallback(
     async (organizationId: string) => {
@@ -390,9 +471,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
         const created = await organizationsApi.create({ name, make_default: true });
         setOrganizations((current) => [
           created,
-          ...current
-            .filter((organization) => organization.id !== created.id)
-            .map((organization) => ({ ...organization, is_default: false })),
+          ...current.flatMap((organization) =>
+            organization.id !== created.id ? [{ ...organization, is_default: false }] : [],
+          ),
         ]);
         setCreateOrganizationOpen(false);
         setOrganizationError(null);
@@ -407,12 +488,16 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
     [newOrganizationName, refreshOrganizationContext, resetCreateOrganization],
   );
 
-  const items = navItems
-    .filter((item) => !item.adminOnly || canOperate)
-    .map((item) => ({
-      ...item,
-      badge: item.href === "/approvals" ? pendingDecisionCount : item.badge,
-    }));
+  const items = navItems.flatMap((item) =>
+    !item.adminOnly || canOperate
+      ? [
+          {
+            ...item,
+            badge: item.href === "/approvals" ? pendingDecisionCount : item.badge,
+          },
+        ]
+      : [],
+  );
   const mobilePrimaryItems = items.filter((item) => mobilePrimaryHrefs.has(item.href));
   const mobileOverflowItems = items.filter((item) => !mobilePrimaryHrefs.has(item.href));
 
@@ -420,13 +505,13 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
     <div className="min-h-screen text-foreground">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[1000] focus:rounded-full focus:bg-slate-950 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none dark:focus:bg-slate-100 dark:focus:text-slate-950"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[1000] focus:rounded-full focus:bg-zinc-950 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none dark:focus:bg-zinc-100 dark:focus:text-zinc-950"
       >
         Skip to main content
       </a>
       <div className="fixed inset-0 -z-10 app-grid opacity-40" />
       <div className="flex min-h-screen">
-        <aside className="hidden w-[18.5rem] shrink-0 border-r border-sidebar-border bg-sidebar/95 px-4 py-4 backdrop-blur-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:self-start lg:overflow-y-auto">
+        <aside className="hidden w-[18.5rem] shrink-0 border-r border-sidebar-border bg-sidebar/95 p-4 backdrop-blur-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:self-start lg:overflow-y-auto">
           <Link
             href="/companies"
             className="glass-panel flex items-center gap-3 rounded-[1.25rem] border border-sidebar-border px-3.5 py-3"
@@ -437,7 +522,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
               width={40}
               height={40}
               priority
-              className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-sm"
+              className="size-10 shrink-0 rounded-xl object-cover shadow-sm"
             />
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">ForgeGraph</p>
@@ -456,9 +541,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                 >
                   <span className="truncate font-medium">{organizationLabel}</span>
                   {organizationsLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
                   ) : (
-                    <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                    <ChevronsUpDown className="size-4 text-muted-foreground" />
                   )}
                 </button>
               </DropdownMenuTrigger>
@@ -477,9 +562,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                       >
                         <span className="flex min-w-0 flex-1 items-center gap-2">
                           {switching ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                           ) : (
-                            <Check className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")} />
+                            <Check className={cn("size-4", selected ? "opacity-100" : "opacity-0")} />
                           )}
                           <span className="truncate">{organization.name}</span>
                         </span>
@@ -499,7 +584,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                     setCreateOrganizationOpen(true);
                   }}
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="size-4" />
                   Add organization
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -517,12 +602,13 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                   {section === "operate" ? "Operate" : "Advanced"}
                 </p>
                 <nav className="mt-1.5 space-y-0.5" aria-label={`${section} navigation`}>
-                  {items
-                    .filter((item) => item.section === section)
-                    .map((item) => {
+                  {items.flatMap((item) => {
+                    if (item.section !== section) {
+                      return [];
+                    }
                       const Icon = item.icon;
                       const active = isActivePath(router.pathname, item.href);
-                      return (
+                    return [
                         <Link
                           key={item.href}
                           href={item.href}
@@ -535,7 +621,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                           )}
                         >
                           <span className="flex items-center gap-3">
-                            <Icon className="h-4 w-4" />
+                            <Icon className="size-4" />
                             {item.label}
                           </span>
                           {item.badge && item.badge > 0 ? (
@@ -551,9 +637,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                               {item.badge}
                             </Badge>
                           ) : null}
-                        </Link>
-                      );
-                    })}
+                        </Link>,
+                      ];
+                  })}
                 </nav>
               </div>
             ))}
@@ -583,7 +669,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                 </label>
                 <Input
                   id="new-organization-name"
-                  autoFocus
+                  ref={createOrganizationNameInputRef}
                   aria-describedby={createOrganizationError ? "new-organization-name-error" : undefined}
                   autoComplete="organization"
                   value={newOrganizationName}
@@ -609,7 +695,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={creatingOrganization}>
-                  {creatingOrganization ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {creatingOrganization ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                   Add organization
                 </Button>
               </DialogFooter>
@@ -618,8 +704,8 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
         </Dialog>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 border-b border-slate-900/8 bg-[color-mix(in_srgb,var(--background)_82%,transparent)] backdrop-blur-2xl dark:border-white/8">
-            <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-30 border-b border-zinc-900/8 bg-[color-mix(in_srgb,var(--background)_82%,transparent)] backdrop-blur-2xl dark:border-white/8">
+            <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 p-4 sm:px-6 lg:px-8">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">ForgeGraph</p>
@@ -635,14 +721,14 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                         <button
                           type="button"
                           aria-label={`Switch organization. Current organization: ${organizationLabel}`}
-                          className="inline-flex min-h-11 max-w-[18rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                          className="inline-flex min-h-11 max-w-[18rem] items-center gap-2 rounded-full border border-zinc-900/10 bg-white/70 px-3 py-2.5 text-sm font-medium text-zinc-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10 dark:focus-visible:ring-zinc-100 dark:focus-visible:ring-offset-zinc-950"
                         >
-                          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Building2 className="size-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{organizationLabel}</span>
                           {organizationsLoading ? (
-                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
                           ) : (
-                            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
                           )}
                         </button>
                       </DropdownMenuTrigger>
@@ -662,9 +748,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                               >
                                 <span className="flex min-w-0 flex-1 items-center gap-2">
                                   {switching ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="size-4 animate-spin" />
                                   ) : (
-                                    <Check className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("size-4", selected ? "opacity-100" : "opacity-0")} />
                                   )}
                                   <span className="truncate">{organization.name}</span>
                                 </span>
@@ -684,7 +770,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                             setCreateOrganizationOpen(true);
                           }}
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="size-4" />
                           Add organization
                         </DropdownMenuItem>
                         {organizationError ? (
@@ -705,11 +791,11 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                         <button
                           type="button"
                           aria-label={`Open account menu for ${user?.email ?? "account"}`}
-                          className="inline-flex min-h-11 max-w-[16rem] items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:focus-visible:ring-slate-100 dark:focus-visible:ring-offset-slate-950"
+                          className="inline-flex min-h-11 max-w-[16rem] items-center gap-2 rounded-full border border-zinc-900/10 bg-white/70 px-3 py-2.5 text-sm font-medium text-zinc-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10 dark:focus-visible:ring-zinc-100 dark:focus-visible:ring-offset-zinc-950"
                         >
-                          <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <UserCircle className="size-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{user?.email ?? "Account"}</span>
-                          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-72">
@@ -721,7 +807,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => void logout()}>
-                          <LogOut className="h-4 w-4" />
+                          <LogOut className="size-4" />
                           Sign out
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -745,11 +831,11 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                       className={cn(
                         "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-3 py-2 text-center text-sm",
                         active
-                          ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                          : "border-slate-900/10 bg-white/75 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200",
+                          ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                          : "border-zinc-900/10 bg-white/75 text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200",
                       )}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="size-4" />
                       <span className="min-w-0 truncate">{item.label}</span>
                       {item.badge && item.badge > 0 ? <span>{item.badge}</span> : null}
                     </Link>
@@ -760,9 +846,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-slate-900/10 bg-white/75 px-3 py-2 text-center text-sm text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-zinc-900/10 bg-white/75 px-3 py-2 text-center text-sm text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
                       >
-                        <Menu className="h-4 w-4" />
+                        <Menu className="size-4" />
                         <span>More</span>
                       </button>
                     </DropdownMenuTrigger>
@@ -775,7 +861,7 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
                         return (
                           <DropdownMenuItem key={item.href} asChild>
                             <Link href={item.href} aria-current={active ? "page" : undefined}>
-                              <Icon className="h-4 w-4" />
+                              <Icon className="size-4" />
                               <span className="min-w-0 truncate">{item.label}</span>
                               {item.badge && item.badge > 0 ? <Badge variant="secondary">{item.badge}</Badge> : null}
                             </Link>

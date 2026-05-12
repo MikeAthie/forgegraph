@@ -17,4 +17,4 @@ export const approvalRepository = {
     operationRepository.resumeAfterApproval(approval.operationId, approval.departmentId, approved, feedback),
 };
 
-export type ApprovalRepository = typeof approvalRepository;
+type ApprovalRepository = typeof approvalRepository;

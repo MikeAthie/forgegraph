@@ -7,10 +7,11 @@ import { cn } from "@/lib/utils";
 
 export interface WizardNavigationProps {
   onComplete?: (options?: { runTest?: boolean }) => void;
+  canProceedOverride?: boolean;
   className?: string;
 }
 
-export function WizardNavigation({ onComplete, className }: WizardNavigationProps) {
+export function WizardNavigation({ onComplete, canProceedOverride, className }: WizardNavigationProps) {
   const {
     state,
     currentStepConfig,
@@ -43,12 +44,13 @@ export function WizardNavigation({ onComplete, className }: WizardNavigationProp
   };
 
   const canSkip = currentStepConfig?.canSkip ?? false;
+  const canProceed = canProceedOverride ?? state.canProceed;
 
   return (
     <div className={cn("flex items-center justify-between px-6 py-3 border-t bg-muted/30", className)}>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={exitWizard} className="text-muted-foreground">
-          <XIcon className="w-4 h-4 mr-1" />
+          <XIcon className="size-4 mr-1" />
           Exit
         </Button>
       </div>
@@ -56,7 +58,7 @@ export function WizardNavigation({ onComplete, className }: WizardNavigationProp
       <div className="flex items-center gap-2">
         {!isFirstStep && (
           <Button variant="outline" size="sm" onClick={prevStep}>
-            <ChevronLeftIcon className="w-4 h-4 mr-1" />
+            <ChevronLeftIcon className="size-4 mr-1" />
             Back
           </Button>
         )}
@@ -68,18 +70,18 @@ export function WizardNavigation({ onComplete, className }: WizardNavigationProp
         )}
 
         {isLastStep && (
-          <Button size="sm" variant="outline" onClick={handleCreateAndRunTest} disabled={!state.canProceed}>
+          <Button size="sm" variant="outline" onClick={handleCreateAndRunTest} disabled={!canProceed}>
             Create &amp; Run Test
           </Button>
         )}
 
-        <Button size="sm" onClick={handleNext} disabled={!state.canProceed}>
+        <Button size="sm" onClick={handleNext} disabled={!canProceed}>
           {isLastStep ? (
             "Finish Setup"
           ) : (
             <>
               Next
-              <ChevronRightIcon className="w-4 h-4 ml-1" />
+              <ChevronRightIcon className="size-4 ml-1" />
             </>
           )}
         </Button>
@@ -87,5 +89,3 @@ export function WizardNavigation({ onComplete, className }: WizardNavigationProp
     </div>
   );
 }
-
-export default WizardNavigation;

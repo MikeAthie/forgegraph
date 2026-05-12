@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, type SetStateAction } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -38,10 +38,41 @@ type OperationDetailViewProps = {
   routeParam: string;
 };
 
+type OperationDetailState = {
+  operation: OperationVM | null;
+  selectedTaskId: string | null;
+  loading: boolean;
+  error: string | null;
+  showAllTasks: boolean;
+  actionLoading: "stop" | "retry" | null;
+};
+
+type OperationDetailAction = {
+  patch: Partial<OperationDetailState> | ((state: OperationDetailState) => Partial<OperationDetailState>);
+};
+
+const initialOperationDetailState: OperationDetailState = {
+  operation: null,
+  selectedTaskId: null,
+  loading: true,
+  error: null,
+  showAllTasks: false,
+  actionLoading: null,
+};
+
+function operationDetailReducer(state: OperationDetailState, action: OperationDetailAction): OperationDetailState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 const primaryActionButtonClass =
-  "rounded-full bg-white text-slate-950 shadow-[0_18px_38px_-24px_rgba(255,255,255,0.85)] hover:bg-slate-100 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-800";
+  "rounded-full bg-white text-zinc-950 shadow-[0_18px_38px_-24px_rgba(255,255,255,0.85)] hover:bg-zinc-100 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-800";
 const secondaryActionButtonClass =
-  "rounded-full border-white/25 bg-white/10 text-white hover:bg-white/18 hover:text-white dark:border-slate-950/15 dark:bg-slate-950/8 dark:text-slate-950 dark:hover:bg-slate-950/12";
+  "rounded-full border-white/25 bg-white/10 text-white hover:bg-white/18 hover:text-white dark:border-zinc-950/15 dark:bg-zinc-950/8 dark:text-zinc-950 dark:hover:bg-zinc-950/12";
 const destructiveActionButtonClass =
   "rounded-full bg-rose-500 text-white shadow-[0_18px_38px_-24px_rgba(244,63,94,0.85)] hover:bg-rose-400 dark:bg-rose-600 dark:hover:bg-rose-500";
 
@@ -62,13 +93,24 @@ function shouldPollOperationStatus(operation: OperationVM | null) {
 
 export default function OperationDetailView({ routeParam }: OperationDetailViewProps) {
   const router = useRouter();
+  const { push } = router;
   const operationId = typeof router.query[routeParam] === "string" ? router.query[routeParam] : null;
-  const [operation, setOperation] = useState<OperationVM | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showAllTasks, setShowAllTasks] = useState(false);
-  const [actionLoading, setActionLoading] = useState<"stop" | "retry" | null>(null);
+  const [detailState, dispatchDetailState] = useReducer(operationDetailReducer, initialOperationDetailState);
+  const { operation, selectedTaskId, loading, error, showAllTasks, actionLoading } = detailState;
+  const setDetailField = useCallback(
+    <K extends keyof OperationDetailState>(key: K, value: SetStateAction<OperationDetailState[K]>) => {
+      dispatchDetailState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<OperationDetailState>,
+      });
+    },
+    [],
+  );
+  const setOperation = useCallback((value: SetStateAction<OperationVM | null>) => setDetailField("operation", value), [setDetailField]);
+  const setSelectedTaskId = useCallback((value: SetStateAction<string | null>) => setDetailField("selectedTaskId", value), [setDetailField]);
+  const setLoading = useCallback((value: SetStateAction<boolean>) => setDetailField("loading", value), [setDetailField]);
+  const setError = useCallback((value: SetStateAction<string | null>) => setDetailField("error", value), [setDetailField]);
+  const setShowAllTasks = useCallback((value: SetStateAction<boolean>) => setDetailField("showAllTasks", value), [setDetailField]);
+  const setActionLoading = useCallback((value: SetStateAction<"stop" | "retry" | null>) => setDetailField("actionLoading", value), [setDetailField]);
   const shouldPollCurrentOperation = shouldPollOperationStatus(operation);
 
   const loadOperation = useCallback(
@@ -95,6 +137,9 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
     },
     [operationId],
   );
+  const refreshOperation = useEffectEvent((options?: { showSpinner?: boolean }) => {
+    void loadOperation(options);
+  });
 
   useEffect(() => {
     void loadOperation({ showSpinner: true });
@@ -107,7 +152,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
 
     const refreshVisibleOperation = () => {
       if (document.visibilityState === "visible") {
-        void loadOperation({ showSpinner: false });
+        refreshOperation({ showSpinner: false });
       }
     };
 
@@ -117,7 +162,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
       window.removeEventListener("focus", refreshVisibleOperation);
       document.removeEventListener("visibilitychange", refreshVisibleOperation);
     };
-  }, [loadOperation, operationId]);
+  }, [operationId]);
 
   useEffect(() => {
     if (!operationId || !shouldPollCurrentOperation || typeof window === "undefined") {
@@ -125,15 +170,15 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
     }
 
     const poller = window.setInterval(() => {
-      void loadOperation({ showSpinner: false });
+      refreshOperation({ showSpinner: false });
     }, 2000);
 
     return () => {
       window.clearInterval(poller);
     };
-  }, [loadOperation, operationId, shouldPollCurrentOperation]);
+  }, [operationId, shouldPollCurrentOperation]);
 
-  useRunLiveUpdates(operationId, () => loadOperation({ showSpinner: false }));
+  useRunLiveUpdates(operationId, () => refreshOperation({ showSpinner: false }));
 
   const selectedTask = useMemo(
     () => operation?.tasks.find((task) => task.id === selectedTaskId) ?? operation?.tasks[0] ?? null,
@@ -250,13 +295,13 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
         credentialId: operation.aiAccess?.credential_id,
       });
       showSuccess("Retry started", "A fresh operation has been queued from the saved input.");
-      await router.push(`/runs/${retried.id}`);
+      await push(`/runs/${retried.id}`);
     } catch (retryError: unknown) {
       showError("Retry failed", translateProductError(retryError, "operation"));
     } finally {
       setActionLoading(null);
     }
-  }, [actionLoading, operation, router]);
+  }, [actionLoading, operation, push]);
 
   const handleInspectTask = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -318,16 +363,16 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
           ) : null}
 
           {loading || !operation || !activityState ? (
-            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-slate-900/10 bg-white/70 dark:border-white/10 dark:bg-slate-950/50">
+            <div className="flex min-h-[320px] items-center justify-center rounded-[1.75rem] border border-zinc-900/10 bg-white/70 dark:border-white/10 dark:bg-zinc-950/50">
               <Spinner size="lg" />
             </div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-[1.85rem] border border-slate-900/10 bg-slate-950 text-white shadow-[0_32px_90px_-58px_rgba(15,23,42,0.75)] dark:border-white/10 dark:bg-slate-100 dark:text-slate-950">
-                <div className="flex flex-col gap-5 px-6 py-6 xl:flex-row xl:items-center xl:justify-between">
+              <div className="overflow-hidden rounded-[1.85rem] border border-zinc-900/10 bg-zinc-950 text-white shadow-[0_32px_90px_-58px_rgba(15,23,42,0.75)] dark:border-white/10 dark:bg-zinc-100 dark:text-zinc-950">
+                <div className="flex flex-col gap-5 p-6 xl:flex-row xl:items-center xl:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-white/55 dark:text-slate-500">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-white/55 dark:text-zinc-500">
                         Operator action
                       </p>
                       <StatusBadge status={operation.status} />
@@ -338,7 +383,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                     >
                       {actionTitle}
                     </h3>
-                    <p className="mt-2 max-w-3xl text-sm leading-7 text-white/68 dark:text-slate-600">
+                    <p className="mt-2 max-w-3xl text-sm leading-7 text-white/68 dark:text-zinc-600">
                       {actionDescription}
                     </p>
                   </div>
@@ -351,14 +396,14 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         onClick={() => handleInspectTask(failedTask.id)}
                       >
                         Inspect failure
-                        <ArrowRight className="h-4 w-4" />
+                        <ArrowRight className="size-4" />
                       </Button>
                     ) : null}
 
                     {isWaitingForApproval ? (
                       <Button asChild className={primaryActionButtonClass}>
                         <Link href="/approvals">
-                          <Inbox className="h-4 w-4" />
+                          <Inbox className="size-4" />
                           Open approvals
                         </Link>
                       </Button>
@@ -371,7 +416,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         onClick={() => void handleStopOperation()}
                         disabled={actionLoading !== null}
                       >
-                        <Square className="h-4 w-4" />
+                        <Square className="size-4" />
                         {actionLoading === "stop" ? "Stopping" : "Stop operation"}
                       </Button>
                     ) : null}
@@ -383,7 +428,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         onClick={() => void handleRetryOperation()}
                         disabled={actionLoading !== null}
                       >
-                        <RotateCcw className="h-4 w-4" />
+                        <RotateCcw className="size-4" />
                         {retryButtonLabel}
                       </Button>
                     ) : null}
@@ -401,35 +446,35 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                 action={<StatusBadge status={operation.status} />}
               >
                 <div className="grid gap-4 xl:grid-cols-4">
-                  <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                       Total duration
                     </p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                    <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                       {formatDuration(operation.durationMs)}
                     </p>
                   </div>
-                  <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                       Estimated cost
                     </p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                    <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
                       {formatCurrency(totalCost)}
                     </p>
                   </div>
-                  <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                       Attention point
                     </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+                    <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                       {failedTask ? failedTask.departmentName : "No failure detected"}
                     </p>
                   </div>
-                  <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                       Bottleneck
                     </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+                    <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                       {bottleneckTask
                         ? `${bottleneckTask.departmentName} · ${formatDuration(bottleneckTask.durationMs)}`
                         : "No bottleneck flagged"}
@@ -443,7 +488,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                   {failedTask || decisionTask || retryTask || bottleneckTask ? (
                     <div className="space-y-3">
                       {failedTask ? (
-                        <div className="rounded-[1.2rem] border border-rose-800/12 bg-rose-50 px-4 py-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
+                        <div className="rounded-[1.2rem] border border-rose-800/12 bg-rose-50 p-4 text-rose-950 dark:border-rose-200/15 dark:bg-rose-500/10 dark:text-rose-100">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold">Needs attention</p>
@@ -452,12 +497,12 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                                 operation.
                               </p>
                             </div>
-                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                            <AlertTriangle className="size-4 shrink-0" />
                           </div>
                         </div>
                       ) : null}
                       {decisionTask ? (
-                        <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 px-4 py-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
+                        <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 p-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
                           <p className="text-sm font-semibold">Decision boundary</p>
                           <p className="mt-2 text-sm leading-7">
                             {decisionTask.departmentName} is waiting on a human decision or approval boundary.
@@ -465,7 +510,7 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         </div>
                       ) : null}
                       {retryTask ? (
-                        <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 px-4 py-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
+                        <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 p-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
                           <p className="text-sm font-semibold">Retry scheduled</p>
                           <p className="mt-2 text-sm leading-7">
                             {retryTask.latestRetry?.retry_reason ||
@@ -474,16 +519,16 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         </div>
                       ) : null}
                       {bottleneckTask ? (
-                        <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
+                        <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Bottleneck</p>
-                              <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
+                              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Bottleneck</p>
+                              <p className="mt-2 text-sm leading-7 text-zinc-700 dark:text-zinc-200">
                                 {bottleneckTask.departmentName} consumed {formatDuration(bottleneckTask.durationMs)} and
                                 is materially slower than the rest of the operation.
                               </p>
                             </div>
-                            <Clock3 className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />
+                            <Clock3 className="size-4 shrink-0 text-zinc-500 dark:text-zinc-400" />
                           </div>
                         </div>
                       ) : null}
@@ -530,12 +575,12 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                         {showAllTasks ? (
                           <>
                             Collapse routine activity
-                            <ChevronUp className="h-4 w-4" />
+                            <ChevronUp className="size-4" />
                           </>
                         ) : (
                           <>
                             Show all activity
-                            <ChevronDown className="h-4 w-4" />
+                            <ChevronDown className="size-4" />
                           </>
                         )}
                       </Button>
@@ -545,8 +590,8 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                   {operation.tasks.length ? (
                     <div className="space-y-4">
                       {!showAllTasks && activityState.hiddenRoutineCount > 0 ? (
-                        <div className="flex items-center gap-2 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-3 text-sm text-slate-600 dark:border-white/8 dark:text-slate-300">
-                          <Filter className="h-4 w-4" />
+                        <div className="flex items-center gap-2 rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] px-4 py-3 text-sm text-zinc-600 dark:border-white/8 dark:text-zinc-300">
+                          <Filter className="size-4" />
                           {activityState.hiddenRoutineCount} routine activit
                           {activityState.hiddenRoutineCount === 1 ? "y" : "ies"} collapsed.
                         </div>
@@ -562,17 +607,17 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                             key={task.id}
                             type="button"
                             onClick={() => setSelectedTaskId(task.id)}
-                            className="w-full rounded-[1.3rem] border border-slate-900/8 bg-white/75 px-5 py-5 text-left transition-colors hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/8"
+                            className="w-full rounded-[1.3rem] border border-zinc-900/8 bg-white/75 p-5 text-left transition-colors hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/8"
                           >
                             <div className="grid gap-4 xl:grid-cols-[3.5rem_minmax(0,1fr)_13rem]">
                               <div className="flex items-start gap-3 xl:block">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-900/10 bg-[var(--panel-muted)] text-sm font-semibold dark:border-white/10">
+                                <div className="flex size-10 items-center justify-center rounded-2xl border border-zinc-900/10 bg-[var(--panel-muted)] text-sm font-semibold dark:border-white/10">
                                   {index + 1}
                                 </div>
                               </div>
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                                  <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                                     {task.departmentName}
                                   </p>
                                   <StatusBadge status={task.status} />
@@ -582,29 +627,29 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
                                   {task.deadLetter ? <StatusBadge status="dead_lettered" label="dead letter" /> : null}
                                   {task.latestRetry ? <StatusBadge status="retry_scheduled" label="retry" /> : null}
                                 </div>
-                                <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                                <p className="mt-3 text-sm leading-7 text-zinc-600 dark:text-zinc-300">
                                   {getTaskNarrative(task)}
                                 </p>
                                 {task.toolName ? (
-                                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
                                     Tool {task.toolName} · Completed
                                   </p>
                                 ) : null}
                               </div>
                               <div className="grid gap-2 text-sm">
-                                <div className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
-                                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                <div className="rounded-2xl border border-zinc-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
+                                  <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
                                     Duration
                                   </p>
-                                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
+                                  <p className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">
                                     {formatDuration(task.durationMs)}
                                   </p>
                                 </div>
-                                <div className="rounded-2xl border border-slate-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
-                                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                                <div className="rounded-2xl border border-zinc-900/8 bg-[var(--panel-muted)] px-3 py-2 dark:border-white/8">
+                                  <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
                                     Started
                                   </p>
-                                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
+                                  <p className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">
                                     {formatDateTime(task.startedAt)}
                                   </p>
                                 </div>
@@ -655,11 +700,11 @@ export default function OperationDetailView({ routeParam }: OperationDetailViewP
 
                 <Panel title="Deliverable" description="The latest readable result produced by this operation.">
                   {operation.deliverable.ready ? (
-                    <div className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                      <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+                    <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                      <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                         {operation.deliverable.title}
                       </p>
-                      <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                      <p className="mt-2 text-sm leading-7 text-zinc-600 dark:text-zinc-300">
                         {operation.deliverable.content ?? operation.deliverable.preview}
                       </p>
                     </div>

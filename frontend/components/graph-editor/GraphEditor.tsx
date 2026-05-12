@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useReducer,
+  useRef,
+  useState,
+  type Ref,
+  type SetStateAction,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -128,6 +137,69 @@ interface GraphEditorProps {
   saving: boolean;
 }
 
+type GraphEditorViewport = { x: number; y: number; zoom: number } | undefined;
+
+type GraphEditorUiState = {
+  selectedNodeId: string | null;
+  selectedEdgeId: string | null;
+  isDirty: boolean;
+  isEditingMetadata: boolean;
+  startingRun: boolean;
+  overlayRun: RunDetail | null;
+  overlayRunLoading: boolean;
+  overlayRunRefreshing: boolean;
+  overlayRunError: string | null;
+  overlayCanceling: boolean;
+  promptWizardOpen: boolean;
+  promptWizardSourceNodeId: string | null;
+  configDialogOpen: boolean;
+  configDialogNodeType: NodeType | null;
+  configDialogSourceNodeId: string | null;
+  configDialogInitialConfig: NodeConfig;
+  configDialogInitialLabel: string | null;
+  memoryConfigOpen: boolean;
+  marketplaceNodes: MarketplacePackage[];
+  currentViewport: GraphEditorViewport;
+};
+
+type GraphEditorUiAction = {
+  patch: Partial<GraphEditorUiState> | ((state: GraphEditorUiState) => Partial<GraphEditorUiState>);
+};
+
+function graphEditorUiReducer(state: GraphEditorUiState, action: GraphEditorUiAction): GraphEditorUiState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function createInitialGraphEditorUiState(currentViewport: GraphEditorViewport): GraphEditorUiState {
+  return {
+    selectedNodeId: null,
+    selectedEdgeId: null,
+    isDirty: false,
+    isEditingMetadata: false,
+    startingRun: false,
+    overlayRun: null,
+    overlayRunLoading: false,
+    overlayRunRefreshing: false,
+    overlayRunError: null,
+    overlayCanceling: false,
+    promptWizardOpen: false,
+    promptWizardSourceNodeId: null,
+    configDialogOpen: false,
+    configDialogNodeType: null,
+    configDialogSourceNodeId: null,
+    configDialogInitialConfig: {},
+    configDialogInitialLabel: null,
+    memoryConfigOpen: false,
+    marketplaceNodes: [],
+    currentViewport,
+  };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 // Generate unique ID for new nodes/edges
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -210,7 +282,7 @@ const formatDuration = (durationMs: number | null | undefined) => {
 
 // Wizard button component - uses wizard context
 interface WizardButtonProps {
-  buttonRef?: RefObject<HTMLButtonElement | null>;
+  buttonRef?: Ref<HTMLButtonElement>;
   onBeforeStart?: () => void;
 }
 
@@ -230,7 +302,7 @@ function WizardButton({ buttonRef, onBeforeStart }: WizardButtonProps) {
       title="Open Operating Model Wizard (Ctrl+W / Ctrl+Shift+W)"
       className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
     >
-      <Wand2 aria-hidden="true" className="h-4 w-4" />
+      <Wand2 aria-hidden="true" className="size-4" />
       <span className="hidden sm:inline">Wizard</span>
     </button>
   );
@@ -263,6 +335,7 @@ export function GraphEditor({
 }: GraphEditorProps) {
   const router = useRouter();
 
+  const { push } = router;
   const runIdParam = router.query.runId;
   const runIdValue = Array.isArray(runIdParam) ? runIdParam[0] : runIdParam;
   const overlayRunId = typeof runIdValue === "string" ? runIdValue : null;
@@ -295,32 +368,118 @@ export function GraphEditor({
   // Enrich edges with type information for visual display
   const typedEdges = useEdgeTypes(nodes, edges, handleInsertNodeOnEdge);
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
-  const [startingRun, setStartingRun] = useState(false);
-  const [overlayRun, setOverlayRun] = useState<RunDetail | null>(null);
-  const [overlayRunLoading, setOverlayRunLoading] = useState(false);
-  const [overlayRunRefreshing, setOverlayRunRefreshing] = useState(false);
-  const [overlayRunError, setOverlayRunError] = useState<string | null>(null);
-  const [overlayCanceling, setOverlayCanceling] = useState(false);
-
-  const [promptWizardOpen, setPromptWizardOpen] = useState(false);
-  const [promptWizardSourceNodeId, setPromptWizardSourceNodeId] = useState<string | null>(null);
-
-  // Node config dialog state
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [configDialogNodeType, setConfigDialogNodeType] = useState<NodeType | null>(null);
-  const [configDialogSourceNodeId, setConfigDialogSourceNodeId] = useState<string | null>(null);
-  const [configDialogInitialConfig, setConfigDialogInitialConfig] = useState<NodeConfig>({});
-  const [configDialogInitialLabel, setConfigDialogInitialLabel] = useState<string | null>(null);
-  const [memoryConfigOpen, setMemoryConfigOpen] = useState(false);
-  const [marketplaceNodes, setMarketplaceNodes] = useState<MarketplacePackage[]>([]);
-
-  // Viewport state for preserving pan/zoom across saves
-  const [currentViewport, setCurrentViewport] = useState<{ x: number; y: number; zoom: number } | undefined>(
+  const [uiState, dispatchUiState] = useReducer(
+    graphEditorUiReducer,
     initialGraphJson?.editor_state?.viewport,
+    createInitialGraphEditorUiState,
+  );
+  const {
+    selectedNodeId,
+    selectedEdgeId,
+    isDirty,
+    isEditingMetadata,
+    startingRun,
+    overlayRun,
+    overlayRunLoading,
+    overlayRunRefreshing,
+    overlayRunError,
+    overlayCanceling,
+    promptWizardOpen,
+    promptWizardSourceNodeId,
+    configDialogOpen,
+    configDialogNodeType,
+    configDialogSourceNodeId,
+    configDialogInitialConfig,
+    configDialogInitialLabel,
+    memoryConfigOpen,
+    marketplaceNodes,
+    currentViewport,
+  } = uiState;
+
+  const setUiField = useCallback(
+    <K extends keyof GraphEditorUiState>(key: K, value: SetStateAction<GraphEditorUiState[K]>) => {
+      dispatchUiState({
+        patch: (state) =>
+          ({
+            [key]: resolveStateAction(value, state[key]),
+          }) as Partial<GraphEditorUiState>,
+      });
+    },
+    [],
+  );
+  const setSelectedNodeId = useCallback(
+    (value: SetStateAction<string | null>) => setUiField("selectedNodeId", value),
+    [setUiField],
+  );
+  const setSelectedEdgeId = useCallback(
+    (value: SetStateAction<string | null>) => setUiField("selectedEdgeId", value),
+    [setUiField],
+  );
+  const setIsDirty = useCallback((value: SetStateAction<boolean>) => setUiField("isDirty", value), [setUiField]);
+  const setIsEditingMetadata = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("isEditingMetadata", value),
+    [setUiField],
+  );
+  const setStartingRun = useCallback((value: SetStateAction<boolean>) => setUiField("startingRun", value), [setUiField]);
+  const setOverlayRun = useCallback(
+    (value: SetStateAction<RunDetail | null>) => setUiField("overlayRun", value),
+    [setUiField],
+  );
+  const setOverlayRunLoading = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("overlayRunLoading", value),
+    [setUiField],
+  );
+  const setOverlayRunRefreshing = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("overlayRunRefreshing", value),
+    [setUiField],
+  );
+  const setOverlayRunError = useCallback(
+    (value: SetStateAction<string | null>) => setUiField("overlayRunError", value),
+    [setUiField],
+  );
+  const setOverlayCanceling = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("overlayCanceling", value),
+    [setUiField],
+  );
+  const setPromptWizardOpen = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("promptWizardOpen", value),
+    [setUiField],
+  );
+  const setPromptWizardSourceNodeId = useCallback(
+    (value: SetStateAction<string | null>) => setUiField("promptWizardSourceNodeId", value),
+    [setUiField],
+  );
+  const setConfigDialogOpen = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("configDialogOpen", value),
+    [setUiField],
+  );
+  const setConfigDialogNodeType = useCallback(
+    (value: SetStateAction<NodeType | null>) => setUiField("configDialogNodeType", value),
+    [setUiField],
+  );
+  const setConfigDialogSourceNodeId = useCallback(
+    (value: SetStateAction<string | null>) => setUiField("configDialogSourceNodeId", value),
+    [setUiField],
+  );
+  const setConfigDialogInitialConfig = useCallback(
+    (value: SetStateAction<NodeConfig>) => setUiField("configDialogInitialConfig", value),
+    [setUiField],
+  );
+  const setConfigDialogInitialLabel = useCallback(
+    (value: SetStateAction<string | null>) => setUiField("configDialogInitialLabel", value),
+    [setUiField],
+  );
+  const setMemoryConfigOpen = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("memoryConfigOpen", value),
+    [setUiField],
+  );
+  const setMarketplaceNodes = useCallback(
+    (value: SetStateAction<MarketplacePackage[]>) => setUiField("marketplaceNodes", value),
+    [setUiField],
+  );
+  const setCurrentViewport = useCallback(
+    (value: SetStateAction<GraphEditorViewport>) => setUiField("currentViewport", value),
+    [setUiField],
   );
 
   const paletteSearchRef = useRef<HTMLInputElement>(null);
@@ -512,21 +671,21 @@ export function GraphEditor({
         } satisfies Node;
       });
 
-      const newEdges: Edge[] = clipboard.edges
-        .map((edge): Edge | null => {
+      const newEdges: Edge[] = clipboard.edges.flatMap((edge): Edge[] => {
           const source = idMap.get(edge.source);
           const target = idMap.get(edge.target);
-          if (!source || !target) return null;
+          if (!source || !target) return [];
 
-          return {
-            id: generateId(),
-            source,
-            target,
-            label: edge.label,
-            data: deepClone(edge.data),
-          } as Edge;
-        })
-        .filter((edge): edge is Edge => edge !== null);
+          return [
+            {
+              id: generateId(),
+              source,
+              target,
+              label: edge.label,
+              data: deepClone(edge.data),
+            } as Edge,
+          ];
+        });
 
       setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
       setEdges((eds) => [...eds.map((e) => ({ ...e, selected: false })), ...newEdges]);
@@ -603,16 +762,14 @@ export function GraphEditor({
     resetHistory();
 
     if (!initialGraphJson) {
-      setIsDirty(false);
+      dispatchUiState({ patch: { isDirty: false } });
       return;
     }
 
     const next = graphJsonToReactFlow(initialGraphJson);
     setNodes(next.nodes);
     setEdges(next.edges);
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-    setIsDirty(false);
+    dispatchUiState({ patch: { selectedNodeId: null, selectedEdgeId: null, isDirty: false } });
   }, [initialGraphJson, resetHistory, setNodes, setEdges]);
 
   useEffect(() => {
@@ -1387,17 +1544,17 @@ export function GraphEditor({
         },
       );
       showSuccess("Run created");
-      void router.push(`/runs/${run.id}`);
+      void push(`/runs/${run.id}`);
     } catch (err: unknown) {
       showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
     } finally {
       setStartingRun(false);
     }
-  }, [currentVersionId, router, runDisabledReason]);
+  }, [currentVersionId, push, runDisabledReason]);
 
   const handleExitExecutionView = useCallback(() => {
-    void router.push(`/graphs/${graphId}`);
-  }, [graphId, router]);
+    void push(`/graphs/${graphId}`);
+  }, [graphId, push]);
 
   const handleCancelExecution = useCallback(async () => {
     if (!overlayRun) return;
@@ -1435,6 +1592,14 @@ export function GraphEditor({
     setIsDirty(true);
   }, [nodes, edges, pushHistory, setNodes, setEdges]);
 
+  const handleSaveShortcut = useEffectEvent(handleSave);
+  const handleUndoShortcut = useEffectEvent(handleUndo);
+  const handleRedoShortcut = useEffectEvent(handleRedo);
+  const handleCopyShortcut = useEffectEvent(handleCopy);
+  const handlePasteShortcut = useEffectEvent(handlePaste);
+  const handleDuplicateShortcut = useEffectEvent(handleDuplicateSelection);
+  const handleDeleteShortcut = useEffectEvent(handleDeleteSelection);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1453,7 +1618,7 @@ export function GraphEditor({
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           if (!saving) {
-            void handleSave();
+            void handleSaveShortcut();
           }
         }
       }
@@ -1471,9 +1636,9 @@ export function GraphEditor({
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           if (e.shiftKey) {
-            handleRedo();
+            handleRedoShortcut();
           } else {
-            handleUndo();
+            handleUndoShortcut();
           }
         }
       }
@@ -1482,7 +1647,7 @@ export function GraphEditor({
       if ((e.metaKey || e.ctrlKey) && key === "y") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handleRedo();
+          handleRedoShortcut();
         }
       }
 
@@ -1500,7 +1665,7 @@ export function GraphEditor({
       if ((e.metaKey || e.ctrlKey) && key === "c") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handleCopy();
+          handleCopyShortcut();
         }
       }
 
@@ -1508,7 +1673,7 @@ export function GraphEditor({
       if ((e.metaKey || e.ctrlKey) && key === "v") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handlePaste();
+          handlePasteShortcut();
         }
       }
 
@@ -1516,7 +1681,7 @@ export function GraphEditor({
       if ((e.metaKey || e.ctrlKey) && key === "d") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handleDuplicateSelection();
+          handleDuplicateShortcut();
         }
       }
 
@@ -1524,30 +1689,20 @@ export function GraphEditor({
       if (e.key === "Delete" || e.key === "Backspace") {
         // Only delete if not focused on an input
         if (!isEditableTarget(e.target)) {
-          handleDeleteSelection();
+          handleDeleteShortcut();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    handleSave,
-    saving,
-    setNodes,
-    handleUndo,
-    handleRedo,
-    handleCopy,
-    handlePaste,
-    handleDuplicateSelection,
-    handleDeleteSelection,
-  ]);
+  }, [saving, setNodes]);
 
   const overlaySelectedNodeRuns: NodeRunItem[] =
     overlayRun && selectedNodeId
-      ? [...overlayRun.node_runs.filter((nodeRun) => nodeRun.node_id === selectedNodeId)].sort(
-          (a, b) => a.attempt - b.attempt,
-        )
+      ? overlayRun.node_runs
+          .filter((nodeRun) => nodeRun.node_id === selectedNodeId)
+          .toSorted((a, b) => a.attempt - b.attempt)
       : [];
 
   // Handlers for validation quick fixes
@@ -1641,14 +1796,14 @@ export function GraphEditor({
           },
         );
         showSuccess("Test run started");
-        void router.push(`/runs/${run.id}`);
+        void push(`/runs/${run.id}`);
       } catch (err: unknown) {
         showError("Run failed", getApiErrorMessage(err, ERROR_FALLBACKS.run.start));
       } finally {
         setStartingRun(false);
       }
     },
-    [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, router, saveGraphSnapshot, saving],
+    [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, push, saveGraphSnapshot, saving],
   );
 
   return (
@@ -1791,7 +1946,7 @@ export function GraphEditor({
                       title="Undo (Ctrl+Z)"
                       className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      <Undo2 aria-hidden="true" className="h-4 w-4" />
+                      <Undo2 aria-hidden="true" className="size-4" />
                     </button>
                     <div className="w-px bg-border" />
                     <button
@@ -1802,7 +1957,7 @@ export function GraphEditor({
                       title="Redo (Ctrl+Y)"
                       className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      <Redo2 aria-hidden="true" className="h-4 w-4" />
+                      <Redo2 aria-hidden="true" className="size-4" />
                     </button>
                   </div>
                   <button
@@ -1813,7 +1968,7 @@ export function GraphEditor({
                     className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
                     title="Tidy up layout"
                   >
-                    <LayoutGrid aria-hidden="true" className="h-4 w-4" />
+                    <LayoutGrid aria-hidden="true" className="size-4" />
                     <span className="hidden sm:inline">Tidy</span>
                   </button>
                   <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
@@ -1827,8 +1982,8 @@ export function GraphEditor({
                       {availableVersions.length === 0 ? (
                         <option value="">No version</option>
                       ) : (
-                        [...availableVersions]
-                          .sort((a, b) => b.version - a.version)
+                        availableVersions
+                          .toSorted((a, b) => b.version - a.version)
                           .map((v) => (
                             <option key={v.id} value={v.id}>
                               v{v.version}
@@ -1848,7 +2003,7 @@ export function GraphEditor({
                         onClick={handleOpenMemoryConfig}
                         className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
                       >
-                        <Brain aria-hidden="true" className="h-4 w-4" />
+                        <Brain aria-hidden="true" className="size-4" />
                         <span className="hidden sm:inline">Memory</span>
                       </button>
                       <button
@@ -1859,7 +2014,7 @@ export function GraphEditor({
                         title={runDisabledReason ?? "Launch test operation"}
                         className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        {startingRun ? "Starting" : <Play aria-hidden="true" className="h-4 w-4" />}
+                        {startingRun ? "Starting" : <Play aria-hidden="true" className="size-4" />}
                       </button>
                       <button
                         type="button"
@@ -1868,7 +2023,7 @@ export function GraphEditor({
                         disabled={saving || !isDirty}
                         className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        {saving ? "Saving" : <SaveIcon aria-hidden="true" className="h-4 w-4" />}
+                        {saving ? "Saving" : <SaveIcon aria-hidden="true" className="size-4" />}
                       </button>
                     </>
                   )}
@@ -1879,7 +2034,7 @@ export function GraphEditor({
                     onClick={() => paletteSearchRef.current?.focus()}
                     className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="size-4" />
                     Add Step
                   </button>
                 </Panel>

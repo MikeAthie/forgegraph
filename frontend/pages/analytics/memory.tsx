@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -38,18 +38,21 @@ const PERIOD_OPTIONS = [
 const isPeriodOption = (value: unknown): value is string =>
   typeof value === "string" && PERIOD_OPTIONS.some((option) => option.value === value);
 
+const NUMBER_FORMATTER = new Intl.NumberFormat();
+const USD_FORMATTER = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
 const formatNumber = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat().format(value);
+  return NUMBER_FORMATTER.format(value);
 };
 
 const formatCurrency = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return USD_FORMATTER.format(value);
 };
 
 const formatPercent = (value: number | null | undefined) => {
@@ -119,18 +122,238 @@ const downloadBlob = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+function MemoryAnalyticsHeader({
+  period,
+  loading,
+  exportDisabled,
+  onPeriodChange,
+  onRefresh,
+  onExport,
+}: {
+  period: string;
+  loading: boolean;
+  exportDisabled: boolean;
+  onPeriodChange: (period: string) => void;
+  onRefresh: () => void;
+  onExport: (format: "json" | "csv") => void;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card/70 p-6 shadow-lg backdrop-blur-sm">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at top left, rgba(14, 116, 144, 0.18), transparent 55%), radial-gradient(circle at 80% 20%, rgba(234, 179, 8, 0.15), transparent 50%), linear-gradient(120deg, rgba(15, 23, 42, 0.05), rgba(255, 255, 255, 0))",
+        }}
+      />
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Badge variant="outline" className="mb-3 border-cyan-400/40 text-cyan-700 dark:text-cyan-200">
+            Memory Analytics
+          </Badge>
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">Signal, not noise.</h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Monitor how memory tiers perform across operations, costs, and storage saturation. View refreshed on demand.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={period} onValueChange={onPeriodChange}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={onRefresh} disabled={loading}>
+            {loading ? <Spinner size="xs" /> : "Refresh"}
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/analytics/llm">LLM Analytics</Link>
+          </Button>
+          <Button variant="outline" onClick={() => onExport("json")} disabled={exportDisabled}>
+            Export JSON
+          </Button>
+          <Button variant="outline" onClick={() => onExport("csv")} disabled={exportDisabled}>
+            Export CSV
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemoryTierCards({
+  usage,
+  performance,
+  usageTokenSeries,
+}: {
+  usage: MemoryAnalyticsUsage | null;
+  performance: MemoryAnalyticsPerformance | null;
+  usageTokenSeries: number[];
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-4">
+      <Card className="border-border/50 bg-card/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Tier 1 Buffer</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Messages captured</span>
+            <span className="text-xl font-semibold">{formatNumber(usage?.tier1.total_messages)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Avg buffer size</span>
+            <span className="font-medium">{formatNumber(usage?.tier1.avg_buffer_size)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Peak buffer size</span>
+            <span className="font-medium">{formatNumber(usage?.tier1.peak_buffer_size)}</span>
+          </div>
+          <Sparkline values={usageTokenSeries} className="text-cyan-500" label="Tier 1 token trend" />
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Tier 2 Redis</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Keys stored</span>
+            <span className="text-xl font-semibold">{formatNumber(usage?.tier2.redis_keys)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Storage</span>
+            <span className="font-medium">{usage ? `${usage.tier2.storage_mb} MB` : "—"}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Hit rate</span>
+            <span className="font-medium">{formatPercent(usage?.tier2.hit_rate)}</span>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Redis analytics update as memory entries are written for this tenant.
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Tier 3 Vector</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Chunks stored</span>
+            <span className="text-xl font-semibold">{formatNumber(usage?.tier3.chunks_stored)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Embeddings generated</span>
+            <span className="font-medium">{formatNumber(usage?.tier3.embeddings_generated)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Avg search latency</span>
+            <span className="font-medium">
+              {usage?.tier3.avg_search_latency_ms ? `${usage.tier3.avg_search_latency_ms} ms` : "—"}
+            </span>
+          </div>
+          <Sparkline
+            values={usage?.usage_series.map((entry) => entry.summarization_cost_usd ?? 0) ?? []}
+            className="text-amber-500"
+            label="Tier 3 summarization cost trend"
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Curated Memory</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Observations</span>
+            <span className="text-xl font-semibold">{formatNumber(usage?.curated_memory.observations_total)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Indexed</span>
+            <span className="font-medium">{formatNumber(usage?.curated_memory.indexed_observations_total)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Pending index</span>
+            <span className="font-medium">{formatNumber(usage?.curated_memory.pending_index_total)}</span>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Retrieval operations this period: {formatNumber(usage?.curated_memory.retrieval_runs_in_period)}
+          </div>
+          <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Search queries this period: {formatNumber(performance?.vector.search_queries)}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+type MemoryAnalyticsState = {
+  usage: MemoryAnalyticsUsage | null;
+  costs: MemoryAnalyticsCosts | null;
+  performance: MemoryAnalyticsPerformance | null;
+  loading: boolean;
+  error: string | null;
+};
+
+type MemoryAnalyticsAction =
+  | { type: "load-start" }
+  | {
+      type: "load-success";
+      usage: MemoryAnalyticsUsage;
+      costs: MemoryAnalyticsCosts;
+      performance: MemoryAnalyticsPerformance;
+    }
+  | { type: "load-error"; error: string };
+
+const initialMemoryAnalyticsState: MemoryAnalyticsState = {
+  usage: null,
+  costs: null,
+  performance: null,
+  loading: true,
+  error: null,
+};
+
+function memoryAnalyticsReducer(state: MemoryAnalyticsState, action: MemoryAnalyticsAction): MemoryAnalyticsState {
+  switch (action.type) {
+    case "load-start":
+      return { ...state, loading: true, error: null };
+    case "load-success":
+      return {
+        usage: action.usage,
+        costs: action.costs,
+        performance: action.performance,
+        loading: false,
+        error: null,
+      };
+    case "load-error":
+      return { ...state, loading: false, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export default function MemoryAnalyticsPage() {
   const router = useRouter();
-  const [period, setPeriod] = useState("30d");
-  const [usage, setUsage] = useState<MemoryAnalyticsUsage | null>(null);
-  const [costs, setCosts] = useState<MemoryAnalyticsCosts | null>(null);
-  const [performance, setPerformance] = useState<MemoryAnalyticsPerformance | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { replace } = router;
+  const [{ usage, costs, performance, loading, error }, dispatchPage] = useReducer(
+    memoryAnalyticsReducer,
+    initialMemoryAnalyticsState,
+  );
+  const period = isPeriodOption(router.query.period) ? router.query.period : "30d";
 
   const fetchAnalytics = useCallback(async (periodValue: string) => {
-    setLoading(true);
-    setError(null);
+    dispatchPage({ type: "load-start" });
 
     try {
       const [usageData, costsData, performanceData] = await Promise.all([
@@ -139,13 +362,9 @@ export default function MemoryAnalyticsPage() {
         analyticsApi.getMemoryPerformance(periodValue),
       ]);
 
-      setUsage(usageData);
-      setCosts(costsData);
-      setPerformance(performanceData);
+      dispatchPage({ type: "load-success", usage: usageData, costs: costsData, performance: performanceData });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Failed to load memory analytics."));
-    } finally {
-      setLoading(false);
+      dispatchPage({ type: "load-error", error: getApiErrorMessage(err, "Failed to load memory analytics.") });
     }
   }, []);
 
@@ -153,21 +372,11 @@ export default function MemoryAnalyticsPage() {
     void fetchAnalytics(period);
   }, [fetchAnalytics, period]);
 
-  useEffect(() => {
-    if (!router.isReady) {
-      return;
-    }
-    if (isPeriodOption(router.query.period)) {
-      setPeriod(router.query.period);
-    }
-  }, [router.isReady, router.query.period]);
-
   const handlePeriodChange = (nextPeriod: string) => {
-    setPeriod(nextPeriod);
     if (!router.isReady) {
       return;
     }
-    void router.replace(
+    void replace(
       {
         pathname: router.pathname,
         query: { ...router.query, period: nextPeriod },
@@ -193,7 +402,7 @@ export default function MemoryAnalyticsPage() {
         const blob = await analyticsApi.exportMemoryReport({ format, period });
         downloadBlob(blob, `memory-analytics-${period}.${format}`);
       } catch (err: unknown) {
-        setError(getApiErrorMessage(err, "Failed to export memory analytics."));
+        dispatchPage({ type: "load-error", error: getApiErrorMessage(err, "Failed to export memory analytics.") });
       }
     },
     [period],
@@ -203,63 +412,18 @@ export default function MemoryAnalyticsPage() {
     <ProtectedRoute>
       <DashboardLayout>
         <div className="flex flex-col gap-6">
-          <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card/70 p-6 shadow-lg backdrop-blur-sm">
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at top left, rgba(14, 116, 144, 0.18), transparent 55%), radial-gradient(circle at 80% 20%, rgba(234, 179, 8, 0.15), transparent 50%), linear-gradient(120deg, rgba(15, 23, 42, 0.05), rgba(255, 255, 255, 0))",
-              }}
-            />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <Badge variant="outline" className="mb-3 border-cyan-400/40 text-cyan-700 dark:text-cyan-200">
-                  Memory Analytics
-                </Badge>
-                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-                  Signal, not noise.
-                </h1>
-                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  Monitor how memory tiers perform across operations, costs, and storage saturation. View refreshed on
-                  demand.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Select value={period} onValueChange={handlePeriodChange}>
-                  <SelectTrigger className="w-[170px]">
-                    <SelectValue placeholder="Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PERIOD_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={() => void fetchAnalytics(period)} disabled={loading}>
-                  {loading ? <Spinner size="xs" /> : "Refresh"}
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/analytics/llm">LLM Analytics</Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void handleExport("json")}
-                  disabled={!usage || !costs || !performance}
-                >
-                  Export JSON
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void handleExport("csv")}
-                  disabled={!usage || !costs || !performance}
-                >
-                  Export CSV
-                </Button>
-              </div>
-            </div>
-          </div>
+          <MemoryAnalyticsHeader
+            period={period}
+            loading={loading}
+            exportDisabled={!usage || !costs || !performance}
+            onPeriodChange={handlePeriodChange}
+            onRefresh={() => {
+              void fetchAnalytics(period);
+            }}
+            onExport={(format) => {
+              void handleExport(format);
+            }}
+          />
 
           {loading ? (
             <div className="flex items-center justify-center gap-3 rounded-2xl border border-border/40 bg-card/50 py-12">
@@ -268,108 +432,7 @@ export default function MemoryAnalyticsPage() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 lg:grid-cols-4">
-                <Card className="border-border/50 bg-card/60">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold">Tier 1 Buffer</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Messages captured</span>
-                      <span className="text-xl font-semibold">{formatNumber(usage?.tier1.total_messages)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Avg buffer size</span>
-                      <span className="font-medium">{formatNumber(usage?.tier1.avg_buffer_size)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Peak buffer size</span>
-                      <span className="font-medium">{formatNumber(usage?.tier1.peak_buffer_size)}</span>
-                    </div>
-                    <Sparkline values={usageTokenSeries} className="text-cyan-500" label="Tier 1 token trend" />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/50 bg-card/60">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold">Tier 2 Redis</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Keys stored</span>
-                      <span className="text-xl font-semibold">{formatNumber(usage?.tier2.redis_keys)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Storage</span>
-                      <span className="font-medium">{usage ? `${usage.tier2.storage_mb} MB` : "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Hit rate</span>
-                      <span className="font-medium">{formatPercent(usage?.tier2.hit_rate)}</span>
-                    </div>
-                    <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      Redis analytics update as memory entries are written for this tenant.
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/50 bg-card/60">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold">Tier 3 Vector</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Chunks stored</span>
-                      <span className="text-xl font-semibold">{formatNumber(usage?.tier3.chunks_stored)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Embeddings generated</span>
-                      <span className="font-medium">{formatNumber(usage?.tier3.embeddings_generated)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Avg search latency</span>
-                      <span className="font-medium">
-                        {usage?.tier3.avg_search_latency_ms ? `${usage.tier3.avg_search_latency_ms} ms` : "—"}
-                      </span>
-                    </div>
-                    <Sparkline
-                      values={usage?.usage_series.map((entry) => entry.summarization_cost_usd ?? 0) ?? []}
-                      className="text-amber-500"
-                      label="Tier 3 summarization cost trend"
-                    />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/50 bg-card/60">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold">Curated Memory</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Observations</span>
-                      <span className="text-xl font-semibold">
-                        {formatNumber(usage?.curated_memory.observations_total)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Indexed</span>
-                      <span className="font-medium">
-                        {formatNumber(usage?.curated_memory.indexed_observations_total)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Pending index</span>
-                      <span className="font-medium">{formatNumber(usage?.curated_memory.pending_index_total)}</span>
-                    </div>
-                    <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      Retrieval operations this period: {formatNumber(usage?.curated_memory.retrieval_runs_in_period)}
-                    </div>
-                    <div className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      Search queries this period: {formatNumber(performance?.vector.search_queries)}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <MemoryTierCards usage={usage} performance={performance} usageTokenSeries={usageTokenSeries} />
 
               <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
                 <Card className="border-border/50 bg-card/60">

@@ -181,16 +181,20 @@ function normalizeText(value: unknown): string {
 
 function coerceStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+    return value.flatMap((item) => {
+      const trimmed = String(item ?? "").trim();
+      return trimmed ? [trimmed] : [];
+    });
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed ? [trimmed] : [];
   }
   if (isRecord(value)) {
-    return Object.values(value)
-      .map((item) => String(item ?? "").trim())
-      .filter(Boolean);
+    return Object.values(value).flatMap((item) => {
+      const trimmed = String(item ?? "").trim();
+      return trimmed ? [trimmed] : [];
+    });
   }
   return [];
 }
@@ -227,10 +231,9 @@ function parsePossiblyFencedJson(value: unknown): Record<string, unknown> | null
       }
       return null;
     } catch {
-      const firstBrace = text.indexOf("{");
-      const lastBrace = text.lastIndexOf("}");
-      if (firstBrace < 0 || lastBrace <= firstBrace) return null;
-      text = text.slice(firstBrace, lastBrace + 1);
+      const objectMatch = text.match(/\{[\s\S]*\}/);
+      if (!objectMatch) return null;
+      text = objectMatch[0];
     }
   }
   return null;
@@ -521,9 +524,14 @@ function assertVisualBriefsActionable(output: Phase6ObjectiveOutput): VisualAsse
   const briefs = (output.visual_asset_briefs ?? []).map(normalizeVisualBrief);
   expect(briefs.length).toBeGreaterThanOrEqual(5);
   for (const model of REQUIRED_MODELS) {
-    const brief = briefs.find((item) =>
-      normalizeText(`${item.product_name} ${item.sku}`).includes(model.toLowerCase()),
-    );
+    const normalizedModel = model.toLowerCase();
+    let brief: VisualAssetBrief | undefined;
+    for (const item of briefs) {
+      if (normalizeText(`${item.product_name} ${item.sku}`).split(normalizedModel).length > 1) {
+        brief = item;
+        break;
+      }
+    }
     expect(brief, `Missing brief for ${model}`).toBeTruthy();
     expect(brief?.sku).toBeTruthy();
     expect(brief?.stock_state).toBeTruthy();
@@ -565,37 +573,38 @@ async function materializeApprovalDrafts(
   briefs: VisualAssetBrief[],
   idempotencyScope: string,
 ) {
-  const publicationDrafts = [];
-  for (const brief of briefs) {
-    const draft = await apiPost<{ publication_draft: { id: string; title: string; status: string } }>(
-      request,
-      accessToken,
-      "/api/company-ops/publication-drafts",
-      {
-        company_id: companyId,
-        title: brief.approval_task_title,
-        channel: "instagram_draft",
-        audience: "Legacy Glasswear followers",
-        body: [
-          `Product: ${brief.product_name} (${brief.sku})`,
-          `Stock state: ${brief.stock_state}`,
-          `Caption angle: ${brief.caption_angle}`,
-          `Shot list: ${brief.shot_list.join("; ")}`,
-          `Props/background: ${brief.background_or_prop_needs.join("; ")}`,
-        ].join("\n"),
-        call_to_action: "Hold for human approval before any external post.",
-      },
-      `phase6-${idempotencyScope}-publication-${brief.sku}`,
-    );
-    const approval = await apiPost<{ publication_draft: { id: string; title: string; status: string } }>(
-      request,
-      accessToken,
-      `/api/company-ops/publication-drafts/${draft.publication_draft.id}/request-approval`,
-      { note: "Phase 6 approval gate: no live posting." },
-      `phase6-${idempotencyScope}-publication-approval-${draft.publication_draft.id}`,
-    );
-    publicationDrafts.push(approval.publication_draft);
-  }
+  const publicationDrafts = await Promise.all(
+    briefs.map((brief) =>
+      apiPost<{ publication_draft: { id: string; title: string; status: string } }>(
+        request,
+        accessToken,
+        "/api/company-ops/publication-drafts",
+        {
+          company_id: companyId,
+          title: brief.approval_task_title,
+          channel: "instagram_draft",
+          audience: "Legacy Glasswear followers",
+          body: [
+            `Product: ${brief.product_name} (${brief.sku})`,
+            `Stock state: ${brief.stock_state}`,
+            `Caption angle: ${brief.caption_angle}`,
+            `Shot list: ${brief.shot_list.join("; ")}`,
+            `Props/background: ${brief.background_or_prop_needs.join("; ")}`,
+          ].join("\n"),
+          call_to_action: "Hold for human approval before any external post.",
+        },
+        `phase6-${idempotencyScope}-publication-${brief.sku}`,
+      ).then((draft) =>
+        apiPost<{ publication_draft: { id: string; title: string; status: string } }>(
+          request,
+          accessToken,
+          `/api/company-ops/publication-drafts/${draft.publication_draft.id}/request-approval`,
+          { note: "Phase 6 approval gate: no live posting." },
+          `phase6-${idempotencyScope}-publication-approval-${draft.publication_draft.id}`,
+        ),
+      ),
+    ),
+  ).then((approvals) => approvals.map((approval) => approval.publication_draft));
 
   const procurementLines = briefs.map((brief) => {
     const product = products.find(
@@ -773,16 +782,18 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
 
   const accessToken = await getAccessToken(request, user);
   const companyId = bootstrap.observed_data.company_id;
-  const inventory = await apiGet<{ inventory: InventoryOverview }>(
-    request,
-    accessToken,
-    `/api/inventory/overview?company_id=${companyId}`,
-  ).then((payload) => payload.inventory);
-  const companyOpsBefore = await apiGet<{ company_ops: CompanyOpsOverview }>(
-    request,
-    accessToken,
-    `/api/company-ops/overview?company_id=${companyId}`,
-  ).then((payload) => payload.company_ops);
+  const [inventory, companyOpsBefore] = await Promise.all([
+    apiGet<{ inventory: InventoryOverview }>(
+      request,
+      accessToken,
+      `/api/inventory/overview?company_id=${companyId}`,
+    ).then((payload) => payload.inventory),
+    apiGet<{ company_ops: CompanyOpsOverview }>(
+      request,
+      accessToken,
+      `/api/company-ops/overview?company_id=${companyId}`,
+    ).then((payload) => payload.company_ops),
+  ]);
 
   expect(inventory.products.length).toBe(21);
   expect(inventory.summary.total_units).toBe(62);
@@ -802,20 +813,23 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
     ],
     stock_semantics_report: inventory.stock_state_summary,
     products: inventory.products
-      .filter((product) =>
-        REQUIRED_MODELS.some((model) =>
-          normalizeText(`${product.model} ${product.name}`).includes(model.toLowerCase()),
-        ),
-      )
-      .map((product) => ({
-        id: product.id,
-        sku: product.sku,
-        model: product.model,
-        name: product.name,
-        stock_state: product.stock_state,
-        available_units: product.available_units,
-        held_units: product.held_units,
-      })),
+      .flatMap((product) =>
+        REQUIRED_MODELS.some(
+          (model) => normalizeText(`${product.model} ${product.name}`).split(model.toLowerCase()).length > 1,
+        )
+          ? [
+              {
+                id: product.id,
+                sku: product.sku,
+                model: product.model,
+                name: product.name,
+                stock_state: product.stock_state,
+                available_units: product.available_units,
+                held_units: product.held_units,
+              },
+            ]
+          : [],
+      ),
   };
 
   let mockObjectiveSeed: MockObjectiveSeed | null = null;
@@ -850,16 +864,18 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
   expect(drafts.procurement_draft.status).toBe("approval_requested");
   expect(Number(drafts.procurement_draft.budget_amount)).toBe(0);
 
-  const companyOpsAfter = await apiGet<{ company_ops: CompanyOpsOverview }>(
-    request,
-    accessToken,
-    `/api/company-ops/overview?company_id=${companyId}`,
-  ).then((payload) => payload.company_ops);
-  const inventoryAfterReservation = await apiGet<{ inventory: InventoryOverview }>(
-    request,
-    accessToken,
-    `/api/inventory/overview?company_id=${companyId}`,
-  ).then((payload) => payload.inventory);
+  const [companyOpsAfter, inventoryAfterReservation] = await Promise.all([
+    apiGet<{ company_ops: CompanyOpsOverview }>(
+      request,
+      accessToken,
+      `/api/company-ops/overview?company_id=${companyId}`,
+    ).then((payload) => payload.company_ops),
+    apiGet<{ inventory: InventoryOverview }>(
+      request,
+      accessToken,
+      `/api/inventory/overview?company_id=${companyId}`,
+    ).then((payload) => payload.inventory),
+  ]);
   expect(inventoryAfterReservation.summary.total_units).toBe(62);
   expect(inventoryAfterReservation.stock_state_summary).toEqual(companyOpsAfter.stock_state_summary);
   expect(inventoryAfterReservation.events.some((event) => /reserved/i.test(event.message))).toBe(true);

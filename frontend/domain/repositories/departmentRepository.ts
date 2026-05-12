@@ -156,21 +156,27 @@ function buildOperationRefs(
     }
   }
 
-  const refs = operations
-    .filter((operation) => operationIds.has(operation.id) || operation.currentDepartmentName === department.name)
-    .map((operation) => {
-      const isCurrent = operation.currentDepartmentName === department.name;
-      const hasTask = tasks.some((task) => task.operationId === operation.id);
-      const hasApproval = approvals.some((approval) => approval.operationId === operation.id);
-      const role = isCurrent
-        ? "Currently shaping the operation"
-        : hasApproval
-          ? "Proposed an action awaiting review"
-          : hasTask
-            ? "Contributing assigned tasks"
-            : "Recent participant";
-      return toOperationRefVM(operation, role);
-    });
+  const taskOperationIds = new Set(tasks.flatMap((task) => (task.operationId ? [task.operationId] : [])));
+  const approvalOperationIds = new Set(
+    approvals.flatMap((approval) => (approval.operationId ? [approval.operationId] : [])),
+  );
+  const refs: OperationRefVM[] = [];
+  for (const operation of operations) {
+    const isCurrent = operation.currentDepartmentName === department.name;
+    if (!operationIds.has(operation.id) && !isCurrent) {
+      continue;
+    }
+    const hasTask = taskOperationIds.has(operation.id);
+    const hasApproval = approvalOperationIds.has(operation.id);
+    const role = isCurrent
+      ? "Currently shaping the operation"
+      : hasApproval
+        ? "Proposed an action awaiting review"
+        : hasTask
+          ? "Contributing assigned tasks"
+          : "Recent participant";
+    refs.push(toOperationRefVM(operation, role));
+  }
 
   if (refs.length > 0) {
     return refs;
@@ -193,33 +199,43 @@ function buildOperationRefs(
 }
 
 function buildProposals(approvals: ApprovalVM[], operations: OperationRefVM[]): DepartmentProposalVM[] {
+  const operationById = new Map(operations.map((operation) => [operation.id, operation]));
   return approvals.map((approval) => ({
     id: approval.id,
     description: approval.promptMessage,
     status: toProposalStatus(approval),
-    operation: operations.find((operation) => operation.id === approval.operationId) ?? null,
+    operation: operationById.get(approval.operationId) ?? null,
     createdAt: approval.createdAt,
   }));
 }
 
 function buildBlockers(approvals: ApprovalVM[], tasks: TaskVM[], operations: OperationRefVM[]): DepartmentBlockerVM[] {
-  const approvalBlockers = approvals
-    .filter((approval) => approval.status === "pending")
-    .map((approval) => ({
-      id: approval.id,
-      description: approval.promptMessage,
-      status: "waiting" as const,
-      operation: operations.find((operation) => operation.id === approval.operationId) ?? null,
-    }));
+  const operationById = new Map(operations.map((operation) => [operation.id, operation]));
+  const approvalBlockers = approvals.flatMap((approval) =>
+    approval.status === "pending"
+      ? [
+          {
+            id: approval.id,
+            description: approval.promptMessage,
+            status: "waiting" as const,
+            operation: operationById.get(approval.operationId) ?? null,
+          },
+        ]
+      : [],
+  );
 
-  const taskBlockers = tasks
-    .filter((task) => task.status === "paused" || task.status === "failed")
-    .map((task) => ({
-      id: task.id,
-      description: task.issuePreview || task.summary,
-      status: task.status === "failed" ? ("failed" as const) : ("waiting" as const),
-      operation: operations.find((operation) => operation.id === task.operationId) ?? null,
-    }));
+  const taskBlockers = tasks.flatMap((task) =>
+    task.status === "paused" || task.status === "failed"
+      ? [
+          {
+            id: task.id,
+            description: task.issuePreview || task.summary,
+            status: task.status === "failed" ? ("failed" as const) : ("waiting" as const),
+            operation: task.operationId ? (operationById.get(task.operationId) ?? null) : null,
+          },
+        ]
+      : [],
+  );
 
   return [...approvalBlockers, ...taskBlockers];
 }
@@ -308,4 +324,4 @@ export const departmentRepository = {
   },
 };
 
-export type DepartmentRepository = typeof departmentRepository;
+type DepartmentRepository = typeof departmentRepository;

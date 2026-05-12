@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import { ArrowRight, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui";
@@ -25,6 +25,34 @@ type RectState = {
   width: number;
   height: number;
 };
+
+type QuestGuideState = {
+  stepIndex: number;
+  targetRect: RectState | null;
+};
+
+type QuestGuideAction =
+  | { type: "reset" }
+  | { type: "next" }
+  | { type: "target"; rect: RectState | null };
+
+const initialQuestGuideState: QuestGuideState = {
+  stepIndex: 0,
+  targetRect: null,
+};
+
+function questGuideReducer(state: QuestGuideState, action: QuestGuideAction): QuestGuideState {
+  switch (action.type) {
+    case "reset":
+      return initialQuestGuideState;
+    case "next":
+      return { ...state, stepIndex: state.stepIndex + 1 };
+    case "target":
+      return { ...state, targetRect: action.rect };
+    default:
+      return state;
+  }
+}
 
 function getBubblePosition(rect: RectState, placement: QuestGuideStep["placement"]) {
   const bubbleWidth = 320;
@@ -60,37 +88,31 @@ function getBubblePosition(rect: RectState, placement: QuestGuideStep["placement
 }
 
 export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGuideProps) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [targetRect, setTargetRect] = useState<RectState | null>(null);
+  const [{ stepIndex, targetRect }, dispatchGuide] = useReducer(questGuideReducer, initialQuestGuideState);
   const currentStep = steps[stepIndex];
 
   useEffect(() => {
     if (!active) {
-      setStepIndex(0);
+      dispatchGuide({ type: "reset" });
     }
   }, [active]);
 
   useEffect(() => {
     if (!active || !currentStep) {
-      setTargetRect(null);
+      dispatchGuide({ type: "target", rect: null });
       return;
     }
 
     const selector = `[data-guide-id="${currentStep.targetId}"]`;
     const target = document.querySelector(selector) as HTMLElement | null;
     if (!target) {
-      setTargetRect(null);
+      dispatchGuide({ type: "target", rect: null });
       return;
     }
 
     const update = () => {
       const rect = target.getBoundingClientRect();
-      setTargetRect({
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-      });
+      dispatchGuide({ type: "target", rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height } });
     };
 
     target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
@@ -117,7 +139,7 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
 
   return (
     <div data-testid="quest-guide-overlay" className="pointer-events-none fixed inset-0 z-[70]">
-      <div className="absolute inset-0 bg-slate-950/10 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 bg-zinc-950/10 backdrop-blur-[1px]" />
       <div
         className="pointer-events-none fixed rounded-[1.6rem] border-2 border-sky-500/70 shadow-[0_0_0_9999px_rgba(15,23,42,0.14)] transition-[top,left,width,height,border-color,box-shadow,opacity] motion-reduce:transition-none"
         style={{
@@ -129,19 +151,19 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
       />
 
       <div
-        className="pointer-events-auto fixed w-[320px] rounded-[1.6rem] border border-slate-900/10 bg-white px-5 py-5 shadow-[0_32px_80px_-34px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950"
+        className="pointer-events-auto fixed w-[320px] rounded-[1.6rem] border border-zinc-900/10 bg-white p-5 shadow-[0_32px_80px_-34px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-zinc-950"
         style={bubblePosition}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
-              <Sparkles className="h-4 w-4" />
+            <span className="flex size-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+              <Sparkles className="size-4" />
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                 {title}
               </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                 Step {stepIndex + 1} of {steps.length}
               </p>
             </div>
@@ -149,23 +171,23 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
           <button
             type="button"
             onClick={onSkip}
-            className="rounded-full border border-slate-900/10 p-2 text-slate-500 transition-colors hover:border-slate-900 hover:text-slate-900 dark:border-white/10 dark:text-slate-400 dark:hover:border-white/30 dark:hover:text-white"
+            className="rounded-full border border-zinc-900/10 p-2 text-zinc-500 transition-colors hover:border-zinc-900 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:border-white/30 dark:hover:text-white"
             aria-label="Skip guide"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         </div>
 
         <div className="mt-4">
-          <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{currentStep.title}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{currentStep.description}</p>
+          <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{currentStep.title}</p>
+          <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{currentStep.description}</p>
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onSkip}
-            className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
           >
             Skip guide
           </button>
@@ -177,11 +199,11 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
                 onComplete();
                 return;
               }
-              setStepIndex((value) => value + 1);
+              dispatchGuide({ type: "next" });
             }}
           >
             {isLastStep ? "Finish" : "Next"}
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="size-4" />
           </Button>
         </div>
       </div>

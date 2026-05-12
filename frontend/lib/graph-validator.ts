@@ -11,7 +11,7 @@ import { NODE_TYPES, START_NODE_ID, END_NODE_ID } from "./graph-types";
 /**
  * Validation error severity levels
  */
-export type ValidationSeverity = "error" | "warning";
+type ValidationSeverity = "error" | "warning";
 
 /**
  * Validation error codes
@@ -129,9 +129,12 @@ function checkEndNode(nodes: Node[], edges: Edge[]): ValidationError | null {
 
   // Check for sink nodes (nodes with no outgoing edges to other nodes)
   const executableIds = new Set(executableNodes.map((n) => n.id));
-  const sourcesWithOutgoing = new Set(
-    edges.filter((e) => executableIds.has(e.source) && executableIds.has(e.target)).map((e) => e.source),
-  );
+  const sourcesWithOutgoing = new Set<string>();
+  for (const edge of edges) {
+    if (executableIds.has(edge.source) && executableIds.has(edge.target)) {
+      sourcesWithOutgoing.add(edge.source);
+    }
+  }
   const sinkNodes = executableNodes.filter((node) => !sourcesWithOutgoing.has(node.id));
 
   if (!hasExplicitEnd && !hasEndEdge && sinkNodes.length === 0) {

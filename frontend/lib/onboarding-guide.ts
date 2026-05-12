@@ -13,7 +13,7 @@ export interface OnboardingRemediation {
   docsUrl: string;
 }
 
-export const ONBOARDING_DOC_LINKS = {
+const ONBOARDING_DOC_LINKS = {
   templates: "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/template-library.md",
   credentials:
     "https://github.com/GreyCrossX/forgegraph/blob/main/docs/user-guide/v2-launch-quickstart.md#3-credentials-and-provider-setup",

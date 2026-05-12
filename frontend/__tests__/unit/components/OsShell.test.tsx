@@ -20,7 +20,7 @@ jest.mock("next/link", () => ({
 }));
 jest.mock("next/image", () => ({
   __esModule: true,
-  default: ({ alt, priority: _priority, ...props }: any) => <img alt={alt} {...props} />,
+  default: ({ alt, priority: _priority, ...props }: any) => require("react").createElement("img", { alt, ...props }),
 }));
 jest.mock("@/components/ui/theme-toggle", () => ({
   ThemeToggle: () => <button aria-label="Toggle theme">Theme</button>,

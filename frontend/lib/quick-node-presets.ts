@@ -10,7 +10,7 @@ import { NODE_TYPES, type NodeType } from "./graph-types";
 /**
  * Categories for organizing presets
  */
-export type PresetCategory = "ai" | "communication" | "data" | "logic" | "utility" | "integrations";
+type PresetCategory = "ai" | "communication" | "data" | "logic" | "utility" | "integrations";
 
 /**
  * Quick Node Preset definition
@@ -32,7 +32,7 @@ export interface QuickNodePreset {
 /**
  * Category metadata for display
  */
-export const PRESET_CATEGORIES: Record<PresetCategory, { label: string; description: string }> = {
+const PRESET_CATEGORIES: Record<PresetCategory, { label: string; description: string }> = {
   ai: {
     label: "AI & LLM",
     description: "Language model prompts and AI processing",
@@ -62,7 +62,7 @@ export const PRESET_CATEGORIES: Record<PresetCategory, { label: string; descript
 /**
  * All available Quick Node presets
  */
-export const QUICK_NODE_PRESETS: QuickNodePreset[] = [
+const QUICK_NODE_PRESETS: QuickNodePreset[] = [
   // AI & LLM Presets
   {
     id: "chat-assistant",
@@ -709,7 +709,7 @@ return {
 /**
  * Get presets by category
  */
-export function getPresetsByCategory(category: PresetCategory): QuickNodePreset[] {
+function getPresetsByCategory(category: PresetCategory): QuickNodePreset[] {
   return QUICK_NODE_PRESETS.filter((preset) => preset.category === category);
 }
 
@@ -736,7 +736,7 @@ export function searchPresets(query: string): QuickNodePreset[] {
 /**
  * Get popular/featured presets
  */
-export function getPopularPresets(limit = 6): QuickNodePreset[] {
+function getPopularPresets(limit = 6): QuickNodePreset[] {
   // Return a curated list of popular presets
   const popularIds = [
     "chat-assistant",
@@ -746,10 +746,10 @@ export function getPopularPresets(limit = 6): QuickNodePreset[] {
     "approval-gate",
     "final-output",
   ];
-  return popularIds
-    .map((id) => getPresetById(id))
-    .filter((p): p is QuickNodePreset => p !== undefined)
-    .slice(0, limit);
+  return popularIds.flatMap((id) => {
+    const preset = getPresetById(id);
+    return preset ? [preset] : [];
+  }).slice(0, limit);
 }
 
 /**

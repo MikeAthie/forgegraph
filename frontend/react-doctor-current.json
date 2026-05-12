@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.6",
+  "ok": true,
+  "directory": "C:\\Users\\mathi\\projects\\forgegraph\\frontend",
+  "mode": "full",
+  "diff": null,
+  "projects": [
+    {
+      "directory": "C:\\Users\\mathi\\projects\\forgegraph\\frontend",
+      "project": {
+        "rootDirectory": "C:\\Users\\mathi\\projects\\forgegraph\\frontend",
+        "projectName": "forgegraph-frontend",
+        "reactVersion": "^19.2.6",
+        "framework": "nextjs",
+        "hasTypeScript": true,
+        "hasReactCompiler": false,
+        "hasTanStackQuery": true,
+        "sourceFileCount": 295
+      },
+      "diagnostics": [
+        {
+          "filePath": "components/shell/OsShell.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"OsShell\" is 586 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 300,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "components/company/CompanyBuilderForm.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"CompanyBuilderForm\" is 590 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 1030,
+          "column": 17,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "components/os/OperationDetailView.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"OperationDetailView\" is 632 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 94,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "components/company/CommerceInventoryPanel.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"CommerceInventoryPanel\" is 1013 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 155,
+          "column": 17,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "pages/credentials.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"CredentialsPage\" is 570 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 253,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "pages/admin/operations.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"AdminOperationsPage\" is 1080 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 235,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "pages/admin/marketplace.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"MarketplaceAdminPage\" is 581 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 155,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "pages/prompts.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"PromptsPage\" is 895 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 193,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "pages/overview/index.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"OverviewPage\" is 714 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 144,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "components/graph-editor/GraphEditor.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"GraphEditor\" is 1871 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 322,
+          "column": 17,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "pages/tasks/index.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"TasksPage\" is 553 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 172,
+          "column": 25,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "components/company/OperatingModelWorkspace.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"OperatingModelWorkspace\" is 1364 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 667,
+          "column": 17,
+          "category": "Architecture"
+        },
+        {
+          "filePath": "components/company/CompanyWorkspaceShell.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "message": "Component \"CompanyWorkspaceShell\" is 1172 lines — consider breaking it into smaller focused components",
+          "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+          "line": 508,
+          "column": 17,
+          "category": "Architecture"
+        }
+      ],
+      "score": {
+        "score": 99,
+        "label": "Great"
+      },
+      "skippedChecks": [],
+      "elapsedMilliseconds": 4566.7832
+    }
+  ],
+  "diagnostics": [
+    {
+      "filePath": "components/shell/OsShell.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"OsShell\" is 586 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 300,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "components/company/CompanyBuilderForm.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"CompanyBuilderForm\" is 590 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 1030,
+      "column": 17,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "components/os/OperationDetailView.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"OperationDetailView\" is 632 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 94,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "components/company/CommerceInventoryPanel.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"CommerceInventoryPanel\" is 1013 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 155,
+      "column": 17,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "pages/credentials.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"CredentialsPage\" is 570 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 253,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "pages/admin/operations.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"AdminOperationsPage\" is 1080 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 235,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "pages/admin/marketplace.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"MarketplaceAdminPage\" is 581 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 155,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "pages/prompts.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"PromptsPage\" is 895 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 193,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "pages/overview/index.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"OverviewPage\" is 714 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 144,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "components/graph-editor/GraphEditor.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"GraphEditor\" is 1871 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 322,
+      "column": 17,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "pages/tasks/index.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"TasksPage\" is 553 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 172,
+      "column": 25,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "components/company/OperatingModelWorkspace.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"OperatingModelWorkspace\" is 1364 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 667,
+      "column": 17,
+      "category": "Architecture"
+    },
+    {
+      "filePath": "components/company/CompanyWorkspaceShell.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "message": "Component \"CompanyWorkspaceShell\" is 1172 lines — consider breaking it into smaller focused components",
+      "help": "Extract logical sections into focused components: `<UserHeader />`, `<UserActions />`, etc.",
+      "line": 508,
+      "column": 17,
+      "category": "Architecture"
+    }
+  ],
+  "summary": {
+    "errorCount": 0,
+    "warningCount": 13,
+    "affectedFileCount": 13,
+    "totalDiagnosticCount": 13,
+    "score": 99,
+    "scoreLabel": "Great"
+  },
+  "elapsedMilliseconds": 4579.1318,
+  "error": null
+}

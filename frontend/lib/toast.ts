@@ -10,7 +10,7 @@ export const showError = (message: string, description?: string, options?: Toast
   toast.error(message, { ...options, description });
 };
 
-export const showWarning = (message: string, description?: string, options?: ToastOptions) => {
+const showWarning = (message: string, description?: string, options?: ToastOptions) => {
   toast.warning(message, { ...options, description });
 };
 
@@ -18,12 +18,10 @@ export const showInfo = (message: string, description?: string, options?: ToastO
   toast.info(message, { ...options, description });
 };
 
-export const showLoading = (message: string) => {
+const showLoading = (message: string) => {
   return toast.loading(message);
 };
 
-export const dismissToast = (toastId: string | number) => {
+const dismissToast = (toastId: string | number) => {
   toast.dismiss(toastId);
 };
-
-export { toast };

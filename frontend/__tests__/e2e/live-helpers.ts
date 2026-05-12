@@ -91,6 +91,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function runOrderedSteps(steps: Array<() => Promise<unknown>>): Promise<void> {
+  await steps.reduce<Promise<unknown>>((chain, step) => chain.then(() => step()), Promise.resolve());
+}
+
 function isEngineUnavailable(status: number, body: string): boolean {
   return status === 503 && body.includes("ENGINE_UNAVAILABLE");
 }
@@ -122,35 +126,30 @@ export async function ensureUserRegistered(request: APIRequestContext, user: Tes
   throw new Error(`Failed to register test user (status ${response.status()}): ${await response.text()}`);
 }
 
-export async function getAccessToken(request: APIRequestContext, user: TestUser): Promise<string> {
-  let lastBody = "";
+export async function getAccessToken(request: APIRequestContext, user: TestUser, attempt = 0): Promise<string> {
+  const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
+    timeout: API_REQUEST_TIMEOUT_MS,
+    data: {
+      email: user.email,
+      password: user.password,
+    },
+  });
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const response = await request.post(`${API_BASE_URL}/api/auth/login`, {
-      timeout: API_REQUEST_TIMEOUT_MS,
-      data: {
-        email: user.email,
-        password: user.password,
-      },
-    });
-
-    if (response.ok()) {
-      const body = (await response.json()) as { access?: string };
-      expect(body.access).toBeTruthy();
-      return body.access as string;
-    }
-
-    lastBody = await response.text();
-    if (response.status() !== 429 || attempt === 4) {
-      throw new Error(`Failed to login test user (status ${response.status()}): ${lastBody}`);
-    }
-
-    const retryAfterSeconds = Number(response.headers()["retry-after"] ?? "2");
-    const delayMs = Math.max(500, Math.min(5000, retryAfterSeconds * 1000 || 2000));
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  if (response.ok()) {
+    const body = (await response.json()) as { access?: string };
+    expect(body.access).toBeTruthy();
+    return body.access as string;
   }
 
-  throw new Error(`Failed to login test user after retries: ${lastBody}`);
+  const body = await response.text();
+  if (response.status() !== 429 || attempt >= 4) {
+    throw new Error(`Failed to login test user (status ${response.status()}): ${body}`);
+  }
+
+  const retryAfterSeconds = Number(response.headers()["retry-after"] ?? "2");
+  const delayMs = Math.max(500, Math.min(5000, retryAfterSeconds * 1000 || 2000));
+  await sleep(delayMs);
+  return getAccessToken(request, user, attempt + 1);
 }
 
 export async function loginLive(
@@ -159,17 +158,18 @@ export async function loginLive(
   user: TestUser,
   targetPath = "/companies",
 ): Promise<string> {
-  await page.context().clearCookies();
-  await ensureUserRegistered(request, user);
+  await Promise.all([page.context().clearCookies(), ensureUserRegistered(request, user)]);
 
-  await page.goto("/login");
-  await page.getByRole("textbox", { name: /email address/i }).fill(user.email);
-  await page.getByRole("textbox", { name: /password/i }).fill(user.password);
   const loginResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/auth/login") && response.request().method() === "POST",
     { timeout: LIVE_AUTH_TIMEOUT_MS },
   );
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await runOrderedSteps([
+    () => page.goto("/login"),
+    () => page.getByRole("textbox", { name: /email address/i }).fill(user.email),
+    () => page.getByRole("textbox", { name: /password/i }).fill(user.password),
+    () => page.getByRole("button", { name: /^sign in$/i }).click(),
+  ]);
   const loginResponse = await loginResponsePromise;
   if (!loginResponse.ok()) {
     throw new Error(
@@ -251,36 +251,45 @@ export async function startRunViaApi(
     versionId: string;
     inputJson?: Record<string, unknown>;
   },
+  attempt = 1,
 ): Promise<RunSeedResult> {
   const deadline = Date.now() + ENGINE_START_RETRY_MS;
-  let attempt = 0;
+  return startRunViaApiWithDeadline(request, accessToken, options, deadline, attempt);
+}
 
-  while (true) {
-    attempt += 1;
-    const startResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
-      timeout: API_REQUEST_TIMEOUT_MS,
-      headers: { Authorization: `Bearer ${accessToken}` },
-      data: {
-        graph_version_id: options.versionId,
-        input_json: options.inputJson ?? {},
-      },
-    });
-    if (startResponse.ok()) {
-      const startBody = (await startResponse.json()) as { data: { id: string } };
-      return { runId: startBody.data.id };
-    }
-
-    const responseText = await startResponse.text();
-    const hasRetryBudget = Date.now() < deadline;
-    if (isEngineUnavailable(startResponse.status(), responseText) && hasRetryBudget) {
-      await sleep(Math.min(5_000, 500 * 2 ** Math.min(attempt - 1, 4)));
-      continue;
-    }
-
-    throw new Error(
-      `Live run start failed with ${startResponse.status()} ${startResponse.statusText()} after ${attempt} attempt(s): ${responseText}`,
-    );
+async function startRunViaApiWithDeadline(
+  request: APIRequestContext,
+  accessToken: string,
+  options: {
+    versionId: string;
+    inputJson?: Record<string, unknown>;
+  },
+  deadline: number,
+  attempt: number,
+): Promise<RunSeedResult> {
+  const startResponse = await request.post(`${API_BASE_URL}/api/runs/start`, {
+    timeout: API_REQUEST_TIMEOUT_MS,
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      graph_version_id: options.versionId,
+      input_json: options.inputJson ?? {},
+    },
+  });
+  if (startResponse.ok()) {
+    const startBody = (await startResponse.json()) as { data: { id: string } };
+    return { runId: startBody.data.id };
   }
+
+  const responseText = await startResponse.text();
+  const hasRetryBudget = Date.now() < deadline;
+  if (isEngineUnavailable(startResponse.status(), responseText) && hasRetryBudget) {
+    await sleep(Math.min(5_000, 500 * 2 ** Math.min(attempt - 1, 4)));
+    return startRunViaApiWithDeadline(request, accessToken, options, deadline, attempt + 1);
+  }
+
+  throw new Error(
+    `Live run start failed with ${startResponse.status()} ${startResponse.statusText()} after ${attempt} attempt(s): ${responseText}`,
+  );
 }
 
 export async function createHumanGateRunViaApi(

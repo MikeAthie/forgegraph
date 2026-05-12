@@ -8,16 +8,17 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
 
+  const { push } = router;
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push("/login");
+      push("/login");
     }
-  }, [loading, isAuthenticated, router]);
+  }, [loading, isAuthenticated, push]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background" aria-live="polite">
-        <div className="flex flex-col items-center space-y-4">
+        <div className="flex flex-col items-center gap-y-4">
           <Spinner size="lg" label="Loading workspace" />
           <p className="text-sm text-muted-foreground">Loading workspace</p>
         </div>
@@ -28,7 +29,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background" aria-live="polite">
-        <div className="flex flex-col items-center space-y-4">
+        <div className="flex flex-col items-center gap-y-4">
           <Spinner size="lg" label="Redirecting to sign in" />
           <p className="text-sm text-muted-foreground">Redirecting to sign in</p>
         </div>

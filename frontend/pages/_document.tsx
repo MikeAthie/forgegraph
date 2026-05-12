@@ -15,9 +15,6 @@ export default function Document() {
         <meta name="theme-color" content="#0f172a" />
         <meta name="color-scheme" content="light dark" />
 
-        {/* Fonts */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </Head>
       <body className="antialiased">
         <Main />

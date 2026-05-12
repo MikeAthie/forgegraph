@@ -28,6 +28,65 @@ type MinimalGraphVersion = {
   graph_json: GraphJson;
 };
 
+function buildDemoOperatingModelPack() {
+  return {
+    pack_id: "company_ops_demo.v1",
+    base_pack_id: "company_ops_demo",
+    version: "1.0.0",
+    display_name: "Company Ops Demo",
+    description: "A generic company operating model pack for workspace tests.",
+    company_type_label: "Company",
+    checksum: "playwright",
+    manifest: {},
+    files: {
+      programs: {
+        program_templates: [
+          {
+            id: "demo.program",
+            display_label: "Program",
+            title_template: "{{ company_name }} Operating Program",
+            objective_template: "Run a generic company operating program.",
+            default_current_stage_id: "stage_01",
+          },
+        ],
+      },
+      assertions: {
+        assertion_labels: {
+          FACT: "Fact",
+          OPINION: "Opinion",
+          ASSUMPTION: "Assumption",
+          QUESTION: "Question",
+        },
+        categories: ["company", "customer", "operations"],
+      },
+      artifacts: {
+        artifact_schemas: [
+          { id: "brief", label: "Brief" },
+          { id: "report", label: "Report" },
+        ],
+      },
+      evaluations: {
+        profiles: [{ id: "demo.quick_check", label: "Quick Check", mode: "quick" }],
+      },
+      policies: {
+        policy_packs: [
+          {
+            id: "demo.policy",
+            label: "Company Policy",
+            rules: [{ id: "demo.publish", action_type: "publish", risk_floor: "MEDIUM" }],
+          },
+        ],
+      },
+      dashboards: {
+        panels: [
+          { id: "demo.overview", label: "Overview" },
+          { id: "demo.programs", label: "Programs" },
+        ],
+      },
+    },
+  };
+}
+
 export type MockCompanyOperation = {
   id: string;
   status: RunStatus;
@@ -443,7 +502,13 @@ function toInputRecord(value: unknown): Record<string, unknown> {
 }
 
 export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWorkspaceMockState): Promise<void> {
-  await page.route(/\/api\/graphs\/?(?:\?.*)?$/, async (route: Route) => {
+  const demoPack = buildDemoOperatingModelPack();
+  const routePromises: Array<ReturnType<Page["route"]>> = [];
+  const route = (...args: Parameters<Page["route"]>) => {
+    routePromises.push(page.route(...args));
+  };
+
+  route(/\/api\/graphs\/?(?:\?.*)?$/, async (route: Route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -456,7 +521,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(new RegExp(`/api/graphs/${state.companyId}/versions/latest(?:\\?.*)?$`), async (route: Route) => {
+  route(new RegExp(`/api/graphs/${state.companyId}/versions/latest(?:\\?.*)?$`), async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -464,7 +529,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(new RegExp(`/api/graphs/${state.companyId}(?:\\?.*)?$`), async (route: Route) => {
+  route(new RegExp(`/api/graphs/${state.companyId}(?:\\?.*)?$`), async (route: Route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -477,7 +542,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -485,7 +550,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/approvals\/count(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/approvals\/count(?:\?.*)?$/, async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -493,7 +558,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/approvals\/?(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/approvals\/?(?:\?.*)?$/, async (route: Route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -507,7 +572,81 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/interaction\/briefs\/current(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/operating-model-packs\/?(?:\?.*)?$/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ packs: [demoPack] })),
+    });
+  });
+
+  route(new RegExp(`/api/companies/${state.companyId}/operating-model(?:\\?.*)?$`), async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        apiSuccess({
+          operating_model: {
+            company_id: state.companyId,
+            installed_packs: [],
+            programs: [],
+            evaluation_profiles: [],
+            policy_packs: [],
+            signal_taxonomies: [],
+          },
+        }),
+      ),
+    });
+  });
+
+  route(new RegExp(`/api/companies/${state.companyId}/programs(?:\\?.*)?$`), async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ programs: [] })),
+    });
+  });
+
+  route(/\/api\/assertions(?:\?.*)?$/, async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ assertions: [] })),
+    });
+  });
+
+  route(/\/api\/work-artifacts(?:\?.*)?$/, async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ artifacts: [] })),
+    });
+  });
+
+  route(/\/api\/state-projections(?:\?.*)?$/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ state_projections: [] })),
+    });
+  });
+
+  route(/\/api\/interaction\/briefs\/current(?:\?.*)?$/, async (route: Route) => {
     const url = new URL(route.request().url());
     const operationId = url.searchParams.get("operation_id");
     const brief = state.brief ?? buildDefaultOperatingBrief(state, operationId);
@@ -518,7 +657,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/interaction\/events(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/interaction\/events(?:\?.*)?$/, async (route: Route) => {
     const input = toInputRecord(route.request().postDataJSON());
     const text = String(input.input ?? "");
     const operationId = typeof input.operation_id === "string" ? input.operation_id : null;
@@ -589,7 +728,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/runs\/start(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/start(?:\?.*)?$/, async (route: Route) => {
     const input = toInputRecord(route.request().postDataJSON());
     const operation = state.onStart?.(input, state) ?? {
       id: createOperationId(),
@@ -613,7 +752,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/runs\/[^/]+\/replay(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/[^/]+\/replay(?:\?.*)?$/, async (route: Route) => {
     const runId = route.request().url().split("/api/runs/")[1]?.split("/replay")[0] ?? "";
     const input = toInputRecord(route.request().postDataJSON());
     const replayResult = state.onReplay?.(runId, input, state);
@@ -638,7 +777,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/runs\/(?!start(?:\?|$))[^/]+(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/(?!start(?:\?|$))[^/]+(?:\?.*)?$/, async (route: Route) => {
     const runId = route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
     const operation = state.operations.find((existing) => existing.id === runId);
 
@@ -667,7 +806,7 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  await page.route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
+  route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -680,4 +819,5 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
       body: JSON.stringify(apiSuccess(runs)),
     });
   });
+  await Promise.all(routePromises);
 }

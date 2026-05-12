@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, type ReactNode, type SetStateAction } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, Layers3, ShieldCheck, Sparkles } from "lucide-react";
 import { useRouter } from "next/router";
@@ -116,8 +116,8 @@ function ToggleChip({
       onClick={onClick}
       className={`rounded-full border px-3 py-2 text-sm transition-colors ${
         active
-          ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-          : "border-slate-900/10 bg-white/80 text-slate-700 hover:border-slate-950 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:border-white/30"
+          ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+          : "border-zinc-900/10 bg-white/80 text-zinc-700 hover:border-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:border-white/30"
       } ${disabled ? "cursor-default opacity-90" : ""}`}
     >
       {children}
@@ -306,19 +306,19 @@ function BuilderCompanyMap({
   const deliverablePreview = getExpectedDeliverablePreview(objective);
 
   return (
-    <div className="relative overflow-hidden rounded-[1.75rem] border border-slate-900/8 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.92))] p-5 dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(15,23,42,0.9))]">
+    <div className="relative overflow-hidden rounded-[1.75rem] border border-zinc-900/8 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.92))] p-5 dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(15,23,42,0.9))]">
       <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute left-[18%] top-[18%] h-2 w-2 rounded-full bg-sky-400/70" />
-        <div className="absolute left-[48%] top-[26%] h-2 w-2 rounded-full bg-sky-400/60" />
-        <div className="absolute right-[18%] top-[18%] h-2 w-2 rounded-full bg-sky-400/70" />
-        <div className="absolute left-[28%] top-[44%] h-2 w-2 rounded-full bg-sky-400/60" />
-        <div className="absolute right-[28%] top-[44%] h-2 w-2 rounded-full bg-sky-400/60" />
-        <div className="absolute bottom-[22%] left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-emerald-400/70" />
+        <div className="absolute left-[18%] top-[18%] size-2 rounded-full bg-sky-400/70" />
+        <div className="absolute left-[48%] top-[26%] size-2 rounded-full bg-sky-400/60" />
+        <div className="absolute right-[18%] top-[18%] size-2 rounded-full bg-sky-400/70" />
+        <div className="absolute left-[28%] top-[44%] size-2 rounded-full bg-sky-400/60" />
+        <div className="absolute right-[28%] top-[44%] size-2 rounded-full bg-sky-400/60" />
+        <div className="absolute bottom-[22%] left-1/2 size-2 -tranzinc-x-1/2 rounded-full bg-emerald-400/70" />
         <div className="absolute left-[19%] top-[19%] h-px w-[30%] rotate-[12deg] bg-sky-400/35" />
         <div className="absolute right-[19%] top-[19%] h-px w-[30%] -rotate-[12deg] bg-sky-400/35" />
         <div className="absolute left-[29%] top-[44%] h-[24%] w-px bg-sky-400/28" />
         <div className="absolute right-[29%] top-[44%] h-[24%] w-px bg-sky-400/28" />
-        <div className="absolute left-1/2 top-[26%] h-[42%] w-px -translate-x-1/2 bg-sky-400/28" />
+        <div className="absolute left-1/2 top-[26%] h-[42%] w-px -tranzinc-x-1/2 bg-sky-400/28" />
       </div>
 
       <div className="relative">
@@ -331,9 +331,9 @@ function BuilderCompanyMap({
           />
         </div>
 
-        <div className="mt-4 rounded-[1.35rem] border border-slate-900/8 bg-white/80 px-4 py-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-white/8">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Company</p>
-          <p className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{companyName}</p>
+        <div className="mt-4 rounded-[1.35rem] border border-zinc-900/8 bg-white/80 p-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-white/8">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Company</p>
+          <p className="mt-2 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{companyName}</p>
           <MicroExplanation className="mt-2">
             {objective || "Add an objective to see the company take shape."}
           </MicroExplanation>
@@ -343,15 +343,15 @@ function BuilderCompanyMap({
           {departments.slice(0, 4).map((department, index) => (
             <div
               key={department.id}
-              className={`rounded-[1.2rem] border px-4 py-4 backdrop-blur ${
+              className={`rounded-[1.2rem] border p-4 backdrop-blur ${
                 index === 0
                   ? "border-sky-800/14 bg-sky-50/90 dark:border-sky-200/14 dark:bg-sky-500/12"
-                  : "border-slate-900/8 bg-white/76 dark:border-white/8 dark:bg-white/6"
+                  : "border-zinc-900/8 bg-white/76 dark:border-white/8 dark:bg-white/6"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{department.label}</p>
-                <span className="rounded-full border border-slate-900/8 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:border-white/10 dark:text-slate-300">
+                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{department.label}</p>
+                <span className="rounded-full border border-zinc-900/8 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-zinc-500 dark:border-white/10 dark:text-zinc-300">
                   {index === 0 ? "Starts" : index === departments.slice(0, 4).length - 1 ? "Finishes" : "Handoff"}
                 </span>
               </div>
@@ -360,14 +360,14 @@ function BuilderCompanyMap({
           ))}
         </div>
 
-        <div className="mt-5 rounded-[1.35rem] border border-emerald-800/12 bg-emerald-50/85 px-4 py-4 dark:border-emerald-200/15 dark:bg-emerald-500/10">
+        <div className="mt-5 rounded-[1.35rem] border border-emerald-800/12 bg-emerald-50/85 p-4 dark:border-emerald-200/15 dark:bg-emerald-500/10">
           <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-900/70 dark:text-emerald-100/75">
             Expected first deliverable
           </p>
           <ul className="mt-3 space-y-2">
             {deliverablePreview.map((line) => (
               <li key={line} className="flex gap-2 text-sm leading-6 text-emerald-950/85 dark:text-emerald-50/85">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-emerald-500" />
                 <span>{line}</span>
               </li>
             ))}
@@ -383,26 +383,692 @@ function BuilderCompanyMap({
   );
 }
 
+type ObjectiveStepPanelProps = {
+  companyName: string;
+  objective: string;
+  onCompanyNameChange: (value: string) => void;
+  onObjectiveChange: (value: string) => void;
+};
+
+function ObjectiveStepPanel({
+  companyName,
+  objective,
+  onCompanyNameChange,
+  onObjectiveChange,
+}: ObjectiveStepPanelProps) {
+  return (
+    <div data-guide-id="builder-objective-step">
+      <Panel
+        title="1. Objective"
+        description="Tell ForgeGraph what the company should do. The system will suggest the rest."
+        action={<StatusBadge status="active" label="Start here" />}
+      >
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <label
+              htmlFor="components-company-companybuilderform-661"
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+            >
+              Company name
+            </label>
+            <Input
+              id="components-company-companybuilderform-661"
+              data-testid="company-name-input"
+              value={companyName}
+              onChange={(event) => onCompanyNameChange(event.target.value)}
+              placeholder="Northstar Company"
+            />
+            <MicroExplanation>Name the company the way you would refer to it in the real world.</MicroExplanation>
+          </div>
+
+          <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-5 dark:border-white/8">
+            <div className="flex items-center gap-3">
+              <Sparkles className="size-4 text-zinc-500 dark:text-zinc-300" />
+              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+                What do you want this company to accomplish?
+              </p>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+              Start with the result, not the system structure. You can describe the work in your own words.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label
+              htmlFor="components-company-companybuilderform-686"
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+            >
+              Business objective
+            </label>
+            <Textarea
+              id="components-company-companybuilderform-686"
+              data-testid="company-objective-input"
+              value={objective}
+              onChange={(event) => onObjectiveChange(event.target.value)}
+              rows={6}
+              placeholder="Coordinate weekly client delivery updates and send a clear action summary by Friday."
+            />
+            <MicroExplanation>
+              One sentence is enough. Write the outcome you want, not the system you think you need.
+            </MicroExplanation>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Need a starting idea?
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {objectiveHintExamples.map((hint) => (
+                <ToggleChip
+                  key={hint}
+                  active={objective.trim().toLowerCase() === hint.toLowerCase()}
+                  onClick={() => onObjectiveChange(hint)}
+                >
+                  {hint}
+                </ToggleChip>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+type SuggestedSetupStepPanelProps = {
+  objective: string;
+  selectedPreset: CompanyPreset;
+  selectedPresetId: string;
+  deliverablePreview: string[];
+  selectedDepartments: CompanyDepartment[];
+  selectedSkillHighlights: string[];
+  onPresetOverride: (presetId: string) => void;
+};
+
+function SuggestedSetupStepPanel({
+  objective,
+  selectedPreset,
+  selectedPresetId,
+  deliverablePreview,
+  selectedDepartments,
+  selectedSkillHighlights,
+  onPresetOverride,
+}: SuggestedSetupStepPanelProps) {
+  return (
+    <div data-guide-id="builder-suggested-setup-step">
+      <Panel
+        title="2. Suggested setup"
+        description="ForgeGraph suggested this company structure from the objective. You can keep it or change it."
+        action={<StatusBadge status="active" label="Auto-suggested" />}
+      >
+        <div className="space-y-5">
+          <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-5 dark:border-white/8">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Suggested category
+            </p>
+            <p className="mt-3 text-xl font-semibold text-zinc-950 dark:text-zinc-50">{selectedPreset.label}</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{selectedPreset.description}</p>
+            <MicroExplanation className="mt-3">
+              This is a starting shape for the company, not a fixed type you are locked into.
+            </MicroExplanation>
+          </div>
+
+          <WhyBlock
+            title={`Because your goal is ${getCompanyOutcomeSummary(objective)}, this company will`}
+            reasons={[
+              "do the first round of thinking and coordination for you instead of making you design the whole system yourself.",
+              `produce ${deliverablePreview[0]?.toLowerCase() ?? "a useful first result"} so you can judge the company by output, not setup.`,
+              `help you achieve ${deliverablePreview[2]?.toLowerCase() ?? "a result you can use immediately"} after the first launch.`,
+            ]}
+          />
+
+          <div className="rounded-[1.35rem] border border-emerald-800/12 bg-emerald-50/80 p-4 dark:border-emerald-200/15 dark:bg-emerald-500/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/75 dark:text-emerald-100/75">
+              Why this is a safe first launch
+            </p>
+            <p className="mt-3 text-sm leading-6 text-emerald-950/85 dark:text-emerald-50/85">
+              This starting setup is designed to get you to a useful first deliverable quickly. You can keep it if it
+              feels roughly right and refine it after the first result.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Change the fit if needed
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {companyPresets.map((preset) => (
+                <ToggleChip
+                  key={preset.id}
+                  active={selectedPresetId === preset.id}
+                  onClick={() => onPresetOverride(preset.id)}
+                >
+                  {preset.label}
+                </ToggleChip>
+              ))}
+            </div>
+            <MicroExplanation className="mt-3">
+              Changing the category only updates the starting team and skills. The company objective stays the same.
+            </MicroExplanation>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Suggested departments</p>
+              <div className="mt-3 space-y-3">
+                {selectedDepartments.slice(0, 3).map((department) => (
+                  <div
+                    key={department.id}
+                    className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+                  >
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{department.label}</p>
+                    <MicroExplanation className="mt-1">{getDepartmentBenefitSummary(department)}</MicroExplanation>
+                  </div>
+                ))}
+              </div>
+              <MicroExplanation className="mt-3">
+                These are the parts of the company most likely to help you reach a usable first result.
+              </MicroExplanation>
+            </div>
+            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Suggested skills</p>
+              <div className="mt-3 space-y-3">
+                {selectedSkillHighlights.map((skill) => (
+                  <div
+                    key={skill}
+                    className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+                  >
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{skill}</p>
+                    <MicroExplanation className="mt-1">{getSkillExplanation(skill)}</MicroExplanation>
+                  </div>
+                ))}
+              </div>
+              <MicroExplanation className="mt-3">
+                Skills are optional capabilities the company can lean on during the first operation.
+              </MicroExplanation>
+            </div>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+type TeamStepPanelProps = {
+  selectedDepartments: CompanyDepartment[];
+  teamReasons: string[];
+  availableDepartments: CompanyDepartment[];
+  selectedDepartmentIds: string[];
+  selectedSkills: string[];
+  selectedSkillHighlights: string[];
+  onDepartmentToggle: (department: CompanyDepartment) => void;
+  onSkillToggle: (skill: string) => void;
+};
+
+function TeamStepPanel({
+  selectedDepartments,
+  teamReasons,
+  availableDepartments,
+  selectedDepartmentIds,
+  selectedSkills,
+  selectedSkillHighlights,
+  onDepartmentToggle,
+  onSkillToggle,
+}: TeamStepPanelProps) {
+  return (
+    <div data-guide-id="builder-team-step">
+      <Panel
+        title="3. Adjust the team"
+        description="Fine-tune the company structure before launch."
+        action={<StatusBadge status="active" label={`${selectedDepartments.length} departments`} />}
+      >
+        <div className="space-y-5">
+          <WhyBlock title="These departments will work together because" reasons={teamReasons} />
+
+          <div className="rounded-[1.35rem] border border-sky-800/12 bg-sky-50/80 p-4 dark:border-sky-200/15 dark:bg-sky-500/10">
+            <p className="text-sm font-semibold text-sky-950 dark:text-sky-50">This team will work together to:</p>
+            <ul className="mt-3 space-y-2">
+              {["understand your business", "create a plan", "produce usable output", "tell you what to do next"].map(
+                (item) => (
+                  <li key={item} className="flex gap-2 text-sm leading-6 text-sky-950/85 dark:text-sky-50/85">
+                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-sky-500" />
+                    <span>{item}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+          </div>
+
+          <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Quick decision rule</p>
+            <MicroExplanation className="mt-2">
+              If this team feels roughly right, leave it alone for the first launch. The first deliverable will tell you
+              more than extra setup time will.
+            </MicroExplanation>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Departments
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {availableDepartments.map((department) => {
+                const isRoutingDepartment = department.id === ROUTING_DEPARTMENT_ID;
+                return (
+                  <ToggleChip
+                    key={department.id}
+                    active={selectedDepartmentIds.includes(department.id)}
+                    disabled={isRoutingDepartment}
+                    onClick={() => onDepartmentToggle(department)}
+                  >
+                    <span data-testid={`department-chip-${department.id}`}>
+                      {department.label}
+                      {isRoutingDepartment ? " (default)" : ""}
+                    </span>
+                  </ToggleChip>
+                );
+              })}
+            </div>
+            <MicroExplanation className="mt-3">
+              Routing is included in every company. Departments think and propose; operations execute the work.
+            </MicroExplanation>
+          </div>
+
+          <div className="grid gap-3">
+            {selectedDepartments.map((department, index) => (
+              <div
+                key={department.id}
+                className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+              >
+                <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{department.label}</p>
+                <MicroExplanation className="mt-2">{getDepartmentBenefitSummary(department)}</MicroExplanation>
+                <MicroExplanation className="mt-2">
+                  {getDepartmentStageSummary(department, index, selectedDepartments.length)}
+                </MicroExplanation>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Optional skills</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+              Add extra skills only if they matter for the first operation.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {companySkillCatalog.map((skill) => (
+                <ToggleChip key={skill} active={selectedSkills.includes(skill)} onClick={() => onSkillToggle(skill)}>
+                  <span data-testid={`skill-chip-${skill.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{skill}</span>
+                </ToggleChip>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-2">
+              {selectedSkillHighlights.map((skill) => (
+                <div
+                  key={skill}
+                  className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+                >
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{skill}</p>
+                  <MicroExplanation className="mt-1">{getSkillExplanation(skill)}</MicroExplanation>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+type PolicyStepPanelProps = {
+  autonomyMode: CompanyAutonomyMode;
+  aiAccessMode: CompanyAIAccessMode;
+  byokApiKey: string;
+  onAutonomyModeChange: (value: CompanyAutonomyMode) => void;
+  onAIAccessModeChange: (value: CompanyAIAccessMode) => void;
+  onByokApiKeyChange: (value: string) => void;
+};
+
+function PolicyStepPanel({
+  autonomyMode,
+  aiAccessMode,
+  byokApiKey,
+  onAutonomyModeChange,
+  onAIAccessModeChange,
+  onByokApiKeyChange,
+}: PolicyStepPanelProps) {
+  return (
+    <Panel
+      title="4. Policy"
+      description="Decide what happens after launch."
+      action={<StatusBadge status="paused" label="Assisted recommended" />}
+    >
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            How should this company operate?
+          </p>
+          <div className="mt-3 space-y-3">
+            {autonomyOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onAutonomyModeChange(option.id)}
+                className={`w-full rounded-[1.35rem] border p-4 text-left transition-colors ${
+                  autonomyMode === option.id
+                    ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                    : "border-zinc-900/8 bg-[var(--panel-muted)] hover:border-zinc-950 dark:border-white/8 dark:hover:border-white/30"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{option.label}</p>
+                    <p
+                      className={`mt-2 text-sm leading-6 ${
+                        autonomyMode === option.id
+                          ? "text-white/75 dark:text-zinc-700"
+                          : "text-zinc-600 dark:text-zinc-300"
+                      }`}
+                    >
+                      {option.description}
+                    </p>
+                  </div>
+                  {option.id === "assisted" ? <StatusBadge status="paused" label="Recommended" /> : null}
+                </div>
+              </button>
+            ))}
+          </div>
+          <MicroExplanation className="mt-3">{getAutonomyModeSummary(autonomyMode)}</MicroExplanation>
+          <div className="mt-4 rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">If you launch with this mode</p>
+            <MicroExplanation className="mt-2">
+              {autonomyMode === "manual"
+                ? "ForgeGraph will wait for you before meaningful work moves forward."
+                : autonomyMode === "autonomous"
+                  ? "ForgeGraph will keep the company moving on its own until a limit, approval, or failure stops it."
+                  : "ForgeGraph will start the work immediately and pause only when your judgment is worth using."}
+            </MicroExplanation>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            AI access mode
+          </p>
+          <div className="mt-3 space-y-3">
+            {aiAccessOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onAIAccessModeChange(option.id)}
+                className={`w-full rounded-[1.35rem] border p-4 text-left transition-colors ${
+                  aiAccessMode === option.id
+                    ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                    : "border-zinc-900/8 bg-[var(--panel-muted)] hover:border-zinc-950 dark:border-white/8 dark:hover:border-white/30"
+                }`}
+              >
+                <p className="text-sm font-semibold">{option.label}</p>
+                <p
+                  className={`mt-2 text-sm leading-6 ${
+                    aiAccessMode === option.id
+                      ? "text-white/75 dark:text-zinc-700"
+                      : "text-zinc-600 dark:text-zinc-300"
+                  }`}
+                >
+                  {option.description}
+                </p>
+              </button>
+            ))}
+          </div>
+          <MicroExplanation className="mt-3">{getAiAccessModeSummary(aiAccessMode)}</MicroExplanation>
+          <div className="mt-4 rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">If you launch with this AI mode</p>
+            <MicroExplanation className="mt-2">
+              {aiAccessMode === "managed"
+                ? "ForgeGraph will use its built-in AI access so you can launch now without more setup."
+                : "ForgeGraph will use your key for the company's work, so launch depends on your AI access being ready."}
+            </MicroExplanation>
+          </div>
+
+          {aiAccessMode === "byok" ? (
+            <div className="mt-4 rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Bring your own key</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                Enter one API key if you want the company to operate on your own AI access.
+              </p>
+              <Input
+                data-testid="company-byok-api-key-input"
+                className="mt-4"
+                type="password"
+                value={byokApiKey}
+                onChange={(event) => onByokApiKeyChange(event.target.value)}
+                placeholder="sk-proj-example"
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+type LaunchStepPanelProps = {
+  reviewProfile: ReturnType<typeof buildCompanyProfile>;
+  selectedPreset: CompanyPreset;
+  operationBrief: string;
+  autonomyMode: CompanyAutonomyMode;
+  aiAccessMode: CompanyAIAccessMode;
+  saving: boolean;
+  onOperationBriefChange: (value: string) => void;
+  onCreateCompany: (launchFirstOperation: boolean) => void;
+};
+
+function LaunchStepPanel({
+  reviewProfile,
+  selectedPreset,
+  operationBrief,
+  autonomyMode,
+  aiAccessMode,
+  saving,
+  onOperationBriefChange,
+  onCreateCompany,
+}: LaunchStepPanelProps) {
+  return (
+    <div data-guide-id="builder-launch-step">
+      <Panel
+        title="5. Launch"
+        description="Review the setup, then launch the first operation."
+        action={<StatusBadge status="active" label="Ready to launch" />}
+      >
+        <KeyValueGrid
+          columns={1}
+          items={[
+            { label: "Suggested category", value: reviewProfile.companyType },
+            { label: "Autonomy mode", value: reviewProfile.autonomyMode },
+            { label: "AI access mode", value: reviewProfile.aiAccessMode === "managed" ? "Managed" : "BYOK" },
+            {
+              label: "Operating model",
+              value: selectedPreset.operatingModelPackId ? selectedPreset.label : "Generic",
+            },
+            { label: "Departments", value: `${reviewProfile.departments.length} selected` },
+          ]}
+        />
+
+        <div className="mt-4 rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            Objective
+          </p>
+          <p className="mt-3 text-sm leading-6 text-zinc-700 dark:text-zinc-200">{reviewProfile.objective}</p>
+        </div>
+
+        <div className="mt-4 rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            Launch first operation
+          </p>
+          <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+            ForgeGraph will open the company workspace and immediately start the first operation.
+          </p>
+          <div className="mt-4 space-y-2">
+            <label
+              htmlFor="components-company-companybuilderform-1094"
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+            >
+              First assignment
+            </label>
+            <Textarea
+              id="components-company-companybuilderform-1094"
+              data-testid="company-operation-brief-input"
+              value={operationBrief}
+              onChange={(event) => onOperationBriefChange(event.target.value)}
+              rows={4}
+            />
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Keep it short. One clear first assignment is enough to reach the first deliverable quickly.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-[1.35rem] border border-emerald-800/12 bg-emerald-50/80 p-4 dark:border-emerald-200/15 dark:bg-emerald-500/10">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/75 dark:text-emerald-100/75">
+            Preview outcome
+          </p>
+          <p className="mt-3 text-sm font-semibold text-emerald-950 dark:text-emerald-50">
+            When you launch, this company will produce:
+          </p>
+          <ul className="mt-3 space-y-2">
+            {["A clear plan", "Concrete actions", "A result you can use immediately"].map((item) => (
+              <li key={item} className="flex gap-2 text-sm leading-6 text-emerald-950/85 dark:text-emerald-50/85">
+                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 rounded-[1rem] border border-emerald-800/10 bg-white/75 p-3 text-sm leading-6 text-emerald-950/85 dark:border-emerald-200/12 dark:bg-white/6 dark:text-emerald-50/85">
+            Example: &ldquo;Next week, focus on X, do Y first, and assign Z to keep the business moving.&rdquo;
+          </div>
+        </div>
+
+        <WhyBlock
+          title="Why launch from here"
+          reasons={[
+            "The company setup is ready, so the next useful thing is to start real work.",
+            "Your first operation becomes the clearest test of whether the objective, team, and policies make sense.",
+          ]}
+          className="mt-4"
+        />
+
+        <div className="mt-4 rounded-[1.5rem] border border-dashed border-zinc-900/12 p-4 text-sm leading-6 text-zinc-600 dark:border-white/12 dark:text-zinc-300">
+          After you click launch: ForgeGraph creates the company, applies{" "}
+          <span className="font-medium">{autonomyMode}</span> control, uses{" "}
+          <span className="font-medium">{aiAccessMode === "managed" ? "Managed" : "BYOK"}</span> AI mode, and starts
+          the first operation.
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button data-testid="company-create-submit" onClick={() => onCreateCompany(true)} disabled={saving}>
+            {saving ? <Spinner size="xs" className="mr-2" /> : <CheckCircle2 className="size-4" />}
+            Create company and launch first operation
+          </Button>
+          <Button variant="outline" onClick={() => onCreateCompany(false)} disabled={saving}>
+            Create company without launch
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/companies">View companies</Link>
+          </Button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+type CompanyBuilderState = {
+  currentStepIndex: number;
+  selectedPresetId: string;
+  companyName: string;
+  objective: string;
+  selectedDepartmentIds: string[];
+  selectedSkills: string[];
+  autonomyMode: CompanyAutonomyMode;
+  aiAccessMode: CompanyAIAccessMode;
+  byokApiKey: string;
+  operationBrief: string;
+  saving: boolean;
+  error: string | null;
+  questModeEnabled: boolean;
+  guidePromptVisible: boolean;
+};
+
+type CompanyBuilderAction = {
+  patch: Partial<CompanyBuilderState> | ((state: CompanyBuilderState) => Partial<CompanyBuilderState>);
+};
+
+const initialCompanyBuilderState: CompanyBuilderState = {
+  currentStepIndex: 0,
+  selectedPresetId: companyPresets[0].id,
+  companyName: "Northstar Company",
+  objective: "",
+  selectedDepartmentIds: companyPresets[0].departments.map((department) => department.id),
+  selectedSkills: companyPresets[0].skills,
+  autonomyMode: "assisted",
+  aiAccessMode: "managed",
+  byokApiKey: "",
+  operationBrief: "Launch the first operating cycle and produce a useful deliverable.",
+  saving: false,
+  error: null,
+  questModeEnabled: false,
+  guidePromptVisible: false,
+};
+
+function companyBuilderReducer(state: CompanyBuilderState, action: CompanyBuilderAction): CompanyBuilderState {
+  const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
+  return { ...state, ...patch };
+}
+
+function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
+  return typeof value === "function" ? (value as (current: T) => T)(current) : value;
+}
+
 export function CompanyBuilderForm() {
   const router = useRouter();
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [selectedPresetId, setSelectedPresetId] = useState(companyPresets[0].id);
-  const [companyName, setCompanyName] = useState("Northstar Company");
-  const [objective, setObjective] = useState("");
-  const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>(
-    companyPresets[0].departments.map((department) => department.id),
-  );
-  const [selectedSkills, setSelectedSkills] = useState<string[]>(companyPresets[0].skills);
-  const [autonomyMode, setAutonomyMode] = useState<CompanyAutonomyMode>("assisted");
-  const [aiAccessMode, setAiAccessMode] = useState<CompanyAIAccessMode>("managed");
-  const [byokApiKey, setByokApiKey] = useState("");
-  const [operationBrief, setOperationBrief] = useState(
-    "Launch the first operating cycle and produce a useful deliverable.",
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [questModeEnabled, setQuestModeEnabled] = useState(false);
-  const [guidePromptVisible, setGuidePromptVisible] = useState(false);
+  const { push } = router;
+  const [builderState, dispatchBuilderState] = useReducer(companyBuilderReducer, initialCompanyBuilderState);
+  const {
+    currentStepIndex,
+    selectedPresetId,
+    companyName,
+    objective,
+    selectedDepartmentIds,
+    selectedSkills,
+    autonomyMode,
+    aiAccessMode,
+    byokApiKey,
+    operationBrief,
+    saving,
+    error,
+    questModeEnabled,
+    guidePromptVisible,
+  } = builderState;
+  const setBuilderField = <K extends keyof CompanyBuilderState>(
+    key: K,
+    value: SetStateAction<CompanyBuilderState[K]>,
+  ) => {
+    dispatchBuilderState({
+      patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<CompanyBuilderState>,
+    });
+  };
+  const setCurrentStepIndex = (value: SetStateAction<number>) => setBuilderField("currentStepIndex", value);
+  const setSelectedPresetId = (value: SetStateAction<string>) => setBuilderField("selectedPresetId", value);
+  const setCompanyName = (value: SetStateAction<string>) => setBuilderField("companyName", value);
+  const setObjective = (value: SetStateAction<string>) => setBuilderField("objective", value);
+  const setSelectedDepartmentIds = (value: SetStateAction<string[]>) => setBuilderField("selectedDepartmentIds", value);
+  const setSelectedSkills = (value: SetStateAction<string[]>) => setBuilderField("selectedSkills", value);
+  const setAutonomyMode = (value: SetStateAction<CompanyAutonomyMode>) => setBuilderField("autonomyMode", value);
+  const setAiAccessMode = (value: SetStateAction<CompanyAIAccessMode>) => setBuilderField("aiAccessMode", value);
+  const setByokApiKey = (value: SetStateAction<string>) => setBuilderField("byokApiKey", value);
+  const setOperationBrief = (value: SetStateAction<string>) => setBuilderField("operationBrief", value);
+  const setSaving = (value: SetStateAction<boolean>) => setBuilderField("saving", value);
+  const setError = (value: SetStateAction<string | null>) => setBuilderField("error", value);
+  const setQuestModeEnabled = (value: SetStateAction<boolean>) => setBuilderField("questModeEnabled", value);
+  const setGuidePromptVisible = (value: SetStateAction<boolean>) => setBuilderField("guidePromptVisible", value);
 
   const currentStep = builderSteps[currentStepIndex] ?? builderSteps[0];
   const selectedPreset = useMemo(
@@ -604,6 +1270,7 @@ export function CompanyBuilderForm() {
         operationBrief,
         launchFirstOperation,
         byokApiKey,
+        operatingModelPackId: selectedPreset.operatingModelPackId,
       });
       const startQuest = launchFirstOperation && questModeEnabled;
       const commandOpsHref = getCommandOpsHref(created.companyId, startQuest);
@@ -616,7 +1283,7 @@ export function CompanyBuilderForm() {
             return;
           }
         }
-        void router.push(commandOpsHref);
+        void push(commandOpsHref);
       };
 
       if (launchFirstOperation && created.firstOperation) {
@@ -637,7 +1304,7 @@ export function CompanyBuilderForm() {
         });
       }
 
-      await router.push(commandOpsHref);
+      await push(commandOpsHref);
     } catch (saveError: unknown) {
       setError(translateProductError(saveError, "company"));
     } finally {
@@ -645,537 +1312,75 @@ export function CompanyBuilderForm() {
     }
   };
 
-  const renderStepPanel = () => {
-    switch (currentStep.id) {
-      case "objective":
-        return (
-          <div data-guide-id="builder-objective-step">
-            <Panel
-              title="1. Objective"
-              description="Tell ForgeGraph what the company should do. The system will suggest the rest."
-              action={<StatusBadge status="active" label="Start here" />}
-            >
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Company name
-                  </label>
-                  <Input
-                    data-testid="company-name-input"
-                    value={companyName}
-                    onChange={(event) => setCompanyName(event.target.value)}
-                    placeholder="Northstar Company"
-                  />
-                  <MicroExplanation>Name the company the way you would refer to it in the real world.</MicroExplanation>
-                </div>
-
-                <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-5 dark:border-white/8">
-                  <div className="flex items-center gap-3">
-                    <Sparkles className="h-4 w-4 text-slate-500 dark:text-slate-300" />
-                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                      What do you want this company to accomplish?
-                    </p>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    Start with the result, not the system structure. You can describe the work in your own words.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Business objective
-                  </label>
-                  <Textarea
-                    data-testid="company-objective-input"
-                    value={objective}
-                    onChange={(event) => setObjective(event.target.value)}
-                    rows={6}
-                    placeholder="Coordinate weekly client delivery updates and send a clear action summary by Friday."
-                  />
-                  <MicroExplanation>
-                    One sentence is enough. Write the outcome you want, not the system you think you need.
-                  </MicroExplanation>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Need a starting idea?
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {objectiveHintExamples.map((hint) => (
-                      <ToggleChip
-                        key={hint}
-                        active={objective.trim().toLowerCase() === hint.toLowerCase()}
-                        onClick={() => setObjective(hint)}
-                      >
-                        {hint}
-                      </ToggleChip>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Panel>
-          </div>
-        );
-      case "suggestion":
-        return (
-          <div data-guide-id="builder-suggested-setup-step">
-            <Panel
-              title="2. Suggested setup"
-              description="ForgeGraph suggested this company structure from the objective. You can keep it or change it."
-              action={<StatusBadge status="active" label="Auto-suggested" />}
-            >
-              <div className="space-y-5">
-                <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-5 dark:border-white/8">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Suggested category
-                  </p>
-                  <p className="mt-3 text-xl font-semibold text-slate-950 dark:text-slate-50">{selectedPreset.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    {selectedPreset.description}
-                  </p>
-                  <MicroExplanation className="mt-3">
-                    This is a starting shape for the company, not a fixed type you are locked into.
-                  </MicroExplanation>
-                </div>
-
-                <WhyBlock
-                  title={`Because your goal is ${getCompanyOutcomeSummary(objective)}, this company will`}
-                  reasons={[
-                    "do the first round of thinking and coordination for you instead of making you design the whole system yourself.",
-                    `produce ${deliverablePreview[0]?.toLowerCase() ?? "a useful first result"} so you can judge the company by output, not setup.`,
-                    `help you achieve ${deliverablePreview[2]?.toLowerCase() ?? "a result you can use immediately"} after the first launch.`,
-                  ]}
-                />
-
-                <div className="rounded-[1.35rem] border border-emerald-800/12 bg-emerald-50/80 px-4 py-4 dark:border-emerald-200/15 dark:bg-emerald-500/10">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/75 dark:text-emerald-100/75">
-                    Why this is a safe first launch
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-emerald-950/85 dark:text-emerald-50/85">
-                    This starting setup is designed to get you to a useful first deliverable quickly. You can keep it if
-                    it feels roughly right and refine it after the first result.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Change the fit if needed
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {companyPresets.map((preset) => (
-                      <ToggleChip
-                        key={preset.id}
-                        active={selectedPresetId === preset.id}
-                        onClick={() => handlePresetOverride(preset.id)}
-                      >
-                        {preset.label}
-                      </ToggleChip>
-                    ))}
-                  </div>
-                  <MicroExplanation className="mt-3">
-                    Changing the category only updates the starting team and skills. The company objective stays the
-                    same.
-                  </MicroExplanation>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Suggested departments</p>
-                    <div className="mt-3 space-y-3">
-                      {selectedDepartments.slice(0, 3).map((department) => (
-                        <div
-                          key={department.id}
-                          className="rounded-[1rem] border border-slate-900/8 bg-white/70 px-3 py-3 dark:border-white/8 dark:bg-white/5"
-                        >
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{department.label}</p>
-                          <MicroExplanation className="mt-1">
-                            {getDepartmentBenefitSummary(department)}
-                          </MicroExplanation>
-                        </div>
-                      ))}
-                    </div>
-                    <MicroExplanation className="mt-3">
-                      These are the parts of the company most likely to help you reach a usable first result.
-                    </MicroExplanation>
-                  </div>
-                  <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Suggested skills</p>
-                    <div className="mt-3 space-y-3">
-                      {selectedSkillHighlights.map((skill) => (
-                        <div
-                          key={skill}
-                          className="rounded-[1rem] border border-slate-900/8 bg-white/70 px-3 py-3 dark:border-white/8 dark:bg-white/5"
-                        >
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{skill}</p>
-                          <MicroExplanation className="mt-1">{getSkillExplanation(skill)}</MicroExplanation>
-                        </div>
-                      ))}
-                    </div>
-                    <MicroExplanation className="mt-3">
-                      Skills are optional capabilities the company can lean on during the first operation.
-                    </MicroExplanation>
-                  </div>
-                </div>
-              </div>
-            </Panel>
-          </div>
-        );
-      case "team":
-        return (
-          <div data-guide-id="builder-team-step">
-            <Panel
-              title="3. Adjust the team"
-              description="Fine-tune the company structure before launch."
-              action={<StatusBadge status="active" label={`${selectedDepartments.length} departments`} />}
-            >
-              <div className="space-y-5">
-                <WhyBlock title="These departments will work together because" reasons={teamReasons} />
-
-                <div className="rounded-[1.35rem] border border-sky-800/12 bg-sky-50/80 px-4 py-4 dark:border-sky-200/15 dark:bg-sky-500/10">
-                  <p className="text-sm font-semibold text-sky-950 dark:text-sky-50">
-                    This team will work together to:
-                  </p>
-                  <ul className="mt-3 space-y-2">
-                    {[
-                      "understand your business",
-                      "create a plan",
-                      "produce usable output",
-                      "tell you what to do next",
-                    ].map((item) => (
-                      <li key={item} className="flex gap-2 text-sm leading-6 text-sky-950/85 dark:text-sky-50/85">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Quick decision rule</p>
-                  <MicroExplanation className="mt-2">
-                    If this team feels roughly right, leave it alone for the first launch. The first deliverable will
-                    tell you more than extra setup time will.
-                  </MicroExplanation>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Departments
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {availableDepartments.map((department) => {
-                      const isRoutingDepartment = department.id === ROUTING_DEPARTMENT_ID;
-                      return (
-                        <ToggleChip
-                          key={department.id}
-                          active={selectedDepartmentIds.includes(department.id)}
-                          disabled={isRoutingDepartment}
-                          onClick={() => toggleDepartment(department)}
-                        >
-                          <span data-testid={`department-chip-${department.id}`}>
-                            {department.label}
-                            {isRoutingDepartment ? " (default)" : ""}
-                          </span>
-                        </ToggleChip>
-                      );
-                    })}
-                  </div>
-                  <MicroExplanation className="mt-3">
-                    Routing is included in every company. Departments think and propose; operations execute the work.
-                  </MicroExplanation>
-                </div>
-
-                <div className="grid gap-3">
-                  {selectedDepartments.map((department, index) => (
-                    <div
-                      key={department.id}
-                      className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
-                    >
-                      <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">{department.label}</p>
-                      <MicroExplanation className="mt-2">{getDepartmentBenefitSummary(department)}</MicroExplanation>
-                      <MicroExplanation className="mt-2">
-                        {getDepartmentStageSummary(department, index, selectedDepartments.length)}
-                      </MicroExplanation>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Optional skills</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    Add extra skills only if they matter for the first operation.
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {companySkillCatalog.map((skill) => (
-                      <ToggleChip
-                        key={skill}
-                        active={selectedSkills.includes(skill)}
-                        onClick={() => toggleSkill(skill)}
-                      >
-                        <span data-testid={`skill-chip-${skill.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
-                          {skill}
-                        </span>
-                      </ToggleChip>
-                    ))}
-                  </div>
-                  <div className="mt-4 grid gap-2">
-                    {selectedSkillHighlights.map((skill) => (
-                      <div
-                        key={skill}
-                        className="rounded-[1rem] border border-slate-900/8 bg-white/70 px-3 py-3 dark:border-white/8 dark:bg-white/5"
-                      >
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{skill}</p>
-                        <MicroExplanation className="mt-1">{getSkillExplanation(skill)}</MicroExplanation>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Panel>
-          </div>
-        );
-      case "policy":
-        return (
-          <Panel
-            title="4. Policy"
-            description="Decide what happens after launch."
-            action={<StatusBadge status="paused" label="Assisted recommended" />}
-          >
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  How should this company operate?
-                </p>
-                <div className="mt-3 space-y-3">
-                  {autonomyOptions.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setAutonomyMode(option.id)}
-                      className={`w-full rounded-[1.35rem] border p-4 text-left transition-colors ${
-                        autonomyMode === option.id
-                          ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                          : "border-slate-900/8 bg-[var(--panel-muted)] hover:border-slate-950 dark:border-white/8 dark:hover:border-white/30"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">{option.label}</p>
-                          <p
-                            className={`mt-2 text-sm leading-6 ${
-                              autonomyMode === option.id
-                                ? "text-white/75 dark:text-slate-700"
-                                : "text-slate-600 dark:text-slate-300"
-                            }`}
-                          >
-                            {option.description}
-                          </p>
-                        </div>
-                        {option.id === "assisted" ? <StatusBadge status="paused" label="Recommended" /> : null}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <MicroExplanation className="mt-3">{getAutonomyModeSummary(autonomyMode)}</MicroExplanation>
-                <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                    If you launch with this mode
-                  </p>
-                  <MicroExplanation className="mt-2">
-                    {autonomyMode === "manual"
-                      ? "ForgeGraph will wait for you before meaningful work moves forward."
-                      : autonomyMode === "autonomous"
-                        ? "ForgeGraph will keep the company moving on its own until a limit, approval, or failure stops it."
-                        : "ForgeGraph will start the work immediately and pause only when your judgment is worth using."}
-                  </MicroExplanation>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  AI access mode
-                </p>
-                <div className="mt-3 space-y-3">
-                  {aiAccessOptions.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setAiAccessMode(option.id)}
-                      className={`w-full rounded-[1.35rem] border p-4 text-left transition-colors ${
-                        aiAccessMode === option.id
-                          ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                          : "border-slate-900/8 bg-[var(--panel-muted)] hover:border-slate-950 dark:border-white/8 dark:hover:border-white/30"
-                      }`}
-                    >
-                      <p className="text-sm font-semibold">{option.label}</p>
-                      <p
-                        className={`mt-2 text-sm leading-6 ${
-                          aiAccessMode === option.id
-                            ? "text-white/75 dark:text-slate-700"
-                            : "text-slate-600 dark:text-slate-300"
-                        }`}
-                      >
-                        {option.description}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-                <MicroExplanation className="mt-3">{getAiAccessModeSummary(aiAccessMode)}</MicroExplanation>
-                <div className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                    If you launch with this AI mode
-                  </p>
-                  <MicroExplanation className="mt-2">
-                    {aiAccessMode === "managed"
-                      ? "ForgeGraph will use its built-in AI access so you can launch now without more setup."
-                      : "ForgeGraph will use your key for the company’s work, so launch depends on your AI access being ready."}
-                  </MicroExplanation>
-                </div>
-
-                {aiAccessMode === "byok" ? (
-                  <div className="mt-4 rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Bring your own key</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                      Enter one API key if you want the company to operate on your own AI access.
-                    </p>
-                    <Input
-                      data-testid="company-byok-api-key-input"
-                      className="mt-4"
-                      type="password"
-                      value={byokApiKey}
-                      onChange={(event) => setByokApiKey(event.target.value)}
-                      placeholder="sk-proj-example"
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </Panel>
-        );
-      case "launch":
-        return (
-          <div data-guide-id="builder-launch-step">
-            <Panel
-              title="5. Launch"
-              description="Review the setup, then launch the first operation."
-              action={<StatusBadge status="active" label="Ready to launch" />}
-            >
-              <KeyValueGrid
-                columns={1}
-                items={[
-                  { label: "Suggested category", value: reviewProfile.companyType },
-                  { label: "Autonomy mode", value: reviewProfile.autonomyMode },
-                  { label: "AI access mode", value: reviewProfile.aiAccessMode === "managed" ? "Managed" : "BYOK" },
-                  { label: "Departments", value: `${reviewProfile.departments.length} selected` },
-                ]}
-              />
-
-              <div className="mt-4 rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Objective
-                </p>
-                <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{reviewProfile.objective}</p>
-              </div>
-
-              <div className="mt-4 rounded-[1.35rem] border border-slate-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Launch first operation
-                </p>
-                <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                  ForgeGraph will open the company workspace and immediately start the first operation.
-                </p>
-                <div className="mt-4 space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    First assignment
-                  </label>
-                  <Textarea
-                    data-testid="company-operation-brief-input"
-                    value={operationBrief}
-                    onChange={(event) => setOperationBrief(event.target.value)}
-                    rows={4}
-                  />
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Keep it short. One clear first assignment is enough to reach the first deliverable quickly.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[1.35rem] border border-emerald-800/12 bg-emerald-50/80 px-4 py-4 dark:border-emerald-200/15 dark:bg-emerald-500/10">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/75 dark:text-emerald-100/75">
-                  Preview outcome
-                </p>
-                <p className="mt-3 text-sm font-semibold text-emerald-950 dark:text-emerald-50">
-                  When you launch, this company will produce:
-                </p>
-                <ul className="mt-3 space-y-2">
-                  {["A clear plan", "Concrete actions", "A result you can use immediately"].map((item) => (
-                    <li key={item} className="flex gap-2 text-sm leading-6 text-emerald-950/85 dark:text-emerald-50/85">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-4 rounded-[1rem] border border-emerald-800/10 bg-white/75 px-3 py-3 text-sm leading-6 text-emerald-950/85 dark:border-emerald-200/12 dark:bg-white/6 dark:text-emerald-50/85">
-                  Example: &ldquo;Next week, focus on X, do Y first, and assign Z to keep the business moving.&rdquo;
-                </div>
-              </div>
-
-              <WhyBlock
-                title="Why launch from here"
-                reasons={[
-                  "The company setup is ready, so the next useful thing is to start real work.",
-                  "Your first operation becomes the clearest test of whether the objective, team, and policies make sense.",
-                ]}
-                className="mt-4"
-              />
-
-              <div className="mt-4 rounded-[1.5rem] border border-dashed border-slate-900/12 px-4 py-4 text-sm leading-6 text-slate-600 dark:border-white/12 dark:text-slate-300">
-                After you click launch: ForgeGraph creates the company, applies{" "}
-                <span className="font-medium">{autonomyMode}</span> control, uses{" "}
-                <span className="font-medium">{aiAccessMode === "managed" ? "Managed" : "BYOK"}</span> AI mode, and
-                starts the first operation.
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button
-                  data-testid="company-create-submit"
-                  onClick={() => void handleCreateCompany(true)}
-                  disabled={saving}
-                >
-                  {saving ? <Spinner size="xs" className="mr-2" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Create company and launch first operation
-                </Button>
-                <Button variant="outline" onClick={() => void handleCreateCompany(false)} disabled={saving}>
-                  Create company without launch
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href="/companies">View companies</Link>
-                </Button>
-              </div>
-            </Panel>
-          </div>
-        );
-    }
-  };
-
+  const stepPanel =
+    currentStep.id === "objective" ? (
+      <ObjectiveStepPanel
+        companyName={companyName}
+        objective={objective}
+        onCompanyNameChange={setCompanyName}
+        onObjectiveChange={setObjective}
+      />
+    ) : currentStep.id === "suggestion" ? (
+      <SuggestedSetupStepPanel
+        objective={objective}
+        selectedPreset={selectedPreset}
+        selectedPresetId={selectedPresetId}
+        deliverablePreview={deliverablePreview}
+        selectedDepartments={selectedDepartments}
+        selectedSkillHighlights={selectedSkillHighlights}
+        onPresetOverride={handlePresetOverride}
+      />
+    ) : currentStep.id === "team" ? (
+      <TeamStepPanel
+        selectedDepartments={selectedDepartments}
+        teamReasons={teamReasons}
+        availableDepartments={availableDepartments}
+        selectedDepartmentIds={selectedDepartmentIds}
+        selectedSkills={selectedSkills}
+        selectedSkillHighlights={selectedSkillHighlights}
+        onDepartmentToggle={toggleDepartment}
+        onSkillToggle={toggleSkill}
+      />
+    ) : currentStep.id === "policy" ? (
+      <PolicyStepPanel
+        autonomyMode={autonomyMode}
+        aiAccessMode={aiAccessMode}
+        byokApiKey={byokApiKey}
+        onAutonomyModeChange={setAutonomyMode}
+        onAIAccessModeChange={setAiAccessMode}
+        onByokApiKeyChange={setByokApiKey}
+      />
+    ) : currentStep.id === "launch" ? (
+      <LaunchStepPanel
+        reviewProfile={reviewProfile}
+        selectedPreset={selectedPreset}
+        operationBrief={operationBrief}
+        autonomyMode={autonomyMode}
+        aiAccessMode={aiAccessMode}
+        saving={saving}
+        onOperationBriefChange={setOperationBrief}
+        onCreateCompany={(launchFirstOperation) => {
+          void handleCreateCompany(launchFirstOperation);
+        }}
+      />
+    ) : null;
   return (
     <ProtectedRoute>
       <DashboardLayout
         inspector={
           <div className="space-y-4 2xl:sticky 2xl:top-[6.5rem]">
             <Surface className="overflow-hidden">
-              <div className="border-b border-slate-900/8 px-6 py-6 dark:border-white/8">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+              <div className="border-b border-zinc-900/8 p-6 dark:border-white/8">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
                   Operating preview
                 </p>
-                <h3 className="mt-3 text-xl font-semibold text-slate-950 dark:text-slate-50">Company shape</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                <h3 className="mt-3 text-xl font-semibold text-zinc-950 dark:text-zinc-50">Company shape</h3>
+                <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                   See the company as a working system, not a form. The visual below previews the team, flow, and likely
                   deliverable.
                 </p>
               </div>
-              <div className="px-6 py-6">
+              <div className="p-6">
                 <BuilderCompanyMap
                   companyName={reviewProfile.companyName}
                   companyType={reviewProfile.companyType}
@@ -1210,7 +1415,7 @@ export function CompanyBuilderForm() {
               <Button asChild variant="outline" className="rounded-full">
                 <Link href="/workflows">
                   Advanced editor
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="size-4" />
                 </Link>
               </Button>
             }
@@ -1223,12 +1428,12 @@ export function CompanyBuilderForm() {
             >
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex min-w-0 gap-3">
-                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-100">
-                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-100">
+                    <Sparkles className="size-4" aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Guided setup is available</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Guided setup is available</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                       Start the focused walkthrough when useful. The builder stays ready for direct setup.
                     </p>
                   </div>
@@ -1277,10 +1482,10 @@ export function CompanyBuilderForm() {
                     key={step.id}
                     type="button"
                     onClick={() => setCurrentStepIndex(index)}
-                    className={`rounded-[1.25rem] border px-4 py-4 text-left transition-colors ${
+                    className={`rounded-[1.25rem] border p-4 text-left transition-colors ${
                       active
-                        ? "border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950"
-                        : "border-slate-900/8 bg-[var(--panel-muted)] hover:border-slate-950 dark:border-white/8 dark:hover:border-white/30"
+                        ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                        : "border-zinc-900/8 bg-[var(--panel-muted)] hover:border-zinc-950 dark:border-white/8 dark:hover:border-white/30"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -1288,7 +1493,7 @@ export function CompanyBuilderForm() {
                       {completed ? <StatusBadge status="active" label="Done" /> : null}
                     </div>
                     <p
-                      className={`mt-2 text-sm leading-6 ${active ? "text-white/75 dark:text-slate-700" : "text-slate-600 dark:text-slate-300"}`}
+                      className={`mt-2 text-sm leading-6 ${active ? "text-white/75 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"}`}
                     >
                       {step.title}
                     </p>
@@ -1300,17 +1505,17 @@ export function CompanyBuilderForm() {
 
           <div className="grid gap-6 2xl:grid-cols-[1.18fr_0.82fr]">
             <div className="space-y-6">
-              {renderStepPanel()}
+              {stepPanel}
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button variant="outline" onClick={() => moveStep("back")} disabled={currentStepIndex === 0 || saving}>
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="size-4" />
                   Back
                 </Button>
                 {currentStep.id !== "launch" ? (
                   <Button onClick={() => moveStep("next")}>
                     {getNextStepLabel(currentStep.id)}
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="size-4" />
                   </Button>
                 ) : null}
               </div>
@@ -1319,20 +1524,18 @@ export function CompanyBuilderForm() {
             <div className="space-y-6">
               <Panel title="Launch summary" description="The essentials you are about to launch.">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Company
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Company</p>
+                    <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                       {reviewProfile.companyName}
                     </p>
                     <MicroExplanation className="mt-2">{reviewProfile.companyType}</MicroExplanation>
                   </div>
-                  <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                       Team size
                     </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+                    <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
                       {reviewProfile.departments.length} departments
                     </p>
                     <MicroExplanation className="mt-2">
@@ -1341,10 +1544,8 @@ export function CompanyBuilderForm() {
                         : "No extra skills selected"}
                     </MicroExplanation>
                   </div>
-                  <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Autonomy
-                    </p>
+                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Autonomy</p>
                     <StatusBadge status={reviewProfile.autonomyMode} label={reviewProfile.autonomyMode} />
                     <MicroExplanation className="mt-2">
                       {reviewProfile.autonomyMode === "assisted"
@@ -1354,10 +1555,8 @@ export function CompanyBuilderForm() {
                           : "Keeps moving until a limit, approval, or failure stops it."}
                     </MicroExplanation>
                   </div>
-                  <div className="rounded-[1.25rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      AI mode
-                    </p>
+                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">AI mode</p>
                     <StatusBadge
                       status={reviewProfile.aiAccessMode === "managed" ? "active" : "paused"}
                       label={reviewProfile.aiAccessMode === "managed" ? "Managed" : "BYOK"}
@@ -1379,34 +1578,34 @@ export function CompanyBuilderForm() {
                   {[
                     {
                       title: "Operations",
-                      icon: <Layers3 className="h-4 w-4" />,
+                      icon: <Layers3 className="size-4" />,
                       body: "See departments working and handing the task forward.",
                     },
                     {
                       title: "Approvals",
-                      icon: <ShieldCheck className="h-4 w-4" />,
+                      icon: <ShieldCheck className="size-4" />,
                       body: "Step in only when the company needs a real decision.",
                     },
                     {
                       title: "Deliverable",
-                      icon: <CheckCircle2 className="h-4 w-4" />,
+                      icon: <CheckCircle2 className="size-4" />,
                       body: "Review one concrete output you can act on or share.",
                     },
                     {
                       title: "Next move",
-                      icon: <Sparkles className="h-4 w-4" />,
+                      icon: <Sparkles className="size-4" />,
                       body: "Launch again, refine the objective, retry, or change AI mode.",
                     },
                   ].map((item) => (
                     <div
                       key={item.title}
-                      className="rounded-[1.2rem] border border-slate-900/8 bg-[var(--panel-muted)] px-4 py-4 dark:border-white/8"
+                      className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
                     >
-                      <div className="flex items-center gap-2 text-slate-950 dark:text-slate-50">
+                      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
                         {item.icon}
                         <p className="text-sm font-semibold">{item.title}</p>
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.body}</p>
+                      <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.body}</p>
                     </div>
                   ))}
                 </div>

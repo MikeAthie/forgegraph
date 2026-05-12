@@ -1,0 +1,12 @@
+taxonomies:
+  - id: dmp.performance_signals
+    label: Performance Signals
+    signals:
+      - traffic_anomaly
+      - conversion_drop
+      - campaign_pacing_issue
+      - creative_fatigue
+      - email_deliverability_issue
+      - crm_funnel_issue
+      - competitor_movement
+      - content_opportunity

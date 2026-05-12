@@ -1,0 +1,322 @@
+tool_packages:
+  - id: dmp.analytics_read
+    label: Analytics Read Package
+    category: analytics
+    side_effects: read
+    approval_required: false
+    dry_run: true
+  - id: dmp.crm_read_write
+    label: CRM Read/Write Package
+    category: crm
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: sync_crm
+  - id: dmp.cms_draft_publish
+    label: CMS Draft/Publish Package
+    category: cms
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: publish
+  - id: dmp.email_draft_send_schedule
+    label: Email Draft/Send/Schedule Package
+    category: email
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: send_email
+  - id: dmp.ads_draft_launch_update_pause
+    label: Ads Draft/Launch/Update/Pause Package
+    category: ads
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: launch_ads
+  - id: dmp.social_draft_schedule
+    label: Social Draft/Schedule Package
+    category: social
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: schedule
+  - id: dmp.reporting_export
+    label: Reporting Export Package
+    category: reporting
+    side_effects: write
+    approval_required: true
+    dry_run: true
+    policy_action_type: export_report
+
+department_tools:
+  - id: web_research_tool
+    label: Web Research
+    department_id: strategy_research
+    category: research
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: competitor_analysis_tool
+    label: Competitor Analysis
+    department_id: strategy_research
+    category: research
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: customer_research_tool
+    label: Customer Research
+    department_id: strategy_research
+    category: research
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: assertion_register_tool
+    label: Assertion Register
+    department_id: strategy_research
+    category: knowledge
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: context_pack_builder
+    label: Context Pack Builder
+    department_id: strategy_research
+    category: memory
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: brand_profile_tool
+    label: Brand Profile
+    department_id: brand_content
+    category: brand
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: artifact_ledger_tool
+    label: Artifact Ledger
+    department_id: brand_content
+    category: artifact_management
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: copy_generation_tool
+    label: Copy Generation
+    department_id: brand_content
+    category: content
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: content_template_library
+    label: Content Template Library
+    department_id: brand_content
+    category: library
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: revision_lineage_tool
+    label: Revision Lineage
+    department_id: brand_content
+    category: artifact_management
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: cms_connector
+    label: CMS Connector
+    department_id: channel_execution
+    category: publishing
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: publish
+  - id: email_service_connector
+    label: Email Service Connector
+    department_id: channel_execution
+    category: email
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: send_email
+  - id: ads_platform_connector
+    label: Ads Platform Connector
+    department_id: channel_execution
+    category: paid_media
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: launch_ads
+  - id: social_scheduler_connector
+    label: Social Scheduler Connector
+    department_id: channel_execution
+    category: social
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: schedule
+  - id: execution_receipt_tool
+    label: Execution Receipt Tool
+    department_id: channel_execution
+    category: audit
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: crm_connector
+    label: CRM Connector
+    department_id: crm_lifecycle
+    category: crm
+    side_effects: external
+    approval_required: true
+    dry_run: true
+    policy_action_type: sync_crm
+  - id: audience_builder_tool
+    label: Audience Builder
+    department_id: crm_lifecycle
+    category: segmentation
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: deduplication_tool
+    label: Deduplication Tool
+    department_id: crm_lifecycle
+    category: data_quality
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: lifecycle_journey_mapper
+    label: Lifecycle Journey Mapper
+    department_id: crm_lifecycle
+    category: planning
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: pii_policy_checker
+    label: PII Policy Checker
+    department_id: crm_lifecycle
+    category: compliance
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: analytics_connector
+    label: Analytics Connector
+    department_id: analytics_performance
+    category: analytics
+    side_effects: read
+    approval_required: false
+    dry_run: true
+  - id: ads_reporting_connector
+    label: Ads Reporting Connector
+    department_id: analytics_performance
+    category: paid_media_reporting
+    side_effects: read
+    approval_required: false
+    dry_run: true
+  - id: email_reporting_connector
+    label: Email Reporting Connector
+    department_id: analytics_performance
+    category: email_reporting
+    side_effects: read
+    approval_required: false
+    dry_run: true
+  - id: crm_reporting_connector
+    label: CRM Reporting Connector
+    department_id: analytics_performance
+    category: crm_reporting
+    side_effects: read
+    approval_required: false
+    dry_run: true
+  - id: signal_detection_tool
+    label: Signal Detection Tool
+    department_id: analytics_performance
+    category: insights
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: report_builder
+    label: Report Builder
+    department_id: analytics_performance
+    category: reporting
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: qa_evaluator
+    label: QA Evaluator
+    department_id: qa_compliance
+    category: evaluation
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: claims_checker
+    label: Claims Checker
+    department_id: qa_compliance
+    category: evaluation
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: brand_consistency_checker
+    label: Brand Consistency Checker
+    department_id: qa_compliance
+    category: evaluation
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: policy_engine
+    label: Policy Engine
+    department_id: qa_compliance
+    category: governance
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: approval_router
+    label: Approval Router
+    department_id: qa_compliance
+    category: approval
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: audit_log_tool
+    label: Audit Log Tool
+    department_id: qa_compliance
+    category: audit
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: decision_tracker
+    label: Decision Tracker
+    department_id: client_approval_ops
+    category: approval
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: rerun_planner
+    label: Rerun Planner
+    department_id: client_approval_ops
+    category: planning
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: state_projection_tool
+    label: Currently True State Projection
+    department_id: client_approval_ops
+    category: memory
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: portfolio_health_tool
+    label: Portfolio Health Tool
+    department_id: client_approval_ops
+    category: portfolio
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: capacity_planner
+    label: Capacity Planner
+    department_id: client_approval_ops
+    category: operations
+    side_effects: none
+    approval_required: false
+    dry_run: true
+  - id: client_report_builder
+    label: Client Report Builder
+    department_id: client_approval_ops
+    category: reporting
+    side_effects: none
+    approval_required: false
+    dry_run: true

@@ -150,8 +150,13 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
         />
       </div>
 
-      <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 text-sm">
+      <label
+        htmlFor="components-graph-editor-forms-observationsearchnodeform-153"
+        aria-label="Include deleted observations"
+        className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 text-sm"
+      >
         <input
+          id="components-graph-editor-forms-observationsearchnodeform-153"
           type="checkbox"
           checked={Boolean(searchConfig.include_deleted)}
           onChange={(event) => handleFieldChange("include_deleted", event.target.checked)}
@@ -167,5 +172,3 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
     </div>
   );
 }
-
-export default ObservationSearchNodeForm;

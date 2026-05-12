@@ -310,18 +310,19 @@ describe("Overview accounting metrics", () => {
       }),
     );
 
-    for (const label of [
-      "Active Departments",
-      "Running Tasks",
-      "Blocked Decisions",
-      "Cost Today",
-      "Memory Writes",
-      "Recovery Items",
-      "Freshness",
-      "Processing Delay",
-    ]) {
-      expect(await screen.findByText(label)).toBeInTheDocument();
-    }
+    const labels = await Promise.all(
+      [
+        "Active Departments",
+        "Running Tasks",
+        "Blocked Decisions",
+        "Cost Today",
+        "Memory Writes",
+        "Recovery Items",
+        "Freshness",
+        "Processing Delay",
+      ].map((label) => screen.findByText(label)),
+    );
+    labels.forEach((label) => expect(label).toBeInTheDocument());
     expect(screen.getAllByText(/Backend freshness · fresh/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Backend knowledge · fresh/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Backend operations · degraded/i).length).toBeGreaterThan(0);

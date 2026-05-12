@@ -1,0 +1,18 @@
+assertion_labels:
+  FACT: Stone
+  OPINION: Opinion
+  ASSUMPTION: Assumption
+  QUESTION: Research Question
+validation_rules:
+  validated_truth_requires_status: validated
+  opinions_as_truth_without_validation: false
+categories:
+  - company
+  - market
+  - audience
+  - competitor
+  - positioning
+  - offer
+  - budget
+  - channel
+  - claims
