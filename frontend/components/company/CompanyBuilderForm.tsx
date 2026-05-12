@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type ReactNode, type SetStateAction } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, Layers3, ShieldCheck, Sparkles } from "lucide-react";
 import { useRouter } from "next/router";
@@ -1027,7 +1027,7 @@ function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
   return typeof value === "function" ? (value as (current: T) => T)(current) : value;
 }
 
-export function CompanyBuilderForm() {
+function useCompanyBuilderFormController() {
   const router = useRouter();
   const { push } = router;
   const [builderState, dispatchBuilderState] = useReducer(companyBuilderReducer, initialCompanyBuilderState);
@@ -1047,14 +1047,14 @@ export function CompanyBuilderForm() {
     questModeEnabled,
     guidePromptVisible,
   } = builderState;
-  const setBuilderField = <K extends keyof CompanyBuilderState>(
+  const setBuilderField = useCallback(<K extends keyof CompanyBuilderState>(
     key: K,
     value: SetStateAction<CompanyBuilderState[K]>,
   ) => {
     dispatchBuilderState({
       patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<CompanyBuilderState>,
     });
-  };
+  }, []);
   const setCurrentStepIndex = (value: SetStateAction<number>) => setBuilderField("currentStepIndex", value);
   const setSelectedPresetId = (value: SetStateAction<string>) => setBuilderField("selectedPresetId", value);
   const setCompanyName = (value: SetStateAction<string>) => setBuilderField("companyName", value);
@@ -1067,8 +1067,14 @@ export function CompanyBuilderForm() {
   const setOperationBrief = (value: SetStateAction<string>) => setBuilderField("operationBrief", value);
   const setSaving = (value: SetStateAction<boolean>) => setBuilderField("saving", value);
   const setError = (value: SetStateAction<string | null>) => setBuilderField("error", value);
-  const setQuestModeEnabled = (value: SetStateAction<boolean>) => setBuilderField("questModeEnabled", value);
-  const setGuidePromptVisible = (value: SetStateAction<boolean>) => setBuilderField("guidePromptVisible", value);
+  const setQuestModeEnabled = useCallback(
+    (value: SetStateAction<boolean>) => setBuilderField("questModeEnabled", value),
+    [setBuilderField],
+  );
+  const setGuidePromptVisible = useCallback(
+    (value: SetStateAction<boolean>) => setBuilderField("guidePromptVisible", value),
+    [setBuilderField],
+  );
 
   const currentStep = builderSteps[currentStepIndex] ?? builderSteps[0];
   const selectedPreset = useMemo(
@@ -1159,7 +1165,7 @@ export function CompanyBuilderForm() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [setGuidePromptVisible]);
 
   useEffect(() => {
     if (!router.isReady) {
@@ -1174,7 +1180,7 @@ export function CompanyBuilderForm() {
       setGuidePromptVisible(false);
       setQuestModeEnabled(true);
     }
-  }, [router.isReady, router.query.guide]);
+  }, [router.isReady, router.query.guide, setGuidePromptVisible, setQuestModeEnabled]);
 
   const applyPresetSuggestion = (preset: CompanyPreset) => {
     setSelectedPresetId(preset.id);
@@ -1312,308 +1318,392 @@ export function CompanyBuilderForm() {
     }
   };
 
-  const stepPanel =
-    currentStep.id === "objective" ? (
-      <ObjectiveStepPanel
-        companyName={companyName}
-        objective={objective}
-        onCompanyNameChange={setCompanyName}
-        onObjectiveChange={setObjective}
-      />
-    ) : currentStep.id === "suggestion" ? (
-      <SuggestedSetupStepPanel
-        objective={objective}
-        selectedPreset={selectedPreset}
-        selectedPresetId={selectedPresetId}
-        deliverablePreview={deliverablePreview}
-        selectedDepartments={selectedDepartments}
-        selectedSkillHighlights={selectedSkillHighlights}
-        onPresetOverride={handlePresetOverride}
-      />
-    ) : currentStep.id === "team" ? (
-      <TeamStepPanel
-        selectedDepartments={selectedDepartments}
-        teamReasons={teamReasons}
-        availableDepartments={availableDepartments}
-        selectedDepartmentIds={selectedDepartmentIds}
-        selectedSkills={selectedSkills}
-        selectedSkillHighlights={selectedSkillHighlights}
-        onDepartmentToggle={toggleDepartment}
-        onSkillToggle={toggleSkill}
-      />
-    ) : currentStep.id === "policy" ? (
-      <PolicyStepPanel
-        autonomyMode={autonomyMode}
-        aiAccessMode={aiAccessMode}
-        byokApiKey={byokApiKey}
-        onAutonomyModeChange={setAutonomyMode}
-        onAIAccessModeChange={setAiAccessMode}
-        onByokApiKeyChange={setByokApiKey}
-      />
-    ) : currentStep.id === "launch" ? (
-      <LaunchStepPanel
-        reviewProfile={reviewProfile}
-        selectedPreset={selectedPreset}
-        operationBrief={operationBrief}
-        autonomyMode={autonomyMode}
-        aiAccessMode={aiAccessMode}
-        saving={saving}
-        onOperationBriefChange={setOperationBrief}
-        onCreateCompany={(launchFirstOperation) => {
-          void handleCreateCompany(launchFirstOperation);
-        }}
-      />
-    ) : null;
+  return {
+    currentStepIndex,
+    selectedPresetId,
+    companyName,
+    objective,
+    selectedDepartmentIds,
+    selectedSkills,
+    autonomyMode,
+    aiAccessMode,
+    byokApiKey,
+    operationBrief,
+    saving,
+    error,
+    questModeEnabled,
+    guidePromptVisible,
+    currentStep,
+    selectedPreset,
+    availableDepartments,
+    selectedDepartments,
+    selectedSkillHighlights,
+    teamReasons,
+    deliverablePreview,
+    questSteps,
+    reviewProfile,
+    setCurrentStepIndex,
+    setCompanyName,
+    setObjective,
+    setAutonomyMode,
+    setAiAccessMode,
+    setByokApiKey,
+    setOperationBrief,
+    setGuidePromptVisible,
+    setQuestModeEnabled,
+    handlePresetOverride,
+    toggleDepartment,
+    toggleSkill,
+    moveStep,
+    dismissQuestMode,
+    handleCreateCompany,
+  };
+}
+
+type CompanyBuilderController = ReturnType<typeof useCompanyBuilderFormController>;
+
+export function CompanyBuilderForm() {
+  const controller = useCompanyBuilderFormController();
+
   return (
     <ProtectedRoute>
-      <DashboardLayout
-        inspector={
-          <div className="space-y-4 2xl:sticky 2xl:top-[6.5rem]">
-            <Surface className="overflow-hidden">
-              <div className="border-b border-zinc-900/8 p-6 dark:border-white/8">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
-                  Operating preview
-                </p>
-                <h3 className="mt-3 text-xl font-semibold text-zinc-950 dark:text-zinc-50">Company shape</h3>
-                <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                  See the company as a working system, not a form. The visual below previews the team, flow, and likely
-                  deliverable.
-                </p>
-              </div>
-              <div className="p-6">
-                <BuilderCompanyMap
-                  companyName={reviewProfile.companyName}
-                  companyType={reviewProfile.companyType}
-                  objective={reviewProfile.objective}
-                  departments={reviewProfile.departments}
-                  autonomyMode={reviewProfile.autonomyMode}
-                  aiAccessMode={reviewProfile.aiAccessMode}
-                />
-              </div>
-            </Surface>
-          </div>
-        }
-      >
-        <div className="space-y-6">
-          <QuestGuide
-            active={questModeEnabled}
-            title="Guided first operation"
-            steps={questSteps}
-            onSkip={() => {
-              void dismissQuestMode("skip");
-            }}
-            onComplete={() => {
-              void dismissQuestMode("complete");
-            }}
-          />
-
-          <SectionHeader
-            eyebrow="Create Company"
-            title="Define the objective first"
-            description="ForgeGraph should adapt to the business, not force the business into system terms. Start with the goal, then review the suggested setup."
-            action={
-              <Button asChild variant="outline" className="rounded-full">
-                <Link href="/workflows">
-                  Advanced editor
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-            }
-          />
-
-          {guidePromptVisible ? (
-            <Surface
-              data-testid="company-guide-prompt"
-              className="border-sky-900/10 bg-sky-50/80 px-5 py-4 dark:border-sky-200/15 dark:bg-sky-500/10"
-            >
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex min-w-0 gap-3">
-                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-100">
-                    <Sparkles className="size-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Guided setup is available</p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                      Start the focused walkthrough when useful. The builder stays ready for direct setup.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={() => {
-                      setGuidePromptVisible(false);
-                      setQuestModeEnabled(true);
-                    }}
-                  >
-                    Start guided setup
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={() => {
-                      void dismissQuestMode("skip");
-                    }}
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            </Surface>
-          ) : null}
-
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <Panel title={`Step ${currentStepIndex + 1} of ${builderSteps.length}`} description={currentStep.description}>
-            <div className="grid gap-3 lg:grid-cols-5">
-              {builderSteps.map((step, index) => {
-                const active = index === currentStepIndex;
-                const completed = index < currentStepIndex;
-                return (
-                  <button
-                    key={step.id}
-                    type="button"
-                    onClick={() => setCurrentStepIndex(index)}
-                    className={`rounded-[1.25rem] border p-4 text-left transition-colors ${
-                      active
-                        ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
-                        : "border-zinc-900/8 bg-[var(--panel-muted)] hover:border-zinc-950 dark:border-white/8 dark:hover:border-white/30"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold">{step.label}</p>
-                      {completed ? <StatusBadge status="active" label="Done" /> : null}
-                    </div>
-                    <p
-                      className={`mt-2 text-sm leading-6 ${active ? "text-white/75 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"}`}
-                    >
-                      {step.title}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </Panel>
-
-          <div className="grid gap-6 2xl:grid-cols-[1.18fr_0.82fr]">
-            <div className="space-y-6">
-              {stepPanel}
-
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <Button variant="outline" onClick={() => moveStep("back")} disabled={currentStepIndex === 0 || saving}>
-                  <ArrowLeft className="size-4" />
-                  Back
-                </Button>
-                {currentStep.id !== "launch" ? (
-                  <Button onClick={() => moveStep("next")}>
-                    {getNextStepLabel(currentStep.id)}
-                    <ArrowRight className="size-4" />
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <Panel title="Launch summary" description="The essentials you are about to launch.">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Company</p>
-                    <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-                      {reviewProfile.companyName}
-                    </p>
-                    <MicroExplanation className="mt-2">{reviewProfile.companyType}</MicroExplanation>
-                  </div>
-                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                      Team size
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-                      {reviewProfile.departments.length} departments
-                    </p>
-                    <MicroExplanation className="mt-2">
-                      {selectedSkills.length
-                        ? `${selectedSkills.length} supporting skills included`
-                        : "No extra skills selected"}
-                    </MicroExplanation>
-                  </div>
-                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Autonomy</p>
-                    <StatusBadge status={reviewProfile.autonomyMode} label={reviewProfile.autonomyMode} />
-                    <MicroExplanation className="mt-2">
-                      {reviewProfile.autonomyMode === "assisted"
-                        ? "Starts work and pauses only when a human decision matters."
-                        : reviewProfile.autonomyMode === "manual"
-                          ? "Waits for you before meaningful work continues."
-                          : "Keeps moving until a limit, approval, or failure stops it."}
-                    </MicroExplanation>
-                  </div>
-                  <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">AI mode</p>
-                    <StatusBadge
-                      status={reviewProfile.aiAccessMode === "managed" ? "active" : "paused"}
-                      label={reviewProfile.aiAccessMode === "managed" ? "Managed" : "BYOK"}
-                    />
-                    <MicroExplanation className="mt-2">
-                      {reviewProfile.aiAccessMode === "managed"
-                        ? "Launches immediately on ForgeGraph-managed AI access."
-                        : "Launches on your own AI access once your key is ready."}
-                    </MicroExplanation>
-                  </div>
-                </div>
-              </Panel>
-
-              <Panel
-                title="What you will operate next"
-                description="The workspace opens around work, results, and decisions."
-              >
-                <div className="grid gap-3">
-                  {[
-                    {
-                      title: "Operations",
-                      icon: <Layers3 className="size-4" />,
-                      body: "See departments working and handing the task forward.",
-                    },
-                    {
-                      title: "Approvals",
-                      icon: <ShieldCheck className="size-4" />,
-                      body: "Step in only when the company needs a real decision.",
-                    },
-                    {
-                      title: "Deliverable",
-                      icon: <CheckCircle2 className="size-4" />,
-                      body: "Review one concrete output you can act on or share.",
-                    },
-                    {
-                      title: "Next move",
-                      icon: <Sparkles className="size-4" />,
-                      body: "Launch again, refine the objective, retry, or change AI mode.",
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.title}
-                      className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
-                    >
-                      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                        {item.icon}
-                        <p className="text-sm font-semibold">{item.title}</p>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-            </div>
-          </div>
-        </div>
+      <DashboardLayout inspector={<CompanyBuilderInspector controller={controller} />}>
+        <CompanyBuilderContent controller={controller} />
       </DashboardLayout>
     </ProtectedRoute>
+  );
+}
+
+function CompanyBuilderInspector({ controller }: { controller: CompanyBuilderController }) {
+  const { reviewProfile } = controller;
+
+  return (
+    <div className="space-y-4 2xl:sticky 2xl:top-[6.5rem]">
+      <Surface className="overflow-hidden">
+        <div className="border-b border-zinc-900/8 p-6 dark:border-white/8">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
+            Operating preview
+          </p>
+          <h3 className="mt-3 text-xl font-semibold text-zinc-950 dark:text-zinc-50">Company shape</h3>
+          <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+            See the company as a working system, not a form. The visual below previews the team, flow, and likely
+            deliverable.
+          </p>
+        </div>
+        <div className="p-6">
+          <BuilderCompanyMap
+            companyName={reviewProfile.companyName}
+            companyType={reviewProfile.companyType}
+            objective={reviewProfile.objective}
+            departments={reviewProfile.departments}
+            autonomyMode={reviewProfile.autonomyMode}
+            aiAccessMode={reviewProfile.aiAccessMode}
+          />
+        </div>
+      </Surface>
+    </div>
+  );
+}
+
+function CompanyBuilderContent({ controller }: { controller: CompanyBuilderController }) {
+  return (
+    <div className="space-y-6">
+      <QuestGuide
+        active={controller.questModeEnabled}
+        title="Guided first operation"
+        steps={controller.questSteps}
+        onSkip={() => {
+          void controller.dismissQuestMode("skip");
+        }}
+        onComplete={() => {
+          void controller.dismissQuestMode("complete");
+        }}
+      />
+      <SectionHeader
+        eyebrow="Create Company"
+        title="Define the objective first"
+        description="ForgeGraph should adapt to the business, not force the business into system terms. Start with the goal, then review the suggested setup."
+        action={
+          <Button asChild variant="outline" className="rounded-full">
+            <Link href="/workflows">
+              Advanced editor
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      />
+      {controller.guidePromptVisible ? <CompanyBuilderGuidePrompt controller={controller} /> : null}
+      {controller.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{controller.error}</AlertDescription>
+        </Alert>
+      ) : null}
+      <BuilderStepsProgress controller={controller} />
+      <div className="grid gap-6 2xl:grid-cols-[1.18fr_0.82fr]">
+        <div className="space-y-6">
+          <CompanyBuilderStepPanel controller={controller} />
+          <CompanyBuilderNavigation controller={controller} />
+        </div>
+        <div className="space-y-6">
+          <LaunchSummaryPanel controller={controller} />
+          <OperateNextPanel />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyBuilderGuidePrompt({ controller }: { controller: CompanyBuilderController }) {
+  return (
+    <Surface
+      data-testid="company-guide-prompt"
+      className="border-sky-900/10 bg-sky-50/80 px-5 py-4 dark:border-sky-200/15 dark:bg-sky-500/10"
+    >
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-100">
+            <Sparkles className="size-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Guided setup is available</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+              Start the focused walkthrough when useful. The builder stays ready for direct setup.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            className="rounded-full"
+            onClick={() => {
+              controller.setGuidePromptVisible(false);
+              controller.setQuestModeEnabled(true);
+            }}
+          >
+            Start guided setup
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => {
+              void controller.dismissQuestMode("skip");
+            }}
+          >
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    </Surface>
+  );
+}
+
+function BuilderStepsProgress({ controller }: { controller: CompanyBuilderController }) {
+  return (
+    <Panel title={`Step ${controller.currentStepIndex + 1} of ${builderSteps.length}`} description={controller.currentStep.description}>
+      <div className="grid gap-3 lg:grid-cols-5">
+        {builderSteps.map((step, index) => {
+          const active = index === controller.currentStepIndex;
+          const completed = index < controller.currentStepIndex;
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => controller.setCurrentStepIndex(index)}
+              className={`rounded-[1.25rem] border p-4 text-left transition-colors ${
+                active
+                  ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                  : "border-zinc-900/8 bg-[var(--panel-muted)] hover:border-zinc-950 dark:border-white/8 dark:hover:border-white/30"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">{step.label}</p>
+                {completed ? <StatusBadge status="active" label="Done" /> : null}
+              </div>
+              <p className={`mt-2 text-sm leading-6 ${active ? "text-white/75 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"}`}>
+                {step.title}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function CompanyBuilderStepPanel({ controller }: { controller: CompanyBuilderController }) {
+  if (controller.currentStep.id === "objective") {
+    return (
+      <ObjectiveStepPanel
+        companyName={controller.companyName}
+        objective={controller.objective}
+        onCompanyNameChange={controller.setCompanyName}
+        onObjectiveChange={controller.setObjective}
+      />
+    );
+  }
+
+  if (controller.currentStep.id === "suggestion") {
+    return (
+      <SuggestedSetupStepPanel
+        objective={controller.objective}
+        selectedPreset={controller.selectedPreset}
+        selectedPresetId={controller.selectedPresetId}
+        deliverablePreview={controller.deliverablePreview}
+        selectedDepartments={controller.selectedDepartments}
+        selectedSkillHighlights={controller.selectedSkillHighlights}
+        onPresetOverride={controller.handlePresetOverride}
+      />
+    );
+  }
+
+  if (controller.currentStep.id === "team") {
+    return (
+      <TeamStepPanel
+        selectedDepartments={controller.selectedDepartments}
+        teamReasons={controller.teamReasons}
+        availableDepartments={controller.availableDepartments}
+        selectedDepartmentIds={controller.selectedDepartmentIds}
+        selectedSkills={controller.selectedSkills}
+        selectedSkillHighlights={controller.selectedSkillHighlights}
+        onDepartmentToggle={controller.toggleDepartment}
+        onSkillToggle={controller.toggleSkill}
+      />
+    );
+  }
+
+  if (controller.currentStep.id === "policy") {
+    return (
+      <PolicyStepPanel
+        autonomyMode={controller.autonomyMode}
+        aiAccessMode={controller.aiAccessMode}
+        byokApiKey={controller.byokApiKey}
+        onAutonomyModeChange={controller.setAutonomyMode}
+        onAIAccessModeChange={controller.setAiAccessMode}
+        onByokApiKeyChange={controller.setByokApiKey}
+      />
+    );
+  }
+
+  if (controller.currentStep.id === "launch") {
+    return (
+      <LaunchStepPanel
+        reviewProfile={controller.reviewProfile}
+        selectedPreset={controller.selectedPreset}
+        operationBrief={controller.operationBrief}
+        autonomyMode={controller.autonomyMode}
+        aiAccessMode={controller.aiAccessMode}
+        saving={controller.saving}
+        onOperationBriefChange={controller.setOperationBrief}
+        onCreateCompany={(launchFirstOperation) => {
+          void controller.handleCreateCompany(launchFirstOperation);
+        }}
+      />
+    );
+  }
+
+  return null;
+}
+
+function CompanyBuilderNavigation({ controller }: { controller: CompanyBuilderController }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <Button variant="outline" onClick={() => controller.moveStep("back")} disabled={controller.currentStepIndex === 0 || controller.saving}>
+        <ArrowLeft className="size-4" />
+        Back
+      </Button>
+      {controller.currentStep.id !== "launch" ? (
+        <Button onClick={() => controller.moveStep("next")}>
+          {getNextStepLabel(controller.currentStep.id)}
+          <ArrowRight className="size-4" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function LaunchSummaryPanel({ controller }: { controller: CompanyBuilderController }) {
+  const { reviewProfile, selectedSkills } = controller;
+
+  return (
+    <Panel title="Launch summary" description="The essentials you are about to launch.">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <LaunchSummaryItem label="Company" value={reviewProfile.companyName} detail={reviewProfile.companyType} />
+        <LaunchSummaryItem
+          label="Team size"
+          value={`${reviewProfile.departments.length} departments`}
+          detail={selectedSkills.length ? `${selectedSkills.length} supporting skills included` : "No extra skills selected"}
+        />
+        <LaunchSummaryItem
+          label="Autonomy"
+          value={reviewProfile.autonomyMode}
+          status={reviewProfile.autonomyMode}
+          detail={
+            reviewProfile.autonomyMode === "assisted"
+              ? "Starts work and pauses only when a human decision matters."
+              : reviewProfile.autonomyMode === "manual"
+                ? "Waits for you before meaningful work continues."
+                : "Keeps moving until a limit, approval, or failure stops it."
+          }
+        />
+        <LaunchSummaryItem
+          label="AI mode"
+          value={reviewProfile.aiAccessMode === "managed" ? "Managed" : "BYOK"}
+          status={reviewProfile.aiAccessMode === "managed" ? "active" : "paused"}
+          detail={reviewProfile.aiAccessMode === "managed" ? "Launches immediately on ForgeGraph-managed AI access." : "Launches on your own AI access once your key is ready."}
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function LaunchSummaryItem({
+  detail,
+  label,
+  status,
+  value,
+}: {
+  detail: string;
+  label: string;
+  status?: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{label}</p>
+      {status ? (
+        <StatusBadge status={status} label={value} />
+      ) : (
+        <p className="mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{value}</p>
+      )}
+      <MicroExplanation className="mt-2">{detail}</MicroExplanation>
+    </div>
+  );
+}
+
+function OperateNextPanel() {
+  const items = [
+    { title: "Operations", icon: <Layers3 className="size-4" />, body: "See departments working and handing the task forward." },
+    { title: "Approvals", icon: <ShieldCheck className="size-4" />, body: "Step in only when the company needs a real decision." },
+    { title: "Deliverable", icon: <CheckCircle2 className="size-4" />, body: "Review one concrete output you can act on or share." },
+    { title: "Next move", icon: <Sparkles className="size-4" />, body: "Launch again, refine the objective, retry, or change AI mode." },
+  ];
+
+  return (
+    <Panel title="What you will operate next" description="The workspace opens around work, results, and decisions.">
+      <div className="grid gap-3">
+        {items.map((item) => (
+          <div key={item.title} className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+            <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+              {item.icon}
+              <p className="text-sm font-semibold">{item.title}</p>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.body}</p>
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }

@@ -16,6 +16,7 @@ from django.db import transaction
 from django.db.models import Max
 
 from application.services.audit_log import record_audit_log
+from application.services.company_access import ensure_default_company_access_policy
 from domain.services.graph_validator import GraphValidator
 from infrastructure.orm.models import (
     CompanyOperatingModelInstallation,
@@ -25,6 +26,8 @@ from infrastructure.orm.models import (
     GraphTemplate,
     GraphVersion,
     OperatingModelPackRelease,
+    PackInstallationConfigRevision,
+    PackNamespaceClaim,
     PolicyPack,
     PolicyRule,
     SignalTaxonomy,
@@ -227,6 +230,7 @@ def install_pack_for_company(
     user: User,
     pack_id: str,
     config: dict[str, Any] | None = None,
+    role: str | None = None,
 ) -> CompanyOperatingModelInstallation:
     if company.organization_id is None:
         raise OperatingModelPackError(
@@ -246,26 +250,60 @@ def install_pack_for_company(
     )
     dashboards = definition.files.get("dashboards") if isinstance(definition.files, dict) else {}
     dashboard_json = dashboards if isinstance(dashboards, dict) else {}
+    existing_installation = CompanyOperatingModelInstallation.objects.filter(
+        company=company,
+        pack_id=definition.pack_id,
+    ).first()
+    next_role = _installation_role(
+        company=company,
+        requested_role=role or (existing_installation.role if existing_installation else None),
+        current_installation=existing_installation,
+    )
+    namespace = definition.pack_id
 
     with transaction.atomic():
+        ensure_default_company_access_policy(company)
+        _assert_primary_role_available(
+            company=company,
+            pack_id=definition.pack_id,
+            role=next_role,
+            current_installation=existing_installation,
+        )
         installation, _ = CompanyOperatingModelInstallation.objects.update_or_create(
             company=company,
             pack_id=definition.pack_id,
             defaults={
                 "organization": company.organization,
                 "pack_release": release,
+                "base_pack_id": definition.base_pack_id,
+                "role": next_role,
+                "namespace": namespace,
                 "status": "active",
                 "installed_by": user,
                 "config_json": clean_config,
+                "public_config_json": clean_config,
+                "private_config_ref": "",
                 "dashboard_json": dashboard_json,
                 "install_metadata_json": {
                     "checksum": definition.checksum,
                     "company_type_label": definition.company_type_label,
+                    "namespace": namespace,
                 },
+                "active_since": timezone_now(),
                 "disabled_at": None,
                 "removed_at": None,
+                "archived_at": None,
+                "last_error": "",
             },
         )
+        _create_config_revision(
+            installation=installation,
+            user=user,
+            public_config=clean_config,
+            private_config_ref="",
+            reason="install",
+        )
+        _claim_pack_namespace(installation=installation, definition=definition)
         if not bool((config or {}).get("skip_graph_version")):
             _create_graph_version(company=company, graph_json=compiled.graph_json)
         _install_graph_templates(company=company, release=release, definition=definition)
@@ -293,7 +331,31 @@ def upgrade_pack_for_company(
     pack_id: str,
     config: dict[str, Any] | None = None,
 ) -> CompanyOperatingModelInstallation:
-    return install_pack_for_company(company=company, user=user, pack_id=pack_id, config=config)
+    existing = CompanyOperatingModelInstallation.objects.filter(
+        company=company,
+        pack_id=_normalize_pack_id(pack_id),
+    ).first()
+    return install_pack_for_company(
+        company=company,
+        user=user,
+        pack_id=pack_id,
+        config=config,
+        role=existing.role if existing is not None else None,
+    )
+
+
+def upgrade_pack_installation(
+    *,
+    installation: CompanyOperatingModelInstallation,
+    user: User,
+    config: dict[str, Any] | None = None,
+) -> CompanyOperatingModelInstallation:
+    return upgrade_pack_for_company(
+        company=installation.company,
+        user=user,
+        pack_id=installation.pack_id,
+        config=config if config is not None else installation.public_config_json,
+    )
 
 
 def remove_pack_from_company(
@@ -310,24 +372,114 @@ def remove_pack_from_company(
         raise OperatingModelPackError(
             "installation_not_found", "Pack is not installed for company."
         )
-    installation.status = "removed"
+    return archive_pack_installation(installation=installation, user=user, reason="legacy_remove")
+
+
+def archive_pack_installation(
+    *,
+    installation: CompanyOperatingModelInstallation,
+    user: User,
+    reason: str = "",
+) -> CompanyOperatingModelInstallation:
+    installation.status = "archived"
     installation.removed_at = timezone_now()
-    installation.save(update_fields=["status", "removed_at", "updated_at"])
+    installation.archived_at = installation.removed_at
+    metadata = dict(installation.install_metadata_json or {})
+    metadata["archive_reason"] = reason
+    installation.install_metadata_json = metadata
+    installation.save(
+        update_fields=[
+            "status",
+            "removed_at",
+            "archived_at",
+            "install_metadata_json",
+            "updated_at",
+        ]
+    )
+    PackNamespaceClaim.objects.filter(installation=installation, status="active").update(
+        status="released",
+        updated_at=timezone_now(),
+    )
     record_audit_log(
         actor=user,
-        tenant_id=str(company.organization_id),
-        action="operating_model_pack.removed",
+        tenant_id=str(installation.company.organization_id),
+        action="operating_model_pack.archived",
         resource_type="operating_model_pack",
         resource_id=str(installation.id),
-        metadata={"company_id": str(company.id), "pack_id": installation.pack_id},
+        metadata={
+            "company_id": str(installation.company_id),
+            "pack_id": installation.pack_id,
+            "reason": reason,
+        },
     )
+    return installation
+
+
+def update_pack_installation(
+    *,
+    installation: CompanyOperatingModelInstallation,
+    user: User,
+    role: str | None = None,
+    status: str | None = None,
+    config: dict[str, Any] | None = None,
+) -> CompanyOperatingModelInstallation:
+    update_fields: list[str] = ["updated_at"]
+    if role is not None:
+        next_role = _installation_role(
+            company=installation.company,
+            requested_role=role,
+            current_installation=installation,
+        )
+        _assert_primary_role_available(
+            company=installation.company,
+            pack_id=installation.pack_id,
+            role=next_role,
+            current_installation=installation,
+        )
+        installation.role = next_role
+        update_fields.append("role")
+    if status is not None:
+        next_status = _normalize_installation_status(status)
+        installation.status = next_status
+        update_fields.append("status")
+        now = timezone_now()
+        if next_status == "active":
+            installation.active_since = installation.active_since or now
+            installation.disabled_at = None
+            installation.archived_at = None
+            installation.removed_at = None
+            update_fields.extend(["active_since", "disabled_at", "archived_at", "removed_at"])
+        elif next_status == "disabled":
+            installation.disabled_at = now
+            update_fields.append("disabled_at")
+        elif next_status == "archived":
+            installation.archived_at = now
+            installation.removed_at = now
+            update_fields.extend(["archived_at", "removed_at"])
+    if config is not None:
+        installation.config_json = config
+        installation.public_config_json = config
+        update_fields.extend(["config_json", "public_config_json"])
+        _create_config_revision(
+            installation=installation,
+            user=user,
+            public_config=config,
+            private_config_ref=installation.private_config_ref,
+            reason="update",
+        )
+    installation.save(update_fields=sorted(set(update_fields)))
+    if installation.status == "archived":
+        PackNamespaceClaim.objects.filter(installation=installation, status="active").update(
+            status="released",
+            updated_at=timezone_now(),
+        )
     return installation
 
 
 def operating_model_payload(company: Graph) -> dict[str, Any]:
     installations = CompanyOperatingModelInstallation.objects.filter(
         company=company
-    ).select_related("pack_release")
+    ).exclude(status__in=["archived", "removed"]).select_related("pack_release")
     return {
         "company_id": str(company.id),
         "installed_packs": [installation_payload(item) for item in installations],
@@ -336,19 +488,73 @@ def operating_model_payload(company: Graph) -> dict[str, Any]:
 
 def installation_payload(installation: CompanyOperatingModelInstallation) -> dict[str, Any]:
     release = installation.pack_release
+    config_revision_count = getattr(installation, "config_revision_count", None)
+    if config_revision_count is None:
+        config_revision_count = installation.config_revisions.count()
+    namespace_claim_count = getattr(installation, "namespace_claim_count", None)
+    if namespace_claim_count is None:
+        namespace_claim_count = installation.namespace_claims.filter(status="active").count()
     return {
         "id": str(installation.id),
         "company_id": str(installation.company_id),
         "pack_id": installation.pack_id,
+        "base_pack_id": installation.base_pack_id or release.base_pack_id,
+        "role": installation.role,
+        "namespace": installation.namespace or installation.pack_id,
         "status": installation.status,
         "display_name": release.display_name,
         "version": release.version,
         "checksum": release.checksum,
         "company_type_label": release.manifest_json.get("company_type_label"),
         "config": copy.deepcopy(installation.config_json),
+        "public_config": copy.deepcopy(installation.public_config_json),
         "dashboard": copy.deepcopy(installation.dashboard_json),
+        "active_since": installation.active_since.isoformat() if installation.active_since else None,
+        "archived_at": installation.archived_at.isoformat() if installation.archived_at else None,
+        "config_revision_count": int(config_revision_count),
+        "namespace_claim_count": int(namespace_claim_count),
         "installed_at": installation.installed_at.isoformat(),
         "updated_at": installation.updated_at.isoformat(),
+    }
+
+
+def config_revision_payload(revision: PackInstallationConfigRevision) -> dict[str, Any]:
+    return {
+        "id": str(revision.id),
+        "installation_id": str(revision.installation_id),
+        "version": revision.version,
+        "public_config": copy.deepcopy(revision.public_config_json),
+        "change_reason": revision.change_reason,
+        "created_by_id": str(revision.created_by_id) if revision.created_by_id else None,
+        "created_at": revision.created_at.isoformat(),
+    }
+
+
+def namespace_claim_payload(claim: PackNamespaceClaim) -> dict[str, Any]:
+    return {
+        "id": str(claim.id),
+        "installation_id": str(claim.installation_id),
+        "company_id": str(claim.company_id),
+        "pack_id": claim.pack_id,
+        "object_type": claim.object_type,
+        "object_id": claim.object_id,
+        "namespaced_id": claim.namespaced_id,
+        "status": claim.status,
+        "source_checksum": claim.source_checksum,
+    }
+
+
+def installation_detail_payload(installation: CompanyOperatingModelInstallation) -> dict[str, Any]:
+    return {
+        **installation_payload(installation),
+        "config_revisions": [
+            config_revision_payload(item)
+            for item in installation.config_revisions.order_by("-version")[:20]
+        ],
+        "namespace_claims": [
+            namespace_claim_payload(item)
+            for item in installation.namespace_claims.order_by("object_type", "namespaced_id")
+        ],
     }
 
 
@@ -356,6 +562,207 @@ def timezone_now() -> datetime:
     from django.utils import timezone
 
     return timezone.now()
+
+
+def _installation_role(
+    *,
+    company: Graph,
+    requested_role: str | None,
+    current_installation: CompanyOperatingModelInstallation | None = None,
+) -> str:
+    normalized = str(requested_role or "").strip().lower()
+    if normalized in {"primary", "addon"}:
+        return normalized
+    existing_primary = CompanyOperatingModelInstallation.objects.filter(
+        company=company,
+        role="primary",
+        status="active",
+    )
+    if current_installation is not None:
+        existing_primary = existing_primary.exclude(id=current_installation.id)
+    return "addon" if existing_primary.exists() else "primary"
+
+
+def _normalize_installation_status(status: str) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized == "removed":
+        return "archived"
+    valid_statuses = {
+        "installing",
+        "active",
+        "disabled",
+        "archived",
+        "upgrading",
+        "rollback_pending",
+        "failed",
+        "upgrade_available",
+    }
+    if normalized not in valid_statuses:
+        raise OperatingModelPackError(
+            "invalid_installation_status",
+            "Pack installation status is not supported.",
+            details=[{"status": status}],
+        )
+    return normalized
+
+
+def _assert_primary_role_available(
+    *,
+    company: Graph,
+    pack_id: str,
+    role: str,
+    current_installation: CompanyOperatingModelInstallation | None = None,
+) -> None:
+    if role != "primary":
+        return
+    existing = CompanyOperatingModelInstallation.objects.filter(
+        company=company,
+        role="primary",
+        status="active",
+    )
+    if current_installation is not None:
+        existing = existing.exclude(id=current_installation.id)
+    conflict = existing.first()
+    if conflict is not None:
+        raise OperatingModelPackError(
+            "primary_pack_conflict",
+            "Company already has an active primary pack.",
+            details=[
+                {
+                    "requested_pack_id": pack_id,
+                    "active_primary_pack_id": conflict.pack_id,
+                    "active_primary_installation_id": str(conflict.id),
+                }
+            ],
+        )
+
+
+def _create_config_revision(
+    *,
+    installation: CompanyOperatingModelInstallation,
+    user: User,
+    public_config: dict[str, Any],
+    private_config_ref: str,
+    reason: str,
+) -> PackInstallationConfigRevision:
+    latest_version = (
+        PackInstallationConfigRevision.objects.filter(installation=installation)
+        .aggregate(Max("version"))
+        .get("version__max")
+    )
+    return PackInstallationConfigRevision.objects.create(
+        organization=installation.organization,
+        company=installation.company,
+        installation=installation,
+        version=int(latest_version or 0) + 1,
+        public_config_json=copy.deepcopy(public_config),
+        private_config_ref=private_config_ref,
+        change_reason=reason,
+        created_by=user,
+    )
+
+
+def _claim_pack_namespace(
+    *,
+    installation: CompanyOperatingModelInstallation,
+    definition: PackDefinition,
+) -> None:
+    claims = _pack_namespace_claims(definition)
+    seen: set[str] = set()
+    duplicate_claims: list[dict[str, str]] = []
+    for claim in claims:
+        namespaced_id = claim["namespaced_id"]
+        if namespaced_id in seen:
+            duplicate_claims.append(claim)
+        seen.add(namespaced_id)
+    if duplicate_claims:
+        raise OperatingModelPackError(
+            "pack_namespace_duplicate",
+            "Pack defines duplicate namespaced object ids.",
+            details=duplicate_claims[:20],
+        )
+
+    conflicts = list(
+        PackNamespaceClaim.objects.filter(
+            company=installation.company,
+            namespaced_id__in=seen,
+            status="active",
+        )
+        .exclude(installation=installation)
+        .values("namespaced_id", "pack_id", "installation_id")[:20]
+    )
+    if conflicts:
+        raise OperatingModelPackError(
+            "pack_namespace_conflict",
+            "Pack installation would collide with active pack namespace claims.",
+            details=[
+                {
+                    "namespaced_id": str(item["namespaced_id"]),
+                    "pack_id": str(item["pack_id"]),
+                    "installation_id": str(item["installation_id"]),
+                }
+                for item in conflicts
+            ],
+        )
+
+    PackNamespaceClaim.objects.filter(installation=installation).exclude(
+        namespaced_id__in=seen
+    ).update(status="released", updated_at=timezone_now())
+    for claim in claims:
+        PackNamespaceClaim.objects.update_or_create(
+            company=installation.company,
+            installation=installation,
+            namespaced_id=claim["namespaced_id"],
+            defaults={
+                "organization": installation.organization,
+                "pack_id": definition.pack_id,
+                "object_type": claim["object_type"],
+                "object_id": claim["object_id"],
+                "status": "active",
+                "source_checksum": definition.checksum,
+                "metadata_json": {"source": "operating_model_pack"},
+            },
+        )
+
+
+def _pack_namespace_claims(definition: PackDefinition) -> list[dict[str, str]]:
+    object_lists = [
+        ("department", "departments", "departments"),
+        ("capability", "agents", "capabilities"),
+        ("module", "modules", "modules"),
+        ("program_template", "programs", "program_templates"),
+        ("operation_template", "operations", "operation_templates"),
+        ("artifact_schema", "artifacts", "artifact_schemas"),
+        ("evaluation_profile", "evaluations", "profiles"),
+        ("policy_pack", "policies", "policy_packs"),
+        ("tool_package", "tools", "tool_packages"),
+        ("department_tool", "tools", "department_tools"),
+        ("dashboard_panel", "dashboards", "panels"),
+        ("service_section", "service_model", "service_sections"),
+        ("periodic_review", "reports", "periodic_review_templates"),
+        ("report_template", "reports", "report_templates"),
+        ("signal_taxonomy", "signals", "taxonomies"),
+    ]
+    claims: list[dict[str, str]] = []
+    for object_type, file_key, list_key in object_lists:
+        for item in _list_from_file(definition, file_key, list_key):
+            object_id = _safe_key(item.get("id"))
+            if not object_id:
+                continue
+            claims.append(
+                {
+                    "object_type": object_type,
+                    "object_id": object_id,
+                    "namespaced_id": _namespaced_object_id(definition.pack_id, object_id),
+                }
+            )
+    return claims
+
+
+def _namespaced_object_id(pack_id: str, object_id: str) -> str:
+    if object_id.startswith(f"{pack_id}."):
+        return object_id
+    return f"{pack_id}.{object_id}"
 
 
 def _pack_dirs() -> list[Path]:

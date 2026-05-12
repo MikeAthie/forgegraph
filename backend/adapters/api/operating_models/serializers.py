@@ -31,6 +31,40 @@ class PackInstallSerializer(serializers.Serializer[Any]):
     config = serializers.JSONField(required=False, default=dict)
 
 
+class CompanyPackInstallSerializer(serializers.Serializer[Any]):
+    pack_id = serializers.CharField(max_length=160)
+    release_id = serializers.UUIDField(required=False, allow_null=True)
+    role = serializers.ChoiceField(choices=["primary", "addon"], required=False)
+    config = serializers.JSONField(required=False, default=dict)
+    secret_bindings = serializers.JSONField(required=False, default=dict)
+
+
+class CompanyPackPatchSerializer(serializers.Serializer[Any]):
+    role = serializers.ChoiceField(choices=["primary", "addon"], required=False)
+    status = serializers.ChoiceField(
+        choices=[
+            "active",
+            "disabled",
+            "archived",
+            "installing",
+            "upgrading",
+            "rollback_pending",
+            "failed",
+        ],
+        required=False,
+    )
+    config = serializers.JSONField(required=False)
+
+
+class CompanyPackUpgradeSerializer(serializers.Serializer[Any]):
+    target_release_id = serializers.UUIDField(required=False, allow_null=True)
+    config_overrides = serializers.JSONField(required=False, default=dict)
+
+
+class CompanyPackArchiveSerializer(serializers.Serializer[Any]):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+
 class ProgramCreateSerializer(serializers.Serializer[Any]):
     template_id = serializers.CharField(max_length=160)
     pack_id = serializers.CharField(max_length=160, required=False, allow_blank=True)

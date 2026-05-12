@@ -33,6 +33,8 @@ urlpatterns = [
     path("", include("adapters.api.operating_models.urls")),
     path("", include("adapters.api.company_blueprints.urls")),
     path("company-ops/", include("adapters.api.company_ops.urls")),
+    path("", include("adapters.api.portfolio.urls")),
+    path("", include("adapters.api.service_engagements.urls")),
     path("inventory/", include("adapters.api.inventory.urls")),
     path("commerce/", include("adapters.api.commerce.urls")),
     path("storefront/", include("adapters.api.storefront.urls")),

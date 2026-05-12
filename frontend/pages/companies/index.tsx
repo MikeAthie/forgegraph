@@ -15,7 +15,8 @@ import {
   formatDateTime,
 } from "@/components/os/operations-ui";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
-import { companyRepository } from "@/domain/repositories";
+import { companyRepository, portfolioRepository } from "@/domain/repositories";
+import type { PortfolioHomeVM } from "@/domain/repositories/portfolioRepository";
 import type { CompanyVM } from "@/domain/translation";
 import { translateProductError } from "@/domain/errors";
 import { cn } from "@/lib/utils";
@@ -220,6 +221,68 @@ function CompanyWorkspacePanel({
   );
 }
 
+function PortfolioQueuesPanel({ portfolioHome }: { portfolioHome: PortfolioHomeVM | null }) {
+  const queueOrder = ["reviews", "approvals", "metric_gaps", "credentials", "tasks"];
+  const counts = portfolioHome?.queues.counts ?? {};
+  const attentionRows = queueOrder
+    .flatMap((queueName) => portfolioHome?.queues.queues[queueName]?.slice(0, 3) ?? [])
+    .slice(0, 8);
+
+  if (!portfolioHome) {
+    return null;
+  }
+
+  return (
+    <Panel title="Cross-company queues" description="Company-filtered work that needs operator attention.">
+      <div className="grid gap-3 md:grid-cols-5">
+        {queueOrder.map((queueName) => (
+          <div
+            key={queueName}
+            className="rounded-[1.1rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+          >
+            <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              {queueName.replaceAll("_", " ")}
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+              {formatCompactNumber(counts[queueName] ?? 0)}
+            </p>
+          </div>
+        ))}
+      </div>
+      {attentionRows.length ? (
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {attentionRows.map((row) => {
+            const label = String(
+              row.display_name ?? row.title ?? row.gap ?? row.status ?? row.queue_type ?? "Queue item",
+            );
+            const stableKey = [
+              row.queue_type,
+              row.company_id,
+              row.id ?? row.review_id ?? row.approval_id ?? row.task_id ?? row.credential_id ?? label,
+            ]
+              .map(String)
+              .join(":");
+            return (
+              <div
+                key={stableKey}
+                className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-950 dark:text-zinc-50">{label}</p>
+                    <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{row.company_name}</p>
+                  </div>
+                  <StatusBadge status={String(row.queue_type)} label={String(row.queue_type).replaceAll("_", " ")} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
 export default function CompaniesIndexPage() {
   const router = useRouter();
   const { replace } = router;
@@ -229,14 +292,16 @@ export default function CompaniesIndexPage() {
     error: null,
   });
   const [activeFilter, setActiveFilter] = useState<CompanyFilter>("all");
+  const [portfolioHome, setPortfolioHome] = useState<PortfolioHomeVM | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       try {
-        const data = await companyRepository.list();
+        const [data, home] = await Promise.all([companyRepository.list(), portfolioRepository.getHome()]);
         if (!cancelled) {
+          setPortfolioHome(home);
           dispatch({ type: "loaded", companies: data });
         }
       } catch (loadError: unknown) {
@@ -278,24 +343,44 @@ export default function CompaniesIndexPage() {
     );
   };
 
+  const portfolioRowsByCompany = useMemo(
+    () => new Map((portfolioHome?.health.companies ?? []).map((company) => [company.company_id, company])),
+    [portfolioHome],
+  );
+  const attentionCompanyCount =
+    (portfolioHome?.health.summary.blocked ?? 0) + (portfolioHome?.health.summary.attention ?? 0);
+
   const summary = useMemo(
     () => ({
-      total: companies.length,
-      active: companies.filter(isCompanyOperating).length,
-      attention: companies.filter(needsAttention).length,
+      total: portfolioHome?.health.summary.total_companies ?? companies.length,
+      active:
+        portfolioHome?.health.companies.filter((company) => company.active_operations_count > 0).length ??
+        companies.filter(isCompanyOperating).length,
+      attention: portfolioHome ? attentionCompanyCount : companies.filter(needsAttention).length,
     }),
-    [companies],
+    [attentionCompanyCount, companies, portfolioHome],
   );
 
   const filteredCompanies = useMemo(() => {
     if (activeFilter === "operating") {
+      if (portfolioHome) {
+        return companies.filter(
+          (company) => (portfolioRowsByCompany.get(company.id)?.active_operations_count ?? 0) > 0,
+        );
+      }
       return companies.filter(isCompanyOperating);
     }
     if (activeFilter === "attention") {
+      if (portfolioHome) {
+        return companies.filter((company) => {
+          const row = portfolioRowsByCompany.get(company.id);
+          return row ? row.health_status !== "healthy" : needsAttention(company);
+        });
+      }
       return companies.filter(needsAttention);
     }
     return companies;
-  }, [activeFilter, companies]);
+  }, [activeFilter, companies, portfolioHome, portfolioRowsByCompany]);
   const visibleCompanies = filteredCompanies.slice(0, 50);
   const hiddenCompanyCount = Math.max(filteredCompanies.length - visibleCompanies.length, 0);
 
@@ -379,13 +464,15 @@ export default function CompaniesIndexPage() {
                 activeFilter={activeFilter}
                 onFilterChange={updateActiveFilter}
               />
+              <PortfolioQueuesPanel portfolioHome={portfolioHome} />
               <CompanyWorkspacePanel
                 companies={companies}
                 filteredCompanies={filteredCompanies}
                 visibleCompanies={visibleCompanies}
                 hiddenCompanyCount={hiddenCompanyCount}
                 total={summary.total}
-              />            </>
+              />
+            </>
           )}
         </div>
       </DashboardLayout>

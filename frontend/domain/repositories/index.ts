@@ -8,3 +8,4 @@ export { memoryRepository } from "./memoryRepository";
 export { operationRepository } from "./operationRepository";
 export { operatingModelRepository } from "./operatingModelRepository";
 export { overviewRepository } from "./overviewRepository";
+export { portfolioRepository } from "./portfolioRepository";

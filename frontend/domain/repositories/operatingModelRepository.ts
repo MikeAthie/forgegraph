@@ -50,6 +50,11 @@ export const operatingModelRepository = {
     return toCompanyOperatingModelVM(model);
   },
 
+  listInstalledPacks: async (companyId: string): Promise<OperatingModelPackVM[]> => {
+    const packs = await operatingModelsApi.listCompanyPacks(companyId);
+    return packs.map(toOperatingModelPackVM);
+  },
+
   listPrograms: async (companyId: string): Promise<CompanyProgramVM[]> => {
     const programs = await operatingModelsApi.listPrograms(companyId);
     return programs.map(toCompanyProgramVM);
@@ -61,10 +66,9 @@ export const operatingModelRepository = {
   },
 
   installPack: async (companyId: string, packId: string): Promise<OperatingModelPackVM> => {
-    const installation = await operatingModelsApi.installPack(
+    const installation = await operatingModelsApi.installCompanyPack(
       companyId,
-      packId,
-      {},
+      { pack_id: packId },
       { idempotencyKey: stableClientCommandId("operating-model-pack.install", companyId, packId) },
     );
     return toOperatingModelPackVM(installation);

@@ -319,7 +319,7 @@ function ValidationTrigger({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
   return null;
 }
 
-export function GraphEditor({
+function useGraphEditorController({
   graphId,
   graphName,
   graphDescription,
@@ -569,7 +569,7 @@ export function GraphEditor({
 
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
-  }, [setEdges, setNodes, takeSnapshot]);
+  }, [setEdges, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId, takeSnapshot]);
 
   const handleRedo = useCallback(() => {
     const next = redoStackRef.current.pop();
@@ -584,7 +584,7 @@ export function GraphEditor({
 
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
-  }, [setEdges, setNodes, takeSnapshot]);
+  }, [setEdges, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId, takeSnapshot]);
 
   const getSelectedNodes = useCallback((): Node[] => {
     const selected = nodes.filter((n) => n.selected);
@@ -693,7 +693,7 @@ export function GraphEditor({
       setSelectedEdgeId(null);
       setIsDirty(true);
     },
-    [pushHistory, setEdges, setNodes],
+    [pushHistory, setEdges, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId],
   );
 
   const handlePaste = useCallback(() => {
@@ -755,7 +755,7 @@ export function GraphEditor({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setIsDirty(true);
-  }, [getSelectedEdges, getSelectedNodes, pushHistory, setEdges, setNodes]);
+  }, [getSelectedEdges, getSelectedNodes, pushHistory, setEdges, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId]);
 
   // Sync editor state when the loaded version changes (save or version switch).
   useEffect(() => {
@@ -788,7 +788,7 @@ export function GraphEditor({
     return () => {
       active = false;
     };
-  }, []);
+  }, [setMarketplaceNodes]);
 
   const applyExecutionOverlay = useCallback(
     (run: RunDetail | null) => {
@@ -857,7 +857,7 @@ export function GraphEditor({
         setOverlayRunRefreshing(false);
       }
     },
-    [applyExecutionOverlay, graphId, overlayRunId],
+    [applyExecutionOverlay, graphId, overlayRunId, setOverlayRun, setOverlayRunError, setOverlayRunLoading, setOverlayRunRefreshing],
   );
 
   useEffect(() => {
@@ -869,7 +869,7 @@ export function GraphEditor({
     }
 
     void fetchOverlayRun();
-  }, [applyExecutionOverlay, fetchOverlayRun, overlayRunId]);
+  }, [applyExecutionOverlay, fetchOverlayRun, overlayRunId, setOverlayRun, setOverlayRunError]);
 
   useEffect(() => {
     applyExecutionOverlay(overlayRun);
@@ -939,18 +939,18 @@ export function GraphEditor({
       setEdges((eds) => addEdge(newEdge, eds));
       setIsDirty(true);
     },
-    [edges, nodes, pushHistory, setEdges],
+    [edges, nodes, pushHistory, setEdges, setIsDirty],
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
-  }, []);
+  }, [setSelectedEdgeId, setSelectedNodeId]);
 
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     setSelectedEdgeId(edge.id);
     setSelectedNodeId(null);
-  }, []);
+  }, [setSelectedEdgeId, setSelectedNodeId]);
 
   const onNodeDragStop = useCallback<OnNodeDrag>(
     (_, node, draggingNodes) => {
@@ -989,7 +989,7 @@ export function GraphEditor({
 
       setIsDirty(true);
     },
-    [setNodes],
+    [setIsDirty, setNodes],
   );
 
   const onNodeDragStart = useCallback<OnNodeDrag>(() => {
@@ -1001,7 +1001,7 @@ export function GraphEditor({
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-  }, []);
+  }, [setSelectedEdgeId, setSelectedNodeId]);
 
   const addExecutableNode = useCallback(
     (
@@ -1071,7 +1071,7 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [nodes, pushHistory, setEdges, setNodes],
+    [nodes, pushHistory, setEdges, setIsDirty, setNodes, setSelectedNodeId],
   );
 
   const handleAddNode = useCallback(
@@ -1110,7 +1110,7 @@ export function GraphEditor({
       // Fallback: add node directly without config dialog
       addExecutableNode(nodeType, { sourceNodeId, config: {} });
     },
-    [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId],
+    [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId, setConfigDialogInitialConfig, setConfigDialogInitialLabel, setConfigDialogNodeType, setConfigDialogOpen, setConfigDialogSourceNodeId, setPromptWizardOpen, setPromptWizardSourceNodeId],
   );
 
   const handleAddMarketplaceNode = useCallback(
@@ -1157,7 +1157,7 @@ export function GraphEditor({
         showInfo("Credential setup", `Configure ${provider} credentials in this dialog before adding the node.`);
       }
     },
-    [captureFocusableTarget, nodes, selectedNodeId],
+    [captureFocusableTarget, nodes, selectedNodeId, setConfigDialogInitialConfig, setConfigDialogInitialLabel, setConfigDialogNodeType, setConfigDialogOpen, setConfigDialogSourceNodeId],
   );
 
   const handleConfigDialogComplete = useCallback(
@@ -1174,13 +1174,13 @@ export function GraphEditor({
       setConfigDialogInitialConfig({});
       setConfigDialogInitialLabel(null);
     },
-    [addExecutableNode, configDialogNodeType, configDialogSourceNodeId],
+    [addExecutableNode, configDialogNodeType, configDialogSourceNodeId, setConfigDialogInitialConfig, setConfigDialogInitialLabel, setConfigDialogNodeType, setConfigDialogOpen, setConfigDialogSourceNodeId],
   );
 
   const handleOpenMemoryConfig = useCallback(() => {
     captureFocusableTarget();
     setMemoryConfigOpen(true);
-  }, [captureFocusableTarget]);
+  }, [captureFocusableTarget, setMemoryConfigOpen]);
 
   const handleMemoryConfigOpenChange = useCallback(
     (open: boolean) => {
@@ -1189,7 +1189,7 @@ export function GraphEditor({
         restoreFocusableTarget();
       }
     },
-    [restoreFocusableTarget],
+    [restoreFocusableTarget, setMemoryConfigOpen],
   );
 
   const handleAddNote = useCallback(() => {
@@ -1220,7 +1220,7 @@ export function GraphEditor({
     setSelectedNodeId(newNodeId);
     setSelectedEdgeId(null);
     setIsDirty(true);
-  }, [pushHistory, setNodes]);
+  }, [pushHistory, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId]);
 
   const handleUpdateNode = useCallback(
     (nodeId: string, updates: Partial<Node["data"]>) => {
@@ -1230,7 +1230,7 @@ export function GraphEditor({
       );
       setIsDirty(true);
     },
-    [pushHistoryForEdit, setNodes],
+    [pushHistoryForEdit, setIsDirty, setNodes],
   );
 
   const handleUpdateEdge = useCallback(
@@ -1251,7 +1251,7 @@ export function GraphEditor({
       );
       setIsDirty(true);
     },
-    [pushHistoryForEdit, setEdges],
+    [pushHistoryForEdit, setEdges, setIsDirty],
   );
 
   const handleDeleteNode = useCallback(
@@ -1265,7 +1265,7 @@ export function GraphEditor({
       }
       setIsDirty(true);
     },
-    [nodes, pushHistory, setNodes, setEdges, selectedNodeId],
+    [nodes, pushHistory, setNodes, setEdges, selectedNodeId, setIsDirty, setSelectedNodeId],
   );
 
   const handleDuplicateNode = useCallback(
@@ -1293,7 +1293,7 @@ export function GraphEditor({
       setSelectedNodeId(newNodeId);
       setIsDirty(true);
     },
-    [nodes, pushHistory, setNodes],
+    [nodes, pushHistory, setIsDirty, setNodes, setSelectedNodeId],
   );
 
   const handleDeleteEdge = useCallback(
@@ -1306,7 +1306,7 @@ export function GraphEditor({
       }
       setIsDirty(true);
     },
-    [edges, pushHistory, setEdges, selectedEdgeId],
+    [edges, pushHistory, setEdges, selectedEdgeId, setIsDirty, setSelectedEdgeId],
   );
 
   const materializeAgentBlueprint = useCallback(
@@ -1423,7 +1423,7 @@ export function GraphEditor({
       setIsDirty(true);
       return materialized;
     },
-    [materializeAgentBlueprint, pushHistory, setEdges, setNodes],
+    [materializeAgentBlueprint, pushHistory, setEdges, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId],
   );
 
   const saveGraphSnapshot = useCallback(
@@ -1505,7 +1505,7 @@ export function GraphEditor({
       setIsDirty(false);
       return true;
     },
-    [currentViewport, graphDescription, graphId, graphName, onSave, setNodes],
+    [currentViewport, graphDescription, graphId, graphName, onSave, setIsDirty, setNodes],
   );
 
   const handleSave = useCallback(async () => {
@@ -1550,7 +1550,7 @@ export function GraphEditor({
     } finally {
       setStartingRun(false);
     }
-  }, [currentVersionId, push, runDisabledReason]);
+  }, [currentVersionId, push, runDisabledReason, setStartingRun]);
 
   const handleExitExecutionView = useCallback(() => {
     void push(`/graphs/${graphId}`);
@@ -1572,7 +1572,7 @@ export function GraphEditor({
     } finally {
       setOverlayCanceling(false);
     }
-  }, [overlayRun]);
+  }, [overlayRun, setOverlayCanceling, setOverlayRun]);
 
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
@@ -1590,7 +1590,7 @@ export function GraphEditor({
     setNodes([...layoutedNodes, ...noteNodes]);
     setEdges(layoutedEdges);
     setIsDirty(true);
-  }, [nodes, edges, pushHistory, setNodes, setEdges]);
+  }, [nodes, pushHistory, edges, setNodes, setEdges, setIsDirty]);
 
   const handleSaveShortcut = useEffectEvent(handleSave);
   const handleUndoShortcut = useEffectEvent(handleUndo);
@@ -1696,7 +1696,7 @@ export function GraphEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [saving, setNodes]);
+  }, [handleCopyShortcut, handleDeleteShortcut, handleDuplicateShortcut, handlePasteShortcut, handleRedoShortcut, handleSaveShortcut, handleUndoShortcut, saving, setNodes]);
 
   const overlaySelectedNodeRuns: NodeRunItem[] =
     overlayRun && selectedNodeId
@@ -1718,7 +1718,7 @@ export function GraphEditor({
       setPromptWizardSourceNodeId(null);
       setPromptWizardOpen(true);
     }
-  }, [nodes, handleUpdateNode]);
+  }, [nodes, handleUpdateNode, setPromptWizardSourceNodeId, setPromptWizardOpen]);
 
   const handleAddOutputNode = useCallback(() => {
     addExecutableNode(NODE_TYPES.OUTPUT, {
@@ -1730,12 +1730,12 @@ export function GraphEditor({
   const handleFocusNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
     setSelectedEdgeId(null);
-  }, []);
+  }, [setSelectedEdgeId, setSelectedNodeId]);
 
   const handleFocusEdge = useCallback((edgeId: string) => {
     setSelectedEdgeId(edgeId);
     setSelectedNodeId(null);
-  }, []);
+  }, [setSelectedEdgeId, setSelectedNodeId]);
 
   const handleQuickFix = useCallback(
     (error: import("@/lib/graph-validator").ValidationError, fixLabel: string) => {
@@ -1803,390 +1803,534 @@ export function GraphEditor({
         setStartingRun(false);
       }
     },
-    [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, push, saveGraphSnapshot, saving],
+    [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, push, saveGraphSnapshot, saving, setStartingRun],
   );
+
+  return {
+    graphId,
+    graphName,
+    graphDescription,
+    currentVersionId,
+    availableVersions,
+    loadingVersion,
+    onUpdateMetadata,
+    saving,
+    nodes,
+    edges,
+    typedEdges,
+    onNodesChange,
+    onEdgesChange,
+    selectedNode,
+    selectedEdge,
+    selectedNodeId,
+    isDirty,
+    isEditingMetadata,
+    startingRun,
+    overlayRun,
+    overlayRunLoading,
+    overlayRunRefreshing,
+    overlayRunError,
+    overlayCanceling,
+    promptWizardOpen,
+    promptWizardSourceNodeId,
+    configDialogOpen,
+    configDialogNodeType,
+    configDialogInitialConfig,
+    configDialogInitialLabel,
+    memoryConfigOpen,
+    marketplaceNodes,
+    currentViewport,
+    paletteSearchRef,
+    wizardButtonRef,
+    memoryButtonRef,
+    palettePanelRef,
+    canvasPanelRef,
+    inspectorPanelRef,
+    canUndo,
+    canRedo,
+    canQuickAddConnect,
+    runDisabledReason,
+    overlayRunId,
+    overlaySelectedNodeRuns,
+    captureFocusableTarget,
+    restoreFocusableTarget,
+    setPromptWizardOpen,
+    setPromptWizardSourceNodeId,
+    setConfigDialogOpen,
+    setConfigDialogNodeType,
+    setConfigDialogSourceNodeId,
+    setConfigDialogInitialConfig,
+    setConfigDialogInitialLabel,
+    setIsEditingMetadata,
+    setCurrentViewport,
+    addExecutableNode,
+    handleAddNode,
+    handleAddNote,
+    handleAddMarketplaceNode,
+    handleConfigDialogComplete,
+    handleMemoryConfigOpenChange,
+    handleOpenMemoryConfig,
+    handleWizardComplete,
+    onConnect,
+    onNodeClick,
+    onEdgeClick,
+    onNodeDragStart,
+    onNodeDragStop,
+    onPaneClick,
+    handleUndo,
+    handleRedo,
+    handleAutoLayout,
+    handleSelectVersion,
+    handleRunWorkflow,
+    handleSave,
+    handleAddStartNode,
+    handleAddOutputNode,
+    handleExitExecutionView,
+    handleCancelExecution,
+    fetchOverlayRun,
+    handleUpdateNode,
+    handleUpdateEdge,
+    handleDeleteNode,
+    handleDeleteEdge,
+    handleDuplicateNode,
+    handleFocusNode,
+    handleFocusEdge,
+    handleQuickFix,
+  };
+}
+
+type GraphEditorController = ReturnType<typeof useGraphEditorController>;
+
+export function GraphEditor(props: GraphEditorProps) {
+  const controller = useGraphEditorController(props);
 
   return (
     <ValidationProvider>
       <WizardProvider>
-        <ValidationTrigger nodes={nodes} edges={edges} />
-        <div className="flex h-full flex-col">
-          {/* Integration Quick Tool Bar - full width above panels */}
-          <QuickToolBar
-            marketplaceNodes={marketplaceNodes}
-            onSelectPackage={(pkg) => handleAddMarketplaceNode(pkg, canQuickAddConnect)}
-            hasSelectedNode={canQuickAddConnect}
-          />
-          <div className="flex flex-1 overflow-hidden">
-            <AgentWizard
-              onComplete={(payload) => {
-                void handleWizardComplete(payload);
-                restoreFocusableTarget();
-              }}
-              onExit={restoreFocusableTarget}
-            />
-            <PromptNodeWizardDialog
-              open={promptWizardOpen}
-              onOpenChange={(nextOpen) => {
-                setPromptWizardOpen(nextOpen);
-                if (!nextOpen) {
-                  setPromptWizardSourceNodeId(null);
-                  restoreFocusableTarget();
-                }
-              }}
-              onComplete={(config) => {
-                addExecutableNode(NODE_TYPES.PROMPT, {
-                  sourceNodeId: promptWizardSourceNodeId,
-                  config,
-                });
-                setPromptWizardSourceNodeId(null);
-              }}
-            />
-            <NodeConfigDialog
-              isOpen={configDialogOpen}
-              onClose={() => {
-                setConfigDialogOpen(false);
-                setConfigDialogNodeType(null);
-                setConfigDialogSourceNodeId(null);
-                setConfigDialogInitialConfig({});
-                setConfigDialogInitialLabel(null);
-                restoreFocusableTarget();
-              }}
-              nodeType={configDialogNodeType}
-              initialConfig={configDialogInitialConfig}
-              initialLabel={configDialogInitialLabel ?? undefined}
-              onSave={handleConfigDialogComplete}
-              FormComponent={
-                configDialogNodeType ? (getNodeFormComponent(configDialogNodeType) ?? undefined) : undefined
-              }
-            />
-            <MemoryConfigDialog
-              graphId={graphId ?? null}
-              open={memoryConfigOpen}
-              onOpenChange={handleMemoryConfigOpenChange}
-            />
-            {/* Left Panel - Node Palette */}
-            <div
-              ref={palettePanelRef}
-              role="complementary"
-              aria-label="Step palette panel"
-              tabIndex={-1}
-              className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-            >
-              <NodePalette
-                onAddNode={handleAddNode}
-                onAddNote={handleAddNote}
-                onAddMarketplaceNode={handleAddMarketplaceNode}
-                marketplaceNodes={marketplaceNodes}
-                hasSelectedNode={canQuickAddConnect}
-                searchInputRef={paletteSearchRef}
-              />
-            </div>
-
-            {/* Center - Canvas */}
-            <div
-              ref={canvasPanelRef}
-              role="region"
-              aria-label="Canvas panel"
-              data-testid="graph-canvas-panel"
-              tabIndex={-1}
-              className="flex-1 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-            >
-              <ReactFlow
-                className="bg-background"
-                aria-label="Operating model canvas"
-                nodes={nodes}
-                edges={typedEdges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                connectOnClick
-                onNodeClick={onNodeClick}
-                onEdgeClick={onEdgeClick}
-                onNodeDragStart={onNodeDragStart}
-                onNodeDragStop={onNodeDragStop}
-                onPaneClick={onPaneClick}
-                onMoveEnd={(_, viewport) => setCurrentViewport(viewport)}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                defaultViewport={currentViewport}
-                fitView={!currentViewport}
-                onlyRenderVisibleElements
-                snapToGrid
-                snapGrid={GRAPH_EDITOR_SNAP_GRID}
-                selectionOnDrag
-                selectionMode={SelectionMode.Partial}
-                selectNodesOnDrag={false}
-                panOnDrag={[1, 2]}
-                defaultEdgeOptions={{
-                  type: "typed",
-                  style: { strokeWidth: 2 },
-                  markerEnd: {
-                    type: MarkerType.ArrowClosed,
-                    width: 14,
-                    height: 14,
-                  },
-                }}
-              >
-                <Background variant={BackgroundVariant.Dots} gap={24} size={0.8} color="rgba(255,255,255,0.06)" />
-                <Controls />
-                <MiniMap
-                  nodeStrokeWidth={3}
-                  zoomable
-                  pannable
-                  className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
-                />
-                <Panel position="top-right" className="flex items-center gap-2">
-                  <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
-                    <button
-                      type="button"
-                      aria-label="Undo"
-                      onClick={handleUndo}
-                      disabled={!canUndo}
-                      title="Undo (Ctrl+Z)"
-                      className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Undo2 aria-hidden="true" className="size-4" />
-                    </button>
-                    <div className="w-px bg-border" />
-                    <button
-                      type="button"
-                      aria-label="Redo"
-                      onClick={handleRedo}
-                      disabled={!canRedo}
-                      title="Redo (Ctrl+Y)"
-                      className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Redo2 aria-hidden="true" className="size-4" />
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label="Auto-layout"
-                    onClick={handleAutoLayout}
-                    disabled={nodes.length === 0}
-                    className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
-                    title="Tidy up layout"
-                  >
-                    <LayoutGrid aria-hidden="true" className="size-4" />
-                    <span className="hidden sm:inline">Tidy</span>
-                  </button>
-                  <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
-                    <select
-                      aria-label="Saved version"
-                      value={currentVersionId ?? ""}
-                      disabled={loadingVersion || saving || availableVersions.length === 0}
-                      onChange={(e) => void handleSelectVersion(e.target.value)}
-                      className="bg-transparent text-sm text-muted-foreground outline-none"
-                    >
-                      {availableVersions.length === 0 ? (
-                        <option value="">No version</option>
-                      ) : (
-                        availableVersions
-                          .toSorted((a, b) => b.version - a.version)
-                          .map((v) => (
-                            <option key={v.id} value={v.id}>
-                              v{v.version}
-                            </option>
-                          ))
-                      )}
-                    </select>
-                    {isDirty && <span className="text-amber-500 ml-1">*</span>}
-                  </div>
-                  {!isEditingMetadata && (
-                    <>
-                      <WizardButton buttonRef={wizardButtonRef} onBeforeStart={captureFocusableTarget} />
-                      <button
-                        ref={memoryButtonRef}
-                        type="button"
-                        aria-label="Memory settings"
-                        onClick={handleOpenMemoryConfig}
-                        className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
-                      >
-                        <Brain aria-hidden="true" className="size-4" />
-                        <span className="hidden sm:inline">Memory</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={runDisabledReason ?? "Launch test operation"}
-                        onClick={() => void handleRunWorkflow()}
-                        disabled={Boolean(runDisabledReason)}
-                        title={runDisabledReason ?? "Launch test operation"}
-                        className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                      >
-                        {startingRun ? "Starting" : <Play aria-hidden="true" className="size-4" />}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={saving ? "Saving" : "Save"}
-                        onClick={() => void handleSave()}
-                        disabled={saving || !isDirty}
-                        className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                      >
-                        {saving ? "Saving" : <SaveIcon aria-hidden="true" className="size-4" />}
-                      </button>
-                    </>
-                  )}
-                </Panel>
-                <Panel position="bottom-center">
-                  <button
-                    type="button"
-                    onClick={() => paletteSearchRef.current?.focus()}
-                    className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
-                  >
-                    <Plus className="size-4" />
-                    Add Step
-                  </button>
-                </Panel>
-              </ReactFlow>
-              {/* Validation Overlay - shows missing start/output indicators */}
-              <ValidationOverlay onAddStartNode={handleAddStartNode} onAddOutputNode={handleAddOutputNode} />
-            </div>
-
-            {/* Right Panel - Inspector */}
-            <div
-              ref={inspectorPanelRef}
-              role="complementary"
-              aria-label="Inspector panel"
-              tabIndex={-1}
-              className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-            >
-              {overlayRunId && (
-                <div className="border-b border-border bg-muted/30 p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-foreground">Operation</h3>
-                    <button
-                      type="button"
-                      onClick={handleExitExecutionView}
-                      className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Exit
-                    </button>
-                  </div>
-
-                  {overlayRunLoading && !overlayRun && (
-                    <p className="text-xs text-muted-foreground">Loading operation detail…</p>
-                  )}
-
-                  {overlayRunError && <p className="text-xs text-destructive whitespace-pre-wrap">{overlayRunError}</p>}
-
-                  {overlayRun && (
-                    <>
-                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span>
-                          Status: <span className="font-medium text-foreground">{String(overlayRun.status)}</span>
-                        </span>
-                        <Link href={`/runs/${overlayRun.id}`} className="text-primary hover:underline">
-                          Open operation
-                        </Link>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {!isTerminalRunStatus(String(overlayRun.status)) && (
-                          <button
-                            type="button"
-                            onClick={() => void handleCancelExecution()}
-                            disabled={overlayCanceling}
-                            className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {overlayCanceling ? "Stopping" : "Stop"}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void fetchOverlayRun()}
-                          disabled={overlayRunLoading || overlayRunRefreshing}
-                          className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {overlayRunLoading || overlayRunRefreshing ? "Refreshing" : "Refresh"}
-                        </button>
-                      </div>
-
-                      <div className="pt-3 border-t border-border space-y-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase">Department activity</p>
-
-                        {!selectedNodeId ? (
-                          <p className="text-xs text-muted-foreground">Select a step to inspect its activity.</p>
-                        ) : overlaySelectedNodeRuns.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No activity records for this step.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {overlaySelectedNodeRuns.map((nodeRun) => {
-                              const agentTrace = getNodeRunAgentTrace(nodeRun);
-                              return (
-                                <div
-                                  key={nodeRun.id}
-                                  className="rounded-lg border border-border bg-background/40 p-2 space-y-2"
-                                >
-                                  <div className="flex items-center justify-between gap-2 text-xs">
-                                    <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
-                                    <span className="text-muted-foreground">{String(nodeRun.status)}</span>
-                                    <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
-                                  </div>
-
-                                  {agentTrace ? <AgentTracePanel trace={agentTrace} compact /> : null}
-
-                                  <details open>
-                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                                      Deliverable / response
-                                    </summary>
-                                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                                      {formatJsonForDisplay(nodeRun.output_json)}
-                                    </pre>
-                                  </details>
-
-                                  <details open={String(nodeRun.status) === "failed"}>
-                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                                      Needs attention
-                                    </summary>
-                                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                                      {formatJsonForDisplay(nodeRun.error_json)}
-                                    </pre>
-                                  </details>
-
-                                  <details>
-                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                                      Input
-                                    </summary>
-                                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-                                      {formatJsonForDisplay(nodeRun.input_json)}
-                                    </pre>
-                                  </details>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-              <NodeInspector
-                selectedNode={selectedNode}
-                selectedEdge={selectedEdge}
-                nodes={nodes}
-                edges={edges}
-                graphName={graphName}
-                graphDescription={graphDescription}
-                onUpdateNode={handleUpdateNode}
-                onUpdateEdge={handleUpdateEdge}
-                onDeleteNode={handleDeleteNode}
-                onDeleteEdge={handleDeleteEdge}
-                onDuplicateNode={handleDuplicateNode}
-                onUpdateMetadata={onUpdateMetadata}
-                onEditingMetadataChange={setIsEditingMetadata}
-              />
-            </div>
-          </div>
-          {/* Validation Status Bar - shows errors/warnings */}
-          <ValidationStatusBar
-            onFocusNode={handleFocusNode}
-            onFocusEdge={handleFocusEdge}
-            onQuickFix={handleQuickFix}
-          />
-        </div>
+        <GraphEditorShell controller={controller} />
       </WizardProvider>
     </ValidationProvider>
+  );
+}
+
+function GraphEditorShell({ controller }: { controller: GraphEditorController }) {
+  return (
+    <>
+      <ValidationTrigger nodes={controller.nodes} edges={controller.edges} />
+      <div className="flex h-full flex-col">
+        <QuickToolBar
+          marketplaceNodes={controller.marketplaceNodes}
+          onSelectPackage={(pkg) => controller.handleAddMarketplaceNode(pkg, controller.canQuickAddConnect)}
+          hasSelectedNode={controller.canQuickAddConnect}
+        />
+        <div className="flex flex-1 overflow-hidden">
+          <GraphEditorDialogs controller={controller} />
+          <GraphEditorPalettePanel controller={controller} />
+          <GraphCanvasPanel controller={controller} />
+          <GraphInspectorPanel controller={controller} />
+        </div>
+        <ValidationStatusBar
+          onFocusNode={controller.handleFocusNode}
+          onFocusEdge={controller.handleFocusEdge}
+          onQuickFix={controller.handleQuickFix}
+        />
+      </div>
+    </>
+  );
+}
+
+function GraphEditorDialogs({ controller }: { controller: GraphEditorController }) {
+  return (
+    <>
+      <AgentWizard
+        onComplete={(payload) => {
+          void controller.handleWizardComplete(payload);
+          controller.restoreFocusableTarget();
+        }}
+        onExit={controller.restoreFocusableTarget}
+      />
+      <PromptNodeWizardDialog
+        open={controller.promptWizardOpen}
+        onOpenChange={(nextOpen) => {
+          controller.setPromptWizardOpen(nextOpen);
+          if (!nextOpen) {
+            controller.setPromptWizardSourceNodeId(null);
+            controller.restoreFocusableTarget();
+          }
+        }}
+        onComplete={(config) => {
+          controller.addExecutableNode(NODE_TYPES.PROMPT, {
+            sourceNodeId: controller.promptWizardSourceNodeId,
+            config,
+          });
+          controller.setPromptWizardSourceNodeId(null);
+        }}
+      />
+      <NodeConfigDialog
+        isOpen={controller.configDialogOpen}
+        onClose={() => {
+          controller.setConfigDialogOpen(false);
+          controller.setConfigDialogNodeType(null);
+          controller.setConfigDialogSourceNodeId(null);
+          controller.setConfigDialogInitialConfig({});
+          controller.setConfigDialogInitialLabel(null);
+          controller.restoreFocusableTarget();
+        }}
+        nodeType={controller.configDialogNodeType}
+        initialConfig={controller.configDialogInitialConfig}
+        initialLabel={controller.configDialogInitialLabel ?? undefined}
+        onSave={controller.handleConfigDialogComplete}
+        FormComponent={
+          controller.configDialogNodeType
+            ? (getNodeFormComponent(controller.configDialogNodeType) ?? undefined)
+            : undefined
+        }
+      />
+      <MemoryConfigDialog
+        graphId={controller.graphId ?? null}
+        open={controller.memoryConfigOpen}
+        onOpenChange={controller.handleMemoryConfigOpenChange}
+      />
+    </>
+  );
+}
+
+function GraphEditorPalettePanel({ controller }: { controller: GraphEditorController }) {
+  return (
+    <div
+      ref={controller.palettePanelRef}
+      role="complementary"
+      aria-label="Step palette panel"
+      tabIndex={-1}
+      className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+    >
+      <NodePalette
+        onAddNode={controller.handleAddNode}
+        onAddNote={controller.handleAddNote}
+        onAddMarketplaceNode={controller.handleAddMarketplaceNode}
+        marketplaceNodes={controller.marketplaceNodes}
+        hasSelectedNode={controller.canQuickAddConnect}
+        searchInputRef={controller.paletteSearchRef}
+      />
+    </div>
+  );
+}
+
+function GraphCanvasPanel({ controller }: { controller: GraphEditorController }) {
+  return (
+    <div
+      ref={controller.canvasPanelRef}
+      role="region"
+      aria-label="Canvas panel"
+      data-testid="graph-canvas-panel"
+      tabIndex={-1}
+      className="flex-1 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+    >
+      <ReactFlow
+        className="bg-background"
+        aria-label="Operating model canvas"
+        nodes={controller.nodes}
+        edges={controller.typedEdges}
+        onNodesChange={controller.onNodesChange}
+        onEdgesChange={controller.onEdgesChange}
+        onConnect={controller.onConnect}
+        connectOnClick
+        onNodeClick={controller.onNodeClick}
+        onEdgeClick={controller.onEdgeClick}
+        onNodeDragStart={controller.onNodeDragStart}
+        onNodeDragStop={controller.onNodeDragStop}
+        onPaneClick={controller.onPaneClick}
+        onMoveEnd={(_, viewport) => controller.setCurrentViewport(viewport)}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultViewport={controller.currentViewport}
+        fitView={!controller.currentViewport}
+        onlyRenderVisibleElements
+        snapToGrid
+        snapGrid={GRAPH_EDITOR_SNAP_GRID}
+        selectionOnDrag
+        selectionMode={SelectionMode.Partial}
+        selectNodesOnDrag={false}
+        panOnDrag={[1, 2]}
+        defaultEdgeOptions={{
+          type: "typed",
+          style: { strokeWidth: 2 },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 14,
+            height: 14,
+          },
+        }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={24} size={0.8} color="rgba(255,255,255,0.06)" />
+        <Controls />
+        <MiniMap
+          nodeStrokeWidth={3}
+          zoomable
+          pannable
+          className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
+        />
+        <GraphCanvasToolbar controller={controller} />
+        <Panel position="bottom-center">
+          <button
+            type="button"
+            onClick={() => controller.paletteSearchRef.current?.focus()}
+            className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
+          >
+            <Plus className="size-4" />
+            Add Step
+          </button>
+        </Panel>
+      </ReactFlow>
+      <ValidationOverlay onAddStartNode={controller.handleAddStartNode} onAddOutputNode={controller.handleAddOutputNode} />
+    </div>
+  );
+}
+
+function GraphCanvasToolbar({ controller }: { controller: GraphEditorController }) {
+  return (
+    <Panel position="top-right" className="flex items-center gap-2">
+      <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
+        <button
+          type="button"
+          aria-label="Undo"
+          onClick={controller.handleUndo}
+          disabled={!controller.canUndo}
+          title="Undo (Ctrl+Z)"
+          className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Undo2 aria-hidden="true" className="size-4" />
+        </button>
+        <div className="w-px bg-border" />
+        <button
+          type="button"
+          aria-label="Redo"
+          onClick={controller.handleRedo}
+          disabled={!controller.canRedo}
+          title="Redo (Ctrl+Y)"
+          className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Redo2 aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+      <button
+        type="button"
+        aria-label="Auto-layout"
+        onClick={controller.handleAutoLayout}
+        disabled={controller.nodes.length === 0}
+        className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
+        title="Tidy up layout"
+      >
+        <LayoutGrid aria-hidden="true" className="size-4" />
+        <span className="hidden sm:inline">Tidy</span>
+      </button>
+      <GraphVersionSelect controller={controller} />
+      {!controller.isEditingMetadata ? <GraphPrimaryActions controller={controller} /> : null}
+    </Panel>
+  );
+}
+
+function GraphVersionSelect({ controller }: { controller: GraphEditorController }) {
+  return (
+    <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
+      <select
+        aria-label="Saved version"
+        value={controller.currentVersionId ?? ""}
+        disabled={controller.loadingVersion || controller.saving || controller.availableVersions.length === 0}
+        onChange={(event) => void controller.handleSelectVersion(event.target.value)}
+        className="bg-transparent text-sm text-muted-foreground outline-none"
+      >
+        {controller.availableVersions.length === 0 ? (
+          <option value="">No version</option>
+        ) : (
+          controller.availableVersions.toSorted((left, right) => right.version - left.version).map((version) => (
+            <option key={version.id} value={version.id}>
+              v{version.version}
+            </option>
+          ))
+        )}
+      </select>
+      {controller.isDirty ? <span className="text-amber-500 ml-1">*</span> : null}
+    </div>
+  );
+}
+
+function GraphPrimaryActions({ controller }: { controller: GraphEditorController }) {
+  return (
+    <>
+      <WizardButton buttonRef={controller.wizardButtonRef} onBeforeStart={controller.captureFocusableTarget} />
+      <button
+        ref={controller.memoryButtonRef}
+        type="button"
+        aria-label="Memory settings"
+        onClick={controller.handleOpenMemoryConfig}
+        className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
+      >
+        <Brain aria-hidden="true" className="size-4" />
+        <span className="hidden sm:inline">Memory</span>
+      </button>
+      <button
+        type="button"
+        aria-label={controller.runDisabledReason ?? "Launch test operation"}
+        onClick={() => void controller.handleRunWorkflow()}
+        disabled={Boolean(controller.runDisabledReason)}
+        title={controller.runDisabledReason ?? "Launch test operation"}
+        className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+      >
+        {controller.startingRun ? "Starting" : <Play aria-hidden="true" className="size-4" />}
+      </button>
+      <button
+        type="button"
+        aria-label={controller.saving ? "Saving" : "Save"}
+        onClick={() => void controller.handleSave()}
+        disabled={controller.saving || !controller.isDirty}
+        className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+      >
+        {controller.saving ? "Saving" : <SaveIcon aria-hidden="true" className="size-4" />}
+      </button>
+    </>
+  );
+}
+
+function GraphInspectorPanel({ controller }: { controller: GraphEditorController }) {
+  return (
+    <div
+      ref={controller.inspectorPanelRef}
+      role="complementary"
+      aria-label="Inspector panel"
+      tabIndex={-1}
+      className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+    >
+      {controller.overlayRunId ? <ExecutionOverlayPanel controller={controller} /> : null}
+      <NodeInspector
+        selectedNode={controller.selectedNode}
+        selectedEdge={controller.selectedEdge}
+        nodes={controller.nodes}
+        edges={controller.edges}
+        graphName={controller.graphName}
+        graphDescription={controller.graphDescription}
+        onUpdateNode={controller.handleUpdateNode}
+        onUpdateEdge={controller.handleUpdateEdge}
+        onDeleteNode={controller.handleDeleteNode}
+        onDeleteEdge={controller.handleDeleteEdge}
+        onDuplicateNode={controller.handleDuplicateNode}
+        onUpdateMetadata={controller.onUpdateMetadata}
+        onEditingMetadataChange={controller.setIsEditingMetadata}
+      />
+    </div>
+  );
+}
+
+function ExecutionOverlayPanel({ controller }: { controller: GraphEditorController }) {
+  return (
+    <div className="border-b border-border bg-muted/30 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-foreground">Operation</h3>
+        <button
+          type="button"
+          onClick={controller.handleExitExecutionView}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Exit
+        </button>
+      </div>
+      {controller.overlayRunLoading && !controller.overlayRun ? (
+        <p className="text-xs text-muted-foreground">Loading operation detail&hellip;</p>
+      ) : null}
+      {controller.overlayRunError ? (
+        <p className="text-xs text-destructive whitespace-pre-wrap">{controller.overlayRunError}</p>
+      ) : null}
+      {controller.overlayRun ? <ExecutionOverlayDetail controller={controller} /> : null}
+    </div>
+  );
+}
+
+function ExecutionOverlayDetail({ controller }: { controller: GraphEditorController }) {
+  const run = controller.overlayRun;
+  if (!run) {
+    return null;
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          Status: <span className="font-medium text-foreground">{String(run.status)}</span>
+        </span>
+        <Link href={`/runs/${run.id}`} className="text-primary hover:underline">
+          Open operation
+        </Link>
+      </div>
+      <div className="flex items-center gap-2">
+        {!isTerminalRunStatus(String(run.status)) ? (
+          <button
+            type="button"
+            onClick={() => void controller.handleCancelExecution()}
+            disabled={controller.overlayCanceling}
+            className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {controller.overlayCanceling ? "Stopping" : "Stop"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void controller.fetchOverlayRun()}
+          disabled={controller.overlayRunLoading || controller.overlayRunRefreshing}
+          className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {controller.overlayRunLoading || controller.overlayRunRefreshing ? "Refreshing" : "Refresh"}
+        </button>
+      </div>
+      <div className="pt-3 border-t border-border space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase">Department activity</p>
+        <NodeRunActivityList controller={controller} />
+      </div>
+    </>
+  );
+}
+
+function NodeRunActivityList({ controller }: { controller: GraphEditorController }) {
+  if (!controller.selectedNodeId) {
+    return <p className="text-xs text-muted-foreground">Select a step to inspect its activity.</p>;
+  }
+  if (controller.overlaySelectedNodeRuns.length === 0) {
+    return <p className="text-xs text-muted-foreground">No activity records for this step.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {controller.overlaySelectedNodeRuns.map((nodeRun) => (
+        <NodeRunActivityCard key={nodeRun.id} nodeRun={nodeRun} />
+      ))}
+    </div>
+  );
+}
+
+function NodeRunActivityCard({ nodeRun }: { nodeRun: NodeRunItem }) {
+  const agentTrace = getNodeRunAgentTrace(nodeRun);
+
+  return (
+    <div className="rounded-lg border border-border bg-background/40 p-2 space-y-2">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
+        <span className="text-muted-foreground">{String(nodeRun.status)}</span>
+        <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
+      </div>
+      {agentTrace ? <AgentTracePanel trace={agentTrace} compact /> : null}
+      <NodeRunJsonBlock title="Deliverable / response" value={nodeRun.output_json} open />
+      <NodeRunJsonBlock title="Needs attention" value={nodeRun.error_json} open={String(nodeRun.status) === "failed"} />
+      <NodeRunJsonBlock title="Input" value={nodeRun.input_json} />
+    </div>
+  );
+}
+
+function NodeRunJsonBlock({ open, title, value }: { open?: boolean; title: string; value: unknown }) {
+  return (
+    <details open={open}>
+      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{title}</summary>
+      <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
+        {formatJsonForDisplay(value)}
+      </pre>
+    </details>
   );
 }

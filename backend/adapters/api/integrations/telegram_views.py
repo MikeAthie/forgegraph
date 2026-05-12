@@ -415,6 +415,7 @@ class TelegramWebhookView(APIView):
             prepared_graph = prepare_graph_for_engine(
                 graph_version.graph_json,
                 owner,
+                company_id=graph_version.graph_id,
                 traceparent=request.headers.get("traceparent"),
                 tracestate=request.headers.get("tracestate"),
             )

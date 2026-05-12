@@ -2272,6 +2272,7 @@ class RunStartView(APIView):
             prepared_graph = prepare_graph_for_engine(
                 graph_version.graph_json,
                 user,
+                company_id=graph_version.graph_id,
                 traceparent=traceparent,
                 tracestate=tracestate,
             )
@@ -2699,6 +2700,7 @@ class RunInvokeView(APIView):
             graph_json = prepare_graph_for_engine(
                 graph_version.graph_json,
                 user,
+                company_id=graph_version.graph_id,
                 traceparent=traceparent,
                 tracestate=tracestate,
             )
@@ -3081,6 +3083,7 @@ class RunReplayView(APIView):
             prepared_graph = prepare_graph_for_engine(
                 graph_version.graph_json,
                 user,
+                company_id=graph_version.graph_id,
                 traceparent=traceparent,
                 tracestate=tracestate,
             )

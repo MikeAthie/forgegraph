@@ -408,7 +408,7 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
     } finally {
       setLoading(false);
     }
-  }, [graphId]);
+  }, [graphId, setConfig, setError, setFormState, setLoading]);
 
   useEffect(() => {
     if (!open) {
@@ -473,11 +473,11 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
     } finally {
       setSaving(false);
     }
-  }, [bufferSize, config, formState, graphId, onOpenChange]);
+  }, [bufferSize, config?.buffer_enabled, formState.autoPrepend, formState.embeddingModel, formState.enablePersistence, formState.factsTtlDays, formState.summarizationEnabled, formState.summarizationKeepRecent, formState.summarizationModel, formState.summarizationThreshold, formState.summaryTtlHours, formState.vectorEnabled, formState.vectorRecencyWeight, formState.vectorThreshold, formState.vectorTopK, graphId, onOpenChange, setConfig, setError, setSaving]);
 
   const handleToggleAdvanced = useCallback(() => {
     setFormState((prev) => ({ ...prev, showAdvanced: !prev.showAdvanced }));
-  }, []);
+  }, [setFormState]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

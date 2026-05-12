@@ -17,6 +17,10 @@ from adapters.api.operating_models.serializers import (
     AssertionCreateSerializer,
     AssertionQuerySerializer,
     CanonicalRevisionSerializer,
+    CompanyPackArchiveSerializer,
+    CompanyPackInstallSerializer,
+    CompanyPackPatchSerializer,
+    CompanyPackUpgradeSerializer,
     EvaluationRunSerializer,
     MetricSnapshotCreateSerializer,
     MetricSnapshotQuerySerializer,
@@ -41,6 +45,7 @@ from adapters.api.operating_models.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from application.services.assertions import assertion_payload, create_assertion
+from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.company_operating_models import company_operating_model_payload
 from application.services.company_programs import (
     CompanyProgramError,
@@ -53,13 +58,19 @@ from application.services.company_programs import (
 from application.services.evaluations import evaluation_payload, run_evaluation
 from application.services.operating_model_packs import (
     OperatingModelPackError,
+    archive_pack_installation,
     compile_pack,
+    config_revision_payload,
     install_pack_for_company,
+    installation_detail_payload,
     installation_payload,
     list_available_packs,
     load_pack_definition,
+    namespace_claim_payload,
     remove_pack_from_company,
+    update_pack_installation,
     upgrade_pack_for_company,
+    upgrade_pack_installation,
 )
 from application.services.pack_tool_executions import (
     PackToolExecutionError,
@@ -113,6 +124,7 @@ from infrastructure.orm.models import (
     AssertionRecord,
     Asset,
     AssetVersion,
+    CompanyOperatingModelInstallation,
     CompanyProgram,
     EvaluationRun,
     Graph,
@@ -176,6 +188,230 @@ class CompanyOperatingModelView(APIView):
         if isinstance(company, Response):
             return company
         return success_response({"operating_model": company_operating_model_payload(company)})
+
+
+class CompanyPackListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, company_id: UUID) -> Response:
+        company = _company_for_user(request, company_id, minimum_role="viewer")
+        if isinstance(company, Response):
+            return company
+        installations = (
+            CompanyOperatingModelInstallation.objects.filter(company=company)
+            .select_related("pack_release")
+            .order_by("role", "pack_id")
+        )
+        return success_response(
+            {"packs": [installation_payload(installation) for installation in installations]}
+        )
+
+
+class CompanyPackGenericInstallView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, company_id: UUID) -> Response:
+        serializer = CompanyPackInstallSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        company = _company_for_user(request, company_id, minimum_role="admin")
+        if isinstance(company, Response):
+            return company
+        pack_id = str(serializer.validated_data["pack_id"])
+        command = _prepare_command(
+            request=request,
+            company=company,
+            action=f"company_pack.install:{pack_id}",
+        )
+        if isinstance(command, Response):
+            return command
+        context, replay = command
+        if replay is not None:
+            return replay
+        try:
+            installation = install_pack_for_company(
+                company=company,
+                user=cast(User, request.user),
+                pack_id=pack_id,
+                role=str(serializer.validated_data.get("role") or ""),
+                config=serializer.validated_data.get("config") or {},
+            )
+        except OperatingModelPackError as exc:
+            return _pack_error(exc)
+        response = success_response(
+            {"installation": installation_payload(installation)},
+            status=http_status.HTTP_201_CREATED,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="pack_installation",
+            resource_id=str(installation.id),
+        )
+
+
+class CompanyPackDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, company_id: UUID, installation_id: UUID) -> Response:
+        installation = _installation_for_user(
+            request,
+            company_id,
+            installation_id,
+            minimum_role="viewer",
+        )
+        if isinstance(installation, Response):
+            return installation
+        return success_response({"installation": installation_detail_payload(installation)})
+
+    def patch(self, request: Request, company_id: UUID, installation_id: UUID) -> Response:
+        serializer = CompanyPackPatchSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        installation = _installation_for_user(
+            request,
+            company_id,
+            installation_id,
+            minimum_role="admin",
+        )
+        if isinstance(installation, Response):
+            return installation
+        command = _prepare_command(
+            request=request,
+            company=installation.company,
+            action=f"company_pack.update:{installation_id}",
+        )
+        if isinstance(command, Response):
+            return command
+        context, replay = command
+        if replay is not None:
+            return replay
+        try:
+            installation = update_pack_installation(
+                installation=installation,
+                user=cast(User, request.user),
+                role=serializer.validated_data.get("role"),
+                status=serializer.validated_data.get("status"),
+                config=serializer.validated_data.get("config")
+                if "config" in serializer.validated_data
+                else None,
+            )
+        except OperatingModelPackError as exc:
+            return _pack_error(exc)
+        response = success_response({"installation": installation_payload(installation)})
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="pack_installation",
+            resource_id=str(installation.id),
+        )
+
+
+class CompanyPackGenericUpgradeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, company_id: UUID, installation_id: UUID) -> Response:
+        serializer = CompanyPackUpgradeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        installation = _installation_for_user(
+            request,
+            company_id,
+            installation_id,
+            minimum_role="admin",
+        )
+        if isinstance(installation, Response):
+            return installation
+        command = _prepare_command(
+            request=request,
+            company=installation.company,
+            action=f"company_pack.upgrade:{installation_id}",
+        )
+        if isinstance(command, Response):
+            return command
+        context, replay = command
+        if replay is not None:
+            return replay
+        config = dict(installation.public_config_json or {})
+        overrides = serializer.validated_data.get("config_overrides")
+        if isinstance(overrides, dict):
+            config.update(overrides)
+        try:
+            installation = upgrade_pack_installation(
+                installation=installation,
+                user=cast(User, request.user),
+                config=config,
+            )
+        except OperatingModelPackError as exc:
+            return _pack_error(exc)
+        response = success_response({"installation": installation_payload(installation)})
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="pack_installation",
+            resource_id=str(installation.id),
+        )
+
+
+class CompanyPackGenericArchiveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, company_id: UUID, installation_id: UUID) -> Response:
+        serializer = CompanyPackArchiveSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        installation = _installation_for_user(
+            request,
+            company_id,
+            installation_id,
+            minimum_role="admin",
+        )
+        if isinstance(installation, Response):
+            return installation
+        command = _prepare_command(
+            request=request,
+            company=installation.company,
+            action=f"company_pack.archive:{installation_id}",
+        )
+        if isinstance(command, Response):
+            return command
+        context, replay = command
+        if replay is not None:
+            return replay
+        installation = archive_pack_installation(
+            installation=installation,
+            user=cast(User, request.user),
+            reason=str(serializer.validated_data.get("reason") or ""),
+        )
+        response = success_response({"installation": installation_payload(installation)})
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="pack_installation",
+            resource_id=str(installation.id),
+        )
+
+
+class CompanyPackObjectsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, company_id: UUID, installation_id: UUID) -> Response:
+        installation = _installation_for_user(
+            request,
+            company_id,
+            installation_id,
+            minimum_role="viewer",
+        )
+        if isinstance(installation, Response):
+            return installation
+        claims = installation.namespace_claims.order_by("object_type", "namespaced_id")
+        revisions = installation.config_revisions.order_by("-version")[:20]
+        return success_response(
+            {
+                "objects": [namespace_claim_payload(claim) for claim in claims],
+                "config_revisions": [config_revision_payload(revision) for revision in revisions],
+            }
+        )
 
 
 class CompanyPackInstallView(APIView):
@@ -1320,7 +1556,7 @@ class StateProjectionListView(APIView):
 
 def _company_for_user(request: Request, company_id: UUID, *, minimum_role: str) -> Graph | Response:
     user = cast(User, request.user)
-    company = Graph.objects.for_user(user).filter(id=company_id).first()
+    company = accessible_company_queryset(user, minimum_role="viewer").filter(id=company_id).first()
     if company is None:
         return _not_found("Company was not found.")
     if not _can_access_company(request, company, minimum_role):
@@ -1345,6 +1581,26 @@ def _program_for_user(
     if not _can_access_company(request, program.company, minimum_role):
         return _forbidden("You do not have permission for this program.")
     return program
+
+
+def _installation_for_user(
+    request: Request,
+    company_id: UUID,
+    installation_id: UUID,
+    *,
+    minimum_role: str,
+) -> CompanyOperatingModelInstallation | Response:
+    company = _company_for_user(request, company_id, minimum_role=minimum_role)
+    if isinstance(company, Response):
+        return company
+    installation = (
+        CompanyOperatingModelInstallation.objects.select_related("company", "pack_release")
+        .filter(company=company, id=installation_id)
+        .first()
+    )
+    if installation is None:
+        return _not_found("Pack installation was not found.")
+    return installation
 
 
 def _optional_program(
@@ -1420,9 +1676,7 @@ def _optional_periodic_review(
 
 def _can_access_company(request: Request, company: Graph, minimum_role: str) -> bool:
     user = cast(User, request.user)
-    return bool(
-        company.organization_id and has_min_role(user, minimum_role, str(company.organization_id))
-    )
+    return has_company_access(user, company, minimum_role)
 
 
 def _prepare_command(
@@ -1533,6 +1787,11 @@ def _pack_error(exc: OperatingModelPackError) -> Response:
         if exc.code.endswith("not_found")
         else http_status.HTTP_400_BAD_REQUEST
     )
-    if exc.code == "invalid_graph_json":
+    if exc.code in {
+        "invalid_graph_json",
+        "primary_pack_conflict",
+        "pack_namespace_conflict",
+        "pack_namespace_duplicate",
+    }:
         status_code = http_status.HTTP_409_CONFLICT
     return error_response(exc.code.upper(), exc.message, status=status_code, details=exc.details)

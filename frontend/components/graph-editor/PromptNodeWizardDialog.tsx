@@ -546,7 +546,7 @@ function usePromptNodeWizardDialogController({
     if (titleTouchedRef.current) return;
 
     setTitle(suggestPromptTitle({ role, task }));
-  }, [mode, open, role, task]);
+  }, [mode, open, role, setTitle, task]);
 
   useEffect(() => {
     if (!open) return;

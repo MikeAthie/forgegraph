@@ -10,7 +10,12 @@ from uuid import UUID
 
 from django.utils import timezone
 
-from infrastructure.orm.models import NodePackageInstallation, NodeRegistryRelease
+from infrastructure.orm.models import (
+    CompanyOperatingModelInstallation,
+    Graph,
+    NodePackageInstallation,
+    NodeRegistryRelease,
+)
 
 MANIFEST_SCHEMA_VERSION = 2
 RUNTIME_MODE_CLOUD = "cloud"
@@ -468,18 +473,66 @@ def is_release_installable_in_runtime_mode(
 def build_runtime_manifest_payload(
     tenant_id: str | UUID,
     runtime_mode: str = RUNTIME_MODE_CLOUD,
+    company_id: str | UUID | None = None,
 ) -> dict[str, Any]:
     runtime_mode = normalize_runtime_mode(runtime_mode)
     tenant_str = str(tenant_id)
+    company_str = str(company_id) if company_id else ""
+    company = None
+    warnings: list[dict[str, str]] = []
+    if company_str:
+        company = Graph.objects.filter(id=company_str, organization_id=tenant_str).first()
+        if company is None:
+            canonical_payload = {
+                "tenant_id": tenant_str,
+                "company_id": company_str,
+                "manifest_version": MANIFEST_SCHEMA_VERSION,
+                "tools": [],
+                "packages": [],
+                "operating_model_packs": [],
+                "warnings": [{"code": "company_not_found"}],
+            }
+            return {
+                **canonical_payload,
+                "checksum": _checksum(canonical_payload),
+                "generated_at": timezone.now().isoformat(),
+            }
     installs = (
         NodePackageInstallation.objects.filter(organization_id=tenant_str, is_active=True)
         .select_related("package", "release")
         .order_by("package__slug", "-installed_at")
     )
+    if company is not None:
+        warnings.append(
+            {
+                "code": "organization_runtime_package_fallback",
+                "message": "Runtime packages are still resolved from organization installs.",
+            }
+        )
 
     tools: list[dict[str, Any]] = []
     packages: list[dict[str, Any]] = []
     seen_package_slugs: set[str] = set()
+    operating_model_packs: list[dict[str, Any]] = []
+
+    if company is not None:
+        operating_model_packs = [
+            {
+                "installation_id": str(installation.id),
+                "pack_id": installation.pack_id,
+                "role": installation.role,
+                "status": installation.status,
+                "namespace": installation.namespace or installation.pack_id,
+                "release_version": installation.pack_release.version,
+                "release_checksum": installation.pack_release.checksum,
+            }
+            for installation in CompanyOperatingModelInstallation.objects.filter(
+                company=company,
+                status="active",
+            )
+            .select_related("pack_release")
+            .order_by("role", "pack_id")
+        ]
 
     for install in installs:
         release = install.release
@@ -517,9 +570,12 @@ def build_runtime_manifest_payload(
 
     canonical_payload = {
         "tenant_id": tenant_str,
+        "company_id": company_str,
         "manifest_version": MANIFEST_SCHEMA_VERSION,
         "tools": tools,
         "packages": packages,
+        "operating_model_packs": operating_model_packs,
+        "warnings": warnings,
     }
     checksum = _checksum(canonical_payload)
     generated_at = timezone.now().isoformat()

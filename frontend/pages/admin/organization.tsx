@@ -282,7 +282,7 @@ export default function OrganizationPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setError, setGovernance, setLoading, setOrganization, setRole]);
 
   const loadMembers = useCallback(async () => {
     if (!canManageMembers) return;
@@ -296,7 +296,7 @@ export default function OrganizationPage() {
     } finally {
       setMembersLoading(false);
     }
-  }, [canManageMembers]);
+  }, [canManageMembers, setMemberError, setMembers, setMembersLoading]);
 
   useEffect(() => {
     void loadOrganization();

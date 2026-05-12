@@ -145,7 +145,7 @@ function useGraphsPageController() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setError, setGraphs, setLoading]);
 
   useEffect(() => {
     void refreshGraphs();

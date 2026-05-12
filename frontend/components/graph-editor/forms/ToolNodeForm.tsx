@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -102,7 +102,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     [onChange, provider, toolConfig],
   );
 
-  const reportErrors = useEffectEvent((nextErrors: Record<string, string>) => setErrors(nextErrors));
+  const reportErrors = useCallback((nextErrors: Record<string, string>) => setErrors(nextErrors), [setErrors]);
 
   // Validate input schema on change
   useEffect(() => {
@@ -116,7 +116,7 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     }
 
     reportErrors(newErrors);
-  }, [toolConfig.input_schema]);
+  }, [reportErrors, toolConfig.input_schema]);
 
   const isCustomTool = !toolConfig.tool_name || toolConfig.tool_name === "custom";
 

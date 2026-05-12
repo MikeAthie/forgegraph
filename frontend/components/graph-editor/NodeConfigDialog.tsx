@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useLayoutEffect,
   useReducer,
   useRef,
@@ -182,16 +181,16 @@ export function NodeConfigDialog({
     } else {
       onClose();
     }
-  }, [isDirty, onClose]);
+  }, [isDirty, onClose, setShowCloseConfirm]);
 
   const handleConfirmClose = useCallback(() => {
     setShowCloseConfirm(false);
     onClose();
-  }, [onClose]);
+  }, [onClose, setShowCloseConfirm]);
 
   const handleCancelClose = useCallback(() => {
     setShowCloseConfirm(false);
-  }, []);
+  }, [setShowCloseConfirm]);
 
   const handleSave = useCallback(() => {
     // Check for errors
@@ -203,7 +202,7 @@ export function NodeConfigDialog({
     onClose();
   }, [config, errors, label, nodeType, onClose, onSave]);
 
-  const handleEscapeClose = useEffectEvent(handleClose);
+  const handleEscapeClose = handleClose;
 
   // Handle escape key
   useEffect(() => {
@@ -216,7 +215,7 @@ export function NodeConfigDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  }, [handleEscapeClose, isOpen]);
 
   if (!nodeType) {
     return null;

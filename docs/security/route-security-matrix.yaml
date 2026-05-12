@@ -4864,6 +4864,292 @@ routes:
   expected: *company_ops_jwt_read_expected
   rate_limit_scope: default
   request_size_limit: api_default
+- id: portfolios
+  names:
+  - portfolio-list
+  paths:
+  - /api/portfolios
+  - /api/v1/portfolios
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: portfolio-views
+  names:
+  - portfolio-view-list
+  paths:
+  - /api/portfolio-views
+  - /api/v1/portfolio-views
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: portfolio-health
+  names:
+  - portfolio-health
+  paths:
+  - /api/portfolio-health
+  - /api/v1/portfolio-health
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: cross-company-queues
+  names:
+  - cross-company-queues
+  paths:
+  - /api/cross-company-queues
+  - /api/v1/cross-company-queues
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: credential-health
+  names:
+  - credential-health
+  paths:
+  - /api/credential-health
+  - /api/v1/credential-health
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  secret_exposure: forbidden
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: company-assignments
+  names:
+  - company-assignment-list-create
+  paths:
+  - /api/company-assignments
+  - /api/v1/company-assignments
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  company_role: admin
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: company-assignments-create
+  names:
+  - company-assignment-list-create
+  paths:
+  - /api/company-assignments
+  - /api/v1/company-assignments
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  company_role: admin
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: company_assignment.created
+- id: company-assignments-assignment-id
+  names:
+  - company-assignment-detail
+  paths:
+  - /api/company-assignments/<uuid:assignment_id>
+  - /api/v1/company-assignments/<uuid:assignment_id>
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  company_role: admin
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: company_assignment.updated
+- id: service-catalog-read
+  names:
+  - service-catalog-list-create
+  paths:
+  - /api/service-catalog
+  - /api/v1/service-catalog
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: none
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: service-catalog-create
+  names:
+  - service-catalog-list-create
+  paths:
+  - /api/service-catalog
+  - /api/v1/service-catalog
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: none
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: service_catalog.created
+- id: service-catalog-detail-read
+  names:
+  - service-catalog-detail
+  paths:
+  - /api/service-catalog/<uuid:service_id>
+  - /api/v1/service-catalog/<uuid:service_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: none
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: service-catalog-detail-update
+  names:
+  - service-catalog-detail
+  paths:
+  - /api/service-catalog/<uuid:service_id>
+  - /api/v1/service-catalog/<uuid:service_id>
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: none
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: service_catalog.updated
+- id: service-engagements-read
+  names:
+  - service-engagement-list-create
+  paths:
+  - /api/service-engagements
+  - /api/v1/service-engagements
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: service-engagements-create
+  names:
+  - service-engagement-list-create
+  paths:
+  - /api/service-engagements
+  - /api/v1/service-engagements
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: service_engagement.created
+- id: service-engagement-detail-read
+  names:
+  - service-engagement-detail
+  paths:
+  - /api/service-engagements/<uuid:engagement_id>
+  - /api/v1/service-engagements/<uuid:engagement_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: service-engagement-detail-update
+  names:
+  - service-engagement-detail
+  paths:
+  - /api/service-engagements/<uuid:engagement_id>
+  - /api/v1/service-engagements/<uuid:engagement_id>
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: service_engagement.updated
+- id: service-engagement-deliverables-read
+  names:
+  - service-engagement-deliverables
+  paths:
+  - /api/service-engagements/<uuid:engagement_id>/deliverables
+  - /api/v1/service-engagements/<uuid:engagement_id>/deliverables
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: service-engagement-deliverables-create
+  names:
+  - service-engagement-deliverables
+  paths:
+  - /api/service-engagements/<uuid:engagement_id>/deliverables
+  - /api/v1/service-engagements/<uuid:engagement_id>/deliverables
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: service_deliverable.created
 - id: operating-model-packs-pack-id
   names:
   - operating-model-pack-detail
@@ -4903,6 +5189,117 @@ routes:
   auth_surface: jwt
   required_role: viewer
   org_scope: tenant
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs
+  names:
+  - company-pack-list
+  paths:
+  - /api/companies/<uuid:company_id>/packs
+  - /api/v1/companies/<uuid:company_id>/packs
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs-install
+  names:
+  - company-pack-install
+  paths:
+  - /api/companies/<uuid:company_id>/packs/install
+  - /api/v1/companies/<uuid:company_id>/packs/install
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  pack_namespace: claimed
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs-installation-id-read
+  names:
+  - company-pack-detail
+  paths:
+  - /api/companies/<uuid:company_id>/packs/<uuid:installation_id>
+  - /api/v1/companies/<uuid:company_id>/packs/<uuid:installation_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  pack_namespace: read_only
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs-installation-id-update
+  names:
+  - company-pack-detail
+  paths:
+  - /api/companies/<uuid:company_id>/packs/<uuid:installation_id>
+  - /api/v1/companies/<uuid:company_id>/packs/<uuid:installation_id>
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  pack_namespace: installation
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs-installation-id-upgrade
+  names:
+  - company-pack-upgrade
+  paths:
+  - /api/companies/<uuid:company_id>/packs/<uuid:installation_id>/upgrade
+  - /api/v1/companies/<uuid:company_id>/packs/<uuid:installation_id>/upgrade
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  pack_namespace: claimed
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs-installation-id-archive
+  names:
+  - company-pack-archive
+  paths:
+  - /api/companies/<uuid:company_id>/packs/<uuid:installation_id>/archive
+  - /api/v1/companies/<uuid:company_id>/packs/<uuid:installation_id>/archive
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: admin
+  org_scope: tenant
+  company_scope: required
+  pack_namespace: installation
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: companies-company-id-packs-installation-id-objects
+  names:
+  - company-pack-objects
+  paths:
+  - /api/companies/<uuid:company_id>/packs/<uuid:installation_id>/objects
+  - /api/v1/companies/<uuid:company_id>/packs/<uuid:installation_id>/objects
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  pack_namespace: read_only
   expected: *company_ops_jwt_read_expected
   rate_limit_scope: default
   request_size_limit: api_default

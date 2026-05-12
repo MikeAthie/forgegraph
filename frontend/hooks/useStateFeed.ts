@@ -87,30 +87,39 @@ function numericStateVersion(value: unknown): number | null {
   return Math.trunc(value);
 }
 
-function targetPath(options: StateFeedOptions) {
-  if (options.scope === "run") {
-    return options.runId ? `/ws/runs/${encodeURIComponent(options.runId)}/` : null;
-  }
-  return options.organizationId ? `/ws/organizations/${encodeURIComponent(options.organizationId)}/state/` : null;
-}
-
 export function useStateFeed(options: StateFeedOptions) {
+  const scope = options.scope;
+  const runId = scope === "run" ? options.runId : undefined;
+  const organizationId = scope === "organization" ? options.organizationId : undefined;
+  const eventLevel = scope === "run" ? options.eventLevel : undefined;
+  const enabled = options.enabled;
+  const eventTypes = options.eventTypes;
+  const lastSeenStateVersion = options.lastSeenStateVersion;
+  const onEvent = options.onEvent;
+  const onFullResync = options.onFullResync;
   const [status, dispatchStatus] = useReducer(
     (_: StateFeedStatus, nextStatus: StateFeedStatus) => nextStatus,
     "idle",
   );
-  const eventTypesKey = useMemo(() => (options.eventTypes ?? []).join(","), [options.eventTypes]);
-  const onEventRef = useRef(options.onEvent);
-  const onFullResyncRef = useRef(options.onFullResync);
+  const eventTypesKey = useMemo(() => (eventTypes ?? []).join(","), [eventTypes]);
+  const onEventRef = useRef(onEvent);
+  const onFullResyncRef = useRef(onFullResync);
 
   useEffect(() => {
-    onEventRef.current = options.onEvent;
-    onFullResyncRef.current = options.onFullResync;
-  }, [options.onEvent, options.onFullResync]);
+    onEventRef.current = onEvent;
+    onFullResyncRef.current = onFullResync;
+  }, [onEvent, onFullResync]);
 
   useEffect(() => {
-    const path = targetPath(options);
-    if (!path || options.enabled === false || typeof window === "undefined") {
+    const path =
+      scope === "run"
+        ? runId
+          ? `/ws/runs/${encodeURIComponent(runId)}/`
+          : null
+        : organizationId
+          ? `/ws/organizations/${encodeURIComponent(organizationId)}/state/`
+          : null;
+    if (!path || enabled === false || typeof window === "undefined") {
       dispatchStatus("idle");
       return;
     }
@@ -120,7 +129,7 @@ export function useStateFeed(options: StateFeedOptions) {
     let reconnectTimer: number | null = null;
     const lastEventIdRef = { current: "" };
     const lastStateVersionRef = {
-      current: Math.max(Math.trunc(options.lastSeenStateVersion ?? 0), 0),
+      current: Math.max(Math.trunc(lastSeenStateVersion ?? 0), 0),
     };
     const eventTypes = eventTypesKey
       .split(",")
@@ -140,8 +149,8 @@ export function useStateFeed(options: StateFeedOptions) {
         const params = new URLSearchParams({
           ticket: ticket.ticket,
         });
-        if (options.scope === "run") {
-          params.set("event_level", options.eventLevel ?? "default");
+        if (scope === "run") {
+          params.set("event_level", eventLevel ?? "default");
         }
         if (eventTypes.length > 0) {
           params.set("event_types", eventTypes.join(","));
@@ -229,15 +238,7 @@ export function useStateFeed(options: StateFeedOptions) {
       }
       socket?.close();
     };
-  }, [
-    eventTypesKey,
-    options.enabled,
-    options.eventLevel,
-    options.lastSeenStateVersion,
-    options.organizationId,
-    options.runId,
-    options.scope,
-  ]);
+  }, [enabled, eventLevel, eventTypesKey, lastSeenStateVersion, organizationId, runId, scope]);
 
   return { status };
 }

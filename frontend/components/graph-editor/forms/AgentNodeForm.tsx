@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
@@ -181,7 +181,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
   const toolsText = serializeToolList(agentConfig.tools);
   const approvalToolsText = serializeToolList(agentConfig.approval_required_tools);
   const observationContextText = serializeToolList(agentConfig.observation_context_paths);
-  const reportErrors = useEffectEvent((nextErrors: Record<string, string>) => setErrors(nextErrors));
+  const reportErrors = useCallback((nextErrors: Record<string, string>) => setErrors(nextErrors), [setErrors]);
 
   const updateAgentConfig = useCallback(
     <K extends keyof AgentFormConfig>(field: K, value: AgentFormConfig[K]) => {
@@ -271,14 +271,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
     }
 
     reportErrors(nextErrors);
-  }, [
-    agentConfig.approval_required_tools,
-    agentConfig.instructions,
-    agentConfig.max_steps,
-    agentConfig.max_tool_calls,
-    agentConfig.model,
-    agentConfig.tools,
-  ]);
+  }, [agentConfig.approval_required_tools, agentConfig.instructions, agentConfig.max_steps, agentConfig.max_tool_calls, agentConfig.model, agentConfig.tools, reportErrors]);
 
   const provider = agentConfig.provider || "openai";
   const filteredCredentials = useMemo(

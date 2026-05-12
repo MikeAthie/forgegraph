@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -262,7 +262,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     httpFormReducer,
     initialHttpFormState,
   );
-  const reportErrors = useEffectEvent((nextErrors: Record<string, string>) => setErrors(nextErrors));
+  const reportErrors = useCallback((nextErrors: Record<string, string>) => setErrors(nextErrors), [setErrors]);
   const effectiveMethod = httpConfig.method ?? "GET";
   const configuredCredential = useMemo(
     () => credentials.find((item) => item.id === httpConfig.credential_id),
@@ -334,7 +334,7 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     }
 
     reportErrors(newErrors);
-  }, [httpConfig.url, httpConfig.body, shouldValidateJsonBody]);
+  }, [httpConfig.url, httpConfig.body, shouldValidateJsonBody, reportErrors]);
 
   useEffect(() => {
     if (provider !== "twilio") return;

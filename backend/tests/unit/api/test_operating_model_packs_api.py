@@ -10,6 +10,8 @@ from infrastructure.orm.models import (
     AssertionRecord,
     Asset,
     AssetDependency,
+    CompanyAccessPolicy,
+    CompanyAssignment,
     CompanyOperatingModelInstallation,
     CompanySignal,
     EvaluationProfile,
@@ -18,6 +20,9 @@ from infrastructure.orm.models import (
     GraphVersion,
     MetricSnapshot,
     OperatingModelPackRelease,
+    OrganizationMembership,
+    PackInstallationConfigRevision,
+    PackNamespaceClaim,
     PeriodicReviewDefinition,
     PolicyEvaluation,
     PolicyPack,
@@ -26,6 +31,7 @@ from infrastructure.orm.models import (
     Run,
     StateProjection,
     ToolExecution,
+    User,
     ValidationDecision,
 )
 
@@ -162,6 +168,217 @@ def test_install_pack_creates_company_scoped_generic_records_idempotently(
     assert PolicyPack.objects.filter(
         company=company, policy_pack_id="dmp.side_effect_governance"
     ).exists()
+
+
+def test_generic_company_pack_api_installs_details_objects_updates_and_archives(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    installed = authenticated_client.post(
+        f"/api/companies/{company.id}/packs/install",
+        data={
+            "pack_id": "digital_marketing_pro.v1",
+            "role": "primary",
+            "config": {"skip_graph_version": True, "selected_services": ["SEO"]},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="generic-install-dmp",
+    )
+
+    assert installed.status_code == 201
+    installation = installed.json()["data"]["installation"]
+    assert installation["pack_id"] == "digital_marketing_pro.v1"
+    assert installation["role"] == "primary"
+    assert installation["namespace"] == "digital_marketing_pro.v1"
+    assert installation["config_revision_count"] == 1
+    assert installation["namespace_claim_count"] > 0
+    assert PackInstallationConfigRevision.objects.filter(
+        installation_id=installation["id"]
+    ).count() == 1
+    assert PackNamespaceClaim.objects.filter(
+        company=company,
+        status="active",
+        namespaced_id__startswith="digital_marketing_pro.v1.",
+    ).exists()
+
+    listed = authenticated_client.get(f"/api/companies/{company.id}/packs")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["data"]["packs"]] == [installation["id"]]
+
+    detail = authenticated_client.get(
+        f"/api/companies/{company.id}/packs/{installation['id']}"
+    )
+    assert detail.status_code == 200
+    assert detail.json()["data"]["installation"]["config_revisions"][0]["version"] == 1
+
+    objects = authenticated_client.get(
+        f"/api/companies/{company.id}/packs/{installation['id']}/objects"
+    )
+    assert objects.status_code == 200
+    assert any(
+        item["namespaced_id"] == "digital_marketing_pro.v1.dmp.engagement"
+        for item in objects.json()["data"]["objects"]
+    )
+
+    patched = authenticated_client.patch(
+        f"/api/companies/{company.id}/packs/{installation['id']}",
+        data={"config": {"selected_services": ["SEO", "Reporting"]}},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="generic-update-dmp",
+    )
+    assert patched.status_code == 200
+    assert patched.json()["data"]["installation"]["config_revision_count"] == 2
+
+    archived = authenticated_client.post(
+        f"/api/companies/{company.id}/packs/{installation['id']}/archive",
+        data={"reason": "test archive"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="generic-archive-dmp",
+    )
+    assert archived.status_code == 200
+    assert archived.json()["data"]["installation"]["status"] == "archived"
+    assert not PackNamespaceClaim.objects.filter(
+        company=company,
+        status="active",
+        installation_id=installation["id"],
+    ).exists()
+
+
+def test_generic_company_pack_api_enforces_single_active_primary_pack(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    first = authenticated_client.post(
+        f"/api/companies/{company.id}/packs/install",
+        data={
+            "pack_id": "digital_marketing_pro.v1",
+            "role": "primary",
+            "config": {"skip_graph_version": True},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="primary-dmp",
+    )
+    conflicting = authenticated_client.post(
+        f"/api/companies/{company.id}/packs/install",
+        data={
+            "pack_id": "legal_ops_demo.v1",
+            "role": "primary",
+            "config": {"skip_graph_version": True},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="primary-legal-conflict",
+    )
+    addon = authenticated_client.post(
+        f"/api/companies/{company.id}/packs/install",
+        data={
+            "pack_id": "legal_ops_demo.v1",
+            "role": "addon",
+            "config": {"skip_graph_version": True},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="addon-legal",
+    )
+
+    assert first.status_code == 201
+    assert conflicting.status_code == 409
+    assert conflicting.json()["error"]["code"] == "PRIMARY_PACK_CONFLICT"
+    assert addon.status_code == 201
+    assert addon.json()["data"]["installation"]["role"] == "addon"
+
+
+def test_generic_company_pack_api_blocks_namespace_collision(authenticated_client, user):
+    company = _company(user)
+    release = OperatingModelPackRelease.objects.create(
+        pack_id="conflict_pack.v1",
+        base_pack_id="conflict_pack",
+        version="0.1.0",
+        display_name="Conflict Pack",
+        checksum="conflict",
+        manifest_json={},
+        files_json={},
+    )
+    installation = CompanyOperatingModelInstallation.objects.create(
+        organization=company.organization,
+        company=company,
+        pack_release=release,
+        pack_id="conflict_pack.v1",
+        base_pack_id="conflict_pack",
+        role="addon",
+        namespace="conflict_pack.v1",
+        status="active",
+        installed_by=user,
+    )
+    PackNamespaceClaim.objects.create(
+        organization=company.organization,
+        company=company,
+        installation=installation,
+        pack_id="conflict_pack.v1",
+        object_type="program_template",
+        object_id="dmp.engagement",
+        namespaced_id="digital_marketing_pro.v1.dmp.engagement",
+        status="active",
+    )
+
+    response = authenticated_client.post(
+        f"/api/companies/{company.id}/packs/install",
+        data={
+            "pack_id": "digital_marketing_pro.v1",
+            "role": "primary",
+            "config": {"skip_graph_version": True},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="namespace-conflict",
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PACK_NAMESPACE_CONFLICT"
+    assert not CompanyOperatingModelInstallation.objects.filter(
+        company=company,
+        pack_id="digital_marketing_pro.v1",
+    ).exists()
+
+
+def test_company_pack_api_respects_restricted_company_assignments(api_client, user):
+    allowed_company = _company(user, name="Assigned Company")
+    restricted_company = _company(user, name="Restricted Company")
+    member = User.objects.create_user(email="company-member@example.com", password="pw123456")
+    member.default_organization = user.default_organization
+    member.save(update_fields=["default_organization"])
+    OrganizationMembership.objects.create(
+        user=member,
+        organization=user.default_organization,
+        role="member",
+    )
+    CompanyAccessPolicy.objects.create(
+        organization=user.default_organization,
+        company=allowed_company,
+        assignment_required=True,
+        org_admin_access_enabled=False,
+    )
+    CompanyAccessPolicy.objects.create(
+        organization=user.default_organization,
+        company=restricted_company,
+        assignment_required=True,
+        org_admin_access_enabled=False,
+    )
+    CompanyAssignment.objects.create(
+        organization=user.default_organization,
+        company=allowed_company,
+        user=member,
+        role="admin",
+        created_by=user,
+    )
+    api_client.force_authenticate(user=member)
+
+    allowed = api_client.get(f"/api/companies/{allowed_company.id}/packs")
+    restricted = api_client.get(f"/api/companies/{restricted_company.id}/packs")
+
+    assert allowed.status_code == 200
+    assert restricted.status_code == 404
 
 
 def test_dmp_pack_flow_uses_generic_program_assertion_artifact_evaluation_policy_and_rework(

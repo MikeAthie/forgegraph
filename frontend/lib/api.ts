@@ -181,6 +181,15 @@ const API_PATHS = {
     pack: (packId: string) => `/api/operating-model-packs/${packId}`,
     compilePack: (packId: string) => `/api/operating-model-packs/${packId}/compile`,
     companyOperatingModel: (companyId: string) => `/api/companies/${companyId}/operating-model`,
+    companyPacks: (companyId: string) => `/api/companies/${companyId}/packs`,
+    companyPackInstall: (companyId: string) => `/api/companies/${companyId}/packs/install`,
+    companyPack: (companyId: string, installationId: string) => `/api/companies/${companyId}/packs/${installationId}`,
+    companyPackUpgrade: (companyId: string, installationId: string) =>
+      `/api/companies/${companyId}/packs/${installationId}/upgrade`,
+    companyPackArchive: (companyId: string, installationId: string) =>
+      `/api/companies/${companyId}/packs/${installationId}/archive`,
+    companyPackObjects: (companyId: string, installationId: string) =>
+      `/api/companies/${companyId}/packs/${installationId}/objects`,
     installPack: (companyId: string, packId: string) =>
       `/api/companies/${companyId}/operating-model/packs/${packId}/install`,
     upgradePack: (companyId: string, packId: string) =>
@@ -216,6 +225,15 @@ const API_PATHS = {
   companyBlueprints: {
     compile: "/api/company-blueprints/compile",
     createCompany: "/api/companies/from-blueprint",
+  },
+  portfolio: {
+    portfolios: "/api/portfolios",
+    portfolioViews: "/api/portfolio-views",
+    health: "/api/portfolio-health",
+    crossCompanyQueues: "/api/cross-company-queues",
+    credentialHealth: "/api/credential-health",
+    companyAssignments: "/api/company-assignments",
+    companyAssignment: (assignmentId: string) => `/api/company-assignments/${assignmentId}`,
   },
   storefront: {
     products: (companySlug: string) => `/api/storefront/${companySlug}/products`,
@@ -2392,14 +2410,7 @@ export const onboardingApi = {
 
 type PMAction = "EXECUTE" | "ASK_CLARIFICATION" | "ASSUME_AND_CONTINUE" | "BLOCK";
 
-type InteractionEventType =
-  | "CREATE"
-  | "MODIFY"
-  | "CLARIFY"
-  | "CONSTRAINT"
-  | "PRIORITY_SHIFT"
-  | "APPROVE"
-  | "OVERRIDE";
+type InteractionEventType = "CREATE" | "MODIFY" | "CLARIFY" | "CONSTRAINT" | "PRIORITY_SHIFT" | "APPROVE" | "OVERRIDE";
 
 type PriorityFrame = {
   speed: number;
@@ -4205,15 +4216,74 @@ export type OperatingModelInstallation = {
   id: string;
   company_id: string;
   pack_id: string;
+  base_pack_id?: string;
+  role?: "primary" | "addon" | string;
+  namespace?: string;
   status: string;
   display_name: string;
   version: string;
   checksum: string;
   company_type_label?: string | null;
   config: Record<string, unknown>;
+  public_config?: Record<string, unknown>;
   dashboard: Record<string, unknown>;
+  active_since?: string | null;
+  archived_at?: string | null;
+  config_revision_count?: number;
+  namespace_claim_count?: number;
   installed_at: string;
   updated_at: string;
+};
+
+type PackInstallationConfigRevisionDTO = {
+  id: string;
+  installation_id: string;
+  version: number;
+  public_config: Record<string, unknown>;
+  change_reason: string;
+  created_by_id: string | null;
+  created_at: string;
+};
+
+type PackNamespaceClaimDTO = {
+  id: string;
+  installation_id: string;
+  company_id: string;
+  pack_id: string;
+  object_type: string;
+  object_id: string;
+  namespaced_id: string;
+  status: string;
+  source_checksum: string;
+};
+
+type OperatingModelInstallationDetail = OperatingModelInstallation & {
+  config_revisions: PackInstallationConfigRevisionDTO[];
+  namespace_claims: PackNamespaceClaimDTO[];
+};
+
+type CompanyPackObjectsDTO = {
+  objects: PackNamespaceClaimDTO[];
+  config_revisions: PackInstallationConfigRevisionDTO[];
+};
+
+type CompanyPackInstallInput = {
+  pack_id: string;
+  release_id?: string | null;
+  role?: "primary" | "addon";
+  config?: Record<string, unknown>;
+  secret_bindings?: Record<string, unknown>;
+};
+
+type CompanyPackPatchInput = {
+  role?: "primary" | "addon";
+  status?: string;
+  config?: Record<string, unknown>;
+};
+
+type CompanyPackUpgradeInput = {
+  target_release_id?: string | null;
+  config_overrides?: Record<string, unknown>;
 };
 
 export type CompanyProgramDTO = {
@@ -4534,6 +4604,134 @@ export type CompanyOperatingModelDTO = {
   }>;
 };
 
+type PortfolioHealthStatus = "healthy" | "attention" | "blocked" | string;
+
+type PortfolioHealthSummary = {
+  total_companies: number;
+  healthy: number;
+  attention: number;
+  blocked: number;
+  active_operations: number;
+  pending_approvals: number;
+  metric_gaps: number;
+  credential_blockers: number;
+};
+
+type PortfolioHealthCompany = {
+  company_id: string;
+  company_name: string;
+  company_description: string;
+  health_status: PortfolioHealthStatus;
+  health_score: number;
+  primary_pack: {
+    installation_id: string;
+    pack_id: string;
+    namespace: string;
+    release_version: string;
+  } | null;
+  pack_counts: {
+    active: number;
+    primary: number;
+    addon: number;
+    disabled: number;
+    archived: number;
+  };
+  active_operations_count: number;
+  failed_operations_count: number;
+  pending_approval_count: number;
+  pending_decision_count: number;
+  pending_task_count: number;
+  enabled_review_count: number;
+  report_run_count: number;
+  metric_gap_count: number;
+  signal_summary: {
+    total: number;
+    new: number;
+    qualified: number;
+    latest_at: string | null;
+  };
+  credential_health: CredentialHealthCompany;
+  latest_report: {
+    report_run_id: string;
+    report_template_id: string;
+    period_start: string;
+    period_end: string;
+    created_at: string;
+  } | null;
+  updated_at: string;
+};
+
+export type PortfolioHealth = {
+  organization_id: string;
+  source: "computed" | string;
+  generated_at: string;
+  summary: PortfolioHealthSummary;
+  companies: PortfolioHealthCompany[];
+};
+
+export type CrossCompanyQueueType = "all" | "reviews" | "approvals" | "metric_gaps" | "credentials" | "tasks";
+
+type CrossCompanyQueueItem = {
+  queue_type: string;
+  company_id: string;
+  company_name: string;
+  [key: string]: unknown;
+};
+
+export type CrossCompanyQueues = {
+  type: CrossCompanyQueueType;
+  source: "computed" | string;
+  generated_at: string;
+  counts: Record<string, number>;
+  queues: Record<string, CrossCompanyQueueItem[]>;
+};
+
+type CredentialHealthCompany = {
+  company_id: string;
+  status: string;
+  scope: string;
+  healthy_count: number;
+  expired_count: number;
+  revoked_count: number;
+  provider_counts: Record<string, number>;
+};
+
+export type CredentialHealth = {
+  source: "computed" | string;
+  generated_at: string;
+  scope: string;
+  companies: CredentialHealthCompany[];
+};
+
+export type CompanyAssignmentDTO = {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  company_name: string;
+  user_id: string;
+  email: string;
+  role: "admin" | "member" | "viewer" | string;
+  status: "active" | "inactive" | string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompanyAssignmentInput = {
+  company_id: string;
+  user_id?: string;
+  email?: string;
+  role: "admin" | "member" | "viewer";
+  status?: "active" | "inactive";
+  expires_at?: string | null;
+};
+
+export type CompanyAssignmentPatchInput = {
+  role?: "admin" | "member" | "viewer";
+  status?: "active" | "inactive";
+  expires_at?: string | null;
+};
+
 export type CompanyBlueprintInput = {
   company_name: string;
   objective: string;
@@ -4582,6 +4780,59 @@ export const companyBlueprintsApi = {
   },
 };
 
+export const portfolioApi = {
+  listPortfolios: async (): Promise<Array<Record<string, unknown>>> => {
+    const response = await api.get<ApiSuccessResponse<{ portfolios: Array<Record<string, unknown>> }>>(
+      API_PATHS.portfolio.portfolios,
+    );
+    return response.data.data.portfolios;
+  },
+  listPortfolioViews: async (): Promise<Array<Record<string, unknown>>> => {
+    const response = await api.get<ApiSuccessResponse<{ views: Array<Record<string, unknown>> }>>(
+      API_PATHS.portfolio.portfolioViews,
+    );
+    return response.data.data.views;
+  },
+  getHealth: async (): Promise<PortfolioHealth> => {
+    const response = await api.get<ApiSuccessResponse<PortfolioHealth>>(API_PATHS.portfolio.health);
+    return response.data.data;
+  },
+  getCrossCompanyQueues: async (type: CrossCompanyQueueType = "all"): Promise<CrossCompanyQueues> => {
+    const response = await api.get<ApiSuccessResponse<CrossCompanyQueues>>(API_PATHS.portfolio.crossCompanyQueues, {
+      params: { type },
+    });
+    return response.data.data;
+  },
+  getCredentialHealth: async (): Promise<CredentialHealth> => {
+    const response = await api.get<ApiSuccessResponse<CredentialHealth>>(API_PATHS.portfolio.credentialHealth);
+    return response.data.data;
+  },
+  listCompanyAssignments: async (companyId?: string): Promise<CompanyAssignmentDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ assignments: CompanyAssignmentDTO[] }>>(
+      API_PATHS.portfolio.companyAssignments,
+      { params: companyId ? { company_id: companyId } : undefined },
+    );
+    return response.data.data.assignments;
+  },
+  createCompanyAssignment: async (input: CompanyAssignmentInput): Promise<CompanyAssignmentDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ assignment: CompanyAssignmentDTO }>>(
+      API_PATHS.portfolio.companyAssignments,
+      input,
+    );
+    return response.data.data.assignment;
+  },
+  patchCompanyAssignment: async (
+    assignmentId: string,
+    input: CompanyAssignmentPatchInput,
+  ): Promise<CompanyAssignmentDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ assignment: CompanyAssignmentDTO }>>(
+      API_PATHS.portfolio.companyAssignment(assignmentId),
+      input,
+    );
+    return response.data.data.assignment;
+  },
+};
+
 export const operatingModelsApi = {
   listPacks: async (): Promise<OperatingModelPack[]> => {
     const response = await api.get<ApiSuccessResponse<{ packs: OperatingModelPack[] }>>(
@@ -4607,6 +4858,75 @@ export const operatingModelsApi = {
       API_PATHS.operatingModels.companyOperatingModel(companyId),
     );
     return response.data.data.operating_model;
+  },
+  listCompanyPacks: async (companyId: string): Promise<OperatingModelInstallation[]> => {
+    const response = await api.get<ApiSuccessResponse<{ packs: OperatingModelInstallation[] }>>(
+      API_PATHS.operatingModels.companyPacks(companyId),
+    );
+    return response.data.data.packs;
+  },
+  installCompanyPack: async (
+    companyId: string,
+    input: CompanyPackInstallInput,
+    options?: IdempotencyOptions,
+  ): Promise<OperatingModelInstallation> => {
+    const response = await api.post<ApiSuccessResponse<{ installation: OperatingModelInstallation }>>(
+      API_PATHS.operatingModels.companyPackInstall(companyId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.installation;
+  },
+  getCompanyPack: async (companyId: string, installationId: string): Promise<OperatingModelInstallationDetail> => {
+    const response = await api.get<ApiSuccessResponse<{ installation: OperatingModelInstallationDetail }>>(
+      API_PATHS.operatingModels.companyPack(companyId, installationId),
+    );
+    return response.data.data.installation;
+  },
+  patchCompanyPack: async (
+    companyId: string,
+    installationId: string,
+    input: CompanyPackPatchInput,
+    options?: IdempotencyOptions,
+  ): Promise<OperatingModelInstallation> => {
+    const response = await api.patch<ApiSuccessResponse<{ installation: OperatingModelInstallation }>>(
+      API_PATHS.operatingModels.companyPack(companyId, installationId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.installation;
+  },
+  upgradeCompanyPack: async (
+    companyId: string,
+    installationId: string,
+    input: CompanyPackUpgradeInput = {},
+    options?: IdempotencyOptions,
+  ): Promise<OperatingModelInstallation> => {
+    const response = await api.post<ApiSuccessResponse<{ installation: OperatingModelInstallation }>>(
+      API_PATHS.operatingModels.companyPackUpgrade(companyId, installationId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.installation;
+  },
+  archiveCompanyPack: async (
+    companyId: string,
+    installationId: string,
+    input: { reason?: string } = {},
+    options?: IdempotencyOptions,
+  ): Promise<OperatingModelInstallation> => {
+    const response = await api.post<ApiSuccessResponse<{ installation: OperatingModelInstallation }>>(
+      API_PATHS.operatingModels.companyPackArchive(companyId, installationId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.installation;
+  },
+  listCompanyPackObjects: async (companyId: string, installationId: string): Promise<CompanyPackObjectsDTO> => {
+    const response = await api.get<ApiSuccessResponse<CompanyPackObjectsDTO>>(
+      API_PATHS.operatingModels.companyPackObjects(companyId, installationId),
+    );
+    return response.data.data;
   },
   installPack: async (
     companyId: string,

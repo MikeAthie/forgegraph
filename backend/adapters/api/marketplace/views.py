@@ -545,7 +545,12 @@ class MarketplaceRuntimeManifestView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        payload = build_runtime_manifest_payload(tenant_id, settings.FORGEGRAPH_RUNTIME_MODE)
+        company_id = (request.query_params.get("company_id") or "").strip() or None
+        payload = build_runtime_manifest_payload(
+            tenant_id,
+            settings.FORGEGRAPH_RUNTIME_MODE,
+            company_id=company_id,
+        )
         checksum = str(payload["checksum"])
         if_none_match = (request.headers.get("If-None-Match") or "").strip().strip('"')
         if if_none_match == checksum:
@@ -585,6 +590,11 @@ class MarketplaceRuntimeManifestPreviewView(APIView):
                 }
             )
 
+        company_id = (request.query_params.get("company_id") or "").strip() or None
         return success_response(
-            build_runtime_manifest_payload(org.id, settings.FORGEGRAPH_RUNTIME_MODE)
+            build_runtime_manifest_payload(
+                org.id,
+                settings.FORGEGRAPH_RUNTIME_MODE,
+                company_id=company_id,
+            )
         )
