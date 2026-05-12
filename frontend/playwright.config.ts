@@ -208,7 +208,7 @@ export default defineConfig({
     ...(useLlmMockServer
       ? [
           {
-            command: `node scripts/playwright-openai-mock.mjs`,
+            command: "npm run playwright:openai-mock",
             url: `${llmMockUrl}/health`,
             timeout: webServerTimeout,
             reuseExistingServer,

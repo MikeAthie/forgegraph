@@ -23,6 +23,7 @@ from adapters.api.company_ops.serializers import (
     PublicationDraftCreateSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.company_ops import (
     CompanyOpsError,
     company_opportunity_payload,
@@ -49,7 +50,6 @@ from application.services.processed_commands import (
     record_processed_command,
     replay_processed_command,
 )
-from application.services.rbac import has_min_role
 from infrastructure.orm.models import (
     CommerceProcurementDraft,
     CompanyOperationObjective,
@@ -582,11 +582,14 @@ def _company_from_query(request: Request, *, minimum_role: str) -> Graph | Respo
 def _company_from_body(request: Request, company_id: Any, *, minimum_role: str) -> Graph | Response:
     user = cast(User, request.user)
     company = (
-        Graph.objects.for_user(user).filter(id=company_id).select_related("organization").first()
+        accessible_company_queryset(user, minimum_role=minimum_role)
+        .filter(id=company_id)
+        .select_related("organization")
+        .first()
     )
     if company is None:
         return _not_found("Company was not found or you do not have access to it.")
-    if not has_min_role(user, minimum_role, organization_id=str(company.organization_id)):
+    if not has_company_access(user, company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use company operations.")
     return cast(Graph, company)
 
@@ -597,12 +600,12 @@ def _signal_for_user(
     user = cast(User, request.user)
     signal = (
         CompanySignal.objects.select_related("company", "company__organization")
-        .filter(id=signal_id, company__in=Graph.objects.for_user(user))
+        .filter(id=signal_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role))
         .first()
     )
     if signal is None:
         return _not_found("Company signal was not found.")
-    if not has_min_role(user, minimum_role, organization_id=str(signal.company.organization_id)):
+    if not has_company_access(user, signal.company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use this company signal.")
     return signal
 
@@ -613,14 +616,15 @@ def _opportunity_for_user(
     user = cast(User, request.user)
     opportunity = (
         CompanyOpportunity.objects.select_related("company", "company__organization")
-        .filter(id=opportunity_id, company__in=Graph.objects.for_user(user))
+        .filter(
+            id=opportunity_id,
+            company__in=accessible_company_queryset(user, minimum_role=minimum_role),
+        )
         .first()
     )
     if opportunity is None:
         return _not_found("Company opportunity was not found.")
-    if not has_min_role(
-        user, minimum_role, organization_id=str(opportunity.company.organization_id)
-    ):
+    if not has_company_access(user, opportunity.company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use this company opportunity.")
     return opportunity
 
@@ -631,12 +635,12 @@ def _publication_draft_for_user(
     user = cast(User, request.user)
     draft = (
         PublicationDraft.objects.select_related("company", "company__organization")
-        .filter(id=draft_id, company__in=Graph.objects.for_user(user))
+        .filter(id=draft_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role))
         .first()
     )
     if draft is None:
         return _not_found("Publication draft was not found.")
-    if not has_min_role(user, minimum_role, organization_id=str(draft.company.organization_id)):
+    if not has_company_access(user, draft.company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use this publication draft.")
     return draft
 
@@ -647,12 +651,12 @@ def _procurement_draft_for_user(
     user = cast(User, request.user)
     draft = (
         CommerceProcurementDraft.objects.select_related("company", "company__organization")
-        .filter(id=draft_id, company__in=Graph.objects.for_user(user))
+        .filter(id=draft_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role))
         .first()
     )
     if draft is None:
         return _not_found("Procurement draft was not found.")
-    if not has_min_role(user, minimum_role, organization_id=str(draft.company.organization_id)):
+    if not has_company_access(user, draft.company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use this procurement draft.")
     return draft
 
@@ -668,12 +672,15 @@ def _objective_for_user(
             "operation",
             "source_signal",
         )
-        .filter(operation_id=operation_id, company__in=Graph.objects.for_user(user))
+        .filter(
+            operation_id=operation_id,
+            company__in=accessible_company_queryset(user, minimum_role=minimum_role),
+        )
         .first()
     )
     if objective is None:
         return _not_found("Company operation objective was not found.")
-    if not has_min_role(user, minimum_role, organization_id=str(objective.company.organization_id)):
+    if not has_company_access(user, objective.company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to evaluate this company operation.")
     return objective
 

@@ -22,12 +22,21 @@ import type {
 } from "@/lib/api";
 
 export type OperatingModelPackVM = {
+  installationId?: string;
   id: string;
+  basePackId?: string;
   name: string;
   version: string;
   companyTypeLabel: string;
   description: string;
   checksum: string;
+  role?: string;
+  status?: string;
+  namespace?: string;
+  activeSince?: string | null;
+  archivedAt?: string | null;
+  configRevisionCount?: number;
+  namespaceClaimCount?: number;
   programTemplates: ProgramTemplateVM[];
   operationTemplates: OperationTemplateVM[];
   modules: CapabilityModuleVM[];
@@ -367,12 +376,21 @@ export type CompanyOperatingModelVM = {
 export const toOperatingModelPackVM = (
   pack: OperatingModelPack | OperatingModelInstallation,
 ): OperatingModelPackVM => ({
+  installationId: "id" in pack ? pack.id : undefined,
   id: pack.pack_id,
+  basePackId: pack.base_pack_id,
   name: pack.display_name,
   version: pack.version,
   companyTypeLabel: pack.company_type_label ?? "Company",
   description: "description" in pack ? pack.description : "",
   checksum: pack.checksum,
+  role: "role" in pack ? pack.role : undefined,
+  status: "status" in pack ? pack.status : undefined,
+  namespace: "namespace" in pack ? pack.namespace : undefined,
+  activeSince: "active_since" in pack ? pack.active_since : undefined,
+  archivedAt: "archived_at" in pack ? pack.archived_at : undefined,
+  configRevisionCount: "config_revision_count" in pack ? pack.config_revision_count : undefined,
+  namespaceClaimCount: "namespace_claim_count" in pack ? pack.namespace_claim_count : undefined,
   programTemplates: "files" in pack ? programTemplatesFromFiles(pack.files) : [],
   operationTemplates: "files" in pack ? operationTemplatesFromFiles(pack.files) : [],
   modules: "files" in pack ? modulesFromFiles(pack.files) : [],

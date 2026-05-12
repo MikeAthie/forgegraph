@@ -351,13 +351,14 @@ def _normalize_agent_tool_names(raw_value: Any) -> list[str]:
     return normalized
 
 
-def _get_runtime_tool_catalog(owner: User) -> dict[str, Any]:
+def _get_runtime_tool_catalog(owner: User, company_id: UUID | str | None = None) -> dict[str, Any]:
     tenant_id = get_tenant_id_for_user(owner)
     runtime_mode = normalize_runtime_mode(getattr(settings, "FORGEGRAPH_RUNTIME_MODE", "cloud"))
-    payload = build_runtime_manifest_payload(tenant_id, runtime_mode)
+    payload = build_runtime_manifest_payload(tenant_id, runtime_mode, company_id=company_id)
     tools = payload.get("tools")
     return {
         "tenant_id": tenant_id,
+        "company_id": str(payload.get("company_id") or ""),
         "runtime_mode": runtime_mode,
         "manifest_checksum": str(payload.get("checksum") or ""),
         "manifest_version": int(payload.get("manifest_version") or 2),
@@ -367,7 +368,12 @@ def _get_runtime_tool_catalog(owner: User) -> dict[str, Any]:
     }
 
 
-def apply_backend_tool_selection(graph_json: dict[str, Any], owner: User) -> dict[str, Any]:
+def apply_backend_tool_selection(
+    graph_json: dict[str, Any],
+    owner: User,
+    *,
+    company_id: UUID | str | None = None,
+) -> dict[str, Any]:
     """
     Resolve agent/tool node tool references against the backend-owned tenant tool catalog.
 
@@ -377,7 +383,7 @@ def apply_backend_tool_selection(graph_json: dict[str, Any], owner: User) -> dic
     if not isinstance(graph_json, dict):
         return graph_json
 
-    catalog = _get_runtime_tool_catalog(owner)
+    catalog = _get_runtime_tool_catalog(owner, company_id=company_id)
     available_tools = catalog["tools"]
     indexed_tools: dict[str, dict[str, Any]] = {}
     for definition in available_tools:
@@ -483,6 +489,7 @@ def apply_backend_tool_selection(graph_json: dict[str, Any], owner: User) -> dic
         "manifest_version": catalog["manifest_version"],
         "manifest_checksum": catalog["manifest_checksum"],
         "tenant_id": catalog["tenant_id"],
+        "company_id": catalog["company_id"],
         "runtime_mode": catalog["runtime_mode"],
         "tool_catalog_size": len(available_tools),
         "pinned_tools": sorted(
@@ -549,6 +556,7 @@ def prepare_graph_for_engine(
     graph_json: dict[str, Any],
     owner: User,
     *,
+    company_id: UUID | str | None = None,
     traceparent: str | None = None,
     tracestate: str | None = None,
 ) -> dict[str, Any]:
@@ -558,7 +566,7 @@ def prepare_graph_for_engine(
     namespaced = apply_memory_namespace_prefix(expanded, owner.id)
     resolved = resolve_prompt_templates(namespaced, owner)
     credentialized = apply_tool_runtime_credentials(resolved, owner)
-    prepared = apply_backend_tool_selection(credentialized, owner)
+    prepared = apply_backend_tool_selection(credentialized, owner, company_id=company_id)
     metadata_raw = prepared.get("metadata")
     metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
     transformations = [

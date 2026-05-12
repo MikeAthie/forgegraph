@@ -61,6 +61,7 @@ type OperatingModelWorkspaceProps = {
 
 type OperatingModelWorkspaceState = {
   packs: OperatingModelPackVM[];
+  installedPacks: OperatingModelPackVM[];
   model: CompanyOperatingModelVM | null;
   programs: CompanyProgramVM[];
   assertions: AssertionRecordVM[];
@@ -108,6 +109,7 @@ type OperatingModelWorkspaceAction =
 
 const initialOperatingModelWorkspaceState: OperatingModelWorkspaceState = {
   packs: [],
+  installedPacks: [],
   model: null,
   programs: [],
   assertions: [],
@@ -179,10 +181,32 @@ const fallbackAssertionKinds: AssertionKindVM[] = [
 
 function firstInstalledPack(
   packs: OperatingModelPackVM[],
-  model: CompanyOperatingModelVM | null,
+  installedPacks: OperatingModelPackVM[],
 ): OperatingModelPackVM | null {
-  const installedIds = new Set((model?.installedPacks ?? []).map((pack) => pack.id));
-  return packs.find((pack) => installedIds.has(pack.id)) ?? packs[0] ?? null;
+  const installation =
+    installedPacks.find((pack) => pack.status === "active" && pack.role === "primary") ??
+    installedPacks.find((pack) => pack.status === "active") ??
+    installedPacks.find((pack) => pack.status !== "archived") ??
+    null;
+  if (!installation) {
+    return packs[0] ?? null;
+  }
+  const definition = packs.find((pack) => pack.id === installation.id);
+  if (!definition) {
+    return installation;
+  }
+  return {
+    ...definition,
+    installationId: installation.installationId,
+    basePackId: installation.basePackId,
+    role: installation.role,
+    status: installation.status,
+    namespace: installation.namespace,
+    activeSince: installation.activeSince,
+    archivedAt: installation.archivedAt,
+    configRevisionCount: installation.configRevisionCount,
+    namespaceClaimCount: installation.namespaceClaimCount,
+  };
 }
 
 function titleFromTemplate(template: string, companyName: string, fallback: string) {
@@ -207,10 +231,12 @@ function recordValue(value: unknown): Record<string, unknown> {
 }
 
 function stringListValue(value: unknown): string[] {
-  return Array.isArray(value) ? value.flatMap((item) => {
-    const text = String(item);
-    return text ? [text] : [];
-  }) : [];
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const text = String(item);
+        return text ? [text] : [];
+      })
+    : [];
 }
 
 function labelFromSchemaId(value: string) {
@@ -463,27 +489,40 @@ function ServiceHistoryPanel({ projection }: { projection: StateProjectionVM | n
 
 function PackSummary({
   pack,
+  installation,
   installed,
   installing,
   onInstall,
 }: {
   pack: OperatingModelPackVM;
+  installation: OperatingModelPackVM | null;
   installed: boolean;
   installing: boolean;
   onInstall: () => void;
 }) {
+  const namespace = installation?.namespace ?? pack.namespace ?? pack.id;
+  const status = installation?.status ?? (installed ? "active" : "available");
+  const role = installation?.role ?? "available";
   return (
     <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{pack.name}</p>
-            <StatusBadge status={installed ? "active" : "available"} label={installed ? "Installed" : "Available"} />
+            <StatusBadge status={status} label={installed ? status : "Available"} />
+            {installed ? <StatusBadge status={role} label={role} /> : null}
           </div>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{pack.description}</p>
           <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
             {pack.companyTypeLabel} · v{pack.version}
+            {installed ? ` · ${namespace}` : ""}
           </p>
+          {installed ? (
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              {(installation?.namespaceClaimCount ?? 0).toLocaleString()} namespace claims ·{" "}
+              {(installation?.configRevisionCount ?? 0).toLocaleString()} config revisions
+            </p>
+          ) : null}
         </div>
         <Button size="sm" className="rounded-full" onClick={onInstall} disabled={installed || installing}>
           {installing ? <Spinner size="xs" className="mr-2" /> : <PackagePlus className="size-4" />}
@@ -664,13 +703,14 @@ function ProgramTimeline({
   );
 }
 
-export function OperatingModelWorkspace({ companyId, companyName }: OperatingModelWorkspaceProps) {
+function useOperatingModelWorkspaceController({ companyId, companyName }: OperatingModelWorkspaceProps) {
   const [workspaceState, dispatchWorkspaceState] = useReducer(
     operatingModelWorkspaceReducer,
     initialOperatingModelWorkspaceState,
   );
   const {
     packs,
+    installedPacks,
     model,
     programs,
     assertions,
@@ -724,8 +764,7 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
   const setArtifactLineage = (value: SetStateAction<ArtifactLineageVM | null>) => setField("artifactLineage", value);
   const setLaunchedOperation = (value: SetStateAction<ProgramOperationVM | null>) =>
     setField("launchedOperation", value);
-  const setPackageReceipt = (value: SetStateAction<ToolExecutionReceiptVM | null>) =>
-    setField("packageReceipt", value);
+  const setPackageReceipt = (value: SetStateAction<ToolExecutionReceiptVM | null>) => setField("packageReceipt", value);
   const setStageOutput = (value: SetStateAction<StageOutputGenerationVM | null>) => setField("stageOutput", value);
   const setProjections = (value: SetStateAction<StateProjectionVM[]>) => setField("projections", value);
   const setMetricPeriods = (value: SetStateAction<MetricSnapshotVM[]>) => setField("metricPeriods", value);
@@ -748,8 +787,17 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
   const setPolicyBudget = (value: SetStateAction<string>) => setField("policyBudget", value);
   const setRevisionContent = (value: SetStateAction<string>) => setField("revisionContent", value);
 
-  const activePack = useMemo(() => firstInstalledPack(packs, model), [model, packs]);
-  const installedPackIds = useMemo(() => new Set((model?.installedPacks ?? []).map((pack) => pack.id)), [model]);
+  const activePack = useMemo(() => firstInstalledPack(packs, installedPacks), [installedPacks, packs]);
+  const installedPackIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const pack of installedPacks) {
+      if (pack.status !== "archived") {
+        ids.add(pack.id);
+      }
+    }
+    return ids;
+  }, [installedPacks]);
+  const installedPackById = useMemo(() => new Map(installedPacks.map((pack) => [pack.id, pack])), [installedPacks]);
   const selectedProgram = useMemo(
     () => programs.find((program) => program.id === selectedProgramId) ?? programs[0] ?? null,
     [programs, selectedProgramId],
@@ -774,13 +822,15 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
 
     dispatchWorkspaceState({ type: "patch", patch: { loading: true, error: null } });
     try {
-      const [availablePacks, operatingModel, programList, assertionList, artifactList] = await Promise.all([
-        operatingModelRepository.listPacks(),
-        operatingModelRepository.getCompanyOperatingModel(companyId),
-        operatingModelRepository.listPrograms(companyId),
-        operatingModelRepository.listAssertions({ companyId }),
-        operatingModelRepository.listArtifacts({ companyId }),
-      ]);
+      const [availablePacks, installedPackList, operatingModel, programList, assertionList, artifactList] =
+        await Promise.all([
+          operatingModelRepository.listPacks(),
+          operatingModelRepository.listInstalledPacks(companyId),
+          operatingModelRepository.getCompanyOperatingModel(companyId),
+          operatingModelRepository.listPrograms(companyId),
+          operatingModelRepository.listAssertions({ companyId }),
+          operatingModelRepository.listArtifacts({ companyId }),
+        ]);
       const nextSelectedArtifactId =
         selectedArtifactId && artifactList.some((artifact) => artifact.id === selectedArtifactId)
           ? selectedArtifactId
@@ -813,6 +863,7 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
         type: "patch",
         patch: {
           packs: availablePacks,
+          installedPacks: installedPackList,
           model: operatingModel,
           programs: programList,
           assertions: assertionList,
@@ -869,14 +920,18 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
     if (assertionKinds.some((option) => option.kind === assertionKind)) {
       return;
     }
-    setAssertionKind(assertionKinds[0]?.kind ?? "FACT");
+    dispatchWorkspaceState({
+      type: "setField",
+      key: "assertionKind",
+      value: assertionKinds[0]?.kind ?? "FACT",
+    });
   }, [assertionKind, assertionKinds]);
 
   useEffect(() => {
     if (!selectedModuleId || capabilityModules.some((module) => module.id === selectedModuleId)) {
       return;
     }
-    setSelectedModuleId("");
+    dispatchWorkspaceState({ type: "setField", key: "selectedModuleId", value: "" });
   }, [capabilityModules, selectedModuleId]);
 
   const installPack = async (packId: string) => {
@@ -1329,7 +1384,112 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
     }
   };
 
-  if (loading && !model) {
+  const currentProjection = projections[0] ?? null;
+  const serviceHistoryProjection = serviceHistoryProjections[0] ?? null;
+
+  return {
+    companyId,
+    packs,
+    model,
+    programs,
+    assertions,
+    artifacts,
+    periodicReviews,
+    metricPeriods,
+    reportRuns,
+    evaluation,
+    policyEvaluation,
+    validationPacket,
+    reworkPlan,
+    artifactLineage,
+    launchedOperation,
+    packageReceipt,
+    stageOutput,
+    selectedModuleId,
+    selectedProgramId,
+    selectedArtifactId,
+    loading,
+    busyAction,
+    error,
+    programTitle,
+    programObjective,
+    assertionKind,
+    assertionCategory,
+    assertionStatement,
+    assertionSource,
+    artifactType,
+    artifactTitle,
+    artifactContent,
+    evaluationProfileId,
+    evaluationContent,
+    evaluationInputs,
+    metricPeriodInputs,
+    policyActionType,
+    policyBudget,
+    revisionContent,
+    activePack,
+    installedPacks,
+    installedPackById,
+    installedPackIds,
+    selectedProgram,
+    primaryTemplate,
+    assertionKinds,
+    artifactSchemas,
+    evaluationProfiles,
+    policyActions,
+    operationTemplates,
+    capabilityModules,
+    toolPackages,
+    currentProjection,
+    serviceHistoryProjection,
+    refresh,
+    installPack,
+    createProgram,
+    createAssertion,
+    advanceStage,
+    launchStageOperation,
+    generateStageOutputs,
+    validateAssertion,
+    createArtifact,
+    validateArtifact,
+    loadArtifactLineage,
+    createArtifactRevision,
+    loadValidationPacket,
+    createReworkPlan,
+    executeReworkPlan,
+    startEvaluation,
+    createMetricPeriod,
+    startPeriodicReview,
+    launchRecommendedOperation,
+    evaluatePolicy,
+    executeConnectorRehearsal,
+    setSelectedModuleId,
+    setSelectedProgramId,
+    setAssertionKind,
+    setAssertionCategory,
+    setAssertionStatement,
+    setAssertionSource,
+    setArtifactType,
+    setArtifactTitle,
+    setArtifactContent,
+    setEvaluationProfileId,
+    setEvaluationContent,
+    setEvaluationInputs,
+    setMetricPeriodInputs,
+    setPolicyActionType,
+    setPolicyBudget,
+    setRevisionContent,
+    setProgramTitle,
+    setProgramObjective,
+  };
+}
+
+type OperatingModelController = ReturnType<typeof useOperatingModelWorkspaceController>;
+
+export function OperatingModelWorkspace(props: OperatingModelWorkspaceProps) {
+  const controller = useOperatingModelWorkspaceController(props);
+
+  if (controller.loading && !controller.model) {
     return (
       <Panel title="Operating Model" description="Installed packs, programs, state, evaluation, and policy.">
         <div className="flex min-h-[220px] items-center justify-center">
@@ -1339,692 +1499,804 @@ export function OperatingModelWorkspace({ companyId, companyName }: OperatingMod
     );
   }
 
-  const currentProjection = projections[0] ?? null;
-  const serviceHistoryProjection = serviceHistoryProjections[0] ?? null;
+  return <OperatingModelPanel controller={controller} />;
+}
 
+function OperatingModelPanel({ controller }: { controller: OperatingModelController }) {
   return (
     <Panel
       title="Operating Model"
       description="Pack-driven company programs, assertions, artifacts, state, evaluation, and policy."
       className="operating-model-panel"
       action={
-        <Button variant="outline" size="sm" className="rounded-full" onClick={() => void refresh()}>
+        <Button variant="outline" size="sm" className="rounded-full" onClick={() => void controller.refresh()}>
           <RefreshCw className="size-4" />
           Refresh
         </Button>
       }
     >
-      {error ? (
+      {controller.error ? (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{controller.error}</AlertDescription>
         </Alert>
       ) : null}
-
       <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-        <div className="space-y-4">
-          <div>
-            <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-              <BookCheck className="size-4" />
-              <p className="text-sm font-semibold">Packs</p>
-            </div>
-            <div className="mt-3 space-y-3">
-              {packs.length ? (
-                packs.map((pack) => (
-                  <PackSummary
-                    key={pack.id}
-                    pack={pack}
-                    installed={installedPackIds.has(pack.id)}
-                    installing={busyAction === `install:${pack.id}`}
-                    onInstall={() => void installPack(pack.id)}
-                  />
-                ))
-              ) : (
-                <EmptyBlock title="No packs available" description="Installable operating models will appear here." />
-              )}
-            </div>
-          </div>
-
-          {activePack?.dashboardPanels.length ? (
-            <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Views</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {activePack.dashboardPanels.map((panel) => (
-                  <span
-                    key={panel.id}
-                    className="rounded-full border border-zinc-900/10 bg-white/80 px-3 py-1 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
-                  >
-                    {panel.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {activePack ? <PackServiceModelPanel pack={activePack} /> : null}
-
-          {capabilityModules.length ? (
-            <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                  <GitBranch className="size-4" />
-                  <p className="text-sm font-semibold">Capability Modules</p>
-                </div>
-                <StatusBadge status="available" label={`${capabilityModules.length}`} />
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {capabilityModules.slice(0, 8).map((module) => (
-                  <button
-                    key={module.id}
-                    type="button"
-                    onClick={() => setSelectedModuleId(module.id)}
-                    className={`rounded-[1rem] border p-3 text-left transition-colors ${
-                      selectedModuleId === module.id
-                        ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
-                        : "border-zinc-900/8 bg-white/70 text-zinc-700 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-zinc-200"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold">{module.label}</p>
-                    <p className="mt-1 line-clamp-2 text-xs opacity-75">{module.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {operationTemplates.length ? (
-            <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                  <ListChecks className="size-4" />
-                  <p className="text-sm font-semibold">Operation Templates</p>
-                </div>
-                <StatusBadge status="available" label={`${operationTemplates.length}`} />
-              </div>
-              <div className="mt-3 space-y-2">
-                {operationTemplates.slice(0, 6).map((operation) => (
-                  <div
-                    key={operation.id}
-                    className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
-                  >
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{operation.label}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                      {operation.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {toolPackages.length ? (
-            <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                <Wrench className="size-4" />
-                <p className="text-sm font-semibold">Governed Packages</p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {toolPackages.map((tool) => (
-                  <span
-                    key={tool.id}
-                    className="rounded-full border border-zinc-900/10 bg-white/80 px-3 py-1 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
-                  >
-                    {tool.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-5">
-          <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                  <ListChecks className="size-4" />
-                  <p className="text-sm font-semibold">Programs</p>
-                </div>
-                <MicroExplanation className="mt-2">
-                  {primaryTemplate ? `Template: ${primaryTemplate.label}` : "Install a pack to add program templates."}
-                </MicroExplanation>
-              </div>
-              {programs.length ? <StatusBadge status="active" label={`${programs.length} active`} /> : null}
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-              <Input
-                value={programTitle}
-                onChange={(event) => setProgramTitle(event.target.value)}
-                placeholder={primaryTemplate?.label ?? "Program title"}
-              />
-              <Button
-                onClick={() => void createProgram()}
-                disabled={!primaryTemplate || busyAction === "program:create"}
-              >
-                {busyAction === "program:create" ? (
-                  <Spinner size="xs" className="mr-2" />
-                ) : (
-                  <PackagePlus className="size-4" />
-                )}
-                Create
-              </Button>
-            </div>
-            <Textarea
-              className="mt-3"
-              rows={2}
-              value={programObjective}
-              onChange={(event) => setProgramObjective(event.target.value)}
-              placeholder={primaryTemplate?.objectiveTemplate || "Program objective"}
-            />
-
-            <div className="mt-4 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-              <div className="space-y-2">
-                {programs.length ? (
-                  programs.map((program) => (
-                    <button
-                      key={program.id}
-                      type="button"
-                      onClick={() => setSelectedProgramId(program.id)}
-                      className={`w-full rounded-[1rem] border p-3 text-left transition-colors ${
-                        selectedProgram?.id === program.id
-                          ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
-                          : "border-zinc-900/8 bg-white/70 text-zinc-700 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-zinc-200"
-                      }`}
-                    >
-                      <p className="text-sm font-semibold">{program.title}</p>
-                      <p className="mt-1 text-xs opacity-75">{program.label}</p>
-                    </button>
-                  ))
-                ) : (
-                  <EmptyBlock title="No programs yet" description="Create the first program from an installed pack." />
-                )}
-              </div>
-              {selectedProgram ? (
-                <ProgramTimeline
-                  program={selectedProgram}
-                  operationTemplates={operationTemplates}
-                  modules={capabilityModules}
-                  selectedModuleId={selectedModuleId}
-                  busyAction={busyAction}
-                  stageOutput={stageOutput}
-                  onSelectModule={setSelectedModuleId}
-                  onAdvanceStage={(stageId, status) => void advanceStage(stageId, status)}
-                  onLaunchOperation={(stageId, operationTemplateId) =>
-                    void launchStageOperation(stageId, operationTemplateId)
-                  }
-                  onGenerateOutputs={(stageId) => void generateStageOutputs(stageId)}
-                />
-              ) : null}
-            </div>
-            {launchedOperation ? (
-              <div className="mt-4 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{launchedOperation.label}</p>
-                  <StatusBadge status={launchedOperation.status} label={launchedOperation.status} />
-                </div>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  Operation launched for {launchedOperation.stageId ?? "selected stage"}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="grid gap-5 xl:grid-cols-2">
-            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                <ClipboardCheck className="size-4" />
-                <p className="text-sm font-semibold">Assertions</p>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Select
-                  value={assertionKind}
-                  onValueChange={(value) => setAssertionKind(value as AssertionKindVM["kind"])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kind" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assertionKinds.map((kind) => (
-                      <SelectItem key={kind.kind} value={kind.kind}>
-                        {kind.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  value={assertionCategory}
-                  onChange={(event) => setAssertionCategory(event.target.value)}
-                  placeholder={activePack?.assertionCategories[0] ?? "Category"}
-                />
-              </div>
-              <Textarea
-                className="mt-3"
-                rows={3}
-                value={assertionStatement}
-                onChange={(event) => setAssertionStatement(event.target.value)}
-                placeholder="Statement"
-              />
-              <Input
-                className="mt-3"
-                value={assertionSource}
-                onChange={(event) => setAssertionSource(event.target.value)}
-                placeholder="Source"
-              />
-              <Button
-                className="mt-3"
-                onClick={() => void createAssertion()}
-                disabled={busyAction === "assertion:create"}
-              >
-                {busyAction === "assertion:create" ? (
-                  <Spinner size="xs" className="mr-2" />
-                ) : (
-                  <BookCheck className="size-4" />
-                )}
-                Save assertion
-              </Button>
-              <div className="mt-4 space-y-2">
-                {assertions.slice(0, 4).map((assertion) => (
-                  <div
-                    key={assertion.id}
-                    className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusBadge status={assertion.validationStatus} label={assertion.label} />
-                      {assertion.category ? <span className="text-xs text-zinc-500">{assertion.category}</span> : null}
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-zinc-700 dark:text-zinc-200">{assertion.statement}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void validateAssertion(assertion, "ACCEPT")}
-                        disabled={busyAction === `assertion:${assertion.id}:ACCEPT`}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void validateAssertion(assertion, "NEEDS_RESEARCH")}
-                        disabled={busyAction === `assertion:${assertion.id}:NEEDS_RESEARCH`}
-                      >
-                        Research
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void validateAssertion(assertion, "REJECT")}
-                        disabled={busyAction === `assertion:${assertion.id}:REJECT`}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                <FileStack className="size-4" />
-                <p className="text-sm font-semibold">Work Artifacts</p>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Select value={artifactType} onValueChange={setArtifactType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Artifact type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {artifactSchemas.map((schema) => (
-                      <SelectItem key={schema.id} value={schema.id}>
-                        {schema.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  value={artifactTitle}
-                  onChange={(event) => setArtifactTitle(event.target.value)}
-                  placeholder="Title"
-                />
-              </div>
-              <Textarea
-                className="mt-3"
-                rows={4}
-                value={artifactContent}
-                onChange={(event) => setArtifactContent(event.target.value)}
-                placeholder="Draft content"
-              />
-              <Button
-                className="mt-3"
-                onClick={() => void createArtifact()}
-                disabled={busyAction === "artifact:create"}
-              >
-                {busyAction === "artifact:create" ? (
-                  <Spinner size="xs" className="mr-2" />
-                ) : (
-                  <FileStack className="size-4" />
-                )}
-                Save artifact
-              </Button>
-              <Textarea
-                className="mt-3"
-                rows={2}
-                value={revisionContent}
-                onChange={(event) => setRevisionContent(event.target.value)}
-                placeholder="Revision content or requested change"
-              />
-              <Button
-                className="mt-3"
-                variant="outline"
-                onClick={() => void createArtifactRevision()}
-                disabled={!selectedArtifactId || busyAction?.includes(":revision")}
-              >
-                <GitBranch className="size-4" />
-                Add revision
-              </Button>
-              <div className="mt-4 space-y-2">
-                {artifacts.slice(0, 4).map((artifact) => (
-                  <div
-                    key={artifact.id}
-                    className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{artifact.title}</p>
-                      <StatusBadge status={artifact.status} label={`${artifact.revisionCount || 1} rev`} />
-                    </div>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {artifact.artifactType} · {formatDateTime(artifact.updatedAt)}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void loadArtifactLineage(artifact.id)}
-                        disabled={busyAction === `artifact:${artifact.id}:lineage`}
-                      >
-                        Lineage
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void validateArtifact(artifact, "ACCEPT")}
-                        disabled={busyAction === `artifact:${artifact.id}:ACCEPT`}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void validateArtifact(artifact, "EDIT")}
-                        disabled={busyAction === `artifact:${artifact.id}:EDIT`}
-                      >
-                        Edit
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {artifactLineage ? (
-                <div className="mt-4 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {artifactLineage.artifact.title}
-                    </p>
-                    <StatusBadge status="lineage" label={`${artifactLineage.dependencyCount} links`} />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {artifactLineage.artifact.revisions.map((revision) => (
-                      <button
-                        key={revision.id}
-                        type="button"
-                        onClick={() =>
-                          void operatingModelRepository.setCanonicalRevision(artifactLineage.artifact.id, revision.id)
-                        }
-                        className={`rounded-full border px-3 py-1 text-xs ${
-                          revision.isCanonical
-                            ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
-                            : "border-zinc-900/10 bg-white text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
-                        }`}
-                      >
-                        {revision.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                  <RotateCcw className="size-4" />
-                  <p className="text-sm font-semibold">Validation & Rework</p>
-                </div>
-                <MicroExplanation className="mt-2">
-                  Generate a review packet, record decisions, inspect impact, then execute selected rework.
-                </MicroExplanation>
-              </div>
-              {reworkPlan ? <StatusBadge status={reworkPlan.status} label={`${reworkPlan.itemCount} items`} /> : null}
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void loadValidationPacket()}
-                disabled={!selectedProgram || busyAction === "validation:packet"}
-              >
-                <ClipboardCheck className="size-4" />
-                Build packet
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void createReworkPlan()}
-                disabled={!selectedProgram || busyAction === "rework:create"}
-              >
-                <RotateCcw className="size-4" />
-                Plan rework
-              </Button>
-              <Button
-                onClick={() => void executeReworkPlan()}
-                disabled={!reworkPlan || reworkPlan.status === "executed" || busyAction?.includes("rework:")}
-              >
-                Execute rework
-              </Button>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {validationPacket ? (
-                <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Validation packet</p>
-                  <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                    {validationPacket.assertionCount} assertions · {validationPacket.artifactCount} artifacts ·{" "}
-                    {validationPacket.blockingFindingCount} blockers
-                  </p>
-                </div>
-              ) : null}
-              {reworkPlan ? (
-                <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{reworkPlan.triggerSummary}</p>
-                  <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                    Scope {String(reworkPlan.estimatedEffort.scope ?? "n/a")} ·{" "}
-                    {String(reworkPlan.impact.impacted_stages ?? "[]")}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <PeriodicReviewsPanel
-            reviews={periodicReviews}
-            metricPeriods={metricPeriods}
-            reportRuns={reportRuns}
-            onStart={(review, metricPeriod) => void startPeriodicReview(review, metricPeriod)}
-          />
-
-          <div className="grid gap-5 xl:grid-cols-3">
-            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8 xl:col-span-1">
-              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                <BookCheck className="size-4" />
-                <p className="text-sm font-semibold">{currentProjection?.label ?? "Current State"}</p>
-              </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-700 dark:text-zinc-200">
-                {currentProjection?.markdownSummary || compactJson(currentProjection?.state ?? {})}
-              </p>
-            </div>
-
-            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                <ClipboardCheck className="size-4" />
-                <p className="text-sm font-semibold">Evaluation</p>
-              </div>
-              <Select value={evaluationProfileId} onValueChange={setEvaluationProfileId}>
-                <SelectTrigger className="mt-3">
-                  <SelectValue placeholder="Profile" />
-                </SelectTrigger>
-                <SelectContent>
-                  {evaluationProfiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Textarea
-                className="mt-3"
-                rows={3}
-                value={evaluationContent}
-                onChange={(event) => setEvaluationContent(event.target.value)}
-                placeholder="Content to evaluate"
-              />
-              <Textarea
-                className="mt-3"
-                rows={3}
-                value={evaluationInputs}
-                onChange={(event) => setEvaluationInputs(event.target.value)}
-                placeholder='Structured inputs JSON, for example {"metrics":{"roas":3.5}}'
-              />
-              <Textarea
-                className="mt-3"
-                rows={3}
-                value={metricPeriodInputs}
-                onChange={(event) => setMetricPeriodInputs(event.target.value)}
-                placeholder='Metric period JSON, for example {"roas":3.5,"email_open_rate":20}'
-              />
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button onClick={() => void startEvaluation()} disabled={busyAction === "evaluation:evaluate"}>
-                  {busyAction === "evaluation:evaluate" ? (
-                    <Spinner size="xs" className="mr-2" />
-                  ) : (
-                    <ClipboardCheck className="size-4" />
-                  )}
-                  Evaluate
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void createMetricPeriod()}
-                  disabled={busyAction === "metric-period:create"}
-                >
-                  {busyAction === "metric-period:create" ? (
-                    <Spinner size="xs" className="mr-2" />
-                  ) : (
-                    <CalendarClock className="size-4" />
-                  )}
-                  Save Metrics
-                </Button>
-              </div>
-              {evaluation ? (
-                <div className="mt-3 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                  <StatusBadge status={evaluation.status} label={evaluation.status} />
-                  <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200">
-                    Score {evaluation.score ?? "n/a"} · {evaluation.blockingFindingCount} blocking
-                  </p>
-                </div>
-              ) : null}
-              <ScorecardPanel evaluation={evaluation} />
-              <RecommendedOperationsPanel
-                evaluation={evaluation}
-                operationTemplates={operationTemplates}
-                onLaunch={(operation, reason) => void launchRecommendedOperation(operation, reason)}
-              />
-            </div>
-
-            <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-                <ShieldCheck className="size-4" />
-                <p className="text-sm font-semibold">Policy</p>
-              </div>
-              <Select value={policyActionType} onValueChange={setPolicyActionType}>
-                <SelectTrigger className="mt-3">
-                  <SelectValue placeholder="Action" />
-                </SelectTrigger>
-                <SelectContent>
-                  {policyActions.map((action) => (
-                    <SelectItem key={action.actionType} value={action.actionType}>
-                      {action.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                className="mt-3"
-                value={policyBudget}
-                onChange={(event) => setPolicyBudget(event.target.value)}
-                inputMode="numeric"
-                placeholder="Budget"
-              />
-              <Button
-                className="mt-3"
-                onClick={() => void evaluatePolicy()}
-                disabled={busyAction === "policy:evaluate"}
-              >
-                {busyAction === "policy:evaluate" ? (
-                  <Spinner size="xs" className="mr-2" />
-                ) : (
-                  <ShieldCheck className="size-4" />
-                )}
-                Evaluate
-              </Button>
-              <Button
-                className="mt-3"
-                variant="outline"
-                onClick={() => void executeConnectorRehearsal()}
-                disabled={!launchedOperation || busyAction === "connector:rehearsal"}
-              >
-                <Wrench className="size-4" />
-                Rehearse package
-              </Button>
-              {policyEvaluation ? (
-                <div className="mt-3 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                  <StatusBadge status={policyEvaluation.status} label={policyEvaluation.riskLevel} />
-                  <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200">
-                    {policyEvaluation.actionType} · {policyEvaluation.status.replaceAll("_", " ")}
-                  </p>
-                </div>
-              ) : null}
-              {packageReceipt ? (
-                <div className="mt-3 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
-                  <StatusBadge
-                    status={packageReceipt.status}
-                    label={packageReceipt.dryRun ? "Rehearsal" : packageReceipt.status}
-                  />
-                  <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200">
-                    {packageReceipt.label} · {packageReceipt.sideEffects}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <ServiceHistoryPanel projection={serviceHistoryProjection} />
-        </div>
+        <OperatingModelPackColumn controller={controller} />
+        <OperatingModelWorkColumn controller={controller} />
       </div>
     </Panel>
+  );
+}
+
+function OperatingModelPackColumn({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+          <BookCheck className="size-4" />
+          <p className="text-sm font-semibold">Packs</p>
+        </div>
+        <div className="mt-3 space-y-3">
+          {controller.packs.length ? (
+            controller.packs.map((pack) => (
+              <PackSummary
+                key={pack.id}
+                pack={pack}
+                installation={controller.installedPackById.get(pack.id) ?? null}
+                installed={controller.installedPackIds.has(pack.id)}
+                installing={controller.busyAction === `install:${pack.id}`}
+                onInstall={() => void controller.installPack(pack.id)}
+              />
+            ))
+          ) : (
+            <EmptyBlock title="No packs available" description="Installable operating models will appear here." />
+          )}
+        </div>
+      </div>
+      <PackDashboardPanel controller={controller} />
+      {controller.activePack ? <PackServiceModelPanel pack={controller.activePack} /> : null}
+      <CapabilityModulesPanel controller={controller} />
+      <OperationTemplatesPanel controller={controller} />
+      <ToolPackagesPanel controller={controller} />
+    </div>
+  );
+}
+
+function PackDashboardPanel({ controller }: { controller: OperatingModelController }) {
+  if (!controller.activePack?.dashboardPanels.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Views</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {controller.activePack.dashboardPanels.map((panel) => (
+          <span
+            key={panel.id}
+            className="rounded-full border border-zinc-900/10 bg-white/80 px-3 py-1 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
+          >
+            {panel.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CapabilityModulesPanel({ controller }: { controller: OperatingModelController }) {
+  if (!controller.capabilityModules.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+          <GitBranch className="size-4" />
+          <p className="text-sm font-semibold">Capability Modules</p>
+        </div>
+        <StatusBadge status="available" label={`${controller.capabilityModules.length}`} />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {controller.capabilityModules.slice(0, 8).map((module) => (
+          <button
+            key={module.id}
+            type="button"
+            onClick={() => controller.setSelectedModuleId(module.id)}
+            className={`rounded-[1rem] border p-3 text-left transition-colors ${
+              controller.selectedModuleId === module.id
+                ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                : "border-zinc-900/8 bg-white/70 text-zinc-700 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-zinc-200"
+            }`}
+          >
+            <p className="text-sm font-semibold">{module.label}</p>
+            <p className="mt-1 line-clamp-2 text-xs opacity-75">{module.description}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OperationTemplatesPanel({ controller }: { controller: OperatingModelController }) {
+  if (!controller.operationTemplates.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+          <ListChecks className="size-4" />
+          <p className="text-sm font-semibold">Operation Templates</p>
+        </div>
+        <StatusBadge status="available" label={`${controller.operationTemplates.length}`} />
+      </div>
+      <div className="mt-3 space-y-2">
+        {controller.operationTemplates.slice(0, 6).map((operation) => (
+          <div
+            key={operation.id}
+            className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+          >
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{operation.label}</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              {operation.description}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ToolPackagesPanel({ controller }: { controller: OperatingModelController }) {
+  if (!controller.toolPackages.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+        <Wrench className="size-4" />
+        <p className="text-sm font-semibold">Governed Packages</p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {controller.toolPackages.map((tool) => (
+          <span
+            key={tool.id}
+            className="rounded-full border border-zinc-900/10 bg-white/80 px-3 py-1 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
+          >
+            {tool.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OperatingModelWorkColumn({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="space-y-5">
+      <ProgramsPanel controller={controller} />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <AssertionsPanel controller={controller} />
+        <ArtifactsPanel controller={controller} />
+      </div>
+      <ValidationReworkPanel controller={controller} />
+      <PeriodicReviewsPanel
+        reviews={controller.periodicReviews}
+        metricPeriods={controller.metricPeriods}
+        reportRuns={controller.reportRuns}
+        onStart={(review, metricPeriod) => void controller.startPeriodicReview(review, metricPeriod)}
+      />
+      <div className="grid gap-5 xl:grid-cols-3">
+        <CurrentStatePanel controller={controller} />
+        <EvaluationPanel controller={controller} />
+        <PolicyPanel controller={controller} />
+      </div>
+      <ServiceHistoryPanel projection={controller.serviceHistoryProjection} />
+    </div>
+  );
+}
+
+function ProgramsPanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+            <ListChecks className="size-4" />
+            <p className="text-sm font-semibold">Programs</p>
+          </div>
+          <MicroExplanation className="mt-2">
+            {controller.primaryTemplate
+              ? `Template: ${controller.primaryTemplate.label}`
+              : "Install a pack to add program templates."}
+          </MicroExplanation>
+        </div>
+        {controller.programs.length ? (
+          <StatusBadge status="active" label={`${controller.programs.length} active`} />
+        ) : null}
+      </div>
+      <ProgramCreateForm controller={controller} />
+      <div className="mt-4 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+        <ProgramSelector controller={controller} />
+        {controller.selectedProgram ? (
+          <ProgramTimeline
+            program={controller.selectedProgram}
+            operationTemplates={controller.operationTemplates}
+            modules={controller.capabilityModules}
+            selectedModuleId={controller.selectedModuleId}
+            busyAction={controller.busyAction}
+            stageOutput={controller.stageOutput}
+            onSelectModule={controller.setSelectedModuleId}
+            onAdvanceStage={(stageId, status) => void controller.advanceStage(stageId, status)}
+            onLaunchOperation={(stageId, operationTemplateId) =>
+              void controller.launchStageOperation(stageId, operationTemplateId)
+            }
+            onGenerateOutputs={(stageId) => void controller.generateStageOutputs(stageId)}
+          />
+        ) : null}
+      </div>
+      {controller.launchedOperation ? <LaunchedOperationNotice controller={controller} /> : null}
+    </div>
+  );
+}
+
+function ProgramCreateForm({ controller }: { controller: OperatingModelController }) {
+  return (
+    <>
+      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+        <Input
+          value={controller.programTitle}
+          onChange={(event) => controller.setProgramTitle(event.target.value)}
+          placeholder={controller.primaryTemplate?.label ?? "Program title"}
+        />
+        <Button
+          onClick={() => void controller.createProgram()}
+          disabled={!controller.primaryTemplate || controller.busyAction === "program:create"}
+        >
+          {controller.busyAction === "program:create" ? (
+            <Spinner size="xs" className="mr-2" />
+          ) : (
+            <PackagePlus className="size-4" />
+          )}
+          Create
+        </Button>
+      </div>
+      <Textarea
+        className="mt-3"
+        rows={2}
+        value={controller.programObjective}
+        onChange={(event) => controller.setProgramObjective(event.target.value)}
+        placeholder={controller.primaryTemplate?.objectiveTemplate || "Program objective"}
+      />
+    </>
+  );
+}
+
+function ProgramSelector({ controller }: { controller: OperatingModelController }) {
+  if (!controller.programs.length) {
+    return <EmptyBlock title="No programs yet" description="Create the first program from an installed pack." />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {controller.programs.map((program) => (
+        <button
+          key={program.id}
+          type="button"
+          onClick={() => controller.setSelectedProgramId(program.id)}
+          className={`w-full rounded-[1rem] border p-3 text-left transition-colors ${
+            controller.selectedProgram?.id === program.id
+              ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+              : "border-zinc-900/8 bg-white/70 text-zinc-700 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-zinc-200"
+          }`}
+        >
+          <p className="text-sm font-semibold">{program.title}</p>
+          <p className="mt-1 text-xs opacity-75">{program.label}</p>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LaunchedOperationNotice({ controller }: { controller: OperatingModelController }) {
+  const operation = controller.launchedOperation;
+  if (!operation) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{operation.label}</p>
+        <StatusBadge status={operation.status} label={operation.status} />
+      </div>
+      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        Operation launched for {operation.stageId ?? "selected stage"}
+      </p>
+    </div>
+  );
+}
+
+function AssertionsPanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+        <ClipboardCheck className="size-4" />
+        <p className="text-sm font-semibold">Assertions</p>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Select
+          value={controller.assertionKind}
+          onValueChange={(value) => controller.setAssertionKind(value as AssertionKindVM["kind"])}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Kind" />
+          </SelectTrigger>
+          <SelectContent>
+            {controller.assertionKinds.map((kind) => (
+              <SelectItem key={kind.kind} value={kind.kind}>
+                {kind.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          value={controller.assertionCategory}
+          onChange={(event) => controller.setAssertionCategory(event.target.value)}
+          placeholder={controller.activePack?.assertionCategories[0] ?? "Category"}
+        />
+      </div>
+      <Textarea
+        className="mt-3"
+        rows={3}
+        value={controller.assertionStatement}
+        onChange={(event) => controller.setAssertionStatement(event.target.value)}
+        placeholder="Statement"
+      />
+      <Input
+        className="mt-3"
+        value={controller.assertionSource}
+        onChange={(event) => controller.setAssertionSource(event.target.value)}
+        placeholder="Source"
+      />
+      <Button
+        className="mt-3"
+        onClick={() => void controller.createAssertion()}
+        disabled={controller.busyAction === "assertion:create"}
+      >
+        {controller.busyAction === "assertion:create" ? (
+          <Spinner size="xs" className="mr-2" />
+        ) : (
+          <BookCheck className="size-4" />
+        )}
+        Save assertion
+      </Button>
+      <div className="mt-4 space-y-2">
+        {controller.assertions.slice(0, 4).map((assertion) => (
+          <AssertionCard key={assertion.id} assertion={assertion} controller={controller} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AssertionCard({
+  assertion,
+  controller,
+}: {
+  assertion: AssertionRecordVM;
+  controller: OperatingModelController;
+}) {
+  return (
+    <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={assertion.validationStatus} label={assertion.label} />
+        {assertion.category ? <span className="text-xs text-zinc-500">{assertion.category}</span> : null}
+      </div>
+      <p className="mt-2 text-sm leading-6 text-zinc-700 dark:text-zinc-200">{assertion.statement}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(["ACCEPT", "NEEDS_RESEARCH", "REJECT"] as const).map((decision) => (
+          <Button
+            key={decision}
+            size="sm"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={() => void controller.validateAssertion(assertion, decision)}
+            disabled={controller.busyAction === `assertion:${assertion.id}:${decision}`}
+          >
+            {decision === "NEEDS_RESEARCH" ? "Research" : decision.toLowerCase()}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ArtifactsPanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+        <FileStack className="size-4" />
+        <p className="text-sm font-semibold">Work Artifacts</p>
+      </div>
+      <ArtifactForm controller={controller} />
+      <div className="mt-4 space-y-2">
+        {controller.artifacts.slice(0, 4).map((artifact) => (
+          <ArtifactCard key={artifact.id} artifact={artifact} controller={controller} />
+        ))}
+      </div>
+      <ArtifactLineagePanel controller={controller} />
+    </div>
+  );
+}
+
+function ArtifactForm({ controller }: { controller: OperatingModelController }) {
+  return (
+    <>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Select value={controller.artifactType} onValueChange={controller.setArtifactType}>
+          <SelectTrigger>
+            <SelectValue placeholder="Artifact type" />
+          </SelectTrigger>
+          <SelectContent>
+            {controller.artifactSchemas.map((schema) => (
+              <SelectItem key={schema.id} value={schema.id}>
+                {schema.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          value={controller.artifactTitle}
+          onChange={(event) => controller.setArtifactTitle(event.target.value)}
+          placeholder="Title"
+        />
+      </div>
+      <Textarea
+        className="mt-3"
+        rows={4}
+        value={controller.artifactContent}
+        onChange={(event) => controller.setArtifactContent(event.target.value)}
+        placeholder="Draft content"
+      />
+      <Button
+        className="mt-3"
+        onClick={() => void controller.createArtifact()}
+        disabled={controller.busyAction === "artifact:create"}
+      >
+        {controller.busyAction === "artifact:create" ? (
+          <Spinner size="xs" className="mr-2" />
+        ) : (
+          <FileStack className="size-4" />
+        )}
+        Save artifact
+      </Button>
+      <Textarea
+        className="mt-3"
+        rows={2}
+        value={controller.revisionContent}
+        onChange={(event) => controller.setRevisionContent(event.target.value)}
+        placeholder="Revision content or requested change"
+      />
+      <Button
+        className="mt-3"
+        variant="outline"
+        onClick={() => void controller.createArtifactRevision()}
+        disabled={!controller.selectedArtifactId || controller.busyAction?.includes(":revision")}
+      >
+        <GitBranch className="size-4" />
+        Add revision
+      </Button>
+    </>
+  );
+}
+
+function ArtifactCard({ artifact, controller }: { artifact: WorkArtifactVM; controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{artifact.title}</p>
+        <StatusBadge status={artifact.status} label={`${artifact.revisionCount || 1} rev`} />
+      </div>
+      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        {artifact.artifactType} · {formatDateTime(artifact.updatedAt)}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 rounded-full px-3 text-xs"
+          onClick={() => void controller.loadArtifactLineage(artifact.id)}
+          disabled={controller.busyAction === `artifact:${artifact.id}:lineage`}
+        >
+          Lineage
+        </Button>
+        {(["ACCEPT", "EDIT"] as const).map((decision) => (
+          <Button
+            key={decision}
+            size="sm"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={() => void controller.validateArtifact(artifact, decision)}
+            disabled={controller.busyAction === `artifact:${artifact.id}:${decision}`}
+          >
+            {decision.toLowerCase()}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ArtifactLineagePanel({ controller }: { controller: OperatingModelController }) {
+  if (!controller.artifactLineage) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          {controller.artifactLineage.artifact.title}
+        </p>
+        <StatusBadge status="lineage" label={`${controller.artifactLineage.dependencyCount} links`} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {controller.artifactLineage.artifact.revisions.map((revision) => (
+          <span
+            key={revision.id}
+            className={`rounded-full border px-3 py-1 text-xs ${
+              revision.isCanonical
+                ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                : "border-zinc-900/10 bg-white text-zinc-700 dark:border-white/10 dark:bg-white/6 dark:text-zinc-200"
+            }`}
+          >
+            {revision.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ValidationReworkPanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+            <RotateCcw className="size-4" />
+            <p className="text-sm font-semibold">Validation & Rework</p>
+          </div>
+          <MicroExplanation className="mt-2">
+            Generate a review packet, record decisions, inspect impact, then execute selected rework.
+          </MicroExplanation>
+        </div>
+        {controller.reworkPlan ? (
+          <StatusBadge status={controller.reworkPlan.status} label={`${controller.reworkPlan.itemCount} items`} />
+        ) : null}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          onClick={() => void controller.loadValidationPacket()}
+          disabled={!controller.selectedProgram || controller.busyAction === "validation:packet"}
+        >
+          <ClipboardCheck className="size-4" />
+          Build packet
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => void controller.createReworkPlan()}
+          disabled={!controller.selectedProgram || controller.busyAction === "rework:create"}
+        >
+          <RotateCcw className="size-4" />
+          Plan rework
+        </Button>
+        <Button
+          onClick={() => void controller.executeReworkPlan()}
+          disabled={
+            !controller.reworkPlan ||
+            controller.reworkPlan.status === "executed" ||
+            controller.busyAction?.includes("rework:")
+          }
+        >
+          Execute rework
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {controller.validationPacket ? (
+          <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Validation packet</p>
+            <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              {controller.validationPacket.assertionCount} assertions · {controller.validationPacket.artifactCount}{" "}
+              artifacts · {controller.validationPacket.blockingFindingCount} blockers
+            </p>
+          </div>
+        ) : null}
+        {controller.reworkPlan ? (
+          <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {controller.reworkPlan.triggerSummary}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              Scope {String(controller.reworkPlan.estimatedEffort.scope ?? "n/a")} ·{" "}
+              {String(controller.reworkPlan.impact.impacted_stages ?? "[]")}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CurrentStatePanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8 xl:col-span-1">
+      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+        <BookCheck className="size-4" />
+        <p className="text-sm font-semibold">{controller.currentProjection?.label ?? "Current State"}</p>
+      </div>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-700 dark:text-zinc-200">
+        {controller.currentProjection?.markdownSummary || compactJson(controller.currentProjection?.state ?? {})}
+      </p>
+    </div>
+  );
+}
+
+function EvaluationPanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+        <ClipboardCheck className="size-4" />
+        <p className="text-sm font-semibold">Evaluation</p>
+      </div>
+      <Select value={controller.evaluationProfileId} onValueChange={controller.setEvaluationProfileId}>
+        <SelectTrigger className="mt-3">
+          <SelectValue placeholder="Profile" />
+        </SelectTrigger>
+        <SelectContent>
+          {controller.evaluationProfiles.map((profile) => (
+            <SelectItem key={profile.id} value={profile.id}>
+              {profile.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Textarea
+        className="mt-3"
+        rows={3}
+        value={controller.evaluationContent}
+        onChange={(event) => controller.setEvaluationContent(event.target.value)}
+        placeholder="Content to evaluate"
+      />
+      <Textarea
+        className="mt-3"
+        rows={3}
+        value={controller.evaluationInputs}
+        onChange={(event) => controller.setEvaluationInputs(event.target.value)}
+        placeholder='Structured inputs JSON, for example {"metrics":{"roas":3.5}}'
+      />
+      <Textarea
+        className="mt-3"
+        rows={3}
+        value={controller.metricPeriodInputs}
+        onChange={(event) => controller.setMetricPeriodInputs(event.target.value)}
+        placeholder='Metric period JSON, for example {"roas":3.5,"email_open_rate":20}'
+      />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          onClick={() => void controller.startEvaluation()}
+          disabled={controller.busyAction === "evaluation:evaluate"}
+        >
+          {controller.busyAction === "evaluation:evaluate" ? (
+            <Spinner size="xs" className="mr-2" />
+          ) : (
+            <ClipboardCheck className="size-4" />
+          )}
+          Evaluate
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => void controller.createMetricPeriod()}
+          disabled={controller.busyAction === "metric-period:create"}
+        >
+          {controller.busyAction === "metric-period:create" ? (
+            <Spinner size="xs" className="mr-2" />
+          ) : (
+            <CalendarClock className="size-4" />
+          )}
+          Save Metrics
+        </Button>
+      </div>
+      {controller.evaluation ? (
+        <div className="mt-3 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+          <StatusBadge status={controller.evaluation.status} label={controller.evaluation.status} />
+          <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200">
+            Score {controller.evaluation.score ?? "n/a"} · {controller.evaluation.blockingFindingCount} blocking
+          </p>
+        </div>
+      ) : null}
+      <ScorecardPanel evaluation={controller.evaluation} />
+      <RecommendedOperationsPanel
+        evaluation={controller.evaluation}
+        operationTemplates={controller.operationTemplates}
+        onLaunch={(operation, reason) => void controller.launchRecommendedOperation(operation, reason)}
+      />
+    </div>
+  );
+}
+
+function PolicyPanel({ controller }: { controller: OperatingModelController }) {
+  return (
+    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+      <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+        <ShieldCheck className="size-4" />
+        <p className="text-sm font-semibold">Policy</p>
+      </div>
+      <Select value={controller.policyActionType} onValueChange={controller.setPolicyActionType}>
+        <SelectTrigger className="mt-3">
+          <SelectValue placeholder="Action" />
+        </SelectTrigger>
+        <SelectContent>
+          {controller.policyActions.map((action) => (
+            <SelectItem key={action.actionType} value={action.actionType}>
+              {action.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        className="mt-3"
+        value={controller.policyBudget}
+        onChange={(event) => controller.setPolicyBudget(event.target.value)}
+        inputMode="numeric"
+        placeholder="Budget"
+      />
+      <Button
+        className="mt-3"
+        onClick={() => void controller.evaluatePolicy()}
+        disabled={controller.busyAction === "policy:evaluate"}
+      >
+        {controller.busyAction === "policy:evaluate" ? (
+          <Spinner size="xs" className="mr-2" />
+        ) : (
+          <ShieldCheck className="size-4" />
+        )}
+        Evaluate
+      </Button>
+      <Button
+        className="mt-3"
+        variant="outline"
+        onClick={() => void controller.executeConnectorRehearsal()}
+        disabled={!controller.launchedOperation || controller.busyAction === "connector:rehearsal"}
+      >
+        <Wrench className="size-4" />
+        Rehearse package
+      </Button>
+      {controller.policyEvaluation ? (
+        <div className="mt-3 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+          <StatusBadge status={controller.policyEvaluation.status} label={controller.policyEvaluation.riskLevel} />
+          <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200">
+            {controller.policyEvaluation.actionType} · {controller.policyEvaluation.status.replaceAll("_", " ")}
+          </p>
+        </div>
+      ) : null}
+      {controller.packageReceipt ? (
+        <div className="mt-3 rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+          <StatusBadge
+            status={controller.packageReceipt.status}
+            label={controller.packageReceipt.dryRun ? "Rehearsal" : controller.packageReceipt.status}
+          />
+          <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200">
+            {controller.packageReceipt.label} · {controller.packageReceipt.sideEffects}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }

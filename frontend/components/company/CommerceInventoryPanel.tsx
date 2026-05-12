@@ -152,7 +152,7 @@ function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
   return typeof value === "function" ? (value as (current: T) => T)(current) : value;
 }
 
-export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProps) {
+function useCommerceInventoryController({ companyId }: CommerceInventoryPanelProps) {
   const [panelState, dispatchPanelState] = useReducer(commerceInventoryReducer, initialCommerceInventoryState);
   const {
     overview,
@@ -237,7 +237,7 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
     }
     mediaPreviewUrlRef.current = nextUrls;
     setMediaPreviewUrls(nextUrls);
-  }, []);
+  }, [setMediaPreviewUrls]);
 
   const loadMediaDrafts = useCallback(async () => {
     setMediaLoading(true);
@@ -276,7 +276,7 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
     } finally {
       setMediaLoading(false);
     }
-  }, [companyId, replaceMediaPreviewUrls]);
+  }, [companyId, replaceMediaPreviewUrls, setCredentials, setMediaAssets, setMediaError, setMediaLoading]);
 
   const loadInventory = async () => {
     setLoading(true);
@@ -580,6 +580,72 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
   const recommendedOperations = companyOpsOverview?.recommended_operations ?? [];
   const objectiveContracts = companyOpsOverview?.objective_contracts ?? [];
 
+  const runOrderAction = async (order: CommerceOrder, nextAction: "mark-ready" | "block" | "ship" | "deliver") => {
+    setActionLoading(`${nextAction}:${order.id}`);
+    try {
+      await runFulfillmentAction(order, nextAction);
+      await loadInventory();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Fulfillment action failed.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  return {
+    companyId,
+    overview,
+    commerceOverview,
+    companyOpsOverview,
+    loading,
+    actionLoading,
+    selectedProductId,
+    quantity,
+    buyerAlias,
+    channel,
+    note,
+    error,
+    mediaAssets,
+    mediaPreviewUrls,
+    mediaJobs,
+    mediaPrompt,
+    mediaLoading,
+    mediaActionLoading,
+    mediaError,
+    products,
+    operationalReservations,
+    stockStateSummary,
+    mediaCredential,
+    publicationDraftByAssetId,
+    selectedProduct,
+    recentOrders,
+    recommendedOperations,
+    objectiveContracts,
+    loadMediaDrafts,
+    loadInventory,
+    createHold,
+    runReservationAction,
+    expireDue,
+    launchCompanyOperation,
+    qualifyCompanySignal,
+    requestDraftApproval,
+    generateMediaDraft,
+    createSocialPostDraft,
+    runOrderAction,
+    setSelectedProductId,
+    setQuantity,
+    setBuyerAlias,
+    setChannel,
+    setNote,
+    setMediaPrompt,
+  };
+}
+
+type CommerceInventoryController = ReturnType<typeof useCommerceInventoryController>;
+
+export function CommerceInventoryPanel(props: CommerceInventoryPanelProps) {
+  const controller = useCommerceInventoryController(props);
+
   return (
     <section className="mt-10 space-y-4" data-testid="commerce-inventory-panel">
       <SectionHeader
@@ -587,582 +653,515 @@ export function CommerceInventoryPanel({ companyId }: CommerceInventoryPanelProp
         title="Operations Control Tower"
         description="Backend-owned stock, payments, fulfillment, and operator-visible order state."
       />
-
-      {error ? (
+      {controller.error ? (
         <Alert variant="destructive">
           <AlertTriangle className="size-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{controller.error}</AlertDescription>
         </Alert>
       ) : null}
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <InventoryMetric
-          icon={<PackageOpen className="size-4" />}
-          label="Total"
-          value={overview?.summary.total_units ?? 0}
-        />
-        <InventoryMetric
-          icon={<PackageCheck className="size-4" />}
-          label="Available"
-          value={overview?.summary.available_units ?? 0}
-          tone="emerald"
-        />
-        <InventoryMetric
-          icon={<Clock3 className="size-4" />}
-          label="Held"
-          value={overview?.summary.held_units ?? 0}
-          tone="amber"
-        />
-        <InventoryMetric
-          icon={<AlertTriangle className="size-4" />}
-          label="Low stock"
-          value={stockStateSummary?.low_stock_count ?? overview?.summary.low_stock_products ?? 0}
-          tone="rose"
-        />
-      </div>
-
-      <Panel
-        title="Stock States"
-        description={
-          stockStateSummary?.definition_used ?? "Canonical stock semantics will appear after inventory loads."
-        }
-      >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <InventoryMetric
-            icon={<PackageCheck className="size-4" />}
-            label="Active"
-            value={stockStateSummary?.active_count ?? 0}
-            tone="emerald"
-          />
-          <InventoryMetric
-            icon={<AlertTriangle className="size-4" />}
-            label="Low"
-            value={stockStateSummary?.low_stock_count ?? 0}
-            tone="amber"
-          />
-          <InventoryMetric
-            icon={<Clock3 className="size-4" />}
-            label="Last piece"
-            value={stockStateSummary?.last_piece_count ?? overview?.summary.last_piece_products ?? 0}
-            tone="rose"
-          />
-          <InventoryMetric
-            icon={<PackageOpen className="size-4" />}
-            label="Sold out"
-            value={stockStateSummary?.sold_out_count ?? overview?.summary.sold_out_products ?? 0}
-          />
-        </div>
-      </Panel>
-
-      <Panel
-        title="Media Drafts"
-        description="Turn generated media into approval-gated Instagram/Facebook post packages without publishing externally."
-        action={
-          <Button variant="outline" size="sm" onClick={loadMediaDrafts} disabled={mediaLoading}>
-            {mediaLoading ? <Spinner size="sm" /> : <RotateCcw className="size-4" />}
-            Refresh
-          </Button>
-        }
-      >
-        <div className="grid gap-4 2xl:grid-cols-[0.8fr_1.2fr]" data-testid="media-drafts-panel">
-          <div className="space-y-3 rounded-xl border border-zinc-900/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
-            <div>
-              <Label htmlFor="media-prompt" className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-                Sanitized media prompt
-              </Label>
-              <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                Product and styling context only. Customer, payment, and address details stay out.
-              </p>
-            </div>
-            <Textarea
-              id="media-prompt"
-              data-testid="media-prompt"
-              value={mediaPrompt}
-              onChange={(event) => setMediaPrompt(event.target.value)}
-              rows={5}
-              className="text-sm leading-6"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => void generateMediaDraft("image")}
-                disabled={!mediaCredential || mediaActionLoading !== null}
-                data-testid="generate-media-image-draft"
-              >
-                {mediaActionLoading === "image" ? <Spinner size="sm" /> : <ImageIcon className="size-4" />}
-                Generate image draft
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void generateMediaDraft("video")}
-                disabled={!mediaCredential || mediaCredential.provider !== "google" || mediaActionLoading !== null}
-              >
-                {mediaActionLoading === "video" ? <Spinner size="sm" /> : <Video className="size-4" />}
-                Generate video draft
-              </Button>
-              <StatusBadge
-                status={mediaCredential ? "active" : "paused"}
-                label={
-                  mediaCredential
-                    ? `${mediaCredential.provider === "openrouter" ? "OpenRouter" : "Google"} ready`
-                    : "OpenRouter or Google credential required"
-                }
-              />
-            </div>
-            {mediaJobs.length ? (
-              <div className="grid gap-2">
-                {mediaJobs.map((job) => (
-                  <div
-                    key={job.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-900/8 bg-[var(--panel-muted)] px-3 py-2 text-sm dark:border-white/8"
-                  >
-                    <span className="font-medium text-zinc-950 dark:text-zinc-50">
-                      {job.modality} draft {job.id.slice(0, 8)}
-                    </span>
-                    <StatusBadge status={job.status} label={job.status.replaceAll("_", " ")} />
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {mediaError ? (
-              <Alert variant="destructive" data-testid="media-error">
-                <AlertTriangle className="size-4" />
-                <AlertDescription>{mediaError}</AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div
-              className="rounded-xl border border-zinc-900/10 bg-zinc-950 p-4 text-white dark:border-white/10 lg:col-span-2"
-              data-testid="social-post-package-card"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">Commercial handoff</p>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-300">
-                    Generated image drafts become social post packages with caption, channel, CTA, and human approval
-                    before Instagram or Facebook publication.
-                  </p>
-                </div>
-                <StatusBadge status="approval_gated" label="approval gated" />
-              </div>
-              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
-                <div className="rounded-lg bg-white/10 p-3">
-                  <p className="font-semibold text-white">1. Creative</p>
-                  <p className="mt-1 text-zinc-300">Use the archive image as the campaign asset.</p>
-                </div>
-                <div className="rounded-lg bg-white/10 p-3">
-                  <p className="font-semibold text-white">2. Caption</p>
-                  <p className="mt-1 text-zinc-300">Package Instagram/Facebook copy and reservation CTA.</p>
-                </div>
-                <div className="rounded-lg bg-white/10 p-3">
-                  <p className="font-semibold text-white">3. Approval</p>
-                  <p className="mt-1 text-zinc-300">Queue review before any public post.</p>
-                </div>
-              </div>
-            </div>
-            {mediaLoading ? (
-              <div className="flex min-h-[16rem] items-center justify-center rounded-xl border border-zinc-900/10 bg-white/75 dark:border-white/10 dark:bg-white/5 lg:col-span-2">
-                <Spinner />
-              </div>
-            ) : null}
-            {!mediaLoading && mediaAssets.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400 lg:col-span-2">
-                No media drafts have been generated yet.
-              </div>
-            ) : null}
-            {mediaAssets.slice(0, 6).map((asset) => (
-              <MediaDraftCard
-                key={asset.id}
-                asset={asset}
-                previewUrl={mediaPreviewUrls[asset.id]}
-                publicationDraft={publicationDraftByAssetId.get(asset.id)}
-                actionLoading={actionLoading}
-                onCreateSocialPost={createSocialPostDraft}
-                onRequestApproval={(draft) => requestDraftApproval(draft, "publication")}
-              />
-            ))}
-          </div>
-        </div>
-      </Panel>
-
-      <div className="grid gap-3 md:grid-cols-5">
-        <InventoryMetric
-          icon={<CreditCard className="size-4" />}
-          label="Paid"
-          value={commerceOverview?.summary.orders_paid ?? 0}
-          tone="emerald"
-        />
-        <InventoryMetric
-          icon={<Clock3 className="size-4" />}
-          label="Pending"
-          value={commerceOverview?.summary.orders_pending_payment ?? 0}
-          tone="amber"
-        />
-        <InventoryMetric
-          icon={<AlertTriangle className="size-4" />}
-          label="Stuck"
-          value={commerceOverview?.summary.orders_stuck ?? 0}
-          tone="rose"
-        />
-        <InventoryMetric
-          icon={<Truck className="size-4" />}
-          label="To fulfill"
-          value={
-            (commerceOverview?.summary.fulfillment_pending ?? 0) +
-            (commerceOverview?.summary.fulfillment_ready ?? 0) +
-            (commerceOverview?.summary.fulfillment_blocked ?? 0)
-          }
-        />
-        <InventoryMetric
-          icon={<ReceiptText className="size-4" />}
-          label="Sales MXN"
-          value={Number(commerceOverview?.summary.cash_sales_mxn ?? 0)}
-        />
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-5">
-        <InventoryMetric
-          icon={<Brain className="size-4" />}
-          label="Signals"
-          value={(companyOpsOverview?.summary.signals_new ?? 0) + (companyOpsOverview?.summary.signals_qualified ?? 0)}
-        />
-        <InventoryMetric
-          icon={<ShoppingBag className="size-4" />}
-          label="Opportunities"
-          value={companyOpsOverview?.summary.opportunities_open ?? 0}
-          tone="emerald"
-        />
-        <InventoryMetric
-          icon={<Megaphone className="size-4" />}
-          label="Drafts"
-          value={companyOpsOverview?.summary.publication_drafts ?? 0}
-          tone="amber"
-        />
-        <InventoryMetric
-          icon={<FileCheck2 className="size-4" />}
-          label="Procurement"
-          value={companyOpsOverview?.summary.procurement_drafts ?? 0}
-        />
-        <InventoryMetric
-          icon={<AlertTriangle className="size-4" />}
-          label="Ops stuck"
-          value={companyOpsOverview?.summary.stuck_orders ?? 0}
-          tone="rose"
-        />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
-        <Panel
-          title="Products"
-          description={`${products.length} SKU${products.length === 1 ? "" : "s"} loaded`}
-          className="min-h-[28rem]"
-          action={
-            <Button variant="outline" size="sm" onClick={loadInventory} disabled={loading}>
-              {loading ? <Spinner size="sm" /> : <RotateCcw className="size-4" />}
-              Refresh
-            </Button>
-          }
-        >
-          <div className="grid gap-2">
-            {products.length === 0 && !loading ? (
-              <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400">
-                No inventory has been imported yet.
-              </div>
-            ) : null}
-            {products.map((product) => (
-              <ProductRow
-                key={product.id}
-                product={product}
-                selected={product.id === selectedProductId}
-                onSelect={() => setSelectedProductId(product.id)}
-              />
-            ))}
-          </div>
-        </Panel>
-
-        <div className="space-y-4">
-          <Panel title="Create Hold">
-            <div className="space-y-3">
-              <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select SKU" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.model} · {product.available_units} available
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="grid grid-cols-[5.5rem_1fr] gap-2">
-                <Input
-                  aria-label="Quantity"
-                  type="number"
-                  min={1}
-                  value={quantity}
-                  onChange={(event) => setQuantity(event.target.value)}
-                />
-                <Input
-                  aria-label="Buyer alias"
-                  value={buyerAlias}
-                  onChange={(event) => setBuyerAlias(event.target.value)}
-                  placeholder="Buyer alias"
-                />
-              </div>
-              <Select value={channel} onValueChange={(value) => setChannel(value as typeof channel)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {channels.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Textarea
-                aria-label="Hold note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="Operator note"
-                rows={3}
-              />
-              <Button className="w-full" onClick={createHold} disabled={!selectedProduct || actionLoading === "create"}>
-                {actionLoading === "create" ? <Spinner size="sm" /> : <Clock3 className="size-4" />}
-                Hold 30m
-              </Button>
-            </div>
-          </Panel>
-
-          <Panel
-            title="Holds And Orders"
-            action={
-              <Button variant="outline" size="sm" onClick={expireDue} disabled={actionLoading === "expire-due"}>
-                {actionLoading === "expire-due" ? <Spinner size="sm" /> : <Clock3 className="size-4" />}
-                Expire Due
-              </Button>
-            }
-          >
-            <div className="space-y-3">
-              {operationalReservations.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">No active holds or payment orders.</p>
-              ) : null}
-              {operationalReservations.map((reservation) => (
-                <ReservationRow
-                  key={reservation.id}
-                  reservation={reservation}
-                  actionLoading={actionLoading}
-                  onAction={runReservationAction}
-                />
-              ))}
-            </div>
-          </Panel>
-        </div>
-      </div>
-
-      <Panel title="Orders And Fulfillment" action={<Truck className="size-4 text-zinc-500" />}>
-        <div className="grid gap-2">
-          {recentOrders.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No commerce orders yet.</p>
-          ) : null}
-          {recentOrders.map((order) => (
-            <OrderRow
-              key={order.id}
-              order={order}
-              actionLoading={actionLoading}
-              onAction={async (nextAction) => {
-                setActionLoading(`${nextAction}:${order.id}`);
-                try {
-                  await runFulfillmentAction(order, nextAction);
-                  await loadInventory();
-                } catch (err) {
-                  showError(err instanceof Error ? err.message : "Fulfillment action failed.");
-                } finally {
-                  setActionLoading(null);
-                }
-              }}
-            />
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title="Operating Loop" action={<Brain className="size-4 text-zinc-500" />}>
-        <div className="mb-4 rounded-xl border border-zinc-900/10 bg-zinc-50/80 p-4 dark:border-white/10 dark:bg-white/5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Objective Contract</p>
-              <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                Sell-through learning is the scorecard: each operation records the goal, target signal, integrity gates,
-                miss analysis, and next decision.
-              </p>
-            </div>
-            <StatusBadge status="rehearsal" label="Learning + integrity" />
-          </div>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Recommended Operations</h3>
-            {recommendedOperations.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No operating-loop recommendations yet.</p>
-            ) : null}
-            {recommendedOperations.map((operation) => (
-              <div
-                key={operation.operation_type}
-                className="grid gap-3 rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 md:grid-cols-[1fr_auto]"
-              >
-                <div>
-                  <p className="font-medium text-zinc-950 dark:text-zinc-50">{operation.label}</p>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">{operation.reason}</p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => launchCompanyOperation(operation.operation_type)}
-                  disabled={actionLoading === `operation:${operation.operation_type}:manual`}
-                >
-                  {actionLoading === `operation:${operation.operation_type}:manual` ? (
-                    <Spinner size="sm" />
-                  ) : (
-                    <PlayCircle className="size-4" />
-                  )}
-                  Launch
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Signals</h3>
-            {(companyOpsOverview?.signals ?? []).slice(0, 5).map((signal) => (
-              <SignalRow
-                key={signal.id}
-                signal={signal}
-                actionLoading={actionLoading}
-                onQualify={qualifyCompanySignal}
-                onLaunch={launchCompanyOperation}
-              />
-            ))}
-            {companyOpsOverview && companyOpsOverview.signals.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No company signals captured yet.</p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <DraftColumn
-            title="Publication Drafts"
-            drafts={companyOpsOverview?.publication_drafts ?? []}
-            actionLoading={actionLoading}
-            onRequestApproval={(draft) => requestDraftApproval(draft, "publication")}
-          />
-          <DraftColumn
-            title="Procurement Drafts"
-            drafts={companyOpsOverview?.procurement_drafts ?? []}
-            actionLoading={actionLoading}
-            onRequestApproval={(draft) => requestDraftApproval(draft, "procurement")}
-          />
-        </div>
-
-        <div className="mt-4">
-          <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Objective Reviews</h3>
-          <div className="grid gap-2">
-            {objectiveContracts.slice(0, 4).map((objective) => (
-              <ObjectiveContractRow key={objective.id} objective={objective} />
-            ))}
-            {objectiveContracts.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No operation objective contracts recorded yet.</p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Opportunities</h3>
-            <div className="grid gap-2">
-              {(companyOpsOverview?.opportunities ?? []).slice(0, 5).map((opportunity) => (
-                <div
-                  key={opportunity.id}
-                  className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-zinc-950 dark:text-zinc-50">{opportunity.title}</p>
-                    <StatusBadge status={opportunity.status} label={opportunity.status.replaceAll("_", " ")} />
-                  </div>
-                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    {opportunity.next_action || opportunity.summary || "No next action recorded."}
-                  </p>
-                </div>
-              ))}
-              {companyOpsOverview && companyOpsOverview.opportunities.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">No qualified opportunities yet.</p>
-              ) : null}
-            </div>
-          </div>
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Decisions And Policies</h3>
-            <div className="grid gap-2">
-              {(companyOpsOverview?.recent_decisions ?? []).slice(0, 3).map((decision) => (
-                <div
-                  key={decision.id}
-                  className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-zinc-950 dark:text-zinc-50">
-                      {decision.decision_type.replaceAll("_", " ")}
-                    </p>
-                    <StatusBadge status={decision.status} />
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    {decision.requested_at ? formatDateTime(decision.requested_at) : "No timestamp"}
-                  </p>
-                </div>
-              ))}
-              {(companyOpsOverview?.policies ?? []).slice(0, 3).map((policy) => (
-                <div
-                  key={policy.id}
-                  className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-zinc-950 dark:text-zinc-50">{policy.title}</p>
-                    <StatusBadge status={policy.status} />
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    Confidence {Math.round(policy.confidence * 100)}%
-                  </p>
-                </div>
-              ))}
-              {companyOpsOverview &&
-              companyOpsOverview.recent_decisions.length === 0 &&
-              companyOpsOverview.policies.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">No decisions or policies recorded yet.</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </Panel>
-
-      <Panel title="Inventory Timeline" action={<ReceiptText className="size-4 text-zinc-500" />}>
-        <div className="grid gap-2">
-          {(overview?.events ?? []).slice(0, 8).map((event) => (
-            <div
-              key={event.id}
-              className="grid gap-2 rounded-xl border border-zinc-900/10 bg-white/80 p-3 text-sm dark:border-white/10 dark:bg-white/5 md:grid-cols-[8rem_1fr_auto]"
-            >
-              <StatusBadge status={event.event_type} />
-              <span className="text-zinc-700 dark:text-zinc-200">{event.message}</span>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(event.created_at)}</span>
-            </div>
-          ))}
-          {overview && overview.events.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No inventory events yet.</p>
-          ) : null}
-        </div>
-      </Panel>
+      <InventoryMetricGrid controller={controller} />
+      <StockStatesPanel controller={controller} />
+      <MediaDraftsPanel controller={controller} />
+      <CommerceMetricGrid controller={controller} />
+      <CompanyOpsMetricGrid controller={controller} />
+      <ProductsAndHolds controller={controller} />
+      <OrdersPanel controller={controller} />
+      <OperatingLoopPanel controller={controller} />
+      <InventoryTimelinePanel controller={controller} />
     </section>
+  );
+}
+
+function InventoryMetricGrid({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-4">
+      <InventoryMetric icon={<PackageOpen className="size-4" />} label="Total" value={controller.overview?.summary.total_units ?? 0} />
+      <InventoryMetric icon={<PackageCheck className="size-4" />} label="Available" value={controller.overview?.summary.available_units ?? 0} tone="emerald" />
+      <InventoryMetric icon={<Clock3 className="size-4" />} label="Held" value={controller.overview?.summary.held_units ?? 0} tone="amber" />
+      <InventoryMetric
+        icon={<AlertTriangle className="size-4" />}
+        label="Low stock"
+        value={controller.stockStateSummary?.low_stock_count ?? controller.overview?.summary.low_stock_products ?? 0}
+        tone="rose"
+      />
+    </div>
+  );
+}
+
+function StockStatesPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel title="Stock States" description={controller.stockStateSummary?.definition_used ?? "Canonical stock semantics will appear after inventory loads."}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <InventoryMetric icon={<PackageCheck className="size-4" />} label="Active" value={controller.stockStateSummary?.active_count ?? 0} tone="emerald" />
+        <InventoryMetric icon={<AlertTriangle className="size-4" />} label="Low" value={controller.stockStateSummary?.low_stock_count ?? 0} tone="amber" />
+        <InventoryMetric
+          icon={<Clock3 className="size-4" />}
+          label="Last piece"
+          value={controller.stockStateSummary?.last_piece_count ?? controller.overview?.summary.last_piece_products ?? 0}
+          tone="rose"
+        />
+        <InventoryMetric icon={<PackageOpen className="size-4" />} label="Sold out" value={controller.stockStateSummary?.sold_out_count ?? controller.overview?.summary.sold_out_products ?? 0} />
+      </div>
+    </Panel>
+  );
+}
+
+function MediaDraftsPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel
+      title="Media Drafts"
+      description="Turn generated media into approval-gated Instagram/Facebook post packages without publishing externally."
+      action={
+        <Button variant="outline" size="sm" onClick={controller.loadMediaDrafts} disabled={controller.mediaLoading}>
+          {controller.mediaLoading ? <Spinner size="sm" /> : <RotateCcw className="size-4" />}
+          Refresh
+        </Button>
+      }
+    >
+      <div className="grid gap-4 2xl:grid-cols-[0.8fr_1.2fr]" data-testid="media-drafts-panel">
+        <MediaGenerationControls controller={controller} />
+        <MediaDraftGallery controller={controller} />
+      </div>
+    </Panel>
+  );
+}
+
+function MediaGenerationControls({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="space-y-3 rounded-xl border border-zinc-900/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
+      <div>
+        <Label htmlFor="media-prompt" className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+          Sanitized media prompt
+        </Label>
+        <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          Product and styling context only. Customer, payment, and address details stay out.
+        </p>
+      </div>
+      <Textarea
+        id="media-prompt"
+        data-testid="media-prompt"
+        value={controller.mediaPrompt}
+        onChange={(event) => controller.setMediaPrompt(event.target.value)}
+        rows={5}
+        className="text-sm leading-6"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          onClick={() => void controller.generateMediaDraft("image")}
+          disabled={!controller.mediaCredential || controller.mediaActionLoading !== null}
+          data-testid="generate-media-image-draft"
+        >
+          {controller.mediaActionLoading === "image" ? <Spinner size="sm" /> : <ImageIcon className="size-4" />}
+          Generate image draft
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => void controller.generateMediaDraft("video")}
+          disabled={!controller.mediaCredential || controller.mediaCredential.provider !== "google" || controller.mediaActionLoading !== null}
+        >
+          {controller.mediaActionLoading === "video" ? <Spinner size="sm" /> : <Video className="size-4" />}
+          Generate video draft
+        </Button>
+        <StatusBadge
+          status={controller.mediaCredential ? "active" : "paused"}
+          label={
+            controller.mediaCredential
+              ? `${controller.mediaCredential.provider === "openrouter" ? "OpenRouter" : "Google"} ready`
+              : "OpenRouter or Google credential required"
+          }
+        />
+      </div>
+      <MediaJobList jobs={controller.mediaJobs} />
+      {controller.mediaError ? (
+        <Alert variant="destructive" data-testid="media-error">
+          <AlertTriangle className="size-4" />
+          <AlertDescription>{controller.mediaError}</AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
+  );
+}
+
+function MediaJobList({ jobs }: { jobs: MediaGenerationJob[] }) {
+  if (!jobs.length) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {jobs.map((job) => (
+        <div key={job.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-900/8 bg-[var(--panel-muted)] px-3 py-2 text-sm dark:border-white/8">
+          <span className="font-medium text-zinc-950 dark:text-zinc-50">{job.modality} draft {job.id.slice(0, 8)}</span>
+          <StatusBadge status={job.status} label={job.status.replaceAll("_", " ")} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MediaDraftGallery({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <SocialPostPackageCard />
+      {controller.mediaLoading ? (
+        <div className="flex min-h-[16rem] items-center justify-center rounded-xl border border-zinc-900/10 bg-white/75 dark:border-white/10 dark:bg-white/5 lg:col-span-2">
+          <Spinner />
+        </div>
+      ) : null}
+      {!controller.mediaLoading && controller.mediaAssets.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400 lg:col-span-2">
+          No media drafts have been generated yet.
+        </div>
+      ) : null}
+      {controller.mediaAssets.slice(0, 6).map((asset) => (
+        <MediaDraftCard
+          key={asset.id}
+          asset={asset}
+          previewUrl={controller.mediaPreviewUrls[asset.id]}
+          publicationDraft={controller.publicationDraftByAssetId.get(asset.id)}
+          actionLoading={controller.actionLoading}
+          onCreateSocialPost={controller.createSocialPostDraft}
+          onRequestApproval={(draft) => controller.requestDraftApproval(draft, "publication")}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SocialPostPackageCard() {
+  return (
+    <div className="rounded-xl border border-zinc-900/10 bg-zinc-950 p-4 text-white dark:border-white/10 lg:col-span-2" data-testid="social-post-package-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Commercial handoff</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-300">
+            Generated image drafts become social post packages with caption, channel, CTA, and human approval before Instagram or Facebook publication.
+          </p>
+        </div>
+        <StatusBadge status="approval_gated" label="approval gated" />
+      </div>
+      <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
+        {["Creative", "Caption", "Approval"].map((label, index) => (
+          <div key={label} className="rounded-lg bg-white/10 p-3">
+            <p className="font-semibold text-white">{index + 1}. {label}</p>
+            <p className="mt-1 text-zinc-300">
+              {label === "Creative"
+                ? "Use the archive image as the campaign asset."
+                : label === "Caption"
+                  ? "Package Instagram/Facebook copy and reservation CTA."
+                  : "Queue review before any public post."}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CommerceMetricGrid({ controller }: { controller: CommerceInventoryController }) {
+  const fulfillmentCount =
+    (controller.commerceOverview?.summary.fulfillment_pending ?? 0) +
+    (controller.commerceOverview?.summary.fulfillment_ready ?? 0) +
+    (controller.commerceOverview?.summary.fulfillment_blocked ?? 0);
+
+  return (
+    <div className="grid gap-3 md:grid-cols-5">
+      <InventoryMetric icon={<CreditCard className="size-4" />} label="Paid" value={controller.commerceOverview?.summary.orders_paid ?? 0} tone="emerald" />
+      <InventoryMetric icon={<Clock3 className="size-4" />} label="Pending" value={controller.commerceOverview?.summary.orders_pending_payment ?? 0} tone="amber" />
+      <InventoryMetric icon={<AlertTriangle className="size-4" />} label="Stuck" value={controller.commerceOverview?.summary.orders_stuck ?? 0} tone="rose" />
+      <InventoryMetric icon={<Truck className="size-4" />} label="To fulfill" value={fulfillmentCount} />
+      <InventoryMetric icon={<ReceiptText className="size-4" />} label="Sales MXN" value={Number(controller.commerceOverview?.summary.cash_sales_mxn ?? 0)} />
+    </div>
+  );
+}
+
+function CompanyOpsMetricGrid({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-5">
+      <InventoryMetric icon={<Brain className="size-4" />} label="Signals" value={(controller.companyOpsOverview?.summary.signals_new ?? 0) + (controller.companyOpsOverview?.summary.signals_qualified ?? 0)} />
+      <InventoryMetric icon={<ShoppingBag className="size-4" />} label="Opportunities" value={controller.companyOpsOverview?.summary.opportunities_open ?? 0} tone="emerald" />
+      <InventoryMetric icon={<Megaphone className="size-4" />} label="Drafts" value={controller.companyOpsOverview?.summary.publication_drafts ?? 0} tone="amber" />
+      <InventoryMetric icon={<FileCheck2 className="size-4" />} label="Procurement" value={controller.companyOpsOverview?.summary.procurement_drafts ?? 0} />
+      <InventoryMetric icon={<AlertTriangle className="size-4" />} label="Ops stuck" value={controller.companyOpsOverview?.summary.stuck_orders ?? 0} tone="rose" />
+    </div>
+  );
+}
+
+function ProductsAndHolds({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+      <ProductsPanel controller={controller} />
+      <div className="space-y-4">
+        <CreateHoldPanel controller={controller} />
+        <HoldsPanel controller={controller} />
+      </div>
+    </div>
+  );
+}
+
+function ProductsPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel
+      title="Products"
+      description={`${controller.products.length} SKU${controller.products.length === 1 ? "" : "s"} loaded`}
+      className="min-h-[28rem]"
+      action={
+        <Button variant="outline" size="sm" onClick={controller.loadInventory} disabled={controller.loading}>
+          {controller.loading ? <Spinner size="sm" /> : <RotateCcw className="size-4" />}
+          Refresh
+        </Button>
+      }
+    >
+      <div className="grid gap-2">
+        {controller.products.length === 0 && !controller.loading ? (
+          <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400">
+            No inventory has been imported yet.
+          </div>
+        ) : null}
+        {controller.products.map((product) => (
+          <ProductRow key={product.id} product={product} selected={product.id === controller.selectedProductId} onSelect={() => controller.setSelectedProductId(product.id)} />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function CreateHoldPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel title="Create Hold">
+      <div className="space-y-3">
+        <Select value={controller.selectedProductId} onValueChange={controller.setSelectedProductId}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select SKU" />
+          </SelectTrigger>
+          <SelectContent>
+            {controller.products.map((product) => (
+              <SelectItem key={product.id} value={product.id}>
+                {product.model} · {product.available_units} available
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="grid grid-cols-[5.5rem_1fr] gap-2">
+          <Input aria-label="Quantity" type="number" min={1} value={controller.quantity} onChange={(event) => controller.setQuantity(event.target.value)} />
+          <Input aria-label="Buyer alias" value={controller.buyerAlias} onChange={(event) => controller.setBuyerAlias(event.target.value)} placeholder="Buyer alias" />
+        </div>
+        <Select value={controller.channel} onValueChange={(value) => controller.setChannel(value as typeof controller.channel)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {channels.map((item) => (
+              <SelectItem key={item} value={item}>{item}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Textarea aria-label="Hold note" value={controller.note} onChange={(event) => controller.setNote(event.target.value)} placeholder="Operator note" rows={3} />
+        <Button className="w-full" onClick={controller.createHold} disabled={!controller.selectedProduct || controller.actionLoading === "create"}>
+          {controller.actionLoading === "create" ? <Spinner size="sm" /> : <Clock3 className="size-4" />}
+          Hold 30m
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+function HoldsPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel
+      title="Holds And Orders"
+      action={
+        <Button variant="outline" size="sm" onClick={controller.expireDue} disabled={controller.actionLoading === "expire-due"}>
+          {controller.actionLoading === "expire-due" ? <Spinner size="sm" /> : <Clock3 className="size-4" />}
+          Expire Due
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        {controller.operationalReservations.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No active holds or payment orders.</p> : null}
+        {controller.operationalReservations.map((reservation) => (
+          <ReservationRow key={reservation.id} reservation={reservation} actionLoading={controller.actionLoading} onAction={controller.runReservationAction} />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function OrdersPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel title="Orders And Fulfillment" action={<Truck className="size-4 text-zinc-500" />}>
+      <div className="grid gap-2">
+        {controller.recentOrders.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No commerce orders yet.</p> : null}
+        {controller.recentOrders.map((order) => (
+          <OrderRow key={order.id} order={order} actionLoading={controller.actionLoading} onAction={(nextAction) => controller.runOrderAction(order, nextAction)} />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function OperatingLoopPanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel title="Operating Loop" action={<Brain className="size-4 text-zinc-500" />}>
+      <ObjectiveContractIntro />
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <RecommendedOperations controller={controller} />
+        <SignalsPanel controller={controller} />
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <DraftColumn title="Publication Drafts" drafts={controller.companyOpsOverview?.publication_drafts ?? []} actionLoading={controller.actionLoading} onRequestApproval={(draft) => controller.requestDraftApproval(draft, "publication")} />
+        <DraftColumn title="Procurement Drafts" drafts={controller.companyOpsOverview?.procurement_drafts ?? []} actionLoading={controller.actionLoading} onRequestApproval={(draft) => controller.requestDraftApproval(draft, "procurement")} />
+      </div>
+      <ObjectiveReviews controller={controller} />
+      <OpportunityDecisionGrid controller={controller} />
+    </Panel>
+  );
+}
+
+function ObjectiveContractIntro() {
+  return (
+    <div className="mb-4 rounded-xl border border-zinc-900/10 bg-zinc-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Objective Contract</p>
+          <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+            Sell-through learning is the scorecard: each operation records the goal, target signal, integrity gates, miss analysis, and next decision.
+          </p>
+        </div>
+        <StatusBadge status="rehearsal" label="Learning + integrity" />
+      </div>
+    </div>
+  );
+}
+
+function RecommendedOperations({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Recommended Operations</h3>
+      {controller.recommendedOperations.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No operating-loop recommendations yet.</p> : null}
+      {controller.recommendedOperations.map((operation) => (
+        <div key={operation.operation_type} className="grid gap-3 rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 md:grid-cols-[1fr_auto]">
+          <div>
+            <p className="font-medium text-zinc-950 dark:text-zinc-50">{operation.label}</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">{operation.reason}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void controller.launchCompanyOperation(operation.operation_type)} disabled={controller.actionLoading === `operation:${operation.operation_type}:manual`}>
+            {controller.actionLoading === `operation:${operation.operation_type}:manual` ? <Spinner size="sm" /> : <PlayCircle className="size-4" />}
+            Launch
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SignalsPanel({ controller }: { controller: CommerceInventoryController }) {
+  const signals = controller.companyOpsOverview?.signals ?? [];
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Signals</h3>
+      {signals.slice(0, 5).map((signal) => (
+        <SignalRow key={signal.id} signal={signal} actionLoading={controller.actionLoading} onQualify={controller.qualifyCompanySignal} onLaunch={controller.launchCompanyOperation} />
+      ))}
+      {controller.companyOpsOverview && signals.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No company signals captured yet.</p> : null}
+    </div>
+  );
+}
+
+function ObjectiveReviews({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="mt-4">
+      <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Objective Reviews</h3>
+      <div className="grid gap-2">
+        {controller.objectiveContracts.slice(0, 4).map((objective) => (
+          <ObjectiveContractRow key={objective.id} objective={objective} />
+        ))}
+        {controller.objectiveContracts.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No operation objective contracts recorded yet.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function OpportunityDecisionGrid({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <div className="mt-4 grid gap-4 xl:grid-cols-2">
+      <OpportunitiesPanel controller={controller} />
+      <DecisionsPoliciesPanel controller={controller} />
+    </div>
+  );
+}
+
+function OpportunitiesPanel({ controller }: { controller: CommerceInventoryController }) {
+  const opportunities = controller.companyOpsOverview?.opportunities ?? [];
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Opportunities</h3>
+      <div className="grid gap-2">
+        {opportunities.slice(0, 5).map((opportunity) => (
+          <div key={opportunity.id} className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium text-zinc-950 dark:text-zinc-50">{opportunity.title}</p>
+              <StatusBadge status={opportunity.status} label={opportunity.status.replaceAll("_", " ")} />
+            </div>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{opportunity.next_action || opportunity.summary || "No next action recorded."}</p>
+          </div>
+        ))}
+        {controller.companyOpsOverview && opportunities.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No qualified opportunities yet.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function DecisionsPoliciesPanel({ controller }: { controller: CommerceInventoryController }) {
+  const decisions = controller.companyOpsOverview?.recent_decisions ?? [];
+  const policies = controller.companyOpsOverview?.policies ?? [];
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Decisions And Policies</h3>
+      <div className="grid gap-2">
+        {decisions.slice(0, 3).map((decision) => (
+          <div key={decision.id} className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium text-zinc-950 dark:text-zinc-50">{decision.decision_type.replaceAll("_", " ")}</p>
+              <StatusBadge status={decision.status} />
+            </div>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{decision.requested_at ? formatDateTime(decision.requested_at) : "No timestamp"}</p>
+          </div>
+        ))}
+        {policies.slice(0, 3).map((policy) => (
+          <div key={policy.id} className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium text-zinc-950 dark:text-zinc-50">{policy.title}</p>
+              <StatusBadge status={policy.status} />
+            </div>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Confidence {Math.round(policy.confidence * 100)}%</p>
+          </div>
+        ))}
+        {controller.companyOpsOverview && decisions.length === 0 && policies.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No decisions or policies recorded yet.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function InventoryTimelinePanel({ controller }: { controller: CommerceInventoryController }) {
+  return (
+    <Panel title="Inventory Timeline" action={<ReceiptText className="size-4 text-zinc-500" />}>
+      <div className="grid gap-2">
+        {(controller.overview?.events ?? []).slice(0, 8).map((event) => (
+          <div key={event.id} className="grid gap-2 rounded-xl border border-zinc-900/10 bg-white/80 p-3 text-sm dark:border-white/10 dark:bg-white/5 md:grid-cols-[8rem_1fr_auto]">
+            <StatusBadge status={event.event_type} />
+            <span className="text-zinc-700 dark:text-zinc-200">{event.message}</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(event.created_at)}</span>
+          </div>
+        ))}
+        {controller.overview && controller.overview.events.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No inventory events yet.</p> : null}
+      </div>
+    </Panel>
   );
 }
 

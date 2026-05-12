@@ -212,7 +212,11 @@ class Command(BaseCommand):
             prepared_graph = copy.deepcopy(run.dispatch_graph_json)
         else:
             try:
-                prepared_graph = prepare_graph_for_engine(graph_version.graph_json, user)
+                prepared_graph = prepare_graph_for_engine(
+                    graph_version.graph_json,
+                    user,
+                    company_id=graph_version.graph_id,
+                )
             except PromptTemplateResolutionError as exc:
                 self._fail_run(entry, run, f"Invalid prompt configuration: {exc}")
                 return

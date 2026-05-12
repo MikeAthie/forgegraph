@@ -190,11 +190,10 @@ function resolveStateAction<T>(value: SetStateAction<T>, current: T): T {
   return typeof value === "function" ? (value as (current: T) => T)(current) : value;
 }
 
-export default function PromptsPage() {
+function usePromptsPageController() {
   const router = useRouter();
   const { replace } = router;
   const { user } = useAuth();
-
   const [pageState, dispatchPageState] = useReducer(promptsPageReducer, initialPromptsPageState);
   const {
     ownership,
@@ -232,8 +231,6 @@ export default function PromptsPage() {
   const setSearchDraft = useCallback((value: SetStateAction<string>) => setPageField("searchDraft", value), [setPageField]);
   const setSearchQuery = useCallback((value: SetStateAction<string>) => setPageField("searchQuery", value), [setPageField]);
   const setPrompts = useCallback((value: SetStateAction<PromptListItem[]>) => setPageField("prompts", value), [setPageField]);
-  const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
-  const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
   const setIsCreateOpen = useCallback((value: SetStateAction<boolean>) => setPageField("isCreateOpen", value), [setPageField]);
   const setIsCreating = useCallback((value: SetStateAction<boolean>) => setPageField("isCreating", value), [setPageField]);
   const setCreateError = useCallback((value: SetStateAction<string | null>) => setPageField("createError", value), [setPageField]);
@@ -249,65 +246,32 @@ export default function PromptsPage() {
   const setEditForm = useCallback((value: SetStateAction<PromptEditFormState>) => setPageField("editForm", value), [setPageField]);
   const setIsPublishing = useCallback((value: SetStateAction<boolean>) => setPageField("isPublishing", value), [setPageField]);
 
-  const filters = useMemo(
-    () => ({
-      ownership,
-      category: category || undefined,
-      search: searchQuery || undefined,
-    }),
-    [ownership, category, searchQuery],
-  );
+  const filters = useMemo(() => ({ ownership, category: category || undefined, search: searchQuery || undefined }), [ownership, category, searchQuery]);
 
   useEffect(() => {
-    if (!router.isReady) {
-      return;
-    }
-
+    if (!router.isReady) return;
     const nextOwnership = isPromptOwnershipFilter(router.query.ownership) ? router.query.ownership : "all";
     const nextCategory = isPromptCategory(router.query.category) ? router.query.category : "";
     const nextSearch = typeof router.query.q === "string" ? router.query.q : "";
-
-    dispatchPageState({
-      patch: {
-        ownership: nextOwnership,
-        category: nextCategory,
-        searchDraft: nextSearch,
-        searchQuery: nextSearch.trim(),
-      },
-    });
+    dispatchPageState({ patch: { ownership: nextOwnership, category: nextCategory, searchDraft: nextSearch, searchQuery: nextSearch.trim() } });
   }, [router.isReady, router.query.category, router.query.ownership, router.query.q]);
 
   const replacePromptQuery = useCallback(
     (next: { ownership?: PromptOwnershipFilter; category?: string; q?: string; prompt?: string | null }) => {
-      if (!router.isReady) {
-        return;
-      }
-
+      if (!router.isReady) return;
       const queryParams = { ...router.query };
       delete queryParams.ownership;
       delete queryParams.category;
       delete queryParams.q;
       delete queryParams.prompt;
-
       queryParams.ownership = next.ownership ?? ownership;
       const nextCategory = next.category ?? category;
       const nextSearch = next.q ?? searchQuery;
       const nextPrompt = next.prompt !== undefined ? next.prompt : selectedPromptId;
-
-      if (nextCategory) {
-        queryParams.category = nextCategory;
-      }
-      if (nextSearch.trim()) {
-        queryParams.q = nextSearch.trim();
-      }
-      if (nextPrompt) {
-        queryParams.prompt = nextPrompt;
-      }
-
-      void replace({ pathname: router.pathname, query: queryParams }, undefined, {
-        shallow: true,
-        scroll: false,
-      });
+      if (nextCategory) queryParams.category = nextCategory;
+      if (nextSearch.trim()) queryParams.q = nextSearch.trim();
+      if (nextPrompt) queryParams.prompt = nextPrompt;
+      void replace({ pathname: router.pathname, query: queryParams }, undefined, { shallow: true, scroll: false });
     },
     [category, ownership, replace, router, searchQuery, selectedPromptId],
   );
@@ -316,13 +280,11 @@ export default function PromptsPage() {
     setOwnership(value);
     replacePromptQuery({ ownership: value });
   };
-
   const updateCategory = (value: string) => {
     const nextCategory = value === "all" ? "" : value;
     setCategory(nextCategory);
     replacePromptQuery({ category: nextCategory });
   };
-
   const applySearch = (value: string) => {
     const normalized = value.trim();
     setSearchQuery(normalized);
@@ -352,7 +314,6 @@ export default function PromptsPage() {
         dispatchPageState({ patch: { error: getApiErrorMessage(err, "Failed to load prompts."), loading: false } });
       }
     };
-
     void loadPrompts();
     return () => {
       isActive = false;
@@ -361,25 +322,16 @@ export default function PromptsPage() {
 
   const openCreate = () => {
     setCreateError(null);
-    setCreateForm({
-      title: "",
-      description: "",
-      category: "other",
-      content: "",
-      variablesSchemaText: "",
-    });
+    setCreateForm({ title: "", description: "", category: "other", content: "", variablesSchemaText: "" });
     setIsCreateOpen(true);
   };
-
   const closeCreate = () => {
     if (isCreating) return;
     setIsCreateOpen(false);
   };
-
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateError(null);
-
     if (!createForm.title.trim()) {
       setCreateError("Title is required.");
       return;
@@ -388,13 +340,11 @@ export default function PromptsPage() {
       setCreateError("Content is required.");
       return;
     }
-
     const parsed = parseVariablesSchema(createForm.variablesSchemaText);
     if (!parsed.ok) {
       setCreateError(parsed.error);
       return;
     }
-
     setIsCreating(true);
     try {
       const created = await promptsApi.create({
@@ -404,7 +354,6 @@ export default function PromptsPage() {
         content: createForm.content,
         variables_schema: parsed.value,
       });
-
       setIsCreateOpen(false);
       showSuccess("Prompt created", `"${created.title}" is ready to use.`);
       await refreshPrompts();
@@ -423,20 +372,17 @@ export default function PromptsPage() {
       setIsEditing(false);
       setEditError(null);
       setDetailLoading(true);
-
       try {
         const detail = await promptsApi.get(promptId);
         setSelectedPrompt(detail);
-        if (syncUrl) {
-          replacePromptQuery({ prompt: promptId });
-        }
+        if (syncUrl) replacePromptQuery({ prompt: promptId });
       } catch (err: unknown) {
         setDetailError(getApiErrorMessage(err, "Failed to load prompt."));
       } finally {
         setDetailLoading(false);
       }
     },
-    [replacePromptQuery],
+    [replacePromptQuery, setDetailError, setDetailLoading, setEditError, setIsEditing, setSelectedPrompt, setSelectedPromptId],
   );
 
   const closeDetail = useCallback(
@@ -447,56 +393,27 @@ export default function PromptsPage() {
       setDetailError(null);
       setIsEditing(false);
       setEditError(null);
-      if (syncUrl) {
-        replacePromptQuery({ prompt: null });
-      }
+      if (syncUrl) replacePromptQuery({ prompt: null });
     },
-    [detailLoading, isCloning, isPublishing, isSaving, replacePromptQuery],
+    [detailLoading, isCloning, isPublishing, isSaving, replacePromptQuery, setDetailError, setEditError, setIsEditing, setSelectedPrompt, setSelectedPromptId],
   );
 
   useEffect(() => {
-    if (!router.isReady) {
-      return;
-    }
-
+    if (!router.isReady) return;
     const promptId = typeof router.query.prompt === "string" ? router.query.prompt : "";
-    if (promptId && promptId !== selectedPromptId) {
-      void openDetail(promptId, false);
-    }
-    if (!promptId && selectedPromptId && !detailLoading && !isCloning && !isSaving && !isPublishing) {
-      closeDetail(false);
-    }
-  }, [
-    closeDetail,
-    detailLoading,
-    isCloning,
-    isPublishing,
-    isSaving,
-    openDetail,
-    router.isReady,
-    router.query.prompt,
-    selectedPromptId,
-  ]);
+    if (promptId && promptId !== selectedPromptId) void openDetail(promptId, false);
+    if (!promptId && selectedPromptId && !detailLoading && !isCloning && !isSaving && !isPublishing) closeDetail(false);
+  }, [closeDetail, detailLoading, isCloning, isPublishing, isSaving, openDetail, router.isReady, router.query.prompt, selectedPromptId]);
 
-  const canCloneSelected = Boolean(
-    selectedPrompt && selectedPrompt.visibility === "public" && selectedPrompt.owner_id !== user?.id,
-  );
-
+  const canCloneSelected = Boolean(selectedPrompt && selectedPrompt.visibility === "public" && selectedPrompt.owner_id !== user?.id);
   const isOrgAdmin = user?.organization_role === "owner" || user?.organization_role === "admin";
-
-  const canEditSelected = Boolean(
-    selectedPrompt && user?.id && selectedPrompt.owner_id && (selectedPrompt.owner_id === user.id || isOrgAdmin),
-  );
-
-  const canPublishSelected = Boolean(
-    selectedPrompt && canEditSelected && selectedPrompt.visibility !== "public" && isOrgAdmin,
-  );
+  const canEditSelected = Boolean(selectedPrompt && user?.id && selectedPrompt.owner_id && (selectedPrompt.owner_id === user.id || isOrgAdmin));
+  const canPublishSelected = Boolean(selectedPrompt && canEditSelected && selectedPrompt.visibility !== "public" && isOrgAdmin);
 
   const cloneSelected = async () => {
     if (!selectedPrompt) return;
     setIsCloning(true);
     setDetailError(null);
-
     try {
       const cloned = await promptsApi.clone(selectedPrompt.id);
       showSuccess("Prompt cloned", `"${cloned.title}" has been added to your library.`);
@@ -521,19 +438,15 @@ export default function PromptsPage() {
       variablesSchemaText: JSON.stringify(selectedPrompt.variables_schema ?? {}, null, 2),
     });
   };
-
   const cancelEditing = () => {
     if (isSaving) return;
     setIsEditing(false);
     setEditError(null);
   };
-
   const submitEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedPrompt) return;
-
     setEditError(null);
-
     if (!editForm.title.trim()) {
       setEditError("Title is required.");
       return;
@@ -542,13 +455,11 @@ export default function PromptsPage() {
       setEditError("Content is required.");
       return;
     }
-
     const parsed = parseVariablesSchema(editForm.variablesSchemaText);
     if (!parsed.ok) {
       setEditError(parsed.error);
       return;
     }
-
     setIsSaving(true);
     try {
       const updated = await promptsApi.update(selectedPrompt.id, {
@@ -557,15 +468,8 @@ export default function PromptsPage() {
         content: editForm.content,
         variables_schema: parsed.value,
       });
-
       setSelectedPrompt(updated);
-      setPrompts((prev) =>
-        prev.map((p) =>
-          p.id === updated.id
-            ? { ...p, title: updated.title, description: updated.description, visibility: updated.visibility }
-            : p,
-        ),
-      );
+      setPrompts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, title: updated.title, description: updated.description, visibility: updated.visibility } : p)));
       setIsEditing(false);
       showSuccess("Prompt updated", `"${updated.title}" has been saved.`);
     } catch (err: unknown) {
@@ -603,483 +507,301 @@ export default function PromptsPage() {
     }
   };
 
-  const emptyStateTitle =
-    ownership === "mine"
-      ? "No prompts yet"
-      : ownership === "builtin"
-        ? "No built-in prompts found"
-        : "No prompts found";
-
-  const emptyStateDescription =
-    ownership === "mine"
-      ? "Create a prompt or clone a built-in one to get started."
-      : ownership === "builtin"
-        ? "Seed data may not be loaded yet."
-        : "Try adjusting your filters.";
+  const emptyStateTitle = ownership === "mine" ? "No prompts yet" : ownership === "builtin" ? "No built-in prompts found" : "No prompts found";
+  const emptyStateDescription = ownership === "mine" ? "Create a prompt or clone a built-in one to get started." : ownership === "builtin" ? "Seed data may not be loaded yet." : "Try adjusting your filters.";
   const visiblePrompts = prompts.slice(0, 50);
   const hiddenPromptCount = Math.max(prompts.length - visiblePrompts.length, 0);
+
+  return {
+    ownership,
+    category,
+    searchDraft,
+    prompts,
+    loading,
+    error,
+    isCreateOpen,
+    isCreating,
+    createError,
+    createForm,
+    selectedPromptId,
+    selectedPrompt,
+    detailLoading,
+    detailError,
+    isCloning,
+    isEditing,
+    isSaving,
+    editError,
+    editForm,
+    isPublishing,
+    canCloneSelected,
+    canEditSelected,
+    canPublishSelected,
+    emptyStateTitle,
+    emptyStateDescription,
+    visiblePrompts,
+    hiddenPromptCount,
+    setSearchDraft,
+    setCreateForm,
+    setIsCreateOpen,
+    setEditForm,
+    updateOwnership,
+    updateCategory,
+    applySearch,
+    refreshPrompts,
+    openCreate,
+    closeCreate,
+    submitCreate,
+    openDetail,
+    closeDetail,
+    cloneSelected,
+    startEditing,
+    cancelEditing,
+    submitEdit,
+    publishSelected,
+    handleDelete,
+  };
+}
+
+type PromptsPageController = ReturnType<typeof usePromptsPageController>;
+
+function PromptsHero({ controller }: { controller: PromptsPageController }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div><h1 className="text-2xl sm:text-3xl font-semibold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">Prompts</h1><p className="mt-1 text-sm text-muted-foreground">Browse built-in prompts and manage your own prompt library.</p></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => void controller.refreshPrompts()} disabled={controller.loading}><RefreshCw aria-hidden="true" />Refresh</Button>
+          <Button onClick={controller.openCreate}><Plus aria-hidden="true" />New prompt</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromptFilters({ controller }: { controller: PromptsPageController }) {
+  return (
+    <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
+      <CardContent className="pt-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            {OWNERSHIP_OPTIONS.map((option) => <Button key={option.value} variant={controller.ownership === option.value ? "default" : "outline"} size="sm" onClick={() => controller.updateOwnership(option.value)}>{option.label}</Button>)}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <Select value={controller.category || "all"} onValueChange={controller.updateCategory}>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All categories" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {CATEGORIES.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <SearchInput value={controller.searchDraft} onChange={controller.setSearchDraft} placeholder="Search prompts" className="w-full sm:w-64" onSearch={controller.applySearch} debounceMs={300} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PromptsListSection({ controller }: { controller: PromptsPageController }) {
+  if (controller.loading) {
+    return <div className="flex items-center justify-center py-10"><Spinner size="md" /><span className="ml-3 text-sm text-muted-foreground">Loading prompts</span></div>;
+  }
+  if (controller.prompts.length === 0) {
+    return <EmptyState className="py-10" title={controller.emptyStateTitle} description={controller.emptyStateDescription} action={controller.ownership !== "builtin" ? <Button onClick={controller.openCreate}>Create a prompt</Button> : undefined} />;
+  }
+
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {controller.visiblePrompts.map((prompt) => <PromptCard key={prompt.id} prompt={prompt} onOpen={() => void controller.openDetail(prompt.id)} />)}
+      </div>
+      {controller.hiddenPromptCount > 0 ? <p className="text-sm text-muted-foreground">Showing first 50 of {controller.prompts.length} prompts. Narrow the filters or search to reduce the list.</p> : null}
+    </>
+  );
+}
+
+function PromptCard({ prompt, onOpen }: { prompt: PromptListItem; onOpen: () => void }) {
+  return (
+    <Card className={prompt.is_builtin ? "border-primary/30 bg-primary/5" : ""}>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base line-clamp-2">{prompt.title}</CardTitle>
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant={prompt.is_builtin ? "default" : "secondary"}>{prompt.is_builtin ? "Built-in" : "Custom"}</Badge>
+            <Badge variant={prompt.visibility === "public" ? "outline" : "secondary"}>{prompt.visibility === "public" ? "Public" : "Private"}</Badge>
+          </div>
+        </div>
+        <CardDescription className="line-clamp-2">{prompt.description || "No description"}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3"><span>{formatCategory(prompt.category)}</span><span>{formatDateTime(prompt.created_at)}</span></div>
+        <Button variant="outline" size="sm" className="w-full" onClick={onOpen}>View</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PromptFormFields({
+  form,
+  disabled,
+  onChange,
+  mode,
+  category,
+}: {
+  form: PromptFormState | PromptEditFormState;
+  disabled: boolean;
+  onChange: (value: SetStateAction<any>) => void;
+  mode: "create" | "edit";
+  category?: string;
+}) {
+  const prefix = mode === "create" ? "create" : "edit";
+  return (
+    <>
+      <div className="grid gap-4 md:grid-cols-2">
+        <FormField label="Title" required htmlFor={`${prefix}-prompt-title`}>
+          <Input id={`${prefix}-prompt-title`} name={`${prefix}_prompt_title`} autoComplete="off" value={form.title} onChange={(e) => onChange((prev: any) => ({ ...prev, title: e.target.value }))} disabled={disabled} />
+        </FormField>
+        {mode === "create" ? (
+          <FormField label="Category" htmlFor="create-prompt-category">
+            <Select value={(form as PromptFormState).category} onValueChange={(v) => onChange((prev: PromptFormState) => ({ ...prev, category: v as PromptCategory }))} disabled={disabled}>
+              <SelectTrigger id="create-prompt-category"><SelectValue /></SelectTrigger>
+              <SelectContent>{CATEGORIES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </FormField>
+        ) : (
+          <FormField label="Category"><div className="px-3 py-2 border rounded-md text-sm bg-muted">{category ? formatCategory(category) : "Other"}</div></FormField>
+        )}
+      </div>
+      <FormField label="Description" htmlFor={`${prefix}-prompt-description`}>
+        <Input id={`${prefix}-prompt-description`} name={`${prefix}_prompt_description`} autoComplete="off" value={form.description} onChange={(e) => onChange((prev: any) => ({ ...prev, description: e.target.value }))} disabled={disabled} />
+      </FormField>
+      <FormField label="Content" required htmlFor={`${prefix}-prompt-content`}>
+        <Textarea id={`${prefix}-prompt-content`} name={`${prefix}_prompt_content`} autoComplete="off" value={form.content} onChange={(e) => onChange((prev: any) => ({ ...prev, content: e.target.value }))} disabled={disabled} className="font-mono" rows={mode === "create" ? 10 : 12} />
+      </FormField>
+      <FormField label="Variables schema (JSON)" description={mode === "create" ? "Leave empty for no variables." : undefined} htmlFor={`${prefix}-prompt-variables`}>
+        <Textarea id={`${prefix}-prompt-variables`} name={`${prefix}_prompt_variables_schema`} autoComplete="off" value={form.variablesSchemaText} onChange={(e) => onChange((prev: any) => ({ ...prev, variablesSchemaText: e.target.value }))} disabled={disabled} className="font-mono" rows={mode === "create" ? 4 : 6} />
+      </FormField>
+    </>
+  );
+}
+
+function CreatePromptDialog({ controller }: { controller: PromptsPageController }) {
+  return (
+    <Dialog open={controller.isCreateOpen} onOpenChange={(open) => !controller.isCreating && controller.setIsCreateOpen(open)}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader><DialogTitle>Create new prompt</DialogTitle><DialogDescription>Create a reusable prompt template.</DialogDescription></DialogHeader>
+        {controller.createError ? <Alert variant="destructive"><AlertDescription>{controller.createError}</AlertDescription></Alert> : null}
+        <form id="create-prompt-form" className="space-y-4" onSubmit={controller.submitCreate}>
+          <PromptFormFields form={controller.createForm} disabled={controller.isCreating} onChange={controller.setCreateForm} mode="create" />
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={controller.closeCreate} disabled={controller.isCreating}>Cancel</Button>
+          <Button type="submit" form="create-prompt-form" disabled={controller.isCreating}>{controller.isCreating ? <><Spinner size="xs" className="mr-2" />Creating</> : "Create"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PromptDetailDialog({ controller }: { controller: PromptsPageController }) {
+  return (
+    <Dialog open={Boolean(controller.selectedPromptId)} onOpenChange={(open) => { if (!open && !controller.detailLoading && !controller.isCloning && !controller.isSaving && !controller.isPublishing) controller.closeDetail(); }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <PromptDetailHeader selectedPrompt={controller.selectedPrompt} />
+        {controller.detailError ? <Alert variant="destructive"><AlertDescription>{controller.detailError}</AlertDescription></Alert> : null}
+        <PromptDetailBody controller={controller} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PromptDetailHeader({ selectedPrompt }: { selectedPrompt: PromptDetail | null }) {
+  return (
+    <DialogHeader>
+      <DialogTitle>{selectedPrompt ? selectedPrompt.title : "Prompt"}</DialogTitle>
+      <DialogDescription>{selectedPrompt ? selectedPrompt.description || "Review prompt details, variables, and sharing controls." : "Loading prompt details."}</DialogDescription>
+      {selectedPrompt ? <div className="flex items-center gap-2 mt-2"><Badge variant={selectedPrompt.owner_id ? "secondary" : "default"}>{selectedPrompt.owner_id ? "Custom" : "Built-in"}</Badge><Badge variant="outline">{selectedPrompt.visibility}</Badge><Badge variant="outline">{formatCategory(selectedPrompt.category)}</Badge></div> : null}
+    </DialogHeader>
+  );
+}
+
+function PromptDetailBody({ controller }: { controller: PromptsPageController }) {
+  if (controller.detailLoading) {
+    return <div className="flex items-center justify-center py-10"><Spinner size="md" /><span className="ml-3 text-sm text-muted-foreground">Loading prompt</span></div>;
+  }
+  if (!controller.selectedPrompt) {
+    return <div className="py-6 text-center text-sm text-muted-foreground">Prompt not available.</div>;
+  }
+  if (controller.isEditing) {
+    return <PromptEditPanel controller={controller} selectedPrompt={controller.selectedPrompt} />;
+  }
+  return <PromptReadOnlyDetail controller={controller} selectedPrompt={controller.selectedPrompt} />;
+}
+
+function PromptEditPanel({ controller, selectedPrompt }: { controller: PromptsPageController; selectedPrompt: PromptDetail }) {
+  return (
+    <>
+      {controller.editError ? <Alert variant="destructive"><AlertDescription>{controller.editError}</AlertDescription></Alert> : null}
+      <form id="edit-prompt-form" className="space-y-4" onSubmit={controller.submitEdit}>
+        <PromptFormFields form={controller.editForm} disabled={controller.isSaving} onChange={controller.setEditForm} mode="edit" category={selectedPrompt.category} />
+      </form>
+      <DialogFooter>
+        <Button variant="outline" onClick={controller.cancelEditing} disabled={controller.isSaving}>Cancel</Button>
+        <Button type="submit" form="edit-prompt-form" disabled={controller.isSaving}>{controller.isSaving ? <><Spinner size="xs" className="mr-2" />Saving</> : "Save"}</Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function PromptReadOnlyDetail({ controller, selectedPrompt }: { controller: PromptsPageController; selectedPrompt: PromptDetail }) {
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          <PromptMetaBox label="Version" value={selectedPrompt.version} />
+          <PromptMetaBox label="License" value={selectedPrompt.license} />
+          <PromptMetaBox label="Updated" value={formatDateTime(selectedPrompt.updated_at)} />
+        </div>
+        {selectedPrompt.description ? <><Separator /><div><h4 className="text-sm font-medium mb-2">Description</h4><p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedPrompt.description}</p></div></> : null}
+        <Separator />
+        <div><h4 className="text-sm font-medium mb-2">Content</h4><pre className="p-4 bg-muted rounded-lg border border-border/50 overflow-x-auto text-sm font-mono whitespace-pre-wrap">{selectedPrompt.content}</pre></div>
+        <Separator />
+        <div><h4 className="text-sm font-medium mb-2">Variables schema</h4><pre className="p-4 bg-muted rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">{JSON.stringify(selectedPrompt.variables_schema ?? {}, null, 2)}</pre></div>
+      </div>
+      <PromptDetailFooter controller={controller} selectedPrompt={selectedPrompt} />
+    </>
+  );
+}
+
+function PromptMetaBox({ label, value }: { label: string; value: string | number }) {
+  return <div className="bg-muted rounded-lg p-3"><p className="text-xs font-medium text-muted-foreground uppercase">{label}</p><p className="mt-1 text-sm">{value}</p></div>;
+}
+
+function PromptDetailFooter({ controller, selectedPrompt }: { controller: PromptsPageController; selectedPrompt: PromptDetail }) {
+  return (
+    <DialogFooter className="flex-wrap gap-2">
+      {controller.canCloneSelected ? <Button onClick={() => void controller.cloneSelected()} disabled={controller.isCloning}>{controller.isCloning ? <><Spinner size="xs" className="mr-2" />Cloning</> : "Clone"}</Button> : null}
+      {controller.canPublishSelected ? <Button variant="outline" onClick={() => void controller.publishSelected()} disabled={controller.isPublishing}>{controller.isPublishing ? <><Spinner size="xs" className="mr-2" />Publishing</> : "Publish"}</Button> : null}
+      {controller.canEditSelected ? <><Button variant="outline" onClick={controller.startEditing}>Edit</Button><ConfirmButton variant="destructive" title={`Delete "${selectedPrompt.title}"`} description="This will permanently delete the prompt. This action cannot be undone." confirmText="Delete" onConfirm={() => controller.handleDelete(selectedPrompt)}>Delete</ConfirmButton></> : null}
+      <Button variant="outline" onClick={() => controller.closeDetail()}>Close</Button>
+    </DialogFooter>
+  );
+}
+
+export default function PromptsPage() {
+  const controller = usePromptsPageController();
 
   return (
     <ProtectedRoute>
       <DashboardLayout>
         <div className="flex flex-col gap-6">
-          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-6">
-            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/12 via-violet-500/8 to-fuchsia-500/8" />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight bg-linear-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
-                  Prompts
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Browse built-in prompts and manage your own prompt library.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" onClick={() => void refreshPrompts()} disabled={loading}>
-                  <RefreshCw aria-hidden="true" />
-                  Refresh
-                </Button>
-                <Button onClick={openCreate}>
-                  <Plus aria-hidden="true" />
-                  New prompt
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Filters */}
-          <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
-            <CardContent className="pt-6">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  {OWNERSHIP_OPTIONS.map((o) => (
-                    <Button
-                      key={o.value}
-                      variant={ownership === o.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateOwnership(o.value)}
-                    >
-                      {o.label}
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <Select value={category || "all"} onValueChange={updateCategory}>
-                    <SelectTrigger className="w-full sm:w-48">
-                      <SelectValue placeholder="All categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All categories</SelectItem>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <SearchInput
-                    value={searchDraft}
-                    onChange={setSearchDraft}
-                    placeholder="Search prompts"
-                    className="w-full sm:w-64"
-                    onSearch={applySearch}
-                    debounceMs={300}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Spinner size="md" />
-              <span className="ml-3 text-sm text-muted-foreground">Loading prompts</span>
-            </div>
-          ) : prompts.length === 0 ? (
-            <EmptyState
-              className="py-10"
-              title={emptyStateTitle}
-              description={emptyStateDescription}
-              action={ownership !== "builtin" ? <Button onClick={openCreate}>Create a prompt</Button> : undefined}
-            />
-          ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {visiblePrompts.map((prompt) => (
-                  <Card key={prompt.id} className={prompt.is_builtin ? "border-primary/30 bg-primary/5" : ""}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base line-clamp-2">{prompt.title}</CardTitle>
-                        <div className="flex flex-col items-end gap-1">
-                          <Badge variant={prompt.is_builtin ? "default" : "secondary"}>
-                            {prompt.is_builtin ? "Built-in" : "Custom"}
-                          </Badge>
-                          <Badge variant={prompt.visibility === "public" ? "outline" : "secondary"}>
-                            {prompt.visibility === "public" ? "Public" : "Private"}
-                          </Badge>
-                        </div>
-                      </div>
-                      <CardDescription className="line-clamp-2">
-                        {prompt.description || "No description"}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                        <span>{formatCategory(prompt.category)}</span>
-                        <span>{formatDateTime(prompt.created_at)}</span>
-                      </div>
-                      <Button variant="outline" size="sm" className="w-full" onClick={() => void openDetail(prompt.id)}>
-                        View
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              {hiddenPromptCount > 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Showing first 50 of {prompts.length} prompts. Narrow the filters or search to reduce the list.
-                </p>
-              ) : null}
-            </>
-          )}
-
-          {/* Create Dialog */}
-          <Dialog open={isCreateOpen} onOpenChange={(open) => !isCreating && setIsCreateOpen(open)}>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Create new prompt</DialogTitle>
-                <DialogDescription>Create a reusable prompt template.</DialogDescription>
-              </DialogHeader>
-
-              {createError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{createError}</AlertDescription>
-                </Alert>
-              )}
-
-              <form id="create-prompt-form" className="space-y-4" onSubmit={submitCreate}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Title" required htmlFor="create-prompt-title">
-                    <Input
-                      id="create-prompt-title"
-                      name="prompt_title"
-                      autoComplete="off"
-                      value={createForm.title}
-                      onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
-                      disabled={isCreating}
-                    />
-                  </FormField>
-
-                  <FormField label="Category" htmlFor="create-prompt-category">
-                    <Select
-                      value={createForm.category}
-                      onValueChange={(v) => setCreateForm((prev) => ({ ...prev, category: v as PromptCategory }))}
-                      disabled={isCreating}
-                    >
-                      <SelectTrigger id="create-prompt-category">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            {c.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-                </div>
-
-                <FormField label="Description" htmlFor="create-prompt-description">
-                  <Input
-                    id="create-prompt-description"
-                    name="prompt_description"
-                    autoComplete="off"
-                    value={createForm.description}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
-                    disabled={isCreating}
-                  />
-                </FormField>
-
-                <FormField label="Content" required htmlFor="create-prompt-content">
-                  <Textarea
-                    id="create-prompt-content"
-                    name="prompt_content"
-                    autoComplete="off"
-                    value={createForm.content}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, content: e.target.value }))}
-                    disabled={isCreating}
-                    className="font-mono"
-                    rows={10}
-                  />
-                </FormField>
-
-                <FormField
-                  label="Variables schema (JSON)"
-                  description="Leave empty for no variables."
-                  htmlFor="create-prompt-variables"
-                >
-                  <Textarea
-                    id="create-prompt-variables"
-                    name="prompt_variables_schema"
-                    autoComplete="off"
-                    value={createForm.variablesSchemaText}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
-                    disabled={isCreating}
-                    className="font-mono"
-                    rows={4}
-                  />
-                </FormField>
-              </form>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={closeCreate} disabled={isCreating}>
-                  Cancel
-                </Button>
-                <Button type="submit" form="create-prompt-form" disabled={isCreating}>
-                  {isCreating ? (
-                    <>
-                      <Spinner size="xs" className="mr-2" />
-                      Creating
-                    </>
-                  ) : (
-                    "Create"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Detail Dialog */}
-          <Dialog
-            open={Boolean(selectedPromptId)}
-            onOpenChange={(open) => {
-              if (!open && !detailLoading && !isCloning && !isSaving && !isPublishing) {
-                closeDetail();
-              }
-            }}
-          >
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{selectedPrompt ? selectedPrompt.title : "Prompt"}</DialogTitle>
-                <DialogDescription>
-                  {selectedPrompt
-                    ? selectedPrompt.description || "Review prompt details, variables, and sharing controls."
-                    : "Loading prompt details."}
-                </DialogDescription>
-                {selectedPrompt && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant={selectedPrompt.owner_id ? "secondary" : "default"}>
-                      {selectedPrompt.owner_id ? "Custom" : "Built-in"}
-                    </Badge>
-                    <Badge variant="outline">{selectedPrompt.visibility}</Badge>
-                    <Badge variant="outline">{formatCategory(selectedPrompt.category)}</Badge>
-                  </div>
-                )}
-              </DialogHeader>
-
-              {detailError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{detailError}</AlertDescription>
-                </Alert>
-              )}
-
-              {detailLoading ? (
-                <div className="flex items-center justify-center py-10">
-                  <Spinner size="md" />
-                  <span className="ml-3 text-sm text-muted-foreground">Loading prompt</span>
-                </div>
-              ) : !selectedPrompt ? (
-                <div className="py-6 text-center text-sm text-muted-foreground">Prompt not available.</div>
-              ) : isEditing ? (
-                <>
-                  {editError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{editError}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <form id="edit-prompt-form" className="space-y-4" onSubmit={submitEdit}>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField label="Title" required htmlFor="edit-prompt-title">
-                        <Input
-                          id="edit-prompt-title"
-                          name="edit_prompt_title"
-                          autoComplete="off"
-                          value={editForm.title}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
-                          disabled={isSaving}
-                        />
-                      </FormField>
-
-                      <FormField label="Category">
-                        <div className="px-3 py-2 border rounded-md text-sm bg-muted">
-                          {formatCategory(selectedPrompt.category)}
-                        </div>
-                      </FormField>
-                    </div>
-
-                    <FormField label="Description" htmlFor="edit-prompt-description">
-                      <Input
-                        id="edit-prompt-description"
-                        name="edit_prompt_description"
-                        autoComplete="off"
-                        value={editForm.description}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
-                        disabled={isSaving}
-                      />
-                    </FormField>
-
-                    <FormField label="Content" required htmlFor="edit-prompt-content">
-                      <Textarea
-                        id="edit-prompt-content"
-                        name="edit_prompt_content"
-                        autoComplete="off"
-                        value={editForm.content}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
-                        disabled={isSaving}
-                        className="font-mono"
-                        rows={12}
-                      />
-                    </FormField>
-
-                    <FormField label="Variables schema (JSON)" htmlFor="edit-prompt-variables">
-                      <Textarea
-                        id="edit-prompt-variables"
-                        name="edit_prompt_variables_schema"
-                        autoComplete="off"
-                        value={editForm.variablesSchemaText}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, variablesSchemaText: e.target.value }))}
-                        disabled={isSaving}
-                        className="font-mono"
-                        rows={6}
-                      />
-                    </FormField>
-                  </form>
-
-                  <DialogFooter>
-                    <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" form="edit-prompt-form" disabled={isSaving}>
-                      {isSaving ? (
-                        <>
-                          <Spinner size="xs" className="mr-2" />
-                          Saving
-                        </>
-                      ) : (
-                        "Save"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <div className="bg-muted rounded-lg p-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase">Version</p>
-                        <p className="mt-1 text-sm">{selectedPrompt.version}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase">License</p>
-                        <p className="mt-1 text-sm">{selectedPrompt.license}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase">Updated</p>
-                        <p className="mt-1 text-sm">{formatDateTime(selectedPrompt.updated_at)}</p>
-                      </div>
-                    </div>
-
-                    {selectedPrompt.description && (
-                      <>
-                        <Separator />
-                        <div>
-                          <h4 className="text-sm font-medium mb-2">Description</h4>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedPrompt.description}
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                    <Separator />
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Content</h4>
-                      <pre className="p-4 bg-muted rounded-lg border border-border/50 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
-                        {selectedPrompt.content}
-                      </pre>
-                    </div>
-
-                    <Separator />
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Variables schema</h4>
-                      <pre className="p-4 bg-muted rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-                        {JSON.stringify(selectedPrompt.variables_schema ?? {}, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-
-                  <DialogFooter className="flex-wrap gap-2">
-                    {canCloneSelected && (
-                      <Button onClick={() => void cloneSelected()} disabled={isCloning}>
-                        {isCloning ? (
-                          <>
-                            <Spinner size="xs" className="mr-2" />
-                            Cloning
-                          </>
-                        ) : (
-                          "Clone"
-                        )}
-                      </Button>
-                    )}
-
-                    {canPublishSelected && (
-                      <Button variant="outline" onClick={() => void publishSelected()} disabled={isPublishing}>
-                        {isPublishing ? (
-                          <>
-                            <Spinner size="xs" className="mr-2" />
-                            Publishing
-                          </>
-                        ) : (
-                          "Publish"
-                        )}
-                      </Button>
-                    )}
-
-                    {canEditSelected && (
-                      <>
-                        <Button variant="outline" onClick={startEditing}>
-                          Edit
-                        </Button>
-                        <ConfirmButton
-                          variant="destructive"
-                          title={`Delete "${selectedPrompt.title}"`}
-                          description="This will permanently delete the prompt. This action cannot be undone."
-                          confirmText="Delete"
-                          onConfirm={() => handleDelete(selectedPrompt)}
-                        >
-                          Delete
-                        </ConfirmButton>
-                      </>
-                    )}
-
-                    <Button variant="outline" onClick={() => closeDetail()}>
-                      Close
-                    </Button>
-                  </DialogFooter>
-                </>
-              )}
-            </DialogContent>
-          </Dialog>
+          <PromptsHero controller={controller} />
+          <PromptFilters controller={controller} />
+          {controller.error ? <Alert variant="destructive"><AlertDescription>{controller.error}</AlertDescription></Alert> : null}
+          <PromptsListSection controller={controller} />
+          <CreatePromptDialog controller={controller} />
+          <PromptDetailDialog controller={controller} />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

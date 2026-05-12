@@ -130,7 +130,7 @@ function useNodeInspectorMetadata({
     if ((!selectedNode && !selectedEdge) || !editingMetadata) return;
     dispatchInspectorState({ patch: { editingMetadata: false } });
     notifyEditingMetadataChange(false);
-  }, [editingMetadata, selectedEdge, selectedNode]);
+  }, [editingMetadata, notifyEditingMetadataChange, selectedEdge, selectedNode]);
 
   const saveMetadata = async () => {
     dispatchInspectorState({ patch: { savingMetadata: true } });

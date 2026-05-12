@@ -250,7 +250,7 @@ function credentialsPageReducer(state: CredentialsPageState, action: Credentials
   }
 }
 
-export default function CredentialsPage() {
+function useCredentialsPageController() {
   const router = useRouter();
   const { user } = useAuth();
   const canManageCredentials = user?.organization_role === "owner" || user?.organization_role === "admin";
@@ -345,8 +345,6 @@ export default function CredentialsPage() {
     }
   };
 
-  const hasCredentials = credentials.length > 0;
-
   const handleStartOAuth = useCallback(
     async (provider: OAuthIntegrationProvider) => {
       if (!canManageCredentials) {
@@ -393,10 +391,7 @@ export default function CredentialsPage() {
       acc[item.provider] = (acc[item.provider] ?? 0) + 1;
       return acc;
     }, {});
-    return Object.entries(counts).map(([provider, count]) => ({
-      provider,
-      count,
-    }));
+    return Object.entries(counts).map(([provider, count]) => ({ provider, count }));
   }, [credentials]);
 
   const latestOauthCredentialByProvider = useMemo(() => {
@@ -452,369 +447,439 @@ export default function CredentialsPage() {
     };
   }, [oauthConnectionStateByProvider, oauthProvidersByName]);
 
+  return {
+    credentials,
+    loading,
+    isRefreshing,
+    error,
+    isDialogOpen,
+    isSubmitting,
+    oauthStartingProvider,
+    formState,
+    canManageCredentials,
+    hasCredentials: credentials.length > 0,
+    providerSummary,
+    oauthProvidersByName,
+    latestOauthCredentialByProvider,
+    oauthConnectionStateByProvider,
+    oauthChecklist,
+    fetchCredentials,
+    handleCreate,
+    handleDelete,
+    handleStartOAuth,
+    handleCopyText,
+    setDialogOpen: (open: boolean) => dispatchCredentials({ type: "dialog", open }),
+    updateFormField: (field: keyof CredentialCreateInput, value: string) => dispatchCredentials({ type: "form-field", field, value }),
+  };
+}
+
+type CredentialsPageController = ReturnType<typeof useCredentialsPageController>;
+
+function CredentialsHeader({ controller }: { controller: CredentialsPageController }) {
+  return (
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">Credentials</h1>
+        <p className="text-sm text-muted-foreground">
+          Securely store provider keys for multi-model company operations. Keys are encrypted and never shown in full.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={() => void controller.fetchCredentials({ silent: true })}>
+          {controller.isRefreshing ? <Spinner className="mr-2 size-4" /> : <RefreshCw className="mr-2 size-4" />}
+          Refresh
+        </Button>
+        <AddCredentialDialog controller={controller} />
+      </div>
+    </div>
+  );
+}
+
+function AddCredentialDialog({ controller }: { controller: CredentialsPageController }) {
+  return (
+    <Dialog open={controller.isDialogOpen} onOpenChange={controller.setDialogOpen}>
+      <Button onClick={() => controller.setDialogOpen(true)} disabled={!controller.canManageCredentials}>
+        <Plus className="mr-2 size-4" />
+        Add credential
+      </Button>
+      <DialogContent>
+        <form onSubmit={controller.handleCreate} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Add provider credential</DialogTitle>
+            <DialogDescription>
+              Store API keys for non-OAuth providers used by AI workers. OAuth providers connect below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <FormField label="Provider" htmlFor="provider">
+            <Select
+              value={controller.formState.provider}
+              onValueChange={(value) => controller.updateFormField("provider", value as CredentialCreateInput["provider"])}
+            >
+              <SelectTrigger id="provider">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {MANUAL_PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.value} value={provider.value}>
+                    {provider.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+
+          <FormField label="Name" htmlFor="name" description="Friendly name to identify this key.">
+            <Input
+              id="name"
+              name="credential_name"
+              autoComplete="off"
+              value={controller.formState.name}
+              onChange={(event) => controller.updateFormField("name", event.target.value)}
+              placeholder="Production OpenAI"
+              required
+            />
+          </FormField>
+
+          <FormField label="API key" htmlFor="api_key" description="Stored securely. You will only see the last 4 characters later.">
+            <Input
+              id="api_key"
+              name="api_key"
+              type="password"
+              autoComplete="new-password"
+              value={controller.formState.api_key}
+              onChange={(event) => controller.updateFormField("api_key", event.target.value)}
+              placeholder="sk-proj-example"
+              required
+            />
+          </FormField>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => controller.setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={controller.isSubmitting}>
+              {controller.isSubmitting ? <Spinner className="mr-2 size-4" /> : null}
+              Save credential
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProviderSummaryBadges({ items }: { items: { provider: string; count: number }[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <Badge key={item.provider} variant="outline">
+          {getProviderLabel(item.provider)}: {item.count}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function OAuthIntegrationsCard({ controller }: { controller: CredentialsPageController }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>OAuth integrations</CardTitle>
+        <CardDescription>
+          OAuth apps are configured at service level via environment variables. From this page, you only connect and reconnect accounts.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <OAuthChecklist controller={controller} />
+        {OAUTH_PROVIDERS.map((provider) => (
+          <OAuthProviderRow key={provider} provider={provider} controller={controller} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OAuthChecklist({ controller }: { controller: CredentialsPageController }) {
+  const { oauthChecklist } = controller;
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Connection checklist</p>
+          <p className="text-xs text-muted-foreground">
+            Connected {oauthChecklist.connectedCount} of {oauthChecklist.total} providers.
+          </p>
+        </div>
+        <Badge variant={oauthChecklist.remainingConnections === 0 ? "default" : "outline"}>
+          {oauthChecklist.remainingConnections === 0 ? "All connected" : `${oauthChecklist.remainingConnections} remaining`}
+        </Badge>
+      </div>
+      <Separator className="my-3" />
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p>
+          1. Service OAuth config ready: {oauthChecklist.serviceConfiguredCount} / {oauthChecklist.total}.
+        </p>
+        <p>2. Connect account for each provider you plan to use in your company.</p>
+        <p>
+          Redirect URI configured in service:
+          <span className="mx-1 font-mono text-foreground">{oauthChecklist.redirectUri}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="min-h-11 px-3 text-xs md:min-h-8"
+            onClick={() => void controller.handleCopyText("Redirect URI", oauthChecklist.redirectUri)}
+          >
+            <Copy className="mr-1 size-3.5" />
+            Copy
+          </Button>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function OAuthProviderRow({ provider, controller }: { provider: OAuthIntegrationProvider; controller: CredentialsPageController }) {
+  const status = controller.oauthProvidersByName.get(provider);
+  const label = getProviderLabel(provider);
+  const serviceConfigured = Boolean(status?.configured);
+  const connectionState = controller.oauthConnectionStateByProvider.get(provider) ?? "not_connected";
+  const guidance = OAUTH_PROVIDER_GUIDANCE[provider];
+  const connectButtonLabel = connectionState === "needs_reconnect" ? "Reconnect account" : "Connect account";
+
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium">{label}</p>
+            <OAuthStateBadge state={connectionState} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {guidance.scopeHint}{" "}
+            <a href={guidance.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+              OAuth docs
+              <ExternalLink className="size-3" />
+            </a>
+          </p>
+          <OAuthProviderStatusMessage status={status} serviceConfigured={serviceConfigured} connectionState={connectionState} />
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            size="sm"
+            onClick={() => void controller.handleStartOAuth(provider)}
+            disabled={controller.oauthStartingProvider === provider || !serviceConfigured || !controller.canManageCredentials}
+          >
+            {controller.oauthStartingProvider === provider ? (
+              <>
+                <Spinner className="mr-2 size-4" />
+                Connecting
+              </>
+            ) : (
+              connectButtonLabel
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OAuthStateBadge({ state }: { state: OAuthConnectionState }) {
+  if (state === "ready") {
+    return (
+      <Badge variant="outline" className="gap-1 text-emerald-600">
+        <CheckCircle2 className="size-3.5" />
+        Ready
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="outline" className="gap-1 text-amber-600">
+      <CircleAlert className="size-3.5" />
+      {state === "needs_reconnect" ? "Reconnect needed" : "Not connected"}
+    </Badge>
+  );
+}
+
+function OAuthProviderStatusMessage({
+  status,
+  serviceConfigured,
+  connectionState,
+}: {
+  status: CredentialOAuthProviderStatus | undefined;
+  serviceConfigured: boolean;
+  connectionState: OAuthConnectionState;
+}) {
+  if (!status) {
+    return <p className="text-xs text-muted-foreground">Provider status unavailable.</p>;
+  }
+  if (!serviceConfigured) {
+    return <p className="text-xs text-amber-700 dark:text-amber-400">{formatOAuthServiceMessage(status)}</p>;
+  }
+  if (connectionState === "ready") {
+    return <p className="text-xs text-muted-foreground">Account connected. Click Connect account again to rotate or reconnect.</p>;
+  }
+  if (connectionState === "needs_reconnect") {
+    return <p className="text-xs text-amber-700 dark:text-amber-400">OAuth credential exists but requires reconnection.</p>;
+  }
+  return <p className="text-xs text-muted-foreground">Service ready. Connect an account to use this provider.</p>;
+}
+
+function CredentialAlerts({ controller }: { controller: CredentialsPageController }) {
+  return (
+    <>
+      {controller.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{controller.error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!controller.canManageCredentials ? (
+        <Alert>
+          <AlertDescription>Only organization admins can create or delete credentials. You can still view existing keys.</AlertDescription>
+        </Alert>
+      ) : null}
+    </>
+  );
+}
+
+function CredentialsListSection({ controller }: { controller: CredentialsPageController }) {
+  if (controller.loading) {
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Spinner className="size-5" />
+        Loading credentials
+      </div>
+    );
+  }
+
+  if (!controller.hasCredentials) {
+    return (
+      <EmptyState
+        title="No credentials yet"
+        description="Add a provider key to unlock multi-model AI workers."
+        action={
+          controller.canManageCredentials ? (
+            <Button onClick={() => controller.setDialogOpen(true)}>
+              <Plus className="mr-2 size-4" />
+              Add credential
+            </Button>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {controller.credentials.map((credential) => (
+        <CredentialCard key={credential.id} credential={credential} controller={controller} />
+      ))}
+    </div>
+  );
+}
+
+function CredentialCard({ credential, controller }: { credential: Credential; controller: CredentialsPageController }) {
+  const oauthProvider = isOAuthProvider(credential.provider) ? credential.provider : null;
+  const isOAuthCredential = credential.is_oauth_connection;
+  const isActiveOAuthCredential = oauthProvider !== null && controller.latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div>
+          <CardTitle className="text-base">{credential.name}</CardTitle>
+          <p className="text-sm text-muted-foreground">{getProviderLabel(credential.provider)}</p>
+        </div>
+        {controller.canManageCredentials ? (
+          <ConfirmButton
+            variant="destructive"
+            size="sm"
+            title="Delete credential?"
+            description="This will remove the key and any operations using it will fail until replaced."
+            onConfirm={() => controller.handleDelete(credential.id)}
+          >
+            Delete
+          </ConfirmButton>
+        ) : (
+          <Badge variant="outline">Read only</Badge>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <CredentialBadges credential={credential} oauthProvider={oauthProvider} isActiveOAuthCredential={isActiveOAuthCredential} />
+        {credential.health_message ? <div className="text-xs text-muted-foreground">{credential.health_message}</div> : null}
+        {credential.requires_reauth && controller.canManageCredentials && oauthProvider && isOAuthCredential ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void controller.handleStartOAuth(oauthProvider)}
+            disabled={controller.oauthStartingProvider === oauthProvider}
+          >
+            {controller.oauthStartingProvider === oauthProvider ? (
+              <>
+                <Spinner className="mr-2 size-4" />
+                Reconnecting
+              </>
+            ) : (
+              "Reconnect OAuth"
+            )}
+          </Button>
+        ) : null}
+        <div className="text-sm text-muted-foreground">Key hint</div>
+        <div className="font-mono text-sm">{credential.key_hint}</div>
+        {credential.token_expires_at ? (
+          <div className="text-xs text-muted-foreground">Expires {formatDateTime(credential.token_expires_at)}</div>
+        ) : null}
+        <div className="text-xs text-muted-foreground">Created {formatDateTime(credential.created_at)}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CredentialBadges({
+  credential,
+  oauthProvider,
+  isActiveOAuthCredential,
+}: {
+  credential: Credential;
+  oauthProvider: OAuthIntegrationProvider | null;
+  isActiveOAuthCredential: boolean;
+}) {
+  const isOAuthCredential = credential.is_oauth_connection;
+
+  return (
+    <>
+      {oauthProvider && !isOAuthCredential ? <Badge variant="outline">API key only (not OAuth)</Badge> : null}
+      {oauthProvider && isOAuthCredential && isActiveOAuthCredential ? (
+        <Badge variant="outline" className="text-emerald-600">Active OAuth credential</Badge>
+      ) : null}
+      {oauthProvider && isOAuthCredential && !isActiveOAuthCredential ? <Badge variant="outline">Older OAuth credential</Badge> : null}
+      {credential.health_status !== "healthy" ? (
+        <Badge variant="outline">{credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}</Badge>
+      ) : null}
+    </>
+  );
+}
+
+export default function CredentialsPage() {
+  const controller = useCredentialsPageController();
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-foreground">Credentials</h1>
-              <p className="text-sm text-muted-foreground">
-                Securely store provider keys for multi-model company operations. Keys are encrypted and never shown in
-                full.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => void fetchCredentials({ silent: true })}>
-                {isRefreshing ? <Spinner className="mr-2 size-4" /> : <RefreshCw className="mr-2 size-4" />}
-                Refresh
-              </Button>
-              <Dialog
-                open={isDialogOpen}
-                onOpenChange={(open) => dispatchCredentials({ type: "dialog", open })}
-              >
-                <Button onClick={() => dispatchCredentials({ type: "dialog", open: true })} disabled={!canManageCredentials}>
-                  <Plus className="mr-2 size-4" />
-                  Add credential
-                </Button>
-                <DialogContent>
-                  <form onSubmit={handleCreate} className="space-y-4">
-                    <DialogHeader>
-                      <DialogTitle>Add provider credential</DialogTitle>
-                      <DialogDescription>
-                        Store API keys for non-OAuth providers used by AI workers. OAuth providers connect below.
-                      </DialogDescription>
-                    </DialogHeader>
-
-                    <FormField label="Provider" htmlFor="provider">
-                      <Select
-                        value={formState.provider}
-                        onValueChange={(value) =>
-                          dispatchCredentials({
-                            type: "form-field",
-                            field: "provider",
-                            value: value as CredentialCreateInput["provider"],
-                          })
-                        }
-                      >
-                        <SelectTrigger id="provider">
-                          <SelectValue placeholder="Select provider" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MANUAL_PROVIDERS.map((provider) => (
-                            <SelectItem key={provider.value} value={provider.value}>
-                              {provider.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormField>
-
-                    <FormField label="Name" htmlFor="name" description="Friendly name to identify this key.">
-                      <Input
-                        id="name"
-                        name="credential_name"
-                        autoComplete="off"
-                        value={formState.name}
-                        onChange={(event) =>
-                          dispatchCredentials({ type: "form-field", field: "name", value: event.target.value })
-                        }
-                        placeholder="Production OpenAI"
-                        required
-                      />
-                    </FormField>
-
-                    <FormField
-                      label="API key"
-                      htmlFor="api_key"
-                      description="Stored securely. You will only see the last 4 characters later."
-                    >
-                      <Input
-                        id="api_key"
-                        name="api_key"
-                        type="password"
-                        autoComplete="new-password"
-                        value={formState.api_key}
-                        onChange={(event) =>
-                          dispatchCredentials({ type: "form-field", field: "api_key", value: event.target.value })
-                        }
-                        placeholder="sk-proj-example"
-                        required
-                      />
-                    </FormField>
-
-                    <DialogFooter className="gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => dispatchCredentials({ type: "dialog", open: false })}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? <Spinner className="mr-2 size-4" /> : null}
-                        Save credential
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-
-          {providerSummary.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {providerSummary.map((item) => (
-                <Badge key={item.provider} variant="outline">
-                  {getProviderLabel(item.provider)}: {item.count}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>OAuth integrations</CardTitle>
-              <CardDescription>
-                OAuth apps are configured at service level via environment variables. From this page, you only connect
-                and reconnect accounts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Connection checklist</p>
-                    <p className="text-xs text-muted-foreground">
-                      Connected {oauthChecklist.connectedCount} of {oauthChecklist.total} providers.
-                    </p>
-                  </div>
-                  <Badge variant={oauthChecklist.remainingConnections === 0 ? "default" : "outline"}>
-                    {oauthChecklist.remainingConnections === 0
-                      ? "All connected"
-                      : `${oauthChecklist.remainingConnections} remaining`}
-                  </Badge>
-                </div>
-                <Separator className="my-3" />
-                <div className="space-y-2 text-xs text-muted-foreground">
-                  <p>
-                    1. Service OAuth config ready: {oauthChecklist.serviceConfiguredCount} / {oauthChecklist.total}.
-                  </p>
-                  <p>2. Connect account for each provider you plan to use in your company.</p>
-                  <p>
-                    Redirect URI configured in service:
-                    <span className="mx-1 font-mono text-foreground">{oauthChecklist.redirectUri}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-11 px-3 text-xs md:min-h-8"
-                      onClick={() => void handleCopyText("Redirect URI", oauthChecklist.redirectUri)}
-                    >
-                      <Copy className="mr-1 size-3.5" />
-                      Copy
-                    </Button>
-                  </p>
-                </div>
-              </div>
-
-              {OAUTH_PROVIDERS.map((provider) => {
-                const status = oauthProvidersByName.get(provider);
-                const label = getProviderLabel(provider);
-                const serviceConfigured = Boolean(status?.configured);
-                const connectionState = oauthConnectionStateByProvider.get(provider) ?? "not_connected";
-                const guidance = OAUTH_PROVIDER_GUIDANCE[provider];
-                const connectButtonLabel =
-                  connectionState === "needs_reconnect" ? "Reconnect account" : "Connect account";
-
-                return (
-                  <div key={provider} className="rounded-lg border border-border p-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium">{label}</p>
-                          {connectionState === "ready" ? (
-                            <Badge variant="outline" className="gap-1 text-emerald-600">
-                              <CheckCircle2 className="size-3.5" />
-                              Ready
-                            </Badge>
-                          ) : connectionState === "needs_reconnect" ? (
-                            <Badge variant="outline" className="gap-1 text-amber-600">
-                              <CircleAlert className="size-3.5" />
-                              Reconnect needed
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="gap-1 text-amber-600">
-                              <CircleAlert className="size-3.5" />
-                              Not connected
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {guidance.scopeHint}{" "}
-                          <a
-                            href={guidance.docsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
-                          >
-                            OAuth docs
-                            <ExternalLink className="size-3" />
-                          </a>
-                        </p>
-                        {!status ? (
-                          <p className="text-xs text-muted-foreground">Provider status unavailable.</p>
-                        ) : !serviceConfigured ? (
-                          <p className="text-xs text-amber-700 dark:text-amber-400">
-                            {formatOAuthServiceMessage(status)}
-                          </p>
-                        ) : connectionState === "ready" ? (
-                          <p className="text-xs text-muted-foreground">
-                            Account connected. Click Connect account again to rotate or reconnect.
-                          </p>
-                        ) : connectionState === "needs_reconnect" ? (
-                          <p className="text-xs text-amber-700 dark:text-amber-400">
-                            OAuth credential exists but requires reconnection.
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            Service ready. Connect an account to use this provider.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => void handleStartOAuth(provider)}
-                          disabled={oauthStartingProvider === provider || !serviceConfigured || !canManageCredentials}
-                        >
-                          {oauthStartingProvider === provider ? (
-                            <>
-                              <Spinner className="mr-2 size-4" />
-                              Connecting
-                            </>
-                          ) : (
-                            connectButtonLabel
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {!canManageCredentials && (
-            <Alert>
-              <AlertDescription>
-                Only organization admins can create or delete credentials. You can still view existing keys.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {loading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner className="size-5" />
-              Loading credentials
-            </div>
-          ) : !hasCredentials ? (
-            <EmptyState
-              title="No credentials yet"
-              description="Add a provider key to unlock multi-model AI workers."
-              action={
-                canManageCredentials ? (
-                  <Button onClick={() => dispatchCredentials({ type: "dialog", open: true })}>
-                    <Plus className="mr-2 size-4" />
-                    Add credential
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {credentials.map((credential) => {
-                const oauthProvider = isOAuthProvider(credential.provider) ? credential.provider : null;
-                const isOAuthCredential = credential.is_oauth_connection;
-                const isActiveOAuthCredential =
-                  oauthProvider !== null && latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
-                return (
-                  <Card key={credential.id}>
-                    <CardHeader className="flex flex-row items-start justify-between">
-                      <div>
-                        <CardTitle className="text-base">{credential.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground">{getProviderLabel(credential.provider)}</p>
-                      </div>
-                      {canManageCredentials ? (
-                        <ConfirmButton
-                          variant="destructive"
-                          size="sm"
-                          title="Delete credential?"
-                          description="This will remove the key and any operations using it will fail until replaced."
-                          onConfirm={() => handleDelete(credential.id)}
-                        >
-                          Delete
-                        </ConfirmButton>
-                      ) : (
-                        <Badge variant="outline">Read only</Badge>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {oauthProvider && !isOAuthCredential && <Badge variant="outline">API key only (not OAuth)</Badge>}
-                      {oauthProvider && isOAuthCredential && isActiveOAuthCredential && (
-                        <Badge variant="outline" className="text-emerald-600">
-                          Active OAuth credential
-                        </Badge>
-                      )}
-                      {oauthProvider && isOAuthCredential && !isActiveOAuthCredential && (
-                        <Badge variant="outline">Older OAuth credential</Badge>
-                      )}
-                      {credential.health_status !== "healthy" && (
-                        <Badge variant="outline">
-                          {credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}
-                        </Badge>
-                      )}
-                      {credential.health_message && (
-                        <div className="text-xs text-muted-foreground">{credential.health_message}</div>
-                      )}
-                      {credential.requires_reauth && canManageCredentials && oauthProvider && isOAuthCredential && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleStartOAuth(oauthProvider)}
-                          disabled={oauthStartingProvider === oauthProvider}
-                        >
-                          {oauthStartingProvider === oauthProvider ? (
-                            <>
-                              <Spinner className="mr-2 size-4" />
-                              Reconnecting
-                            </>
-                          ) : (
-                            "Reconnect OAuth"
-                          )}
-                        </Button>
-                      )}
-                      <div className="text-sm text-muted-foreground">Key hint</div>
-                      <div className="font-mono text-sm">{credential.key_hint}</div>
-                      {credential.token_expires_at && (
-                        <div className="text-xs text-muted-foreground">
-                          Expires {formatDateTime(credential.token_expires_at)}
-                        </div>
-                      )}
-                      <div className="text-xs text-muted-foreground">
-                        Created {formatDateTime(credential.created_at)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          <CredentialsHeader controller={controller} />
+          <ProviderSummaryBadges items={controller.providerSummary} />
+          <OAuthIntegrationsCard controller={controller} />
+          <CredentialAlerts controller={controller} />
+          <CredentialsListSection controller={controller} />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

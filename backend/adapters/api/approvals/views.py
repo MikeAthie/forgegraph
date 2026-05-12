@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
+from application.services.company_access import accessible_company_queryset, has_company_access
 from infrastructure.orm.models import ApprovalTask, User
 
 
@@ -30,6 +31,7 @@ class ApprovalListView(APIView):
         tasks = (
             ApprovalTask.objects.filter(
                 assignee=user,
+                run__graph_version__graph__in=accessible_company_queryset(user),
             )
             .select_related("run__graph_version__graph")
             .order_by("-created_at")
@@ -92,6 +94,13 @@ class ApprovalDetailView(APIView):
 
         # Check permission - user must be assignee or run owner
         user = cast(User, request.user)
+        graph = task.run.graph_version.graph if task.run.graph_version_id else None
+        if graph is None or not has_company_access(user, graph, minimum_role="viewer"):
+            return error_response(
+                code="NOT_FOUND",
+                message="Approval task not found",
+                status=404,
+            )
         if task.assignee != user and task.run.owner != user:
             return error_response(
                 code="FORBIDDEN",
@@ -140,6 +149,7 @@ class ApprovalCountView(APIView):
         count = ApprovalTask.objects.filter(
             assignee=user,
             status="pending",
+            run__graph_version__graph__in=accessible_company_queryset(user),
         ).count()
 
         return success_response({"count": count})

@@ -1,0 +1,453 @@
+"""Generic service catalog, engagement, and deliverable API views."""
+
+from __future__ import annotations
+
+from typing import Any, cast
+from uuid import UUID
+
+from django.db import IntegrityError
+from rest_framework import status as http_status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from adapters.api.responses import error_response, success_response
+from adapters.api.service_engagements.serializers import (
+    ServiceCatalogCreateSerializer,
+    ServiceCatalogPatchSerializer,
+    ServiceCatalogQuerySerializer,
+    ServiceDeliverableCreateSerializer,
+    ServiceEngagementCreateSerializer,
+    ServiceEngagementPatchSerializer,
+    ServiceEngagementQuerySerializer,
+)
+from application.services.audit_log import record_audit_log
+from application.services.company_access import accessible_company_queryset, has_company_access
+from application.services.rbac import has_min_role
+from application.services.service_engagements import (
+    ServiceEngagementError,
+    create_service_catalog_item,
+    create_service_deliverable,
+    create_service_engagement,
+    service_catalog_payload,
+    service_deliverable_payload,
+    service_engagement_payload,
+    update_service_catalog_item,
+    update_service_engagement,
+)
+from infrastructure.orm.models import (
+    Asset,
+    Graph,
+    OrganizationMembership,
+    ReportRun,
+    ServiceCatalogItem,
+    ServiceDeliverable,
+    ServiceEngagement,
+    User,
+)
+
+
+class ServiceCatalogListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "viewer"):
+            return _forbidden("You do not have permission to view service catalog items.")
+        serializer = ServiceCatalogQuerySerializer(data=request.query_params)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        organization = user.default_organization
+        if organization is None:
+            return success_response({"services": []})
+        queryset = ServiceCatalogItem.objects.filter(organization=organization)
+        if not has_min_role(user, "admin"):
+            queryset = queryset.filter(status="active").exclude(visibility="internal")
+        status_filter = str(serializer.validated_data.get("status") or "")
+        visibility_filter = str(serializer.validated_data.get("visibility") or "")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if visibility_filter:
+            queryset = queryset.filter(visibility=visibility_filter)
+        return success_response(
+            {"services": [service_catalog_payload(item) for item in queryset.order_by("title", "slug")]}
+        )
+
+    def post(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return _forbidden("You do not have permission to manage service catalog items.")
+        organization = user.default_organization
+        if organization is None:
+            return _forbidden("You must belong to an organization to create service catalog items.")
+        serializer = ServiceCatalogCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        try:
+            item = create_service_catalog_item(
+                organization=organization,
+                user=user,
+                data=serializer.validated_data,
+            )
+        except IntegrityError:
+            return error_response(
+                "SERVICE_SLUG_CONFLICT",
+                "A service catalog item with this slug already exists.",
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        record_audit_log(
+            actor=user,
+            tenant_id=str(organization.id),
+            action="service_catalog.created",
+            resource_type="service_catalog_item",
+            resource_id=str(item.id),
+            metadata={"slug": item.slug, "status": item.status},
+        )
+        return success_response(
+            {"service": service_catalog_payload(item)},
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class ServiceCatalogDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, service_id: UUID) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "viewer"):
+            return _forbidden("You do not have permission to view service catalog items.")
+        item = _catalog_item_for_user(user, service_id)
+        if item is None:
+            return _not_found("Service catalog item was not found.")
+        return success_response({"service": service_catalog_payload(item)})
+
+    def patch(self, request: Request, service_id: UUID) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "admin"):
+            return _forbidden("You do not have permission to manage service catalog items.")
+        item = _catalog_item_for_user(user, service_id, include_inactive=True)
+        if item is None:
+            return _not_found("Service catalog item was not found.")
+        serializer = ServiceCatalogPatchSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        try:
+            item = update_service_catalog_item(item=item, data=serializer.validated_data)
+        except IntegrityError:
+            return error_response(
+                "SERVICE_SLUG_CONFLICT",
+                "A service catalog item with this slug already exists.",
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        record_audit_log(
+            actor=user,
+            tenant_id=str(item.organization_id),
+            action="service_catalog.updated",
+            resource_type="service_catalog_item",
+            resource_id=str(item.id),
+            metadata={"slug": item.slug, "status": item.status},
+        )
+        return success_response({"service": service_catalog_payload(item)})
+
+
+class ServiceEngagementListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        if not has_min_role(user, "viewer"):
+            return _forbidden("You do not have permission to view service engagements.")
+        serializer = ServiceEngagementQuerySerializer(data=request.query_params)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        companies = accessible_company_queryset(user, minimum_role="viewer")
+        company_id = serializer.validated_data.get("company_id")
+        if company_id:
+            companies = companies.filter(id=company_id)
+        queryset = (
+            ServiceEngagement.objects.filter(company__in=companies)
+            .select_related("company", "catalog_item", "assigned_operator", "requested_by")
+            .order_by("-updated_at")
+        )
+        status_filter = str(serializer.validated_data.get("status") or "")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        return success_response(
+            {
+                "engagements": [
+                    service_engagement_payload(
+                        item,
+                        include_internal=has_company_access(user, item.company, "member"),
+                    )
+                    for item in queryset
+                ]
+            }
+        )
+
+    def post(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        serializer = ServiceEngagementCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        company = _company_for_user(user, serializer.validated_data["company_id"], minimum_role="member")
+        if company is None:
+            return _not_found("Company was not found or you do not have access to create engagements.")
+        catalog_item = _catalog_item_for_engagement(user, serializer.validated_data["catalog_item_id"])
+        if catalog_item is None:
+            return _not_found("Service catalog item was not found.")
+        assigned_operator = _assigned_operator(company, serializer.validated_data.get("assigned_operator_id"))
+        if isinstance(assigned_operator, Response):
+            return assigned_operator
+        data = dict(serializer.validated_data)
+        data["assigned_operator"] = assigned_operator
+        try:
+            engagement = create_service_engagement(
+                company=company,
+                catalog_item=catalog_item,
+                user=user,
+                data=data,
+            )
+        except IntegrityError:
+            return error_response(
+                "SERVICE_ENGAGEMENT_SOURCE_CONFLICT",
+                "A service engagement with this source key already exists for the company.",
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        except ServiceEngagementError as exc:
+            return _service_error(exc)
+        record_audit_log(
+            actor=user,
+            tenant_id=str(company.organization_id),
+            action="service_engagement.created",
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
+            metadata={"company_id": str(company.id), "catalog_item_id": str(catalog_item.id)},
+        )
+        return success_response(
+            {"engagement": service_engagement_payload(engagement, include_internal=True)},
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class ServiceEngagementDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="viewer")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        return success_response(
+            {
+                "engagement": service_engagement_payload(
+                    engagement,
+                    include_internal=has_company_access(user, engagement.company, "member"),
+                )
+            }
+        )
+
+    def patch(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="member")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        serializer = ServiceEngagementPatchSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        assigned_operator = None
+        if "assigned_operator_id" in serializer.validated_data:
+            assigned_operator = _assigned_operator(
+                engagement.company,
+                serializer.validated_data.get("assigned_operator_id"),
+            )
+            if isinstance(assigned_operator, Response):
+                return assigned_operator
+        data = dict(serializer.validated_data)
+        data.pop("company_id", None)
+        data.pop("catalog_item_id", None)
+        if "assigned_operator_id" in data:
+            data.pop("assigned_operator_id", None)
+            data["assigned_operator"] = assigned_operator
+        try:
+            engagement = update_service_engagement(engagement=engagement, data=data)
+        except IntegrityError:
+            return error_response(
+                "SERVICE_ENGAGEMENT_SOURCE_CONFLICT",
+                "A service engagement with this source key already exists for the company.",
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        record_audit_log(
+            actor=user,
+            tenant_id=str(engagement.organization_id),
+            action="service_engagement.updated",
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
+            metadata={"company_id": str(engagement.company_id), "status": engagement.status},
+        )
+        return success_response(
+            {"engagement": service_engagement_payload(engagement, include_internal=True)}
+        )
+
+
+class ServiceDeliverableListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="viewer")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        queryset = ServiceDeliverable.objects.filter(engagement=engagement).order_by("-updated_at")
+        if not has_company_access(user, engagement.company, "member"):
+            queryset = queryset.exclude(visibility="internal")
+        return success_response(
+            {"deliverables": [service_deliverable_payload(item) for item in queryset]}
+        )
+
+    def post(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="member")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        serializer = ServiceDeliverableCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        data = dict(serializer.validated_data)
+        artifact = _artifact_for_company(engagement.company, data.pop("artifact_id", None))
+        if isinstance(artifact, Response):
+            return artifact
+        report_run = _report_for_company(engagement.company, data.pop("report_run_id", None))
+        if isinstance(report_run, Response):
+            return report_run
+        data["artifact"] = artifact
+        data["report_run"] = report_run
+        try:
+            deliverable = create_service_deliverable(
+                engagement=engagement,
+                user=user,
+                data=data,
+            )
+        except ServiceEngagementError as exc:
+            return _service_error(exc)
+        record_audit_log(
+            actor=user,
+            tenant_id=str(engagement.organization_id),
+            action="service_deliverable.created",
+            resource_type="service_deliverable",
+            resource_id=str(deliverable.id),
+            metadata={"company_id": str(engagement.company_id), "engagement_id": str(engagement.id)},
+        )
+        return success_response(
+            {"deliverable": service_deliverable_payload(deliverable)},
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+def _catalog_item_for_user(
+    user: User,
+    service_id: UUID,
+    *,
+    include_inactive: bool = False,
+) -> ServiceCatalogItem | None:
+    organization = user.default_organization
+    if organization is None:
+        return None
+    queryset = ServiceCatalogItem.objects.filter(organization=organization, id=service_id)
+    if not include_inactive and not has_min_role(user, "admin"):
+        queryset = queryset.filter(status="active").exclude(visibility="internal")
+    return queryset.first()
+
+
+def _catalog_item_for_engagement(user: User, service_id: UUID) -> ServiceCatalogItem | None:
+    item = _catalog_item_for_user(user, service_id, include_inactive=has_min_role(user, "admin"))
+    if item is None:
+        return None
+    if item.status == "active" or has_min_role(user, "admin"):
+        return item
+    return None
+
+
+def _company_for_user(user: User, company_id: UUID, *, minimum_role: str) -> Graph | None:
+    return (
+        accessible_company_queryset(user, minimum_role=minimum_role)
+        .filter(id=company_id)
+        .select_related("organization")
+        .first()
+    )
+
+
+def _engagement_for_user(
+    user: User,
+    engagement_id: UUID,
+    *,
+    minimum_role: str,
+) -> ServiceEngagement | None:
+    companies = accessible_company_queryset(user, minimum_role=minimum_role)
+    return (
+        ServiceEngagement.objects.filter(id=engagement_id, company__in=companies)
+        .select_related("company", "catalog_item", "assigned_operator", "requested_by")
+        .first()
+    )
+
+
+def _assigned_operator(company: Graph, user_id: UUID | None) -> User | Response | None:
+    if user_id is None:
+        return None
+    operator = User.objects.filter(id=user_id).first()
+    if operator is None:
+        return _not_found("Assigned operator was not found.")
+    if not OrganizationMembership.objects.filter(
+        organization=company.organization,
+        user=operator,
+    ).exists():
+        return error_response(
+            "ASSIGNED_OPERATOR_NOT_ORG_MEMBER",
+            "Assigned operator must belong to the company organization.",
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    return operator
+
+
+def _artifact_for_company(company: Graph, artifact_id: UUID | None) -> Asset | Response | None:
+    if artifact_id is None:
+        return None
+    artifact = Asset.objects.filter(id=artifact_id, company=company).first()
+    if artifact is None:
+        return _not_found("Artifact was not found for this company.")
+    return artifact
+
+
+def _report_for_company(company: Graph, report_id: UUID | None) -> ReportRun | Response | None:
+    if report_id is None:
+        return None
+    report_run = ReportRun.objects.filter(id=report_id, company=company).first()
+    if report_run is None:
+        return _not_found("Report run was not found for this company.")
+    return report_run
+
+
+def _service_error(exc: ServiceEngagementError) -> Response:
+    return error_response(
+        exc.code.upper(),
+        exc.message,
+        status=http_status.HTTP_400_BAD_REQUEST,
+        details=exc.details,
+    )
+
+
+def _validation_error(details: Any) -> Response:
+    return error_response(
+        "VALIDATION_ERROR",
+        "Request validation failed.",
+        status=http_status.HTTP_400_BAD_REQUEST,
+        details=[{"field": key, "errors": value} for key, value in dict(details).items()],
+    )
+
+
+def _not_found(message: str) -> Response:
+    return error_response("NOT_FOUND", message, status=http_status.HTTP_404_NOT_FOUND)
+
+
+def _forbidden(message: str) -> Response:
+    return error_response("FORBIDDEN", message, status=http_status.HTTP_403_FORBIDDEN)
